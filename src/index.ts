@@ -9,6 +9,7 @@ async function main() {
     await initPaseoClient()
   } catch (err) {
     console.warn('[agent-server] Paseo connection failed, starting without Paseo:', (err as Error).message)
+    paseoClient.disconnect() // Stop reconnection attempts
   }
 
   serve({ fetch: app.fetch, port })

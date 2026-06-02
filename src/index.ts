@@ -5,15 +5,15 @@ import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 const port = parseInt(process.env.PORT || '3000')
 
 async function main() {
-  try {
-    await initPaseoClient()
-  } catch (err) {
-    console.warn('[agent-server] Paseo connection failed, starting without Paseo:', (err as Error).message)
-    paseoClient.disconnect() // Stop reconnection attempts
-  }
-
+  // Start HTTP server immediately so health checks pass
   serve({ fetch: app.fetch, port })
   console.log(`[agent-server] Listening on port ${port}`)
+
+  // Attempt Paseo connection in background (non-blocking)
+  initPaseoClient().catch((err) => {
+    console.warn('[agent-server] Paseo unavailable, running without it:', (err as Error).message)
+    paseoClient.disconnect()
+  })
 
   const shutdown = async () => {
     console.log('[agent-server] Shutting down...')

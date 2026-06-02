@@ -1,0 +1,33 @@
+services:
+  agent-server:
+    build: .
+    container_name: agent-server
+    volumes:
+      - agent-data:/root/.paseo
+      - ./workspace:/workspace
+    ports:
+      - "13000:3000"
+      - "16767:6767"
+    environment:
+      - PORT=3000
+      - PASEO_WS_URL=ws://127.0.0.1:6767/ws
+      - API_KEY=${API_KEY:-}
+      # Claude Code via Bedrock (litellm proxy)
+      - CLAUDE_CODE_USE_BEDROCK=1
+      - CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
+      - ANTHROPIC_BEDROCK_BASE_URL=${ANTHROPIC_BEDROCK_BASE_URL:-https://litellm-de.yijin.io/bedrock}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+      - ANTHROPIC_DEFAULT_OPUS_MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL:-claude-opus-4-6}
+      - ANTHROPIC_DEFAULT_SONNET_MODEL=${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-6}
+      - ANTHROPIC_DEFAULT_HAIKU_MODEL=${ANTHROPIC_DEFAULT_HAIKU_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}
+      - CLAUDE_CODE_MAX_OUTPUT_TOKENS=${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-16384}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+volumes:
+  agent-data:

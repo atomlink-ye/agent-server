@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && echo '<!DOCTYPE html><html><body>agent-server</body></html>' > dist/index.html",
+    "build": "tsc && echo '<!DOCTYPE html><html><body>agent-server</body></html>' > dist/index.html && mkdir -p output/bin && cp -r dist/* output/bin/ && cp -r node_modules output/bin/ && cp package.json output/bin/",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",

@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, execSync, ChildProcess } from 'child_process'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { mkdirSync, writeFileSync, existsSync } from 'fs'
@@ -9,8 +9,9 @@ import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 const port = parseInt(process.env.PORT || '3000')
 const paseoEnabled = process.env.PASEO_ENABLED !== 'false'
 
-// Decode Base64-encoded auth token if provided
-function resolveAuthToken(): string | undefined {
+// Resolve API key from various env var formats
+function resolveApiKey(): string | undefined {
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
   if (process.env.ANTHROPIC_AUTH_TOKEN) return process.env.ANTHROPIC_AUTH_TOKEN
   if (process.env.ANTHROPIC_AUTH_TOKEN_B64) {
     return Buffer.from(process.env.ANTHROPIC_AUTH_TOKEN_B64, 'base64').toString('utf-8')
@@ -18,10 +19,22 @@ function resolveAuthToken(): string | undefined {
   return undefined
 }
 
-const anthropicAuthToken = resolveAuthToken()
-const anthropicBedrockBaseUrl = process.env.ANTHROPIC_BEDROCK_BASE_URL
+const anthropicApiKey = resolveApiKey()
+const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL ||
+  (process.env.ANTHROPIC_BEDROCK_BASE_URL?.replace(/\/bedrock$/, '') || undefined)
 
 let paseoProcess: ChildProcess | null = null
+
+const PASEO_USER = 'agent'
+
+function ensureAgentUser(): void {
+  try {
+    execSync(`id ${PASEO_USER}`, { stdio: 'ignore' })
+  } catch {
+    execSync(`useradd -m ${PASEO_USER}`, { stdio: 'ignore' })
+    console.log(`[agent-server] Created user '${PASEO_USER}'`)
+  }
+}
 
 function ensurePaseoConfig(paseoHome: string): void {
   mkdirSync(paseoHome, { recursive: true })
@@ -35,35 +48,53 @@ function ensurePaseoConfig(paseoHome: string): void {
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
     console.log(`[agent-server] Created Paseo config at ${configPath} (relay disabled)`)
   }
+  // Ensure agent user owns the paseo home
+  try {
+    execSync(`chown -R ${PASEO_USER}:${PASEO_USER} ${paseoHome}`, { stdio: 'ignore' })
+  } catch { /* ignore if chown fails */ }
 }
 
 function startPaseoDaemon(): Promise<void> {
   return new Promise((resolve, reject) => {
     const __dirname = dirname(fileURLToPath(import.meta.url))
-    // Look for paseo binary in node_modules/.bin/
     const paseoBin = process.env.PASEO_BIN || `${__dirname}/node_modules/.bin/paseo`
     const paseoHome = process.env.PASEO_HOME || '/tmp/.paseo'
+
+    // Ensure non-root user exists for Claude Code compatibility
+    ensureAgentUser()
 
     // Write config.json to disable relay before starting daemon
     ensurePaseoConfig(paseoHome)
 
-    console.log(`[agent-server] Starting Paseo daemon from: ${paseoBin}`)
+    console.log(`[agent-server] Starting Paseo daemon as user '${PASEO_USER}' from: ${paseoBin}`)
+
+    // Build environment for Paseo
+    const paseoEnv: Record<string, string> = {
+      HOME: `/home/${PASEO_USER}`,
+      USER: PASEO_USER,
+      PATH: `${__dirname}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin`,
+      PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
+      PASEO_HOME: paseoHome,
+      PASEO_RELAY_ENABLED: 'false',
+      // Claude Code API config
+      ...(anthropicApiKey ? { ANTHROPIC_API_KEY: anthropicApiKey } : {}),
+      ...(anthropicBaseUrl ? { ANTHROPIC_BASE_URL: anthropicBaseUrl } : {}),
+    }
+
+    // Get uid/gid of agent user
+    let uid: number | undefined
+    let gid: number | undefined
+    try {
+      uid = parseInt(execSync(`id -u ${PASEO_USER}`, { encoding: 'utf-8' }).trim())
+      gid = parseInt(execSync(`id -g ${PASEO_USER}`, { encoding: 'utf-8' }).trim())
+    } catch {
+      console.warn(`[agent-server] Could not resolve uid/gid for '${PASEO_USER}', running as current user`)
+    }
 
     paseoProcess = spawn(paseoBin, ['daemon', 'start', '--foreground', '--no-relay'], {
-      env: {
-        ...process.env,
-        PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
-        PASEO_HOME: paseoHome,
-        PASEO_RELAY_ENABLED: 'false',
-        // Claude Code Bedrock mode (LiteLLM proxy)
-        CLAUDE_CODE_USE_BEDROCK: '1',
-        CLAUDE_CODE_SKIP_BEDROCK_AUTH: '1',
-        ...(anthropicAuthToken ? { ANTHROPIC_AUTH_TOKEN: anthropicAuthToken } : {}),
-        ...(anthropicBedrockBaseUrl ? { ANTHROPIC_BEDROCK_BASE_URL: anthropicBedrockBaseUrl } : {}),
-        ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || 'qa.fiat.chat.cloudways.default.sonnet-4-6',
-        ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'qa.fiat.chat.cloudways.default.opus-4-6',
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'qa.fiat.chat.cloudways.default.haiku-4-5',
-      },
+      env: paseoEnv,
+      uid,
+      gid,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
@@ -115,7 +146,7 @@ async function main() {
   if (!paseoEnabled) {
     console.log('[agent-server] Paseo disabled by PASEO_ENABLED=false')
   } else {
-    console.log(`[agent-server] Claude Code config: bedrock_url=${anthropicBedrockBaseUrl || 'not set'}, auth_token=${anthropicAuthToken ? '***' + anthropicAuthToken.slice(-4) : 'not set'}`)
+    console.log(`[agent-server] API config: base_url=${anthropicBaseUrl || 'not set'}, key=${anthropicApiKey ? '***' + anthropicApiKey.slice(-4) : 'not set'}`)
     // Start Paseo daemon, then connect client
     try {
       await startPaseoDaemon()

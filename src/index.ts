@@ -18,7 +18,7 @@ function startPaseoDaemon(): Promise<void> {
 
     console.log(`[agent-server] Starting Paseo daemon from: ${paseoBin}`)
 
-    paseoProcess = spawn(paseoBin, ['daemon', 'start', '--foreground'], {
+    paseoProcess = spawn(paseoBin, ['daemon', 'start', '--foreground', '--no-relay'], {
       env: {
         ...process.env,
         PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',

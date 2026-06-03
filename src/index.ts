@@ -9,6 +9,18 @@ import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 const port = parseInt(process.env.PORT || '3000')
 const paseoEnabled = process.env.PASEO_ENABLED !== 'false'
 
+// Decode Base64-encoded auth token if provided
+function resolveAuthToken(): string | undefined {
+  if (process.env.ANTHROPIC_AUTH_TOKEN) return process.env.ANTHROPIC_AUTH_TOKEN
+  if (process.env.ANTHROPIC_AUTH_TOKEN_B64) {
+    return Buffer.from(process.env.ANTHROPIC_AUTH_TOKEN_B64, 'base64').toString('utf-8')
+  }
+  return undefined
+}
+
+const anthropicAuthToken = resolveAuthToken()
+const anthropicBedrockBaseUrl = process.env.ANTHROPIC_BEDROCK_BASE_URL
+
 let paseoProcess: ChildProcess | null = null
 
 function ensurePaseoConfig(paseoHome: string): void {
@@ -43,6 +55,14 @@ function startPaseoDaemon(): Promise<void> {
         PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
         PASEO_HOME: paseoHome,
         PASEO_RELAY_ENABLED: 'false',
+        // Claude Code Bedrock mode (LiteLLM proxy)
+        CLAUDE_CODE_USE_BEDROCK: '1',
+        CLAUDE_CODE_SKIP_BEDROCK_AUTH: '1',
+        ...(anthropicAuthToken ? { ANTHROPIC_AUTH_TOKEN: anthropicAuthToken } : {}),
+        ...(anthropicBedrockBaseUrl ? { ANTHROPIC_BEDROCK_BASE_URL: anthropicBedrockBaseUrl } : {}),
+        ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || 'qa.fiat.chat.cloudways.default.sonnet-4-6',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'qa.fiat.chat.cloudways.default.opus-4-6',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'qa.fiat.chat.cloudways.default.haiku-4-5',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -95,6 +115,7 @@ async function main() {
   if (!paseoEnabled) {
     console.log('[agent-server] Paseo disabled by PASEO_ENABLED=false')
   } else {
+    console.log(`[agent-server] Claude Code config: bedrock_url=${anthropicBedrockBaseUrl || 'not set'}, auth_token=${anthropicAuthToken ? '***' + anthropicAuthToken.slice(-4) : 'not set'}`)
     // Start Paseo daemon, then connect client
     try {
       await startPaseoDaemon()

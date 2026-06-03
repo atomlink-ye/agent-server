@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { spawn, ChildProcess } from 'child_process'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { mkdirSync, writeFileSync, existsSync } from 'fs'
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 
@@ -10,11 +11,29 @@ const paseoEnabled = process.env.PASEO_ENABLED !== 'false'
 
 let paseoProcess: ChildProcess | null = null
 
+function ensurePaseoConfig(paseoHome: string): void {
+  mkdirSync(paseoHome, { recursive: true })
+  const configPath = `${paseoHome}/config.json`
+  if (!existsSync(configPath)) {
+    const config = {
+      daemon: {
+        relay: { enabled: false },
+      },
+    }
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
+    console.log(`[agent-server] Created Paseo config at ${configPath} (relay disabled)`)
+  }
+}
+
 function startPaseoDaemon(): Promise<void> {
   return new Promise((resolve, reject) => {
     const __dirname = dirname(fileURLToPath(import.meta.url))
     // Look for paseo binary in node_modules/.bin/
     const paseoBin = process.env.PASEO_BIN || `${__dirname}/node_modules/.bin/paseo`
+    const paseoHome = process.env.PASEO_HOME || '/tmp/.paseo'
+
+    // Write config.json to disable relay before starting daemon
+    ensurePaseoConfig(paseoHome)
 
     console.log(`[agent-server] Starting Paseo daemon from: ${paseoBin}`)
 
@@ -22,7 +41,8 @@ function startPaseoDaemon(): Promise<void> {
       env: {
         ...process.env,
         PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
-        PASEO_HOME: process.env.PASEO_HOME || '/tmp/.paseo',
+        PASEO_HOME: paseoHome,
+        PASEO_RELAY_ENABLED: 'false',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

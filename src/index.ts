@@ -68,17 +68,15 @@ function startPaseoDaemon(): Promise<void> {
 
     console.log(`[agent-server] Starting Paseo daemon as user '${PASEO_USER}' from: ${paseoBin}`)
 
-    // Build environment for Paseo
+    // Build environment for Paseo: inherit process.env, then override with Paseo-specific values
     const paseoEnv: Record<string, string> = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v != null) as [string, string][]),
       HOME: `/home/${PASEO_USER}`,
       USER: PASEO_USER,
       PATH: `${__dirname}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin`,
       PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
       PASEO_HOME: paseoHome,
       PASEO_RELAY_ENABLED: 'false',
-      // Claude Code API config
-      ...(anthropicApiKey ? { ANTHROPIC_API_KEY: anthropicApiKey } : {}),
-      ...(anthropicBaseUrl ? { ANTHROPIC_BASE_URL: anthropicBaseUrl } : {}),
     }
 
     // Get uid/gid of agent user

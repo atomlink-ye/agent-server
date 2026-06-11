@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server'
 import { spawn, execSync, ChildProcess } from 'child_process'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { mkdirSync, writeFileSync, existsSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, symlinkSync } from 'fs'
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 
@@ -54,6 +54,63 @@ function ensurePaseoConfig(paseoHome: string): void {
   } catch { /* ignore if chown fails */ }
 }
 
+function ensureLarkCliConfig(): void {
+  const appId = process.env.LARK_APP_ID
+  const appSecret = process.env.LARK_APP_SECRET
+  if (!appId || !appSecret) {
+    console.log('[agent-server] LARK_APP_ID/LARK_APP_SECRET not set, skipping lark-cli config')
+    return
+  }
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const larkCliBin = `${__dirname}/node_modules/.bin/lark-cli`
+  if (!existsSync(larkCliBin)) {
+    console.warn('[agent-server] lark-cli binary not found, skipping config')
+    return
+  }
+  const agentHome = `/home/${PASEO_USER}`
+  try {
+    execSync(`echo "${appSecret}" | su - ${PASEO_USER} -s /bin/bash -c "HOME=${agentHome} ${larkCliBin} config init --app-id ${appId} --app-secret-stdin --brand lark"`, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
+    })
+    console.log(`[agent-server] lark-cli configured for app ${appId}`)
+  } catch (e: any) {
+    console.warn(`[agent-server] lark-cli config init: ${e.stderr?.toString().trim() || e.message}`)
+  }
+}
+
+function ensureLarkSkills(): void {
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const skillsSource = `${__dirname}/.agent-skills`
+  if (!existsSync(skillsSource)) {
+    console.log('[agent-server] No .agent-skills directory found, skipping skills setup')
+    return
+  }
+  const agentHome = `/home/${PASEO_USER}`
+  const claudeSkillsDir = `${agentHome}/.claude/skills`
+  mkdirSync(claudeSkillsDir, { recursive: true })
+
+  const skills = readdirSync(skillsSource)
+  let installed = 0
+  for (const skill of skills) {
+    const target = `${claudeSkillsDir}/${skill}`
+    const source = `${skillsSource}/${skill}`
+    if (!existsSync(target)) {
+      try {
+        symlinkSync(source, target)
+        installed++
+      } catch { /* ignore */ }
+    }
+  }
+  // Ensure agent user owns the .claude directory
+  try {
+    execSync(`chown -R ${PASEO_USER}:${PASEO_USER} ${agentHome}/.claude`, { stdio: 'ignore' })
+  } catch { /* ignore */ }
+  if (installed > 0) {
+    console.log(`[agent-server] Installed ${installed} lark skills to ${claudeSkillsDir}`)
+  }
+}
+
 function startPaseoDaemon(): Promise<void> {
   return new Promise((resolve, reject) => {
     const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -62,6 +119,10 @@ function startPaseoDaemon(): Promise<void> {
 
     // Ensure non-root user exists for Claude Code compatibility
     ensureAgentUser()
+
+    // Configure lark-cli with app credentials and set up skills
+    ensureLarkCliConfig()
+    ensureLarkSkills()
 
     // Write config.json to disable relay before starting daemon
     ensurePaseoConfig(paseoHome)
@@ -73,7 +134,7 @@ function startPaseoDaemon(): Promise<void> {
       ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v != null) as [string, string][]),
       HOME: `/home/${PASEO_USER}`,
       USER: PASEO_USER,
-      PATH: `${__dirname}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin`,
+      PATH: `${__dirname}:${__dirname}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin`,
       PASEO_LISTEN: process.env.PASEO_LISTEN || '127.0.0.1:6767',
       PASEO_HOME: paseoHome,
       PASEO_RELAY_ENABLED: 'false',

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && echo '<!DOCTYPE html><html><body>agent-server</body></html>' > dist/index.html && mkdir -p output/bin && cp -r dist/* output/bin/ && cp -r node_modules output/bin/ && cp package.json output/bin/",
+    "build": "tsc && echo '<!DOCTYPE html><html><body>agent-server</body></html>' > dist/index.html && mkdir -p output/bin && cp -r dist/* output/bin/ && cp -r node_modules output/bin/ && cp package.json output/bin/ && npm run build:skills",
+    "build:skills": "skills add larksuite/cli -s lark-doc -s lark-im -s lark-contact -s lark-base -s lark-drive -s lark-sheets -s lark-shared -y --copy && cp -r .agents/skills output/bin/.agent-skills",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
@@ -18,6 +19,7 @@
     "@anthropic-ai/claude-code": "^2.1.161",
     "@getpaseo/cli": "^0.1.89",
     "@hono/node-server": "^1.13.7",
+    "@larksuite/cli": "^1.0.51",
     "hono": "^4.6.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0",
@@ -27,6 +29,7 @@
     "@types/node": "^22.10.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.13",
+    "skills": "^1.5.11",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.6"

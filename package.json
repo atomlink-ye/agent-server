@@ -20,6 +20,7 @@
     "@getpaseo/cli": "^0.1.89",
     "@hono/node-server": "^1.13.7",
     "@larksuite/cli": "^1.0.51",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "hono": "^4.6.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0",

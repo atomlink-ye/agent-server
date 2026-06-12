@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { agentRoutes } from './routes/agents.js'
+import { mcpRoute } from '../mcp/route.js'
 import { authMiddleware } from '../middleware/auth.js'
 
 export const app = new Hono()
@@ -12,6 +13,9 @@ app.use('*', cors())
 
 // Health check (no auth)
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
+
+// MCP endpoint (no auth — MCP protocol handles its own session management)
+app.route('/mcp', mcpRoute)
 
 // Auth for API routes
 app.use('/api/v1/*', authMiddleware)

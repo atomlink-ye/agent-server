@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'child_process'
+import { ChildProcess, spawn, execSync } from 'child_process'
 import { createInterface } from 'readline'
 import { EventEmitter } from 'events'
 import type { PaseoClient } from '../paseo-client/index.js'
@@ -71,7 +71,7 @@ export class LarkEventConsumer extends EventEmitter {
 
     this.process = spawn(
       larkCliBin,
-      ['event', 'consume', 'im.message.receive_v1', '--as', 'bot', '--quiet'],
+      ['event', 'consume', 'im.message.receive_v1', '--as', 'bot'],
       {
         uid,
         gid,
@@ -87,7 +87,14 @@ export class LarkEventConsumer extends EventEmitter {
 
     this.process.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim()
-      if (msg) console.error(`[lark-event] ${msg}`)
+      if (msg) {
+        // Info-level messages from lark-cli (e.g. [event] ready, [source] connected)
+        if (msg.startsWith('[event]') || msg.startsWith('[source]')) {
+          console.log(`[lark-event] ${msg}`)
+        } else {
+          console.error(`[lark-event] ${msg}`)
+        }
+      }
     })
 
     this.process.on('error', (err) => {
@@ -134,7 +141,7 @@ export class LarkEventConsumer extends EventEmitter {
   }
 
   private async handleMessage(event: LarkMessageEvent): Promise<void> {
-    const { paseoClient, model, agentCwd } = this.options
+    const { paseoClient, model, agentCwd, larkCliBin, uid, gid, env } = this.options
 
     // Strip @mention prefix if present
     const content = event.content.replace(/@\S+\s*/, '').trim()
@@ -142,6 +149,9 @@ export class LarkEventConsumer extends EventEmitter {
       console.log('[lark-event] Empty message after stripping mention, ignoring')
       return
     }
+
+    // Send ack reaction (👀) to indicate message received
+    this.sendReaction(event.message_id, 'Eyes')
 
     const prompt = this.buildAgentPrompt(content, event)
 
@@ -157,6 +167,23 @@ export class LarkEventConsumer extends EventEmitter {
     } catch (err: any) {
       console.error(`[lark-event] Failed to create agent: ${err.message}`)
       this.emit('error', err)
+    }
+  }
+
+  private sendReaction(messageId: string, emojiType: string): void {
+    const { larkCliBin, uid, gid, env } = this.options
+    try {
+      const cmd = `${larkCliBin} im message.reactions create --params '{"message_id":"${messageId}"}' --body '{"reaction_type":{"emoji_type":"${emojiType}"}}'`
+      spawn('sh', ['-c', cmd], {
+        uid,
+        gid,
+        env,
+        stdio: 'ignore',
+        detached: true,
+      }).unref()
+      console.log(`[lark-event] Sent reaction ${emojiType} to ${messageId}`)
+    } catch (err: any) {
+      console.warn(`[lark-event] Failed to send reaction: ${err.message}`)
     }
   }
 

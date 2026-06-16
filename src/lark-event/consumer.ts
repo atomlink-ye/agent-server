@@ -69,14 +69,15 @@ export class LarkEventConsumer extends EventEmitter {
 
     console.log('[lark-event] Starting event consumer...')
 
-    this.process = spawn(
-      larkCliBin,
-      ['event', 'consume', 'im.message.receive_v1', '--as', 'bot'],
+    // Must use shell invocation — lark-cli exits immediately when spawned directly
+    // with piped stdio (no TTY). Running via sh -c keeps it alive.
+    const cmd = `exec ${larkCliBin} event consume im.message.receive_v1 --as bot`
+    this.process = spawn('sh', ['-c', cmd],
       {
         uid,
         gid,
         env,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       }
     )
 

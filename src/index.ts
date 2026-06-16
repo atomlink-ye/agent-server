@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { mkdirSync, writeFileSync, existsSync, readdirSync, symlinkSync } from 'fs'
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
+import { LarkEventConsumer } from './lark-event/consumer.js'
 
 const port = parseInt(process.env.PORT || '3000')
 const paseoEnabled = process.env.PASEO_ENABLED !== 'false'
@@ -24,6 +25,7 @@ const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL ||
   (process.env.ANTHROPIC_BEDROCK_BASE_URL?.replace(/\/bedrock$/, '') || undefined)
 
 let paseoProcess: ChildProcess | null = null
+let larkEventConsumer: LarkEventConsumer | null = null
 
 const PASEO_USER = 'agent'
 
@@ -197,6 +199,51 @@ function startPaseoDaemon(): Promise<void> {
   })
 }
 
+function startLarkEventConsumer(): void {
+  const larkEnabled = process.env.LARK_EVENT_ENABLED !== 'false'
+  const appId = process.env.LARK_APP_ID
+  if (!larkEnabled || !appId) {
+    console.log('[agent-server] Lark event consumer disabled (LARK_EVENT_ENABLED=false or no LARK_APP_ID)')
+    return
+  }
+
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const larkCliBin = `${__dirname}/node_modules/.bin/lark-cli`
+  if (!existsSync(larkCliBin)) {
+    console.warn('[agent-server] lark-cli binary not found, skipping event consumer')
+    return
+  }
+
+  // Get agent user uid/gid (lark-cli config is under /home/agent)
+  let uid: number | undefined
+  let gid: number | undefined
+  try {
+    uid = parseInt(execSync(`id -u ${PASEO_USER}`, { encoding: 'utf-8' }).trim())
+    gid = parseInt(execSync(`id -g ${PASEO_USER}`, { encoding: 'utf-8' }).trim())
+  } catch { /* run as current user */ }
+
+  const consumerEnv: Record<string, string> = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v != null) as [string, string][]),
+    HOME: `/home/${PASEO_USER}`,
+    USER: PASEO_USER,
+    PATH: `${__dirname}:${__dirname}/node_modules/.bin:/usr/local/bin:/usr/bin:/bin`,
+  }
+
+  larkEventConsumer = new LarkEventConsumer({
+    larkCliBin,
+    paseoClient,
+    model: process.env.LARK_AGENT_MODEL || 'qa.fiat.chat.cloudways.default.sonnet-4-6',
+    agentCwd: process.env.LARK_AGENT_CWD || __dirname,
+    uid,
+    gid,
+    env: consumerEnv,
+    restartDelay: 5000,
+  })
+
+  larkEventConsumer.start()
+  console.log('[agent-server] Lark event consumer started')
+}
+
 async function main() {
   // Start HTTP server immediately so health checks pass
   serve({ fetch: app.fetch, port })
@@ -211,6 +258,9 @@ async function main() {
       await startPaseoDaemon()
       await initPaseoClient()
       console.log('[agent-server] Connected to Paseo successfully')
+
+      // Start Lark event consumer after Paseo is ready
+      startLarkEventConsumer()
     } catch (err) {
       console.warn('[agent-server] Paseo unavailable, running without it:', (err as Error).message)
       paseoClient.disconnect()
@@ -219,6 +269,9 @@ async function main() {
 
   const shutdown = async () => {
     console.log('[agent-server] Shutting down...')
+    if (larkEventConsumer) {
+      larkEventConsumer.stop()
+    }
     paseoClient.disconnect()
     if (paseoProcess) {
       paseoProcess.kill('SIGTERM')

@@ -151,8 +151,8 @@ export class LarkEventConsumer extends EventEmitter {
       return
     }
 
-    // Send ack reaction (👀) to indicate message received
-    this.sendReaction(event.message_id, 'Eyes')
+    // Send ack reaction (👌) to indicate message received
+    this.sendReaction(event.message_id, 'OK')
 
     const prompt = this.buildAgentPrompt(content, event)
 
@@ -174,7 +174,7 @@ export class LarkEventConsumer extends EventEmitter {
   private sendReaction(messageId: string, emojiType: string): void {
     const { larkCliBin, uid, gid, env } = this.options
     try {
-      const cmd = `${larkCliBin} im message.reactions create --params '{"message_id":"${messageId}"}' --body '{"reaction_type":{"emoji_type":"${emojiType}"}}'`
+      const cmd = `${larkCliBin} im reactions create --message-id "${messageId}" --data '{"reaction_type":{"emoji_type":"${emojiType}"}}' --as bot`
       spawn('sh', ['-c', cmd], {
         uid,
         gid,

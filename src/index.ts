@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server'
 import { spawn, execSync, ChildProcess } from 'child_process'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { mkdirSync, writeFileSync, existsSync, readdirSync, symlinkSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, symlinkSync, readFileSync, copyFileSync } from 'fs'
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 import { LarkEventConsumer } from './lark-event/consumer.js'
@@ -104,13 +104,45 @@ function ensureLarkSkills(): void {
       } catch { /* ignore */ }
     }
   }
+  if (installed > 0) {
+    console.log(`[agent-server] Installed ${installed} lark skills to ${claudeSkillsDir}`)
+  }
+}
+
+function ensurePlugins(): void {
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const pluginsSource = `${__dirname}/.agent-plugins`
+  if (!existsSync(pluginsSource)) {
+    console.log('[agent-server] No .agent-plugins directory found, skipping plugins setup')
+    return
+  }
+  const agentHome = `/home/${PASEO_USER}`
+  const pluginsTarget = `${agentHome}/.claude/plugins`
+  if (!existsSync(pluginsTarget)) {
+    try {
+      symlinkSync(pluginsSource, pluginsTarget)
+      console.log(`[agent-server] Linked plugins to ${pluginsTarget}`)
+    } catch { /* ignore */ }
+  }
+}
+
+function ensureGlobalClaudeMd(): void {
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const source = `${__dirname}/.claude-global-md`
+  if (!existsSync(source)) {
+    console.log('[agent-server] No .claude-global-md found, skipping global CLAUDE.md setup')
+    return
+  }
+  const agentHome = `/home/${PASEO_USER}`
+  const target = `${agentHome}/.claude/CLAUDE.md`
+  mkdirSync(`${agentHome}/.claude`, { recursive: true })
+  copyFileSync(source, target)
+  console.log(`[agent-server] Installed global CLAUDE.md to ${target}`)
+
   // Ensure agent user owns the .claude directory
   try {
     execSync(`chown -R ${PASEO_USER}:${PASEO_USER} ${agentHome}/.claude`, { stdio: 'ignore' })
   } catch { /* ignore */ }
-  if (installed > 0) {
-    console.log(`[agent-server] Installed ${installed} lark skills to ${claudeSkillsDir}`)
-  }
 }
 
 function startPaseoDaemon(): Promise<void> {
@@ -122,9 +154,11 @@ function startPaseoDaemon(): Promise<void> {
     // Ensure non-root user exists for Claude Code compatibility
     ensureAgentUser()
 
-    // Configure lark-cli with app credentials and set up skills
+    // Configure lark-cli with app credentials and set up skills/plugins
     ensureLarkCliConfig()
     ensureLarkSkills()
+    ensurePlugins()
+    ensureGlobalClaudeMd()
 
     // Write config.json to disable relay before starting daemon
     ensurePaseoConfig(paseoHome)

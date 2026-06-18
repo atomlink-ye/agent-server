@@ -70,6 +70,15 @@ lark-cli wiki node get --token "<wiki_token>"
 
 ---
 
+## 评论偏好
+
+当用户要求对文档进行评审并留评论时：
+- **优先使用划线评论**（`--selection-with-ellipsis`），将问题精确定位到文档中的具体段落
+- 只在最后添加一条 `--full-comment` 作为总体评审总结
+- 不要把所有评论都用 `--full-comment` 堆在文档底部
+
+---
+
 ## 注意事项
 
 1. 不要尝试安装或调用 `executor.mjs`

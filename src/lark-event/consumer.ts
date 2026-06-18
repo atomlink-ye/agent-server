@@ -189,20 +189,9 @@ export class LarkEventConsumer extends EventEmitter {
   }
 
   private buildAgentPrompt(content: string, event: LarkMessageEvent): string {
-    return `You received a message from a Lark user. Process it and reply.
+    return `${content}
 
-## Message
-- Chat ID: ${event.chat_id}
-- Message ID: ${event.message_id}
-- Content: ${content}
-
-## Instructions
-1. Read your global CLAUDE.md (~/.claude/CLAUDE.md) to understand your environment and available tools
-2. Check ~/.claude/plugins/ for available skills that match the user's request
-3. Fulfill the user's request using lark-cli and any relevant skills
-4. When done, reply to the user:
-   lark-cli im +send --chat-id "${event.chat_id}" --content '[{"type":"text","text":"YOUR_REPLY"}]'
-
-Always reply to the user with a brief summary when you're done.`
+---
+Reply when done: lark-cli im +send --chat-id "${event.chat_id}" --content '[{"type":"text","text":"<reply>"}]'`
   }
 }

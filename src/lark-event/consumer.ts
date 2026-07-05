@@ -200,11 +200,16 @@ export class LarkEventConsumer extends EventEmitter {
       return
     }
 
-    // Determine thread context
-    // lark-cli event consume doesn't include root_id/thread_id,
-    // so we fetch it via +messages-mget
-    const threadId = event.root_id || await this.resolveThreadId(event.message_id) || event.message_id
-    const isInThread = threadId !== event.message_id
+    // Determine session key
+    // P2P: use chat_id (one conversation = one session, simple and reliable)
+    // Group: resolve thread_id via +messages-mget, fall back to message_id
+    let threadId: string
+    if (event.chat_type === 'p2p') {
+      threadId = event.chat_id
+    } else {
+      threadId = event.root_id || this.resolveThreadId(event.message_id) || event.message_id
+    }
+    const isInThread = event.chat_type === 'p2p' || threadId !== event.message_id
 
     // Check for /new command to force a fresh session
     if (content === NEW_SESSION_CMD) {
@@ -218,7 +223,23 @@ export class LarkEventConsumer extends EventEmitter {
     this.sendReaction(event.message_id, 'OK')
 
     // Try to reuse existing session for this thread
-    const existingSession = this.sessionStore.getByThread(threadId)
+    let existingSession = this.sessionStore.getByThread(threadId)
+    // For group threads: if not found by thread_id, try looking up by message_id
+    // (first message stored under message_id before thread was created)
+    if (!existingSession && event.chat_type !== 'p2p' && threadId !== event.message_id) {
+      // threadId is a resolved thread_id but session might be stored under the root message_id
+      // Try to find root message from +messages-mget response
+      const rootMsgId = this.resolveRootMessageId(event.message_id)
+      if (rootMsgId) {
+        existingSession = this.sessionStore.getByThread(rootMsgId)
+        if (existingSession) {
+          // Migrate session to use thread_id as key going forward
+          this.sessionStore.removeByThread(rootMsgId)
+          this.sessionStore.set(threadId, existingSession)
+          console.log(`[lark-event] Migrated session from ${rootMsgId} to ${threadId}`)
+        }
+      }
+    }
     if (existingSession) {
       try {
         await paseoClient.sendPrompt(existingSession.agentId, content)
@@ -306,6 +327,30 @@ export class LarkEventConsumer extends EventEmitter {
     } catch (err: any) {
       console.warn(`[lark-event] Failed to resolve thread_id for ${messageId}: ${err.message}`)
     }
+    return null
+  }
+
+  private resolveRootMessageId(messageId: string): string | null {
+    const { larkCliBin, uid, gid, env } = this.options
+    try {
+      const cmd = `${larkCliBin} im +messages-mget --message-ids "${messageId}" --as bot`
+      const output = execSync(cmd, { uid, gid, env, encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] })
+      const jsonStart = output.indexOf('{')
+      if (jsonStart === -1) return null
+      const data = JSON.parse(output.slice(jsonStart))
+      // thread_replies[0] is the root/first message
+      const messages = data?.data?.messages || data?.data || []
+      const msgList = Array.isArray(messages) ? messages : [messages]
+      for (const msg of msgList) {
+        if (msg?.thread_replies && msg.thread_replies.length > 0) {
+          const root = msg.thread_replies[0]
+          if (root?.message_id) {
+            console.log(`[lark-event] Found root message_id=${root.message_id} for thread`)
+            return root.message_id
+          }
+        }
+      }
+    } catch { /* ignore */ }
     return null
   }
 

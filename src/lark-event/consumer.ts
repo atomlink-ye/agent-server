@@ -224,19 +224,22 @@ export class LarkEventConsumer extends EventEmitter {
 
     // Try to reuse existing session for this thread
     let existingSession = this.sessionStore.getByThread(threadId)
-    // For group threads: if not found by thread_id, try looking up by message_id
+    // For group threads: if not found by thread_id, try secondary lookup
     // (first message stored under message_id before thread was created)
     if (!existingSession && event.chat_type !== 'p2p' && threadId !== event.message_id) {
-      // threadId is a resolved thread_id but session might be stored under the root message_id
-      // Try to find root message from +messages-mget response
-      const rootMsgId = this.resolveRootMessageId(event.message_id)
-      if (rootMsgId) {
-        existingSession = this.sessionStore.getByThread(rootMsgId)
-        if (existingSession) {
-          // Migrate session to use thread_id as key going forward
-          this.sessionStore.removeByThread(rootMsgId)
-          this.sessionStore.set(threadId, existingSession)
-          console.log(`[lark-event] Migrated session from ${rootMsgId} to ${threadId}`)
+      // threadId is a resolved thread_id but session was stored under message_id
+      // Search sessions in same chat, check if their originMessageId now resolves to this thread_id
+      for (const [key, session] of this.sessionStore.entries()) {
+        if (session.chatId === event.chat_id && key !== threadId) {
+          const originThreadId = this.resolveThreadId(session.originMessageId)
+          if (originThreadId === threadId) {
+            existingSession = session
+            // Migrate: update key from message_id to thread_id (permanent)
+            this.sessionStore.removeByThread(key)
+            this.sessionStore.set(threadId, { ...session, threadId })
+            console.log(`[lark-event] Migrated session key: ${key} → ${threadId}`)
+            break
+          }
         }
       }
     }
@@ -265,9 +268,10 @@ export class LarkEventConsumer extends EventEmitter {
         mode: 'bypassPermissions',
       })
 
-      // Store session mapping
+      // Store session mapping with originMessageId for secondary lookup
       this.sessionStore.set(threadId, {
         threadId,
+        originMessageId: event.message_id,
         agentId: agent.id,
         chatId: event.chat_id,
         createdAt: Date.now(),
@@ -330,29 +334,6 @@ export class LarkEventConsumer extends EventEmitter {
     return null
   }
 
-  private resolveRootMessageId(messageId: string): string | null {
-    const { larkCliBin, uid, gid, env } = this.options
-    try {
-      const cmd = `${larkCliBin} im +messages-mget --message-ids "${messageId}" --as bot`
-      const output = execSync(cmd, { uid, gid, env, encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] })
-      const jsonStart = output.indexOf('{')
-      if (jsonStart === -1) return null
-      const data = JSON.parse(output.slice(jsonStart))
-      // thread_replies[0] is the root/first message
-      const messages = data?.data?.messages || data?.data || []
-      const msgList = Array.isArray(messages) ? messages : [messages]
-      for (const msg of msgList) {
-        if (msg?.thread_replies && msg.thread_replies.length > 0) {
-          const root = msg.thread_replies[0]
-          if (root?.message_id) {
-            console.log(`[lark-event] Found root message_id=${root.message_id} for thread`)
-            return root.message_id
-          }
-        }
-      }
-    } catch { /* ignore */ }
-    return null
-  }
 
   private buildAgentPrompt(content: string, event: LarkMessageEvent, threadId: string): string {
     // Reply target: use message_id for reply-in-thread (not threadId which may be chat_id for P2P)

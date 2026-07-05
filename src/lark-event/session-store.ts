@@ -4,8 +4,10 @@
  */
 
 export interface LarkSession {
-  /** Root message_id that defines the thread */
+  /** Primary key (chat_id for P2P, thread_id or message_id for group) */
   threadId: string
+  /** Original message_id that created this session (secondary lookup key) */
+  originMessageId: string
   /** Paseo agent ID */
   agentId: string
   /** Lark chat_id for the conversation */
@@ -40,6 +42,20 @@ export class LarkSessionStore {
       return undefined
     }
     return session
+  }
+
+  /** Look up a session by originMessageId (secondary key, for thread migration) */
+  getByOriginMessage(messageId: string): { key: string; session: LarkSession } | undefined {
+    for (const [key, session] of this.sessions) {
+      if (session.originMessageId === messageId) {
+        if (Date.now() - session.lastActiveAt > this.maxAge) {
+          this.sessions.delete(key)
+          return undefined
+        }
+        return { key, session }
+      }
+    }
+    return undefined
   }
 
   /** Store or update a session */
@@ -85,6 +101,11 @@ export class LarkSessionStore {
       clearInterval(this.cleanupTimer)
       this.cleanupTimer = null
     }
+  }
+
+  /** Iterate all sessions (for secondary lookup) */
+  entries(): IterableIterator<[string, LarkSession]> {
+    return this.sessions.entries()
   }
 
   /** Current number of active sessions (for diagnostics) */

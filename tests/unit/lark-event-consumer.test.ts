@@ -17,6 +17,7 @@ function createMockScript(events: object[], delayMs = 100): string {
 function createMockPaseoClient() {
   return {
     createAgent: vi.fn().mockResolvedValue({ id: 'agent-123', status: 'running' }),
+    sendPrompt: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
@@ -67,7 +68,7 @@ describe('LarkEventConsumer', () => {
       restartDelay: 0,
     })
 
-    const agentPromise = new Promise<{ agentId: string; event: LarkMessageEvent }>((resolve) => {
+    const agentPromise = new Promise<{ agentId: string; threadId: string; event: LarkMessageEvent }>((resolve) => {
       consumer.on('agent_created', resolve)
     })
 
@@ -75,6 +76,7 @@ describe('LarkEventConsumer', () => {
     const result = await agentPromise
 
     expect(result.agentId).toBe('agent-123')
+    expect(result.threadId).toBe('om_msg001') // message_id becomes threadId for new messages
     expect(mockPaseoClient.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'test-model',
@@ -152,7 +154,7 @@ describe('LarkEventConsumer', () => {
     expect(prompt).toContain('hi there')
   })
 
-  it('should include chat_id and reply instructions in prompt', async () => {
+  it('should include reply-in-thread instructions in prompt', async () => {
     const event = sampleEvent({ chat_id: 'oc_special_chat', content: '@bot what time is it' })
     createMockScript([event])
 
@@ -170,9 +172,148 @@ describe('LarkEventConsumer', () => {
     await agentPromise
 
     const prompt = mockPaseoClient.createAgent.mock.calls[0][0].prompt
-    expect(prompt).toContain('oc_special_chat')
-    expect(prompt).toContain('lark-cli im +send')
-    expect(prompt).toContain('--chat-id')
+    expect(prompt).toContain('+messages-reply')
+    expect(prompt).toContain('--reply-in-thread')
+    expect(prompt).toContain('om_msg001') // thread root is the message_id
+  })
+
+  it('should reuse session for messages in same thread', async () => {
+    // First message creates the agent
+    const firstEvent = sampleEvent({ content: '@bot task one', event_id: 'evt_1', message_id: 'om_root' })
+    // Second message is in the same thread (has root_id pointing to first message)
+    const threadEvent = sampleEvent({
+      content: '@bot follow up',
+      event_id: 'evt_2',
+      message_id: 'om_reply1',
+      root_id: 'om_root',
+    })
+    createMockScript([firstEvent, threadEvent])
+
+    consumer = new LarkEventConsumer({
+      larkCliBin: MOCK_SCRIPT,
+      paseoClient: mockPaseoClient,
+      restartDelay: 0,
+    })
+
+    let agentCreatedCount = 0
+    let promptSentCount = 0
+    consumer.on('agent_created', () => agentCreatedCount++)
+    consumer.on('prompt_sent', () => promptSentCount++)
+
+    const donePromise = new Promise<void>((resolve) => {
+      consumer.on('prompt_sent', resolve)
+    })
+
+    consumer.start()
+    await donePromise
+
+    // First message creates agent, second sends prompt to existing agent
+    expect(agentCreatedCount).toBe(1)
+    expect(promptSentCount).toBe(1)
+    expect(mockPaseoClient.createAgent).toHaveBeenCalledTimes(1)
+    expect(mockPaseoClient.sendPrompt).toHaveBeenCalledWith('agent-123', 'follow up')
+  })
+
+  it('should create new agent if existing session agent is dead', async () => {
+    // First message creates agent
+    const firstEvent = sampleEvent({ content: '@bot task', event_id: 'evt_1', message_id: 'om_root' })
+    // Second message in thread, but sendPrompt will fail
+    const threadEvent = sampleEvent({
+      content: '@bot more work',
+      event_id: 'evt_2',
+      message_id: 'om_reply1',
+      root_id: 'om_root',
+    })
+    createMockScript([firstEvent, threadEvent])
+
+    // sendPrompt fails (agent dead)
+    mockPaseoClient.sendPrompt.mockRejectedValue(new Error('Agent not found'))
+
+    consumer = new LarkEventConsumer({
+      larkCliBin: MOCK_SCRIPT,
+      paseoClient: mockPaseoClient,
+      restartDelay: 0,
+    })
+
+    let agentCreatedCount = 0
+    const donePromise = new Promise<void>((resolve) => {
+      consumer.on('agent_created', () => {
+        agentCreatedCount++
+        if (agentCreatedCount === 2) resolve()
+      })
+    })
+
+    consumer.start()
+    await donePromise
+
+    // Both messages create agents (second one because sendPrompt failed)
+    expect(mockPaseoClient.createAgent).toHaveBeenCalledTimes(2)
+  })
+
+  it('should deduplicate events with same event_id', async () => {
+    const event = sampleEvent({ event_id: 'evt_dupe' })
+    // Same event delivered twice (Lark retry)
+    createMockScript([event, event])
+
+    consumer = new LarkEventConsumer({
+      larkCliBin: MOCK_SCRIPT,
+      paseoClient: mockPaseoClient,
+      restartDelay: 0,
+    })
+
+    const agentPromise = new Promise<void>((resolve) => {
+      consumer.on('agent_created', resolve)
+    })
+
+    consumer.start()
+    await agentPromise
+
+    // Wait a bit to ensure second event was processed (and deduped)
+    await new Promise(r => setTimeout(r, 300))
+
+    expect(mockPaseoClient.createAgent).toHaveBeenCalledTimes(1)
+  })
+
+  it('should handle /new command to reset session', async () => {
+    // Create session first
+    const firstEvent = sampleEvent({ content: '@bot hello', event_id: 'evt_1', message_id: 'om_root' })
+    // /new command in thread
+    const newCmd = sampleEvent({
+      content: '@bot /new',
+      event_id: 'evt_new',
+      message_id: 'om_new',
+      root_id: 'om_root',
+    })
+    // Follow-up after /new should create new agent
+    const followUp = sampleEvent({
+      content: '@bot fresh start',
+      event_id: 'evt_3',
+      message_id: 'om_follow',
+      root_id: 'om_root',
+    })
+    createMockScript([firstEvent, newCmd, followUp])
+
+    consumer = new LarkEventConsumer({
+      larkCliBin: MOCK_SCRIPT,
+      paseoClient: mockPaseoClient,
+      restartDelay: 0,
+    })
+
+    let agentCreatedCount = 0
+    const donePromise = new Promise<void>((resolve) => {
+      consumer.on('agent_created', () => {
+        agentCreatedCount++
+        if (agentCreatedCount === 2) resolve()
+      })
+    })
+
+    consumer.start()
+    await donePromise
+
+    // Two agents created: first message + after /new reset
+    expect(mockPaseoClient.createAgent).toHaveBeenCalledTimes(2)
+    // sendPrompt should NOT have been called (session was reset before follow-up)
+    expect(mockPaseoClient.sendPrompt).not.toHaveBeenCalled()
   })
 
   it('should handle multiple events sequentially', async () => {
@@ -199,6 +340,7 @@ describe('LarkEventConsumer', () => {
     consumer.start()
     await donePromise
 
+    // Different message_ids (no root_id) = different threads = new agents
     expect(mockPaseoClient.createAgent).toHaveBeenCalledTimes(2)
   })
 

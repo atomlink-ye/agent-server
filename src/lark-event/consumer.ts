@@ -201,9 +201,10 @@ export class LarkEventConsumer extends EventEmitter {
     }
 
     // Determine thread context
-    // root_id is present when this message is in an existing thread
-    const threadId = event.root_id || event.message_id
-    const isInThread = !!event.root_id
+    // lark-cli event consume doesn't include root_id/thread_id,
+    // so we fetch it via +messages-mget
+    const threadId = event.root_id || await this.resolveThreadId(event.message_id) || event.message_id
+    const isInThread = threadId !== event.message_id
 
     // Check for /new command to force a fresh session
     if (content === NEW_SESSION_CMD) {
@@ -275,6 +276,33 @@ export class LarkEventConsumer extends EventEmitter {
     } catch (err: any) {
       console.warn(`[lark-event] Failed to send reaction: ${err.message}`)
     }
+  }
+
+  private resolveThreadId(messageId: string): string | null {
+    const { larkCliBin, uid, gid, env } = this.options
+    try {
+      const cmd = `${larkCliBin} im +messages-mget --message-ids "${messageId}" --as bot`
+      const output = execSync(cmd, {
+        uid,
+        gid,
+        env,
+        encoding: 'utf-8',
+        timeout: 10000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      const data = JSON.parse(output)
+      // Look for thread_id in the message data
+      const messages = data?.data?.messages || data?.messages || (Array.isArray(data) ? data : [data])
+      for (const msg of messages) {
+        if (msg?.thread_id) {
+          console.log(`[lark-event] Resolved thread_id=${msg.thread_id} for message ${messageId}`)
+          return msg.thread_id
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[lark-event] Failed to resolve thread_id for ${messageId}: ${err.message}`)
+    }
+    return null
   }
 
   private buildAgentPrompt(content: string, event: LarkMessageEvent, threadId: string): string {

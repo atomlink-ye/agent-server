@@ -172,7 +172,8 @@ export class LarkEventConsumer extends EventEmitter {
       return
     }
 
-    console.log(`[lark-event] Received message: "${event.content}" from ${event.sender_id} in ${event.chat_id} (root_id=${event.root_id || 'none'})`)
+    console.log(`[lark-event] Received [${event.message_type}] from ${event.sender_id} in ${event.chat_id} (msg_id=${event.message_id}, root_id=${event.root_id || 'none'})`)
+    console.log(`[lark-event] Raw content: ${event.content}`)
     this.emit('message', event)
     this.handleMessage(event)
   }

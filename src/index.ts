@@ -110,19 +110,21 @@ function ensureLarkSkills(): void {
 }
 
 function ensurePlugins(): void {
-  const __dirname = dirname(fileURLToPath(import.meta.url))
-  const pluginsSource = `${__dirname}/.agent-plugins`
-  if (!existsSync(pluginsSource)) {
-    console.log('[agent-server] No .agent-plugins directory found, skipping plugins setup')
-    return
-  }
   const agentHome = `/home/${PASEO_USER}`
   const pluginsTarget = `${agentHome}/.claude/plugins`
+  // Only create the directory if it doesn't exist - don't overwrite remote-installed plugins
   if (!existsSync(pluginsTarget)) {
-    try {
-      symlinkSync(pluginsSource, pluginsTarget)
-      console.log(`[agent-server] Linked plugins to ${pluginsTarget}`)
-    } catch { /* ignore */ }
+    mkdirSync(pluginsTarget, { recursive: true })
+    console.log(`[agent-server] Created plugins directory at ${pluginsTarget}`)
+  }
+  // Log skills config for reference (actual installation happens via proxy MCP)
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const configPath = `${__dirname}/.skills-config.json`
+  if (existsSync(configPath)) {
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+    const plugins = Object.keys(config.plugins || {})
+    const totalSkills = Object.values(config.plugins || {}).reduce((sum: number, p: any) => sum + (p.skills?.length || 0), 0)
+    console.log(`[agent-server] Skills config: ${totalSkills} skills across ${plugins.length} plugins (${plugins.join(', ')}) — install via proxy MCP`)
   }
 }
 

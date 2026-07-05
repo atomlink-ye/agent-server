@@ -1,0 +1,19 @@
+{
+  "repo": "qa-marketplace",
+  "plugins": {
+    "common": {
+      "skills": [
+        "ai-polling",
+        "trd-review",
+        "case-trd-review",
+        "monitor-coverage-eval"
+      ]
+    },
+    "sbu": {
+      "skills": [
+        "cr-bug-finder",
+        "case-miss-finder"
+      ]
+    }
+  }
+}

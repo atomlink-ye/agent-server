@@ -6,7 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc && echo '<!DOCTYPE html><html><body>agent-server</body></html>' > dist/index.html && mkdir -p output/bin && cp -r dist/* output/bin/ && cp -r node_modules output/bin/ && cp package.json output/bin/ && find output/bin/node_modules -name '*.map' -delete && find output/bin/node_modules -name '*.js.map' -delete && rm -rf output/bin/node_modules/convert-source-map output/bin/node_modules/source-map output/bin/node_modules/source-map-js output/bin/node_modules/vite && npm run build:skills && npm run build:config",
     "build:skills": "skills add larksuite/cli -s lark-doc -s lark-im -s lark-contact -s lark-base -s lark-drive -s lark-sheets -s lark-shared -y --copy && cp -r .agents/skills output/bin/.agent-skills",
-    "build:config": "cp runtime/CLAUDE.md output/bin/.claude-global-md && cp config/skills.json output/bin/.skills-config.json",
+    "build:config": "cp runtime/CLAUDE.md output/bin/.claude-global-md && cp config/skills.json output/bin/.skills-config.json && cp -r skills output/bin/.builtin-skills",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",

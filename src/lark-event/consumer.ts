@@ -290,10 +290,14 @@ export class LarkEventConsumer extends EventEmitter {
         timeout: 10000,
         stdio: ['pipe', 'pipe', 'pipe'],
       })
-      const data = JSON.parse(output)
-      // Look for thread_id in the message data
-      const messages = data?.data?.messages || data?.messages || (Array.isArray(data) ? data : [data])
-      for (const msg of messages) {
+      // Output may have warning lines before JSON — find first '{'
+      const jsonStart = output.indexOf('{')
+      if (jsonStart === -1) return null
+      const data = JSON.parse(output.slice(jsonStart))
+      // Navigate: data.data.messages[0].thread_id or data.data[0].thread_id
+      const messages = data?.data?.messages || data?.data || []
+      const msgList = Array.isArray(messages) ? messages : [messages]
+      for (const msg of msgList) {
         if (msg?.thread_id) {
           console.log(`[lark-event] Resolved thread_id=${msg.thread_id} for message ${messageId}`)
           return msg.thread_id

@@ -2,9 +2,9 @@
 name: install-skills
 description: >
   安装或更新 QA Marketplace Skills。通过 proxy MCP 从内网 GitLab 拉取 qa-marketplace 仓库，
-  按照配置安装指定 skills 到 Claude Code plugins 目录，使后续新 session 能发现并使用这些 skills。
+  按照配置安装指定 skills 到 ~/.claude/skills/ 目录（standalone skills，自动发现）。
   触发词：安装skills、install skills、更新skills、update skills。
-version: 1.0.0
+version: 1.1.0
 author: agent-server
 user_invocable: true
 allowed-tools:
@@ -15,151 +15,90 @@ allowed-tools:
 
 # Install Skills
 
-从 QA Marketplace 仓库安装 skills 到当前环境。
+从 QA Marketplace 安装 skills 到 `~/.claude/skills/`（standalone 路径，自动被 Claude Code 发现）。
 
 ## 执行步骤
 
 ### 1. 读取配置
 
-读取 skills 配置文件确定要安装哪些 skills：
-
 ```bash
 cat /data/services/zzz-test-agent-server-*/bin/.skills-config.json
 ```
 
-配置格式：
-```json
-{
-  "repo": "qa-marketplace",
-  "plugins": {
-    "<plugin-name>": {
-      "skills": ["skill-1", "skill-2"]
-    }
-  }
-}
-```
+### 2. 拉取 plugin 内容
 
-### 2. 通过 Proxy MCP 拉取仓库
-
-对配置中的每个 plugin，通过 Gateway 调用 proxy-service 的 echo tool 获取 plugin 内容：
+对每个 plugin 分别创建独立 Gateway session（每个 session 只能调用一次 echo tool）：
 
 ```bash
 GW_URL="http://mcp-gateway-v2-prod.ai-agw.ww5sawfyut0k.bitsvc.io/api/v1/mcps/agent-server-proxy/mcp"
 API_KEY="e29ddfd399014d729c897307f8bbadeb"
 
-# 初始化 session
+# 初始化 + 拉取 (每个 plugin 独立执行，间隔 15s)
 SID=$(curl -s -D /dev/stdout --max-time 10 -X POST "$GW_URL" \
   -H "X-API-KEY: $API_KEY" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "X-USER-EMAIL: link.ye@bybit.com" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"skill-installer","version":"1.0"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"installer","version":"1.0"}}}' \
   -o /dev/null 2>/dev/null | grep -i mcp-session-id | tr -d '\r' | awk '{print $2}')
 
-# 等待 5s warmup
 sleep 5
 
-# 拉取 plugin (每个 plugin 需要独立 session)
 curl -s --max-time 120 -X POST "$GW_URL" \
   -H "X-API-KEY: $API_KEY" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "X-USER-EMAIL: link.ye@bybit.com" \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"{\"repo\":\"qa-marketplace\",\"plugin\":\"<PLUGIN_NAME>\"}"}}}' \
-  -o /tmp/<PLUGIN_NAME>.response
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"{\"repo\":\"qa-marketplace\",\"plugin\":\"<PLUGIN>\"}"}}}' \
+  -o /tmp/<PLUGIN>.resp
 ```
 
-**重要**: Gateway 每个 session 只能成功调用 echo 一次。如需拉取多个 plugin，每个 plugin 创建独立 session，间隔 15 秒避免 rate limit。
+**重要**: 每个 plugin 需要独立 session，间隔 15 秒避免 rate limit。
 
-### 3. 解码并解包
+### 3. 解码解包
 
 ```bash
 python3 -c "
 import json, base64
-data = open('/tmp/<PLUGIN_NAME>.response').read()
-for line in data.split('\n'):
+data = open('/tmp/<PLUGIN>.resp').read()
+for line in data.split(chr(10)):
   if line.startswith('data: '):
     j = json.loads(line[6:])
     for c in j.get('result',{}).get('content',[]):
       if c.get('type')=='resource':
-        with open('/tmp/<PLUGIN_NAME>.tar.gz','wb') as f:
+        with open('/tmp/<PLUGIN>.tar.gz','wb') as f:
           f.write(base64.b64decode(c['resource']['blob']))
-        print(f'Saved: {len(base64.b64decode(c[\"resource\"][\"blob\"]))} bytes')
 "
-mkdir -p /tmp/src-<PLUGIN_NAME>
-tar -xzf /tmp/<PLUGIN_NAME>.tar.gz -C /tmp/src-<PLUGIN_NAME>
+mkdir -p /tmp/src-<PLUGIN>
+tar -xzf /tmp/<PLUGIN>.tar.gz -C /tmp/src-<PLUGIN>
 ```
 
-解包后结构为 `/tmp/src-<PLUGIN_NAME>/<PLUGIN_NAME>/skills/...`
+解包结构: `/tmp/src-<PLUGIN>/<PLUGIN>/skills/<SKILL_NAME>/SKILL.md`
 
-### 4. 安装指定 skills
-
-按配置只安装需要的 skills（不是全部）：
+### 4. 安装到 ~/.claude/skills/ (standalone)
 
 ```bash
-PLUGINS_DIR="/home/agent/.claude/plugins"
-
-# 为每个 plugin 创建目录
-mkdir -p "$PLUGINS_DIR/<PLUGIN_NAME>/.claude-plugin"
-mkdir -p "$PLUGINS_DIR/<PLUGIN_NAME>/skills"
-
-# 只复制配置中指定的 skills
-cp -r /tmp/src-<PLUGIN_NAME>/<PLUGIN_NAME>/skills/<SKILL_NAME> "$PLUGINS_DIR/<PLUGIN_NAME>/skills/"
+# 直接复制到 standalone skills 目录（自动被 Claude Code 发现）
+cp -r /tmp/src-<PLUGIN>/<PLUGIN>/skills/<SKILL_NAME> /home/agent/.claude/skills/
+chown -R agent:agent /home/agent/.claude/skills/
 ```
 
-### 5. 生成 plugin.json (只声明要启用的 skills)
+**不需要 plugin.json、settings.json 或 installed_plugins.json！** Standalone skills 自动发现。
+
+### 5. 验证
 
 ```bash
-cat > "$PLUGINS_DIR/<PLUGIN_NAME>/.claude-plugin/plugin.json" << EOF
-{
-  "name": "<PLUGIN_NAME>",
-  "version": "1.0.0",
-  "skills": [
-    "./skills/<skill-1>",
-    "./skills/<skill-2>"
-  ]
-}
-EOF
-```
-
-### 6. 更新 settings.json
-
-```bash
-# 读取现有 settings 或创建新的
-cat > /home/agent/.claude/settings.json << EOF
-{
-  "enabledPlugins": {
-    "<plugin1>": true,
-    "<plugin2>": true
-  },
-  "permissions": {
-    "allow": ["Bash(*)", "Read(*)", "Write(*)", "Edit(*)", "Glob(*)", "Grep(*)", "Agent(*)"],
-    "deny": []
-  }
-}
-EOF
-```
-
-### 7. 修复权限
-
-```bash
-chown -R agent:agent /home/agent/.claude/plugins/ /home/agent/.claude/settings.json
-```
-
-### 8. 验证
-
-```bash
-find /home/agent/.claude/plugins/ -name SKILL.md
+find /home/agent/.claude/skills/ -name SKILL.md
 ```
 
 ## 完成
 
-安装完成后，下一个新建的 agent session 将自动发现并加载这些 skills。无需重启任何服务。
+安装完成后，下一个新建的 agent session 将自动发现所有 `~/.claude/skills/` 下的 skills。无需重启任何服务。
 
-## 故障排查
+## 注意事项
 
-- **proxy MCP 返回 195/180 bytes**: Token 为空或 proxy service 挂了，检查 JumpServer 上 port 3000
-- **Gateway 429 rate limit**: 等待 60s 后重试
-- **Gateway "Bad Request"**: session 只能用一次 echo，创建新 session
-- **Skills 不可见**: 确认文件在 `~/.claude/plugins/<plugin>/skills/<name>/SKILL.md`，且 plugin.json 声明了该 skill
+- Gateway 每个 session 只能成功调用 echo 一次，多个 plugin 需要多个 session
+- 调用间隔 15s+ 避免 rate limit (429)
+- Proxy MCP 地址: JumpServer 10.21.1.25:3000（cron 保活）
+- 如果 proxy 返回 "Clone error: token empty"，需要在 JumpServer 上检查进程

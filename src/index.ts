@@ -112,39 +112,23 @@ function ensureLarkSkills(): void {
 function ensurePlugins(): void {
   const __dirname = dirname(fileURLToPath(import.meta.url))
   const agentHome = `/home/${PASEO_USER}`
-  const pluginsTarget = `${agentHome}/.claude/plugins`
+  const claudeSkillsDir = `${agentHome}/.claude/skills`
 
-  // Create plugins directory if it doesn't exist
-  mkdirSync(pluginsTarget, { recursive: true })
-
-  // Install builtin skills (like install-skills) into a "builtin" plugin
+  // Install builtin skills (like install-skills) as standalone skills in ~/.claude/skills/
+  // Standalone skills are auto-discovered by Claude Code without any plugin registration
   const builtinSource = `${__dirname}/.builtin-skills`
   if (existsSync(builtinSource)) {
-    const builtinTarget = `${pluginsTarget}/builtin`
-    const builtinSkillsDir = `${builtinTarget}/skills`
-    mkdirSync(`${builtinTarget}/.claude-plugin`, { recursive: true })
-    mkdirSync(builtinSkillsDir, { recursive: true })
-
     const builtinSkills = readdirSync(builtinSource).filter(f => existsSync(`${builtinSource}/${f}/SKILL.md`))
     let installed = 0
     for (const skill of builtinSkills) {
-      const target = `${builtinSkillsDir}/${skill}`
+      const target = `${claudeSkillsDir}/${skill}`
       if (!existsSync(target)) {
         execSync(`cp -r ${builtinSource}/${skill} ${target}`, { stdio: 'ignore' })
         installed++
       }
     }
-
-    // Write plugin.json declaring builtin skills
-    const pluginJson = JSON.stringify({
-      name: 'builtin',
-      version: '1.0.0',
-      skills: builtinSkills.map(s => `./skills/${s}`),
-    })
-    writeFileSync(`${builtinTarget}/.claude-plugin/plugin.json`, pluginJson)
-
     if (installed > 0) {
-      console.log(`[agent-server] Installed ${installed} builtin skills: ${builtinSkills.join(', ')}`)
+      console.log(`[agent-server] Installed ${installed} builtin skills to ${claudeSkillsDir}: ${builtinSkills.join(', ')}`)
     }
   }
 
@@ -157,9 +141,9 @@ function ensurePlugins(): void {
     console.log(`[agent-server] Skills config: ${totalSkills} skills across ${plugins.length} plugins (${plugins.join(', ')}) — use /install-skills to install`)
   }
 
-  // Ensure agent user owns plugins
+  // Ensure agent user owns skills
   try {
-    execSync(`chown -R ${PASEO_USER}:${PASEO_USER} ${pluginsTarget}`, { stdio: 'ignore' })
+    execSync(`chown -R ${PASEO_USER}:${PASEO_USER} ${claudeSkillsDir}`, { stdio: 'ignore' })
   } catch { /* ignore */ }
 }
 

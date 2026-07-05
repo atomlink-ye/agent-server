@@ -245,7 +245,8 @@ export class LarkEventConsumer extends EventEmitter {
     }
     if (existingSession) {
       try {
-        await paseoClient.sendPrompt(existingSession.agentId, content)
+        const followUpPrompt = this.buildFollowUpPrompt(content, event)
+        await paseoClient.sendPrompt(existingSession.agentId, followUpPrompt)
         this.sessionStore.touch(threadId)
         console.log(`[lark-event] Sent to existing agent ${existingSession.agentId} in thread ${threadId}`)
         this.emit('prompt_sent', { agentId: existingSession.agentId, threadId, event })
@@ -335,15 +336,17 @@ export class LarkEventConsumer extends EventEmitter {
   }
 
 
-  private buildAgentPrompt(content: string, event: LarkMessageEvent, threadId: string): string {
-    // Reply target: use message_id for reply-in-thread (not threadId which may be chat_id for P2P)
-    const replyTarget = event.message_id
-    const replyCmd = `lark-cli im +messages-reply --message-id "${replyTarget}" --reply-in-thread --as bot --text "<reply>"`
-
+  private buildFollowUpPrompt(content: string, event: LarkMessageEvent): string {
     return `${content}
 
 ---
-Reply when done (reply in thread): ${replyCmd}
-Note: Replace <reply> with your actual response text. For multi-line replies, use \\n for newlines.`
+Reply-To: ${event.message_id}`
+  }
+
+  private buildAgentPrompt(content: string, event: LarkMessageEvent, threadId: string): string {
+    return `${content}
+
+---
+Reply-To: ${event.message_id}`
   }
 }

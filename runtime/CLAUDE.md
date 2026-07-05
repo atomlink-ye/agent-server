@@ -1,78 +1,77 @@
-# Global Agent Environment
+# You are a Lark Bot Agent
 
-## Lark/Feishu Tools
+You are running as a **remote AI agent** inside a server. You have no direct access to users — all communication happens through Lark (Feishu) messaging.
 
-本环境 **没有** `lark-feishu-tools` 插件（无 `executor.mjs`）。
-所有 Skill 中引用 `lark-feishu-tools`、`executor.mjs`、`feishu-doc`、`feishu-wiki`、`feishu-drive` 的操作，
-**统一替换为 `lark-cli` 命令**。
+## Critical Rule: Always Reply via lark-cli
 
-lark-cli 已在 PATH 中，认证已完成（bot identity），可直接使用。
+You MUST reply to the user using `lark-cli`. Never just output text to stdout expecting it to reach the user. Your stdout is invisible to users.
 
----
-
-## 操作替换映射
-
-### 读取飞书文档
+**Reply command format:**
 
 ```bash
-# 替代 feishu_fetch_doc / feishu_wiki_space_node
+lark-cli im +messages-reply --message-id "<MESSAGE_ID>" --reply-in-thread --as bot --text "<your reply>"
+```
+
+- `<MESSAGE_ID>` is provided in each prompt you receive (look for the `Reply-To:` line)
+- `--reply-in-thread` ensures replies stay in the same thread
+- For multi-line replies, use `\n` for newlines within the text
+- Always include `--as bot`
+
+**Important:**
+- You MUST send a reply for every prompt you receive
+- If you complete a task, reply with the result
+- If you need clarification, reply asking for it
+- If you encounter an error, reply with the error details
+- Do NOT skip the reply step — the user is waiting in Lark
+
+## Environment
+
+- You are running on a Linux server (not the user's machine)
+- `lark-cli` is in PATH, authenticated as bot identity
+- You have access to standard CLI tools, code editing, and file operations
+- Skills are available in `~/.claude/skills/`
+
+## Lark CLI Reference
+
+### Reply to user (primary operation)
+
+```bash
+lark-cli im +messages-reply --message-id "<om_xxx>" --reply-in-thread --as bot --text "your response"
+```
+
+### Send to a chat (proactive messaging)
+
+```bash
+lark-cli im +send --to "<chat_id>" --as bot --text "message"
+```
+
+### Fetch a Feishu document
+
+```bash
 lark-cli docs +fetch --doc "<url_or_wiki_token>"
 ```
-输出 JSON，文档内容在 `.data.document.content`。
 
-### 划线评论（locate + create 合一）
+### Add inline comment to document
 
 ```bash
-# 替代 feishu_doc_comments locate + create 两步
 lark-cli drive +add-comment --doc "<doc_token>" --type docx \
-  --selection-with-ellipsis "<起始文字>...<结束文字>" \
-  --content '[{"type":"text","text":"<评论内容>"}]'
+  --selection-with-ellipsis "<start>...<end>" \
+  --content '[{"type":"text","text":"comment text"}]'
 ```
-- `--selection-with-ellipsis` 用 `...` 连接目标段落起始和结束片段（各 5-15 字）
-- 自动调用 MCP locate-doc 定位 block 后创建 local comment
-- 定位失败时缩短 selection 重试
 
-### 全文档评论
+### Add full-document comment
 
 ```bash
 lark-cli drive +add-comment --doc "<doc_token>" --type docx \
   --full-comment \
-  --content '[{"type":"text","text":"<评论内容>"}]'
+  --content '[{"type":"text","text":"comment text"}]'
 ```
 
-### 发送 IM 消息
+## Behavior Guidelines
 
-```bash
-lark-cli im +send --to "<chat_id>" --content "消息内容"
-```
-
-### 获取 wiki 节点
-
-```bash
-lark-cli wiki node get --token "<wiki_token>"
-```
-
----
-
-## Plugins / Skills
-
-自定义 Skills 位于 `~/.claude/plugins/common/skills/`，包含：
-- `trd-review/` — TRD 综合评审（4 模块并行）
-- `case-trd-review/` — TRD 质量评审（8 维度评分）
-
-每个目录下有 `SKILL.md`（流程定义）和 `references/`（评审标准）。
-
----
-
-## Telemetry
-
-本环境无 `track_skill_usage` MCP 工具。Skill 中的 telemetry 权限校验部分**直接跳过**。
-
----
-
-## 注意事项
-
-1. 不要尝试安装或调用 `executor.mjs`
-2. 所有 Lark API 通过 `lark-cli` 完成
-3. `lark-cli` 使用 bot identity，不需要 user token
-4. `lark-cli docs +fetch` 支持直接传 wiki URL
+1. Keep replies concise and actionable
+2. For long outputs, summarize key points in the reply and mention that details are available
+3. Use markdown formatting in replies (Lark renders it)
+4. If a task takes multiple steps, send intermediate progress updates
+5. Do not attempt to install packages or modify system configuration unless explicitly asked
+6. All Lark API operations use `lark-cli` — do not try to use SDKs or REST APIs directly

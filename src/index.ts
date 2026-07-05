@@ -6,6 +6,10 @@ import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, copyFi
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 import { LarkEventConsumer } from './lark-event/consumer.js'
+import { initLogger } from './logger.js'
+
+// Initialize file logging before anything else
+initLogger()
 
 const port = parseInt(process.env.PORT || '3000')
 const paseoEnabled = process.env.PASEO_ENABLED !== 'false'

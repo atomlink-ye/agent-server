@@ -161,8 +161,8 @@ export class LarkEventConsumer extends EventEmitter {
     }
 
     if (event.type !== 'im.message.receive_v1') return
-    if (event.message_type !== 'text') {
-      console.log(`[lark-event] Ignoring non-text message type: ${event.message_type}`)
+    if (event.message_type !== 'text' && event.message_type !== 'post') {
+      console.log(`[lark-event] Ignoring unsupported message type: ${event.message_type}`)
       return
     }
 
@@ -193,10 +193,10 @@ export class LarkEventConsumer extends EventEmitter {
   private async handleMessage(event: LarkMessageEvent): Promise<void> {
     const { paseoClient, model, agentCwd } = this.options
 
-    // Strip @mention prefix if present
-    const content = event.content.replace(/@\S+\s*/, '').trim()
+    // Extract text content based on message type
+    const content = this.extractContent(event)
     if (!content) {
-      console.log('[lark-event] Empty message after stripping mention, ignoring')
+      console.log('[lark-event] Empty message after content extraction, ignoring')
       return
     }
 
@@ -335,6 +335,44 @@ export class LarkEventConsumer extends EventEmitter {
     return null
   }
 
+
+  /**
+   * Extract text content from message event.
+   * - text type: content is plain text, strip @mention prefix
+   * - post type: content is JSON rich text, extract text elements (skip at elements)
+   */
+  private extractContent(event: LarkMessageEvent): string {
+    if (event.message_type === 'text') {
+      // Plain text: strip @mention prefix
+      return event.content.replace(/@\S+\s*/, '').trim()
+    }
+
+    if (event.message_type === 'post') {
+      // Rich text (post): content is JSON like {"title":"","content":[[{"tag":"text","text":"hello"},{"tag":"at",...}]]}
+      try {
+        const post = typeof event.content === 'string' ? JSON.parse(event.content) : event.content
+        const parts: string[] = []
+        // post.content is array of paragraphs, each paragraph is array of elements
+        const paragraphs = post.content || []
+        for (const paragraph of paragraphs) {
+          if (!Array.isArray(paragraph)) continue
+          for (const elem of paragraph) {
+            if (elem.tag === 'text' && elem.text) {
+              parts.push(elem.text)
+            }
+            // Skip 'at' elements (bot mentions)
+          }
+        }
+        return parts.join('').trim()
+      } catch (err: any) {
+        console.warn(`[lark-event] Failed to parse post content: ${err.message}, raw: ${String(event.content).slice(0, 200)}`)
+        // Fallback: treat as plain text
+        return String(event.content).replace(/@\S+\s*/, '').trim()
+      }
+    }
+
+    return ''
+  }
 
   private buildFollowUpPrompt(content: string, event: LarkMessageEvent): string {
     return `${content}

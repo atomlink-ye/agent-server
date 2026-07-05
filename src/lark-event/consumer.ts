@@ -355,8 +355,9 @@ export class LarkEventConsumer extends EventEmitter {
   }
 
   private buildAgentPrompt(content: string, event: LarkMessageEvent, threadId: string): string {
-    // Reply in thread: use +messages-reply with --reply-in-thread to keep responses in the thread
-    const replyCmd = `lark-cli im +messages-reply --message-id "${threadId}" --reply-in-thread --as bot --text "<reply>"`
+    // Reply target: use message_id for reply-in-thread (not threadId which may be chat_id for P2P)
+    const replyTarget = event.message_id
+    const replyCmd = `lark-cli im +messages-reply --message-id "${replyTarget}" --reply-in-thread --as bot --text "<reply>"`
 
     return `${content}
 

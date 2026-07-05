@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server'
 import { spawn, execSync, ChildProcess } from 'child_process'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { mkdirSync, writeFileSync, existsSync, readdirSync, symlinkSync, readFileSync, copyFileSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, copyFileSync } from 'fs'
 import { app } from './api/app.js'
 import { paseoClient, initPaseoClient } from './paseo-client/singleton.js'
 import { LarkEventConsumer } from './lark-event/consumer.js'
@@ -81,55 +81,47 @@ function ensureLarkCliConfig(): void {
   }
 }
 
-function ensureLarkSkills(): void {
+function ensureSkills(): void {
   const __dirname = dirname(fileURLToPath(import.meta.url))
-  const skillsSource = `${__dirname}/.agent-skills`
-  if (!existsSync(skillsSource)) {
-    console.log('[agent-server] No .agent-skills directory found, skipping skills setup')
-    return
-  }
   const agentHome = `/home/${PASEO_USER}`
   const claudeSkillsDir = `${agentHome}/.claude/skills`
   mkdirSync(claudeSkillsDir, { recursive: true })
 
-  const skills = readdirSync(skillsSource)
-  let installed = 0
-  for (const skill of skills) {
-    const target = `${claudeSkillsDir}/${skill}`
-    const source = `${skillsSource}/${skill}`
-    if (!existsSync(target)) {
-      try {
-        symlinkSync(source, target)
-        installed++
-      } catch { /* ignore */ }
-    }
-  }
-  if (installed > 0) {
-    console.log(`[agent-server] Installed ${installed} lark skills to ${claudeSkillsDir}`)
-  }
-}
+  let totalInstalled = 0
 
-function ensurePlugins(): void {
-  const __dirname = dirname(fileURLToPath(import.meta.url))
-  const agentHome = `/home/${PASEO_USER}`
-  const claudeSkillsDir = `${agentHome}/.claude/skills`
-
-  // Install builtin skills (like install-skills) as standalone skills in ~/.claude/skills/
-  // Standalone skills are auto-discovered by Claude Code without any plugin registration
-  const builtinSource = `${__dirname}/.builtin-skills`
-  if (existsSync(builtinSource)) {
-    const builtinSkills = readdirSync(builtinSource).filter(f => existsSync(`${builtinSource}/${f}/SKILL.md`))
-    let installed = 0
-    for (const skill of builtinSkills) {
+  // Install lark skills from .agent-skills (built via `skills add larksuite/cli`)
+  const larkSource = `${__dirname}/.agent-skills`
+  if (existsSync(larkSource)) {
+    const skills = readdirSync(larkSource)
+    for (const skill of skills) {
       const target = `${claudeSkillsDir}/${skill}`
       if (!existsSync(target)) {
-        execSync(`cp -r ${builtinSource}/${skill} ${target}`, { stdio: 'ignore' })
-        installed++
+        try {
+          execSync(`cp -r ${larkSource}/${skill} ${target}`, { stdio: 'ignore' })
+          totalInstalled++
+        } catch { /* ignore */ }
       }
     }
-    if (installed > 0) {
-      console.log(`[agent-server] Installed ${installed} builtin skills to ${claudeSkillsDir}: ${builtinSkills.join(', ')}`)
+  }
+
+  // Install builtin skills from .builtin-skills (like install-skills)
+  const builtinSource = `${__dirname}/.builtin-skills`
+  if (existsSync(builtinSource)) {
+    const skills = readdirSync(builtinSource).filter(f => existsSync(`${builtinSource}/${f}/SKILL.md`))
+    for (const skill of skills) {
+      const target = `${claudeSkillsDir}/${skill}`
+      if (!existsSync(target)) {
+        try {
+          execSync(`cp -r ${builtinSource}/${skill} ${target}`, { stdio: 'ignore' })
+          totalInstalled++
+        } catch { /* ignore */ }
+      }
     }
+  }
+
+  if (totalInstalled > 0) {
+    const allSkills = existsSync(claudeSkillsDir) ? readdirSync(claudeSkillsDir) : []
+    console.log(`[agent-server] Installed ${totalInstalled} skills to ${claudeSkillsDir} (total: ${allSkills.length})`)
   }
 
   // Log skills config
@@ -138,7 +130,7 @@ function ensurePlugins(): void {
     const config = JSON.parse(readFileSync(configPath, 'utf-8'))
     const plugins = Object.keys(config.plugins || {})
     const totalSkills = Object.values(config.plugins || {}).reduce((sum: number, p: any) => sum + (p.skills?.length || 0), 0)
-    console.log(`[agent-server] Skills config: ${totalSkills} skills across ${plugins.length} plugins (${plugins.join(', ')}) — use /install-skills to install`)
+    console.log(`[agent-server] Skills config: ${totalSkills} additional skills available via /install-skills (${plugins.join(', ')})`)
   }
 
   // Ensure agent user owns skills
@@ -177,8 +169,7 @@ function startPaseoDaemon(): Promise<void> {
 
     // Configure lark-cli with app credentials and set up skills/plugins
     ensureLarkCliConfig()
-    ensureLarkSkills()
-    ensurePlugins()
+    ensureSkills()
     ensureGlobalClaudeMd()
 
     // Write config.json to disable relay before starting daemon

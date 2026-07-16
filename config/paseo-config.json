@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "daemon": {
+    "listen": "0.0.0.0:6767",
+    "mcp": {
+      "injectIntoAgents": true
+    },
+    "cors": {
+      "allowedOrigins": ["*"]
+    }
+  },
+  "features": {
+    "dictation": {
+      "enabled": false
+    },
+    "voiceMode": {
+      "enabled": false
+    }
+  }
+}

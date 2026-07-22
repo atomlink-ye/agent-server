@@ -2,16 +2,16 @@
 
 This is the authoritative capability ledger. Status values are `implemented`, `baseline`, `planned`, and `reserved`. `baseline` is a proven seam with known temporary limitations; it is not production completion.
 
-| Feature area                     | Current status | Baseline evidence                                   | V1 destination                                                      |
-| -------------------------------- | -------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
-| Identity and Access              | Planned        | Loopback-only warning                               | Tenant, canonical user, OIDC/Lark, ACL, service accounts            |
-| Agents and Teams                 | Planned        | Runtime provider is hidden behind a port            | Immutable Agent/Team versions and bounded graphs                    |
-| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is explicitly reused   | Product Workspace, snapshots, proposals, memory policy              |
-| Sessions, Tasks and Runs         | Baseline       | In-memory async Run state and polling               | Product Session, durable Task/Run, queue, lease, fence, recovery    |
-| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection | Execution cells, tool gateway, credential broker, approvals         |
-| Artifacts and Evidence           | Planned        | Result text only                                    | Immutable Artifact versions, evidence, source and child lineage     |
-| Channels, API and Console        | Baseline       | Run and health HTTP routes                          | Task API, SSE, Web console, Lark adapter                            |
-| Schedules, Triggers and Delivery | Planned        | None                                                | Idempotent admission, controlled schedules/events, durable delivery |
+| Feature area                     | Current status | Baseline evidence                                         | V1 destination                                                      |
+| -------------------------------- | -------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Identity and Access              | Planned        | Loopback-only warning                                     | Tenant, canonical user, OIDC/Lark, ACL, service accounts            |
+| Agents and Teams                 | Planned        | Runtime provider is hidden behind a port                  | Immutable Agent/Team versions and bounded graphs                    |
+| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is explicitly reused         | Product Workspace, snapshots, proposals, memory policy              |
+| Sessions, Tasks and Runs         | Baseline       | PostgreSQL-backed Task admission, Run polling, dispatcher | Product Session, public Task API, cancel/retry, reconcile, recovery |
+| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection       | Execution cells, tool gateway, credential broker, approvals         |
+| Artifacts and Evidence           | Planned        | Result text only                                          | Immutable Artifact versions, evidence, source and child lineage     |
+| Channels, API and Console        | Baseline       | Run and health HTTP routes                                | Task API, SSE, Web console, Lark adapter                            |
+| Schedules, Triggers and Delivery | Planned        | None                                                      | Idempotent admission, controlled schedules/events, durable delivery |
 
 ## Identity and Access
 
@@ -33,9 +33,9 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 
 ## Sessions, Tasks and Runs
 
-**Baseline:** `queued → running → succeeded|failed|timed_out` is stored in process memory. Create returns `202`; GET never returns the prompt. Restart loses all Runs.
+**Baseline:** `POST /api/v1/runs` persists a canonical root Task, compatibility Run, idempotent admission, and dispatch state in PostgreSQL. `GET /api/v1/runs/{id}` never returns the prompt. One in-process dispatcher claims queued Runs and completes them through the Runtime Port.
 
-**V1 acceptance:** Task is the only node invocation identity. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
+**V1 acceptance:** Task is the only node invocation identity at both public and internal boundaries. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
 ## Runtime, Tools and Credentials
 

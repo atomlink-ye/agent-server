@@ -13,7 +13,7 @@ describe('run walking skeleton', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    const app = createTestApp(
+    const app = await createTestApp(
       new FakeAgentRuntime({ responseText: 'DETERMINISTIC_E2E_OK' }),
     );
     server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
@@ -34,13 +34,14 @@ describe('run walking skeleton', () => {
   });
 
   it('accepts, executes, and exposes a completed run over a real socket', async () => {
+    const prompt = 'deterministic e2e prompt';
     const ready = await fetch(`${baseUrl}/health/ready`);
     expect(ready.status).toBe(200);
 
     const createdResponse = await fetch(`${baseUrl}/api/v1/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'deterministic e2e prompt' }),
+      body: JSON.stringify({ prompt }),
     });
     expect(createdResponse.status).toBe(202);
     const created = CreateRunResponseSchema.parse(await createdResponse.json());
@@ -65,5 +66,6 @@ describe('run walking skeleton', () => {
       },
       result: { text: 'DETERMINISTIC_E2E_OK' },
     });
+    expect(JSON.stringify(completed)).not.toContain(prompt);
   });
 });

@@ -37,6 +37,8 @@ export interface Run {
   readonly error?: RunFailure;
 }
 
+export type RunSnapshot = Run;
+
 export function createRun(
   prompt: string,
   options: {
@@ -55,6 +57,11 @@ export function createRun(
   });
 }
 
+export function rehydrateRun(snapshot: RunSnapshot): Run {
+  assertRunTimestamps(snapshot);
+  return Object.freeze({ ...snapshot });
+}
+
 export function transitionRun(
   run: Run,
   status: RunStatus,
@@ -69,4 +76,17 @@ export function transitionRun(
     status,
     updatedAt: now().toISOString(),
   });
+}
+
+function assertRunTimestamps(run: RunSnapshot): void {
+  const createdAt = Date.parse(run.createdAt);
+  const updatedAt = Date.parse(run.updatedAt);
+
+  if (Number.isNaN(createdAt) || Number.isNaN(updatedAt)) {
+    throw new Error('Run timestamps must be valid ISO-8601 instants');
+  }
+
+  if (updatedAt < createdAt) {
+    throw new Error('Run updatedAt must be greater than or equal to createdAt');
+  }
 }

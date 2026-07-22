@@ -1,18 +1,20 @@
 # Agent Server
 
-Agent Server is an enterprise control-plane project for long-lived agents and bounded agent teams. Paseo remains the leaf-agent runtime; this repository owns stable product identities, task/run semantics, policy, evidence, channels, and eventually durable orchestration around it.
+Agent Server is an enterprise control-plane project for long-lived agents and bounded agent teams. Paseo remains the leaf-agent runtime; this repository owns stable product identities, task/run semantics, policy, evidence, channels, and durable orchestration around it.
 
-The current repository is a **walking-skeleton baseline**, not the V1 platform. It proves one replaceable path end to end:
+The current repository is a **walking-skeleton baseline with the first durable kernel slice**, not the V1 platform. It proves one replaceable path end to end:
 
 ```mermaid
 flowchart TD
-    A["POST /api/v1/runs"] --> B["Run application service"]
-    B --> C["In-memory run repository"]
-    B --> D["AgentRuntimePort"]
-    D --> E["Paseo adapter"]
-    E --> F["OpenCode free model"]
-    F --> C
-    G["GET /api/v1/runs/:id"] --> C
+    A["POST /api/v1/runs"] --> B["SubmitRun compatibility service"]
+    B --> C["AdmitRootTask"]
+    C --> D["PostgreSQL tasks / runs / admissions / dispatches"]
+    D --> E["In-process dispatcher claim + fence"]
+    E --> F["AgentRuntimePort"]
+    F --> G["Paseo adapter"]
+    G --> H["OpenCode free model"]
+    H --> D
+    I["GET /api/v1/runs/:id"] --> D
 ```
 
 ## Baseline status
@@ -21,20 +23,21 @@ flowchart TD
 | ------------------------------------------ | -------------------------------------- |
 | HTTP liveness/readiness                    | Implemented                            |
 | Asynchronous Run API                       | Implemented                            |
+| PostgreSQL-backed Task/Run admission       | Implemented                            |
+| Idempotent replay via `Idempotency-Key`    | Implemented                            |
+| In-process durable dispatcher/claim/fence  | Implemented; single process            |
 | Paseo WebSocket adapter                    | Implemented                            |
 | OpenCode free-model discovery              | Implemented                            |
 | Explicit reusable Paseo Workspace          | Implemented                            |
-| In-memory Run storage                      | Baseline-only                          |
 | Deterministic CI                           | Implemented; no model network calls    |
 | Zero-model-credential external smoke       | Implemented; optional/manual/scheduled |
-| Durable Task/Run, queue, lease, fence      | Planned V1                             |
 | Tenant, identity, credentials, approval    | Planned V1                             |
 | Agent/Team definitions and graph execution | Planned V1                             |
 | Artifacts, evidence, Lark, Web console     | Planned V1                             |
 
 ## Quick start
 
-Requirements: Node.js 22–24, Corepack, Linux or macOS on x64/arm64, and network access for the real OpenCode smoke.
+Requirements: Node.js 22–24, Corepack, Linux or macOS on x64/arm64, PostgreSQL reachable via `DATABASE_URL` or `POSTGRES_URL` for API startup, and network access for the real OpenCode smoke.
 
 ```bash
 make setup
@@ -42,13 +45,15 @@ make ci
 make paseo-smoke
 ```
 
-`make ci` is deterministic and does not call an external model. `make paseo-smoke` starts isolated Paseo and Agent Server processes, allowlists only non-secret runtime/network environment variables, dynamically selects an explicitly free OpenCode model, and expects the exact marker `PASEO_OPENCODE_BASELINE_OK`.
+`make ci` is deterministic and does not call an external model. `make paseo-smoke` starts isolated Paseo, a local PGlite-backed PostgreSQL socket, and Agent Server processes, allowlists only non-secret runtime/network environment variables, dynamically selects an explicitly free OpenCode model, and expects the exact marker `PASEO_OPENCODE_BASELINE_OK`.
 
 Start the local stack:
 
 ```bash
 make dev
 ```
+
+`make dev`, `make dev-api`, and `pnpm start` require `DATABASE_URL` or `POSTGRES_URL`.
 
 Submit and poll a run:
 
@@ -60,7 +65,7 @@ curl -sS http://127.0.0.1:3000/api/v1/runs \
 curl -sS http://127.0.0.1:3000/api/v1/runs/<run_id>
 ```
 
-The API does not accept a caller-selected model. Operators may set `PASEO_MODEL`; otherwise the adapter chooses from the live catalog and never automatically falls back to an unmarked paid model.
+The public HTTP surface remains `/api/v1/runs`, but admission now persists a canonical root Task plus the first compatibility Run in PostgreSQL. The API does not accept a caller-selected model. Operators may set `PASEO_MODEL`; otherwise the adapter chooses from the live catalog and never automatically falls back to an unmarked paid model.
 
 ## Canonical commands
 
@@ -94,9 +99,9 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 
 ## Baseline limitations
 
-- Runs disappear when the process restarts.
-- There is no authentication, tenant boundary, idempotency key, cancel, retry, streaming, or artifact service yet.
-- Runtime execution is one in-process asynchronous callback, not a durable queue.
+- There is no authentication, tenant boundary, cancel, retry, streaming, or artifact service yet.
+- Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
+- `/api/v1/runs` is still the only public invocation surface; canonical Task routes are not exposed yet.
 - Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
 - The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.
 

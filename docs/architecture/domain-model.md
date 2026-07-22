@@ -35,4 +35,4 @@ Artifact is a stable series identity. Each manifest version is immutable and rec
 
 ## Baseline mapping
 
-[`Run`](../../src/domain/runs/run.ts) currently models only a temporary leaf-shaped resource with five states. It intentionally omits Tenant, Task, attempt, activation, fence, session, Artifact, and idempotency until the durable-kernel plan implements them together.
+[`Run`](../../src/domain/runs/run.ts) still exposes a minimal compatibility resource with five states plus runtime/result/usage/error. Task identity, attempt, activation, fence, and idempotency are now persisted behind the durable admission and repository boundaries rather than returned as public Run fields.

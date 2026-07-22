@@ -4,16 +4,19 @@
 
 The kernel turns admitted intent into durable, bounded, recoverable execution. Task is the canonical node invocation; Run is one attempt; Activation is temporary worker authority.
 
-## Baseline implementation
+## Current implementation
 
-The current walking skeleton deliberately contains only:
+The current walking skeleton contains:
 
-- [`Run`](../../src/domain/runs/run.ts) and its minimal state invariant;
-- Submit, execute, and get use cases under [`src/application/runs`](../../src/application/runs/);
-- [`InMemoryRunRepository`](../../src/infrastructure/memory/in-memory-run-repository.ts);
-- an in-process asynchronous callback that calls `AgentRuntimePort`.
+- canonical root [`Task`](../../src/domain/tasks/task.ts) admission under [`src/application/tasks`](../../src/application/tasks/);
+- compatibility Run submit/get/claim/complete use cases under [`src/application/runs`](../../src/application/runs/);
+- PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
+- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes them through `AgentRuntimePort` with lease/activation/fence metadata behind the repository boundary;
+- the unchanged public `/api/v1/runs` compatibility surface.
 
-This proves API and adapter separation. It does not survive restart, serialize concurrent work, provide idempotency, or guarantee accepted-work durability.
+This proves durable admission, idempotent replay, and fenced in-process execution without exposing internal Task state over HTTP yet.
+
+Still out of scope for this phase: child-task trees, waiting/resume, cancel, retry, reconcile, Team execution, tenant/identity enforcement, and artifact/evidence orchestration.
 
 ## V1 responsibilities
 

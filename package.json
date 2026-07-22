@@ -32,6 +32,7 @@
     "@getpaseo/client": "0.1.110",
     "@hono/node-server": "2.0.11",
     "hono": "4.12.31",
+    "pg": "8.16.3",
     "zod": "4.4.3"
   },
   "optionalDependencies": {
@@ -41,8 +42,12 @@
     "opencode-linux-x64": "1.18.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@electric-sql/pglite-smoke": "npm:@electric-sql/pglite@0.5.4",
+    "@electric-sql/pglite-socket": "0.2.7",
     "@getpaseo/cli": "0.1.110",
     "@types/node": "22.20.1",
+    "@types/pg": "8.15.5",
     "prettier": "3.9.6",
     "tsx": "4.23.1",
     "typescript": "7.0.2",

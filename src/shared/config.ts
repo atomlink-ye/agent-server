@@ -2,6 +2,84 @@ import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
+import type { ServiceAccountRecord } from '../application/control-plane/service-account-authenticator.js';
+
+const ServiceAccountSchema = z.object({
+  serviceAccountId: z.string().trim().min(1),
+  token: z.string().trim().min(1),
+  tenantId: z.string().trim().min(1),
+  workspaceId: z.string().trim().min(1),
+  policyVersion: z.string().trim().min(1),
+  disabled: z.boolean().default(false),
+});
+
+const ServiceAccountsEnvironmentSchema = z
+  .string()
+  .optional()
+  .transform((value, context): unknown => {
+    if (value === undefined || value.trim() === '') {
+      return [];
+    }
+
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      context.addIssue({
+        code: 'custom',
+        message: 'must be valid JSON',
+      });
+      return z.NEVER;
+    }
+  })
+  .pipe(
+    z.array(ServiceAccountSchema).superRefine((accounts, context) => {
+      const tokenIndexes = new Map<string, number>();
+      const serviceAccountScopes = new Map<
+        string,
+        {
+          readonly tenantId: string;
+          readonly workspaceId: string;
+        }
+      >();
+
+      for (const [index, account] of accounts.entries()) {
+        const duplicateTokenIndex = tokenIndexes.get(account.token);
+        if (duplicateTokenIndex !== undefined) {
+          context.addIssue({
+            code: 'custom',
+            path: [index, 'token'],
+            message: `duplicate service-account token is not allowed: ${account.token}`,
+          });
+        } else {
+          tokenIndexes.set(account.token, index);
+        }
+
+        const existingScope = serviceAccountScopes.get(
+          account.serviceAccountId,
+        );
+        if (!existingScope) {
+          serviceAccountScopes.set(account.serviceAccountId, {
+            tenantId: account.tenantId,
+            workspaceId: account.workspaceId,
+          });
+          continue;
+        }
+
+        const hasConflictingOwnerScope =
+          existingScope.tenantId !== account.tenantId ||
+          existingScope.workspaceId !== account.workspaceId;
+
+        if (hasConflictingOwnerScope) {
+          context.addIssue({
+            code: 'custom',
+            path: [index, 'serviceAccountId'],
+            message: `conflicting service-account id binding across different owner scopes is not allowed: ${account.serviceAccountId}`,
+          });
+        }
+      }
+    }),
+  );
+
 const ConfigSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
@@ -26,6 +104,7 @@ const ConfigSchema = z.object({
     .min(1_000)
     .max(600_000)
     .default(120_000),
+  SERVICE_ACCOUNTS_JSON: ServiceAccountsEnvironmentSchema,
 });
 
 export type AppConfig = Readonly<{
@@ -34,6 +113,7 @@ export type AppConfig = Readonly<{
   port: number;
   logLevel: z.infer<typeof ConfigSchema>['LOG_LEVEL'];
   serviceName: string;
+  serviceAccounts?: readonly ServiceAccountRecord[];
   paseo: {
     wsUrl: string;
     agentCwd: string;
@@ -73,6 +153,11 @@ export function loadConfig(
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
+    serviceAccounts: Object.freeze(
+      parsed.data.SERVICE_ACCOUNTS_JSON.map((account) =>
+        Object.freeze({ ...account }),
+      ),
+    ),
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),

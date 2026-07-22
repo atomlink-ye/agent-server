@@ -27,6 +27,16 @@ describe('run routes', () => {
         port: 3_000,
         logLevel: 'error',
         serviceName: 'agent-server-test',
+        serviceAccounts: [
+          {
+            serviceAccountId: 'svc_enabled',
+            token: 'token-enabled',
+            tenantId: 'tenant_alpha',
+            workspaceId: 'workspace_main',
+            policyVersion: 'policy-2026-07-22',
+            disabled: false,
+          },
+        ],
         paseo: {
           wsUrl: 'ws://127.0.0.1:6767/ws',
           agentCwd: '/tmp/agent-server-test',
@@ -48,6 +58,7 @@ describe('run routes', () => {
     });
 
     const headers = {
+      authorization: 'Bearer token-enabled',
       'content-type': 'application/json',
       'idempotency-key': 'same-key',
     };

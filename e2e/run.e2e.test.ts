@@ -5,7 +5,12 @@ import {
   CreateRunResponseSchema,
   GetRunResponseSchema,
 } from '../src/contracts/runs.js';
-import { createTestApp } from '../tests/fixtures/create-test-app.js';
+import { ErrorResponseSchema } from '../src/contracts/http.js';
+import {
+  createTestApp,
+  primaryServiceAccountToken,
+  secondaryServiceAccountToken,
+} from '../tests/fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../tests/fixtures/fake-agent-runtime.js';
 
 describe('run walking skeleton', () => {
@@ -33,14 +38,28 @@ describe('run walking skeleton', () => {
     });
   });
 
-  it('accepts, executes, and exposes a completed run over a real socket', async () => {
+  it('requires bearer auth and keeps completed runs owner-scoped over a real socket', async () => {
     const prompt = 'deterministic e2e prompt';
     const ready = await fetch(`${baseUrl}/health/ready`);
     expect(ready.status).toBe(200);
 
-    const createdResponse = await fetch(`${baseUrl}/api/v1/runs`, {
+    const unauthorized = await fetch(`${baseUrl}/api/v1/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('www-authenticate')).toBe('Bearer');
+    expect(
+      ErrorResponseSchema.parse(await unauthorized.json()).error.code,
+    ).toBe('unauthorized');
+
+    const createdResponse = await fetch(`${baseUrl}/api/v1/runs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${primaryServiceAccountToken}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ prompt }),
     });
     expect(createdResponse.status).toBe(202);
@@ -48,7 +67,9 @@ describe('run walking skeleton', () => {
 
     let completed: ReturnType<typeof GetRunResponseSchema.parse> | null = null;
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const response = await fetch(`${baseUrl}${created.links.self}`);
+      const response = await fetch(`${baseUrl}${created.links.self}`, {
+        headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+      });
       const run = GetRunResponseSchema.parse(await response.json());
       if (['succeeded', 'failed', 'timed_out'].includes(run.status)) {
         completed = run;
@@ -67,5 +88,13 @@ describe('run walking skeleton', () => {
       result: { text: 'DETERMINISTIC_E2E_OK' },
     });
     expect(JSON.stringify(completed)).not.toContain(prompt);
+
+    const nonOwner = await fetch(`${baseUrl}${created.links.self}`, {
+      headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+    });
+    expect(nonOwner.status).toBe(404);
+    expect(ErrorResponseSchema.parse(await nonOwner.json()).error.code).toBe(
+      'run_not_found',
+    );
   });
 });

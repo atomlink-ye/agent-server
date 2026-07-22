@@ -1,18 +1,19 @@
 # Run compatibility API contract
 
-`/api/v1/runs` is the implemented HTTP surface. Internally, `POST /api/v1/runs` admits a canonical root Task plus its first Run in PostgreSQL; the Run resource remains the compatibility representation returned over HTTP.
+`/api/v1/runs` is the implemented HTTP surface. Both `POST` and `GET` require `Authorization: Bearer <token>`. Internally, `POST /api/v1/runs` admits a canonical root Task plus its first Run in PostgreSQL; the Run resource remains the compatibility representation returned over HTTP.
 
 ## Create
 
 ```http
 POST /api/v1/runs
+Authorization: Bearer configured-token
 Content-Type: application/json
 Idempotency-Key: client-generated-key   ; optional
 
 {"prompt":"Reply with exactly: BASELINE_OK"}
 ```
 
-The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. Runtime readiness is checked before accepting new work.
+The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. The caller cannot provide authoritative tenant, workspace, or principal fields. Runtime readiness is checked before accepting new work.
 
 ```http
 HTTP/1.1 202 Accepted
@@ -26,12 +27,13 @@ HTTP/1.1 202 Accepted
 }
 ```
 
-If the same `Idempotency-Key` is replayed with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same key with a different body returns `409 idempotency_conflict`.
+If the same `Idempotency-Key` is replayed by the same authenticated owner scope with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same owner scope and key with a different body returns `409 idempotency_conflict`. The same key used by a different authenticated owner scope is independent work, not a conflict.
 
 ## Get
 
 ```http
 GET /api/v1/runs/{run_id}
+Authorization: Bearer configured-token
 ```
 
 ```json
@@ -50,7 +52,7 @@ GET /api/v1/runs/{run_id}
 }
 ```
 
-Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/error are nullable. The prompt is never returned. Runtime failures use stable codes and safe messages.
+Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
 
 ## Errors
 
@@ -64,7 +66,7 @@ Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/erro
 }
 ```
 
-Relevant codes are `invalid_json`, `invalid_request`, `request_too_large`, `runtime_unavailable`, `idempotency_conflict`, `run_not_found`, `route_not_found`, and `internal_error`.
+Relevant codes are `unauthorized`, `invalid_json`, `invalid_request`, `request_too_large`, `runtime_unavailable`, `idempotency_conflict`, `run_not_found`, `route_not_found`, and `internal_error`.
 
 ## Future public Task routes
 

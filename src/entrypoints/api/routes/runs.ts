@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import type { AgentRuntimePort } from '../../../application/ports/agent-runtime.js';
-import type { ExecuteRun } from '../../../application/runs/execute-run.js';
+import { IdempotencyConflictError } from '../../../application/tasks/admit-root-task.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import { HttpError } from '../../../contracts/http.js';
@@ -18,7 +18,6 @@ interface RunRouteDependencies {
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
-  readonly executeRun: ExecuteRun;
 }
 
 export function registerRunRoutes(
@@ -37,24 +36,44 @@ export function registerRunRoutes(
       );
     }
 
-    const health = await dependencies.runtime.health();
-    if (!health.ready) {
-      throw new HttpError(
-        503,
-        'runtime_unavailable',
-        'The Paseo OpenCode runtime is not ready.',
-      );
+    const idempotencyKey = context.req.header('idempotency-key') ?? undefined;
+    let submission;
+
+    try {
+      submission = idempotencyKey
+        ? await dependencies.submitRun.replayIfAccepted(
+            input.data.prompt,
+            idempotencyKey,
+          )
+        : null;
+
+      if (!submission) {
+        const health = await dependencies.runtime.health();
+        if (!health.ready) {
+          throw new HttpError(
+            503,
+            'runtime_unavailable',
+            'The Paseo OpenCode runtime is not ready.',
+          );
+        }
+
+        submission = await dependencies.submitRun.execute(
+          input.data.prompt,
+          idempotencyKey,
+        );
+      }
+    } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        throw new HttpError(409, error.code, error.message);
+      }
+
+      throw error;
     }
 
-    const run = await dependencies.submitRun.execute(input.data.prompt);
-    queueMicrotask(() => {
-      void dependencies.executeRun.execute(run.id);
-    });
-
     const response: CreateRunResponse = {
-      run_id: run.id,
+      run_id: submission.run.id,
       status: 'queued',
-      links: { self: `/api/v1/runs/${run.id}` },
+      links: { self: `/api/v1/runs/${submission.run.id}` },
     };
     return context.json(response, 202);
   });

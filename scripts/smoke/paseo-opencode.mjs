@@ -4,6 +4,9 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { PGlite } from '@electric-sql/pglite-smoke';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+
 import {
   delay,
   getAvailablePort,
@@ -42,8 +45,16 @@ let paseo;
 let api;
 let paseoPid;
 let apiPid;
+let smokeDatabase;
+let smokePostgres;
 
 try {
+  const smokePostgresBootstrap = await startSmokePostgres(
+    join(runtimeRoot, 'pglite-postgres'),
+  );
+  smokeDatabase = smokePostgresBootstrap.database;
+  smokePostgres = smokePostgresBootstrap.server;
+
   paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot,
@@ -66,6 +77,9 @@ try {
           HOST: '127.0.0.1',
           PORT: String(apiPort),
           LOG_LEVEL: 'info',
+          DATABASE_URL: smokePostgresBootstrap.databaseUrl,
+          POSTGRES_URL: smokePostgresBootstrap.databaseUrl,
+          PGSSLMODE: 'disable',
           PASEO_WS_URL: paseo.wsUrl,
           PASEO_AGENT_CWD: agentWorkspace,
           PASEO_WORKSPACE_TITLE: 'Paseo OpenCode Baseline Smoke',
@@ -141,6 +155,7 @@ try {
   process.stdout.write(
     `${JSON.stringify({
       success: true,
+      database: 'pglite-socket',
       marker: expectedText,
       provider: completed.runtime.provider,
       model: completed.runtime.model,
@@ -149,10 +164,43 @@ try {
     })}\n`,
   );
 } finally {
-  await Promise.all([stopProcessTree(api), stopProcessTree(paseo?.child)]);
+  await Promise.all([
+    stopProcessTree(api),
+    stopProcessTree(paseo?.child),
+    stopSmokePostgres(smokePostgres, smokeDatabase),
+  ]);
   if (isProcessAlive(apiPid) || isProcessAlive(paseoPid)) {
     throw new Error('Smoke cleanup left a managed process running.');
   }
+}
+
+async function startSmokePostgres(databasePath) {
+  const database = new PGlite(databasePath);
+  const server = new PGLiteSocketServer({
+    db: database,
+    host: '127.0.0.1',
+    port: 0,
+    maxConnections: 10,
+  });
+  await server.start();
+
+  const connection = server.getServerConn();
+  if (!/^127\.0\.0\.1:\d+$/.test(connection)) {
+    throw new Error(
+      `Unexpected PGlite socket connection string: ${connection}`,
+    );
+  }
+
+  return {
+    database,
+    server,
+    databaseUrl: `postgresql://postgres:postgres@${connection}/postgres`,
+  };
+}
+
+async function stopSmokePostgres(server, database) {
+  await server?.stop();
+  await database?.close();
 }
 
 async function pollRun(baseUrl, runId, timeoutMs) {

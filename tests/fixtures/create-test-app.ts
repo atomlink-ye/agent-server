@@ -1,10 +1,21 @@
+import { randomUUID } from 'node:crypto';
+
+import { PGlite } from '@electric-sql/pglite';
+
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
 import type { AgentRuntimePort } from '../../src/application/ports/agent-runtime.js';
+import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
+import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { ExecuteRun } from '../../src/application/runs/execute-run.js';
 import { GetRun } from '../../src/application/runs/get-run.js';
 import { SubmitRun } from '../../src/application/runs/submit-run.js';
+import { AdmitRootTask } from '../../src/application/tasks/admit-root-task.js';
 import { createApp } from '../../src/entrypoints/api/app.js';
-import { InMemoryRunRepository } from '../../src/infrastructure/memory/in-memory-run-repository.js';
+import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
+import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
+import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
+import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 export const testConfig = {
@@ -22,16 +33,38 @@ export const testConfig = {
   },
 } as const;
 
-export function createTestApp(runtime: AgentRuntimePort) {
-  const repository = new InMemoryRunRepository();
+export async function createTestApp(runtime: AgentRuntimePort) {
+  const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
+  const database = new PGlite();
+  await applyDurableKernelMigrations(database);
+
+  const runRepository = new PostgresRunRepository(database);
+  const taskRepository = new PostgresTaskRepository(database);
+  const admissionRepository = new PostgresAdmissionRepository(database);
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
     write: () => undefined,
   });
-  const submitRun = new SubmitRun(repository);
-  const getRun = new GetRun(repository);
-  const executeRun = new ExecuteRun(repository, runtime, logger);
+  const admitRootTask = new AdmitRootTask(
+    taskRepository,
+    runRepository,
+    admissionRepository,
+  );
+  const submitRun = new SubmitRun(admitRootTask, runRepository);
+  const getRun = new GetRun(runRepository);
+  const completeRun = new CompleteRun(runRepository);
+  const executeRun = new ExecuteRun(completeRun, runtime, logger);
+  const dispatcher = new PostgresRunDispatcher(
+    new ClaimNextRun(runRepository, {
+      workerId,
+      leaseDurationMs: 30_000,
+    }),
+    executeRun,
+    logger,
+    { pollIntervalMs: 1 },
+  );
+  dispatcher.start();
 
   return createApp({
     config: testConfig,
@@ -40,6 +73,5 @@ export function createTestApp(runtime: AgentRuntimePort) {
     runtime,
     submitRun,
     getRun,
-    executeRun,
   });
 }

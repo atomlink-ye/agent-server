@@ -1,15 +1,18 @@
-# Run and Task API contract
+# Run compatibility API contract
 
-## Baseline create
+`/api/v1/runs` is the implemented HTTP surface. Internally, `POST /api/v1/runs` admits a canonical root Task plus its first Run in PostgreSQL; the Run resource remains the compatibility representation returned over HTTP.
+
+## Create
 
 ```http
 POST /api/v1/runs
 Content-Type: application/json
+Idempotency-Key: client-generated-key   ; optional
 
 {"prompt":"Reply with exactly: BASELINE_OK"}
 ```
 
-The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. Runtime readiness is checked before acceptance.
+The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. Runtime readiness is checked before accepting new work.
 
 ```http
 HTTP/1.1 202 Accepted
@@ -23,7 +26,9 @@ HTTP/1.1 202 Accepted
 }
 ```
 
-## Baseline get
+If the same `Idempotency-Key` is replayed with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same key with a different body returns `409 idempotency_conflict`.
+
+## Get
 
 ```http
 GET /api/v1/runs/{run_id}
@@ -59,15 +64,8 @@ Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/erro
 }
 ```
 
-Relevant codes are `invalid_json`, `invalid_request`, `request_too_large`, `runtime_unavailable`, `run_not_found`, `route_not_found`, and `internal_error`.
+Relevant codes are `invalid_json`, `invalid_request`, `request_too_large`, `runtime_unavailable`, `idempotency_conflict`, `run_not_found`, `route_not_found`, and `internal_error`.
 
-## V1 evolution
+## Future public Task routes
 
-The baseline Run route is replaced by canonical Task admission:
-
-```http
-POST /api/v1/tasks:invoke
-Idempotency-Key: client-generated-key
-```
-
-The request identifies an immutable Agent/Team version, Workspace, optional Product Session, typed input, and optional completion contract. Identity, tenant, effective principal, policy, genealogy, attempt, and fence are server-derived. `GET /tasks/{id}`, `/tasks/{id}/tree`, `/runs/{id}`, cancel, retry, and cursor-based events expose durable state. No second node-invocation identity is introduced.
+Public Task routes are not implemented in this phase. When they are added, they must expose the same canonical Task admission already used internally instead of introducing a competing invocation identity.

@@ -1,15 +1,16 @@
-import { serve, type ServerType } from '@hono/node-server';
+import { serve } from '@hono/node-server';
 
 import { createService } from '../../bootstrap.js';
 import { loadConfig } from '../../shared/config.js';
 import { createLogger } from '../../shared/observability/logger.js';
+import { shutdownService } from './shutdown.js';
 
 const config = loadConfig();
 const logger = createLogger({
   service: config.serviceName,
   minimumLevel: config.logLevel,
 });
-const { app, runtime } = createService(config, logger);
+const { app, runtime, close } = await createService(config, logger);
 
 void runtime.initialize().catch((error: unknown) => {
   logger.log('warn', 'runtime.initialization_failed', {
@@ -38,8 +39,12 @@ async function shutdown(signal: string): Promise<void> {
     return;
   }
   stopping = true;
-  logger.log('info', 'service.stopping', { signal });
-  await Promise.allSettled([closeServer(server), runtime.close()]);
+  await shutdownService({
+    signal,
+    logger,
+    server,
+    closeService: close,
+  });
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -47,11 +52,5 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     void shutdown(signal).finally(() => {
       process.exitCode = 0;
     });
-  });
-}
-
-function closeServer(serverToClose: ServerType): Promise<void> {
-  return new Promise((resolve, reject) => {
-    serverToClose.close((error) => (error ? reject(error) : resolve()));
   });
 }

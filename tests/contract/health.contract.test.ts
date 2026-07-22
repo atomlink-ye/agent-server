@@ -10,9 +10,8 @@ import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 
 describe('health HTTP contracts', () => {
   it('returns the stable liveness response', async () => {
-    const response = await createTestApp(new FakeAgentRuntime()).request(
-      '/health/live',
-    );
+    const app = await createTestApp(new FakeAgentRuntime());
+    const response = await app.request('/health/live');
 
     expect(response.status).toBe(200);
     expect(LivenessResponseSchema.parse(await response.json())).toMatchObject({
@@ -23,9 +22,8 @@ describe('health HTTP contracts', () => {
   });
 
   it('returns not-ready with a dependency-safe detail', async () => {
-    const response = await createTestApp(
-      new FakeAgentRuntime({ ready: false }),
-    ).request('/health/ready');
+    const app = await createTestApp(new FakeAgentRuntime({ ready: false }));
+    const response = await app.request('/health/ready');
 
     expect(response.status).toBe(503);
     expect(ReadinessResponseSchema.parse(await response.json())).toEqual({
@@ -42,10 +40,10 @@ describe('health HTTP contracts', () => {
   });
 
   it('uses the common error envelope for unknown routes', async () => {
-    const response = await createTestApp(new FakeAgentRuntime()).request(
-      '/missing',
-      { headers: { 'x-request-id': 'request-contract-1' } },
-    );
+    const app = await createTestApp(new FakeAgentRuntime());
+    const response = await app.request('/missing', {
+      headers: { 'x-request-id': 'request-contract-1' },
+    });
 
     expect(response.status).toBe(404);
     expect(ErrorResponseSchema.parse(await response.json())).toEqual({

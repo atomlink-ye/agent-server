@@ -5,7 +5,6 @@ import { Hono } from 'hono';
 
 import type { ReadinessProbe } from '../../application/health/readiness.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
-import type { ExecuteRun } from '../../application/runs/execute-run.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
@@ -22,7 +21,6 @@ export interface AppDependencies {
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
-  readonly executeRun: ExecuteRun;
   readonly version?: string;
 }
 

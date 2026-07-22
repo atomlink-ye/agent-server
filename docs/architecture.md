@@ -4,18 +4,19 @@ Agent Server follows a ports-and-adapters modular monolith around a separately m
 
 ```mermaid
 flowchart TD
-    C["Web / API / Lark"] --> A["Admission and Control Plane"]
-    A --> K["Task / Run Kernel"]
-    K --> T["Team Coordinator"]
-    K --> R["AgentRuntimePort"]
+    C["HTTP / future channels"] --> A["Admission + compatibility API"]
+    A --> D["PostgreSQL Task / Run / admission state"]
+    D --> W["In-process dispatcher claim + fence"]
+    W --> R["AgentRuntimePort"]
     R --> P["Paseo execution cell"]
-    K --> G["Tool Gateway"]
-    K --> S["Workspace / Artifact services"]
-    A --> D["PostgreSQL + outbox"]
-    K --> D
 ```
 
-In the baseline, admission and durable services are reduced to a small HTTP route and in-memory repository; the Runtime Port and separate process boundary are real.
+Current implementation truth:
+
+- Task is canonical internally; `Run` remains the compatibility HTTP surface.
+- Admission, idempotency, Task/Run persistence, and dispatch hints are PostgreSQL-backed.
+- One in-process dispatcher claims queued Runs with lease/activation/fence metadata and executes them through `AgentRuntimePort`.
+- Reconcile workers, public Task routes, multi-worker coordination, Team orchestration, and tenant/identity scope remain future work.
 
 ## Dependency rule
 

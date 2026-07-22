@@ -6,13 +6,13 @@ This component supplies durable storage, queue/outbox integration, audit, teleme
 
 ## Baseline state
 
-- In-process Map storage for Runs.
+- PostgreSQL migrations plus durable Task, Run, admission, and dispatch tables.
 - Structured JSON log records with request and Run identifiers.
 - Separate liveness and dependency readiness.
 - Deterministic CI plus a manually/scheduled external smoke.
 - Signal-aware local process cleanup and ignored evidence.
 
-There is no database, migration, queue, durable event log, metrics backend, tracing backend, service-level objective, backup, or production deployment.
+There is no external queue service, durable event log beyond the current enqueue table, metrics backend, tracing backend, service-level objective, backup, or production deployment.
 
 ## V1 direction
 

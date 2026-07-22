@@ -1,3 +1,4 @@
+import type { AccessContext } from '../control-plane/access-context.js';
 import { createRun } from '../../domain/runs/run.js';
 import { createRootTask } from '../../domain/tasks/task.js';
 import {
@@ -16,6 +17,7 @@ import {
 export interface AdmitRootTaskRequest {
   readonly prompt: string;
   readonly idempotencyKey: string;
+  readonly accessContext: AccessContext;
 }
 
 export interface AdmitRootTaskResult {
@@ -45,6 +47,7 @@ export class AdmitRootTask {
         transaction,
         request.idempotencyKey,
         fingerprint,
+        request.accessContext,
       ),
     );
   }
@@ -61,6 +64,7 @@ export class AdmitRootTask {
           transaction,
           request.idempotencyKey,
           fingerprint,
+          request.accessContext,
         );
 
         if (existing) {
@@ -70,6 +74,11 @@ export class AdmitRootTask {
         const admittedAt = this.now();
         const frozenNow = () => admittedAt;
         const task = createRootTask({
+          tenantId: request.accessContext.tenantId,
+          workspaceId: request.accessContext.workspaceId,
+          principalType: request.accessContext.principalType,
+          principalId: request.accessContext.principalId,
+          policySnapshotVersion: request.accessContext.policySnapshotVersion,
           ingress: 'api',
           invokableKind: 'agent',
           invokableVersionId: BASELINE_RUN_API_INVOKABLE_VERSION_ID,
@@ -86,6 +95,11 @@ export class AdmitRootTask {
           idempotencyKey: request.idempotencyKey,
           requestFingerprint: fingerprint,
           taskId: task.id,
+          tenantId: request.accessContext.tenantId,
+          workspaceId: request.accessContext.workspaceId,
+          principalType: request.accessContext.principalType,
+          principalId: request.accessContext.principalId,
+          policySnapshotVersion: request.accessContext.policySnapshotVersion,
           createdAt: task.createdAt,
         });
         await transaction.enqueueRunDispatch(run.id, run.createdAt);
@@ -115,10 +129,17 @@ export class AdmitRootTask {
     transaction: AdmissionTransaction,
     idempotencyKey: string,
     fingerprint: string,
+    accessContext: AccessContext,
   ): Promise<AdmitRootTaskResult | null> {
     const existing = await transaction.findByIngressAndIdempotencyKey(
       'api',
       idempotencyKey,
+      {
+        tenantId: accessContext.tenantId,
+        workspaceId: accessContext.workspaceId,
+        principalType: accessContext.principalType,
+        principalId: accessContext.principalId,
+      },
     );
 
     if (!existing) {

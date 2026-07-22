@@ -1,10 +1,23 @@
+import type { AccessContext } from '../control-plane/access-context.js';
 import type { Run } from '../../domain/runs/run.js';
-import type { RunRepository } from '../ports/run-repository.js';
+import type { RunOwnerScope, RunRepository } from '../ports/run-repository.js';
 
 export class GetRun {
   public constructor(private readonly repository: RunRepository) {}
 
-  public execute(id: string): Promise<Run | null> {
-    return this.repository.findById(id);
+  public execute(
+    id: string,
+    accessContext: AccessContext,
+  ): Promise<Run | null> {
+    return this.repository.findByIdForOwner(id, toRunOwnerScope(accessContext));
   }
+}
+
+function toRunOwnerScope(accessContext: AccessContext): RunOwnerScope {
+  return {
+    tenantId: accessContext.tenantId,
+    workspaceId: accessContext.workspaceId,
+    principalType: accessContext.principalType,
+    principalId: accessContext.principalId,
+  };
 }

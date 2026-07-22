@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 
+import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import type { AgentRuntimePort } from '../../../application/ports/agent-runtime.js';
 import { IdempotencyConflictError } from '../../../application/tasks/admit-root-task.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
@@ -12,9 +13,15 @@ import {
   MAX_RUN_REQUEST_BYTES,
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
+import type { AppConfig } from '../../../shared/config.js';
+import {
+  getAuthenticatedAccessContext,
+  requireServiceAccountAccess,
+} from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 
 interface RunRouteDependencies {
+  readonly config: AppConfig;
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
@@ -24,7 +31,15 @@ export function registerRunRoutes(
   app: Hono<ApiEnvironment>,
   dependencies: RunRouteDependencies,
 ): void {
+  const authenticator = new ServiceAccountAuthenticator(
+    dependencies.config.serviceAccounts ?? [],
+  );
+
+  app.use('/api/v1/runs', requireServiceAccountAccess(authenticator));
+  app.use('/api/v1/runs/*', requireServiceAccountAccess(authenticator));
+
   app.post('/api/v1/runs', async (context) => {
+    const accessContext = getAuthenticatedAccessContext(context);
     const input = CreateRunRequestSchema.safeParse(
       await readBoundedJson(context.req.raw),
     );
@@ -44,6 +59,7 @@ export function registerRunRoutes(
         ? await dependencies.submitRun.replayIfAccepted(
             input.data.prompt,
             idempotencyKey,
+            accessContext,
           )
         : null;
 
@@ -59,6 +75,7 @@ export function registerRunRoutes(
 
         submission = await dependencies.submitRun.execute(
           input.data.prompt,
+          accessContext,
           idempotencyKey,
         );
       }
@@ -79,7 +96,10 @@ export function registerRunRoutes(
   });
 
   app.get('/api/v1/runs/:runId', async (context) => {
-    const run = await dependencies.getRun.execute(context.req.param('runId'));
+    const run = await dependencies.getRun.execute(
+      context.req.param('runId'),
+      getAuthenticatedAccessContext(context),
+    );
     if (!run) {
       throw new HttpError(
         404,

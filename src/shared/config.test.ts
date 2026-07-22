@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       port: 3_000,
       logLevel: 'info',
       serviceName: 'agent-server',
+      serviceAccounts: [],
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         agentCwd: '/repo/.local/agent-workspace',
@@ -41,5 +42,94 @@ describe('loadConfig', () => {
       model: 'opencode/mimo-v2.5-free',
       agentCwd: '/repo/runtime-workspace',
     });
+  });
+
+  it('loads static service-account bindings with tenant workspace and policy metadata', () => {
+    expect(
+      loadConfig(
+        {
+          SERVICE_ACCOUNTS_JSON: JSON.stringify([
+            {
+              serviceAccountId: 'svc_alpha',
+              token: 'token-alpha',
+              tenantId: 'tenant_alpha',
+              workspaceId: 'workspace_main',
+              policyVersion: 'policy-2026-07-22',
+            },
+          ]),
+        },
+        '/repo',
+      ).serviceAccounts,
+    ).toEqual([
+      {
+        serviceAccountId: 'svc_alpha',
+        token: 'token-alpha',
+        tenantId: 'tenant_alpha',
+        workspaceId: 'workspace_main',
+        policyVersion: 'policy-2026-07-22',
+        disabled: false,
+      },
+    ]);
+  });
+
+  it('rejects malformed static service-account configuration before startup', () => {
+    expect(() =>
+      loadConfig({
+        SERVICE_ACCOUNTS_JSON: JSON.stringify([
+          {
+            serviceAccountId: 'svc_alpha',
+            tenantId: 'tenant_alpha',
+            workspaceId: 'workspace_main',
+            policyVersion: 'policy-2026-07-22',
+          },
+        ]),
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
+  it('rejects duplicate static service-account token values before startup', () => {
+    expect(() =>
+      loadConfig({
+        SERVICE_ACCOUNTS_JSON: JSON.stringify([
+          {
+            serviceAccountId: 'svc_alpha',
+            token: 'token-duplicate',
+            tenantId: 'tenant_alpha',
+            workspaceId: 'workspace_main',
+            policyVersion: 'policy-2026-07-22',
+          },
+          {
+            serviceAccountId: 'svc_beta',
+            token: 'token-duplicate',
+            tenantId: 'tenant_beta',
+            workspaceId: 'workspace_other',
+            policyVersion: 'policy-2026-07-22',
+          },
+        ]),
+      }),
+    ).toThrow(/duplicate service-account token/i);
+  });
+
+  it('rejects conflicting duplicate service-account ids across different owner scopes before startup', () => {
+    expect(() =>
+      loadConfig({
+        SERVICE_ACCOUNTS_JSON: JSON.stringify([
+          {
+            serviceAccountId: 'svc_alpha',
+            token: 'token-alpha-1',
+            tenantId: 'tenant_alpha',
+            workspaceId: 'workspace_main',
+            policyVersion: 'policy-2026-07-22',
+          },
+          {
+            serviceAccountId: 'svc_alpha',
+            token: 'token-alpha-2',
+            tenantId: 'tenant_beta',
+            workspaceId: 'workspace_other',
+            policyVersion: 'policy-2026-07-22',
+          },
+        ]),
+      }),
+    ).toThrow(/conflicting service-account id binding/i);
   });
 });

@@ -21,7 +21,10 @@ export interface PostgresMigrationExecutor {
   exec?(sql: string): Promise<unknown>;
 }
 
-const durableKernelMigrationFileNames = ['0001_durable_kernel_a.sql'] as const;
+const durableKernelMigrationFileNames = [
+  '0001_durable_kernel_a.sql',
+  '0002_phase_2a_authenticated_admission.sql',
+] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 
 export function resolveDurableKernelRepoRoot(

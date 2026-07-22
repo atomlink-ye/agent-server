@@ -20,7 +20,14 @@ The Control Plane owns product definitions and decisions that must outlive a run
 
 ## Baseline state
 
-The component is documented but not implemented. The current API has no authentication or product-definition endpoints. Adding any identity or policy placeholder that appears secure without real enforcement is out of scope; the first implementation must start with a dedicated Exec Plan and threat model.
+The first narrow Control Plane slice is implemented for the Run compatibility API:
+
+- configured service-account bearer authentication on `POST /api/v1/runs` and `GET /api/v1/runs/{id}`;
+- server-derived owner scope `(tenant, workspace, principal)` rather than caller-supplied authority fields;
+- persisted tenant/workspace/principal/policy snapshot facts on root Task admission;
+- owner-scoped idempotency replay and owner-scoped Run reads.
+
+Still not implemented: durable product-definition endpoints, end-user identity, shared Workspace ACLs, credential/tool policy enforcement, approvals, or broader channel authorization. The repository must not imply those later controls already exist.
 
 ## Required consumers and evidence
 

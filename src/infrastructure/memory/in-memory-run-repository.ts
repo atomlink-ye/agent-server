@@ -2,6 +2,7 @@ import type {
   ClaimedRun,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
+  RunOwnerScope,
   RunRepository,
   SaveRunOptions,
 } from '../../application/ports/run-repository.js';
@@ -28,6 +29,15 @@ export class InMemoryRunRepository implements RunRepository {
   public async findById(id: string): Promise<Run | null> {
     const run = this.#runs.get(id);
     return run ? structuredClone(run) : null;
+  }
+
+  public async findByIdForOwner(
+    _id: string,
+    _ownerScope: RunOwnerScope,
+  ): Promise<Run | null> {
+    throw new Error(
+      'InMemoryRunRepository does not support owner-scoped reads because stored runs do not retain authoritative owner scope',
+    );
   }
 
   public async findByTaskId(taskId: string): Promise<Run | null> {

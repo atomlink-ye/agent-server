@@ -27,9 +27,17 @@ export interface CompleteClaimedRunOptions {
   readonly run: Run;
 }
 
+export interface RunOwnerScope {
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+}
+
 export interface RunRepository {
   save(run: Run, options?: SaveRunOptions): Promise<void>;
   findById(id: string): Promise<Run | null>;
+  findByIdForOwner(id: string, ownerScope: RunOwnerScope): Promise<Run | null>;
   findByTaskId(taskId: string): Promise<Run | null>;
   claimNextQueued(
     options: ClaimNextQueuedRunOptions,

@@ -22,6 +22,23 @@ import { createLogger } from '../../src/shared/observability/logger.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { TestClock } from '../fixtures/test-clock.js';
 
+const primaryAccessContext = {
+  tenantId: 'tenant_alpha',
+  workspaceId: 'workspace_main',
+  principalType: 'service_account' as const,
+  principalId: 'svc_alpha',
+  policySnapshotVersion: 'policy-2026-07-22',
+};
+
+function createAccessContext(
+  overrides: Partial<typeof primaryAccessContext> = {},
+) {
+  return {
+    ...primaryAccessContext,
+    ...overrides,
+  };
+}
+
 async function createDatabase(): Promise<PGlite> {
   return new PGlite();
 }
@@ -68,7 +85,10 @@ describe('durable kernel postgres bootstrap', () => {
       "SELECT table_name FROM information_schema.tables WHERE table_name = 'runs'",
     );
 
-    expect(migrationRows.rows).toEqual([{ version: '0001_durable_kernel_a' }]);
+    expect(migrationRows.rows).toEqual([
+      { version: '0001_durable_kernel_a' },
+      { version: '0002_phase_2a_authenticated_admission' },
+    ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
   });
@@ -91,7 +111,10 @@ describe('durable kernel postgres bootstrap', () => {
       'SELECT version FROM durable_kernel_schema_migrations ORDER BY version ASC',
     );
 
-    expect(migrationRows.rows).toEqual([{ version: '0001_durable_kernel_a' }]);
+    expect(migrationRows.rows).toEqual([
+      { version: '0001_durable_kernel_a' },
+      { version: '0002_phase_2a_authenticated_admission' },
+    ]);
   });
 
   it('enforces canonical root-task and run-state invariants', async () => {
@@ -109,6 +132,10 @@ describe('durable kernel postgres bootstrap', () => {
           parent_run_id,
           depth,
           status,
+          workspace_id,
+          principal_type,
+          principal_id,
+          policy_snapshot_version,
           ingress,
           invokable_kind,
           invokable_version_id,
@@ -124,6 +151,10 @@ describe('durable kernel postgres bootstrap', () => {
           NULL,
           0,
           'queued',
+          'workspace_main',
+          'service_account',
+          'svc_alpha',
+          'policy-2026-07-22',
           'api',
           'agent',
           'baseline-run-api',
@@ -144,6 +175,10 @@ describe('durable kernel postgres bootstrap', () => {
         parent_run_id,
         depth,
         status,
+        workspace_id,
+        principal_type,
+        principal_id,
+        policy_snapshot_version,
         ingress,
         invokable_kind,
         invokable_version_id,
@@ -159,6 +194,10 @@ describe('durable kernel postgres bootstrap', () => {
         NULL,
         0,
         'queued',
+        'workspace_main',
+        'service_account',
+        'svc_alpha',
+        'policy-2026-07-22',
         'api',
         'agent',
         'baseline-run-api',
@@ -220,22 +259,24 @@ describe('durable kernel postgres bootstrap', () => {
     const first = await useCase.execute({
       prompt: 'same prompt',
       idempotencyKey: 'same-key',
+      accessContext: primaryAccessContext,
     });
     const second = await useCase.execute({
       prompt: 'same prompt',
       idempotencyKey: 'same-key',
+      accessContext: primaryAccessContext,
     });
 
     expect(second).toEqual({ ...first, reused: true });
 
     const taskRows = await database.query(
-      'SELECT id, root_task_id, status, input_snapshot_ref FROM tasks ORDER BY created_at ASC',
+      'SELECT id, root_task_id, status, tenant_id, workspace_id, principal_type, principal_id, policy_snapshot_version, input_snapshot_ref FROM tasks ORDER BY created_at ASC',
     );
     const runRows = await database.query(
       'SELECT id, task_id, attempt, status FROM runs ORDER BY created_at ASC',
     );
     const admissionRows = await database.query(
-      'SELECT ingress, idempotency_key, task_id FROM admissions ORDER BY id ASC',
+      'SELECT ingress, idempotency_key, task_id, tenant_id, workspace_id, principal_type, principal_id, policy_snapshot_version FROM admissions ORDER BY id ASC',
     );
     const dispatchRows = await database.query(
       'SELECT run_id, event_type, published_at FROM run_dispatches ORDER BY id ASC',
@@ -246,6 +287,11 @@ describe('durable kernel postgres bootstrap', () => {
       id: first.taskId,
       root_task_id: first.taskId,
       status: 'queued',
+      tenant_id: primaryAccessContext.tenantId,
+      workspace_id: primaryAccessContext.workspaceId,
+      principal_type: primaryAccessContext.principalType,
+      principal_id: primaryAccessContext.principalId,
+      policy_snapshot_version: primaryAccessContext.policySnapshotVersion,
     });
     expect(runRows.rows).toEqual([
       {
@@ -260,6 +306,11 @@ describe('durable kernel postgres bootstrap', () => {
         ingress: 'api',
         idempotency_key: 'same-key',
         task_id: first.taskId,
+        tenant_id: primaryAccessContext.tenantId,
+        workspace_id: primaryAccessContext.workspaceId,
+        principal_type: primaryAccessContext.principalType,
+        principal_id: primaryAccessContext.principalId,
+        policy_snapshot_version: primaryAccessContext.policySnapshotVersion,
       },
     ]);
     expect(dispatchRows.rows).toEqual([
@@ -285,14 +336,104 @@ describe('durable kernel postgres bootstrap', () => {
     await useCase.execute({
       prompt: 'first prompt',
       idempotencyKey: 'same-key',
+      accessContext: primaryAccessContext,
     });
 
     await expect(
       useCase.execute({
         prompt: 'different prompt',
         idempotencyKey: 'same-key',
+        accessContext: primaryAccessContext,
       }),
     ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it('creates separate admissions for the same idempotency key in different owner scopes and ignores policy version for replay matching', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const useCase = new AdmitRootTask(
+      new PostgresTaskRepository(database),
+      new PostgresRunRepository(database),
+      new PostgresAdmissionRepository(database),
+    );
+
+    const first = await useCase.execute({
+      prompt: 'same prompt',
+      idempotencyKey: 'shared-key',
+      accessContext: createAccessContext({
+        policySnapshotVersion: 'policy-v1',
+      }),
+    });
+    const replay = await useCase.execute({
+      prompt: 'same prompt',
+      idempotencyKey: 'shared-key',
+      accessContext: createAccessContext({
+        policySnapshotVersion: 'policy-v2',
+      }),
+    });
+    const secondScope = await useCase.execute({
+      prompt: 'same prompt',
+      idempotencyKey: 'shared-key',
+      accessContext: createAccessContext({
+        principalId: 'svc_beta',
+        policySnapshotVersion: 'policy-v9',
+      }),
+    });
+
+    expect(replay).toEqual({ ...first, reused: true });
+    expect(secondScope.reused).toBe(false);
+    expect(secondScope.taskId).not.toBe(first.taskId);
+    expect(secondScope.runId).not.toBe(first.runId);
+
+    const taskRows = await database.query(
+      'SELECT id, tenant_id, workspace_id, principal_type, principal_id, policy_snapshot_version FROM tasks ORDER BY principal_id ASC',
+    );
+    const admissionRows = await database.query(
+      'SELECT ingress, idempotency_key, tenant_id, workspace_id, principal_type, principal_id, policy_snapshot_version, task_id FROM admissions ORDER BY principal_id ASC',
+    );
+
+    expect(taskRows.rows).toEqual([
+      {
+        id: first.taskId,
+        tenant_id: primaryAccessContext.tenantId,
+        workspace_id: primaryAccessContext.workspaceId,
+        principal_type: primaryAccessContext.principalType,
+        principal_id: primaryAccessContext.principalId,
+        policy_snapshot_version: 'policy-v1',
+      },
+      {
+        id: secondScope.taskId,
+        tenant_id: primaryAccessContext.tenantId,
+        workspace_id: primaryAccessContext.workspaceId,
+        principal_type: primaryAccessContext.principalType,
+        principal_id: 'svc_beta',
+        policy_snapshot_version: 'policy-v9',
+      },
+    ]);
+    expect(admissionRows.rows).toEqual([
+      {
+        ingress: 'api',
+        idempotency_key: 'shared-key',
+        tenant_id: primaryAccessContext.tenantId,
+        workspace_id: primaryAccessContext.workspaceId,
+        principal_type: primaryAccessContext.principalType,
+        principal_id: primaryAccessContext.principalId,
+        policy_snapshot_version: 'policy-v1',
+        task_id: first.taskId,
+      },
+      {
+        ingress: 'api',
+        idempotency_key: 'shared-key',
+        tenant_id: primaryAccessContext.tenantId,
+        workspace_id: primaryAccessContext.workspaceId,
+        principal_type: primaryAccessContext.principalType,
+        principal_id: 'svc_beta',
+        policy_snapshot_version: 'policy-v9',
+        task_id: secondScope.taskId,
+      },
+    ]);
   });
 
   it('claims one queued dispatched run atomically with lease metadata and publishes the dispatch', async () => {
@@ -311,6 +452,7 @@ describe('durable kernel postgres bootstrap', () => {
     const admission = await useCase.execute({
       prompt: 'claim me once',
       idempotencyKey: 'claim-key',
+      accessContext: primaryAccessContext,
     });
 
     clock.advanceMs(30_000);
@@ -396,6 +538,7 @@ describe('durable kernel postgres bootstrap', () => {
     ).execute({
       prompt: 'stale completion prompt',
       idempotencyKey: 'stale-completion-key',
+      accessContext: primaryAccessContext,
     });
 
     clock.advanceMs(30_000);
@@ -463,6 +606,7 @@ describe('durable kernel postgres bootstrap', () => {
     ).execute({
       prompt: 'complete me once',
       idempotencyKey: 'complete-key',
+      accessContext: primaryAccessContext,
     });
 
     clock.advanceMs(20_000);
@@ -552,6 +696,7 @@ describe('durable kernel postgres bootstrap', () => {
     ).execute({
       prompt: 'dispatch me once',
       idempotencyKey: 'dispatch-key',
+      accessContext: primaryAccessContext,
     });
 
     const dispatcher = new PostgresRunDispatcher(

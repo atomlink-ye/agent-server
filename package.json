@@ -1,0 +1,51 @@
+{
+  "name": "@atomlink-ye/agent-server",
+  "version": "0.1.0",
+  "description": "Enterprise agent control-plane walking skeleton built on Paseo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "scripts": {
+    "dev": "node scripts/dev/with-paseo.mjs -- pnpm dev:api",
+    "dev:api": "node --import tsx --watch src/entrypoints/api/server.ts",
+    "start": "node dist/entrypoints/api/server.js",
+    "build": "tsc -p tsconfig.build.json",
+    "check:types": "tsc -p tsconfig.json --noEmit",
+    "check:format": "prettier --check .",
+    "check:docs": "node scripts/ci/check-docs.mjs",
+    "check:exec-plans": "node scripts/ci/check-exec-plans.mjs",
+    "check": "pnpm check:types && pnpm check:format && pnpm check:docs && pnpm check:exec-plans",
+    "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",
+    "eval:smoke": "node scripts/ci/pending-lane.mjs eval-smoke",
+    "ci": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
+    "clean": "node scripts/dev/clean.mjs"
+  },
+  "dependencies": {
+    "@getpaseo/client": "0.1.110",
+    "@hono/node-server": "2.0.11",
+    "hono": "4.12.31",
+    "zod": "4.4.3"
+  },
+  "optionalDependencies": {
+    "opencode-darwin-arm64": "1.18.4",
+    "opencode-darwin-x64": "1.18.4",
+    "opencode-linux-arm64": "1.18.4",
+    "opencode-linux-x64": "1.18.4"
+  },
+  "devDependencies": {
+    "@getpaseo/cli": "0.1.110",
+    "@types/node": "22.20.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

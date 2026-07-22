@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: true
+  node-pty: true
+minimumReleaseAgeExclude:
+  - prettier@3.9.6

@@ -10,8 +10,18 @@ import { ExecuteRun } from '../../src/application/runs/execute-run.js';
 import { GetRun } from '../../src/application/runs/get-run.js';
 import { SubmitRun } from '../../src/application/runs/submit-run.js';
 import { AdmitRootTask } from '../../src/application/tasks/admit-root-task.js';
+import { GetTask } from '../../src/application/tasks/get-task.js';
+import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
+import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
+import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
+import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
+import {
+  createDraftAgentVersion,
+  publishAgentVersion,
+} from '../../src/domain/invokables/agent-version.js';
 import { createApp } from '../../src/entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
@@ -21,6 +31,8 @@ import { createLogger } from '../../src/shared/observability/logger.js';
 export const primaryServiceAccountToken = 'token-enabled';
 export const secondaryServiceAccountToken = 'token-other-owner';
 export const disabledServiceAccountToken = 'token-disabled';
+export const defaultPublishedAgentVersionId =
+  '00000000-0000-4000-8000-0000000a0101';
 
 export const testConfig = {
   nodeEnv: 'test',
@@ -63,7 +75,14 @@ export const testConfig = {
   },
 } as const;
 
-export async function createTestApp(runtime: AgentRuntimePort) {
+export interface CreateTestAppOptions {
+  readonly startDispatcher?: boolean;
+}
+
+export async function createTestApp(
+  runtime: AgentRuntimePort,
+  options: CreateTestAppOptions = {},
+) {
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
@@ -71,6 +90,8 @@ export async function createTestApp(runtime: AgentRuntimePort) {
   const runRepository = new PostgresRunRepository(database);
   const taskRepository = new PostgresTaskRepository(database);
   const admissionRepository = new PostgresAdmissionRepository(database);
+  const invokableRepository = new PostgresInvokableRepository(database);
+  await seedDefaultPublishedAgent(invokableRepository);
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
@@ -83,18 +104,42 @@ export async function createTestApp(runtime: AgentRuntimePort) {
   );
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
-  const completeRun = new CompleteRun(runRepository);
-  const executeRun = new ExecuteRun(completeRun, runtime, logger);
-  const dispatcher = new PostgresRunDispatcher(
-    new ClaimNextRun(runRepository, {
-      workerId,
-      leaseDurationMs: 30_000,
-    }),
-    executeRun,
-    logger,
-    { pollIntervalMs: 1 },
+  const invokeTask = new InvokeTask(
+    taskRepository,
+    runRepository,
+    admissionRepository,
+    invokableRepository,
   );
-  dispatcher.start();
+  const getTask = new GetTask(taskRepository);
+  const getTaskTree = new GetTaskTree(taskRepository);
+  const completeRun = new CompleteRun(runRepository, taskRepository);
+  const executeTeamTask = new ExecuteTeamTask(
+    taskRepository,
+    runRepository,
+    invokableRepository,
+    runtime,
+    completeRun,
+  );
+  const executeRun = new ExecuteRun(
+    completeRun,
+    taskRepository,
+    invokableRepository,
+    executeTeamTask,
+    runtime,
+    logger,
+  );
+  if (options.startDispatcher ?? true) {
+    const dispatcher = new PostgresRunDispatcher(
+      new ClaimNextRun(runRepository, {
+        workerId,
+        leaseDurationMs: 30_000,
+      }),
+      executeRun,
+      logger,
+      { pollIntervalMs: 1 },
+    );
+    dispatcher.start();
+  }
 
   return createApp({
     config: testConfig,
@@ -103,5 +148,43 @@ export async function createTestApp(runtime: AgentRuntimePort) {
     runtime,
     submitRun,
     getRun,
+    invokeTask,
+    getTask,
+    getTaskTree,
   });
+}
+
+async function seedDefaultPublishedAgent(
+  invokables: PostgresInvokableRepository,
+): Promise<void> {
+  const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+  const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
+  const definition = createAgentDefinition({
+    id: '00000000-0000-4000-8000-0000000a0001',
+    tenantId: 'tenant_alpha',
+    workspaceId: 'workspace_main',
+    principalType: 'service_account',
+    principalId: 'svc_enabled',
+    name: 'Default Task Agent',
+    description: 'Seeded test invokable',
+    now: createdAt,
+  });
+  const version = publishAgentVersion(
+    createDraftAgentVersion({
+      id: defaultPublishedAgentVersionId,
+      definitionId: definition.id,
+      tenantId: definition.tenantId,
+      workspaceId: definition.workspaceId,
+      principalType: definition.principalType,
+      principalId: definition.principalId,
+      name: 'Default Task Agent v1',
+      description: 'Seeded test invokable',
+      instructions: 'Do the task.',
+      now: createdAt,
+    }),
+    publishedAt,
+  );
+
+  await invokables.saveAgentDefinition(definition);
+  await invokables.saveAgentVersion(version);
 }

@@ -8,6 +8,7 @@ import {
 } from '../ports/admission-repository.js';
 import type { RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import {
   encodeRootTaskRunRequestSnapshotRef,
   fingerprintRootTaskRunRequest,
@@ -25,8 +26,6 @@ export interface AdmitRootTaskResult {
   readonly runId: string;
   readonly reused: boolean;
 }
-
-const BASELINE_RUN_API_INVOKABLE_VERSION_ID = 'baseline-run-api';
 
 export class AdmitRootTask {
   public constructor(
@@ -81,7 +80,7 @@ export class AdmitRootTask {
           policySnapshotVersion: request.accessContext.policySnapshotVersion,
           ingress: 'api',
           invokableKind: 'agent',
-          invokableVersionId: BASELINE_RUN_API_INVOKABLE_VERSION_ID,
+          invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
           inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalized),
           inputFingerprint: fingerprint,
           now: frozenNow,

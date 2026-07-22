@@ -7,12 +7,16 @@ import type { ReadinessProbe } from '../../application/health/readiness.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
+import type { GetTask } from '../../application/tasks/get-task.js';
+import type { GetTaskTree } from '../../application/tasks/get-task-tree.js';
+import type { InvokeTask } from '../../application/tasks/invoke-task.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ApiEnvironment } from './http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerTaskRoutes } from './routes/tasks.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -21,6 +25,9 @@ export interface AppDependencies {
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
+  readonly invokeTask: InvokeTask;
+  readonly getTask: GetTask;
+  readonly getTaskTree: GetTaskTree;
   readonly version?: string;
 }
 
@@ -52,6 +59,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     version,
   });
   registerRunRoutes(app, dependencies);
+  registerTaskRoutes(app, dependencies);
 
   app.notFound((context) => {
     return context.json(

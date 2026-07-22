@@ -1,5 +1,6 @@
 import type {
   ClaimedRun,
+  ClaimQueuedRunByIdOptions,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
   RunOwnerScope,
@@ -147,79 +148,45 @@ export class PostgresRunRepository implements RunRepository {
     options: ClaimNextQueuedRunOptions,
   ): Promise<ClaimedRun | null> {
     const result = await this.database.query<RunRow>(
-      `
-        WITH next_dispatch AS (
-          SELECT run_dispatches.id AS dispatch_id, run_dispatches.run_id
-          FROM run_dispatches
-          INNER JOIN runs ON runs.id = run_dispatches.run_id
-          WHERE run_dispatches.event_type = 'run.enqueue'
-            AND run_dispatches.published_at IS NULL
-            AND runs.status = 'queued'
-          ORDER BY run_dispatches.id ASC
-          LIMIT 1
-        ),
-        claimed_run AS (
-          UPDATE runs
-          SET
-            status = 'running',
-            lease_owner = $1,
-            activation_id = $2,
-            fencing_token = runs.fencing_token + 1,
-            lease_expires_at = $4,
-            updated_at = $3
-          FROM next_dispatch
-          WHERE runs.id = next_dispatch.run_id
-            AND runs.status = 'queued'
-            AND runs.lease_owner IS NULL
-            AND runs.activation_id IS NULL
-            AND runs.lease_expires_at IS NULL
-            AND runs.fencing_token = 0
-          RETURNING
-            runs.id,
-            runs.task_id,
-            runs.attempt,
-            runs.status,
-            runs.lease_owner,
-            runs.activation_id,
-            runs.lease_expires_at,
-            runs.runtime,
-            runs.result,
-            runs.usage,
-            runs.error,
-            runs.created_at,
-            runs.updated_at,
-            runs.fencing_token,
-            next_dispatch.dispatch_id
-        ),
-        published_dispatch AS (
-          UPDATE run_dispatches
-          SET published_at = $3
-          WHERE id IN (SELECT dispatch_id FROM claimed_run)
-        )
-        SELECT
-          claimed_run.id,
-          claimed_run.task_id,
-          claimed_run.attempt,
-          claimed_run.status,
-          claimed_run.lease_owner,
-          claimed_run.activation_id,
-          claimed_run.lease_expires_at,
-          claimed_run.runtime,
-          claimed_run.result,
-          claimed_run.usage,
-          claimed_run.error,
-          claimed_run.created_at,
-          claimed_run.updated_at,
-          claimed_run.fencing_token,
-          tasks.input_snapshot_ref
-        FROM claimed_run
-        INNER JOIN tasks ON tasks.id = claimed_run.task_id
-      `,
+      buildClaimQueuedSql(`
+        SELECT run_dispatches.id AS dispatch_id, run_dispatches.run_id
+        FROM run_dispatches
+        INNER JOIN runs ON runs.id = run_dispatches.run_id
+        WHERE run_dispatches.event_type = 'run.enqueue'
+          AND run_dispatches.published_at IS NULL
+          AND runs.status = 'queued'
+        ORDER BY run_dispatches.id ASC
+        LIMIT 1
+      `),
       [
         options.workerId,
         options.activationId,
         options.claimedAt,
         options.leaseExpiresAt,
+      ],
+    );
+
+    const row = result.rows?.[0];
+    return row ? mapClaimedRunRow(row) : null;
+  }
+
+  public async claimQueuedById(
+    options: ClaimQueuedRunByIdOptions,
+  ): Promise<ClaimedRun | null> {
+    const result = await this.database.query<RunRow>(
+      buildClaimQueuedSql(`
+        SELECT NULL::bigint AS dispatch_id, runs.id AS run_id
+        FROM runs
+        WHERE runs.id = $5
+          AND runs.status = 'queued'
+        LIMIT 1
+      `),
+      [
+        options.workerId,
+        options.activationId,
+        options.claimedAt,
+        options.leaseExpiresAt,
+        options.runId,
       ],
     );
 
@@ -379,6 +346,74 @@ const RUN_SELECT_SQL = `
   FROM runs
   INNER JOIN tasks ON tasks.id = runs.task_id
 `;
+
+function buildClaimQueuedSql(claimSourceSql: string): string {
+  return `
+    WITH next_dispatch AS (
+      ${claimSourceSql}
+    ),
+    claimed_run AS (
+      UPDATE runs
+      SET
+        status = 'running',
+        lease_owner = $1,
+        activation_id = $2,
+        fencing_token = runs.fencing_token + 1,
+        lease_expires_at = $4,
+        updated_at = $3
+      FROM next_dispatch
+      WHERE runs.id = next_dispatch.run_id
+        AND runs.status = 'queued'
+        AND runs.lease_owner IS NULL
+        AND runs.activation_id IS NULL
+        AND runs.lease_expires_at IS NULL
+        AND runs.fencing_token = 0
+      RETURNING
+        runs.id,
+        runs.task_id,
+        runs.attempt,
+        runs.status,
+        runs.lease_owner,
+        runs.activation_id,
+        runs.lease_expires_at,
+        runs.runtime,
+        runs.result,
+        runs.usage,
+        runs.error,
+        runs.created_at,
+        runs.updated_at,
+        runs.fencing_token,
+        next_dispatch.dispatch_id
+    ),
+    published_dispatch AS (
+      UPDATE run_dispatches
+      SET published_at = $3
+      WHERE id IN (
+        SELECT dispatch_id
+        FROM claimed_run
+        WHERE dispatch_id IS NOT NULL
+      )
+    )
+    SELECT
+      claimed_run.id,
+      claimed_run.task_id,
+      claimed_run.attempt,
+      claimed_run.status,
+      claimed_run.lease_owner,
+      claimed_run.activation_id,
+      claimed_run.lease_expires_at,
+      claimed_run.runtime,
+      claimed_run.result,
+      claimed_run.usage,
+      claimed_run.error,
+      claimed_run.created_at,
+      claimed_run.updated_at,
+      claimed_run.fencing_token,
+      tasks.input_snapshot_ref
+    FROM claimed_run
+    INNER JOIN tasks ON tasks.id = claimed_run.task_id
+  `;
+}
 
 function mapClaimedRunRow(row: RunRow): ClaimedRun {
   if (!row.lease_owner || !row.activation_id || !row.lease_expires_at) {

@@ -2,19 +2,25 @@
 
 Agent Server is an enterprise control-plane project for long-lived agents and bounded agent teams. Paseo remains the leaf-agent runtime; this repository owns stable product identities, task/run semantics, policy, evidence, channels, and durable orchestration around it.
 
-The current repository is a **walking-skeleton baseline with the first durable kernel slice**, not the V1 platform. It proves one replaceable path end to end:
+The current repository is a **walking-skeleton baseline with the first durable kernel slice and a sequential Team MVP**, not the V1 platform. It proves one replaceable path end to end:
 
 ```mermaid
 flowchart TD
-    A["POST /api/v1/runs"] --> B["SubmitRun compatibility service"]
-    B --> C["AdmitRootTask"]
-    C --> D["PostgreSQL tasks / runs / admissions / dispatches"]
+    A["POST /api/v1/tasks:invoke"] --> B["Canonical Task admission"]
+    J["POST /api/v1/runs"] --> C["Run compatibility admission"]
+    B --> D["PostgreSQL tasks / runs / admissions / invokables"]
+    C --> D
     D --> E["In-process dispatcher claim + fence"]
-    E --> F["AgentRuntimePort"]
-    F --> G["Paseo adapter"]
-    G --> H["OpenCode free model"]
-    H --> D
-    I["GET /api/v1/runs/:id"] --> D
+    E --> F{"Invokable kind"}
+    F -->|agent| G["AgentRuntimePort"]
+    F -->|team| H["Sequential Team coordinator"]
+    H --> I["Child Tasks + child Runs"]
+    I --> G
+    G --> K["Paseo adapter"]
+    K --> L["OpenCode free model"]
+    L --> D
+    M["GET /api/v1/tasks/:id[/tree]"] --> D
+    N["GET /api/v1/runs/:id"] --> D
 ```
 
 ## Baseline status
@@ -24,8 +30,12 @@ flowchart TD
 | HTTP liveness/readiness                        | Implemented                            |
 | Asynchronous Run API                           | Implemented                            |
 | Authenticated service-account Run ingress      | Implemented                            |
+| Canonical Task invoke/read/tree API            | Implemented                            |
 | Owner-scoped Run reads                         | Implemented                            |
 | PostgreSQL-backed Task/Run admission           | Implemented                            |
+| Durable Agent/Team definitions and versions    | Implemented                            |
+| Sequential Team graph compilation              | Implemented; sequential-only subset    |
+| Sequential Team child Task/Run execution       | Implemented; inline control-plane path |
 | Owner-scoped idempotent replay                 | Implemented                            |
 | In-process durable dispatcher/claim/fence      | Implemented; single process            |
 | Paseo WebSocket adapter                        | Implemented                            |
@@ -34,7 +44,6 @@ flowchart TD
 | Deterministic CI                               | Implemented; no model network calls    |
 | Zero-model-credential external smoke           | Implemented; optional/manual/scheduled |
 | OIDC users, shared ACLs, credentials, approval | Planned V1                             |
-| Agent/Team definitions and graph execution     | Planned V1                             |
 | Artifacts, evidence, Lark, Web console         | Planned V1                             |
 
 ## Quick start
@@ -71,7 +80,15 @@ curl -sS http://127.0.0.1:3000/api/v1/runs/<run_id> \
   -H 'authorization: Bearer token-local-dev'
 ```
 
-The public HTTP surface remains `/api/v1/runs`, but both `POST` and `GET` now require `Authorization: Bearer ...`. Admission persists a canonical root Task plus the first compatibility Run in PostgreSQL, deriving owner scope from the authenticated service account rather than caller-supplied tenant or principal fields. The API does not accept a caller-selected model. Operators may set `PASEO_MODEL`; otherwise the adapter chooses from the live catalog and never automatically falls back to an unmarked paid model.
+`/api/v1/runs` remains the compatibility API, but it is no longer the only public Task ingress. Both Run and Task routes require `Authorization: Bearer ...`. Admission persists a canonical root Task plus the first Run in PostgreSQL, deriving owner scope from the authenticated service account rather than caller-supplied tenant or principal fields. The Run compatibility API does not accept a caller-selected model. Operators may set `PASEO_MODEL`; otherwise the adapter chooses from the live catalog and never automatically falls back to an unmarked paid model.
+
+The canonical public Task surface is:
+
+- `POST /api/v1/tasks:invoke`
+- `GET /api/v1/tasks/{id}`
+- `GET /api/v1/tasks/{id}/tree`
+
+These routes invoke a published `agent` or `team` version and return Task identity plus owner-scoped read links. There are still no public `/api/v1/agents` or `/api/v1/teams` write/read endpoints in this phase; durable Agent/Team versions exist in PostgreSQL and are consumed by the control plane.
 
 ## Canonical commands
 
@@ -93,7 +110,7 @@ The public HTTP surface remains `/api/v1/runs`, but both `POST` and `GET` now re
 - [Features](docs/features.md): authoritative capability ledger and status.
 - [Components](docs/components.md): ownership and implementation boundaries.
 - [Architecture](docs/architecture.md): domain, execution, recovery, and security direction.
-- [Contracts](docs/contracts.md): Run, health, and runtime interfaces.
+- [Contracts](docs/contracts.md): Run compatibility, Task, health, runtime, and invokable registry interfaces.
 - [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Decisions](docs/decisions.md): accepted architectural decisions.
@@ -105,10 +122,12 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 
 ## Baseline limitations
 
-- Baseline authentication is limited to configured service-account bearer tokens on the Run compatibility API.
+- Baseline authentication is limited to configured service-account bearer tokens on the public Run and Task APIs.
 - The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, execution-cell isolation, cancel, retry, streaming, and artifact services.
 - Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
-- `/api/v1/runs` is still the only public invocation surface; canonical Task routes are not exposed yet.
+- `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.
+- Team execution is intentionally sequential-only. This phase does not implement join, approval, retry, reconcile, shared Team runtime sessions, or artifact lineage.
+- Durable Agent/Team definitions and published versions exist, but public `/api/v1/agents` and `/api/v1/teams` management routes are not implemented yet.
 - Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
 - The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.
 

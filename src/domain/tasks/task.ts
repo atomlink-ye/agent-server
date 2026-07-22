@@ -13,9 +13,11 @@ export interface Task {
   readonly parentTaskId: string | null;
   readonly parentRunId: string | null;
   readonly depth: number;
+  readonly logicalStepKey: string | null;
+  readonly nodePath: string | null;
   readonly status: TaskStatus;
   readonly ingress: 'api';
-  readonly invokableKind: 'agent';
+  readonly invokableKind: 'agent' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
@@ -34,14 +36,34 @@ export interface CreateRootTaskOptions {
   readonly principalId: string;
   readonly policySnapshotVersion: string;
   readonly ingress: 'api';
-  readonly invokableKind: 'agent';
+  readonly invokableKind: 'agent' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
   readonly now?: () => Date;
 }
 
+export interface CreateChildTaskOptions {
+  readonly id?: string;
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+  readonly policySnapshotVersion: string;
+  readonly rootTaskId: string;
+  readonly parentTaskId: string;
+  readonly parentRunId: string;
+  readonly invokableKind: 'agent' | 'team';
+  readonly invokableVersionId: string;
+  readonly inputSnapshotRef: string;
+  readonly inputFingerprint: string;
+  readonly logicalStepKey: string;
+  readonly nodePath: string;
+  readonly now?: () => Date;
+}
+
 const ROOT_TASK_DEPTH = 0;
+const CHILD_TASK_DEPTH = 1;
 
 export function createRootTask(options: CreateRootTaskOptions): Task {
   const depth = options.depth ?? ROOT_TASK_DEPTH;
@@ -64,8 +86,37 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     parentTaskId: null,
     parentRunId: null,
     depth,
+    logicalStepKey: null,
+    nodePath: null,
     status: 'queued',
     ingress: options.ingress,
+    invokableKind: options.invokableKind,
+    invokableVersionId: options.invokableVersionId,
+    inputSnapshotRef: options.inputSnapshotRef,
+    inputFingerprint: options.inputFingerprint,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+export function createChildTask(options: CreateChildTaskOptions): Task {
+  const timestamp = (options.now ?? (() => new Date()))().toISOString();
+
+  return rehydrateTask({
+    id: options.id ?? randomUUID(),
+    tenantId: options.tenantId,
+    workspaceId: options.workspaceId,
+    principalType: options.principalType,
+    principalId: options.principalId,
+    policySnapshotVersion: options.policySnapshotVersion,
+    rootTaskId: options.rootTaskId,
+    parentTaskId: options.parentTaskId,
+    parentRunId: options.parentRunId,
+    depth: CHILD_TASK_DEPTH,
+    logicalStepKey: options.logicalStepKey,
+    nodePath: options.nodePath,
+    status: 'queued',
+    ingress: 'api',
     invokableKind: options.invokableKind,
     invokableVersionId: options.invokableVersionId,
     inputSnapshotRef: options.inputSnapshotRef,
@@ -114,6 +165,12 @@ function assertTaskShape(task: TaskSnapshot): void {
       );
     }
 
+    if (task.logicalStepKey !== null || task.nodePath !== null) {
+      throw new Error(
+        'Root task snapshots cannot include step identity fields',
+      );
+    }
+
     return;
   }
 
@@ -128,6 +185,13 @@ function assertTaskShape(task: TaskSnapshot): void {
       'Child task snapshots cannot self-reference as the root task',
     );
   }
+
+  assertNonEmptyTaskString(
+    'logicalStepKey',
+    task.logicalStepKey,
+    'Child task snapshots',
+  );
+  assertNonEmptyTaskString('nodePath', task.nodePath, 'Child task snapshots');
 }
 
 function assertAuthoritativeScope(task: TaskSnapshot): void {
@@ -160,5 +224,15 @@ function assertTaskTimestamps(task: TaskSnapshot): void {
     throw new Error(
       'Task updatedAt must be greater than or equal to createdAt',
     );
+  }
+}
+
+function assertNonEmptyTaskString(
+  fieldName: string,
+  value: string | null,
+  subject: string,
+): void {
+  if (value === null || value.trim().length === 0) {
+    throw new Error(`${subject} require ${fieldName} to be a non-empty string`);
   }
 }

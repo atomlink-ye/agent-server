@@ -1,6 +1,6 @@
 # Run compatibility API contract
 
-`/api/v1/runs` is the implemented HTTP surface. Both `POST` and `GET` require `Authorization: Bearer <token>`. Internally, `POST /api/v1/runs` admits a canonical root Task plus its first Run in PostgreSQL; the Run resource remains the compatibility representation returned over HTTP.
+`/api/v1/runs` remains the implemented compatibility HTTP surface. Both `POST` and `GET` require `Authorization: Bearer <token>`. Internally, `POST /api/v1/runs` admits a canonical root Task plus its first Run in PostgreSQL; the Run resource remains the compatibility representation returned over HTTP even though canonical public invocation now lives on the Task API.
 
 ## Create
 
@@ -13,7 +13,7 @@ Idempotency-Key: client-generated-key   ; optional
 {"prompt":"Reply with exactly: BASELINE_OK"}
 ```
 
-The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. The caller cannot provide authoritative tenant, workspace, or principal fields. Runtime readiness is checked before accepting new work.
+The decoded body is limited to 64 KiB, `prompt` must be non-empty, and unknown fields are rejected. A caller-supplied `model` is invalid. The caller cannot provide authoritative tenant, workspace, or principal fields. Runtime readiness is checked before accepting new compatibility work.
 
 ```http
 HTTP/1.1 202 Accepted
@@ -68,6 +68,6 @@ Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/erro
 
 Relevant codes are `unauthorized`, `invalid_json`, `invalid_request`, `request_too_large`, `runtime_unavailable`, `idempotency_conflict`, `run_not_found`, `route_not_found`, and `internal_error`.
 
-## Future public Task routes
+## Relationship to the Task API
 
-Public Task routes are not implemented in this phase. When they are added, they must expose the same canonical Task admission already used internally instead of introducing a competing invocation identity.
+`/api/v1/tasks:invoke` is now the canonical public invocation route and returns `task_id` plus Task read links. `/api/v1/runs` is preserved for compatibility callers that still submit prompt-only work and poll by `run_id`. Both paths share the same owner-scoped admission model and persist the same canonical Task/Run state underneath. Compatibility-admitted root Tasks use a reserved UUID invokable-version sentinel so the stored Task shape remains representable by the Task API contract.

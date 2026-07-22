@@ -22,6 +22,10 @@ export interface ClaimNextQueuedRunOptions {
   readonly leaseExpiresAt: string;
 }
 
+export interface ClaimQueuedRunByIdOptions extends ClaimNextQueuedRunOptions {
+  readonly runId: string;
+}
+
 export interface CompleteClaimedRunOptions {
   readonly claim: ClaimedRun;
   readonly run: Run;
@@ -41,6 +45,9 @@ export interface RunRepository {
   findByTaskId(taskId: string): Promise<Run | null>;
   claimNextQueued(
     options: ClaimNextQueuedRunOptions,
+  ): Promise<ClaimedRun | null>;
+  claimQueuedById(
+    options: ClaimQueuedRunByIdOptions,
   ): Promise<ClaimedRun | null>;
   completeClaimed(options: CompleteClaimedRunOptions): Promise<Run>;
 }

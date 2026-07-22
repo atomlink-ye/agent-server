@@ -4,11 +4,26 @@ import { describe, expect, it } from 'vitest';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { ExecuteRun } from '../../src/application/runs/execute-run.js';
+import { GetTask } from '../../src/application/tasks/get-task.js';
+import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
+import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import {
   AdmitRootTask,
   IdempotencyConflictError,
 } from '../../src/application/tasks/admit-root-task.js';
+import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
+import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
+import {
+  createDraftAgentVersion,
+  publishAgentVersion,
+} from '../../src/domain/invokables/agent-version.js';
+import { createCompiledSequentialTeamPlan } from '../../src/domain/invokables/compiled-team-plan.js';
+import { createTeamDefinition } from '../../src/domain/invokables/team-definition.js';
+import {
+  createDraftTeamVersion,
+  publishTeamVersion,
+} from '../../src/domain/invokables/team-version.js';
 import {
   applyDurableKernelMigrations,
   readDurableKernelMigration,
@@ -16,6 +31,7 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
@@ -88,6 +104,7 @@ describe('durable kernel postgres bootstrap', () => {
     expect(migrationRows.rows).toEqual([
       { version: '0001_durable_kernel_a' },
       { version: '0002_phase_2a_authenticated_admission' },
+      { version: '0003_sequential_team_mvp' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -114,7 +131,129 @@ describe('durable kernel postgres bootstrap', () => {
     expect(migrationRows.rows).toEqual([
       { version: '0001_durable_kernel_a' },
       { version: '0002_phase_2a_authenticated_admission' },
+      { version: '0003_sequential_team_mvp' },
     ]);
+  });
+
+  it('persists durable agent and team registry records with compiled sequential plans', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const repository = new PostgresInvokableRepository(database);
+    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+    const publishedAt = () => new Date('2026-07-22T12:10:00.000Z');
+    const ownerScope = {
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+    } as const;
+    const agentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000010001',
+      ...ownerScope,
+      name: 'Collector',
+      description: 'Collects source material',
+      now: createdAt,
+    });
+    const agentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000010101',
+        definitionId: agentDefinition.id,
+        ...ownerScope,
+        name: 'Collector v1',
+        description: 'First published collector',
+        instructions: 'Collect the evidence only.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    const teamDefinition = createTeamDefinition({
+      id: '00000000-0000-4000-8000-000000020001',
+      ...ownerScope,
+      name: 'Research Team',
+      description: 'Runs the sequential research flow',
+      now: createdAt,
+    });
+    const compiledPlan = createCompiledSequentialTeamPlan({
+      teamVersionId: '00000000-0000-4000-8000-000000020101',
+      entryNodeId: 'collect',
+      finalOutputNodeId: 'collect',
+      compiledAt: '2026-07-22T12:10:00.000Z',
+      steps: [
+        {
+          nodeId: 'collect',
+          nodePath: 'step.0001',
+          agentVersionId: agentVersion.id,
+          order: 1,
+          output: 'final',
+        },
+      ],
+    });
+    const teamVersion = publishTeamVersion(
+      createDraftTeamVersion({
+        id: compiledPlan.teamVersionId,
+        definitionId: teamDefinition.id,
+        ...ownerScope,
+        name: 'Research Team v1',
+        description: 'First published team',
+        graph: {
+          nodes: [
+            {
+              id: 'collect',
+              kind: 'invoke',
+              agentVersionId: agentVersion.id,
+              successNodeId: null,
+              output: 'final',
+            },
+          ],
+        },
+        now: createdAt,
+      }),
+      compiledPlan,
+      publishedAt,
+    );
+
+    await repository.saveAgentDefinition(agentDefinition);
+    await repository.saveAgentVersion(agentVersion);
+    await repository.saveTeamDefinition(teamDefinition);
+    await repository.saveTeamVersion(teamVersion);
+
+    await expect(
+      repository.saveAgentVersion({
+        ...agentVersion,
+        instructions: 'mutated after publish',
+      }),
+    ).rejects.toThrow(/immutable|published/i);
+
+    await expect(
+      repository.findPublishedAgentVersionById(agentVersion.id, ownerScope),
+    ).resolves.toMatchObject({
+      id: agentVersion.id,
+      status: 'published',
+    });
+    await expect(
+      repository.findPublishedAgentVersionById(agentVersion.id, {
+        ...ownerScope,
+        principalId: 'svc_other',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.findTeamVersionById(teamVersion.id),
+    ).resolves.toMatchObject({
+      id: teamVersion.id,
+      status: 'published',
+      compiledPlan,
+    });
+    await expect(
+      repository.findPublishedTeamVersionById(teamVersion.id, {
+        ...ownerScope,
+        principalId: 'svc_other',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.findCompiledTeamPlanByVersionId(teamVersion.id),
+    ).resolves.toEqual(compiledPlan);
   });
 
   it('enforces canonical root-task and run-state invariants', async () => {
@@ -157,7 +296,7 @@ describe('durable kernel postgres bootstrap', () => {
           'policy-2026-07-22',
           'api',
           'agent',
-          'baseline-run-api',
+          '00000000-0000-4000-8000-00000000b100',
           'inline:prompt',
           'sha256:abc',
           '2026-07-22T12:00:00.000Z',
@@ -165,6 +304,56 @@ describe('durable kernel postgres bootstrap', () => {
         )
       `),
     ).rejects.toThrow(/tasks_root_shape_check|tasks_root_task_fk/);
+
+    await expect(
+      database.query(`
+        INSERT INTO tasks (
+          id,
+          tenant_id,
+          root_task_id,
+          parent_task_id,
+          parent_run_id,
+          depth,
+          status,
+          workspace_id,
+          principal_type,
+          principal_id,
+          policy_snapshot_version,
+          ingress,
+          invokable_kind,
+          invokable_version_id,
+          logical_step_key,
+          node_path,
+          input_snapshot_ref,
+          input_fingerprint,
+          created_at,
+          updated_at
+        ) VALUES (
+          '7f3d2bc7-2db0-4c80-9790-42e388bf0b63',
+          'tenant_local',
+          '7f3d2bc7-2db0-4c80-9790-42e388bf0b63',
+          NULL,
+          NULL,
+          0,
+          'queued',
+          'workspace_main',
+          'service_account',
+          'svc_alpha',
+          'policy-2026-07-22',
+          'api',
+          'agent',
+          '00000000-0000-4000-8000-00000000b100',
+          'collect',
+          NULL,
+          'inline:prompt',
+          'sha256:abc',
+          '2026-07-22T12:00:00.000Z',
+          '2026-07-22T12:00:00.000Z'
+        )
+      `),
+    ).rejects.toThrow(
+      /logical_step|node_path|tasks_step_identity_shape_check/i,
+    );
 
     await database.query(`
       INSERT INTO tasks (
@@ -200,13 +389,63 @@ describe('durable kernel postgres bootstrap', () => {
         'policy-2026-07-22',
         'api',
         'agent',
-        'baseline-run-api',
+        '00000000-0000-4000-8000-00000000b100',
         'inline:prompt',
         'sha256:abc',
         '2026-07-22T12:00:00.000Z',
         '2026-07-22T12:00:00.000Z'
       )
     `);
+
+    await expect(
+      database.query(`
+        INSERT INTO tasks (
+          id,
+          tenant_id,
+          root_task_id,
+          parent_task_id,
+          parent_run_id,
+          depth,
+          status,
+          workspace_id,
+          principal_type,
+          principal_id,
+          policy_snapshot_version,
+          ingress,
+          invokable_kind,
+          invokable_version_id,
+          logical_step_key,
+          node_path,
+          input_snapshot_ref,
+          input_fingerprint,
+          created_at,
+          updated_at
+        ) VALUES (
+          'bf3d2bc7-2db0-4c80-9790-42e388bf0b64',
+          'tenant_local',
+          'bf3d2bc7-2db0-4c80-9790-42e388bf0b63',
+          'bf3d2bc7-2db0-4c80-9790-42e388bf0b63',
+          '47d4c8e0-ee39-4c19-95b9-a121627728f1',
+          1,
+          'queued',
+          'workspace_main',
+          'service_account',
+          'svc_alpha',
+          'policy-2026-07-22',
+          'api',
+          'agent',
+          '00000000-0000-4000-8000-000000010101',
+          NULL,
+          'step.0001',
+          'inline:prompt',
+          'sha256:child',
+          '2026-07-22T12:00:00.000Z',
+          '2026-07-22T12:00:00.000Z'
+        )
+      `),
+    ).rejects.toThrow(
+      /logical_step|node_path|tasks_step_identity_shape_check/i,
+    );
 
     await expect(
       database.query(`
@@ -318,6 +557,114 @@ describe('durable kernel postgres bootstrap', () => {
         run_id: first.runId,
         event_type: 'run.enqueue',
         published_at: null,
+      },
+    ]);
+  });
+
+  it('admits canonical task invoke state and reads it back through owner-scoped task queries', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const invokables = new PostgresInvokableRepository(database);
+    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+    const publishedAt = () => new Date('2026-07-22T12:10:00.000Z');
+    const agentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000030001',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Task Agent',
+      description: 'Used for canonical task invoke',
+      now: createdAt,
+    });
+    const agentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000030101',
+        definitionId: agentDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Task Agent v1',
+        description: 'Published task agent',
+        instructions: 'Do the task.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    await invokables.saveAgentDefinition(agentDefinition);
+    await invokables.saveAgentVersion(agentVersion);
+
+    const tasks = new PostgresTaskRepository(database);
+    const runs = new PostgresRunRepository(database);
+    const admissions = new PostgresAdmissionRepository(database);
+    const invoked = await new InvokeTask(
+      tasks,
+      runs,
+      admissions,
+      invokables,
+      () => new Date('2026-07-22T12:15:00.000Z'),
+    ).execute({
+      idempotencyKey: 'task-key',
+      invokable: { kind: 'agent', versionId: agentVersion.id },
+      input: { text: 'canonical task input' },
+      accessContext: primaryAccessContext,
+    });
+
+    expect(invoked.reused).toBe(false);
+    expect(invoked.task.task.invokableKind).toBe('agent');
+    expect(invoked.task.task.invokableVersionId).toBe(agentVersion.id);
+    expect(invoked.task.latestRun).toMatchObject({
+      status: 'queued',
+      attempt: 1,
+    });
+
+    const loaded = await new GetTask(tasks).execute(
+      invoked.task.task.id,
+      primaryAccessContext,
+    );
+    const tree = await new GetTaskTree(tasks).execute(
+      invoked.task.task.id,
+      primaryAccessContext,
+    );
+
+    expect(loaded).toMatchObject({
+      task: {
+        id: invoked.task.task.id,
+        rootTaskId: invoked.task.task.id,
+        invokableKind: 'agent',
+        invokableVersionId: agentVersion.id,
+      },
+      latestRun: {
+        status: 'queued',
+        attempt: 1,
+      },
+    });
+    expect(tree).toHaveLength(1);
+    expect(tree?.[0]).toMatchObject({
+      task: { id: invoked.task.task.id },
+      latestRun: { status: 'queued', attempt: 1 },
+    });
+
+    const nonOwner = await new GetTask(tasks).execute(
+      invoked.task.task.id,
+      createAccessContext({ principalId: 'svc_beta' }),
+    );
+    expect(nonOwner).toBeNull();
+
+    const taskRows = await database.query(
+      'SELECT id, root_task_id, invokable_kind, invokable_version_id, workspace_id FROM tasks WHERE id = $1',
+      [invoked.task.task.id],
+    );
+    expect(taskRows.rows).toEqual([
+      {
+        id: invoked.task.task.id,
+        root_task_id: invoked.task.task.id,
+        invokable_kind: 'agent',
+        invokable_version_id: agentVersion.id,
+        workspace_id: primaryAccessContext.workspaceId,
       },
     ]);
   });
@@ -584,7 +931,10 @@ describe('durable kernel postgres bootstrap', () => {
     );
 
     await expect(
-      new CompleteRun(runRepository).execute({
+      new CompleteRun(
+        runRepository,
+        new PostgresTaskRepository(database),
+      ).execute({
         claim: claimed!,
         run: terminal,
       }),
@@ -619,7 +969,10 @@ describe('durable kernel postgres bootstrap', () => {
     expect(claimed).not.toBeNull();
 
     clock.advanceMs(10_000);
-    const completed = await new CompleteRun(runRepository).execute({
+    const completed = await new CompleteRun(
+      runRepository,
+      new PostgresTaskRepository(database),
+    ).execute({
       claim: claimed!,
       run: transitionRun(
         claimed!.run,
@@ -710,12 +1063,14 @@ describe('durable kernel postgres bootstrap', () => {
         },
         activationIdFactory: () => '00000000-0000-4000-8000-000000000511',
       }),
-      new ExecuteRun(
-        new CompleteRun(runRepository),
+      createExecuteRun({
+        database,
+        runRepository,
+        invokableRepository: new PostgresInvokableRepository(database),
         runtime,
         logger,
-        clock.now,
-      ),
+        now: clock.now,
+      }),
       logger,
       { pollIntervalMs: 1 },
     );
@@ -745,7 +1100,384 @@ describe('durable kernel postgres bootstrap', () => {
     });
     expect(completedRow?.published_at).not.toBeNull();
   });
+
+  it('executes a canonical agent task through the published agent version path', async () => {
+    const database = await createDatabase();
+    const clock = new TestClock('2026-07-22T12:00:00.000Z');
+    const runtime = new FakeAgentRuntime({ responseText: 'AGENT_TASK_OK' });
+    const logger = createLogger({
+      service: 'agent-server-test',
+      minimumLevel: 'error',
+      write: () => undefined,
+    });
+
+    await applyDurableKernelMigrations(database);
+
+    const invokables = new PostgresInvokableRepository(database);
+    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+    const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
+    const agentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000040001',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Canonical Agent',
+      description: 'Executes through the task path',
+      now: createdAt,
+    });
+    const agentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000040101',
+        definitionId: agentDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Canonical Agent v1',
+        description: 'Published agent',
+        instructions: 'Reply with the analyzed result only.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    await invokables.saveAgentDefinition(agentDefinition);
+    await invokables.saveAgentVersion(agentVersion);
+
+    const tasks = new PostgresTaskRepository(database);
+    const runs = new PostgresRunRepository(database);
+    const admissions = new PostgresAdmissionRepository(database);
+    const invocation = await new InvokeTask(
+      tasks,
+      runs,
+      admissions,
+      invokables,
+      clock.now,
+    ).execute({
+      idempotencyKey: 'canonical-agent-task',
+      invokable: { kind: 'agent', versionId: agentVersion.id },
+      input: { text: 'Summarize this incident.' },
+      accessContext: primaryAccessContext,
+    });
+
+    clock.advanceMs(30_000);
+    const claim = await new ClaimNextRun(runs, {
+      workerId: 'worker-agent-task',
+      leaseDurationMs: 60_000,
+      now: clock.now,
+      activationIdFactory: () => '00000000-0000-4000-8000-000000000611',
+    }).execute();
+
+    expect(claim).not.toBeNull();
+
+    await createExecuteRun({
+      database,
+      runRepository: runs,
+      invokableRepository: invokables,
+      runtime,
+      logger,
+      now: clock.now,
+    }).execute(claim!);
+
+    const task = await new GetTask(tasks).execute(
+      invocation.task.task.id,
+      primaryAccessContext,
+    );
+
+    expect(task).toMatchObject({
+      task: {
+        id: invocation.task.task.id,
+        status: 'completed',
+      },
+      latestRun: {
+        status: 'succeeded',
+        result: { text: 'AGENT_TASK_OK' },
+      },
+    });
+    expect(runtime.prompts).toHaveLength(1);
+    expect(runtime.prompts[0]).toContain(
+      'Reply with the analyzed result only.',
+    );
+    expect(runtime.prompts[0]).toContain('Summarize this incident.');
+  });
+
+  it('executes a sequential team task inline and exposes child genealogy in the task tree', async () => {
+    const database = await createDatabase();
+    const clock = new TestClock('2026-07-22T12:00:00.000Z');
+    const runtime = new FakeAgentRuntime({
+      responseTexts: ['FIRST_STEP_OK', 'FINAL_STEP_OK'],
+    });
+    const logger = createLogger({
+      service: 'agent-server-test',
+      minimumLevel: 'error',
+      write: () => undefined,
+    });
+
+    await applyDurableKernelMigrations(database);
+
+    const invokables = new PostgresInvokableRepository(database);
+    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+    const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
+    const firstAgentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000050001',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Collector',
+      description: 'Collects the first step',
+      now: createdAt,
+    });
+    const firstAgentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000050101',
+        definitionId: firstAgentDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Collector v1',
+        description: 'First step agent',
+        instructions: 'Collect the relevant evidence.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    const secondAgentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000050002',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Writer',
+      description: 'Produces the final answer',
+      now: createdAt,
+    });
+    const secondAgentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000050102',
+        definitionId: secondAgentDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Writer v1',
+        description: 'Final step agent',
+        instructions: 'Write the final answer from the prior step only.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    const teamDefinition = createTeamDefinition({
+      id: '00000000-0000-4000-8000-000000050201',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Sequential Team',
+      description: 'Runs two steps in order',
+      now: createdAt,
+    });
+    const compiledPlan = createCompiledSequentialTeamPlan({
+      teamVersionId: '00000000-0000-4000-8000-000000050301',
+      entryNodeId: 'collect',
+      finalOutputNodeId: 'write',
+      compiledAt: '2026-07-22T12:05:00.000Z',
+      steps: [
+        {
+          nodeId: 'collect',
+          nodePath: 'step.0001',
+          agentVersionId: firstAgentVersion.id,
+          order: 1,
+          output: 'step',
+        },
+        {
+          nodeId: 'write',
+          nodePath: 'step.0002',
+          agentVersionId: secondAgentVersion.id,
+          order: 2,
+          output: 'final',
+        },
+      ],
+    });
+    const teamVersion = publishTeamVersion(
+      createDraftTeamVersion({
+        id: compiledPlan.teamVersionId,
+        definitionId: teamDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Sequential Team v1',
+        description: 'Published sequential team',
+        graph: {
+          nodes: [
+            {
+              id: 'collect',
+              kind: 'invoke',
+              agentVersionId: firstAgentVersion.id,
+              successNodeId: 'write',
+              output: 'step',
+            },
+            {
+              id: 'write',
+              kind: 'invoke',
+              agentVersionId: secondAgentVersion.id,
+              successNodeId: null,
+              output: 'final',
+            },
+          ],
+        },
+        now: createdAt,
+      }),
+      compiledPlan,
+      publishedAt,
+    );
+    await invokables.saveAgentDefinition(firstAgentDefinition);
+    await invokables.saveAgentVersion(firstAgentVersion);
+    await invokables.saveAgentDefinition(secondAgentDefinition);
+    await invokables.saveAgentVersion(secondAgentVersion);
+    await invokables.saveTeamDefinition(teamDefinition);
+    await invokables.saveTeamVersion(teamVersion);
+
+    const tasks = new PostgresTaskRepository(database);
+    const runs = new PostgresRunRepository(database);
+    const admissions = new PostgresAdmissionRepository(database);
+    const invocation = await new InvokeTask(
+      tasks,
+      runs,
+      admissions,
+      invokables,
+      clock.now,
+    ).execute({
+      idempotencyKey: 'sequential-team-task',
+      invokable: { kind: 'team', versionId: teamVersion.id },
+      input: { text: 'Investigate the outage.' },
+      accessContext: primaryAccessContext,
+    });
+
+    clock.advanceMs(30_000);
+    const claim = await new ClaimNextRun(runs, {
+      workerId: 'worker-team-task',
+      leaseDurationMs: 60_000,
+      now: clock.now,
+      activationIdFactory: () => '00000000-0000-4000-8000-000000000711',
+    }).execute();
+
+    expect(claim).not.toBeNull();
+
+    await createExecuteRun({
+      database,
+      runRepository: runs,
+      invokableRepository: invokables,
+      runtime,
+      logger,
+      now: clock.now,
+    }).execute(claim!);
+
+    const rootTask = await new GetTask(tasks).execute(
+      invocation.task.task.id,
+      primaryAccessContext,
+    );
+    const tree = await new GetTaskTree(tasks).execute(
+      invocation.task.task.id,
+      primaryAccessContext,
+    );
+    const childRunRows = await database.query(
+      `
+        SELECT task_id, attempt, status
+        FROM runs
+        WHERE task_id <> $1
+        ORDER BY task_id ASC
+      `,
+      [invocation.task.task.id],
+    );
+
+    expect(rootTask).toMatchObject({
+      task: {
+        id: invocation.task.task.id,
+        status: 'completed',
+      },
+      latestRun: {
+        status: 'succeeded',
+        result: { text: 'FINAL_STEP_OK' },
+      },
+    });
+    expect(tree).not.toBeNull();
+    expect(tree).toHaveLength(3);
+    expect(tree?.[0]).toMatchObject({
+      task: {
+        id: invocation.task.task.id,
+        parentTaskId: null,
+        parentRunId: null,
+      },
+    });
+    expect(tree?.[1]).toMatchObject({
+      task: {
+        rootTaskId: invocation.task.task.id,
+        parentTaskId: invocation.task.task.id,
+        parentRunId: claim!.run.id,
+        status: 'completed',
+      },
+      latestRun: {
+        attempt: 1,
+        status: 'succeeded',
+        result: { text: 'FIRST_STEP_OK' },
+      },
+    });
+    expect(tree?.[2]).toMatchObject({
+      task: {
+        rootTaskId: invocation.task.task.id,
+        parentTaskId: invocation.task.task.id,
+        parentRunId: claim!.run.id,
+        status: 'completed',
+      },
+      latestRun: {
+        attempt: 1,
+        status: 'succeeded',
+        result: { text: 'FINAL_STEP_OK' },
+      },
+    });
+    expect(childRunRows.rows).toHaveLength(2);
+    expect(runtime.prompts).toHaveLength(2);
+    expect(runtime.prompts[0]).toContain('Collect the relevant evidence.');
+    expect(runtime.prompts[0]).toContain('Investigate the outage.');
+    expect(runtime.prompts[1]).toContain(
+      'Write the final answer from the prior step only.',
+    );
+    expect(runtime.prompts[1]).toContain('FIRST_STEP_OK');
+  });
 });
+
+function createExecuteRun(input: {
+  readonly database: PGlite;
+  readonly runRepository: PostgresRunRepository;
+  readonly invokableRepository: PostgresInvokableRepository;
+  readonly runtime: FakeAgentRuntime;
+  readonly logger: ReturnType<typeof createLogger>;
+  readonly now: () => Date;
+}): ExecuteRun {
+  const tasks = new PostgresTaskRepository(input.database);
+  const completeRun = new CompleteRun(input.runRepository, tasks);
+  const executeTeamTask = new ExecuteTeamTask(
+    tasks,
+    input.runRepository,
+    input.invokableRepository,
+    input.runtime,
+    completeRun,
+    input.now,
+  );
+
+  return new ExecuteRun(
+    completeRun,
+    tasks,
+    input.invokableRepository,
+    executeTeamTask,
+    input.runtime,
+    input.logger,
+    input.now,
+  );
+}
 
 async function waitFor(check: () => Promise<boolean>): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {

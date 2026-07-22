@@ -1,5 +1,6 @@
 import type {
   ClaimedRun,
+  ClaimQueuedRunByIdOptions,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
   RunOwnerScope,
@@ -47,6 +48,12 @@ export class InMemoryRunRepository implements RunRepository {
 
   public async claimNextQueued(
     _options: ClaimNextQueuedRunOptions,
+  ): Promise<ClaimedRun | null> {
+    throw new Error('InMemoryRunRepository does not implement durable claim');
+  }
+
+  public async claimQueuedById(
+    _options: ClaimQueuedRunByIdOptions,
   ): Promise<ClaimedRun | null> {
     throw new Error('InMemoryRunRepository does not implement durable claim');
   }

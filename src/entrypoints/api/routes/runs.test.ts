@@ -8,6 +8,9 @@ import type {
 } from '../../../application/ports/agent-runtime.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
+import type { GetTask } from '../../../application/tasks/get-task.js';
+import type { GetTaskTree } from '../../../application/tasks/get-task-tree.js';
+import type { InvokeTask } from '../../../application/tasks/invoke-task.js';
 import { createRun } from '../../../domain/runs/run.js';
 import { createApp } from '../app.js';
 
@@ -55,6 +58,17 @@ describe('run routes', () => {
       getRun: {
         execute: async () => null,
       } as unknown as GetRun,
+      invokeTask: {
+        execute: async () => {
+          throw new Error('not implemented in run route tests');
+        },
+      } as unknown as InvokeTask,
+      getTask: {
+        execute: async () => null,
+      } as unknown as GetTask,
+      getTaskTree: {
+        execute: async () => null,
+      } as unknown as GetTaskTree,
     });
 
     const headers = {

@@ -1,15 +1,29 @@
 import { transitionRun, type RunFailure } from '../../domain/runs/run.js';
+import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
+import { transitionTask } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import {
   type AgentRuntimePort,
   RuntimeTimedOutError,
 } from '../ports/agent-runtime.js';
+import type {
+  InvokableOwnerScope,
+  InvokableRepository,
+} from '../ports/invokable-repository.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
+import type { TaskRepository } from '../ports/task-repository.js';
+import {
+  buildPublishedAgentPrompt,
+  ExecuteTeamTask,
+} from '../tasks/execute-team-task.js';
 import { CompleteRun } from './complete-run.js';
 
 export class ExecuteRun {
   public constructor(
     private readonly completeRun: CompleteRun,
+    private readonly tasks: TaskRepository,
+    private readonly invokables: InvokableRepository,
+    private readonly executeTeamTask: ExecuteTeamTask,
     private readonly runtime: AgentRuntimePort,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
@@ -41,32 +55,50 @@ export class ExecuteRun {
     });
 
     try {
-      const execution = await this.runtime.execute({
-        runId: claim.run.id,
-        prompt: claim.run.prompt,
-      });
-      const succeeded = transitionRun(
-        claim.run,
-        'succeeded',
+      const task = await this.tasks.findById(claim.taskId);
+      if (!task) {
+        throw new Error(
+          `Task ${claim.taskId} could not be loaded for execution`,
+        );
+      }
+
+      if (task.status === 'queued') {
+        await this.tasks.save(
+          transitionTask(task, 'active', () => new Date(claim.run.updatedAt)),
+        );
+      }
+
+      const completed =
+        task.invokableKind === 'team'
+          ? await this.completeRun.execute({
+              claim,
+              run: await this.executeTeamTask.execute({ claim, task }),
+            })
+          : await this.executeAgentRun(
+              claim,
+              {
+                tenantId: task.tenantId,
+                workspaceId: task.workspaceId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+              },
+              task.invokableVersionId,
+            );
+
+      this.logger.log(
+        completed.status === 'succeeded' ? 'info' : 'error',
+        completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
         {
-          runtime: {
-            provider: execution.provider,
-            model: execution.model,
-          },
-          result: { text: execution.text },
-          ...(execution.usage ? { usage: execution.usage } : {}),
+          run_id: claim.run.id,
+          ...(completed.runtime
+            ? {
+                provider: completed.runtime.provider,
+                model: completed.runtime.model,
+              }
+            : {}),
+          ...(completed.error ? { failure_code: completed.error.code } : {}),
         },
-        this.now,
       );
-      const completed = await this.completeRun.execute({
-        claim,
-        run: succeeded,
-      });
-      this.logger.log('info', 'run.succeeded', {
-        run_id: claim.run.id,
-        provider: execution.provider,
-        model: execution.model,
-      });
       return completed;
     } catch (error) {
       const timedOut = error instanceof RuntimeTimedOutError;
@@ -95,5 +127,62 @@ export class ExecuteRun {
       });
       return completed;
     }
+  }
+
+  private async executeAgentRun(
+    claim: ClaimedRun,
+    ownerScope: InvokableOwnerScope,
+    invokableVersionId: string,
+  ) {
+    const prompt = await this.resolveAgentPrompt(
+      claim.run.prompt,
+      ownerScope,
+      invokableVersionId,
+    );
+    const execution = await this.runtime.execute({
+      runId: claim.run.id,
+      prompt,
+    });
+    const succeeded = transitionRun(
+      claim.run,
+      'succeeded',
+      {
+        runtime: {
+          provider: execution.provider,
+          model: execution.model,
+        },
+        result: { text: execution.text },
+        ...(execution.usage ? { usage: execution.usage } : {}),
+      },
+      this.now,
+    );
+
+    return this.completeRun.execute({
+      claim,
+      run: succeeded,
+    });
+  }
+
+  private async resolveAgentPrompt(
+    prompt: string,
+    ownerScope: InvokableOwnerScope,
+    invokableVersionId: string,
+  ): Promise<string> {
+    if (invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID) {
+      return prompt;
+    }
+
+    const agentVersion = await this.invokables.findPublishedAgentVersionById(
+      invokableVersionId,
+      ownerScope,
+    );
+
+    if (!agentVersion) {
+      throw new Error(
+        `Published agent version ${invokableVersionId} could not be loaded for execution`,
+      );
+    }
+
+    return buildPublishedAgentPrompt(agentVersion.instructions, prompt);
   }
 }

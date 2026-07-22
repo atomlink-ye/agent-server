@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AccessContext } from '../control-plane/access-context.js';
 import { createRun, type Run } from '../../domain/runs/run.js';
+import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { createRootTask, type Task } from '../../domain/tasks/task.js';
 import type {
   AdmissionRecord,
@@ -11,13 +12,18 @@ import type {
 import { AdmissionAlreadyExistsError as AdmissionRaceError } from '../ports/admission-repository.js';
 import type {
   ClaimedRun,
+  ClaimQueuedRunByIdOptions,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
   RunOwnerScope,
   RunRepository,
   SaveRunOptions,
 } from '../ports/run-repository.js';
-import type { TaskRepository } from '../ports/task-repository.js';
+import type {
+  TaskOwnerScope,
+  TaskRecord,
+  TaskRepository,
+} from '../ports/task-repository.js';
 import { AdmitRootTask } from './admit-root-task.js';
 import {
   encodeRootTaskRunRequestSnapshotRef,
@@ -52,6 +58,7 @@ describe('AdmitRootTask', () => {
       principalType: primaryAccessContext.principalType,
       principalId: primaryAccessContext.principalId,
       policySnapshotVersion: primaryAccessContext.policySnapshotVersion,
+      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
     });
     expect(repository.records).toEqual([
       expect.objectContaining({
@@ -135,7 +142,7 @@ describe('AdmitRootTask', () => {
       ...primaryAccessContext,
       ingress: 'api',
       invokableKind: 'agent',
-      invokableVersionId: 'baseline-run-api',
+      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalizedRequest),
       inputFingerprint: fingerprint,
       now: () => new Date('2026-07-22T12:00:00.000Z'),
@@ -241,6 +248,31 @@ class InMemoryTaskRepository implements TaskRepository {
   public async findById(id: string): Promise<Task | null> {
     return this.#tasks.get(id) ?? null;
   }
+
+  public async findByIdForOwner(
+    id: string,
+    ownerScope: TaskOwnerScope,
+  ): Promise<TaskRecord | null> {
+    const task = await this.findById(id);
+    if (!task || !matchesTaskOwnerScope(task, ownerScope)) {
+      return null;
+    }
+
+    return { task, latestRun: null };
+  }
+
+  public async findByRootTaskIdForOwner(
+    rootTaskId: string,
+    ownerScope: TaskOwnerScope,
+  ): Promise<readonly TaskRecord[]> {
+    return Array.from(this.#tasks.values())
+      .filter(
+        (task) =>
+          task.rootTaskId === rootTaskId &&
+          matchesTaskOwnerScope(task, ownerScope),
+      )
+      .map((task) => ({ task, latestRun: null }));
+  }
 }
 
 class InMemoryRunRepository implements RunRepository {
@@ -277,6 +309,12 @@ class InMemoryRunRepository implements RunRepository {
 
   public async claimNextQueued(
     _options: ClaimNextQueuedRunOptions,
+  ): Promise<ClaimedRun | null> {
+    throw new Error('Not implemented in admission tests');
+  }
+
+  public async claimQueuedById(
+    _options: ClaimQueuedRunByIdOptions,
   ): Promise<ClaimedRun | null> {
     throw new Error('Not implemented in admission tests');
   }
@@ -356,5 +394,17 @@ function matchesAdmissionScope(
     record.workspaceId === scope.workspaceId &&
     record.principalType === scope.principalType &&
     record.principalId === scope.principalId
+  );
+}
+
+function matchesTaskOwnerScope(
+  task: Task,
+  ownerScope: TaskOwnerScope,
+): boolean {
+  return (
+    task.tenantId === ownerScope.tenantId &&
+    task.workspaceId === ownerScope.workspaceId &&
+    task.principalType === ownerScope.principalType &&
+    task.principalId === ownerScope.principalId
   );
 }

@@ -32,6 +32,7 @@ The baseline now enforces one real ingress boundary on the Run compatibility API
 - `POST /api/v1/runs` and `GET /api/v1/runs/{id}` require a configured service-account bearer token;
 - tenant, workspace, and principal scope are resolved from that authenticated binding, not caller-supplied fields;
 - root Task admission persists those snapshot facts and idempotency replay is scoped to that owner;
+- published Agent/Team version lookups are limited to that same owner scope until shared ACLs exist;
 - authenticated reads outside the stored owner scope return `404 run_not_found`.
 
 This is still not full Phase 2 security. The baseline does not yet provide end-user OIDC, shared Workspace ACLs, credential broker enforcement, approval flows, storage-wide tenant isolation guarantees, or execution-cell filesystem/network isolation. It must not process customer data or production credentials. Its zero-model-credential test demonstrates installation convenience, not enterprise isolation.

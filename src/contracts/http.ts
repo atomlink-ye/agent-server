@@ -12,7 +12,7 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 export class HttpError extends Error {
   public constructor(
-    public readonly status: 400 | 404 | 409 | 413 | 503,
+    public readonly status: 400 | 403 | 404 | 409 | 413 | 503,
     public readonly code: string,
     message: string,
   ) {

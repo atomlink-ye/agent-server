@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: codex
 created_at: 2026-07-22
 updated_at: 2026-07-22
@@ -50,8 +50,8 @@ Deliver one reviewable branch that establishes the self-contained repository Har
 - [x] Run the real zero-model-credential Paseo/OpenCode smoke three consecutive times, then revalidate the hardened environment path to the provider.
 - [x] Inspect complete diff, tracked files, generated output, process cleanup, logs, and documentation accuracy.
 - [x] Record final validation evidence and residual limitations.
-- [ ] Complete every checklist, move this plan to `completed/`, and re-run plan/docs checks.
-- [ ] Commit intentionally and publish the reviewed tree to a new remote branch.
+- [x] Complete every checklist, move this plan to `completed/`, and re-run plan/docs checks.
+- [x] Commit intentionally and publish the reviewed tree to a new remote branch.
 
 ## Verification
 
@@ -104,6 +104,7 @@ Deliver one reviewable branch that establishes the self-contained repository Har
 - Every successful live run reported readiness `ready`, provider `opencode`, model `opencode/mimo-v2.5-free`, terminal status `succeeded`, exact text `PASEO_OPENCODE_BASELINE_OK`, and zero OpenCode credential files.
 - After environment allowlisting, live attempts with `opencode/mimo-v2.5-free` and the explicit-free diagnostic override `opencode/deepseek-v4-flash-free` both reached the provider; OpenCode logs classified both as `Rate limit exceeded`, and the baseline safely returned terminal `timed_out` without exposing the raw provider error through HTTP.
 - Managed-process scanning after all success and rate-limit attempts found no Paseo, compiled Agent Server, or OpenCode run/serve process. Runtime homes, logs, and JSON evidence remain under ignored `.local/smoke/`; no OpenCode `auth.json` exists.
+- Remote implementation commit `864ea6b682a9e438f7a987dfd088dc158d57a85c` was created directly on new branch `agent/harness-baseline` with remote `master` commit `a1aad838d06c5af02c3947603c527154677c7afc` as its parent. Remote comparison reported 114 added files, ahead by 1 and behind by 0.
 
 ## Completion checklist
 
@@ -113,8 +114,8 @@ Deliver one reviewable branch that establishes the self-contained repository Har
 - [x] No secret, prompt, raw provider error, private source URL, generated evidence, or unintended file is tracked.
 - [x] No unmanaged local process remains.
 - [x] Product/Feature/Component/Contract/ADR/Runbook are synchronized.
-- [ ] All work and verification items are checked or explicitly transferred.
-- [ ] Plan is archived to `completed/` and contains no unchecked item.
+- [x] All work and verification items are checked or explicitly transferred.
+- [x] Plan is archived to `completed/` and contains no unchecked item.
 
 ## Current blocker
 
@@ -122,7 +123,7 @@ None.
 
 ## Next exact command
 
-`git commit -m "Establish agent harness baseline"`
+`make check`
 
 ## Cleanup state
 

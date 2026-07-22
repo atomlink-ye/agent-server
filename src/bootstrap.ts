@@ -9,9 +9,14 @@ import { ExecuteRun } from './application/runs/execute-run.js';
 import { GetRun } from './application/runs/get-run.js';
 import { SubmitRun } from './application/runs/submit-run.js';
 import { AdmitRootTask } from './application/tasks/admit-root-task.js';
+import { GetTask } from './application/tasks/get-task.js';
+import { GetTaskTree } from './application/tasks/get-task-tree.js';
+import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
+import { InvokeTask } from './application/tasks/invoke-task.js';
 import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
 import { createApp } from './entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
+import { PostgresInvokableRepository } from './infrastructure/postgres/postgres-invokable-repository.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -44,6 +49,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const runRepository = new PostgresRunRepository(pool);
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
+  const invokableRepository = new PostgresInvokableRepository(pool);
   const runtime = new PaseoRuntimeAdapter(
     {
       wsUrl: config.paseo.wsUrl,
@@ -62,8 +68,30 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
-  const completeRun = new CompleteRun(runRepository);
-  const executeRun = new ExecuteRun(completeRun, runtime, logger);
+  const invokeTask = new InvokeTask(
+    taskRepository,
+    runRepository,
+    admissionRepository,
+    invokableRepository,
+  );
+  const getTask = new GetTask(taskRepository);
+  const getTaskTree = new GetTaskTree(taskRepository);
+  const completeRun = new CompleteRun(runRepository, taskRepository);
+  const executeTeamTask = new ExecuteTeamTask(
+    taskRepository,
+    runRepository,
+    invokableRepository,
+    runtime,
+    completeRun,
+  );
+  const executeRun = new ExecuteRun(
+    completeRun,
+    taskRepository,
+    invokableRepository,
+    executeTeamTask,
+    runtime,
+    logger,
+  );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
       workerId,
@@ -80,6 +108,9 @@ export async function createService(config: AppConfig, logger: Logger) {
     runtime,
     submitRun,
     getRun,
+    invokeTask,
+    getTask,
+    getTaskTree,
   });
   dispatcher.start();
 

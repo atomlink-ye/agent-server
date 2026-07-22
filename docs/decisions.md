@@ -8,5 +8,6 @@ Accepted decisions are recorded as ADRs. A superseding ADR points to the prior r
 | [0002](decisions/0002-typescript-modular-monolith.md)             | TypeScript modular monolith with ports/adapters and deterministic gates | Accepted |
 | [0003](decisions/0003-paseo-process-boundary.md)                  | Paseo is an external leaf-runtime process behind one adapter            | Accepted |
 | [0004](decisions/0004-authenticated-service-account-admission.md) | First tenant boundary uses authenticated service-account Run admission  | Accepted |
+| [0005](decisions/0005-sequential-team-mvp.md)                     | Sequential Team MVP adds Task-first invoke/read plus leaf-only Team IR  | Accepted |
 
 New ADRs are required for public contract ownership, database/queue selection, tenant/isolation model, credential architecture, Team graph semantics, or a second runtime.

@@ -1,0 +1,375 @@
+import { describe, expect, it } from 'vitest';
+
+import type { AccessContext } from '../control-plane/access-context.js';
+import { createRun, type Run } from '../../domain/runs/run.js';
+import {
+  createDraftAgentVersion,
+  publishAgentVersion,
+  type AgentVersion,
+} from '../../domain/invokables/agent-version.js';
+import { createRootTask, type Task } from '../../domain/tasks/task.js';
+import type {
+  AdmissionRecord,
+  AdmissionRepository,
+  AdmissionTransaction,
+} from '../ports/admission-repository.js';
+import { AdmissionAlreadyExistsError } from '../ports/admission-repository.js';
+import type { InvokableRepository } from '../ports/invokable-repository.js';
+import type {
+  ClaimedRun,
+  ClaimQueuedRunByIdOptions,
+  ClaimNextQueuedRunOptions,
+  CompleteClaimedRunOptions,
+  RunOwnerScope,
+  RunRepository,
+  SaveRunOptions,
+} from '../ports/run-repository.js';
+import type {
+  TaskOwnerScope,
+  TaskRecord,
+  TaskRepository,
+} from '../ports/task-repository.js';
+import {
+  IdempotencyConflictError,
+  InvokeTask,
+  WorkspaceScopeMismatchError,
+} from './invoke-task.js';
+
+const primaryAccessContext = createAccessContext();
+const publishedAgentVersion = publishAgentVersion(
+  createDraftAgentVersion({
+    id: '00000000-0000-4000-8000-0000000a0101',
+    definitionId: '00000000-0000-4000-8000-0000000a0001',
+    tenantId: primaryAccessContext.tenantId,
+    workspaceId: primaryAccessContext.workspaceId,
+    principalType: primaryAccessContext.principalType,
+    principalId: primaryAccessContext.principalId,
+    name: 'Task Agent',
+    instructions: 'Do the task.',
+    now: () => new Date('2026-07-22T12:00:00.000Z'),
+  }),
+  () => new Date('2026-07-22T12:05:00.000Z'),
+);
+
+describe('InvokeTask', () => {
+  it('reuses the original task when the same key is replayed with the same canonical request', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository.tasksRepository,
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+      () => new Date('2026-07-22T12:10:00.000Z'),
+    );
+
+    const first = await useCase.execute({
+      idempotencyKey: 'same-key',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: '  same prompt  ' },
+      accessContext: primaryAccessContext,
+    });
+    const second = await useCase.execute({
+      idempotencyKey: 'same-key',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'same prompt' },
+      workspaceId: primaryAccessContext.workspaceId,
+      accessContext: primaryAccessContext,
+    });
+
+    expect(first.reused).toBe(false);
+    expect(second.reused).toBe(true);
+    expect(second.task.task.id).toBe(first.task.task.id);
+    expect(second.task.latestRun?.runId).toBe(first.task.latestRun?.runId);
+  });
+
+  it('rejects a mismatched workspace_id before admission', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository.tasksRepository,
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+
+    await expect(
+      useCase.execute({
+        idempotencyKey: 'workspace-key',
+        invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+        input: { text: 'same prompt' },
+        workspaceId: 'workspace_other',
+        accessContext: primaryAccessContext,
+      }),
+    ).rejects.toBeInstanceOf(WorkspaceScopeMismatchError);
+  });
+
+  it('rejects the same key when the canonical request fingerprint changes', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository.tasksRepository,
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+      () => new Date('2026-07-22T12:10:00.000Z'),
+    );
+
+    await useCase.execute({
+      idempotencyKey: 'same-key',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'first prompt' },
+      accessContext: primaryAccessContext,
+    });
+
+    await expect(
+      useCase.execute({
+        idempotencyKey: 'same-key',
+        invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+        input: { text: 'different prompt' },
+        accessContext: primaryAccessContext,
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+});
+
+class PublishedInvokableRepository implements InvokableRepository {
+  readonly #agentVersions = new Map<string, AgentVersion>();
+
+  public constructor(agentVersions: readonly AgentVersion[]) {
+    for (const version of agentVersions) {
+      this.#agentVersions.set(version.id, version);
+    }
+  }
+
+  public async saveAgentDefinition(): Promise<void> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async findAgentDefinitionById(): Promise<null> {
+    return null;
+  }
+
+  public async saveAgentVersion(): Promise<void> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async findAgentVersionById(): Promise<null> {
+    return null;
+  }
+
+  public async findPublishedAgentVersionById(
+    id: string,
+    ownerScope: {
+      readonly tenantId: string;
+      readonly workspaceId: string;
+      readonly principalType: string;
+      readonly principalId: string;
+    },
+  ): Promise<AgentVersion | null> {
+    const version = this.#agentVersions.get(id) ?? null;
+    return version &&
+      version.tenantId === ownerScope.tenantId &&
+      version.workspaceId === ownerScope.workspaceId &&
+      version.principalType === ownerScope.principalType &&
+      version.principalId === ownerScope.principalId
+      ? version
+      : null;
+  }
+
+  public async saveTeamDefinition(): Promise<void> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async findTeamDefinitionById(): Promise<null> {
+    return null;
+  }
+
+  public async saveTeamVersion(): Promise<void> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async findTeamVersionById(): Promise<null> {
+    return null;
+  }
+
+  public async findPublishedTeamVersionById(
+    _id: string,
+    _ownerScope: {
+      readonly tenantId: string;
+      readonly workspaceId: string;
+      readonly principalType: string;
+      readonly principalId: string;
+    },
+  ): Promise<null> {
+    return null;
+  }
+
+  public async saveCompiledTeamPlan(): Promise<void> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async findCompiledTeamPlanByVersionId(): Promise<null> {
+    return null;
+  }
+}
+
+class InMemoryTaskRepository implements TaskRepository {
+  readonly #tasks = new Map<string, Task>();
+
+  public async save(task: Task): Promise<void> {
+    this.#tasks.set(task.id, task);
+  }
+
+  public async findById(id: string): Promise<Task | null> {
+    return this.#tasks.get(id) ?? null;
+  }
+
+  public async findByIdForOwner(
+    id: string,
+    ownerScope: TaskOwnerScope,
+  ): Promise<TaskRecord | null> {
+    const task = this.#tasks.get(id);
+    if (!task || !matchesTaskOwnerScope(task, ownerScope)) {
+      return null;
+    }
+
+    return { task, latestRun: null };
+  }
+
+  public async findByRootTaskIdForOwner(
+    rootTaskId: string,
+    ownerScope: TaskOwnerScope,
+  ): Promise<readonly TaskRecord[]> {
+    return Array.from(this.#tasks.values())
+      .filter(
+        (task) =>
+          task.rootTaskId === rootTaskId &&
+          matchesTaskOwnerScope(task, ownerScope),
+      )
+      .map((task) => ({ task, latestRun: null }));
+  }
+}
+
+class InMemoryRunRepository implements RunRepository {
+  readonly #runsById = new Map<string, Run>();
+  readonly #runIdsByTaskId = new Map<string, string>();
+
+  public async save(run: Run, options?: SaveRunOptions): Promise<void> {
+    this.#runsById.set(run.id, run);
+    if (options?.taskId) {
+      this.#runIdsByTaskId.set(options.taskId, run.id);
+    }
+  }
+
+  public async findById(id: string): Promise<Run | null> {
+    return this.#runsById.get(id) ?? null;
+  }
+
+  public async findByIdForOwner(
+    id: string,
+    _ownerScope: RunOwnerScope,
+  ): Promise<Run | null> {
+    return this.findById(id);
+  }
+
+  public async findByTaskId(taskId: string): Promise<Run | null> {
+    const runId = this.#runIdsByTaskId.get(taskId);
+    return runId ? (this.#runsById.get(runId) ?? null) : null;
+  }
+
+  public async claimNextQueued(
+    _options: ClaimNextQueuedRunOptions,
+  ): Promise<ClaimedRun | null> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async claimQueuedById(
+    _options: ClaimQueuedRunByIdOptions,
+  ): Promise<ClaimedRun | null> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+
+  public async completeClaimed(
+    _options: CompleteClaimedRunOptions,
+  ): Promise<Run> {
+    throw new Error('Not implemented in invoke-task tests');
+  }
+}
+
+class InMemoryAdmissionRepository implements AdmissionRepository {
+  public readonly tasksRepository = new InMemoryTaskRepository();
+  public readonly runsRepository = new InMemoryRunRepository();
+  public readonly records: AdmissionRecord[] = [];
+
+  public async withTransaction<T>(
+    work: (transaction: AdmissionTransaction) => Promise<T>,
+  ): Promise<T> {
+    return work({
+      tasks: this.tasksRepository,
+      runs: this.runsRepository,
+      findByIngressAndIdempotencyKey: async (ingress, idempotencyKey, scope) =>
+        this.records.find(
+          (record) =>
+            record.ingress === ingress &&
+            record.idempotencyKey === idempotencyKey &&
+            matchesAdmissionScope(record, scope),
+        ) ?? null,
+      save: async (record) => {
+        const existing = this.records.find(
+          (candidate) =>
+            candidate.ingress === record.ingress &&
+            candidate.idempotencyKey === record.idempotencyKey &&
+            matchesAdmissionScope(candidate, record),
+        );
+
+        if (existing) {
+          throw new AdmissionAlreadyExistsError();
+        }
+
+        this.records.push(record);
+      },
+      enqueueRunDispatch: async () => undefined,
+    });
+  }
+}
+
+function createAccessContext(
+  overrides: Partial<AccessContext> = {},
+): AccessContext {
+  return Object.freeze({
+    tenantId: 'tenant_alpha',
+    workspaceId: 'workspace_main',
+    principalType: 'service_account',
+    principalId: 'svc_alpha',
+    policySnapshotVersion: 'policy-2026-07-22',
+    ...overrides,
+  });
+}
+
+function matchesAdmissionScope(
+  record: Pick<
+    AdmissionRecord,
+    'tenantId' | 'workspaceId' | 'principalType' | 'principalId'
+  >,
+  scope: Pick<
+    AdmissionRecord,
+    'tenantId' | 'workspaceId' | 'principalType' | 'principalId'
+  >,
+): boolean {
+  return (
+    record.tenantId === scope.tenantId &&
+    record.workspaceId === scope.workspaceId &&
+    record.principalType === scope.principalType &&
+    record.principalId === scope.principalId
+  );
+}
+
+function matchesTaskOwnerScope(
+  task: Task,
+  ownerScope: TaskOwnerScope,
+): boolean {
+  return (
+    task.tenantId === ownerScope.tenantId &&
+    task.workspaceId === ownerScope.workspaceId &&
+    task.principalType === ownerScope.principalType &&
+    task.principalId === ownerScope.principalId
+  );
+}

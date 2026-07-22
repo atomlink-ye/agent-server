@@ -24,6 +24,7 @@ export interface PostgresMigrationExecutor {
 const durableKernelMigrationFileNames = [
   '0001_durable_kernel_a.sql',
   '0002_phase_2a_authenticated_admission.sql',
+  '0003_sequential_team_mvp.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 

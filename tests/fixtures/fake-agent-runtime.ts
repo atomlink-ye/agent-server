@@ -7,6 +7,7 @@ import type {
 export interface FakeRuntimeOptions {
   readonly ready?: boolean;
   readonly responseText?: string;
+  readonly responseTexts?: readonly string[];
   readonly delayMs?: number;
   readonly error?: Error;
 }
@@ -15,6 +16,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
+  public readonly prompts: string[] = [];
   public ready: boolean;
   readonly #options: FakeRuntimeOptions;
 
@@ -30,8 +32,12 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     }
   }
 
-  public async execute(): Promise<AgentRuntimeExecution> {
+  public async execute(input: {
+    readonly runId: string;
+    readonly prompt: string;
+  }): Promise<AgentRuntimeExecution> {
     this.executeCalls += 1;
+    this.prompts.push(input.prompt);
     if (this.#options.delayMs) {
       await new Promise((resolve) =>
         setTimeout(resolve, this.#options.delayMs),
@@ -43,7 +49,10 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     return {
       provider: 'opencode',
       model: 'opencode/fake-free',
-      text: this.#options.responseText ?? 'FAKE_RUNTIME_OK',
+      text:
+        this.#options.responseTexts?.[this.executeCalls - 1] ??
+        this.#options.responseText ??
+        'FAKE_RUNTIME_OK',
       usage: { inputTokens: 3, outputTokens: 2, totalCostUsd: 0 },
     };
   }

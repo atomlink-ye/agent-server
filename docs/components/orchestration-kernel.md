@@ -8,15 +8,16 @@ The kernel turns admitted intent into durable, bounded, recoverable execution. T
 
 The current walking skeleton contains:
 
-- canonical root [`Task`](../../src/domain/tasks/task.ts) admission under [`src/application/tasks`](../../src/application/tasks/);
+- canonical root and child [`Task`](../../src/domain/tasks/task.ts) admission/query services under [`src/application/tasks`](../../src/application/tasks/);
 - compatibility Run submit/get/claim/complete use cases under [`src/application/runs`](../../src/application/runs/);
+- public `POST /api/v1/tasks:invoke`, `GET /api/v1/tasks/{id}`, and `GET /api/v1/tasks/{id}/tree` routes under [`src/entrypoints/api/routes/tasks.ts`](../../src/entrypoints/api/routes/tasks.ts);
 - PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
-- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes them through `AgentRuntimePort` with lease/activation/fence metadata behind the repository boundary;
+- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary;
 - the unchanged public `/api/v1/runs` compatibility surface.
 
-This proves durable admission, idempotent replay, and fenced in-process execution without exposing internal Task state over HTTP yet.
+This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
 
-Still out of scope for this phase: child-task trees, waiting/resume, cancel, retry, reconcile, Team execution, tenant/identity enforcement, and artifact/evidence orchestration.
+Still out of scope for this phase: waiting/resume, cancel, retry, reconcile, multi-worker recovery, parallel/join semantics, approvals, budget propagation, and artifact/evidence orchestration.
 
 ## V1 responsibilities
 
@@ -30,7 +31,7 @@ Still out of scope for this phase: child-task trees, waiting/resume, cancel, ret
 
 ## Team boundary
 
-Agent and Team are both Invokable versions. A Team activation executes control-plane graph IR and creates Child Tasks; it never creates a Paseo session for the whole graph. Leaf Agent Runs alone cross the Runtime Port.
+Agent and Team are both Invokable versions. In this MVP, a Team activation executes compiled sequential control-plane IR and creates sibling child Tasks beneath the root Task with stable `logicalStepKey` and `nodePath` ordering; it never creates a Paseo session for the whole graph. Leaf Agent Runs alone cross the Runtime Port.
 
 ## Completion evidence
 

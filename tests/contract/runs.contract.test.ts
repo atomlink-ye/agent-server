@@ -5,15 +5,56 @@ import {
   CreateRunResponseSchema,
   GetRunResponseSchema,
 } from '../../src/contracts/runs.js';
-import { createTestApp } from '../fixtures/create-test-app.js';
+import {
+  createTestApp,
+  disabledServiceAccountToken,
+  primaryServiceAccountToken,
+  secondaryServiceAccountToken,
+} from '../fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 
+const authenticatedJsonHeaders = {
+  authorization: `Bearer ${primaryServiceAccountToken}`,
+  'content-type': 'application/json',
+};
+
 describe('run HTTP contracts', () => {
-  it('accepts a valid prompt asynchronously', async () => {
+  it.each([
+    [{}, 'missing'],
+    [{ authorization: 'Basic nope' }, 'malformed'],
+    [{ authorization: 'Bearer token-unknown' }, 'unknown'],
+    [{ authorization: `Bearer ${disabledServiceAccountToken}` }, 'disabled'],
+  ])(
+    'returns the same public 401 for %s bearer auth failure',
+    async (headers, _reason) => {
+      const app = await createTestApp(new FakeAgentRuntime());
+      const response = await app.request('/api/v1/runs', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'content-type': 'application/json',
+          'x-request-id': 'req-unauthorized',
+        },
+        body: JSON.stringify({ prompt: 'Reply with exactly: BASELINE_OK' }),
+      });
+
+      expect(response.status).toBe(401);
+      expect(response.headers.get('www-authenticate')).toBe('Bearer');
+      expect(await response.json()).toEqual({
+        error: {
+          code: 'unauthorized',
+          message: 'Authentication is required to access this resource.',
+          request_id: 'req-unauthorized',
+        },
+      });
+    },
+  );
+
+  it('accepts a valid authenticated prompt asynchronously', async () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authenticatedJsonHeaders,
       body: JSON.stringify({ prompt: 'Reply with exactly: BASELINE_OK' }),
     });
 
@@ -28,7 +69,7 @@ describe('run HTTP contracts', () => {
   it('reuses the same accepted work for the same Idempotency-Key', async () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const headers = {
-      'content-type': 'application/json',
+      ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
     };
 
@@ -57,7 +98,7 @@ describe('run HTTP contracts', () => {
     const runtime = new FakeAgentRuntime();
     const app = await createTestApp(runtime);
     const headers = {
-      'content-type': 'application/json',
+      ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
     };
 
@@ -88,7 +129,7 @@ describe('run HTTP contracts', () => {
   it('returns conflict when the same Idempotency-Key is reused with a different body', async () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const headers = {
-      'content-type': 'application/json',
+      ...authenticatedJsonHeaders,
       'idempotency-key': 'same-key',
     };
 
@@ -117,7 +158,7 @@ describe('run HTTP contracts', () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authenticatedJsonHeaders,
       body: JSON.stringify(body),
     });
 
@@ -131,7 +172,7 @@ describe('run HTTP contracts', () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authenticatedJsonHeaders,
       body: JSON.stringify({ prompt: 'x'.repeat(70_000) }),
     });
 
@@ -145,7 +186,7 @@ describe('run HTTP contracts', () => {
     const app = await createTestApp(new FakeAgentRuntime({ ready: false }));
     const response = await app.request('/api/v1/runs', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: authenticatedJsonHeaders,
       body: JSON.stringify({ prompt: 'test' }),
     });
 
@@ -159,6 +200,7 @@ describe('run HTTP contracts', () => {
     const app = await createTestApp(new FakeAgentRuntime());
     const response = await app.request(
       '/api/v1/runs/00000000-0000-4000-8000-000000000000',
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
 
     expect(response.status).toBe(404);
@@ -175,14 +217,16 @@ describe('run HTTP contracts', () => {
       await (
         await app.request('/api/v1/runs', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: authenticatedJsonHeaders,
           body: JSON.stringify({ prompt: 'private prompt' }),
         })
       ).json(),
     );
 
     await new Promise((resolve) => setTimeout(resolve, 5));
-    const response = await app.request(created.links.self);
+    const response = await app.request(created.links.self, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
     const body = GetRunResponseSchema.parse(await response.json());
 
     expect(Object.keys(body).sort()).toEqual([
@@ -198,5 +242,33 @@ describe('run HTTP contracts', () => {
     expect(body.status).toBe('succeeded');
     expect(body.result?.text).toBe('CONTRACT_OK');
     expect(JSON.stringify(body)).not.toContain('private prompt');
+  });
+
+  it('returns 404 run_not_found when an authenticated non-owner reads an existing run', async () => {
+    const app = await createTestApp(
+      new FakeAgentRuntime({ responseText: 'OWNER_SCOPE_OK' }),
+    );
+    const created = CreateRunResponseSchema.parse(
+      await (
+        await app.request('/api/v1/runs', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({ prompt: 'owner scoped prompt' }),
+        })
+      ).json(),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const response = await app.request(created.links.self, {
+      headers: {
+        authorization: `Bearer ${secondaryServiceAccountToken}`,
+      },
+    });
+
+    expect(response.status).toBe(404);
+    expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+      'run_not_found',
+    );
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  AdmissionOwnerScope,
   AdmissionRecord,
   AdmissionRepository,
   AdmissionTransaction,
@@ -33,6 +34,11 @@ interface AdmissionRow {
   readonly idempotency_key: string;
   readonly request_fingerprint: string;
   readonly task_id: string;
+  readonly tenant_id: string;
+  readonly workspace_id: string;
+  readonly principal_type: string;
+  readonly principal_id: string;
+  readonly policy_snapshot_version: string;
   readonly created_at: string;
 }
 
@@ -82,14 +88,37 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
   public async findByIngressAndIdempotencyKey(
     ingress: 'api',
     idempotencyKey: string,
+    scope: AdmissionOwnerScope,
   ): Promise<AdmissionRecord | null> {
     const result = await this.database.query<AdmissionRow>(
       `
-        SELECT ingress, idempotency_key, request_fingerprint, task_id, created_at
+        SELECT
+          ingress,
+          idempotency_key,
+          request_fingerprint,
+          task_id,
+          tenant_id,
+          workspace_id,
+          principal_type,
+          principal_id,
+          policy_snapshot_version,
+          created_at
         FROM admissions
-        WHERE ingress = $1 AND idempotency_key = $2
+        WHERE ingress = $1
+          AND idempotency_key = $2
+          AND tenant_id = $3
+          AND workspace_id = $4
+          AND principal_type = $5
+          AND principal_id = $6
       `,
-      [ingress, idempotencyKey],
+      [
+        ingress,
+        idempotencyKey,
+        scope.tenantId,
+        scope.workspaceId,
+        scope.principalType,
+        scope.principalId,
+      ],
     );
 
     const row = result.rows?.[0];
@@ -102,6 +131,11 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
       idempotencyKey: row.idempotency_key,
       requestFingerprint: row.request_fingerprint,
       taskId: row.task_id,
+      tenantId: row.tenant_id,
+      workspaceId: row.workspace_id,
+      principalType: row.principal_type,
+      principalId: row.principal_id,
+      policySnapshotVersion: row.policy_snapshot_version,
       createdAt: row.created_at,
     };
   }
@@ -115,14 +149,24 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
             idempotency_key,
             request_fingerprint,
             task_id,
+            tenant_id,
+            workspace_id,
+            principal_type,
+            principal_id,
+            policy_snapshot_version,
             created_at
-          ) VALUES ($1, $2, $3, $4, $5)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
         [
           record.ingress,
           record.idempotencyKey,
           record.requestFingerprint,
           record.taskId,
+          record.tenantId,
+          record.workspaceId,
+          record.principalType,
+          record.principalId,
+          record.policySnapshotVersion,
           record.createdAt,
         ],
       );

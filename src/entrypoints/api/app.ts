@@ -32,6 +32,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     const requestId = context.req.header('x-request-id') ?? randomUUID();
     const startedAt = performance.now();
     context.set('requestId', requestId);
+    context.set('accessContext', null);
     context.header('x-request-id', requestId);
 
     await next();

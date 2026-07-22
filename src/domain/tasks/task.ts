@@ -5,6 +5,10 @@ import { assertTaskTransition, type TaskStatus } from './task-status.js';
 export interface Task {
   readonly id: string;
   readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+  readonly policySnapshotVersion: string;
   readonly rootTaskId: string;
   readonly parentTaskId: string | null;
   readonly parentRunId: string | null;
@@ -24,6 +28,11 @@ export type TaskSnapshot = Task;
 export interface CreateRootTaskOptions {
   readonly id?: string;
   readonly depth?: number;
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+  readonly policySnapshotVersion: string;
   readonly ingress: 'api';
   readonly invokableKind: 'agent';
   readonly invokableVersionId: string;
@@ -33,7 +42,6 @@ export interface CreateRootTaskOptions {
 }
 
 const ROOT_TASK_DEPTH = 0;
-const LOCAL_TENANT_ID = 'tenant_local';
 
 export function createRootTask(options: CreateRootTaskOptions): Task {
   const depth = options.depth ?? ROOT_TASK_DEPTH;
@@ -47,7 +55,11 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
 
   return rehydrateTask({
     id,
-    tenantId: LOCAL_TENANT_ID,
+    tenantId: options.tenantId,
+    workspaceId: options.workspaceId,
+    principalType: options.principalType,
+    principalId: options.principalId,
+    policySnapshotVersion: options.policySnapshotVersion,
     rootTaskId: id,
     parentTaskId: null,
     parentRunId: null,
@@ -85,6 +97,8 @@ export function transitionTask(
 }
 
 function assertTaskShape(task: TaskSnapshot): void {
+  assertAuthoritativeScope(task);
+
   if (task.depth < ROOT_TASK_DEPTH) {
     throw new Error('Task depth must be zero or greater');
   }
@@ -113,6 +127,24 @@ function assertTaskShape(task: TaskSnapshot): void {
     throw new Error(
       'Child task snapshots cannot self-reference as the root task',
     );
+  }
+}
+
+function assertAuthoritativeScope(task: TaskSnapshot): void {
+  const requiredScopeFields = [
+    ['tenantId', task.tenantId],
+    ['workspaceId', task.workspaceId],
+    ['principalType', task.principalType],
+    ['principalId', task.principalId],
+    ['policySnapshotVersion', task.policySnapshotVersion],
+  ] as const;
+
+  for (const [fieldName, value] of requiredScopeFields) {
+    if (value.trim().length === 0) {
+      throw new Error(
+        `Task authoritative scope field ${fieldName} must be a non-empty string`,
+      );
+    }
   }
 }
 

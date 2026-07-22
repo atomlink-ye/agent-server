@@ -18,12 +18,42 @@ import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgre
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
+export const primaryServiceAccountToken = 'token-enabled';
+export const secondaryServiceAccountToken = 'token-other-owner';
+export const disabledServiceAccountToken = 'token-disabled';
+
 export const testConfig = {
   nodeEnv: 'test',
   host: '127.0.0.1',
   port: 3_000,
   logLevel: 'error',
   serviceName: 'agent-server-test',
+  serviceAccounts: [
+    {
+      serviceAccountId: 'svc_enabled',
+      token: primaryServiceAccountToken,
+      tenantId: 'tenant_alpha',
+      workspaceId: 'workspace_main',
+      policyVersion: 'policy-2026-07-22',
+      disabled: false,
+    },
+    {
+      serviceAccountId: 'svc_other_owner',
+      token: secondaryServiceAccountToken,
+      tenantId: 'tenant_alpha',
+      workspaceId: 'workspace_main',
+      policyVersion: 'policy-2026-07-22',
+      disabled: false,
+    },
+    {
+      serviceAccountId: 'svc_disabled',
+      token: disabledServiceAccountToken,
+      tenantId: 'tenant_alpha',
+      workspaceId: 'workspace_main',
+      policyVersion: 'policy-2026-07-22',
+      disabled: true,
+    },
+  ],
   paseo: {
     wsUrl: 'ws://127.0.0.1:6767/ws',
     agentCwd: '/tmp/agent-server-test',

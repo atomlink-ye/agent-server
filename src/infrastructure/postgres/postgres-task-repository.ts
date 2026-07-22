@@ -20,6 +20,10 @@ export class PostgresTaskRepository implements TaskRepository {
         INSERT INTO tasks (
           id,
           tenant_id,
+          workspace_id,
+          principal_type,
+          principal_id,
+          policy_snapshot_version,
           root_task_id,
           parent_task_id,
           parent_run_id,
@@ -33,10 +37,14 @@ export class PostgresTaskRepository implements TaskRepository {
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
+          workspace_id = EXCLUDED.workspace_id,
+          principal_type = EXCLUDED.principal_type,
+          principal_id = EXCLUDED.principal_id,
+          policy_snapshot_version = EXCLUDED.policy_snapshot_version,
           root_task_id = EXCLUDED.root_task_id,
           parent_task_id = EXCLUDED.parent_task_id,
           parent_run_id = EXCLUDED.parent_run_id,
@@ -53,6 +61,10 @@ export class PostgresTaskRepository implements TaskRepository {
       [
         task.id,
         task.tenantId,
+        task.workspaceId,
+        task.principalType,
+        task.principalId,
+        task.policySnapshotVersion,
         task.rootTaskId,
         task.parentTaskId,
         task.parentRunId,

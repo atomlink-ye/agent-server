@@ -2,6 +2,7 @@ import type {
   ClaimedRun,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
+  RunOwnerScope,
   RunRepository,
   SaveRunOptions,
 } from '../../application/ports/run-repository.js';
@@ -101,65 +102,45 @@ export class PostgresRunRepository implements RunRepository {
   }
 
   public async findById(id: string): Promise<Run | null> {
-    const result = await this.database.query<RunRow>(
-      `
-        SELECT
-          runs.id,
-          runs.task_id,
-          runs.attempt,
-          runs.status,
-          runs.lease_owner,
-          runs.activation_id,
-          runs.lease_expires_at,
-          runs.runtime,
-          runs.result,
-          runs.usage,
-          runs.error,
-          runs.created_at,
-          runs.updated_at,
-          runs.fencing_token,
-          tasks.input_snapshot_ref
-        FROM runs
-        INNER JOIN tasks ON tasks.id = runs.task_id
+    return this.findSingle(
+      `${RUN_SELECT_SQL}
         WHERE runs.id = $1
       `,
       [id],
     );
+  }
 
-    const row = result.rows?.[0];
-    return row ? mapRunRow(row) : null;
+  public async findByIdForOwner(
+    id: string,
+    ownerScope: RunOwnerScope,
+  ): Promise<Run | null> {
+    return this.findSingle(
+      `${RUN_SELECT_SQL}
+        WHERE runs.id = $1
+          AND tasks.tenant_id = $2
+          AND tasks.workspace_id = $3
+          AND tasks.principal_type = $4
+          AND tasks.principal_id = $5
+      `,
+      [
+        id,
+        ownerScope.tenantId,
+        ownerScope.workspaceId,
+        ownerScope.principalType,
+        ownerScope.principalId,
+      ],
+    );
   }
 
   public async findByTaskId(taskId: string): Promise<Run | null> {
-    const result = await this.database.query<RunRow>(
-      `
-        SELECT
-          runs.id,
-          runs.task_id,
-          runs.attempt,
-          runs.status,
-          runs.lease_owner,
-          runs.activation_id,
-          runs.lease_expires_at,
-          runs.runtime,
-          runs.result,
-          runs.usage,
-          runs.error,
-          runs.created_at,
-          runs.updated_at,
-          runs.fencing_token,
-          tasks.input_snapshot_ref
-        FROM runs
-        INNER JOIN tasks ON tasks.id = runs.task_id
+    return this.findSingle(
+      `${RUN_SELECT_SQL}
         WHERE runs.task_id = $1
         ORDER BY runs.attempt ASC
         LIMIT 1
       `,
       [taskId],
     );
-
-    const row = result.rows?.[0];
-    return row ? mapRunRow(row) : null;
   }
 
   public async claimNextQueued(
@@ -367,7 +348,37 @@ export class PostgresRunRepository implements RunRepository {
 
     return result.rows?.[0] ?? null;
   }
+
+  private async findSingle(
+    sql: string,
+    values: readonly unknown[],
+  ): Promise<Run | null> {
+    const result = await this.database.query<RunRow>(sql, values);
+    const row = result.rows?.[0];
+    return row ? mapRunRow(row) : null;
+  }
 }
+
+const RUN_SELECT_SQL = `
+  SELECT
+    runs.id,
+    runs.task_id,
+    runs.attempt,
+    runs.status,
+    runs.lease_owner,
+    runs.activation_id,
+    runs.lease_expires_at,
+    runs.runtime,
+    runs.result,
+    runs.usage,
+    runs.error,
+    runs.created_at,
+    runs.updated_at,
+    runs.fencing_token,
+    tasks.input_snapshot_ref
+  FROM runs
+  INNER JOIN tasks ON tasks.id = runs.task_id
+`;
 
 function mapClaimedRunRow(row: RunRow): ClaimedRun {
   if (!row.lease_owner || !row.activation_id || !row.lease_expires_at) {

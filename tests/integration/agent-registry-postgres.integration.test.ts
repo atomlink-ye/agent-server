@@ -909,6 +909,99 @@ describeRealPostgres(
       expect(rows.rows[0]).toEqual({ count: '1', status: 'published' });
     });
 
+    it('races two distinct publication claims while the managed version is still draft', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_publish_race';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const imported = await registry.importAgent(
+        commandFor(
+          tenant,
+          'principal',
+          '00000000-0000-4000-8000-0000000d00c1',
+          '00000000-0000-4000-8000-0000000d01c1',
+          'race-import',
+          'race-import-fp',
+        ),
+      );
+      expect(imported.version.status).toBe('draft');
+
+      const ownerForPublish = {
+        tenantId: imported.version.tenantId,
+        principalType: imported.version.principalType,
+        principalId: imported.version.principalId,
+      };
+      const publishA = {
+        owner: ownerForPublish,
+        idempotencyKey: 'race-publish-a',
+        requestFingerprint: 'race-publish-a-fp',
+        versionId: imported.version.id,
+      };
+      const publishB = {
+        owner: ownerForPublish,
+        idempotencyKey: 'race-publish-b',
+        requestFingerprint: 'race-publish-b-fp',
+        versionId: imported.version.id,
+      };
+      const [publishedA, publishedB] = await Promise.all([
+        registry.publishAgentVersion(publishA),
+        registry.publishAgentVersion(publishB),
+      ]);
+
+      expect(publishedA.id).toBe(imported.version.id);
+      expect(publishedB.id).toBe(imported.version.id);
+      expect(publishedA).toEqual(publishedB);
+      expect(publishedA.status).toBe('published');
+      expect(publishedA.publishedAt).toBe(publishedA.updatedAt);
+      expect(publishedA.package).toEqual(imported.version.package);
+      expect(publishedA.canonicalJson).toBe(imported.version.canonicalJson);
+      expect(publishedA.fingerprint).toBe(imported.version.fingerprint);
+
+      const durable = await pool.query<{
+        count: string;
+        status: string;
+        published_at: string;
+        instructions: string;
+        fingerprint: string;
+      }>(
+        `SELECT count(*)::text AS count, min(status) AS status, min(published_at)::text AS published_at,
+                min(instructions) AS instructions, min(fingerprint) AS fingerprint
+           FROM agent_versions WHERE tenant_id=$1 AND id=$2`,
+        [tenant, imported.version.id],
+      );
+      expect(durable.rows[0]).toMatchObject({
+        count: '1',
+        status: 'published',
+        instructions: imported.version.package.spec.instructions,
+        fingerprint: imported.version.fingerprint.replace('sha256:', ''),
+      });
+      expect(new Date(durable.rows[0]!.published_at).toISOString()).toBe(
+        publishedA.publishedAt,
+      );
+      const claims = await pool.query<{
+        idempotency_key: string;
+        definition_id: string;
+        version_id: string;
+      }>(
+        `SELECT idempotency_key, definition_id, version_id
+           FROM agent_registry_idempotency
+          WHERE tenant_id=$1 AND operation='publish' ORDER BY idempotency_key`,
+        [tenant],
+      );
+      expect(claims.rows).toEqual([
+        {
+          idempotency_key: publishA.idempotencyKey,
+          definition_id: imported.definition.id,
+          version_id: imported.version.id,
+        },
+        {
+          idempotency_key: publishB.idempotencyKey,
+          definition_id: imported.definition.id,
+          version_id: imported.version.id,
+        },
+      ]);
+    });
+
     it('hides definitions, versions, lists, and publication from another principal', async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';

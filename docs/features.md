@@ -35,13 +35,13 @@ Team compatibility remains implemented only as the existing sequential subset: `
 
 **Implemented minimum:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. Phase C adds private database-owned Product Workspaces and multiple-workspace principal ownership. Phase E adds Product-Workspace-owned accepted entries, immutable monotonic snapshots, verified local `MEMORY.md`/`manifest.json` projections, and authenticated read/rebuild routes. Responses expose no local filesystem paths.
 
-Legacy principal-private proposals and accepted entries remain separate and are not merged into Product Workspace snapshots. This minimum intentionally stops before agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records and verified projections, not content that leaf agents read automatically.
+Legacy principal-private proposals and accepted entries remain separate and are not merged into Product Workspace snapshots. Phase F adds the minimum Fresh ProductSession recall path: explicit published AgentVersion, admission-pinned ready snapshot ID/hash, verified local read, exact four-part context order, and final assistant Message persistence. It does not add old history or Workspace scans. This minimum intentionally stops before retrieval, embeddings, vector search, ranking, or provider-native mounting.
 
 **V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 
 ## Sessions, Tasks and Runs
 
-**Baseline:** authenticated `POST /api/v1/tasks:invoke` remains the compatibility ingress. Phase C provides private Workspace/ProductSession resources and ordered lanes; Phase D adds minimum runtime binding, durable normalized lifecycle events, final assistant Message persistence, replayable SSE, and owner-scoped cancellation. Cross-owner resources remain hidden. This is an MVP slice and does not claim full Runtime Session V2 or production recovery.
+**Baseline:** authenticated `POST /api/v1/tasks:invoke` remains the compatibility ingress. Phase C provides private Workspace/ProductSession resources and ordered lanes; Phase D adds minimum runtime binding, durable normalized lifecycle events, final assistant Message persistence, replayable SSE, and owner-scoped cancellation; Phase F adds Fresh ProductSession admission pinning and verified minimum context assembly. Cross-owner resources remain hidden. This is an MVP slice and does not claim full Runtime Session V2 or production recovery.
 
 **V1 acceptance:** Task is the only node invocation identity at both public and internal boundaries. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
@@ -70,4 +70,4 @@ Legacy principal-private proposals and accepted entries remain separate and are 
 The following remain deferred and must not be inferred from the Phase C minimum:
 
 - Full Runtime Session V2 create/resume/status APIs, incremental provider deltas, rich usage, retries/receipts, and production recovery;
-- runtime context assembly, retrieval injection, or automatic safe-memory behavior. Snapshot projection is local MVP behavior only; production durability is deferred.
+- retrieval injection or automatic safe-memory behavior. Phase F context assembly is only the documented four-part minimum; production durability and broader context assembly are deferred.

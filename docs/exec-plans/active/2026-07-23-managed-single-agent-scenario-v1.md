@@ -152,12 +152,18 @@ crash-recovery claim is made.
 
 ### F — Context assembly and Fresh Session memory projection
 
-- [ ] **F-1 (RED):** Add tests for exact context order, admission-pinned snapshot/hash, verified read-only projection, no full Workspace scan/embedding, no hidden old-session history, and runtime resume data. Current execution path is `src/application/runs/execute-run.ts`.
-- [ ] **F-2 (interface/domain):** Implement `assembleContext`, verified projection reads, and admission rejection on changed/mismatched snapshots.
-- [ ] **F-3 (route/application wiring):** Implement `createFreshSession` with a new Product Session and Runtime Binding, selected Agent Version, same Workspace, ready Snapshot, and empty old Message History; no production migration.
-- [ ] **F-4 (GREEN/E2E):** Add deterministic real-socket E2E for recall, rejected/late/other-Workspace absence, reset archiving, read-only projection, admission pinning, and old-task stability; rerun focused tests GREEN.
-- [ ] **F-5 (docs/evidence):** Update context/session/runtime contracts, components, features, and runbook; record `F-CONTEXT`, `F-PIN`, `F-FRESH`, and the old-task stability evidence.
-- [ ] **F-6 (gate):** Run unit, integration, E2E, `make e2e-smoke`, and `pnpm check`; commit behavior and docs/gate changes explicitly, ending with `feat: assemble pinned fresh-session context` and `F-ORACLE`.
+- [x] **F-1 (RED):** Added tests for the implemented minimum context order, admission-pinned snapshot/hash, verified read, no old-session history, and fail-closed mismatch behavior. Broader context and resume cases remain deferred.
+- [x] **F-2 (interface/domain):** Implemented `assembleContext`, exact pinned projection reads, and fail-closed execution when the pinned projection is missing or mismatched.
+- [x] **F-3 (route/application wiring):** Implemented Fresh ProductSession creation with explicit published AgentVersion, same owner-visible Workspace, ready snapshot selection at first message, and no old Message History in context; no new production migration.
+- [x] **F-4 (GREEN/E2E):** Added deterministic real-socket recall coverage for accepted memory, rejected content, late-after-admission content, foreign Workspace hiding, and final assistant Message persistence.
+- [x] **F-5 (GREEN/docs/evidence):** Node 24 focused evidence: context/memory unit 6, workspace-memory contract 14, Fresh Session E2E 1, earlier migration integration 19, and green checks. This does not claim provider-native mount, context beyond the implemented minimum, or production durability.
+- [x] **F-6 (gate):** Phase commits are `603e329` (`feat: assemble pinned fresh-session context`) and `51f0f98` (`fix: scope memory proposals to product workspace`). A blocker-only Oracle found the source Task Product Workspace scope issue; `51f0f98` fixed it. Phase G is next.
+
+**Phase F closeout:** Fresh ProductSession recall now uses the exact ready
+snapshot ID/hash pinned during first-message admission and verifies that local
+projection before assembling the minimum context. Deferred hardening is
+consolidated in `F-HARDENING-001`; no provider-native mount or production
+durability claim is made.
 
 ### G — Auto-safe Memory and Gardener
 

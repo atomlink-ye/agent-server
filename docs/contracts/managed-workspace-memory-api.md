@@ -1,4 +1,4 @@
-# Managed Workspace Memory Phase E
+# Managed Workspace Memory Phase E/F minimum
 
 Accepted proposals create one immutable workspace-owned entry. Entries render in
 `accepted_at ASC, entry_id ASC` order into canonical `MEMORY.md`; snapshot
@@ -23,3 +23,25 @@ The public API exposes entry and snapshot identifiers, hashes, versions, and
 projection status only. It never exposes the configured local filesystem root.
 Legacy principal-private proposal and entry routes remain separate and are not
 included in these workspace snapshots.
+
+## Fresh Session minimum
+
+`POST /api/v1/sessions` creates a Fresh ProductSession for an owner-visible
+Workspace and an explicitly published AgentVersion. On the first message,
+admission selects the latest ready snapshot for that tenant and Product
+Workspace and stores its exact snapshot ID and content hash on the durable Task.
+Execution never re-resolves the latest snapshot. It reads the pinned snapshot
+through verified local FileStore access; missing files or ID/hash/content
+mismatches fail closed without exposing a local path or substituting a newer
+snapshot.
+
+The implemented minimum context order is exactly:
+
+1. fixed runtime contract header;
+2. published AgentVersion instructions;
+3. current Task input;
+4. pinned verified `MEMORY.md`, when present.
+
+No old ProductSession history, full Workspace scan, embeddings/RAG, tool or
+skill summaries, or provider-native mount is part of this contract. A
+successful run persists the final assistant Message in the ProductSession.

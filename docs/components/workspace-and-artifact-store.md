@@ -24,6 +24,15 @@ atomic publication; public responses never expose the configured local path.
 Legacy principal-private entries remain on the prior routes and are excluded
 from Product Workspace snapshots.
 
+Phase F consumes only a pinned ready snapshot. A Fresh ProductSession uses an
+explicit published AgentVersion; its first admitted Task stores the selected
+snapshot ID and hash. Execution verifies that exact local projection and builds
+the minimum context in order: fixed runtime header, published instructions,
+current Task input, then pinned `MEMORY.md`. No previous session history or
+Workspace scan is read, and the final assistant Message is persisted. Missing
+or mismatched pinned content fails closed without latest-snapshot substitution
+or local-path exposure.
+
 Accepted entries are records of reviewed memory, not an implemented retrieval system. No embedding generation, vector search, ranking, context assembly, runtime prompt injection, or automatic agent recall happens in this component yet. Owner scope remains derived from configured service-account bindings until user identity and shared Workspace ACLs land.
 
 ## V1 filesystem boundary

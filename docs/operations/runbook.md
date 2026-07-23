@@ -77,6 +77,13 @@ versions, and status only; never a local path. This is an MVP local projection:
 fsync, KMS, object storage, backup/restore, multi-node locking, crash fallback,
 and production durability guarantees are deferred.
 
+For Fresh Session recall, inspect the admitted Task's pinned snapshot ID/hash,
+not the current latest pointer. The local FileStore must verify the exact
+tenant/workspace/snapshot directory, manifest hash, rendered content hash, and
+expected Task hash. Missing or mismatched content fails the Run safely; never
+fall back to latest, scan the Workspace, reveal a path, or include hash/path
+details in the public error.
+
 Migration `0005_managed_agent_registry_b` is forward-only. Apply the complete
 migration set in order; reruns must not rewrite published versions or reset
 idempotency state. If a migration stops part-way, preserve only the sanitized

@@ -167,11 +167,16 @@ durability claim is made.
 
 ### G — Auto-safe Memory and Gardener
 
-- [ ] **G-1 (RED/eval):** Add the versioned dataset and tests for disabled/proposal/auto_safe, exact category allowlist, source trust, secret/PII/conflict/action rejection, and zero-tolerance counters.
-- [ ] **G-2 (interface/domain):** Implement versioned policy decisions, redacted owner-scoped traces, default-off auto-safe checks, and optional 0009 only if trace durability requires a table.
-- [ ] **G-3 (route/application wiring):** Implement proposal-only gardener deduplication/supersession/expiry/compaction; preserve model-name rejection and free-only policy. Use the existing exact `make eval-smoke` target; do not add a new target.
-- [ ] **G-4 (GREEN/docs/evidence):** Run `make eval-smoke` and the focused evaluation command; require zero unsafe auto-accepts, rejected-memory leakage, cross-Workspace leakage, and secret exposure; record precision, duplicate, contradiction, recall, and budget metrics; update quality/evaluation, contracts, features, and runbook.
-- [ ] **G-5 (gate):** Run unit, integration, docs, and `pnpm check`; commit policy, behavior, and docs/gate changes explicitly, ending with `feat: add default-off memory safety policy` and `G-ORACLE`.
+- [x] **G-1 (RED/eval):** Added the versioned dataset and deterministic tests for disabled/proposal/auto_safe, exact category allowlist, trusted sources, conservative secret/PII/conflict/action/instruction rejection, and zero-tolerance counters.
+- [x] **G-2 (interface/domain):** Implemented versioned safe policy decisions, default-off behavior, and traces containing only the documented redacted fields; no migration was needed.
+- [x] **G-3 (route/application wiring):** Implemented typed proposal delegation and proposal-only duplicate/supersession/expiry suggestions. The existing manual proposal/review path remains unchanged; no model gardener or durable mutation was added.
+- [x] **G-4 (GREEN/docs/evidence):** Node 24 evidence: policy/gardener unit 3, evaluation integration 1, `make eval-smoke` 13 cases with all four zero-tolerance counters at 0, manual memory contract 14, and green checks.
+- [x] **G-5 (gate):** Commit `3a1372d` (`feat: add default-off memory safety policy`) completed the behavior/evaluation gate. Blocker-only Oracle status: APPROVED. Auto-safe remains disabled in release and model-based gardening is not claimed. Phase H is next.
+
+**Phase G closeout:** deterministic default-off policy and proposal-only
+gardening are implemented and evaluated without candidate-content leakage.
+Deferred hardening is consolidated in `G-HARDENING-001`; no auto-safe release
+enablement or model-based gardening claim is made.
 
 ### H — Fault injection, operations, and release evidence
 

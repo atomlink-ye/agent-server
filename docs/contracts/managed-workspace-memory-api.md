@@ -45,3 +45,19 @@ The implemented minimum context order is exactly:
 No old ProductSession history, full Workspace scan, embeddings/RAG, tool or
 skill summaries, or provider-native mount is part of this contract. A
 successful run persists the final assistant Message in the ProductSession.
+
+## Deterministic policy minimum
+
+The memory policy modes are `disabled` (the default), `proposal`, and
+`auto_safe`. The manual proposal/review HTTP routes remain unchanged. Auto-safe
+uses only `terminology`, `output_preference`, `project_constraint`, and
+`confirmed_workflow_procedure`, with `current_user_message` or
+`structured_system` sources; `untrusted` and `unknown` fail closed. Secret/key,
+PII, sensitive action, instruction-marker, conflict, and uncertain candidates
+are rejected conservatively. The safe decision trace contains only `mode`,
+`decision`, `category`, `source`, `reasonCodes`, and `policyVersion`.
+
+The proposal-only gardener suggests exact normalized duplicates,
+same-category supersession candidates, and explicit expiry metadata. It never
+mutates durable memory or snapshot history. Auto-safe is not enabled by this
+minimum and no model-based gardening is provided.

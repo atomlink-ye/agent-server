@@ -37,6 +37,13 @@ Team compatibility remains implemented only as the existing sequential subset: `
 
 Legacy principal-private proposals and accepted entries remain separate and are not merged into Product Workspace snapshots. Phase F adds the minimum Fresh ProductSession recall path: explicit published AgentVersion, admission-pinned ready snapshot ID/hash, verified local read, exact four-part context order, and final assistant Message persistence. It does not add old history or Workspace scans. This minimum intentionally stops before retrieval, embeddings, vector search, ranking, or provider-native mounting.
 
+Phase G adds a deterministic default-off memory policy with `disabled`,
+`proposal`, and `auto_safe` modes. Auto-safe is limited to the exact
+allowlist (`terminology`, `output_preference`, `project_constraint`,
+`confirmed_workflow_procedure`) and trusted current-user/structured-system
+sources. Decisions expose only safe reason-code traces. The gardener is
+proposal-only; the existing manual proposal/review HTTP path is unchanged.
+
 **V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 
 ## Sessions, Tasks and Runs
@@ -70,4 +77,4 @@ Legacy principal-private proposals and accepted entries remain separate and are 
 The following remain deferred and must not be inferred from the Phase C minimum:
 
 - Full Runtime Session V2 create/resume/status APIs, incremental provider deltas, rich usage, retries/receipts, and production recovery;
-- retrieval injection or automatic safe-memory behavior. Phase F context assembly is only the documented four-part minimum; production durability and broader context assembly are deferred.
+- retrieval injection or automatic safe-memory behavior. Phase F context assembly is only the documented four-part minimum; auto-safe remains disabled by default and no production rollout is claimed.

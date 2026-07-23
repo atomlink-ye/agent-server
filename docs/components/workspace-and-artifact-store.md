@@ -35,6 +35,15 @@ or local-path exposure.
 
 Accepted entries are records of reviewed memory, not an implemented retrieval system. No embedding generation, vector search, ranking, context assembly, runtime prompt injection, or automatic agent recall happens in this component yet. Owner scope remains derived from configured service-account bindings until user identity and shared Workspace ACLs land.
 
+Phase G adds a default-off deterministic policy boundary. `disabled` persists
+nothing, `proposal` delegates to the unchanged manual proposal path, and
+`auto_safe` can accept only the exact category allowlist and trusted source
+kinds when every conservative predicate passes. Secret/PII/action/instruction,
+conflict, untrusted, and uncertain candidates fail closed. Policy traces carry
+only mode, decision, category, source, reason codes, and policy version. The
+gardener emits duplicate, supersession, and explicit-expiry suggestions only;
+it never mutates entries, snapshots, or history.
+
 ## V1 filesystem boundary
 
 Each leaf Run receives read-only input snapshots and a Run-scoped writable scratch/candidate area. It cannot see another tenant, sibling mutable directory, host socket, control database credential, vault token, cloud metadata credential, or raw user token. Joins read registered child output, not arbitrary sibling files.

@@ -30,6 +30,11 @@ A pull request must have:
 - Artifact/Evidence lineage and Web/API/Lark flows pass end to end;
 - backup/restore and migration recovery are rehearsed.
 
+The Phase G memory-policy MVP is a deterministic development gate only:
+default-off policy, versioned dataset, aggregate zero-tolerance counters, and
+proposal-only gardening must pass. It is not a production rollout or approval
+to enable auto-safe or model-based gardening.
+
 ## Team V1 Beta gate
 
 - Agent and Team implement the same Invokable/Task completion contracts;

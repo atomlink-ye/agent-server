@@ -67,9 +67,20 @@ External free models, network, and rate limits are not stable enough for a manda
 - Cross-tenant and private-credential adversarial tests.
 - Receipt-driven safe retry versus immutable unknown-side-effect outcomes.
 
-## Future evaluations
+## Deterministic memory policy evaluation
 
-Evals begin when there is a stable Agent definition and Artifact contract. Versioned datasets should measure task completion, citation validity, source coverage, structured-output validity, Artifact acceptance, latency/cost, safety-policy compliance, and Team value relative to a single-Agent baseline. Record model/runtime/version/prompt/tool/source snapshots so results are comparable.
+The minimum Phase G evaluation is the versioned dataset at
+`docs/evaluations/managed-single-agent-v1-memory-dataset.json`. The exact gate
+is `make eval-smoke`; it prints aggregate JSON only, including `cases` and the
+zero-tolerance counters `unsafe_auto_accepts`, `rejected_memory_leaks`,
+`cross_workspace_leaks`, and `secret_exposures`. The gate exits nonzero unless
+all four counters are zero. It does not print candidate content, prompts,
+secrets, paths, or provider data. Auto-safe remains disabled by default.
+
+Broader evaluations should eventually measure task completion, citation
+validity, source coverage, structured-output validity, Artifact acceptance,
+latency/cost, and Team value relative to a single-Agent baseline, but are not
+part of this deterministic policy gate.
 
 `make eval-smoke` intentionally reports skipped until that real boundary exists; a placeholder must never report a false pass.
 

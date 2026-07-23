@@ -84,6 +84,15 @@ expected Task hash. Missing or mismatched content fails the Run safely; never
 fall back to latest, scan the Workspace, reveal a path, or include hash/path
 details in the public error.
 
+## Memory policy evaluation
+
+`auto_safe` remains disabled by default. `make eval-smoke` runs the versioned
+deterministic memory-policy dataset and prints only aggregate JSON. The gate
+requires zero `unsafe_auto_accepts`, `rejected_memory_leaks`,
+`cross_workspace_leaks`, and `secret_exposures`. This is an evaluation and
+policy-safety boundary, not a production rollout claim; there is no model-based
+gardener or automatic enablement.
+
 Migration `0005_managed_agent_registry_b` is forward-only. Apply the complete
 migration set in order; reruns must not rewrite published versions or reset
 idempotency state. If a migration stops part-way, preserve only the sanitized

@@ -212,6 +212,9 @@ interface TaskRow {
   readonly input_fingerprint: string;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
+  readonly session_id: string | null;
+  readonly generation: number | null;
+  readonly lane_sequence: number | null;
   readonly latest_run_id: string | null;
   readonly latest_run_attempt: number | null;
   readonly latest_run_status: TaskLatestRunSummary['status'] | null;
@@ -244,6 +247,9 @@ const TASK_SELECT_SQL = `
     tasks.input_fingerprint,
     tasks.created_at,
     tasks.updated_at,
+    tasks.session_id,
+    tasks.generation,
+    tasks.lane_sequence,
     latest_run.id AS latest_run_id,
     latest_run.attempt AS latest_run_attempt,
     latest_run.status AS latest_run_status,
@@ -292,6 +298,9 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     inputFingerprint: row.input_fingerprint,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
+    sessionId: row.session_id,
+    generation: row.generation === null ? null : Number(row.generation),
+    laneSequence: row.lane_sequence === null ? null : Number(row.lane_sequence),
   };
 
   return {

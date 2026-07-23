@@ -201,10 +201,39 @@ export class PostgresSessionRepository implements SessionRepository {
     runId: string;
     text: string;
   }): Promise<void> {
-    await this.db.query(
-      `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) SELECT $1,$2,$3,COALESCE(MAX(sequence),0)+1,'assistant',$4,$5,$6 FROM messages WHERE session_id=$2 AND generation=$3 ON CONFLICT DO NOTHING`,
-      [randomUUID(), i.sessionId, i.generation, i.text, i.taskId, iso()],
-    );
+    const c = await this.acquire();
+    await c.query('BEGIN');
+    try {
+      const lane = await c.query(
+        `SELECT next_sequence FROM session_lanes WHERE session_id=$1 AND generation=$2 FOR UPDATE`,
+        [i.sessionId, i.generation],
+      );
+      const sequence = Number(lane.rows?.[0]?.next_sequence);
+      if (!Number.isSafeInteger(sequence) || sequence < 1)
+        throw new Error('session lane not found');
+      await c.query(
+        `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) VALUES($1,$2,$3,$4,'assistant',$5,$6,$7) ON CONFLICT(session_id,generation,sequence) DO NOTHING`,
+        [
+          randomUUID(),
+          i.sessionId,
+          i.generation,
+          sequence,
+          i.text,
+          i.taskId,
+          iso(),
+        ],
+      );
+      await c.query(
+        `UPDATE session_lanes SET next_sequence=$3 WHERE session_id=$1 AND generation=$2`,
+        [i.sessionId, i.generation, sequence + 1],
+      );
+      await c.query('COMMIT');
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    } finally {
+      c.release?.();
+    }
   }
   async reset(id: string, o: AccessContext, _key: string) {
     const c = await this.acquire();

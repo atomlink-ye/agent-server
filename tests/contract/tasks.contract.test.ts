@@ -122,6 +122,36 @@ describe('task HTTP contracts', () => {
     expect(body.links.tree).toBe(`/api/v1/tasks/${body.task_id}/tree`);
   });
 
+  it('cancels an owned queued task through the colon route and hides foreign tasks', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const created = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'cancel me' },
+      }),
+    });
+    const taskId = ((await created.json()) as { task_id: string }).task_id;
+    const cancelled = await app.request(`/api/v1/tasks/${taskId}:cancel`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    const cancelledBody = await cancelled.text();
+    expect(cancelled.status, cancelledBody).toBe(202);
+    expect(JSON.parse(cancelledBody).status).toBe('cancelled');
+    const foreign = await app.request(`/api/v1/tasks/${taskId}:cancel`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+    });
+    expect(foreign.status).toBe(404);
+  });
+
   it('reuses the original task for the same idempotency key and canonical request', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,

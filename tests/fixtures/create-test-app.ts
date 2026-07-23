@@ -19,6 +19,7 @@ import { GetTask } from '../../src/application/tasks/get-task.js';
 import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
+import { CancelTask } from '../../src/application/tasks/cancel-task.js';
 import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import {
   createDraftAgentVersion,
@@ -34,6 +35,7 @@ import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgr
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
+import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
@@ -96,6 +98,7 @@ export async function createTestApp(
   await applyDurableKernelMigrations(database);
   const agentRegistry = new PostgresAgentRegistry(database);
   const sessions = new PostgresSessionRepository(database);
+  const events = new PostgresRunEventRepository(database);
 
   const runRepository = new PostgresRunRepository(database);
   const taskRepository = new PostgresTaskRepository(database);
@@ -139,7 +142,18 @@ export async function createTestApp(
     workspaceMemoryRepository,
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
-  const completeRun = new CompleteRun(runRepository, taskRepository);
+  const completeRun = new CompleteRun(
+    runRepository,
+    taskRepository,
+    events,
+    sessions,
+  );
+  const cancelTask = new CancelTask(
+    taskRepository,
+    runRepository,
+    runtime,
+    events,
+  );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
     runRepository,
@@ -156,6 +170,7 @@ export async function createTestApp(
     logger,
     undefined,
     resolveAgentVersion,
+    events,
   );
   if (options.startDispatcher ?? true) {
     const dispatcher = new PostgresRunDispatcher(
@@ -186,6 +201,8 @@ export async function createTestApp(
     listMemoryEntries,
     agentRegistry,
     sessions,
+    events,
+    cancelTask,
   });
 }
 

@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { z } from 'zod';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
@@ -142,8 +143,9 @@ export function registerTaskRoutes(
         'task_not_found',
         'The requested task does not exist.',
       );
-    const taskId = context.req.param('taskId');
-    if (!taskId)
+    const taskId =
+      context.req.path.split('/tasks/')[1]?.split(':cancel')[0] ?? '';
+    if (!z.uuid().safeParse(taskId).success)
       throw new HttpError(
         404,
         'task_not_found',

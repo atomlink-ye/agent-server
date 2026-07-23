@@ -10,6 +10,7 @@ import {
   disabledServiceAccountToken,
   primaryServiceAccountToken,
   secondaryServiceAccountToken,
+  defaultPublishedAgentVersionId,
 } from '../fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 
@@ -19,6 +20,45 @@ const authenticatedJsonHeaders = {
 };
 
 describe('run HTTP contracts', () => {
+  it('authorizes event reads for a product-session run by principal ownership', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const workspace = await app.request('/api/v1/workspaces', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({ name: 'events' }),
+    });
+    const workspaceId = ((await workspace.json()) as { workspace_id: string })
+      .workspace_id;
+    const session = await app.request('/api/v1/sessions', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        agent_version_id: defaultPublishedAgentVersionId,
+      }),
+    });
+    const sessionId = ((await session.json()) as { session_id: string })
+      .session_id;
+    const message = await app.request(
+      `/api/v1/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ text: 'events' }),
+      },
+    );
+    const runId = ((await message.json()) as { run_id: string }).run_id;
+    const owned = await app.request(`/api/v1/runs/${runId}/events`, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect(owned.status).toBe(200);
+    const foreign = await app.request(`/api/v1/runs/${runId}/events`, {
+      headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+    });
+    expect(foreign.status).toBe(404);
+  });
   it.each([
     [{}, 'missing'],
     [{ authorization: 'Basic nope' }, 'malformed'],

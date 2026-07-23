@@ -80,12 +80,31 @@ describe('Phase C session lanes on PostgreSQL', () => {
       });
       expect(claim?.taskId).toBe(first.taskId);
       if (!claim) throw new Error('expected first lane run to claim');
-      await new CompleteRun(runs, tasks).execute({
+      await new CompleteRun(runs, tasks, undefined, repository).execute({
         claim,
         run: transitionRun(claim.run, 'succeeded', {
           result: { text: 'done' },
         }),
       });
+      const completedMessages = await repository.listMessages(
+        session.id,
+        owner,
+      );
+      expect(
+        completedMessages?.find(
+          (message: { role: string }) => message.role === 'assistant',
+        ),
+      ).toMatchObject({
+        sequence: 5,
+        text: 'done',
+        taskId: first.taskId,
+        runId: first.runId,
+      });
+      const laneAfterAssistant = await pool.query(
+        'SELECT next_sequence FROM session_lanes WHERE session_id = $1',
+        [session.id],
+      );
+      expect(Number(laneAfterAssistant.rows[0]!.next_sequence)).toBe(6);
       const promoted = await pool.query(
         'SELECT active_task_id FROM session_lanes WHERE session_id = $1',
         [session.id],

@@ -119,7 +119,7 @@ export class PostgresRunRepository implements RunRepository {
       `${RUN_SELECT_SQL}
         WHERE runs.id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
       `,
@@ -487,14 +487,21 @@ function toPersistedRunState(run: Run, existing: ExistingRunRow) {
     };
   }
 
-  if (run.status !== 'queued' && existing.fencing_token < 1) {
+  if (
+    run.status !== 'queued' &&
+    run.status !== 'cancelled' &&
+    existing.fencing_token < 1
+  ) {
     throw new Error('Terminal runs require an existing fencing token');
   }
 
   return {
     leaseOwner: null,
     activationId: null,
-    fencingToken: run.status === 'queued' ? 0 : existing.fencing_token,
+    fencingToken:
+      run.status === 'queued' || run.status === 'cancelled'
+        ? existing.fencing_token
+        : existing.fencing_token,
     leaseExpiresAt: null,
     runtimeJson: toJsonValue(run.runtime),
     resultJson: toJsonValue(run.result),

@@ -212,7 +212,13 @@ export class ExecuteTeamTask {
         this.now,
       );
 
-      return this.completeRun.execute({ claim, run: failed });
+      try {
+        return await this.completeRun.execute({ claim, run: failed });
+      } catch {
+        throw new RunCompletionPersistenceError(
+          createRuntimeExecutionReceipt(failed, claim.taskId),
+        );
+      }
     }
   }
 }

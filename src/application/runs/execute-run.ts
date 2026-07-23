@@ -89,6 +89,7 @@ export class ExecuteRun {
       return await this.completeTerminalRun(claim, terminalRun);
     } catch (error) {
       if (error instanceof RunCompletionPersistenceError) {
+        this.reportCompletionPersistenceFailure(error.receipt);
         throw error;
       }
       const timedOut = error instanceof RuntimeTimedOutError;
@@ -114,7 +115,14 @@ export class ExecuteRun {
         failure_code: failure.code,
         error_name: error instanceof Error ? error.name : 'UnknownError',
       });
-      return await this.completeTerminalRun(claim, failed);
+      try {
+        return await this.completeTerminalRun(claim, failed);
+      } catch (completionError) {
+        if (completionError instanceof RunCompletionPersistenceError) {
+          this.reportCompletionPersistenceFailure(completionError.receipt);
+        }
+        throw completionError;
+      }
     }
   }
 
@@ -141,18 +149,23 @@ export class ExecuteRun {
       return completed;
     } catch (error) {
       const receipt = createRuntimeExecutionReceipt(run, claim.taskId);
-      this.logger.log('error', 'run.completion_persistence_failed', {
-        run_id: receipt.runId,
-        task_id: receipt.taskId,
-        terminal_status: receipt.terminalStatus,
-        provider: receipt.provider,
-        model: receipt.model,
-        result_available: receipt.resultAvailable,
-        result_fingerprint: receipt.resultFingerprint,
-        completed_at: receipt.completedAt,
-      });
       throw new RunCompletionPersistenceError(receipt);
     }
+  }
+
+  private reportCompletionPersistenceFailure(
+    receipt: ReturnType<typeof createRuntimeExecutionReceipt>,
+  ): void {
+    this.logger.log('error', 'run.completion_persistence_failed', {
+      run_id: receipt.runId,
+      task_id: receipt.taskId,
+      terminal_status: receipt.terminalStatus,
+      provider: receipt.provider,
+      model: receipt.model,
+      result_available: receipt.resultAvailable,
+      result_fingerprint: receipt.resultFingerprint,
+      completed_at: receipt.completedAt,
+    });
   }
 
   private async executeAgentRun(

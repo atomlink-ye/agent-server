@@ -34,6 +34,7 @@ export interface PaseoClientPort {
     agentId: string,
     timeoutMs: number,
   ): Promise<PaseoFinishedAgent>;
+  cancelAgent?(agentId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -129,6 +130,10 @@ export class PaseoSdkClient implements PaseoClientPort {
       lastMessage: result.lastMessage,
       ...(result.final?.lastUsage ? { usage: result.final.lastUsage } : {}),
     };
+  }
+
+  public async cancelAgent(agentId: string): Promise<void> {
+    await this.#client.cancelAgent(agentId);
   }
 
   public close(): Promise<void> {

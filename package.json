@@ -21,10 +21,11 @@
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:real-pg": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts tests/integration/real-pg-pool.integration.test.ts tests/integration/agent-registry-postgres.integration.test.ts tests/integration/session-lane-postgres.integration.test.ts tests/integration/runtime-memory-real-pg.integration.test.ts tests/integration/run-cancellation-postgres.integration.test.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",
-    "eval:smoke": "node scripts/ci/pending-lane.mjs eval-smoke",
+    "eval:smoke": "node --import tsx scripts/eval/memory-policy-eval.ts",
     "ci": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
     "clean": "node scripts/dev/clean.mjs"
   },
@@ -33,6 +34,8 @@
     "@hono/node-server": "2.0.11",
     "hono": "4.12.31",
     "pg": "8.16.3",
+    "re2js": "2.8.6",
+    "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "optionalDependencies": {

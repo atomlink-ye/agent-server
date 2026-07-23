@@ -27,7 +27,7 @@ HTTP/1.1 202 Accepted
 }
 ```
 
-If the same `Idempotency-Key` is replayed by the same authenticated owner scope with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same owner scope and key with a different body returns `409 idempotency_conflict`. The same key used by a different authenticated owner scope is independent work, not a conflict.
+Admission first creates or replays through the transaction-scoped PostgreSQL repository. If the same `Idempotency-Key` is replayed by the same authenticated owner scope with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same owner scope and key with a different body returns `409 idempotency_conflict`. The same key used by a different authenticated owner scope is independent work, not a conflict. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 and a separate reader pool with max 2; it proves committed visibility, replay, owner isolation, and the forced same-key unique race.
 
 ## Get
 
@@ -52,7 +52,17 @@ Authorization: Bearer configured-token
 }
 ```
 
-Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
+Status is `queued|running|succeeded|failed|timed_out|cancelled`. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
+
+## Events and cancellation (minimum Phase D)
+
+`GET /api/v1/runs/{run_id}/events?after=0` returns `{ "events": [...], "next_cursor": number|null }`. Each event has a decimal sequence-string `id`, `run_id`, integer `sequence`, one of `started|output|succeeded|failed|cancelled`, a safe JSON payload, and ISO `created_at`. Prompts, credentials, local paths, provider wire objects, raw provider errors, and model-selection details are not event payloads.
+
+`GET /api/v1/runs/{run_id}/events/stream` is authenticated SSE. It accepts a query cursor or `Last-Event-ID`, replays committed events in order, polls the database, and closes after a terminal event. This is a single-node polling baseline, not a production pub/sub or disconnect-recovery guarantee.
+
+`POST /api/v1/tasks/{task_id}:cancel` returns `{task_id, run_id, status}`, where status is `cancellation_requested|cancelled|terminal`. Queued work terminalizes locally; active work records the request before forwarding one idempotent runtime cancel. Foreign or missing Tasks are hidden with `404`.
+
+If runtime execution succeeds but terminal persistence fails, the application raises the typed `RunCompletionPersistenceError` and creates a safe `RuntimeExecutionReceipt` only in memory. The dispatcher catches the exception and emits a sanitized structured log; there is no durable receipt, operator retrieval, or reconciliation, and the Run may remain `running` until later recovery. This is not reported as `runtime_execution_failed`. Durable receipt storage and a reconciler remain deferred to later recovery work.
 
 ## Errors
 

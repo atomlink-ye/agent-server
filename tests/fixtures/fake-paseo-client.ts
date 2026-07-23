@@ -14,6 +14,7 @@ export class FakePaseoClient implements PaseoClientPort {
   public waitCalls = 0;
   public closeCalls = 0;
   public status = 'idle';
+  public connectHook: ((call: number) => Promise<void>) | null = null;
   public listModelsError: Error | null = null;
   public models: readonly PaseoModelDescriptor[] = [
     { id: 'opencode/mimo-v2.5-free', label: 'MiMo Free' },
@@ -27,6 +28,7 @@ export class FakePaseoClient implements PaseoClientPort {
 
   public async connect(): Promise<void> {
     this.connectCalls += 1;
+    await this.connectHook?.(this.connectCalls);
     this.status = 'connected';
   }
 

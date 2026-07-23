@@ -224,6 +224,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
           published_at
         FROM agent_versions
         WHERE id = $1
+          AND managed_discriminator IS NULL
           AND tenant_id = $2
           AND workspace_id = $3
           AND principal_type = $4

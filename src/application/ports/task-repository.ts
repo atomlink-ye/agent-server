@@ -40,4 +40,5 @@ export interface TaskRepository {
     rootTaskId: string,
     ownerScope: TaskOwnerScope,
   ): Promise<readonly TaskRecord[]>;
+  advanceSessionLane?(taskId: string): Promise<void>;
 }

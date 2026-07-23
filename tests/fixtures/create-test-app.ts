@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { ResolveAgentVersion } from '../../src/application/agents/resolve-agent-version.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from '../../src/application/memory/review-memory-proposal.js';
+import { ManagedMemory } from '../../src/application/memory/managed-memory.js';
 import type { AgentRuntimePort } from '../../src/application/ports/agent-runtime.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
@@ -18,6 +20,7 @@ import { GetTask } from '../../src/application/tasks/get-task.js';
 import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
+import { CancelTask } from '../../src/application/tasks/cancel-task.js';
 import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import {
   createDraftAgentVersion,
@@ -31,6 +34,9 @@ import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgre
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
+import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
+import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
@@ -82,6 +88,24 @@ export const testConfig = {
 
 export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
+  readonly workspaceId?: string;
+  readonly projectionFailures?: number;
+  readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
+  readonly databaseControl?: { database?: PGlite };
+  readonly sessionRepositoryControl?: {
+    repository?: PostgresSessionRepository;
+  };
+  readonly workspaceMemoryFixtureControl?: {
+    seedAcceptedEntry?: (
+      workspaceId: string,
+      content: string,
+    ) => Promise<{
+      proposalId: string;
+      entryId: string;
+      snapshotId: string;
+      contentHash: string;
+    }>;
+  };
 }
 
 export async function createTestApp(
@@ -91,15 +115,72 @@ export async function createTestApp(
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
+  if (options.databaseControl) options.databaseControl.database = database;
+  const effectiveConfig = options.workspaceId
+    ? {
+        ...testConfig,
+        serviceAccounts: testConfig.serviceAccounts.map((account) => ({
+          ...account,
+          workspaceId:
+            account.serviceAccountId === 'svc_enabled'
+              ? (options.workspaceId ?? account.workspaceId)
+              : `foreign-${options.workspaceId ?? account.workspaceId}`,
+        })),
+      }
+    : testConfig;
+  if (options.workspaceId) {
+    const now = new Date().toISOString();
+    await database.query(
+      `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)`,
+      [
+        options.workspaceId,
+        'tenant_alpha',
+        'service_account',
+        'svc_enabled',
+        'E2E Workspace',
+        now,
+      ],
+    );
+  }
+  const agentRegistry = new PostgresAgentRegistry(database);
+  const sessions = new PostgresSessionRepository(database);
+  if (options.sessionRepositoryControl)
+    options.sessionRepositoryControl.repository = sessions;
+  const events = new PostgresRunEventRepository(database);
 
   const runRepository = new PostgresRunRepository(database);
   const taskRepository = new PostgresTaskRepository(database);
   const admissionRepository = new PostgresAdmissionRepository(database);
   const invokableRepository = new PostgresInvokableRepository(database);
+  const resolveAgentVersion = new ResolveAgentVersion(
+    agentRegistry,
+    invokableRepository,
+  );
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     database,
   );
-  await seedDefaultPublishedAgent(invokableRepository);
+  const projectedMemory = new Map<string, string>();
+  let projectionFailures = options.projectionFailures ?? 0;
+  const fileStore = {
+    publish: async (snapshot: { snapshotId: string; memory: string }) => {
+      if (projectionFailures > 0) {
+        projectionFailures -= 1;
+        throw new Error('projection failure');
+      }
+      projectedMemory.set(snapshot.snapshotId, snapshot.memory);
+    },
+    readVerified: async (input: { snapshotId: string }) => {
+      const content = projectedMemory.get(input.snapshotId);
+      if (content === undefined)
+        throw new Error('Memory snapshot verification failed');
+      return content;
+    },
+  };
+  const managedMemory = new ManagedMemory(database, fileStore);
+  await seedDefaultPublishedAgent(
+    invokableRepository,
+    options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+  );
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
@@ -113,10 +194,9 @@ export async function createTestApp(
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
   const invokeTask = new InvokeTask(
-    taskRepository,
-    runRepository,
     admissionRepository,
     invokableRepository,
+    resolveAgentVersion,
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
@@ -131,7 +211,18 @@ export async function createTestApp(
     workspaceMemoryRepository,
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
-  const completeRun = new CompleteRun(runRepository, taskRepository);
+  const completeRun = new CompleteRun(
+    runRepository,
+    taskRepository,
+    events,
+    sessions,
+  );
+  const cancelTask = new CancelTask(
+    taskRepository,
+    runRepository,
+    runtime,
+    events,
+  );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
     runRepository,
@@ -146,6 +237,11 @@ export async function createTestApp(
     executeTeamTask,
     runtime,
     logger,
+    undefined,
+    resolveAgentVersion,
+    events,
+    fileStore,
+    createMemoryProposal,
   );
   if (options.startDispatcher ?? true) {
     const dispatcher = new PostgresRunDispatcher(
@@ -158,10 +254,46 @@ export async function createTestApp(
       { pollIntervalMs: 1 },
     );
     dispatcher.start();
+    if (options.dispatcherControl)
+      options.dispatcherControl.dispatcher = dispatcher;
+  }
+
+  if (options.workspaceMemoryFixtureControl) {
+    options.workspaceMemoryFixtureControl.seedAcceptedEntry = async (
+      workspaceId,
+      content,
+    ) => {
+      const accessContext = {
+        tenantId: 'tenant_alpha',
+        workspaceId,
+        principalType: 'service_account' as const,
+        principalId: 'svc_enabled',
+        serviceAccountId: 'svc_enabled',
+        policySnapshotVersion: 'policy-2026-07-22',
+      };
+      const proposal = await createMemoryProposal.execute({
+        content,
+        category: 'fact',
+        accessContext,
+      });
+      const reviewed = await reviewMemoryProposal.execute({
+        proposalId: proposal.id,
+        action: 'accept',
+        accessContext,
+      });
+      if (!reviewed.entry) throw new Error('fixture entry was not accepted');
+      const snapshot = await managedMemory.acceptEntry(reviewed.entry);
+      return {
+        proposalId: proposal.id,
+        entryId: reviewed.entry.id,
+        snapshotId: snapshot.snapshotId,
+        contentHash: snapshot.contentHash,
+      };
+    };
   }
 
   return createApp({
-    config: testConfig,
+    config: effectiveConfig,
     logger,
     readiness: new RuntimeReadinessProbe(runtime),
     runtime,
@@ -174,18 +306,24 @@ export async function createTestApp(
     listMemoryProposals,
     reviewMemoryProposal,
     listMemoryEntries,
+    managedMemory,
+    agentRegistry,
+    sessions,
+    events,
+    cancelTask,
   });
 }
 
 async function seedDefaultPublishedAgent(
   invokables: PostgresInvokableRepository,
+  workspaceId: string,
 ): Promise<void> {
   const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
   const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
   const definition = createAgentDefinition({
     id: '00000000-0000-4000-8000-0000000a0001',
     tenantId: 'tenant_alpha',
-    workspaceId: 'workspace_main',
+    workspaceId,
     principalType: 'service_account',
     principalId: 'svc_enabled',
     name: 'Default Task Agent',

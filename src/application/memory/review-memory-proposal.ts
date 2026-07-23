@@ -47,21 +47,52 @@ export class ReviewMemoryProposal {
     input: ReviewMemoryProposalInput,
   ): Promise<ReviewMemoryProposalResult> {
     const ownerScope = ownerScopeFromAccessContext(input.accessContext);
-    const existing = await this.memoryRepository.findProposalByIdForOwner(
-      input.proposalId,
-      ownerScope,
-    );
+    const existing = this.memoryRepository.findProposalByIdForActor
+      ? await this.memoryRepository.findProposalByIdForActor(input.proposalId, {
+          tenantId: input.accessContext.tenantId,
+          principalType: input.accessContext.principalType,
+          principalId: input.accessContext.principalId,
+        })
+      : await this.memoryRepository.findProposalByIdForOwner(
+          input.proposalId,
+          ownerScope,
+        );
     if (!existing) {
       throw new MemoryProposalNotFoundError();
     }
     if (existing.status !== 'pending') {
+      const sameDecision =
+        existing.status === 'accepted' &&
+        existing.reviewOutcome === input.action &&
+        (input.action === 'edit_and_accept'
+          ? existing.reviewedContent === (input.content ?? null)
+          : input.content == null);
+      const entry =
+        sameDecision &&
+        this.memoryRepository.findAcceptedEntryByProposalForOwner
+          ? await this.memoryRepository.findAcceptedEntryByProposalForOwner(
+              existing.id,
+              {
+                tenantId: existing.tenantId,
+                workspaceId: existing.workspaceId,
+                principalType: existing.principalType,
+                principalId: existing.principalId,
+              },
+            )
+          : null;
+      if (sameDecision && entry) return { proposal: existing, entry };
       throw new MemoryProposalAlreadyReviewedError();
     }
 
     try {
       return await this.memoryRepository.reviewProposal({
         proposalId: input.proposalId,
-        ownerScope,
+        ownerScope: {
+          tenantId: existing.tenantId,
+          workspaceId: existing.workspaceId,
+          principalType: existing.principalType,
+          principalId: existing.principalId,
+        },
         outcome: input.action,
         reviewedContent: input.content ?? null,
         reviewerSnapshot: {
@@ -77,6 +108,22 @@ export class ReviewMemoryProposal {
       }
       throw error;
     }
+  }
+
+  public async findForAccess(
+    proposalId: string,
+    accessContext: ServiceAccountAccessContext,
+  ): Promise<MemoryProposal | null> {
+    return this.memoryRepository.findProposalByIdForActor
+      ? this.memoryRepository.findProposalByIdForActor(proposalId, {
+          tenantId: accessContext.tenantId,
+          principalType: accessContext.principalType,
+          principalId: accessContext.principalId,
+        })
+      : this.memoryRepository.findProposalByIdForOwner(
+          proposalId,
+          ownerScopeFromAccessContext(accessContext),
+        );
   }
 }
 

@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api build check test test-unit test-integration test-contract e2e-smoke paseo-smoke eval-smoke ci clean
+.PHONY: setup dev dev-api build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci clean
 
 setup:
 	corepack enable
@@ -25,6 +25,9 @@ test-unit:
 
 test-integration:
 	pnpm test:integration
+
+test-real-pg:
+	pnpm test:real-pg
 
 test-contract:
 	pnpm test:contract

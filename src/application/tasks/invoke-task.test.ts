@@ -55,8 +55,6 @@ describe('InvokeTask', () => {
   it('reuses the original task when the same key is replayed with the same canonical request', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
       () => new Date('2026-07-22T12:10:00.000Z'),
@@ -82,11 +80,56 @@ describe('InvokeTask', () => {
     expect(second.task.latestRun?.runId).toBe(first.task.latestRun?.runId);
   });
 
+  it('reloads a newly admitted task through the transaction task repository', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+
+    const result = await useCase.execute({
+      idempotencyKey: 'transaction-visible-new-task',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+
+    expect(result.reused).toBe(false);
+    expect(repository.tasksRepository.transactionScopedOwnerReads).toBe(1);
+  });
+
+  it('reloads a replayed task through the transaction task repository', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+    const first = await useCase.execute({
+      idempotencyKey: 'transaction-visible-replay',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+    const replayUseCase = new InvokeTask(
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+
+    const replay = await replayUseCase.execute({
+      idempotencyKey: 'transaction-visible-replay',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+
+    expect(replay.reused).toBe(true);
+    expect(first.reused).toBe(false);
+    expect(repository.tasksRepository.transactionScopedOwnerReads).toBe(2);
+  });
+
   it('rejects a mismatched workspace_id before admission', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
     );
@@ -105,8 +148,6 @@ describe('InvokeTask', () => {
   it('rejects the same key when the canonical request fingerprint changes', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
       () => new Date('2026-07-22T12:10:00.000Z'),
@@ -213,6 +254,11 @@ class PublishedInvokableRepository implements InvokableRepository {
 
 class InMemoryTaskRepository implements TaskRepository {
   readonly #tasks = new Map<string, Task>();
+  public transactionScopedOwnerReads = 0;
+
+  public constructor(
+    private readonly isTransactionActive: () => boolean = () => true,
+  ) {}
 
   public async save(task: Task): Promise<void> {
     this.#tasks.set(task.id, task);
@@ -226,6 +272,12 @@ class InMemoryTaskRepository implements TaskRepository {
     id: string,
     ownerScope: TaskOwnerScope,
   ): Promise<TaskRecord | null> {
+    if (!this.isTransactionActive()) {
+      throw new Error(
+        'task owner read must occur inside admission transaction',
+      );
+    }
+    this.transactionScopedOwnerReads += 1;
     const task = this.#tasks.get(id);
     if (!task || !matchesTaskOwnerScope(task, ownerScope)) {
       return null;
@@ -275,6 +327,10 @@ class InMemoryRunRepository implements RunRepository {
     return runId ? (this.#runsById.get(runId) ?? null) : null;
   }
 
+  public async requestCancellation(taskId: string, _requestedAt: string) {
+    return { runId: taskId, outcome: 'terminal' as const };
+  }
+
   public async claimNextQueued(
     _options: ClaimNextQueuedRunOptions,
   ): Promise<ClaimedRun | null> {
@@ -295,39 +351,51 @@ class InMemoryRunRepository implements RunRepository {
 }
 
 class InMemoryAdmissionRepository implements AdmissionRepository {
-  public readonly tasksRepository = new InMemoryTaskRepository();
+  #transactionActive = false;
+  public readonly tasksRepository = new InMemoryTaskRepository(
+    () => this.#transactionActive,
+  );
   public readonly runsRepository = new InMemoryRunRepository();
   public readonly records: AdmissionRecord[] = [];
 
   public async withTransaction<T>(
     work: (transaction: AdmissionTransaction) => Promise<T>,
   ): Promise<T> {
-    return work({
-      tasks: this.tasksRepository,
-      runs: this.runsRepository,
-      findByIngressAndIdempotencyKey: async (ingress, idempotencyKey, scope) =>
-        this.records.find(
-          (record) =>
-            record.ingress === ingress &&
-            record.idempotencyKey === idempotencyKey &&
-            matchesAdmissionScope(record, scope),
-        ) ?? null,
-      save: async (record) => {
-        const existing = this.records.find(
-          (candidate) =>
-            candidate.ingress === record.ingress &&
-            candidate.idempotencyKey === record.idempotencyKey &&
-            matchesAdmissionScope(candidate, record),
-        );
+    this.#transactionActive = true;
+    try {
+      return await work({
+        tasks: this.tasksRepository,
+        runs: this.runsRepository,
+        findByIngressAndIdempotencyKey: async (
+          ingress,
+          idempotencyKey,
+          scope,
+        ) =>
+          this.records.find(
+            (record) =>
+              record.ingress === ingress &&
+              record.idempotencyKey === idempotencyKey &&
+              matchesAdmissionScope(record, scope),
+          ) ?? null,
+        save: async (record) => {
+          const existing = this.records.find(
+            (candidate) =>
+              candidate.ingress === record.ingress &&
+              candidate.idempotencyKey === record.idempotencyKey &&
+              matchesAdmissionScope(candidate, record),
+          );
 
-        if (existing) {
-          throw new AdmissionAlreadyExistsError();
-        }
+          if (existing) {
+            throw new AdmissionAlreadyExistsError();
+          }
 
-        this.records.push(record);
-      },
-      enqueueRunDispatch: async () => undefined,
-    });
+          this.records.push(record);
+        },
+        enqueueRunDispatch: async () => undefined,
+      });
+    } finally {
+      this.#transactionActive = false;
+    }
   }
 }
 

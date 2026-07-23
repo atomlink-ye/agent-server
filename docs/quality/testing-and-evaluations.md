@@ -18,9 +18,26 @@ The repository separates deterministic product correctness from externally varia
 
 `make test-integration` covers both durable-kernel and runtime-adapter seams. It verifies PostgreSQL migration replay, durable admission, idempotency, enqueue, atomic claim, fenced completion, stale-writer rejection, dispatcher execution, plus the existing fake-`PaseoClientPort` adapter checks for initialization, Workspace reuse, usage/result translation, timeout, and provider error.
 
+For the managed registry, PGlite is the deterministic role: it proves parser,
+application, migration replay, and ordinary repository transitions quickly. The
+real `pg.Pool` role is separate and required on PostgreSQL 16: it proves
+multi-connection visibility, import/publish races, owner hiding, database
+immutability, and cursor traversal with tied `(created_at, id)` values. The
+registry matrix covers idempotency replay/conflict, equal-canonical convergence,
+concurrent imports and publication, foreign-owner hiding, database rejection of
+published mutation, and strict multi-page cursor traversal without skips or
+duplicates.
+
 ### Deterministic E2E
 
 `make e2e-smoke` binds Hono to a real ephemeral TCP port and follows `POST → poll → succeeded` through the real route, durable admission/dispatch path, and fake Runtime Port.
+
+HTTP contract security tests cover managed import/publish owner hiding,
+published-only canonical Task admission, explicit version pinning,
+secondary-owner rejection, idempotency, safe errors, and absence of
+package/model/template fields from public responses. Managed runtime-input
+execution and legacy fallback/Team preservation are proven by focused
+application/unit evidence, not by HTTP contract tests.
 
 ### External Paseo/OpenCode smoke
 
@@ -50,8 +67,30 @@ External free models, network, and rate limits are not stable enough for a manda
 - Cross-tenant and private-credential adversarial tests.
 - Receipt-driven safe retry versus immutable unknown-side-effect outcomes.
 
-## Future evaluations
+## Deterministic memory policy evaluation
 
-Evals begin when there is a stable Agent definition and Artifact contract. Versioned datasets should measure task completion, citation validity, source coverage, structured-output validity, Artifact acceptance, latency/cost, safety-policy compliance, and Team value relative to a single-Agent baseline. Record model/runtime/version/prompt/tool/source snapshots so results are comparable.
+The minimum Phase G evaluation is the versioned dataset at
+`docs/evaluations/managed-single-agent-v1-memory-dataset.json`. The exact gate
+is `make eval-smoke`; it prints aggregate JSON only, including `cases` and the
+zero-tolerance counters `unsafe_auto_accepts`, `rejected_memory_leaks`,
+`cross_workspace_leaks`, and `secret_exposures`. The gate exits nonzero unless
+all four counters are zero. It does not print candidate content, prompts,
+secrets, paths, or provider data. Auto-safe remains disabled by default.
+
+Broader evaluations should eventually measure task completion, citation
+validity, source coverage, structured-output validity, Artifact acceptance,
+latency/cost, and Team value relative to a single-Agent baseline, but are not
+part of this deterministic policy gate.
 
 `make eval-smoke` intentionally reports skipped until that real boundary exists; a placeholder must never report a false pass.
+
+## Managed single-agent release evidence
+
+The Phase H packet records fresh Node24 deterministic, PostgreSQL16,
+separate real-ephemeral-socket E2E, Paseo/OpenCode, evaluation, fault,
+in-process transcript-contract, and dry-run inspection evidence. It is approved
+for the minimum scenario; passing evidence is not a production readiness claim.
+
+Real-PG tests may skip only in the ordinary local deterministic suite when
+`DATABASE_URL` is absent. They are not an acceptable skip in required
+PostgreSQL 16 CI.

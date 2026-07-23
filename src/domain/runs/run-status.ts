@@ -4,6 +4,7 @@ export const runStatuses = [
   'succeeded',
   'failed',
   'timed_out',
+  'cancelled',
 ] as const;
 
 export type RunStatus = (typeof runStatuses)[number];
@@ -12,14 +13,16 @@ export const terminalRunStatuses: ReadonlySet<RunStatus> = new Set([
   'succeeded',
   'failed',
   'timed_out',
+  'cancelled',
 ]);
 
 const transitions: Readonly<Record<RunStatus, ReadonlySet<RunStatus>>> = {
-  queued: new Set(['running']),
-  running: new Set(['succeeded', 'failed', 'timed_out']),
+  queued: new Set(['running', 'cancelled']),
+  running: new Set(['succeeded', 'failed', 'timed_out', 'cancelled']),
   succeeded: new Set(),
   failed: new Set(),
   timed_out: new Set(),
+  cancelled: new Set(),
 };
 
 export function canTransitionRun(current: RunStatus, next: RunStatus): boolean {

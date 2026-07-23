@@ -18,6 +18,10 @@ export interface AgentRuntimeExecution {
   readonly model: string;
   readonly text: string;
   readonly usage?: RunUsage;
+  readonly memoryCandidates?: readonly {
+    readonly content: string;
+    readonly category: string;
+  }[];
 }
 
 export interface AgentRuntimePort {
@@ -25,7 +29,15 @@ export interface AgentRuntimePort {
   execute(input: {
     readonly runId: string;
     readonly prompt: string;
+    readonly memoryCandidates?: {
+      readonly maxCandidates?: number;
+      readonly proposalLimit?: number;
+    };
   }): Promise<AgentRuntimeExecution>;
+  cancel?(input: {
+    readonly runId: string;
+    readonly providerAgentId?: string;
+  }): Promise<void>;
   health(): Promise<AgentRuntimeHealth>;
   close(): Promise<void>;
 }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../control-plane/access-context.js';
+import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import type {
   AdmissionOwnerScope,
   AdmissionRepository,
@@ -16,7 +17,6 @@ import type {
   TaskRecord,
   TaskRepository,
 } from '../ports/task-repository.js';
-import type { RunRepository } from '../ports/run-repository.js';
 import { createRun } from '../../domain/runs/run.js';
 import { createRootTask } from '../../domain/tasks/task.js';
 import {
@@ -44,12 +44,23 @@ export interface InvokeTaskResult {
 
 export class InvokeTask {
   public constructor(
-    private readonly tasks: TaskRepository,
-    private readonly runs: RunRepository,
     private readonly admissions: AdmissionRepository,
     private readonly invokables: InvokableRepository,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+    resolverOrNow: ResolveAgentVersion | (() => Date) = new ResolveAgentVersion(
+      { findVersion: async () => null },
+      invokables,
+    ),
+    now: () => Date = () => new Date(),
+  ) {
+    this.resolver =
+      typeof resolverOrNow === 'function'
+        ? new ResolveAgentVersion({ findVersion: async () => null }, invokables)
+        : resolverOrNow;
+    this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
+  }
+
+  private readonly resolver: ResolveAgentVersion;
+  private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -117,7 +128,11 @@ export class InvokeTask {
         await transaction.enqueueRunDispatch(run.id, run.createdAt);
 
         return {
-          task: await this.loadTask(task.id, request.accessContext),
+          task: await this.loadTask(
+            transaction.tasks,
+            task.id,
+            request.accessContext,
+          ),
           reused: false,
         };
       });
@@ -166,16 +181,21 @@ export class InvokeTask {
     }
 
     return {
-      task: await this.loadTask(existing.taskId, accessContext),
+      task: await this.loadTask(
+        transaction.tasks,
+        existing.taskId,
+        accessContext,
+      ),
       reused: true,
     };
   }
 
   private async loadTask(
+    repository: TaskRepository,
     taskId: string,
     accessContext: AccessContext,
   ): Promise<TaskRecord> {
-    const task = await this.tasks.findByIdForOwner(
+    const task = await repository.findByIdForOwner(
       taskId,
       toTaskOwnerScope(accessContext),
     );
@@ -192,7 +212,7 @@ export class InvokeTask {
   ): Promise<void> {
     const version =
       request.invokable.kind === 'agent'
-        ? await this.invokables.findPublishedAgentVersionById(
+        ? await this.resolver.resolvePublished(
             request.invokable.versionId,
             toInvokableOwnerScope(request.accessContext),
           )

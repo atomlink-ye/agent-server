@@ -307,6 +307,10 @@ class InMemoryRunRepository implements RunRepository {
     return runId ? (this.#runsById.get(runId) ?? null) : null;
   }
 
+  public async requestCancellation(taskId: string, _requestedAt: string) {
+    return { runId: taskId, outcome: 'terminal' as const };
+  }
+
   public async claimNextQueued(
     _options: ClaimNextQueuedRunOptions,
   ): Promise<ClaimedRun | null> {

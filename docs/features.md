@@ -2,16 +2,16 @@
 
 This is the authoritative capability ledger. Status values are `implemented`, `baseline`, `planned`, and `reserved`. `baseline` is a proven seam with known temporary limitations; it is not production completion.
 
-| Feature area                     | Current status | Baseline evidence                                                                                           | V1 destination                                                           |
-| -------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                  | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts          |
-| Agents and Teams                 | Baseline       | Durable Agent/Team versions and sequential-only compiled Team plans                                         | Immutable Agent/Team versions and bounded graphs                         |
-| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is reused; owner-scoped memory proposals can be reviewed into accepted entries | Product Workspace, snapshots, retrieval, context assembly, memory policy |
-| Sessions, Tasks and Runs         | Baseline       | PostgreSQL-backed Task admission, Task tree reads, Run polling, dispatcher                                  | Product Session, cancel/retry, reconcile, recovery                       |
-| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                                                         | Execution cells, tool gateway, credential broker, approvals              |
-| Artifacts and Evidence           | Planned        | Result text only                                                                                            | Immutable Artifact versions, evidence, source and child lineage          |
-| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes                                                                        | SSE, Web console, Lark adapter                                           |
-| Schedules, Triggers and Delivery | Planned        | None                                                                                                        | Idempotent admission, controlled schedules/events, durable delivery      |
+| Feature area                     | Current status | Baseline evidence                                                                                                                                                                                                | V1 destination                                                                                     |
+| -------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                                                                                                                       | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts                                    |
+| Agents and Teams                 | Baseline       | **Phase B implemented baseline:** managed Agent YAML package validation, durable registry/API, immutable published versions, and published-only Task admission; Team remains the sequential compatibility subset | Immutable Agent/Team versions and bounded graphs                                                   |
+| Workspace and Memory             | Baseline       | **Phase C implemented minimum:** private database-owned Product Workspaces with multiple-workspace principal ownership; memory proposals remain the prior governance baseline                                    | Memory snapshots, retrieval, context assembly, memory policy                                       |
+| Sessions, Tasks and Runs         | Baseline       | **Phase D minimum implemented:** runtime binding, durable normalized lifecycle events, final assistant Message, replayable SSE, owner-scoped cancellation, plus the Phase C ordered lane                         | Runtime Session V2 create/resume/status, incremental deltas, rich usage, retry, receipts, recovery |
+| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                                                                                                                                                              | Execution cells, tool gateway, credential broker, approvals                                        |
+| Artifacts and Evidence           | Planned        | Result text only                                                                                                                                                                                                 | Immutable Artifact versions, evidence, source and child lineage                                    |
+| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes, cursor event replay, terminal-closing SSE, and Task cancellation                                                                                                           | Web console, Lark adapter                                                                          |
+| Schedules, Triggers and Delivery | Planned        | None                                                                                                                                                                                                             | Idempotent admission, controlled schedules/events, durable delivery                                |
 
 ## Identity and Access
 
@@ -25,27 +25,40 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 
 **Outcome:** users publish reusable, immutable definitions instead of depending on an ad hoc runtime conversation.
 
-**Baseline:** PostgreSQL now stores durable `AgentDefinition`/`AgentVersion` and `TeamDefinition`/`TeamVersion` records plus immutable compiled sequential Team plans. Published versions are immutable. Task invocation accepts only published `agent` or `team` versions in the authenticated owner scope because this phase has no shared ACLs. Team execution is intentionally limited to a sequential-only subset: `invoke` nodes only, one linear success chain, one final-output node, and leaf-agent runtime execution one step at a time.
+**Implemented baseline (Phase B):** the managed Agent package contract validates one safe YAML 1.2 document, canonicalizes it, and records a SHA-256 fingerprint. PostgreSQL stores durable managed `AgentDefinition`/`AgentVersion` records, and the six authenticated validation/import/read/list/publish routes are documented in [Contracts](contracts.md). Import and publish are idempotent; publication is immutable. Canonical Task admission and execution resolution accept an explicit published managed Agent version ID only. Owner-scoped drafts remain readable, listable, and publishable through the managed registry API; only that canonical Task boundary rejects unpublished drafts as not found. Foreign and missing resources remain hidden. This is owner-scoped service-account authorization, not private Workspace resource authorization or a shared-ACL implementation.
+
+Team compatibility remains implemented only as the existing sequential subset: `invoke` nodes, one linear success chain, one final-output node, and leaf-agent runtime execution one step at a time. The managed Agent package contract does not claim arbitrary model execution or that referenced tools and skills are available merely because their references parse.
 
 **V1 acceptance:** Agent and Team share one Invokable contract; published versions are immutable; graph compilation validates references, schemas, reachability, bounds, completion, failure and capability attenuation; Team coordination never requires a shared Paseo session.
 
 ## Workspace and Memory
 
-**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git. This phase also adds workspace-memory governance routes for authenticated service-account owner scopes: callers can create proposals with optional Task/session provenance, list proposals, review pending proposals as `accept`, `edit_and_accept`, or `reject`, and list accepted entries.
+**Implemented minimum:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. Phase C adds private database-owned Product Workspaces and multiple-workspace principal ownership. Phase E adds Product-Workspace-owned accepted entries, immutable monotonic snapshots, verified local `MEMORY.md`/`manifest.json` projections, and authenticated read/rebuild routes. Responses expose no local filesystem paths.
 
-This baseline intentionally stops at governance and provenance. It does not add agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records, not content that leaf agents read automatically.
+Legacy principal-private proposals and accepted entries remain separate and are not merged into Product Workspace snapshots. Phase F adds the minimum Fresh ProductSession recall path: explicit published AgentVersion, admission-pinned ready snapshot ID/hash, verified local read, exact four-part context order, and final assistant Message persistence. It does not add old history or Workspace scans. This minimum intentionally stops before retrieval, embeddings, vector search, ranking, or provider-native mounting.
+
+Phase G adds a deterministic default-off memory policy with `disabled`,
+`proposal`, and `auto_safe` modes. Auto-safe is limited to the exact
+allowlist (`terminology`, `output_preference`, `project_constraint`,
+`confirmed_workflow_procedure`) and trusted current-user/structured-system
+sources. Decisions expose only safe reason-code traces. The gardener is
+proposal-only; the existing manual proposal/review HTTP path is unchanged.
+
+Phase H minimum release evidence is approved: the managed single-agent
+transcript, fault lane, recovery inspection, and operations packet are recorded.
+Production hardening and rollout readiness remain deferred.
 
 **V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 
 ## Sessions, Tasks and Runs
 
-**Baseline:** authenticated `POST /api/v1/tasks:invoke` is the canonical public ingress and persists a root Task plus its first Run for a published `agent` or `team` version. Authenticated `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/tree` expose owner-scoped Task state, latest Run summaries, and sequential Team child genealogy. Authenticated `POST /api/v1/runs` remains a compatibility admission route over the same canonical Task/Run model, uses a reserved UUID compatibility invokable-version sentinel for its admitted root Tasks, and `GET /api/v1/runs/{id}` never returns the prompt and collapses cross-owner reads to `404 run_not_found`. One in-process dispatcher claims queued Runs and completes them through the Runtime Port or the sequential Team coordinator.
+**Baseline:** authenticated `POST /api/v1/tasks:invoke` remains the compatibility ingress. Phase C provides private Workspace/ProductSession resources and ordered lanes; Phase D adds minimum runtime binding, durable normalized lifecycle events, final assistant Message persistence, replayable SSE, and owner-scoped cancellation; Phase F adds Fresh ProductSession admission pinning and verified minimum context assembly. Cross-owner resources remain hidden. This is an MVP slice and does not claim full Runtime Session V2 or production recovery.
 
 **V1 acceptance:** Task is the only node invocation identity at both public and internal boundaries. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
 ## Runtime, Tools and Credentials
 
-**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden.
+**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Phase D adds the minimum runtime binding and cancel seam, without claiming full create/resume/status SDK exposure, incremental deltas, rich usage, or durable receipt reconciliation.
 
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 
@@ -55,10 +68,17 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Channels, API and Console
 
-**Baseline:** health plus authenticated Run and Task routes use common request IDs and error envelopes. `/api/v1/tasks:invoke` is the canonical public invocation route; `/api/v1/runs` remains the compatibility route. A deterministic real-socket E2E covers the current compatibility HTTP path, including bearer auth and owner-scoped reads.
+**Baseline:** health plus authenticated Run, Task, managed Agent, event replay/SSE, and cancellation routes use common request IDs and error envelopes. `/api/v1/tasks:invoke` is canonical; `/api/v1/runs` remains compatibility. The Phase D SSE is a persisted-event replay/polling baseline; no production release is claimed.
 
 **V1 acceptance:** Web/API/Lark normalize into one Task proposal and authorization path; Task trees and Run events are inspectable; no UI subscribes directly to Paseo; delivery is retryable and idempotent.
 
 ## Schedules, Triggers and Delivery
 
 **V1 SHOULD:** a schedule fire or external event is persisted and deduplicated before Task materialization. A model may propose but cannot directly create a permanent schedule. When the feature is disabled, manual Task submission is the explicit fallback.
+
+## Explicitly deferred from this baseline
+
+The following remain deferred and must not be inferred from the Phase C minimum:
+
+- Full Runtime Session V2 create/resume/status APIs, incremental provider deltas, rich usage, retries/receipts, and production recovery;
+- retrieval injection or automatic safe-memory behavior. Phase F context assembly is only the documented four-part minimum; auto-safe remains disabled by default and no production rollout is claimed.

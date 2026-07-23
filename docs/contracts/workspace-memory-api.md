@@ -1,6 +1,6 @@
 # Workspace memory API contract
 
-`/api/v1/workspace-memory/*` is the implemented governance-only memory surface. All routes require `Authorization: Bearer <token>` and are scoped to the authenticated service-account owner scope. Cross-owner reads or reviews are hidden as not found.
+`/api/v1/workspace-memory/*` is the implemented governance-only memory surface. All routes require `Authorization: Bearer <token>` and are scoped to the authenticated service-account owner scope. Cross-owner reads or reviews are hidden as not found. Accepted reviews also create the separate Product Workspace projection described in [managed-workspace-memory-api](managed-workspace-memory-api.md).
 
 This API persists proposals, review decisions, accepted entries, and source provenance. It does **not** provide agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation.
 
@@ -44,7 +44,7 @@ HTTP/1.1 201 Created
 }
 ```
 
-The `self` link is an identity link for the proposal. This phase does not implement `GET /api/v1/workspace-memory/proposals/{proposal_id}`.
+`GET /api/v1/workspace-memory/proposals/{proposal_id}` returns the same safe proposal shape under the authenticated owner scope.
 
 ## List proposals
 

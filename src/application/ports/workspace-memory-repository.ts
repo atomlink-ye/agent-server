@@ -8,6 +8,10 @@ import type {
 } from '../../domain/workspace-memory/memory-proposal.js';
 
 export type WorkspaceMemoryRepositoryOwnerScope = WorkspaceMemoryOwnerScope;
+export type WorkspaceMemoryRepositoryActorScope = Pick<
+  WorkspaceMemoryOwnerScope,
+  'tenantId' | 'principalType' | 'principalId'
+>;
 
 export interface ReviewMemoryProposalRepositoryInput {
   readonly proposalId: string;
@@ -26,10 +30,21 @@ export interface ReviewMemoryProposalRepositoryResult {
 
 export interface WorkspaceMemoryRepository {
   createProposal(proposal: MemoryProposal): Promise<MemoryProposal>;
+  createProposalsBatch?(
+    proposals: readonly MemoryProposal[],
+  ): Promise<readonly MemoryProposal[]>;
   findProposalByIdForOwner(
     proposalId: string,
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<MemoryProposal | null>;
+  findProposalByIdForActor?(
+    proposalId: string,
+    actorScope: WorkspaceMemoryRepositoryActorScope,
+  ): Promise<MemoryProposal | null>;
+  findAcceptedEntryByProposalForOwner?(
+    proposalId: string,
+    ownerScope: WorkspaceMemoryRepositoryOwnerScope,
+  ): Promise<WorkspaceMemoryEntry | null>;
   listProposalsByOwnerScope(
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<readonly MemoryProposal[]>;

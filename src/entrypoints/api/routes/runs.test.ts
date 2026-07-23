@@ -10,6 +10,7 @@ import type {
   AgentRuntimeHealth,
   AgentRuntimePort,
 } from '../../../application/ports/agent-runtime.js';
+import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import type { GetTask } from '../../../application/tasks/get-task.js';
@@ -89,6 +90,17 @@ describe('run routes', () => {
       listMemoryEntries: {
         execute: async () => [],
       } as unknown as ListMemoryEntries,
+      agentRegistry: {
+        importAgent: async () => {
+          throw new Error('not implemented in run route tests');
+        },
+        publishAgentVersion: async () => {
+          throw new Error('not implemented in run route tests');
+        },
+        findDefinition: async () => null,
+        findVersion: async () => null,
+        listVersionsForOwner: async () => null,
+      } as AgentRegistry,
     });
 
     const headers = {

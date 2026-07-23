@@ -6,6 +6,8 @@ import type {
   RunOwnerScope,
   RunRepository,
   SaveRunOptions,
+  CancellationOutcome,
+  CancellationRequestResult,
 } from '../../application/ports/run-repository.js';
 import { RunCompletionConflictError as RunCompletionConflict } from '../../application/ports/run-repository.js';
 import { decodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
@@ -119,7 +121,7 @@ export class PostgresRunRepository implements RunRepository {
       `${RUN_SELECT_SQL}
         WHERE runs.id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
       `,
@@ -137,11 +139,47 @@ export class PostgresRunRepository implements RunRepository {
     return this.findSingle(
       `${RUN_SELECT_SQL}
         WHERE runs.task_id = $1
-        ORDER BY runs.attempt ASC
+        ORDER BY runs.attempt DESC
         LIMIT 1
       `,
       [taskId],
     );
+  }
+
+  public async requestCancellation(
+    taskId: string,
+    requestedAt: string,
+  ): Promise<CancellationRequestResult | null> {
+    const result = await this.database.query<{
+      run_id: string;
+      outcome: CancellationOutcome;
+    }>(
+      `WITH latest AS (
+        SELECT id, status, cancellation_requested FROM runs
+        WHERE task_id = $1 ORDER BY attempt DESC LIMIT 1 FOR UPDATE
+      ), changed AS (
+        UPDATE runs
+        SET status = CASE WHEN latest.status = 'queued' THEN 'cancelled' ELSE runs.status END,
+            cancellation_requested = true,
+            cancellation_requested_at = CASE WHEN latest.status = 'queued' THEN $2::timestamptz ELSE COALESCE(runs.cancellation_requested_at, $2::timestamptz) END,
+            error = CASE WHEN latest.status = 'queued' THEN '{"code":"cancelled","message":"The run was cancelled."}'::jsonb ELSE runs.error END,
+            updated_at = CASE WHEN latest.status = 'queued' THEN $2::timestamptz ELSE runs.updated_at END
+        FROM latest
+        WHERE runs.id = latest.id AND latest.status IN ('queued', 'running')
+          AND (latest.status = 'queued' OR latest.cancellation_requested = false)
+        RETURNING (SELECT status FROM latest) AS prior_status
+      )
+      SELECT latest.id AS run_id, CASE
+        WHEN latest.status = 'queued' AND changed.prior_status = 'queued' THEN 'queued_cancelled'
+        WHEN latest.status = 'running' AND changed.prior_status = 'running' THEN 'running_requested'
+        WHEN latest.status = 'running' THEN 'running_already_requested'
+        ELSE 'terminal'
+      END AS outcome
+      FROM latest LEFT JOIN changed ON true`,
+      [taskId, requestedAt],
+    );
+    const row = result.rows?.[0];
+    return row ? { runId: row.run_id, outcome: row.outcome } : null;
   }
 
   public async claimNextQueued(
@@ -152,9 +190,13 @@ export class PostgresRunRepository implements RunRepository {
         SELECT run_dispatches.id AS dispatch_id, run_dispatches.run_id
         FROM run_dispatches
         INNER JOIN runs ON runs.id = run_dispatches.run_id
+        INNER JOIN tasks ON tasks.id = runs.task_id
+        LEFT JOIN session_lanes ON session_lanes.session_id = tasks.session_id
         WHERE run_dispatches.event_type = 'run.enqueue'
           AND run_dispatches.published_at IS NULL
           AND runs.status = 'queued'
+          AND runs.cancellation_requested = false
+          AND (tasks.session_id IS NULL OR session_lanes.active_task_id = tasks.id)
         ORDER BY run_dispatches.id ASC
         LIMIT 1
       `),
@@ -179,6 +221,7 @@ export class PostgresRunRepository implements RunRepository {
         FROM runs
         WHERE runs.id = $5
           AND runs.status = 'queued'
+          AND runs.cancellation_requested = false
         LIMIT 1
       `),
       [
@@ -201,15 +244,18 @@ export class PostgresRunRepository implements RunRepository {
       `
         UPDATE runs
         SET
-          status = $2,
+          status = CASE WHEN cancellation_requested THEN 'cancelled' ELSE $2 END,
           lease_owner = NULL,
           activation_id = NULL,
           lease_expires_at = NULL,
           runtime = $3::jsonb,
-          result = $4::jsonb,
+          result = CASE WHEN cancellation_requested THEN NULL ELSE $4::jsonb END,
           usage = $5::jsonb,
-          error = $6::jsonb,
-          updated_at = $7
+          error = CASE WHEN cancellation_requested THEN '{"code":"cancelled","message":"The run was cancelled."}'::jsonb ELSE $6::jsonb END,
+          updated_at = CASE
+            WHEN cancellation_requested THEN GREATEST($7::timestamptz, cancellation_requested_at)
+            ELSE $7::timestamptz
+          END
         WHERE id = $1
           AND status = 'running'
           AND lease_owner = $8
@@ -364,6 +410,7 @@ function buildClaimQueuedSql(claimSourceSql: string): string {
       FROM next_dispatch
       WHERE runs.id = next_dispatch.run_id
         AND runs.status = 'queued'
+        AND runs.cancellation_requested = false
         AND runs.lease_owner IS NULL
         AND runs.activation_id IS NULL
         AND runs.lease_expires_at IS NULL
@@ -484,14 +531,21 @@ function toPersistedRunState(run: Run, existing: ExistingRunRow) {
     };
   }
 
-  if (run.status !== 'queued' && existing.fencing_token < 1) {
+  if (
+    run.status !== 'queued' &&
+    run.status !== 'cancelled' &&
+    existing.fencing_token < 1
+  ) {
     throw new Error('Terminal runs require an existing fencing token');
   }
 
   return {
     leaseOwner: null,
     activationId: null,
-    fencingToken: run.status === 'queued' ? 0 : existing.fencing_token,
+    fencingToken:
+      run.status === 'queued' || run.status === 'cancelled'
+        ? existing.fencing_token
+        : existing.fencing_token,
     leaseExpiresAt: null,
     runtimeJson: toJsonValue(run.runtime),
     resultJson: toJsonValue(run.result),

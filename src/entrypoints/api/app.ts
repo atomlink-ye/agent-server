@@ -22,6 +22,13 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
+import { registerAgentRoutes } from './routes/agents.js';
+import type { AgentRegistry } from '../../application/ports/agent-registry.js';
+import type { SessionRepository } from '../../application/ports/session-repository.js';
+import type { RunEventRepository } from '../../application/ports/run-events.js';
+import type { CancelTask } from '../../application/tasks/cancel-task.js';
+import type { ManagedMemory } from '../../application/memory/managed-memory.js';
+import { registerSessionRoutes } from './routes/sessions.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -37,6 +44,11 @@ export interface AppDependencies {
   readonly listMemoryProposals: ListMemoryProposals;
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
+  readonly agentRegistry: AgentRegistry;
+  readonly sessions?: SessionRepository;
+  readonly events?: RunEventRepository;
+  readonly cancelTask?: CancelTask;
+  readonly managedMemory?: ManagedMemory;
   readonly version?: string;
 }
 
@@ -70,6 +82,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   registerWorkspaceMemoryRoutes(app, dependencies);
+  registerAgentRoutes(app, dependencies);
+  if (dependencies.sessions)
+    registerSessionRoutes(app, {
+      ...dependencies,
+      sessions: dependencies.sessions,
+    });
 
   app.notFound((context) => {
     return context.json(

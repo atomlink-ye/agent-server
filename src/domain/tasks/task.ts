@@ -23,6 +23,13 @@ export interface Task {
   readonly inputFingerprint: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly sessionId?: string | null;
+  readonly sourceMessageId?: string | null;
+  readonly generation?: number | null;
+  readonly laneSequence?: number | null;
+  readonly failureDetail?: string | null;
+  readonly memorySnapshotId?: string | null;
+  readonly memorySnapshotHash?: string | null;
 }
 
 export type TaskSnapshot = Task;
@@ -41,6 +48,7 @@ export interface CreateRootTaskOptions {
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
   readonly now?: () => Date;
+  readonly sourceMessageId?: string | null;
 }
 
 export interface CreateChildTaskOptions {
@@ -96,6 +104,7 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     inputFingerprint: options.inputFingerprint,
     createdAt: timestamp,
     updatedAt: timestamp,
+    sourceMessageId: options.sourceMessageId ?? null,
   });
 }
 

@@ -16,6 +16,8 @@ import {
   secondaryServiceAccountToken,
 } from '../fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
+import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
+import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 
 const authenticatedJsonHeaders = {
   authorization: `Bearer ${primaryServiceAccountToken}`,
@@ -363,6 +365,509 @@ describe('workspace memory HTTP contracts', () => {
       'Final memory.',
       'Keep original.',
     ]);
+  });
+
+  it('does not disclose runtime proposals before success on any public path', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f301';
+    const databaseControl: {
+      database?: import('@electric-sql/pglite').PGlite;
+    } = {};
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+      databaseControl,
+    });
+    const invoked = InvokeTaskResponseSchema.parse(
+      await (
+        await app.request('/api/v1/tasks:invoke', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            invokable: {
+              kind: 'agent',
+              version_id: defaultPublishedAgentVersionId,
+            },
+            input: { text: 'runtime provenance fixture' },
+          }),
+        })
+      ).json(),
+    );
+    const run = await databaseControl.database!.query<{ id: string }>(
+      'SELECT id FROM runs WHERE task_id=$1',
+      [invoked.task_id],
+    );
+    const runId = run.rows[0]!.id;
+    const messageId = '00000000-0000-4000-8000-00000000f302';
+    const sessionId = '00000000-0000-4000-8000-00000000f303';
+    await databaseControl.database!.query(
+      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,created_at,updated_at) VALUES ($1,$2,'tenant_alpha','service_account','svc_enabled',$3,now(),now())`,
+      [sessionId, workspaceId, defaultPublishedAgentVersionId],
+    );
+    await databaseControl.database!.query(
+      `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) VALUES ($1,$2,0,1,'user','runtime provenance fixture',$3,now())`,
+      [messageId, sessionId, invoked.task_id],
+    );
+    await databaseControl.database!.query(
+      'UPDATE tasks SET session_id=$1 WHERE id=$2',
+      [sessionId, invoked.task_id],
+    );
+    const proposal = createMemoryProposal({
+      tenantId: 'tenant_alpha',
+      workspaceId,
+      principalType: 'service_account',
+      principalId: 'svc_enabled',
+      originalContent: 'runtime-only memory',
+      originalCategory: 'project_constraint',
+      sourceTaskId: invoked.task_id,
+      sourceMessageId: messageId,
+      sourceRunId: runId,
+      sourceAgentVersionId: defaultPublishedAgentVersionId,
+      sourceCandidateIndex: 0,
+      proposerSnapshot: {
+        principalType: 'service_account',
+        principalId: 'svc_enabled',
+        policySnapshotVersion: 'policy-2026-07-22',
+      },
+    });
+    await new PostgresWorkspaceMemoryRepository(
+      databaseControl.database!,
+    ).createProposal(proposal);
+
+    const productListPath = `/api/v1/workspaces/${workspaceId}/memory/proposals`;
+    const reviewPath = `/api/v1/workspace-memory/proposals/${proposal.id}/review`;
+    const hiddenListResponses = await Promise.all([
+      app.request('/api/v1/workspace-memory/proposals', {
+        headers: authenticatedJsonHeaders,
+      }),
+      app.request(productListPath, { headers: authenticatedJsonHeaders }),
+    ]);
+    expect(hiddenListResponses[0]!.status).toBe(200);
+    expect(hiddenListResponses[1]!.status).toBe(200);
+    expect(
+      ((await hiddenListResponses[0]!.json()) as { proposals: unknown[] })
+        .proposals,
+    ).toEqual([]);
+    expect(
+      ((await hiddenListResponses[1]!.json()) as { proposals: unknown[] })
+        .proposals,
+    ).toEqual([]);
+
+    for (const action of ['get', 'review', 'accept'] as const) {
+      const response =
+        action === 'get'
+          ? await app.request(
+              `/api/v1/workspace-memory/proposals/${proposal.id}`,
+              {
+                headers: authenticatedJsonHeaders,
+              },
+            )
+          : await app.request(reviewPath, {
+              method: 'POST',
+              headers: authenticatedJsonHeaders,
+              body: JSON.stringify({
+                action: action === 'accept' ? 'accept' : 'reject',
+              }),
+            });
+      expect(response.status).toBe(404);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        error: {
+          code: 'memory_proposal_not_found',
+          message: 'The requested memory proposal does not exist.',
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain(proposal.id);
+    }
+
+    await databaseControl.database!.query(
+      `UPDATE runs SET status='succeeded',lease_owner=NULL,activation_id=NULL,lease_expires_at=NULL,fencing_token=1,result='{"text":"done"}' WHERE id=$1`,
+      [runId],
+    );
+    const visibleList = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        headers: authenticatedJsonHeaders,
+      },
+    );
+    expect(visibleList.status).toBe(200);
+    expect(
+      ((await visibleList.json()) as { proposals: unknown[] }).proposals,
+    ).toHaveLength(1);
+    const visibleProductList = await app.request(productListPath, {
+      headers: authenticatedJsonHeaders,
+    });
+    expect(visibleProductList.status).toBe(200);
+    expect(
+      ((await visibleProductList.json()) as { proposals: unknown[] }).proposals,
+    ).toHaveLength(1);
+    const visibleGet = await app.request(
+      `/api/v1/workspace-memory/proposals/${proposal.id}`,
+      {
+        headers: authenticatedJsonHeaders,
+      },
+    );
+    expect(visibleGet.status).toBe(200);
+    expect(
+      ((await visibleGet.json()) as { proposal: unknown }).proposal,
+    ).toMatchObject({
+      proposal_id: proposal.id,
+      content: 'runtime-only memory',
+      source_run_id: runId,
+    });
+    const accepted = await app.request(reviewPath, {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({ action: 'accept' }),
+    });
+    expect(accepted.status).toBe(200);
+    expect(((await accepted.json()) as { entry: unknown }).entry).toMatchObject(
+      {
+        proposal_id: proposal.id,
+        source_run_id: runId,
+      },
+    );
+  });
+
+  it('protects product workspace projections and completes the owner flow', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f102';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+    });
+    const sourceTask = (await (
+      await app.request('/api/v1/tasks:invoke', {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          invokable: {
+            kind: 'agent',
+            version_id: defaultPublishedAgentVersionId,
+          },
+          input: { text: 'projection source' },
+          workspace_id: workspaceId,
+        }),
+      })
+    ).json()) as { task_id: string };
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await (
+        await app.request('/api/v1/workspace-memory/proposals', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            content: 'Projection proof.',
+            category: 'rule',
+            source_task_id: sourceTask.task_id,
+          }),
+        })
+      ).json(),
+    );
+    const review = await app.request(
+      `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ action: 'accept' }),
+      },
+    );
+    expect(review.status).toBe(200);
+
+    const productProposals = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(productProposals.status).toBe(200);
+    expect(
+      ((await productProposals.json()) as { proposals: unknown[] }).proposals,
+    ).toHaveLength(1);
+
+    const entries = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    const snapshots = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(entries.status).toBe(200);
+    const entriesBody = (await entries.json()) as { entries: unknown[] };
+    expect(entriesBody.entries).toHaveLength(1);
+    expect(snapshots.status).toBe(200);
+    const snapshotsBody = (await snapshots.json()) as {
+      snapshots: Array<{
+        snapshotId: string;
+        projectionStatus: string;
+        contentHash: string;
+      }>;
+    };
+    const snapshot = snapshotsBody.snapshots[0]!;
+    expect(snapshot.projectionStatus).toBe('ready');
+    expect(JSON.stringify(snapshot)).not.toContain('/tmp/agent-server-test');
+
+    const detail = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots/${snapshot.snapshotId}`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(detail.status).toBe(200);
+    const rebuild = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots:rebuild`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+      },
+    );
+    expect(rebuild.status).toBe(201);
+    const rebuildBody = (await rebuild.json()) as {
+      snapshot: { contentHash: string };
+    };
+    expect(rebuildBody.snapshot.contentHash).toBe(snapshot.contentHash);
+
+    const unauthenticated = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
+    );
+    expect(unauthenticated.status).toBe(401);
+    const foreign = await app.request(
+      '/api/v1/workspaces/workspace_foreign/memory/entries',
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreign.status).toBe(404);
+    const foreignProposals = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/proposals`,
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreignProposals.status).toBe(404);
+  });
+
+  it('lists proposals independently for two owned Product Workspaces and discloses neither to a foreign principal', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const createWorkspace = async (name: string) => {
+      const response = await app.request('/api/v1/workspaces', {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ name }),
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { workspace_id: string }).workspace_id;
+    };
+    const firstWorkspace = await createWorkspace('first workspace');
+    const secondWorkspace = await createWorkspace('second workspace');
+    const createOwnedProposal = async (
+      workspaceId: string,
+      content: string,
+    ) => {
+      const task = (await (
+        await app.request('/api/v1/tasks:invoke', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            invokable: {
+              kind: 'agent',
+              version_id: defaultPublishedAgentVersionId,
+            },
+            input: { text: content },
+            workspace_id: workspaceId,
+          }),
+        })
+      ).json()) as { task_id: string };
+      await app.request(`/api/v1/workspaces/${workspaceId}/memory/proposals`, {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content,
+          category: 'workspace',
+          source_task_id: task.task_id,
+        }),
+      });
+    };
+    await createOwnedProposal(firstWorkspace, 'first only');
+    await createOwnedProposal(secondWorkspace, 'second only');
+
+    const firstList = await app.request(
+      `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    const secondList = await app.request(
+      `/api/v1/workspaces/${secondWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(
+      (
+        (await firstList.json()) as { proposals: Array<{ content: string }> }
+      ).proposals.map((proposal) => proposal.content),
+    ).toEqual(['first only']);
+    expect(
+      (
+        (await secondList.json()) as { proposals: Array<{ content: string }> }
+      ).proposals.map((proposal) => proposal.content),
+    ).toEqual(['second only']);
+    const foreign = await app.request(
+      `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreign.status).toBe(404);
+    expect(await foreign.text()).not.toContain(firstWorkspace);
+  });
+
+  it('derives product workspace scope from a source task and hides it from a foreign principal', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f101';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+    });
+    const taskResponse = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'product source' },
+        workspace_id: workspaceId,
+      }),
+    });
+    const task = (await taskResponse.json()) as { task_id: string };
+    const proposalResponse = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content: 'Product scoped fact.',
+          category: 'fact',
+          source_task_id: task.task_id,
+        }),
+      },
+    );
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await proposalResponse.json(),
+    );
+    const review = await app.request(
+      `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ action: 'accept' }),
+      },
+    );
+    expect(review.status).toBe(200);
+    const primaryEntriesResponse = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(
+      primaryEntriesResponse.status,
+      await primaryEntriesResponse.text(),
+    ).toBe(200);
+    expect(
+      (
+        await app.request(
+          `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}`,
+          {
+            headers: {
+              authorization: `Bearer ${secondaryServiceAccountToken}`,
+            },
+          },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(`/api/v1/workspaces/${workspaceId}/memory/entries`, {
+          headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it('retries an accepted review after projection failure and rejects conflicting replay', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f103';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+      projectionFailures: 1,
+    });
+    const taskResponse = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'retry source' },
+        workspace_id: workspaceId,
+      }),
+    });
+    const task = (await taskResponse.json()) as { task_id: string };
+    const proposalResponse = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content: 'Retryable fact.',
+          category: 'fact',
+          source_task_id: task.task_id,
+        }),
+      },
+    );
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await proposalResponse.json(),
+    );
+    const reviewPath = `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`;
+    expect(
+      (
+        await app.request(reviewPath, {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({ action: 'accept' }),
+        })
+      ).status,
+    ).toBe(500);
+    const retry = await app.request(reviewPath, {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({ action: 'accept' }),
+    });
+    expect(retry.status).toBe(200);
+    const legacyEntries = ListMemoryEntriesResponseSchema.parse(
+      await (
+        await app.request('/api/v1/workspace-memory/entries', {
+          headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+        })
+      ).json(),
+    );
+    expect(legacyEntries.entries).toHaveLength(1);
+    const ownedEntries = (await (
+      await app.request(`/api/v1/workspaces/${workspaceId}/memory/entries`, {
+        headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+      })
+    ).json()) as { entries: unknown[] };
+    expect(ownedEntries.entries).toHaveLength(1);
+    expect(
+      (
+        await app.request(
+          `/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+          {
+            headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+          },
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await app.request(reviewPath, {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            action: 'edit_and_accept',
+            content: 'Conflicting replay.',
+          }),
+        })
+      ).status,
+    ).toBe(409);
   });
 
   it('returns stable review validation, not found, and already-reviewed errors', async () => {

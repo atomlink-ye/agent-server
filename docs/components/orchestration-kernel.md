@@ -14,10 +14,23 @@ The current walking skeleton contains:
 - PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
 - an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary;
 - the unchanged public `/api/v1/runs` compatibility surface.
+- the minimum Phase D `RuntimeSessionBinding`/`RunEvent` repository, lifecycle event persistence, final assistant Message write, replay/poll SSE routes, and owner-scoped Task cancellation.
 
-This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
+Admission first creates or replays through a transaction-scoped repository. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 plus a separate reader pool with max 2, and a forced same-key race to prove committed visibility, replay, owner isolation, and unique-key convergence. This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
 
-Still out of scope for this phase: waiting/resume, cancel, retry, reconcile, multi-worker recovery, parallel/join semantics, approvals, budget propagation, and artifact/evidence orchestration.
+When runtime work succeeds but terminal persistence fails, the kernel preserves the distinction with `RunCompletionPersistenceError` and a safe `RuntimeExecutionReceipt`; it does not relabel the outcome as `runtime_execution_failed`. Receipt durability and reconciliation remain deferred to later recovery work.
+
+Still out of scope: full Runtime Session V2 create/resume/status, incremental deltas, rich usage, retry/reconcile/receipts, multi-worker recovery, parallel/join semantics, approvals, budget propagation, and artifact/evidence orchestration.
+
+## Minimum Phase D interaction
+
+Claimed execution binds the Run to a provider session and persists `started`,
+safe final `output`, and one terminal event. Successful ProductSession Runs add
+one assistant Message using the locked Session Lane sequence; lane promotion
+then permits the next queued Task. Event reads and SSE derive owner scope
+through Task/Run ownership. Cancellation persists the request before forwarding
+runtime cancellation; queued work terminalizes locally. This is not a claim of
+crash-atomic recovery or a complete provider session API.
 
 ## V1 responsibilities
 

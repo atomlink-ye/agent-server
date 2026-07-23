@@ -13,3 +13,45 @@ Components are ownership and contract boundaries, not deployment promises. The b
 | [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline         |
 
 Dependencies point inward: entrypoints and adapters depend on application ports; application depends on domain; domain imports neither frameworks nor Paseo.
+
+## Managed Agent registry boundary
+
+The managed Agent registry augments the existing `agent_definitions` and
+`agent_versions` tables with migration `0005_managed_agent_registry_b`. It does
+not create a parallel version store. Managed ownership is `(tenant_id,
+principal_type, principal_id)`; the `workspace_id` carried by a managed row is a
+compatibility workspace snapshot, not part of managed identity or lookup.
+Legacy invokables retain their existing full tenant/workspace/principal scope.
+
+The package parser and compiler validate the restricted YAML package and persist
+immutable parser/compiler snapshots, canonical JSON, and a SHA-256 fingerprint
+on each version. Runtime execution receives only the published instructions
+selected by the application seam.
+
+`PostgresAgentRegistry` owns atomic import, idempotency convergence and
+conflict handling, publication, owner-hidden reads, and cursor pagination
+ordered by `(created_at, id)`. Database constraints enforce published-version
+immutability. `ResolveAgentVersion` checks managed by tenant and principal
+first, refuses legacy fallback when that managed row is a draft, and consults
+the legacy published Agent query only when no managed row exists. Team lookup,
+compilation, child Agent resolution, and Team execution remain unchanged.
+
+This boundary does not provide latest-version lookup, shared ACLs, arbitrary
+caller-selected models, package/policy/template/schema/completion data to the
+runtime, or provider cancellation forwarding.
+
+## Phase C Session lane boundary
+
+The Session lane owns one ProductSession generation and its durable user Message
+roots. Admission locks the lane, allocates a monotonic sequence, and inserts the
+Message, root Task, Run attempt 1, idempotency record, dispatch intent, and lane
+metadata before returning `202`. Only `active_task_id` is eligible for dispatch;
+later roots remain queued in `(generation, lane_sequence)` order.
+
+Reset increments generation, marks only non-active queued old-generation Tasks
+`cancelled` with failure detail `cancelled_by_reset`, and records a durable
+cancellation request for the active old-generation Task. The active Task remains
+the lane owner until normal terminal completion. Completion then promotes the
+oldest eligible queued root, including a new-generation root, and clears the
+cancellation request. Product Workspace ownership is tenant plus principal;
+legacy Task/Run routes retain their compatibility workspace behavior.

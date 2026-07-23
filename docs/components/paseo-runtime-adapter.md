@@ -18,7 +18,7 @@ The adapter is the only place where control-plane code knows Paseo SDK and OpenC
 
 ## Initialization
 
-The adapter connects once, opens a configured filesystem directory, assigns an explicit Workspace title, reads the live OpenCode model catalog, and caches one selected model. Concurrent calls share the same initialization promise and Workspace. A failed initialization can be retried; readiness exposes WebSocket, Workspace, and model checks.
+The adapter connects once, opens a configured filesystem directory, assigns an explicit Workspace title, reads the live OpenCode model catalog, and caches one selected model. Reconnect reuses the cached Workspace and model. Concurrent calls share initialization state; attempt generation and connection ownership prevent stale initialize/reconnect work from replacing a newer connection. The tests do not establish that a pending `close()` is safe against a newer initialization; close ownership remains a follow-up. A failed initialization can be retried; readiness exposes only safe WebSocket, Workspace, and model checks.
 
 Automatic selection prefers known free model IDs and may fall back only to another catalog entry explicitly marked free in its ID, label, or description. `PASEO_MODEL` is an operator override and must exist in the catalog. HTTP callers cannot set it.
 
@@ -30,7 +30,9 @@ For each baseline Run the adapter creates a Paseo Agent with provider `opencode`
 
 The API does not spawn Paseo. Local scripts own daemon start, health wait, signal forwarding, and cleanup. The runner disables relay, web UI, MCP injection, dictation, and voice; it prepends the platform-specific pinned OpenCode binary to `PATH` and uses isolated runtime homes.
 
-## Known baseline gaps
+## Capability characterization and baseline gaps
+
+The pinned SDK `0.1.110` capability characterization confirms the underlying seam can support resume, cancel, update/stream events, connection state, and timeline/snapshot operations. The current adapter exposes only create-and-wait execution plus health; Runtime Session V2 APIs are not yet public or application-facing.
 
 - No stream cursor, cancel, resume, timeline fetch, runtime receipt, or compatibility version negotiation.
 - No execution cell, tenant placement, workload identity, fence, or capability token.

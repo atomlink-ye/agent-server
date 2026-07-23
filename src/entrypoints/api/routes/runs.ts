@@ -13,18 +13,21 @@ import {
   MAX_RUN_REQUEST_BYTES,
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
+import { terminalRunStatuses } from '../../../domain/runs/run-status.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
+import type { RunEventRepository } from '../../../application/ports/run-events.js';
 
 interface RunRouteDependencies {
   readonly config: AppConfig;
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
+  readonly events?: RunEventRepository;
 }
 
 export function registerRunRoutes(
@@ -109,6 +112,159 @@ export function registerRunRoutes(
     }
     return context.json(toRunResponse(run), 200);
   });
+
+  app.get('/api/v1/runs/:runId/events', async (context) => {
+    const runId = context.req.param('runId');
+    if (
+      !(await dependencies.getRun.execute(
+        runId,
+        getAuthenticatedAccessContext(context),
+      ))
+    )
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    if (!dependencies.events)
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    const raw =
+      context.req.query('after') ?? context.req.query('cursor') ?? '0';
+    const after = Number(raw);
+    if (!Number.isSafeInteger(after) || after < 0)
+      throw new HttpError(
+        400,
+        'invalid_cursor',
+        'Cursor must be a nonnegative integer.',
+      );
+    const page = await dependencies.events.list(runId, after);
+    return context.json(
+      {
+        events: page.events.map(toEventResponse),
+        next_cursor: page.nextCursor,
+      },
+      200,
+    );
+  });
+  app.get('/api/v1/runs/:runId/events/stream', async (context) => {
+    const runId = context.req.param('runId');
+    const accessContext = getAuthenticatedAccessContext(context);
+    if (
+      !(await dependencies.getRun.execute(runId, accessContext)) ||
+      !dependencies.events
+    )
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    const header = context.req.header('last-event-id');
+    const raw = context.req.query('after') ?? header ?? '0';
+    let cursor = Number(raw);
+    if (!Number.isSafeInteger(cursor) || cursor < 0)
+      throw new HttpError(
+        400,
+        'invalid_cursor',
+        'Cursor must be a nonnegative integer.',
+      );
+    let stopStream: () => void = () => undefined;
+    return new Response(
+      new ReadableStream({
+        cancel() {
+          stopStream();
+        },
+        async start(controller) {
+          const encoder = new TextEncoder();
+          let stopped = false;
+          const stop = () => {
+            stopped = true;
+          };
+          stopStream = stop;
+          context.req.raw.signal.addEventListener('abort', stop, {
+            once: true,
+          });
+          try {
+            for (;;) {
+              if (stopped) return;
+              const page = await dependencies.events!.list(runId, cursor);
+              for (const event of page.events) {
+                if (stopped) return;
+                cursor = event.sequence;
+                controller.enqueue(
+                  encoder.encode(
+                    `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(toEventResponse(event))}\n\n`,
+                  ),
+                );
+              }
+              if (
+                page.events.some((event) =>
+                  ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(
+                    event.type,
+                  ),
+                )
+              )
+                break;
+              const run = await dependencies.getRun.execute(
+                runId,
+                accessContext,
+              );
+              if (run && terminalRunStatuses.has(run.status)) break;
+              await waitForStreamPoll(context.req.raw.signal, stop);
+            }
+          } finally {
+            context.req.raw.signal.removeEventListener('abort', stop);
+            if (!stopped) controller.close();
+          }
+        },
+      }),
+      {
+        headers: {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive',
+        },
+      },
+    );
+  });
+}
+
+async function waitForStreamPoll(
+  signal: AbortSignal,
+  stop: () => void,
+): Promise<void> {
+  if (signal.aborted) {
+    stop();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 100);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function toEventResponse(
+  event: import('../../../application/ports/run-events.js').RunEvent,
+) {
+  return {
+    id: String(event.sequence),
+    run_id: event.runId,
+    sequence: event.sequence,
+    type: event.type,
+    payload: event.payload,
+    created_at: event.createdAt,
+  };
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {

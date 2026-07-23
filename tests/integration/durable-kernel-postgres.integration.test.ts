@@ -108,6 +108,14 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
       { version: '0004_workspace_memory_proposal_mvp' },
+      { version: '0005_managed_agent_registry_b' },
+      { version: '0005b_managed_agent_registry_hardening' },
+      { version: '0006_workspace_session_lane_c' },
+      { version: '0007_runtime_events_d' },
+      { version: '0008_managed_memory_e' },
+      { version: '0009_session_reset_idempotency_hardening' },
+      { version: '0010_runtime_memory_provenance' },
+      { version: '0011_runtime_memory_provenance_integrity' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -136,6 +144,14 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
       { version: '0004_workspace_memory_proposal_mvp' },
+      { version: '0005_managed_agent_registry_b' },
+      { version: '0005b_managed_agent_registry_hardening' },
+      { version: '0006_workspace_session_lane_c' },
+      { version: '0007_runtime_events_d' },
+      { version: '0008_managed_memory_e' },
+      { version: '0009_session_reset_idempotency_hardening' },
+      { version: '0010_runtime_memory_provenance' },
+      { version: '0011_runtime_memory_provenance_integrity' },
     ]);
   });
 
@@ -910,8 +926,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invoked = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       () => new Date('2026-07-22T12:15:00.000Z'),
@@ -1457,8 +1471,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invocation = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       clock.now,
@@ -1653,8 +1665,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invocation = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       clock.now,

@@ -4,6 +4,8 @@ import { transitionTask } from '../../domain/tasks/task.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import type { RunEventRepository } from '../ports/run-events.js';
+import type { SessionRepository } from '../ports/session-repository.js';
 
 export interface CompleteRunInput {
   readonly claim: ClaimedRun;
@@ -14,6 +16,8 @@ export class CompleteRun {
   public constructor(
     private readonly repository: RunRepository,
     private readonly tasks: TaskRepository,
+    private readonly events?: RunEventRepository,
+    private readonly sessions?: SessionRepository,
   ) {}
 
   public async execute(input: CompleteRunInput): Promise<Run> {
@@ -30,7 +34,11 @@ export class CompleteRun {
 
     if (!terminalTaskStatuses.has(task.status)) {
       const terminalStatus =
-        completedRun.status === 'succeeded' ? 'completed' : 'failed';
+        completedRun.status === 'succeeded'
+          ? 'completed'
+          : completedRun.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed';
       const timestamp = new Date(completedRun.updatedAt);
       const activeTask =
         task.status === 'queued'
@@ -39,6 +47,46 @@ export class CompleteRun {
 
       await this.tasks.save(
         transitionTask(activeTask, terminalStatus, () => timestamp),
+      );
+    }
+
+    if (
+      completedRun.status === 'succeeded' &&
+      completedRun.result &&
+      this.sessions &&
+      task.sessionId &&
+      task.generation !== null &&
+      task.generation !== undefined &&
+      this.sessions.appendAssistantMessage
+    ) {
+      await this.sessions.appendAssistantMessage({
+        sessionId: task.sessionId,
+        generation: task.generation,
+        taskId: task.id,
+        runId: completedRun.id,
+        text: completedRun.result.text,
+      });
+    }
+
+    await this.tasks.advanceSessionLane?.(input.claim.taskId);
+    if (
+      this.events &&
+      completedRun.status === 'succeeded' &&
+      completedRun.result
+    ) {
+      await this.events.append(completedRun.id, 'output', {
+        text: completedRun.result.text,
+      });
+    }
+    if (this.events) {
+      await this.events.append(
+        completedRun.id,
+        completedRun.status === 'succeeded'
+          ? 'succeeded'
+          : completedRun.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed',
+        completedRun.error ? { code: completedRun.error.code } : {},
       );
     }
 

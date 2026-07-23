@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { OpenCodeModelUnavailableError } from '../../src/adapters/paseo/errors.js';
 import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
@@ -45,6 +45,107 @@ describe('PaseoRuntimeAdapter', () => {
     expect(client.titleCalls).toBe(1);
     expect(client.listModelsCalls).toBe(1);
     expect(client.createAgentCalls).toBe(2);
+  });
+
+  it('reconnects a cached workspace when the websocket disconnects', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const result = await adapter.execute({
+      runId: 'run-after-disconnect',
+      prompt: 'continue',
+    });
+
+    expect(result.text).toBe('PASEO_FAKE_OK');
+    expect(client.connectCalls).toBe(2);
+    expect(client.openWorkspaceCalls).toBe(1);
+    expect(client.titleCalls).toBe(1);
+    expect(client.listModelsCalls).toBe(1);
+    expect(client.createAgentCalls).toBe(1);
+    expect((await adapter.health()).ready).toBe(true);
+  });
+
+  it('does not let a stale reconnect clear a newer initialization attempt', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleReconnect = deferred<void>();
+    const freshInitialization = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 2) await staleReconnect.promise;
+      if (call === 3) await freshInitialization.promise;
+    };
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const staleAttempt = adapter.initialize();
+    await Promise.resolve();
+    await adapter.close();
+    const freshAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(3));
+
+    staleReconnect.resolve();
+    await staleAttempt;
+    expect(client.closeCalls).toBe(1);
+    const coalescedAttempt = adapter.initialize();
+    await Promise.resolve();
+    expect(client.connectCalls).toBe(3);
+
+    freshInitialization.resolve();
+    await Promise.all([freshAttempt, coalescedAttempt]);
+    expect((await adapter.health()).ready).toBe(true);
+  });
+
+  it('does not restore readiness when initialization finishes after close', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleConnection = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 1) await staleConnection.promise;
+    };
+
+    const staleAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(1));
+    await adapter.close();
+    staleConnection.resolve();
+    await staleAttempt;
+
+    const health = await adapter.health();
+    expect(health.ready).toBe(false);
+    expect(client.status).toBe('disposed');
+    expect(client.closeCalls).toBe(2);
+    expect(
+      health.checks.find((check) => check.name === 'paseo_workspace'),
+    ).toMatchObject({ ready: false });
+    expect(
+      health.checks.find((check) => check.name === 'opencode_model'),
+    ).toMatchObject({ ready: false });
+  });
+
+  it('does not let a stale reconnect close a newer completed connection', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleReconnect = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 2) await staleReconnect.promise;
+    };
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const staleAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(2));
+    await adapter.close();
+    await adapter.initialize();
+    expect(client.connectCalls).toBe(3);
+    expect((await adapter.health()).ready).toBe(true);
+
+    staleReconnect.resolve();
+    await staleAttempt;
+
+    expect(client.closeCalls).toBe(1);
+    expect(client.status).toBe('connected');
+    expect((await adapter.health()).ready).toBe(true);
   });
 
   it('fails readiness when no explicitly free model exists', async () => {
@@ -103,3 +204,11 @@ describe('PaseoRuntimeAdapter', () => {
     ).rejects.toThrow(RuntimeExecutionError);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { closeSync, openSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -34,6 +35,7 @@ const runKey = `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${process.p
 const runtimeRoot = join(repositoryRoot, '.local', 'smoke', runKey);
 const agentWorkspace = join(runtimeRoot, 'agent-workspace');
 const evidencePath = join(runtimeRoot, 'evidence.json');
+const smokeToken = `paseo-smoke-${randomUUID()}`;
 await Promise.all([
   mkdir(runtimeRoot, { recursive: true }),
   mkdir(agentWorkspace, { recursive: true }),
@@ -86,6 +88,15 @@ try {
           ...(requestedSmokeModel ? { PASEO_MODEL: requestedSmokeModel } : {}),
           PASEO_CONNECT_TIMEOUT_MS: '10000',
           PASEO_EXECUTION_TIMEOUT_MS: '150000',
+          SERVICE_ACCOUNTS_JSON: JSON.stringify([
+            {
+              serviceAccountId: 'svc_paseo_smoke',
+              token: smokeToken,
+              tenantId: 'tenant_paseo_smoke',
+              workspaceId: 'workspace_paseo_smoke',
+              policyVersion: 'policy-paseo-smoke-v1',
+            },
+          ]),
         },
         detached: process.platform !== 'win32',
         stdio: ['ignore', apiLog, apiLog],
@@ -107,7 +118,10 @@ try {
 
   const createdResponse = await fetch(`${baseUrl}/api/v1/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${smokeToken}`,
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({
       prompt: `Do not use tools. Reply with exactly: ${expectedText}`,
     }),
@@ -122,7 +136,7 @@ try {
     throw new Error(`Unexpected create response: ${JSON.stringify(created)}`);
   }
 
-  const completed = await pollRun(baseUrl, created.run_id, 180_000);
+  const completed = await pollRun(baseUrl, created.run_id, smokeToken, 180_000);
   if (completed.status !== 'succeeded') {
     throw new Error(`Run did not succeed: ${JSON.stringify(completed)}`);
   }
@@ -203,11 +217,12 @@ async function stopSmokePostgres(server, database) {
   await database?.close();
 }
 
-async function pollRun(baseUrl, runId, timeoutMs) {
+async function pollRun(baseUrl, runId, token, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
   while (Date.now() < deadline) {
     const response = await fetch(`${baseUrl}/api/v1/runs/${runId}`, {
+      headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) {

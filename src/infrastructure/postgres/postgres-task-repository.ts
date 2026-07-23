@@ -45,10 +45,12 @@ export class PostgresTaskRepository implements TaskRepository {
           invokable_version_id,
           input_snapshot_ref,
           input_fingerprint,
+           memory_snapshot_id,
+           memory_snapshot_hash,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -68,6 +70,8 @@ export class PostgresTaskRepository implements TaskRepository {
           invokable_version_id = EXCLUDED.invokable_version_id,
           input_snapshot_ref = EXCLUDED.input_snapshot_ref,
           input_fingerprint = EXCLUDED.input_fingerprint,
+           memory_snapshot_id = EXCLUDED.memory_snapshot_id,
+           memory_snapshot_hash = EXCLUDED.memory_snapshot_hash,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at
       `,
@@ -90,6 +94,8 @@ export class PostgresTaskRepository implements TaskRepository {
         task.invokableVersionId,
         task.inputSnapshotRef,
         task.inputFingerprint,
+        task.memorySnapshotId ?? null,
+        task.memorySnapshotHash ?? null,
         task.createdAt,
         task.updatedAt,
       ],
@@ -116,7 +122,7 @@ export class PostgresTaskRepository implements TaskRepository {
       `${TASK_SELECT_SQL}
         WHERE tasks.id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
       `,
@@ -141,7 +147,7 @@ export class PostgresTaskRepository implements TaskRepository {
       `${TASK_SELECT_SQL}
         WHERE tasks.root_task_id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
         ORDER BY tasks.depth ASC, tasks.node_path ASC NULLS FIRST, tasks.created_at ASC, tasks.id ASC
@@ -156,6 +162,38 @@ export class PostgresTaskRepository implements TaskRepository {
     );
 
     return (result.rows ?? []).map(mapTaskRow);
+  }
+
+  public async advanceSessionLane(taskId: string): Promise<void> {
+    await this.database.query(
+      `
+        WITH next_task AS (
+          SELECT queued.id
+          FROM session_lanes lane
+          JOIN tasks current_task ON current_task.id = lane.active_task_id
+          JOIN tasks queued ON queued.session_id = current_task.session_id
+            AND queued.generation = lane.generation
+            AND queued.status = 'queued'
+          WHERE lane.active_task_id = $1
+          ORDER BY queued.generation ASC, queued.lane_sequence ASC, queued.created_at ASC
+          LIMIT 1
+        )
+        UPDATE session_lanes
+        SET active_task_id = (SELECT id FROM next_task),
+            active_cancellation_requested = false
+        WHERE active_task_id = $1
+      `,
+      [taskId],
+    );
+  }
+  public async requestCancellation(
+    taskId: string,
+    requestedAt: string,
+  ): Promise<void> {
+    await this.database.query(
+      `UPDATE runs SET cancellation_requested=true,cancellation_requested_at=$2 WHERE task_id=$1 AND status IN ('queued','running')`,
+      [taskId, requestedAt],
+    );
   }
 }
 
@@ -178,8 +216,14 @@ interface TaskRow {
   readonly invokable_version_id: string;
   readonly input_snapshot_ref: string;
   readonly input_fingerprint: string;
+  readonly memory_snapshot_id: string | null;
+  readonly memory_snapshot_hash: string | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
+  readonly session_id: string | null;
+  readonly input_message_id: string | null;
+  readonly generation: number | null;
+  readonly lane_sequence: number | null;
   readonly latest_run_id: string | null;
   readonly latest_run_attempt: number | null;
   readonly latest_run_status: TaskLatestRunSummary['status'] | null;
@@ -210,8 +254,14 @@ const TASK_SELECT_SQL = `
     tasks.invokable_version_id,
     tasks.input_snapshot_ref,
     tasks.input_fingerprint,
+    tasks.memory_snapshot_id,
+    tasks.memory_snapshot_hash,
     tasks.created_at,
     tasks.updated_at,
+    tasks.session_id,
+    input_message.id AS input_message_id,
+    tasks.generation,
+    tasks.lane_sequence,
     latest_run.id AS latest_run_id,
     latest_run.attempt AS latest_run_attempt,
     latest_run.status AS latest_run_status,
@@ -236,6 +286,13 @@ const TASK_SELECT_SQL = `
     ORDER BY runs.attempt DESC
     LIMIT 1
   ) AS latest_run ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT messages.id
+    FROM messages
+    WHERE messages.task_id = tasks.id AND messages.role = 'user'
+    ORDER BY messages.created_at ASC, messages.sequence ASC
+    LIMIT 1
+  ) AS input_message ON TRUE
 `;
 
 function mapTaskRow(row: TaskRow): TaskRecord {
@@ -258,8 +315,14 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     invokableVersionId: row.invokable_version_id,
     inputSnapshotRef: row.input_snapshot_ref,
     inputFingerprint: row.input_fingerprint,
+    memorySnapshotId: row.memory_snapshot_id,
+    memorySnapshotHash: row.memory_snapshot_hash,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
+    sessionId: row.session_id,
+    sourceMessageId: row.input_message_id,
+    generation: row.generation === null ? null : Number(row.generation),
+    laneSequence: row.lane_sequence === null ? null : Number(row.lane_sequence),
   };
 
   return {

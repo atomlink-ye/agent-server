@@ -68,7 +68,7 @@ the phase owner to preserve earlier gates.
 
 - [x] **P0-1 (truth):** Reconcile this plan with the approved spec and deepwork state; record the existing `.gitignore`, `.ignore`, spec, plan, and ignored-state facts, source revision, owner, dates, phase order, migration ownership, non-goals, blocker, and evidence IDs.
 - [x] **P0-2 (baseline):** Run `node --version`, `pnpm --version`, and locally re-run `make check`. Record Node 24 baseline evidence already available from `make setup && make ci` (59 unit, 42 contract, 23 integration, 1 E2E; docs/types/build green) plus the local check result. Missing `DATABASE_URL` is not relevant to this deterministic check.
-- [ ] **P0-3 (planning commit):** Stage only `.gitignore`, `.ignore`, the approved spec, and this plan; leave `.slim/deepwork/` ignored; commit `docs: control managed single-agent v1 plan`. Review the staged diff and record `P0-PLAN`, `P0-NODE24`, and `P0-COMMIT`.
+- [x] **P0-3 (planning commit):** Stage only `.gitignore`, `.ignore`, the approved spec, and this plan; leave `.slim/deepwork/` ignored; commit `docs: control managed single-agent v1 plan`. Review the staged diff and record `P0-PLAN`, `P0-NODE24`, and `P0-COMMIT`.
 
 ### A — Stabilization and real PostgreSQL lane
 
@@ -185,17 +185,16 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
 - **P0-NODE24:** Node `v24.18.0`, pnpm `11.7.0`; `make setup && make ci` passed
   with 59 unit, 42 contract, 23 integration, and 1 E2E test plus docs, types,
   format, and build. A fresh Node 24 `make check` also passed after plan review.
-- **P0-COMMIT:** Pending the planning-control commit recorded by P0-3.
+- **P0-COMMIT:** `dfc9a82` `docs: control managed single-agent v1 plan`.
 
 ## Current blocker
 
-None. P0 local verification is green; the planning-control commit is the next
-action.
+None. P0 is complete; Phase A regression tests are the next action.
 
 ## Next exact command
 
 ```bash
-git add .gitignore .ignore docs/exec-plans/active/2026-07-23-managed-single-agent-scenario-v1-spec.md docs/exec-plans/active/2026-07-23-managed-single-agent-scenario-v1.md
+pnpm exec vitest run --config vitest.unit.config.ts src/application/tasks/invoke-task.test.ts src/application/runs/execute-run.test.ts
 ```
 
 ## Completion checklist

@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -29,6 +29,65 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
 const logger = { log: () => undefined };
 
 describe('Paseo runtime memory proposal artifact', () => {
+  it.each([
+    ['absent', undefined],
+    ['zero maxCandidates', { maxCandidates: 0 }],
+    ['zero proposalLimit', { proposalLimit: 0 }],
+  ])(
+    'sends the original prompt unchanged and skips artifacts when memory is %s',
+    async (_label, memoryCandidates) => {
+      const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
+      const artifact = join(
+        cwd,
+        'scratchpad',
+        'runs',
+        'run-disabled',
+        'memory-proposals.json',
+      );
+      await mkdir(join(cwd, 'scratchpad', 'runs', 'run-disabled'), {
+        recursive: true,
+      });
+      await writeFile(artifact, '{malformed');
+      let requestPrompt = '';
+      const runtime = new PaseoRuntimeAdapter(
+        {
+          wsUrl: 'ws://test',
+          cwd,
+          workspaceTitle: 'test',
+          connectTimeoutMs: 1,
+          executionTimeoutMs: 1,
+        },
+        logger,
+        {
+          ...client(),
+          createOpenCodeAgent: async (input) => {
+            requestPrompt = input.prompt;
+            return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
+          },
+        },
+      );
+
+      const prompt =
+        'Return exactly: memory artifact instructions are not part of this prompt.';
+      await runtime.execute({
+        runId: 'run-disabled',
+        prompt,
+        ...(memoryCandidates ? { memoryCandidates } : {}),
+      });
+      await runtime.execute({
+        runId: 'run-fresh',
+        prompt,
+        ...(memoryCandidates ? { memoryCandidates } : {}),
+      });
+
+      expect(requestPrompt).toBe(prompt);
+      await expect(access(artifact)).resolves.toBeUndefined();
+      await expect(
+        access(join(cwd, 'scratchpad', 'runs', 'run-fresh')),
+      ).rejects.toThrow();
+    },
+  );
+
   it('creates the run directory and sends the usable relative artifact contract', async () => {
     const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
     let requestPrompt = '';
@@ -49,7 +108,11 @@ describe('Paseo runtime memory proposal artifact', () => {
         },
       },
     );
-    await runtime.execute({ runId: 'run-contract', prompt: 'test' });
+    await runtime.execute({
+      runId: 'run-contract',
+      prompt: 'test',
+      memoryCandidates: { proposalLimit: 1 },
+    });
     expect(requestPrompt).toContain(
       'scratchpad/runs/run-contract/memory-proposals.json',
     );
@@ -90,7 +153,11 @@ describe('Paseo runtime memory proposal artifact', () => {
         ),
       ),
     );
-    const result = await runtime.execute({ runId, prompt: 'test' });
+    const result = await runtime.execute({
+      runId,
+      prompt: 'test',
+      memoryCandidates: { maxCandidates: 1 },
+    });
 
     expect(result.memoryCandidates).toEqual([
       { category: 'project_constraint', content: 'keep logs' },
@@ -114,7 +181,11 @@ describe('Paseo runtime memory proposal artifact', () => {
       client(async () => writeFile(artifact, '{bad')),
     );
     await expect(
-      runtime.execute({ runId: 'run-1', prompt: 'test' }),
+      runtime.execute({
+        runId: 'run-1',
+        prompt: 'test',
+        memoryCandidates: { proposalLimit: 1 },
+      }),
     ).rejects.toThrow('memory proposal artifact');
     await symlink(
       join(cwd, 'missing'),
@@ -138,7 +209,11 @@ describe('Paseo runtime memory proposal artifact', () => {
       ),
     );
     await expect(
-      symlinkRuntime.execute({ runId: 'run-3', prompt: 'test' }),
+      symlinkRuntime.execute({
+        runId: 'run-3',
+        prompt: 'test',
+        memoryCandidates: { proposalLimit: 1 },
+      }),
     ).rejects.toThrow('memory proposal artifact');
 
     const outside = join(cwd, 'outside');
@@ -155,7 +230,11 @@ describe('Paseo runtime memory proposal artifact', () => {
         },
         logger,
         client(),
-      ).execute({ runId: 'run-parent', prompt: 'test' }),
+      ).execute({
+        runId: 'run-parent',
+        prompt: 'test',
+        memoryCandidates: { proposalLimit: 1 },
+      }),
     ).rejects.toThrow('symbolic-link ancestor');
   });
 
@@ -196,7 +275,11 @@ describe('Paseo runtime memory proposal artifact', () => {
         }),
       );
       await expect(
-        runtime.execute({ runId: 'run-1', prompt: 'test' }),
+        runtime.execute({
+          runId: 'run-1',
+          prompt: 'test',
+          memoryCandidates: { proposalLimit: 1 },
+        }),
       ).rejects.toThrow('memory proposal artifact');
     }
   });
@@ -218,7 +301,11 @@ describe('Paseo runtime memory proposal artifact', () => {
       client(),
     );
     await expect(
-      runtime.execute({ runId: 'run-1', prompt: 'test' }),
+      runtime.execute({
+        runId: 'run-1',
+        prompt: 'test',
+        memoryCandidates: { proposalLimit: 1 },
+      }),
     ).rejects.toThrow('symbolic link');
   });
 });

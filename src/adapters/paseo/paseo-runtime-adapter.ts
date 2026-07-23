@@ -161,6 +161,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   public async execute(input: {
     readonly runId: string;
     readonly prompt: string;
+    readonly memoryCandidates?: {
+      readonly maxCandidates?: number;
+      readonly proposalLimit?: number;
+    };
   }): Promise<AgentRuntimeExecution> {
     await this.initialize();
     if (!this.#workspaceId || !this.#model) {
@@ -173,13 +177,20 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       input.runId,
       'memory-proposals.json',
     );
-    const artifact = await this.#prepareArtifactPath(artifactRelativePath);
-    await this.#clearArtifact(artifact);
+    const memoryEnabled =
+      (input.memoryCandidates?.maxCandidates ?? 0) > 0 ||
+      (input.memoryCandidates?.proposalLimit ?? 0) > 0;
+    const artifact = memoryEnabled
+      ? await this.#prepareArtifactPath(artifactRelativePath)
+      : null;
+    if (artifact) await this.#clearArtifact(artifact);
     const agent = await this.#client.createOpenCodeAgent({
       cwd: this.#options.cwd,
       workspaceId: this.#workspaceId,
       model: this.#model.id,
-      prompt: `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`,
+      prompt: artifact
+        ? `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`
+        : input.prompt,
       runId: input.runId,
     });
     this.#agents.set(input.runId, agent.id);
@@ -203,7 +214,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       );
     }
 
-    const memory = await this.#readMemoryCandidates(artifact);
+    const memory = artifact ? await this.#readMemoryCandidates(artifact) : {};
     return {
       provider: agent.provider || 'opencode',
       model: agent.model ?? this.#model.id,

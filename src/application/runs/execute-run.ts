@@ -219,6 +219,9 @@ export class ExecuteRun {
     const execution = await this.runtime.execute({
       runId: claim.run.id,
       prompt: resolved.prompt,
+      ...(resolved.proposalLimit > 0
+        ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
+        : {}),
     });
     const candidateInputs = (
       task.sourceMessageId ? (execution.memoryCandidates ?? []) : []

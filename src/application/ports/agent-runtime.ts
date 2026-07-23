@@ -29,6 +29,10 @@ export interface AgentRuntimePort {
   execute(input: {
     readonly runId: string;
     readonly prompt: string;
+    readonly memoryCandidates?: {
+      readonly maxCandidates?: number;
+      readonly proposalLimit?: number;
+    };
   }): Promise<AgentRuntimeExecution>;
   cancel?(input: {
     readonly runId: string;

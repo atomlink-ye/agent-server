@@ -90,6 +90,7 @@ export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
   readonly workspaceId?: string;
   readonly projectionFailures?: number;
+  readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
 }
 
 export async function createTestApp(
@@ -222,6 +223,7 @@ export async function createTestApp(
     resolveAgentVersion,
     events,
     fileStore,
+    createMemoryProposal,
   );
   if (options.startDispatcher ?? true) {
     const dispatcher = new PostgresRunDispatcher(
@@ -234,6 +236,8 @@ export async function createTestApp(
       { pollIntervalMs: 1 },
     );
     dispatcher.start();
+    if (options.dispatcherControl)
+      options.dispatcherControl.dispatcher = dispatcher;
   }
 
   return createApp({

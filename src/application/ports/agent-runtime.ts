@@ -18,6 +18,10 @@ export interface AgentRuntimeExecution {
   readonly model: string;
   readonly text: string;
   readonly usage?: RunUsage;
+  readonly memoryCandidates?: readonly {
+    readonly content: string;
+    readonly category: string;
+  }[];
 }
 
 export interface AgentRuntimePort {

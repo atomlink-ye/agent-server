@@ -10,6 +10,10 @@ export interface FakeRuntimeOptions {
   readonly responseTexts?: readonly string[];
   readonly delayMs?: number;
   readonly error?: Error;
+  readonly memoryCandidates?: readonly {
+    readonly content: string;
+    readonly category: string;
+  }[];
 }
 
 export class FakeAgentRuntime implements AgentRuntimePort {
@@ -56,6 +60,9 @@ export class FakeAgentRuntime implements AgentRuntimePort {
         this.#options.responseText ??
         'FAKE_RUNTIME_OK',
       usage: { inputTokens: 3, outputTokens: 2, totalCostUsd: 0 },
+      ...(this.#options.memoryCandidates
+        ? { memoryCandidates: this.#options.memoryCandidates }
+        : {}),
     };
   }
 

@@ -19,6 +19,7 @@ import type { ClaimedRun } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
+import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { assembleContext } from '../context/assemble-context.js';
 import {
   buildPublishedAgentPrompt,
@@ -45,6 +46,7 @@ export class ExecuteRun {
     ),
     private readonly events?: RunEventRepository,
     private readonly fileStore?: FileStore,
+    private readonly createMemoryProposal?: CreateMemoryProposal,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -212,6 +214,22 @@ export class ExecuteRun {
       runId: claim.run.id,
       prompt,
     });
+    for (const candidate of execution.memoryCandidates ?? []) {
+      await this.createMemoryProposal?.execute({
+        content: candidate.content,
+        category: candidate.category,
+        sourceTaskId: task.id,
+        ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
+        accessContext: {
+          tenantId: task.tenantId,
+          serviceAccountId: task.principalId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType as 'service_account',
+          principalId: task.principalId,
+          policySnapshotVersion: task.policySnapshotVersion,
+        },
+      });
+    }
     const succeeded = transitionRun(
       claim.run,
       'succeeded',

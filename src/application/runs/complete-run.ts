@@ -26,26 +26,6 @@ export class CompleteRun {
     }
 
     const completedRun = await this.repository.completeClaimed(input);
-    if (
-      this.events &&
-      completedRun.status === 'succeeded' &&
-      completedRun.result
-    ) {
-      await this.events.append(input.claim.run.id, 'output', {
-        text: completedRun.result.text,
-      });
-    }
-    if (this.events) {
-      await this.events.append(
-        input.claim.run.id,
-        completedRun.status === 'succeeded'
-          ? 'succeeded'
-          : completedRun.status === 'cancelled'
-            ? 'cancelled'
-            : 'failed',
-        completedRun.error ? { code: completedRun.error.code } : {},
-      );
-    }
     const task = await this.tasks.findById(input.claim.taskId);
 
     if (!task) {
@@ -70,7 +50,6 @@ export class CompleteRun {
       );
     }
 
-    await this.tasks.advanceSessionLane?.(input.claim.taskId);
     if (
       completedRun.status === 'succeeded' &&
       completedRun.result &&
@@ -87,6 +66,28 @@ export class CompleteRun {
         runId: completedRun.id,
         text: completedRun.result.text,
       });
+    }
+
+    await this.tasks.advanceSessionLane?.(input.claim.taskId);
+    if (
+      this.events &&
+      completedRun.status === 'succeeded' &&
+      completedRun.result
+    ) {
+      await this.events.append(completedRun.id, 'output', {
+        text: completedRun.result.text,
+      });
+    }
+    if (this.events) {
+      await this.events.append(
+        completedRun.id,
+        completedRun.status === 'succeeded'
+          ? 'succeeded'
+          : completedRun.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed',
+        completedRun.error ? { code: completedRun.error.code } : {},
+      );
     }
 
     return completedRun;

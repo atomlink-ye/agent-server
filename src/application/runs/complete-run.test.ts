@@ -15,16 +15,44 @@ describe('CompleteRun cancellation arbitration', () => {
     async (status, eventTypes, taskStatus) => {
       const task = { ...activeTask(), sessionId: 'session', generation: 1 };
       const candidate = terminalRun(status);
+      const order: string[] = [];
+      let taskProjected = false;
+      let laneAdvanced = false;
+      let assistantProjected = false;
       const events = {
-        append: vi.fn(async (_id: string, type: string) => ({ type })),
+        append: vi.fn(async (_id: string, type: string) => {
+          if (['succeeded', 'failed', 'cancelled'].includes(type)) {
+            expect(taskProjected).toBe(true);
+            expect(laneAdvanced).toBe(true);
+            if (type === 'succeeded') expect(assistantProjected).toBe(true);
+          }
+          order.push(`event:${type}`);
+          return { type };
+        }),
       };
       const tasks = {
         findById: vi.fn(async () => task),
-        save: vi.fn(async () => undefined),
-        advanceSessionLane: vi.fn(async () => undefined),
+        save: vi.fn(async () => {
+          taskProjected = true;
+          order.push('task');
+        }),
+        advanceSessionLane: vi.fn(async () => {
+          laneAdvanced = true;
+          order.push('lane');
+        }),
       };
-      const sessions = { appendAssistantMessage: vi.fn(async () => undefined) };
-      const repository = { completeClaimed: vi.fn(async () => candidate) };
+      const sessions = {
+        appendAssistantMessage: vi.fn(async () => {
+          assistantProjected = true;
+          order.push('assistant');
+        }),
+      };
+      const repository = {
+        completeClaimed: vi.fn(async () => {
+          order.push('persist');
+          return candidate;
+        }),
+      };
       const completed = await new CompleteRun(
         repository as never,
         tasks as never,
@@ -47,6 +75,20 @@ describe('CompleteRun cancellation arbitration', () => {
       ).toBe(taskStatus);
       expect(sessions.appendAssistantMessage).toHaveBeenCalledTimes(
         status === 'succeeded' ? 1 : 0,
+      );
+      expect(order).toEqual(
+        status === 'succeeded'
+          ? [
+              'persist',
+              'task',
+              'assistant',
+              'lane',
+              'event:output',
+              'event:succeeded',
+            ]
+          : status === 'cancelled'
+            ? ['persist', 'task', 'lane', 'event:cancelled']
+            : ['persist', 'task', 'lane', 'event:failed'],
       );
     },
   );

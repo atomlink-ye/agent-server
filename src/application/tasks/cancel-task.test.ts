@@ -30,16 +30,25 @@ describe('CancelTask', () => {
             ? 'running'
             : 'succeeded',
       );
+      const order: string[] = [];
       const runtime = { cancel: vi.fn(async () => undefined) };
-      const events = { append: vi.fn(async () => undefined) };
+      const events = {
+        append: vi.fn(async () => {
+          order.push('event');
+        }),
+      };
       const runs = {
         findByTaskId: vi.fn(async () => run),
-        requestCancellation: vi.fn(async () => outcome),
+        requestCancellation: vi.fn(async () => ({ runId: run.id, outcome })),
       };
       const tasks = {
         findByIdForOwner: vi.fn(async () => ({ task, latestRun: null })),
-        save: vi.fn(async () => undefined),
-        advanceSessionLane: vi.fn(async () => undefined),
+        save: vi.fn(async () => {
+          order.push('task');
+        }),
+        advanceSessionLane: vi.fn(async () => {
+          order.push('lane');
+        }),
       };
 
       const result = await new CancelTask(
@@ -62,6 +71,9 @@ describe('CancelTask', () => {
       expect(events.append).toHaveBeenCalledTimes(
         outcome === 'queued_cancelled' ? 1 : 0,
       );
+      expect(order).toEqual(
+        outcome === 'queued_cancelled' ? ['task', 'lane', 'event'] : [],
+      );
     },
   );
 
@@ -78,6 +90,28 @@ describe('CancelTask', () => {
     ).execute('missing', owner);
     expect(result).toBeNull();
     expect(runs.requestCancellation).not.toHaveBeenCalled();
+  });
+
+  it('uses the authoritative run id returned by arbitration', async () => {
+    const task = fixtureTask();
+    const staleRun = fixtureRun('running');
+    const runtime = { cancel: vi.fn(async () => undefined) };
+    const runs = {
+      findByTaskId: vi.fn(async () => staleRun),
+      requestCancellation: vi.fn(async () => ({
+        runId: 'authoritative-run',
+        outcome: 'running_requested' as const,
+      })),
+    };
+    const result = await new CancelTask(
+      {
+        findByIdForOwner: vi.fn(async () => ({ task, latestRun: null })),
+      } as never,
+      runs as never,
+      runtime as never,
+    ).execute(task.id, owner);
+    expect(result?.runId).toBe('authoritative-run');
+    expect(runtime.cancel).toHaveBeenCalledWith({ runId: 'authoritative-run' });
   });
 });
 

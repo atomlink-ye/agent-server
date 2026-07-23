@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { transitionRun } from '../../src/domain/runs/run.js';
+import { CancelTask } from '../../src/application/tasks/cancel-task.js';
+import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import {
   applyDurableKernelMigrations,
@@ -36,16 +38,20 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
     const ids = await insertRun(pool!, 'queued');
     const repository = new PostgresRunRepository(pool!);
     expect(
-      await repository.requestCancellation(
-        ids.taskId,
-        '2026-07-24T00:00:01.000Z',
-      ),
+      (
+        await repository.requestCancellation(
+          ids.taskId,
+          '2026-07-24T00:00:01.000Z',
+        )
+      )?.outcome,
     ).toBe('queued_cancelled');
     expect(
-      await repository.requestCancellation(
-        ids.taskId,
-        '2026-07-24T00:00:02.000Z',
-      ),
+      (
+        await repository.requestCancellation(
+          ids.taskId,
+          '2026-07-24T00:00:02.000Z',
+        )
+      )?.outcome,
     ).toBe('terminal');
     expect(
       await repository.claimQueuedById({
@@ -83,16 +89,20 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
       });
       expect(claim).not.toBeNull();
       expect(
-        await repository.requestCancellation(
-          ids.taskId,
-          '2026-07-24T00:01:01.000Z',
-        ),
+        (
+          await repository.requestCancellation(
+            ids.taskId,
+            '2026-07-24T00:01:01.000Z',
+          )
+        )?.outcome,
       ).toBe('running_requested');
       expect(
-        await repository.requestCancellation(
-          ids.taskId,
-          '2026-07-24T00:01:00.500Z',
-        ),
+        (
+          await repository.requestCancellation(
+            ids.taskId,
+            '2026-07-24T00:01:00.500Z',
+          )
+        )?.outcome,
       ).toBe('running_already_requested');
       const candidate = transitionRun(
         claim!.run,
@@ -101,9 +111,13 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
           ? {
               runtime: { provider: 'test', model: 'test' },
               result: { text: 'late' },
+              usage: { totalCostUsd: 0 },
             }
-          : { error: { code: 'runtime_execution_failed', message: 'late' } },
-        () => new Date('2026-07-24T00:01:02.000Z'),
+          : {
+              error: { code: 'runtime_execution_failed', message: 'late' },
+              usage: { totalCostUsd: 0 },
+            },
+        () => new Date('2026-07-24T00:01:00.500Z'),
       );
       const completed = await repository.completeClaimed({
         claim: claim!,
@@ -112,13 +126,21 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
       expect(completed.status).toBe('cancelled');
       expect(completed.result).toBeUndefined();
       expect(completed.error?.code).toBe('cancelled');
-      const row = await pool!.query<{ cancellation_requested_at: string }>(
-        'SELECT cancellation_requested_at FROM runs WHERE id=$1',
+      const row = await pool!.query<{
+        cancellation_requested_at: string;
+        updated_at: string;
+        usage: { totalCostUsd: number } | null;
+      }>(
+        'SELECT cancellation_requested_at,updated_at,usage FROM runs WHERE id=$1',
         [ids.runId],
       );
       expect(
         new Date(row.rows[0]!.cancellation_requested_at).toISOString(),
       ).toContain('00:01:01');
+      expect(
+        new Date(row.rows[0]!.updated_at).getTime(),
+      ).toBeGreaterThanOrEqual(new Date('2026-07-24T00:01:01.000Z').getTime());
+      expect(row.rows[0]!.usage).toEqual({ totalCostUsd: 0 });
     }
   });
 
@@ -146,10 +168,12 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
         .status,
     ).toBe('succeeded');
     expect(
-      await repository.requestCancellation(
-        ids.taskId,
-        '2026-07-24T00:03:02.000Z',
-      ),
+      (
+        await repository.requestCancellation(
+          ids.taskId,
+          '2026-07-24T00:03:02.000Z',
+        )
+      )?.outcome,
     ).toBe('terminal');
     await expect(
       repository.completeClaimed({
@@ -157,6 +181,42 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
         run: success,
       }),
     ).rejects.toThrow('stale');
+  });
+
+  it('composes CancelTask twice against PostgreSQL and cancels the runtime once', async () => {
+    const ids = await insertRun(pool!, 'queued');
+    const repository = new PostgresRunRepository(pool!);
+    const claim = await repository.claimQueuedById({
+      runId: ids.runId,
+      workerId: 'worker',
+      activationId: ids.activationId,
+      claimedAt: '2026-07-24T00:05:00.000Z',
+      leaseExpiresAt: '2026-07-24T00:06:00.000Z',
+    });
+    expect(claim).not.toBeNull();
+    let calls = 0;
+    const runtime = {
+      cancel: async () => {
+        calls += 1;
+      },
+    };
+    const cancel = new CancelTask(
+      new PostgresTaskRepository(pool!),
+      repository,
+      runtime as never,
+    );
+    const owner = {
+      tenantId: 'cancel-test',
+      workspaceId: 'workspace',
+      principalType: 'service_account' as const,
+      principalId: 'principal',
+      policySnapshotVersion: 'policy',
+    };
+    expect((await cancel.execute(ids.taskId, owner))?.runId).toBe(ids.runId);
+    expect((await cancel.execute(ids.taskId, owner))?.status).toBe(
+      'cancellation_requested',
+    );
+    expect(calls).toBe(1);
   });
 
   async function insertRun(

@@ -307,8 +307,8 @@ class InMemoryRunRepository implements RunRepository {
     return runId ? (this.#runsById.get(runId) ?? null) : null;
   }
 
-  public async requestCancellation(_taskId: string, _requestedAt: string) {
-    return 'terminal' as const;
+  public async requestCancellation(taskId: string, _requestedAt: string) {
+    return { runId: taskId, outcome: 'terminal' as const };
   }
 
   public async claimNextQueued(

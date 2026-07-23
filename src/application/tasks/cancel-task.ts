@@ -17,23 +17,24 @@ export class CancelTask {
     const task = record.task,
       run = await this.runs.findByTaskId(taskId);
     if (!run) return null;
-    const outcome = await this.runs.requestCancellation(
+    const cancellation = await this.runs.requestCancellation(
       taskId,
       new Date().toISOString(),
     );
-    if (!outcome) return null;
+    if (!cancellation) return null;
+    const { runId, outcome } = cancellation;
     if (outcome === 'running_requested') {
-      await this.runtime.cancel?.({ runId: run.id });
+      await this.runtime.cancel?.({ runId });
       return {
         taskId,
-        runId: run.id,
+        runId,
         status: 'cancellation_requested' as const,
       };
     }
     if (outcome === 'running_already_requested') {
       return {
         taskId,
-        runId: run.id,
+        runId,
         status: 'cancellation_requested' as const,
       };
     }
@@ -41,10 +42,10 @@ export class CancelTask {
       const now = new Date();
       if (!['completed', 'failed', 'cancelled'].includes(task.status))
         await this.tasks.save(transitionTask(task, 'cancelled', () => now));
-      await this.events?.append(run.id, 'cancelled', { code: 'cancelled' });
       await this.tasks.advanceSessionLane?.(taskId);
-      return { taskId, runId: run.id, status: 'cancelled' as const };
+      await this.events?.append(runId, 'cancelled', { code: 'cancelled' });
+      return { taskId, runId, status: 'cancelled' as const };
     }
-    return { taskId, runId: run.id, status: 'terminal' as const };
+    return { taskId, runId, status: 'terminal' as const };
   }
 }

@@ -7,6 +7,7 @@ import type {
   RunRepository,
   SaveRunOptions,
   CancellationOutcome,
+  CancellationRequestResult,
 } from '../../application/ports/run-repository.js';
 import { RunCompletionConflictError as RunCompletionConflict } from '../../application/ports/run-repository.js';
 import { decodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
@@ -148,8 +149,11 @@ export class PostgresRunRepository implements RunRepository {
   public async requestCancellation(
     taskId: string,
     requestedAt: string,
-  ): Promise<CancellationOutcome | null> {
-    const result = await this.database.query<{ outcome: CancellationOutcome }>(
+  ): Promise<CancellationRequestResult | null> {
+    const result = await this.database.query<{
+      run_id: string;
+      outcome: CancellationOutcome;
+    }>(
       `WITH latest AS (
         SELECT id, status, cancellation_requested FROM runs
         WHERE task_id = $1 ORDER BY attempt DESC LIMIT 1 FOR UPDATE
@@ -165,7 +169,7 @@ export class PostgresRunRepository implements RunRepository {
           AND (latest.status = 'queued' OR latest.cancellation_requested = false)
         RETURNING (SELECT status FROM latest) AS prior_status
       )
-      SELECT CASE
+      SELECT latest.id AS run_id, CASE
         WHEN latest.status = 'queued' AND changed.prior_status = 'queued' THEN 'queued_cancelled'
         WHEN latest.status = 'running' AND changed.prior_status = 'running' THEN 'running_requested'
         WHEN latest.status = 'running' THEN 'running_already_requested'
@@ -174,7 +178,8 @@ export class PostgresRunRepository implements RunRepository {
       FROM latest LEFT JOIN changed ON true`,
       [taskId, requestedAt],
     );
-    return result.rows?.[0]?.outcome ?? null;
+    const row = result.rows?.[0];
+    return row ? { runId: row.run_id, outcome: row.outcome } : null;
   }
 
   public async claimNextQueued(
@@ -245,9 +250,12 @@ export class PostgresRunRepository implements RunRepository {
           lease_expires_at = NULL,
           runtime = $3::jsonb,
           result = CASE WHEN cancellation_requested THEN NULL ELSE $4::jsonb END,
-          usage = CASE WHEN cancellation_requested THEN NULL ELSE $5::jsonb END,
+          usage = $5::jsonb,
           error = CASE WHEN cancellation_requested THEN '{"code":"cancelled","message":"The run was cancelled."}'::jsonb ELSE $6::jsonb END,
-          updated_at = $7
+          updated_at = CASE
+            WHEN cancellation_requested THEN GREATEST($7::timestamptz, cancellation_requested_at)
+            ELSE $7::timestamptz
+          END
         WHERE id = $1
           AND status = 'running'
           AND lease_owner = $8

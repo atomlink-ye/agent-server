@@ -6,7 +6,7 @@ import type {
   RunOwnerScope,
   RunRepository,
   SaveRunOptions,
-  CancellationOutcome,
+  CancellationRequestResult,
 } from '../../application/ports/run-repository.js';
 import type { Run } from '../../domain/runs/run.js';
 
@@ -51,7 +51,7 @@ export class InMemoryRunRepository implements RunRepository {
   public async requestCancellation(
     taskId: string,
     _requestedAt: string,
-  ): Promise<CancellationOutcome | null> {
+  ): Promise<CancellationRequestResult | null> {
     const runId = this.#taskRuns.get(taskId);
     const run = runId ? this.#runs.get(runId) : undefined;
     if (!run || !runId) return null;
@@ -61,13 +61,13 @@ export class InMemoryRunRepository implements RunRepository {
         status: 'cancelled',
         error: { code: 'cancelled', message: 'The run was cancelled.' },
       });
-      return 'queued_cancelled';
+      return { runId, outcome: 'queued_cancelled' };
     }
-    if (run.status !== 'running') return 'terminal';
+    if (run.status !== 'running') return { runId, outcome: 'terminal' };
     if (this.#cancellationRequested.has(runId))
-      return 'running_already_requested';
+      return { runId, outcome: 'running_already_requested' };
     this.#cancellationRequested.add(runId);
-    return 'running_requested';
+    return { runId, outcome: 'running_requested' };
   }
 
   public async claimNextQueued(
@@ -91,7 +91,7 @@ export class InMemoryRunRepository implements RunRepository {
     }
     let completed = options.run;
     if (this.#cancellationRequested.has(options.run.id)) {
-      const { result: _result, usage: _usage, ...withoutResult } = options.run;
+      const { result: _result, ...withoutResult } = options.run;
       completed = {
         ...withoutResult,
         status: 'cancelled',

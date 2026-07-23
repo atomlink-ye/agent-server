@@ -29,6 +29,7 @@ import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-di
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import type { AppConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
 
@@ -56,6 +57,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
+  const agentRegistry = new PostgresAgentRegistry(pool);
   const runtime = new PaseoRuntimeAdapter(
     {
       wsUrl: config.paseo.wsUrl,
@@ -127,6 +129,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     listMemoryProposals,
     reviewMemoryProposal,
     listMemoryEntries,
+    agentRegistry,
   });
   dispatcher.start();
 

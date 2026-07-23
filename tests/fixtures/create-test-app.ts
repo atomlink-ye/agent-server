@@ -31,6 +31,7 @@ import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgre
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
@@ -91,6 +92,7 @@ export async function createTestApp(
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
+  const agentRegistry = new PostgresAgentRegistry(database);
 
   const runRepository = new PostgresRunRepository(database);
   const taskRepository = new PostgresTaskRepository(database);
@@ -169,6 +171,7 @@ export async function createTestApp(
     listMemoryProposals,
     reviewMemoryProposal,
     listMemoryEntries,
+    agentRegistry,
   });
 }
 

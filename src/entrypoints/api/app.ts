@@ -22,6 +22,8 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
+import { registerAgentRoutes } from './routes/agents.js';
+import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -37,6 +39,7 @@ export interface AppDependencies {
   readonly listMemoryProposals: ListMemoryProposals;
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
+  readonly agentRegistry?: AgentRegistry;
   readonly version?: string;
 }
 
@@ -70,6 +73,11 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   registerWorkspaceMemoryRoutes(app, dependencies);
+  if (dependencies.agentRegistry)
+    registerAgentRoutes(app, {
+      ...dependencies,
+      agentRegistry: dependencies.agentRegistry,
+    });
 
   app.notFound((context) => {
     return context.json(

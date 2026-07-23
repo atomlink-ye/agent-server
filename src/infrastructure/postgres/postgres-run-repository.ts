@@ -152,9 +152,12 @@ export class PostgresRunRepository implements RunRepository {
         SELECT run_dispatches.id AS dispatch_id, run_dispatches.run_id
         FROM run_dispatches
         INNER JOIN runs ON runs.id = run_dispatches.run_id
+        INNER JOIN tasks ON tasks.id = runs.task_id
+        LEFT JOIN session_lanes ON session_lanes.session_id = tasks.session_id
         WHERE run_dispatches.event_type = 'run.enqueue'
           AND run_dispatches.published_at IS NULL
           AND runs.status = 'queued'
+          AND (tasks.session_id IS NULL OR session_lanes.active_task_id = tasks.id)
         ORDER BY run_dispatches.id ASC
         LIMIT 1
       `),

@@ -24,6 +24,8 @@ import { registerTaskRoutes } from './routes/tasks.js';
 import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
 import { registerAgentRoutes } from './routes/agents.js';
 import type { AgentRegistry } from '../../application/ports/agent-registry.js';
+import type { SessionRepository } from '../../application/ports/session-repository.js';
+import { registerSessionRoutes } from './routes/sessions.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -40,6 +42,7 @@ export interface AppDependencies {
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
+  readonly sessions?: SessionRepository;
   readonly version?: string;
 }
 
@@ -74,6 +77,11 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerTaskRoutes(app, dependencies);
   registerWorkspaceMemoryRoutes(app, dependencies);
   registerAgentRoutes(app, dependencies);
+  if (dependencies.sessions)
+    registerSessionRoutes(app, {
+      ...dependencies,
+      sessions: dependencies.sessions,
+    });
 
   app.notFound((context) => {
     return context.json(

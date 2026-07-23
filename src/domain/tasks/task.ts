@@ -23,6 +23,10 @@ export interface Task {
   readonly inputFingerprint: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly sessionId?: string | null;
+  readonly generation?: number | null;
+  readonly laneSequence?: number | null;
+  readonly failureDetail?: string | null;
 }
 
 export type TaskSnapshot = Task;

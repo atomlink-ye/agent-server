@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { OpenCodeModelUnavailableError } from '../../src/adapters/paseo/errors.js';
 import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
@@ -67,6 +67,35 @@ describe('PaseoRuntimeAdapter', () => {
     expect((await adapter.health()).ready).toBe(true);
   });
 
+  it('does not let a stale reconnect clear a newer initialization attempt', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleReconnect = deferred<void>();
+    const freshInitialization = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 2) await staleReconnect.promise;
+      if (call === 3) await freshInitialization.promise;
+    };
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const staleAttempt = adapter.initialize();
+    await Promise.resolve();
+    await adapter.close();
+    const freshAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(3));
+
+    staleReconnect.resolve();
+    await staleAttempt;
+    const coalescedAttempt = adapter.initialize();
+    await Promise.resolve();
+    expect(client.connectCalls).toBe(3);
+
+    freshInitialization.resolve();
+    await Promise.all([freshAttempt, coalescedAttempt]);
+    expect((await adapter.health()).ready).toBe(true);
+  });
+
   it('fails readiness when no explicitly free model exists', async () => {
     const client = new FakePaseoClient();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];
@@ -123,3 +152,11 @@ describe('PaseoRuntimeAdapter', () => {
     ).rejects.toThrow(RuntimeExecutionError);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

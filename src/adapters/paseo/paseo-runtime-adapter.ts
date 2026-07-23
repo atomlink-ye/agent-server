@@ -56,17 +56,21 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       return this.#initialization;
     }
 
-    this.#initialization = initialized
+    const attempt = initialized
       ? this.#reconnectOnce()
       : this.#initializeOnce();
+    this.#initialization = attempt;
     try {
-      await this.#initialization;
+      await attempt;
     } catch (error) {
-      this.#initialization = null;
-      this.#lastError = 'Runtime initialization failed.';
+      if (this.#initialization === attempt) {
+        this.#lastError = 'Runtime initialization failed.';
+      }
       throw error;
     } finally {
-      this.#initialization = null;
+      if (this.#initialization === attempt) {
+        this.#initialization = null;
+      }
     }
   }
 

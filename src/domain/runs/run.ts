@@ -25,6 +25,11 @@ export interface RunFailure {
   readonly message: string;
 }
 
+export const RUN_CANCELLED_ERROR: RunFailure = Object.freeze({
+  code: 'cancelled',
+  message: 'The run was cancelled.',
+});
+
 export interface Run {
   readonly id: string;
   readonly prompt: string;

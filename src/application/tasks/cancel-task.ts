@@ -3,7 +3,6 @@ import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
-import { transitionRun } from '../../domain/runs/run.js';
 import { transitionTask } from '../../domain/tasks/task.js';
 export class CancelTask {
   constructor(
@@ -18,9 +17,12 @@ export class CancelTask {
     const task = record.task,
       run = await this.runs.findByTaskId(taskId);
     if (!run) return null;
-    if (this.tasks.requestCancellation)
-      await this.tasks.requestCancellation(taskId, new Date().toISOString());
-    if (run.status === 'running') {
+    const outcome = await this.runs.requestCancellation(
+      taskId,
+      new Date().toISOString(),
+    );
+    if (!outcome) return null;
+    if (outcome === 'running_requested') {
       await this.runtime.cancel?.({ runId: run.id });
       return {
         taskId,
@@ -28,15 +30,15 @@ export class CancelTask {
         status: 'cancellation_requested' as const,
       };
     }
-    if (run.status === 'queued') {
+    if (outcome === 'running_already_requested') {
+      return {
+        taskId,
+        runId: run.id,
+        status: 'cancellation_requested' as const,
+      };
+    }
+    if (outcome === 'queued_cancelled') {
       const now = new Date();
-      const cancelled = transitionRun(
-        run,
-        'cancelled',
-        { error: { code: 'cancelled', message: 'The run was cancelled.' } },
-        () => now,
-      );
-      await this.runs.save(cancelled);
       if (!['completed', 'failed', 'cancelled'].includes(task.status))
         await this.tasks.save(transitionTask(task, 'cancelled', () => now));
       await this.events?.append(run.id, 'cancelled', { code: 'cancelled' });

@@ -126,9 +126,6 @@ export class ExecuteRun {
         throw error;
       }
       const timedOut = error instanceof RuntimeTimedOutError;
-      await this.events?.append(claim.run.id, 'failed', {
-        code: timedOut ? 'runtime_timed_out' : 'runtime_execution_failed',
-      });
       const failure: RunFailure = timedOut
         ? {
             code: 'runtime_timed_out',
@@ -294,8 +291,6 @@ export class ExecuteRun {
       },
       this.now,
     );
-    await this.events?.append(claim.run.id, 'output', { text: execution.text });
-
     return succeeded;
   }
 

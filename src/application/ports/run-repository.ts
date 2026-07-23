@@ -31,6 +31,12 @@ export interface CompleteClaimedRunOptions {
   readonly run: Run;
 }
 
+export type CancellationOutcome =
+  | 'queued_cancelled'
+  | 'running_requested'
+  | 'running_already_requested'
+  | 'terminal';
+
 export interface RunOwnerScope {
   readonly tenantId: string;
   readonly workspaceId: string;
@@ -43,6 +49,10 @@ export interface RunRepository {
   findById(id: string): Promise<Run | null>;
   findByIdForOwner(id: string, ownerScope: RunOwnerScope): Promise<Run | null>;
   findByTaskId(taskId: string): Promise<Run | null>;
+  requestCancellation(
+    taskId: string,
+    requestedAt: string,
+  ): Promise<CancellationOutcome | null>;
   claimNextQueued(
     options: ClaimNextQueuedRunOptions,
   ): Promise<ClaimedRun | null>;

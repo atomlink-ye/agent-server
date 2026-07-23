@@ -26,6 +26,15 @@ export class CompleteRun {
     }
 
     const completedRun = await this.repository.completeClaimed(input);
+    if (
+      this.events &&
+      completedRun.status === 'succeeded' &&
+      completedRun.result
+    ) {
+      await this.events.append(input.claim.run.id, 'output', {
+        text: completedRun.result.text,
+      });
+    }
     if (this.events) {
       await this.events.append(
         input.claim.run.id,
@@ -45,7 +54,11 @@ export class CompleteRun {
 
     if (!terminalTaskStatuses.has(task.status)) {
       const terminalStatus =
-        completedRun.status === 'succeeded' ? 'completed' : 'failed';
+        completedRun.status === 'succeeded'
+          ? 'completed'
+          : completedRun.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed';
       const timestamp = new Date(completedRun.updatedAt);
       const activeTask =
         task.status === 'queued'

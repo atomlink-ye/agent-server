@@ -6,12 +6,14 @@ import type {
   RunOwnerScope,
   RunRepository,
   SaveRunOptions,
+  CancellationOutcome,
 } from '../../application/ports/run-repository.js';
 import type { Run } from '../../domain/runs/run.js';
 
 export class InMemoryRunRepository implements RunRepository {
   readonly #runs = new Map<string, Run>();
   readonly #taskRuns = new Map<string, string>();
+  readonly #cancellationRequested = new Set<string>();
 
   public async save(run: Run, options: SaveRunOptions = {}): Promise<void> {
     const existingTaskRunId = [...this.#taskRuns.entries()].find(
@@ -46,6 +48,28 @@ export class InMemoryRunRepository implements RunRepository {
     return runId ? this.findById(runId) : null;
   }
 
+  public async requestCancellation(
+    taskId: string,
+    _requestedAt: string,
+  ): Promise<CancellationOutcome | null> {
+    const runId = this.#taskRuns.get(taskId);
+    const run = runId ? this.#runs.get(runId) : undefined;
+    if (!run || !runId) return null;
+    if (run.status === 'queued') {
+      this.#runs.set(runId, {
+        ...run,
+        status: 'cancelled',
+        error: { code: 'cancelled', message: 'The run was cancelled.' },
+      });
+      return 'queued_cancelled';
+    }
+    if (run.status !== 'running') return 'terminal';
+    if (this.#cancellationRequested.has(runId))
+      return 'running_already_requested';
+    this.#cancellationRequested.add(runId);
+    return 'running_requested';
+  }
+
   public async claimNextQueued(
     _options: ClaimNextQueuedRunOptions,
   ): Promise<ClaimedRun | null> {
@@ -59,10 +83,22 @@ export class InMemoryRunRepository implements RunRepository {
   }
 
   public async completeClaimed(
-    _options: CompleteClaimedRunOptions,
+    options: CompleteClaimedRunOptions,
   ): Promise<Run> {
-    throw new Error(
-      'InMemoryRunRepository does not implement durable completion',
-    );
+    const current = this.#runs.get(options.run.id);
+    if (!current || current.status !== 'running') {
+      throw new Error('InMemoryRunRepository completion conflict');
+    }
+    let completed = options.run;
+    if (this.#cancellationRequested.has(options.run.id)) {
+      const { result: _result, usage: _usage, ...withoutResult } = options.run;
+      completed = {
+        ...withoutResult,
+        status: 'cancelled',
+        error: { code: 'cancelled', message: 'The run was cancelled.' },
+      };
+    }
+    this.#runs.set(options.run.id, completed);
+    return structuredClone(completed);
   }
 }

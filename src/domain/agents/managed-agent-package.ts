@@ -7,7 +7,7 @@ export const MAX_AST_DEPTH = 24;
 export const MAX_COLLECTION_SIZE = 64;
 export const MAX_SCALAR_LENGTH = 16 * 1024;
 export const MAX_SCHEMA_DEPTH = 8;
-export const BUILT_IN_MODEL_POLICY_REFS = ['free-only'] as const;
+export const BUILT_IN_MODEL_POLICY_REFS = Object.freeze(['free-only'] as const);
 export type ModelPolicyRef = string;
 
 export interface ManagedAgentPackage {

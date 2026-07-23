@@ -139,6 +139,19 @@ describe('managed agent package', () => {
     expect(() => parseManagedAgentPackage(yaml('  model: gpt-5'))).toThrow();
   });
 
+  it('cannot widen the built-in model policy allowlist through runtime mutation', () => {
+    const attemptedMutation = BUILT_IN_MODEL_POLICY_REFS as unknown as string[];
+    try {
+      attemptedMutation.push('gpt-5');
+      attemptedMutation[0] = 'gpt-5';
+    } catch {
+      // Frozen exports reject mutation in strict mode.
+    }
+    expect(() =>
+      parseManagedAgentPackage(yaml().replace('free-only', 'gpt-5')),
+    ).toThrow();
+  });
+
   it('does not expose unknown or duplicate attacker-controlled keys or values', () => {
     const unknownKey = 'passwordToken';
     const unknownValue = 'unknown-secret-value';

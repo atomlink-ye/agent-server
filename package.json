@@ -21,7 +21,7 @@
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:real-pg": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts tests/integration/real-pg-pool.integration.test.ts",
+    "test:real-pg": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts tests/integration/real-pg-pool.integration.test.ts tests/integration/agent-registry-postgres.integration.test.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",

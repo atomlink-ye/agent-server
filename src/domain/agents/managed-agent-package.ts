@@ -328,6 +328,16 @@ function canonical(value: unknown): string {
       .join(',')}}`;
   return JSON.stringify(value);
 }
+/** Stable JSON used when a managed package is rehydrated from JSONB. */
+export function canonicalizeManagedAgentJson(value: unknown): string {
+  return canonical(value);
+}
+
+export function rehydrateManagedAgentPackage(
+  value: ManagedAgentPackage,
+): ManagedAgentPackage {
+  return freeze(value);
+}
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.freeze(value);

@@ -1,11 +1,62 @@
 import { PGlite } from '@electric-sql/pglite';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
-import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import { createManagedAgentDefinition } from '../../src/domain/agents/managed-agent-definition.js';
+import { createManagedAgentDraft } from '../../src/domain/agents/managed-agent-version.js';
+import { parseManagedAgentPackage } from '../../src/domain/agents/managed-agent-package.js';
+import {
+  applyDurableKernelMigrations,
+  createPostgresPool,
+} from '../../src/infrastructure/postgres/postgres.js';
+import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 
 const definitionId = '00000000-0000-4000-8000-0000000b0001';
 const versionId = '00000000-0000-4000-8000-0000000b0101';
 const now = '2026-07-23T10:00:00.000Z';
+const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+if (process.env.REAL_POSTGRES_REQUIRED === '1' && !connectionString) {
+  throw new Error(
+    'REAL_POSTGRES_REQUIRED=1 requires DATABASE_URL or POSTGRES_URL for the real PostgreSQL integration lane',
+  );
+}
+const owner = {
+  tenantId: 'tenant_registry',
+  principalType: 'service_account',
+  principalId: 'principal_registry',
+};
+const source = `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: Registry Agent
+spec:
+  description: description
+  instructions: instructions
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools: []
+  skills: []
+  input:
+    schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    prompt: hello
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 1
+  permissions:
+    network: none
+    filesystem: none
+  completion:
+    type: executable
+    command: done
+`;
 
 async function database(): Promise<PGlite> {
   const db = new PGlite();
@@ -541,3 +592,118 @@ describe('managed agent registry migration', () => {
     ]);
   });
 });
+
+describe('PostgresAgentRegistry repository contract (PGlite)', () => {
+  it('atomically imports, replays, conflicts, hides owners, and traverses a cursor', async () => {
+    const db = await database();
+    const registry = new PostgresAgentRegistry(db);
+    const parsed = parseManagedAgentPackage(source);
+    const definition = createManagedAgentDefinition({
+      ...owner,
+      normalizedName: 'registry-agent',
+      displayName: 'Registry Agent',
+      id: '00000000-0000-4000-8000-0000000c0001',
+      now: () => new Date(now),
+    });
+    const version = createManagedAgentDraft({
+      definition,
+      parsed,
+      id: '00000000-0000-4000-8000-0000000c0101',
+      now: () => new Date(now),
+    });
+    const command = {
+      owner,
+      compatibilityWorkspaceId: 'workspace-first',
+      idempotencyKey: 'import-1',
+      requestFingerprint: 'fp-1',
+      normalizedName: 'registry-agent',
+      definition,
+      version,
+    };
+    const created = await registry.importAgent(command);
+    expect(created.kind).toBe('created');
+    expect(Object.isFrozen(created.version.package)).toBe(true);
+    expect(
+      await registry.findDefinition(
+        { ...owner, tenantId: 'other' },
+        definition.id,
+      ),
+    ).toBeNull();
+    expect((await registry.importAgent(command)).kind).toBe('replayed');
+    await expect(
+      registry.importAgent({ ...command, requestFingerprint: 'fp-2' }),
+    ).rejects.toThrow('idempotency');
+    const page = await registry.listVersionsForOwner(owner, {
+      definitionId: definition.id,
+      cursor: null,
+      limit: 1,
+    });
+    expect(page?.items).toHaveLength(1);
+    expect(page?.nextCursor).toBeNull();
+  });
+});
+
+const describeRealPostgres = connectionString ? describe : describe.skip;
+describeRealPostgres(
+  'PostgresAgentRegistry repository contract (real PostgreSQL)',
+  () => {
+    const pool = connectionString
+      ? createPostgresPool({ connectionString, maxConnections: 8 })
+      : null;
+
+    afterAll(async () => {
+      await pool?.end();
+    });
+
+    it('uses separate pg.Pool clients for same-key replay and conflict', async () => {
+      if (!pool) return;
+      await applyDurableKernelMigrations(pool);
+      await pool.query(
+        `DELETE FROM agent_registry_idempotency WHERE tenant_id='real_registry_contract'`,
+      );
+      await pool.query(
+        `DELETE FROM agent_versions WHERE tenant_id='real_registry_contract'`,
+      );
+      await pool.query(
+        `DELETE FROM agent_definitions WHERE tenant_id='real_registry_contract'`,
+      );
+      const realOwner = {
+        tenantId: 'real_registry_contract',
+        principalType: 'service_account',
+        principalId: 'principal',
+      };
+      const parsed = parseManagedAgentPackage(source);
+      const definition = createManagedAgentDefinition({
+        ...realOwner,
+        normalizedName: 'registry-agent',
+        displayName: 'Registry Agent',
+        id: '00000000-0000-4000-8000-0000000d0001',
+        now: () => new Date(now),
+      });
+      const version = createManagedAgentDraft({
+        definition,
+        parsed,
+        id: '00000000-0000-4000-8000-0000000d0101',
+        now: () => new Date(now),
+      });
+      const command = {
+        owner: realOwner,
+        compatibilityWorkspaceId: 'real-workspace',
+        idempotencyKey: 'same-key',
+        requestFingerprint: 'real-fp',
+        normalizedName: 'registry-agent',
+        definition,
+        version,
+      };
+      const a = new PostgresAgentRegistry(pool);
+      const [first, replay] = await Promise.all([
+        a.importAgent(command),
+        a.importAgent(command),
+      ]);
+      expect([first.kind, replay.kind].sort()).toEqual(['created', 'replayed']);
+      await expect(
+        a.importAgent({ ...command, requestFingerprint: 'different-fp' }),
+      ).rejects.toThrow('idempotency');
+    });
+  },
+);

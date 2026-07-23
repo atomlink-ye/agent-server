@@ -26,6 +26,13 @@ export class InvalidAgentListLimitError extends Error {
     this.name = 'InvalidAgentListLimitError';
   }
 }
+export class InvalidAgentListCursorError extends Error {
+  readonly code = 'invalid_cursor';
+  constructor() {
+    super('The requested list cursor is invalid.');
+    this.name = 'InvalidAgentListCursorError';
+  }
+}
 export class AgentPackageValidationError extends Error {
   readonly code = 'invalid_agent_package';
   constructor() {

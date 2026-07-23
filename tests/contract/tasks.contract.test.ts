@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import {
+  AgentVersionResponseSchema,
+  ImportAgentResponseSchema,
+} from '../../src/contracts/agents.js';
+import {
   GetTaskResponseSchema,
   GetTaskTreeResponseSchema,
   InvokeTaskResponseSchema,
@@ -19,6 +23,40 @@ const authenticatedJsonHeaders = {
   authorization: `Bearer ${primaryServiceAccountToken}`,
   'content-type': 'application/json',
 };
+
+const managedTaskSource = `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: Task Admission Agent
+spec:
+  description: task admission journey
+  instructions: Follow the managed task instructions.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools: []
+  skills: []
+  input:
+    schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    prompt: task input
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 1
+  permissions:
+    network: none
+    filesystem: none
+  completion:
+    type: executable
+    command: done
+`;
 
 describe('task HTTP contracts', () => {
   it.each([
@@ -235,6 +273,110 @@ describe('task HTTP contracts', () => {
     expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
       'invokable_not_found',
     );
+  });
+
+  it('admits the same explicit managed version only after it is published', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const imported = await app.request('/api/v1/agents:import', {
+      method: 'POST',
+      headers: {
+        ...authenticatedJsonHeaders,
+        'idempotency-key': 'managed-task-import',
+      },
+      body: JSON.stringify({ source: managedTaskSource }),
+    });
+    expect(imported.status).toBe(201);
+    const importedBody = ImportAgentResponseSchema.parse(await imported.json());
+    const versionId = importedBody.version.id;
+    const input = { text: 'managed task input' };
+
+    const draftInvoke = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: {
+        ...authenticatedJsonHeaders,
+        'idempotency-key': 'managed-task-draft',
+      },
+      body: JSON.stringify({
+        invokable: { kind: 'agent', version_id: versionId },
+        input,
+      }),
+    });
+    expect(draftInvoke.status).toBe(404);
+    expect(ErrorResponseSchema.parse(await draftInvoke.json()).error.code).toBe(
+      'invokable_not_found',
+    );
+
+    const published = await app.request(
+      `/api/v1/agent-versions/${versionId}:publish`,
+      {
+        method: 'POST',
+        headers: {
+          ...authenticatedJsonHeaders,
+          'idempotency-key': 'managed-task-publish',
+        },
+        body: '{}',
+      },
+    );
+    expect(published.status).toBe(200);
+    expect(
+      AgentVersionResponseSchema.parse(await published.json()).status,
+    ).toBe('published');
+
+    const accepted = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: {
+        ...authenticatedJsonHeaders,
+        // Reusing the draft attempt's key proves the rejected request wrote no admission.
+        'idempotency-key': 'managed-task-draft',
+      },
+      body: JSON.stringify({
+        invokable: { kind: 'agent', version_id: versionId },
+        input,
+      }),
+    });
+    expect(accepted.status).toBe(202);
+    const acceptedBody = InvokeTaskResponseSchema.parse(await accepted.json());
+    const task = await app.request(acceptedBody.links.self, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect(task.status).toBe(200);
+    expect(GetTaskResponseSchema.parse(await task.json()).invokable).toEqual({
+      kind: 'agent',
+      version_id: versionId,
+    });
+
+    const secondary = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secondaryServiceAccountToken}`,
+        'content-type': 'application/json',
+        'idempotency-key': 'managed-task-secondary',
+      },
+      body: JSON.stringify({
+        invokable: { kind: 'agent', version_id: versionId },
+        input,
+      }),
+    });
+    expect(secondary.status).toBe(404);
+    expect(ErrorResponseSchema.parse(await secondary.json()).error.code).toBe(
+      'invokable_not_found',
+    );
+
+    const primaryAfterSecondary = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: {
+        ...authenticatedJsonHeaders,
+        // A secondary rejection must not consume an admission key or create a task.
+        'idempotency-key': 'managed-task-secondary',
+      },
+      body: JSON.stringify({
+        invokable: { kind: 'agent', version_id: versionId },
+        input: { text: 'primary after secondary' },
+      }),
+    });
+    expect(primaryAfterSecondary.status).toBe(202);
   });
 
   it('returns the canonical task resource and task tree for the authenticated owner', async () => {

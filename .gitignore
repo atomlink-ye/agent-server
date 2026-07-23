@@ -9,5 +9,6 @@ coverage/
 *.log
 pnpm-debug.log*
 .DS_Store
+.slim/deepwork/
 docs/generated/*
 !docs/generated/README.md

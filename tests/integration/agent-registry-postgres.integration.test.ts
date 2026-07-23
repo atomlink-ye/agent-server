@@ -66,6 +66,26 @@ async function database(): Promise<PGlite> {
   return db;
 }
 
+async function downgrade0005DefinitionHardening(db: PGlite): Promise<void> {
+  await db.query(
+    `DELETE FROM durable_kernel_schema_migrations
+     WHERE version = '0005b_managed_agent_registry_hardening'`,
+  );
+  await db.query(
+    'DROP TRIGGER agent_definitions_managed_immutable_before_update ON agent_definitions',
+  );
+  await db.query(
+    'ALTER TABLE agent_definitions DROP CONSTRAINT agent_definitions_managed_shape_check',
+  );
+  await db.query(`
+    ALTER TABLE agent_definitions
+      ADD CONSTRAINT agent_definitions_managed_shape_check CHECK ((
+        (managed_discriminator IS NULL AND normalized_name IS NULL)
+        OR (managed_discriminator = 'managed_agent_v1' AND normalized_name IS NOT NULL AND length(btrim(normalized_name)) > 0)
+      ) IS TRUE)
+  `);
+}
+
 async function insertManagedDefinition(
   db: PGlite,
   id: string = definitionId,
@@ -196,6 +216,70 @@ describe('managed agent registry migration', () => {
       '0003_sequential_team_mvp',
       '0004_workspace_memory_proposal_mvp',
       '0005_managed_agent_registry_b',
+      '0005b_managed_agent_registry_hardening',
+    ]);
+  });
+
+  it('applies 0005b to an already-recorded 0005 schema with the old definition hardening', async () => {
+    const db = await database();
+    await downgrade0005DefinitionHardening(db);
+    await expect(applyDurableKernelMigrations(db)).resolves.toBeUndefined();
+    const trigger = await db.query(
+      `SELECT tgname FROM pg_trigger
+       WHERE tgname = 'agent_definitions_managed_immutable_before_update'`,
+    );
+    const constraint = await db.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
+       WHERE conname = 'agent_definitions_managed_shape_check'`,
+    );
+    expect(trigger.rows).toEqual([
+      { tgname: 'agent_definitions_managed_immutable_before_update' },
+    ]);
+    expect(constraint.rows[0]?.definition).toContain(
+      'octet_length(normalized_name) <= 255',
+    );
+  });
+
+  it('fails safely and rolls back 0005b when an existing managed name is too long', async () => {
+    const db = await database();
+    await downgrade0005DefinitionHardening(db);
+    const longName = 'é'.repeat(128);
+    await insertManagedDefinition(
+      db,
+      '00000000-0000-4000-8000-0000000b00f1',
+      'workspace_one',
+      longName,
+    );
+    await expect(applyDurableKernelMigrations(db)).rejects.toThrow(
+      /managed agent definition data is invalid/i,
+    );
+    const migration = await db.query(
+      `SELECT version FROM durable_kernel_schema_migrations
+       WHERE version = '0005b_managed_agent_registry_hardening'`,
+    );
+    expect(migration.rows).toEqual([]);
+    const constraint = await db.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
+       WHERE conname = 'agent_definitions_managed_shape_check'`,
+    );
+    expect(constraint.rows[0]?.definition).not.toContain(
+      'octet_length(normalized_name) <= 255',
+    );
+  });
+
+  it('recovers 0005b when only its migration registry row is missing', async () => {
+    const db = await database();
+    await db.query(
+      `DELETE FROM durable_kernel_schema_migrations
+       WHERE version = '0005b_managed_agent_registry_hardening'`,
+    );
+    await expect(applyDurableKernelMigrations(db)).resolves.toBeUndefined();
+    const rows = await db.query(
+      `SELECT version FROM durable_kernel_schema_migrations
+       WHERE version = '0005b_managed_agent_registry_hardening'`,
+    );
+    expect(rows.rows).toEqual([
+      { version: '0005b_managed_agent_registry_hardening' },
     ]);
   });
 

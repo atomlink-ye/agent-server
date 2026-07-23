@@ -27,6 +27,7 @@ const durableKernelMigrationFileNames = [
   '0003_sequential_team_mvp.sql',
   '0004_workspace_memory_proposal_mvp.sql',
   '0005_managed_agent_registry_b.sql',
+  '0005b_managed_agent_registry_hardening.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 
@@ -123,10 +124,19 @@ export async function applyDurableKernelMigrations(
 
     const sql = await readDurableKernelMigration(filePath);
 
-    if (executor.exec) {
-      await executor.exec(sql);
-    } else {
-      await executor.query(sql);
+    try {
+      if (executor.exec) {
+        await executor.exec(sql);
+      } else {
+        await executor.query(sql);
+      }
+    } catch (error) {
+      try {
+        await executor.query('ROLLBACK');
+      } catch {
+        // Preserve the migration error when the executor has already rolled back.
+      }
+      throw error;
     }
 
     await executor.query(

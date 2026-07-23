@@ -34,6 +34,11 @@ spec:
   permissions: { network: none, filesystem: none }
   completion: { type: executable, command: done }
 `;
+const canaryMessage =
+  'Run the canary and classify every candidate from this exact invocation.';
+const acceptedCanary = '所有报告都必须区分事实、推断和建议。';
+const rejectedCanary = 'REJECTED_CANARY_MARKER_9D2E';
+const lateCanary = 'LATE_AFTER_CANARY_SNAPSHOT_4B71';
 
 describe('managed single-agent memory recall', () => {
   let server: ServerType;
@@ -45,11 +50,14 @@ describe('managed single-agent memory recall', () => {
     runtime = new FakeAgentRuntime({
       responseText: 'FRESH_SESSION_OK',
       delayMs: 500,
-      memoryCandidates: [
+      canaryPrompt: canaryMessage,
+      canaryResponseText: 'CANARY_FINAL_ANSWER_2026',
+      canaryMemoryCandidates: [
         {
-          content: 'CANARY_CONSTRAINT_UNIQUE_7F31',
+          content: acceptedCanary,
           category: 'project_constraint',
         },
+        { content: rejectedCanary, category: 'project_constraint' },
       ],
     });
     const app = await createTestApp(runtime, {
@@ -356,7 +364,7 @@ describe('managed single-agent memory recall', () => {
         method: 'POST',
         headers: { ...jsonAuth, 'idempotency-key': 'socket-canary-message' },
         body: JSON.stringify({
-          text: 'Research competitors under CANARY_CONSTRAINT_UNIQUE_7F31.',
+          text: canaryMessage,
         }),
       },
     );
@@ -366,6 +374,28 @@ describe('managed single-agent memory recall', () => {
       run_id: string;
     };
     await waitForSocketRun(messageBody.run_id, 'succeeded');
+    const canaryMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as {
+      messages: Array<{
+        role: string;
+        text: string;
+        taskId?: string;
+        runId?: string;
+      }>;
+    };
+    expect(canaryMessages.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          text: 'CANARY_FINAL_ANSWER_2026',
+          taskId: messageBody.task_id,
+          runId: messageBody.run_id,
+        }),
+      ]),
+    );
     const proposals = (await (
       await fetch(`${baseUrl}/api/v1/workspace-memory/proposals`, {
         headers: auth,
@@ -382,12 +412,29 @@ describe('managed single-agent memory recall', () => {
         source_candidate_index: number | null;
       }>;
     };
-    const candidate = proposals.proposals.find(
-      (proposal) => proposal.content === 'CANARY_CONSTRAINT_UNIQUE_7F31',
+    const canaryProposals = proposals.proposals.filter(
+      (proposal) => proposal.source_run_id === messageBody.run_id,
+    );
+    expect(canaryProposals).toHaveLength(2);
+    expect(
+      [...canaryProposals]
+        .sort(
+          (left, right) =>
+            (left.source_candidate_index ?? -1) -
+            (right.source_candidate_index ?? -1),
+        )
+        .map((proposal) => proposal.content),
+    ).toEqual([acceptedCanary, rejectedCanary]);
+    const candidate = canaryProposals.find(
+      (proposal) => proposal.content === acceptedCanary,
+    );
+    const rejectedCandidate = canaryProposals.find(
+      (proposal) => proposal.content === rejectedCanary,
     );
     expect(candidate).toBeDefined();
-    if (!candidate)
-      throw new Error('runtime candidate proposal was not persisted');
+    expect(rejectedCandidate).toBeDefined();
+    if (!candidate || !rejectedCandidate)
+      throw new Error('runtime canary proposals were not persisted');
     expect(candidate).toMatchObject({
       source_task_id: messageBody.task_id,
       source_session_id: sessionId,
@@ -395,6 +442,15 @@ describe('managed single-agent memory recall', () => {
       source_run_id: messageBody.run_id,
       source_agent_version_id: importedBody.version.id,
       source_candidate_index: 0,
+      status: 'pending',
+    });
+    expect(rejectedCandidate).toMatchObject({
+      source_task_id: messageBody.task_id,
+      source_session_id: sessionId,
+      source_message_id: candidate.source_message_id,
+      source_run_id: messageBody.run_id,
+      source_agent_version_id: importedBody.version.id,
+      source_candidate_index: 1,
       status: 'pending',
     });
     const sourceTask = (await (
@@ -470,30 +526,106 @@ describe('managed single-agent memory recall', () => {
     );
     expect(terminalCursor.status).toBe(200);
     expect(await terminalCursor.text()).toBe('');
-    expect(
-      (await (
-        await fetch(
-          `${baseUrl}/api/v1/workspace-memory/proposals/${candidate!.proposal_id}/review`,
-          {
-            method: 'POST',
-            headers: jsonAuth,
-            body: JSON.stringify({ action: 'accept' }),
-          },
-        )
-      ).json()) as object,
-    ).toBeTruthy();
+    const acceptedReview = await fetch(
+      `${baseUrl}/api/v1/workspace-memory/proposals/${candidate.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: jsonAuth,
+        body: JSON.stringify({ action: 'accept' }),
+      },
+    );
+    expect(acceptedReview.status).toBe(200);
+    const rejectedReview = await fetch(
+      `${baseUrl}/api/v1/workspace-memory/proposals/${rejectedCandidate.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: jsonAuth,
+        body: JSON.stringify({ action: 'reject' }),
+      },
+    );
+    expect(rejectedReview.status).toBe(200);
     const snapshots = (await (
       await fetch(
         `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/snapshots`,
         { headers: auth },
       )
     ).json()) as {
-      snapshots: Array<{ projectionStatus: string; workspaceId: string }>;
+      snapshots: Array<{
+        snapshotId: string;
+        contentHash: string;
+        projectionStatus: string;
+        workspaceId: string;
+      }>;
     };
-    expect(snapshots.snapshots[0]).toMatchObject({
+    const readySnapshot = snapshots.snapshots.find(
+      (snapshot) => snapshot.projectionStatus === 'ready',
+    );
+    expect(readySnapshot).toBeDefined();
+    if (!readySnapshot) throw new Error('canary snapshot was not ready');
+    expect(readySnapshot).toMatchObject({
       projectionStatus: 'ready',
       workspaceId,
     });
+    expect(readySnapshot.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    const entries = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/entries`,
+        { headers: auth },
+      )
+    ).json()) as {
+      entries: Array<{
+        content: string;
+        sourceTaskId: string | null;
+        sourceSessionId: string | null;
+        sourceMessageId: string | null;
+        sourceRunId: string | null;
+        sourceAgentVersionId: string | null;
+        sourceCandidateIndex: number | null;
+      }>;
+    };
+    const acceptedEntry = entries.entries.find(
+      (entry) => entry.content === acceptedCanary,
+    );
+    expect(acceptedEntry).toMatchObject({
+      sourceTaskId: messageBody.task_id,
+      sourceSessionId: sessionId,
+      sourceMessageId: candidate.source_message_id,
+      sourceRunId: messageBody.run_id,
+      sourceAgentVersionId: importedBody.version.id,
+      sourceCandidateIndex: 0,
+    });
+    expect(entries.entries.map((entry) => entry.content)).not.toContain(
+      rejectedCanary,
+    );
+    expect(entries.entries.map((entry) => entry.content)).not.toContain(
+      lateCanary,
+    );
+    const lateProposal = await fetch(
+      `${baseUrl}/api/v1/workspace-memory/proposals`,
+      {
+        method: 'POST',
+        headers: jsonAuth,
+        body: JSON.stringify({ content: lateCanary, category: 'fact' }),
+      },
+    );
+    expect(lateProposal.status).toBe(201);
+    const entriesAfterLate = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/entries`,
+        {
+          headers: auth,
+        },
+      )
+    ).json()) as { entries: Array<{ content: string }> };
+    expect(entriesAfterLate.entries.map((entry) => entry.content)).toContain(
+      acceptedCanary,
+    );
+    expect(
+      entriesAfterLate.entries.map((entry) => entry.content),
+    ).not.toContain(rejectedCanary);
+    expect(
+      entriesAfterLate.entries.map((entry) => entry.content),
+    ).not.toContain(lateCanary);
     const second = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -514,11 +646,29 @@ describe('managed single-agent memory recall', () => {
     );
     const recallBody = (await recall.json()) as { run_id: string };
     await waitForSocketRun(recallBody.run_id, 'succeeded');
+    const recallPrompt = runtime.prompts.at(-1) ?? '';
+    expect(recallPrompt).toContain(acceptedCanary);
+    expect(recallPrompt).not.toContain(rejectedCanary);
+    expect(recallPrompt).not.toContain(lateCanary);
+    expect(recallPrompt).not.toContain(canaryMessage);
+    const secondMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${secondId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as { messages: Array<{ role: string; text: string }> };
+    expect(secondMessages.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          text: 'FRESH_SESSION_OK',
+        }),
+      ]),
+    );
     expect(
-      runtime.prompts.some((prompt) =>
-        prompt.includes('CANARY_CONSTRAINT_UNIQUE_7F31'),
-      ),
-    ).toBe(true);
+      secondMessages.messages
+        .filter((item) => item.role === 'user')
+        .map((item) => item.text),
+    ).toEqual(['What is the exact constraint?']);
     const secondWorkspace = await fetch(`${baseUrl}/api/v1/workspaces`, {
       method: 'POST',
       headers: jsonAuth,
@@ -601,7 +751,9 @@ describe('managed single-agent memory recall', () => {
     const a = await postSocketMessage(sessionId, 'A', 'queue-a');
     const b = await postSocketMessage(sessionId, 'B', 'queue-b');
     const c = await postSocketMessage(sessionId, 'C', 'queue-c');
+    expect([a.sequence, b.sequence, c.sequence]).toEqual([1, 2, 3]);
     await waitForTaskStatus(a.task_id, 'active');
+    expect(runtime.activeRunIds.has(a.run_id)).toBe(true);
     expect(await taskStatus(b.task_id)).toBe('queued');
     expect(await taskStatus(c.task_id)).toBe('queued');
     const cancellation = await fetch(
@@ -615,26 +767,43 @@ describe('managed single-agent memory recall', () => {
       status: 'cancellation_requested',
     });
     expect(runtime.cancelledRunIds).toContain(a.run_id);
-    // The fake runtime records cancellation but does not expose provider-side
-    // interruption, so this test only asserts durable convergence to a
-    // terminal task and does not claim runtime cancellation.
-    await waitForTask(a.task_id, 'completed');
+    await waitForTask(a.task_id, 'cancelled');
+    await waitForSocketRun(a.run_id, 'cancelled');
+    expect(await taskStatus(a.task_id)).toBe('cancelled');
+    expect(runtime.activeRunIds.has(a.run_id)).toBe(false);
+    expect(await runEventTypes(a.run_id)).toEqual(['started', 'cancelled']);
     await waitForTask(b.task_id, 'completed');
     await waitForTask(c.task_id, 'completed');
+    expect(await taskStatus(b.task_id)).toBe('completed');
+    expect(await taskStatus(c.task_id)).toBe('completed');
+    await waitForSocketRun(b.run_id, 'succeeded');
+    await waitForSocketRun(c.run_id, 'succeeded');
+    expect(await runEventTypes(b.run_id)).toEqual([
+      'started',
+      'output',
+      'succeeded',
+    ]);
+    expect(await runEventTypes(c.run_id)).toEqual([
+      'started',
+      'output',
+      'succeeded',
+    ]);
+    const queueMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as {
+      messages: Array<{ role: string; text: string; taskId?: string }>;
+    };
     expect(
-      runtime.prompts.findIndex((prompt) =>
-        prompt.includes('Current Task input:\nB'),
-      ),
-    ).toBeLessThan(
-      runtime.prompts.findIndex((prompt) =>
-        prompt.includes('Current Task input:\nC'),
-      ),
-    );
+      queueMessages.messages.filter((message) => message.role === 'assistant'),
+    ).toHaveLength(2);
     const reset = await fetch(`${baseUrl}/api/v1/sessions/${sessionId}:reset`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-reset' },
     });
     expect(reset.status).toBe(200);
+    expect(((await reset.json()) as { generation: number }).generation).toBe(1);
     const newMessage = await postSocketMessage(
       sessionId,
       'new generation',
@@ -643,14 +812,68 @@ describe('managed single-agent memory recall', () => {
     await waitForTask(newMessage.task_id, 'completed');
     expect(newMessage.task_id).not.toBe(a.task_id);
     expect(newMessage.run_id).not.toBe(a.run_id);
+    const resetMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as { messages: Array<{ role: string; text: string }> };
     expect(
-      await (
-        await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
-          headers: auth,
-        })
-      ).text(),
-    ).toContain('assistant');
+      resetMessages.messages.filter((item) => item.role === 'assistant'),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          text: 'FRESH_SESSION_OK',
+        }),
+      ]),
+    );
     expect(b.run_id).not.toBe(c.run_id);
+
+    await dispatcherControl.dispatcher?.stop();
+    const paused = await postSocketMessage(sessionId, 'paused', 'queue-paused');
+    expect(await taskStatus(paused.task_id)).toBe('queued');
+    expect(await runEventTypes(paused.run_id)).toEqual([]);
+    const pausedBeforeRestart = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as {
+      messages: Array<{
+        role: string;
+        text: string;
+        taskId?: string;
+        runId?: string;
+      }>;
+    };
+    expect(pausedBeforeRestart.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          text: 'paused',
+          taskId: paused.task_id,
+          runId: paused.run_id,
+        }),
+      ]),
+    );
+    dispatcherControl.dispatcher?.start();
+    await waitForTask(paused.task_id, 'completed');
+    await waitForSocketRun(paused.run_id, 'succeeded');
+    expect(runtime.executeCalls - executeCallsBeforeRecovery).toBe(6);
+    expect(await runEventTypes(paused.run_id)).toEqual([
+      'started',
+      'output',
+      'succeeded',
+    ]);
+    const pausedMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as { messages: Array<{ role: string; text: string }> };
+    expect(
+      pausedMessages.messages.filter(
+        (item) => item.role === 'assistant' && item.text === 'FRESH_SESSION_OK',
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -711,11 +934,22 @@ async function taskStatus(taskId: string): Promise<string> {
   return ((await response.json()) as { status: string }).status;
 }
 
+async function runEventTypes(runId: string): Promise<string[]> {
+  const response = await fetch(
+    `${socketBaseUrl}/api/v1/runs/${runId}/events?after=0`,
+    { headers: auth },
+  );
+  expect(response.status).toBe(200);
+  return (
+    (await response.json()) as { events: Array<{ type: string }> }
+  ).events.map((event) => event.type);
+}
+
 async function postSocketMessage(
   sessionId: string,
   text: string,
   key: string,
-): Promise<{ task_id: string; run_id: string }> {
+): Promise<{ task_id: string; run_id: string; sequence: number }> {
   const response = await fetch(
     `${socketBaseUrl}/api/v1/sessions/${sessionId}/messages`,
     {
@@ -725,5 +959,9 @@ async function postSocketMessage(
     },
   );
   expect(response.status).toBe(202);
-  return (await response.json()) as { task_id: string; run_id: string };
+  return (await response.json()) as {
+    task_id: string;
+    run_id: string;
+    sequence: number;
+  };
 }

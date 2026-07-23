@@ -14,6 +14,12 @@ export interface FakeRuntimeOptions {
     readonly content: string;
     readonly category: string;
   }[];
+  readonly canaryPrompt?: string;
+  readonly canaryResponseText?: string;
+  readonly canaryMemoryCandidates?: readonly {
+    readonly content: string;
+    readonly category: string;
+  }[];
 }
 
 export class FakeAgentRuntime implements AgentRuntimePort {
@@ -23,6 +29,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
   public cancelCalls = 0;
   public readonly cancelledRunIds: string[] = [];
   public readonly prompts: string[] = [];
+  public readonly activeRunIds = new Set<string>();
   public ready: boolean;
   readonly #options: FakeRuntimeOptions;
 
@@ -44,26 +51,37 @@ export class FakeAgentRuntime implements AgentRuntimePort {
   }): Promise<AgentRuntimeExecution> {
     this.executeCalls += 1;
     this.prompts.push(input.prompt);
-    if (this.#options.delayMs) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.#options.delayMs),
-      );
+    this.activeRunIds.add(input.runId);
+    try {
+      if (this.#options.delayMs) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.#options.delayMs),
+        );
+      }
+      if (this.#options.error) {
+        throw this.#options.error;
+      }
+      const isCanary =
+        this.#options.canaryPrompt !== undefined &&
+        input.prompt.includes(this.#options.canaryPrompt);
+      return {
+        provider: 'opencode',
+        model: 'opencode/fake-free',
+        text: isCanary
+          ? (this.#options.canaryResponseText ?? 'FAKE_RUNTIME_OK')
+          : (this.#options.responseTexts?.[this.executeCalls - 1] ??
+            this.#options.responseText ??
+            'FAKE_RUNTIME_OK'),
+        usage: { inputTokens: 3, outputTokens: 2, totalCostUsd: 0 },
+        ...(isCanary
+          ? { memoryCandidates: this.#options.canaryMemoryCandidates ?? [] }
+          : this.#options.memoryCandidates
+            ? { memoryCandidates: this.#options.memoryCandidates }
+            : {}),
+      };
+    } finally {
+      this.activeRunIds.delete(input.runId);
     }
-    if (this.#options.error) {
-      throw this.#options.error;
-    }
-    return {
-      provider: 'opencode',
-      model: 'opencode/fake-free',
-      text:
-        this.#options.responseTexts?.[this.executeCalls - 1] ??
-        this.#options.responseText ??
-        'FAKE_RUNTIME_OK',
-      usage: { inputTokens: 3, outputTokens: 2, totalCostUsd: 0 },
-      ...(this.#options.memoryCandidates
-        ? { memoryCandidates: this.#options.memoryCandidates }
-        : {}),
-    };
   }
 
   public async health(): Promise<AgentRuntimeHealth> {

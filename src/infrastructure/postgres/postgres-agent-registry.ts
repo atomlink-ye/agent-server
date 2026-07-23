@@ -103,7 +103,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
         `INSERT INTO agent_definitions
           (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9)
-         ON CONFLICT (tenant_id, principal_type, principal_id, normalized_name) WHERE managed_discriminator='managed_agent_v1' DO NOTHING
+         ON CONFLICT DO NOTHING
          RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, created_at, updated_at`,
         [
           command.definition.id,
@@ -137,7 +137,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
            reference_snapshot, tool_skill_snapshot, validation_report, compiled_package, execution_snapshot,
            created_at, updated_at, published_at)
          VALUES ($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9,'managed_agent_v1',$10::jsonb,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19::jsonb,$20,$21,NULL)
-         ON CONFLICT (definition_id, fingerprint) WHERE managed_discriminator='managed_agent_v1' DO NOTHING
+         ON CONFLICT DO NOTHING
          RETURNING *`,
         versionValues(command, definition),
       );
@@ -215,7 +215,9 @@ export class PostgresAgentRegistry implements AgentRegistry {
       let published = row;
       if (row.status === 'draft') {
         const result = await db.query<VersionRow>(
-          `UPDATE agent_versions SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING *`,
+          `UPDATE agent_versions
+             SET status='published', published_at=GREATEST(created_at, now()), updated_at=GREATEST(created_at, now())
+           WHERE id=$1 RETURNING *`,
           [row.id],
         );
         published = result.rows?.[0] ?? row;

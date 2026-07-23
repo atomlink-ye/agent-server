@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createManagedAgentDefinition } from '../../src/domain/agents/managed-agent-definition.js';
 import { createManagedAgentDraft } from '../../src/domain/agents/managed-agent-version.js';
@@ -651,59 +651,421 @@ describeRealPostgres(
       ? createPostgresPool({ connectionString, maxConnections: 8 })
       : null;
 
+    beforeEach(async () => {
+      if (pool) await applyDurableKernelMigrations(pool);
+    });
+
     afterAll(async () => {
       await pool?.end();
     });
 
-    it('uses separate pg.Pool clients for same-key replay and conflict', async () => {
+    async function reset(tenantId: string): Promise<void> {
       if (!pool) return;
-      await applyDurableKernelMigrations(pool);
       await pool.query(
-        `DELETE FROM agent_registry_idempotency WHERE tenant_id='real_registry_contract'`,
+        'DELETE FROM agent_registry_idempotency WHERE tenant_id=$1',
+        [tenantId],
       );
-      await pool.query(
-        `DELETE FROM agent_versions WHERE tenant_id='real_registry_contract'`,
-      );
-      await pool.query(
-        `DELETE FROM agent_definitions WHERE tenant_id='real_registry_contract'`,
-      );
+      await pool.query('DELETE FROM agent_versions WHERE tenant_id=$1', [
+        tenantId,
+      ]);
+      await pool.query('DELETE FROM agent_definitions WHERE tenant_id=$1', [
+        tenantId,
+      ]);
+    }
+
+    function commandFor(
+      tenantId: string,
+      principalId: string,
+      definitionId: string,
+      versionId: string,
+      key: string,
+      fingerprint: string,
+      variant = 'Registry Agent',
+    ) {
       const realOwner = {
-        tenantId: 'real_registry_contract',
+        tenantId,
         principalType: 'service_account',
-        principalId: 'principal',
+        principalId,
       };
-      const parsed = parseManagedAgentPackage(source);
+      const parsed = parseManagedAgentPackage(
+        source.replaceAll('Registry Agent', variant),
+      );
       const definition = createManagedAgentDefinition({
         ...realOwner,
         normalizedName: 'registry-agent',
-        displayName: 'Registry Agent',
-        id: '00000000-0000-4000-8000-0000000d0001',
+        displayName: variant,
+        id: definitionId,
         now: () => new Date(now),
       });
       const version = createManagedAgentDraft({
         definition,
         parsed,
-        id: '00000000-0000-4000-8000-0000000d0101',
+        id: versionId,
         now: () => new Date(now),
       });
-      const command = {
+      return {
         owner: realOwner,
         compatibilityWorkspaceId: 'real-workspace',
-        idempotencyKey: 'same-key',
-        requestFingerprint: 'real-fp',
+        idempotencyKey: key,
+        requestFingerprint: fingerprint,
         normalizedName: 'registry-agent',
         definition,
         version,
       };
-      const a = new PostgresAgentRegistry(pool);
+    }
+
+    it('proves separate leased pg.Pool clients and same-key replay/conflict', async () => {
+      expect(pool).not.toBeNull();
+      if (!pool) return;
+      const clientA = await pool.connect();
+      const clientB = await pool.connect();
+      try {
+        expect(clientA).not.toBe(clientB);
+        const server = await clientA.query<{ version: string }>(
+          'SELECT version()',
+        );
+        expect(server.rows[0]?.version).toMatch(/^PostgreSQL /);
+      } finally {
+        clientA.release();
+        clientB.release();
+      }
+      const tenant = 'real_registry_same_key';
+      await reset(tenant);
+      const command = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d00b1',
+        '00000000-0000-4000-8000-0000000d01b1',
+        'same-key',
+        'real-fp',
+      );
+      const registry = new PostgresAgentRegistry(pool);
       const [first, replay] = await Promise.all([
-        a.importAgent(command),
-        a.importAgent(command),
+        registry.importAgent(command),
+        registry.importAgent(command),
       ]);
       expect([first.kind, replay.kind].sort()).toEqual(['created', 'replayed']);
       await expect(
-        a.importAgent({ ...command, requestFingerprint: 'different-fp' }),
+        registry.importAgent({
+          ...command,
+          requestFingerprint: 'different-fp',
+        }),
       ).rejects.toThrow('idempotency');
+    });
+
+    it('converges concurrent different-key equal-canonical imports to one definition and version', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_equal';
+      await reset(tenant);
+      const a = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d0011',
+        '00000000-0000-4000-8000-0000000d0111',
+        'key-a',
+        'equal-a',
+      );
+      const b = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d0012',
+        '00000000-0000-4000-8000-0000000d0112',
+        'key-b',
+        'equal-b',
+      );
+      const registry = new PostgresAgentRegistry(pool);
+      const results = await Promise.all([
+        registry.importAgent(a),
+        registry.importAgent(b),
+      ]);
+      expect(new Set(results.map((result) => result.definition.id)).size).toBe(
+        1,
+      );
+      expect(new Set(results.map((result) => result.version.id)).size).toBe(1);
+      const counts = await pool.query<{
+        definitions: string;
+        versions: string;
+      }>(
+        `SELECT (SELECT count(*) FROM agent_definitions WHERE tenant_id=$1)::text AS definitions,
+                (SELECT count(*) FROM agent_versions WHERE tenant_id=$1)::text AS versions`,
+        [tenant],
+      );
+      expect(counts.rows[0]).toEqual({ definitions: '1', versions: '1' });
+    });
+
+    it('creates a changed-fingerprint draft under the same owner/name definition', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_changed';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const first = await registry.importAgent(
+        commandFor(
+          tenant,
+          'principal',
+          '00000000-0000-4000-8000-0000000d0021',
+          '00000000-0000-4000-8000-0000000d0121',
+          'key-a',
+          'changed-a',
+        ),
+      );
+      const second = await registry.importAgent(
+        commandFor(
+          tenant,
+          'principal',
+          '00000000-0000-4000-8000-0000000d0022',
+          '00000000-0000-4000-8000-0000000d0122',
+          'key-b',
+          'changed-b',
+          'Registry Agent Revised',
+        ),
+      );
+      expect(second.definition.id).toBe(first.definition.id);
+      expect(second.version.id).not.toBe(first.version.id);
+      expect(second.version.status).toBe('draft');
+    });
+
+    it('converges concurrent owner/name and definition/fingerprint races', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_race';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const commands = Array.from({ length: 4 }, (_, index) =>
+        commandFor(
+          tenant,
+          'principal',
+          `00000000-0000-4000-8000-0000000d00${31 + index}`,
+          `00000000-0000-4000-8000-0000000d01${31 + index}`,
+          `race-${index}`,
+          `race-fp-${index}`,
+        ),
+      );
+      const results = await Promise.all(
+        commands.map((command) => registry.importAgent(command)),
+      );
+      expect(new Set(results.map((result) => result.definition.id)).size).toBe(
+        1,
+      );
+      expect(new Set(results.map((result) => result.version.id)).size).toBe(1);
+    });
+
+    it('publishes with replay/conflict semantics and one concurrent immutable transition', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_publish';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const imported = await registry.importAgent(
+        commandFor(
+          tenant,
+          'principal',
+          '00000000-0000-4000-8000-0000000d0051',
+          '00000000-0000-4000-8000-0000000d0151',
+          'import',
+          'publish-import',
+        ),
+      );
+      const publish = {
+        owner: imported.version,
+        idempotencyKey: 'publish-a',
+        requestFingerprint: 'publish-fp',
+        versionId: imported.version.id,
+      };
+      const ownerForPublish = {
+        tenantId: imported.version.tenantId,
+        principalType: imported.version.principalType,
+        principalId: imported.version.principalId,
+      };
+      const publishCommand = { ...publish, owner: ownerForPublish };
+      const replay = await registry.publishAgentVersion(publishCommand);
+      expect(replay.status).toBe('published');
+      expect(
+        (await registry.publishAgentVersion(publishCommand)).publishedAt,
+      ).toBe(replay.publishedAt);
+      await expect(
+        registry.publishAgentVersion({
+          ...publishCommand,
+          versionId: '00000000-0000-4000-8000-0000000d0152',
+          requestFingerprint: 'other',
+        }),
+      ).rejects.toThrow('idempotency');
+      const concurrent = await Promise.all([
+        registry.publishAgentVersion({
+          ...publishCommand,
+          idempotencyKey: 'publish-b',
+          requestFingerprint: 'publish-b-fp',
+        }),
+        registry.publishAgentVersion({
+          ...publishCommand,
+          idempotencyKey: 'publish-c',
+          requestFingerprint: 'publish-c-fp',
+        }),
+      ]);
+      expect(new Set(concurrent.map((result) => result.publishedAt)).size).toBe(
+        1,
+      );
+      const rows = await pool.query<{ count: string; status: string }>(
+        'SELECT count(*)::text AS count, min(status) AS status FROM agent_versions WHERE tenant_id=$1',
+        [tenant],
+      );
+      expect(rows.rows[0]).toEqual({ count: '1', status: 'published' });
+    });
+
+    it('hides definitions, versions, lists, and publication from another principal', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_hidden';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const imported = await registry.importAgent(
+        commandFor(
+          tenant,
+          'owner',
+          '00000000-0000-4000-8000-0000000d0061',
+          '00000000-0000-4000-8000-0000000d0161',
+          'hidden',
+          'hidden-fp',
+        ),
+      );
+      const hidden = {
+        tenantId: tenant,
+        principalType: 'service_account',
+        principalId: 'other',
+      };
+      expect(
+        await registry.findDefinition(hidden, imported.definition.id),
+      ).toBeNull();
+      expect(
+        await registry.findVersion(hidden, imported.version.id),
+      ).toBeNull();
+      expect(
+        await registry.listVersionsForOwner(hidden, {
+          definitionId: imported.definition.id,
+          cursor: null,
+          limit: 2,
+        }),
+      ).toBeNull();
+      await expect(
+        registry.publishAgentVersion({
+          owner: hidden,
+          idempotencyKey: 'hidden-publish',
+          requestFingerprint: 'hidden',
+          versionId: imported.version.id,
+        }),
+      ).rejects.toThrow('not found');
+    });
+
+    it('rejects direct SQL mutation of published managed content', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_immutable';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const imported = await registry.importAgent(
+        commandFor(
+          tenant,
+          'principal',
+          '00000000-0000-4000-8000-0000000d00a1',
+          '00000000-0000-4000-8000-0000000d0171',
+          'immutable',
+          'immutable-fp',
+        ),
+      );
+      await registry.publishAgentVersion({
+        owner: imported.version,
+        idempotencyKey: 'publish',
+        requestFingerprint: 'immutable-publish',
+        versionId: imported.version.id,
+      });
+      await expect(
+        pool.query(
+          'UPDATE agent_versions SET canonical_package=$2::jsonb WHERE id=$1',
+          [imported.version.id, '{"mutated":true}'],
+        ),
+      ).rejects.toThrow(/immutable/i);
+      await expect(
+        pool.query('UPDATE agent_versions SET fingerprint=$2 WHERE id=$1', [
+          imported.version.id,
+          'b'.repeat(64),
+        ]),
+      ).rejects.toThrow(/immutable/i);
+    });
+
+    it('traverses equal-timestamp pages strictly in (created_at,id) order', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_cursor';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const ids = Array.from(
+        { length: 5 },
+        (_, index) =>
+          `00000000-0000-4000-8000-0000000d0${String(81 + index).padStart(3, '0')}`,
+      );
+      let definitionId = '';
+      for (const [index, id] of ids.entries()) {
+        const result = await registry.importAgent(
+          commandFor(
+            tenant,
+            'principal',
+            `00000000-0000-4000-8000-0000000d0${String(71).padStart(3, '0')}`,
+            id,
+            `cursor-${index}`,
+            `cursor-fp-${index}`,
+            `Registry Agent ${index}`,
+          ),
+        );
+        definitionId = result.definition.id;
+      }
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (;;) {
+        const page = await registry.listVersionsForOwner(
+          {
+            tenantId: tenant,
+            principalType: 'service_account',
+            principalId: 'principal',
+          },
+          { definitionId, cursor, limit: 2 },
+        );
+        expect(page).not.toBeNull();
+        if (!page) break;
+        seen.push(...page.items.map((item) => item.id));
+        if (!page.nextCursor) {
+          expect(page.items.length).toBeLessThanOrEqual(2);
+          break;
+        }
+        cursor = page.nextCursor;
+      }
+      expect(seen).toEqual([...seen].sort((a, b) => a.localeCompare(b)));
+      expect(new Set(seen).size).toBe(5);
+      expect(seen).toEqual(ids);
+    });
+
+    it('round-trips immutable package and all managed snapshots', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_snapshots';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const command = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d0091',
+        '00000000-0000-4000-8000-0000000d0191',
+        'snapshots',
+        'snapshots-fp',
+      );
+      const imported = await registry.importAgent(command);
+      const reloaded = await registry.findVersion(
+        command.owner,
+        imported.version.id,
+      );
+      expect(reloaded).not.toBeNull();
+      expect(reloaded).toMatchObject({
+        package: command.version.package,
+        canonicalJson: command.version.canonicalJson,
+        fingerprint: command.version.fingerprint,
+        compiler: command.version.compiler,
+        policySnapshot: command.version.policySnapshot,
+        referenceSnapshot: command.version.referenceSnapshot,
+        validationSnapshot: command.version.validationSnapshot,
+      });
+      expect(Object.isFrozen(reloaded?.package)).toBe(true);
     });
   },
 );

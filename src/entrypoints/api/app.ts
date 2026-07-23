@@ -25,6 +25,8 @@ import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
 import { registerAgentRoutes } from './routes/agents.js';
 import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 import type { SessionRepository } from '../../application/ports/session-repository.js';
+import type { RunEventRepository } from '../../application/ports/run-events.js';
+import type { CancelTask } from '../../application/tasks/cancel-task.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 
 export interface AppDependencies {
@@ -43,6 +45,8 @@ export interface AppDependencies {
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
   readonly sessions?: SessionRepository;
+  readonly events?: RunEventRepository;
+  readonly cancelTask?: CancelTask;
   readonly version?: string;
 }
 

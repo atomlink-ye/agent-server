@@ -194,6 +194,18 @@ export class PostgresSessionRepository implements SessionRepository {
       c.release?.();
     }
   }
+  async appendAssistantMessage(i: {
+    sessionId: string;
+    generation: number;
+    taskId: string;
+    runId: string;
+    text: string;
+  }): Promise<void> {
+    await this.db.query(
+      `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) SELECT $1,$2,$3,COALESCE(MAX(sequence),0)+1,'assistant',$4,$5,$6 FROM messages WHERE session_id=$2 AND generation=$3 ON CONFLICT DO NOTHING`,
+      [randomUUID(), i.sessionId, i.generation, i.text, i.taskId, iso()],
+    );
+  }
   async reset(id: string, o: AccessContext, _key: string) {
     const c = await this.acquire();
     await c.query('BEGIN');
@@ -274,7 +286,7 @@ function mapMessage(r: any): UserMessage {
     sessionId: r.session_id,
     generation: Number(r.generation),
     sequence: Number(r.sequence),
-    role: 'user',
+    role: r.role,
     text: r.text,
     taskId: r.task_id,
     runId: r.run_id,

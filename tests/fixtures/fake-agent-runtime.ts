@@ -16,6 +16,8 @@ export class FakeAgentRuntime implements AgentRuntimePort {
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
+  public cancelCalls = 0;
+  public readonly cancelledRunIds: string[] = [];
   public readonly prompts: string[] = [];
   public ready: boolean;
   readonly #options: FakeRuntimeOptions;
@@ -70,6 +72,11 @@ export class FakeAgentRuntime implements AgentRuntimePort {
         },
       ],
     };
+  }
+
+  public async cancel(input: { readonly runId: string }): Promise<void> {
+    this.cancelCalls += 1;
+    this.cancelledRunIds.push(input.runId);
   }
 
   public async close(): Promise<void> {

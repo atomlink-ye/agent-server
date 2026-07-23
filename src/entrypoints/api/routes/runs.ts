@@ -19,12 +19,14 @@ import {
   requireServiceAccountAccess,
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
+import type { RunEventRepository } from '../../../application/ports/run-events.js';
 
 interface RunRouteDependencies {
   readonly config: AppConfig;
   readonly runtime: AgentRuntimePort;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
+  readonly events?: RunEventRepository;
 }
 
 export function registerRunRoutes(
@@ -109,6 +111,117 @@ export function registerRunRoutes(
     }
     return context.json(toRunResponse(run), 200);
   });
+
+  app.get('/api/v1/runs/:runId/events', async (context) => {
+    const runId = context.req.param('runId');
+    if (
+      !(await dependencies.getRun.execute(
+        runId,
+        getAuthenticatedAccessContext(context),
+      ))
+    )
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    if (!dependencies.events)
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    const raw =
+      context.req.query('after') ?? context.req.query('cursor') ?? '0';
+    const after = Number(raw);
+    if (!Number.isSafeInteger(after) || after < 0)
+      throw new HttpError(
+        400,
+        'invalid_cursor',
+        'Cursor must be a nonnegative integer.',
+      );
+    const page = await dependencies.events.list(runId, after);
+    return context.json(
+      {
+        events: page.events.map(toEventResponse),
+        next_cursor: page.nextCursor,
+      },
+      200,
+    );
+  });
+  app.get('/api/v1/runs/:runId/events/stream', async (context) => {
+    const runId = context.req.param('runId');
+    if (
+      !(await dependencies.getRun.execute(
+        runId,
+        getAuthenticatedAccessContext(context),
+      )) ||
+      !dependencies.events
+    )
+      throw new HttpError(
+        404,
+        'run_not_found',
+        'The requested run does not exist.',
+      );
+    const header = context.req.header('last-event-id');
+    const raw = context.req.query('after') ?? header ?? '0';
+    let cursor = Number(raw);
+    if (!Number.isSafeInteger(cursor) || cursor < 0)
+      throw new HttpError(
+        400,
+        'invalid_cursor',
+        'Cursor must be a nonnegative integer.',
+      );
+    return new Response(
+      new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          try {
+            for (;;) {
+              const page = await dependencies.events!.list(runId, cursor);
+              for (const event of page.events) {
+                cursor = event.sequence;
+                controller.enqueue(
+                  encoder.encode(
+                    `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(toEventResponse(event))}\n\n`,
+                  ),
+                );
+              }
+              if (
+                page.events.some((event) =>
+                  ['succeeded', 'failed', 'cancelled'].includes(event.type),
+                )
+              )
+                break;
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+          } finally {
+            controller.close();
+          }
+        },
+      }),
+      {
+        headers: {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive',
+        },
+      },
+    );
+  });
+}
+
+function toEventResponse(
+  event: import('../../../application/ports/run-events.js').RunEvent,
+) {
+  return {
+    id: String(event.sequence),
+    run_id: event.runId,
+    sequence: event.sequence,
+    type: event.type,
+    payload: event.payload,
+    created_at: event.createdAt,
+  };
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {

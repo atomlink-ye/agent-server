@@ -29,6 +29,7 @@ const durableKernelMigrationFileNames = [
   '0005_managed_agent_registry_b.sql',
   '0005b_managed_agent_registry_hardening.sql',
   '0006_workspace_session_lane_c.sql',
+  '0007_runtime_events_d.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 

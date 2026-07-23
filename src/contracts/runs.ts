@@ -38,7 +38,11 @@ export const GetRunResponseSchema = z.object({
   usage: UsageSchema.nullable(),
   error: z
     .object({
-      code: z.enum(['runtime_execution_failed', 'runtime_timed_out']),
+      code: z.enum([
+        'runtime_execution_failed',
+        'runtime_timed_out',
+        'cancelled',
+      ]),
       message: z.string().min(1),
     })
     .nullable(),
@@ -48,3 +52,20 @@ export const GetRunResponseSchema = z.object({
 
 export type CreateRunResponse = z.infer<typeof CreateRunResponseSchema>;
 export type GetRunResponse = z.infer<typeof GetRunResponseSchema>;
+
+export const RunEventSchema = z.object({
+  id: z.string().regex(/^\d+$/),
+  run_id: z.uuid(),
+  sequence: z.number().int().positive(),
+  type: z.enum(['started', 'output', 'succeeded', 'failed', 'cancelled']),
+  payload: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  ),
+  created_at: z.iso.datetime(),
+});
+export const RunEventPageSchema = z.object({
+  events: z.array(RunEventSchema),
+  next_cursor: z.number().int().positive().nullable(),
+});
+export type RunEventResponse = z.infer<typeof RunEventSchema>;

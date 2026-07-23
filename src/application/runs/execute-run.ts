@@ -17,6 +17,7 @@ import type {
 } from '../ports/invokable-repository.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import type { RunEventRepository } from '../ports/run-events.js';
 import {
   buildPublishedAgentPrompt,
   ExecuteTeamTask,
@@ -40,6 +41,7 @@ export class ExecuteRun {
       { findVersion: async () => null },
       invokables,
     ),
+    private readonly events?: RunEventRepository,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -70,6 +72,11 @@ export class ExecuteRun {
     let completed: Run;
 
     try {
+      await this.events?.bind({
+        runId: claim.run.id,
+        createdAt: claim.run.updatedAt,
+      });
+      await this.events?.append(claim.run.id, 'started', {});
       const task = await this.tasks.findById(claim.taskId);
       if (!task) {
         throw new Error(
@@ -104,6 +111,9 @@ export class ExecuteRun {
         throw error;
       }
       const timedOut = error instanceof RuntimeTimedOutError;
+      await this.events?.append(claim.run.id, 'failed', {
+        code: timedOut ? 'runtime_timed_out' : 'runtime_execution_failed',
+      });
       const failure: RunFailure = timedOut
         ? {
             code: 'runtime_timed_out',
@@ -209,6 +219,7 @@ export class ExecuteRun {
       },
       this.now,
     );
+    await this.events?.append(claim.run.id, 'output', { text: execution.text });
 
     return succeeded;
   }

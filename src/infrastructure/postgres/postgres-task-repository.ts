@@ -180,6 +180,15 @@ export class PostgresTaskRepository implements TaskRepository {
       [taskId],
     );
   }
+  public async requestCancellation(
+    taskId: string,
+    requestedAt: string,
+  ): Promise<void> {
+    await this.database.query(
+      `UPDATE runs SET cancellation_requested=true,cancellation_requested_at=$2 WHERE task_id=$1 AND status IN ('queued','running')`,
+      [taskId, requestedAt],
+    );
+  }
 }
 
 interface TaskRow {

@@ -24,12 +24,14 @@ import {
   requireServiceAccountAccess,
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
+import type { CancelTask } from '../../../application/tasks/cancel-task.js';
 
 interface TaskRouteDependencies {
   readonly config: AppConfig;
   readonly invokeTask: InvokeTask;
   readonly getTask: GetTask;
   readonly getTaskTree: GetTaskTree;
+  readonly cancelTask?: CancelTask;
 }
 
 const TASK_INVOKE_PATH = '/api/v1/tasks:invoke';
@@ -132,6 +134,35 @@ export function registerTaskRoutes(
       tasks: tasks.map(toTaskResponse),
     };
     return context.json(response, 200);
+  });
+  app.post('/api/v1/tasks/:taskId:cancel', async (context) => {
+    if (!dependencies.cancelTask)
+      throw new HttpError(
+        404,
+        'task_not_found',
+        'The requested task does not exist.',
+      );
+    const taskId = context.req.param('taskId');
+    if (!taskId)
+      throw new HttpError(
+        404,
+        'task_not_found',
+        'The requested task does not exist.',
+      );
+    const result = await dependencies.cancelTask.execute(
+      taskId,
+      getAuthenticatedAccessContext(context),
+    );
+    if (!result)
+      throw new HttpError(
+        404,
+        'task_not_found',
+        'The requested task does not exist.',
+      );
+    return context.json(
+      { task_id: result.taskId, run_id: result.runId, status: result.status },
+      result.status === 'terminal' ? 200 : 202,
+    );
   });
 }
 

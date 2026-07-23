@@ -32,6 +32,8 @@ import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-
 import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
+import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
+import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
 
@@ -61,6 +63,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
+  const events = new PostgresRunEventRepository(pool);
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
@@ -75,6 +78,12 @@ export async function createService(config: AppConfig, logger: Logger) {
       executionTimeoutMs: config.paseo.executionTimeoutMs,
     },
     logger,
+  );
+  const cancelTask = new CancelTask(
+    taskRepository,
+    runRepository,
+    runtime,
+    events,
   );
   const admitRootTask = new AdmitRootTask(
     taskRepository,
@@ -101,7 +110,12 @@ export async function createService(config: AppConfig, logger: Logger) {
     workspaceMemoryRepository,
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
-  const completeRun = new CompleteRun(runRepository, taskRepository);
+  const completeRun = new CompleteRun(
+    runRepository,
+    taskRepository,
+    events,
+    sessions,
+  );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
     runRepository,
@@ -118,6 +132,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     logger,
     undefined,
     resolveAgentVersion,
+    events,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -144,6 +159,8 @@ export async function createService(config: AppConfig, logger: Logger) {
     listMemoryEntries,
     agentRegistry,
     sessions,
+    events,
+    cancelTask,
   });
   dispatcher.start();
 

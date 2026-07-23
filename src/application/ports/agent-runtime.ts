@@ -26,6 +26,10 @@ export interface AgentRuntimePort {
     readonly runId: string;
     readonly prompt: string;
   }): Promise<AgentRuntimeExecution>;
+  cancel?(input: {
+    readonly runId: string;
+    readonly providerAgentId?: string;
+  }): Promise<void>;
   health(): Promise<AgentRuntimeHealth>;
   close(): Promise<void>;
 }

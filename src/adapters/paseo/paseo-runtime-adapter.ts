@@ -35,6 +35,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   #lastError: string | null = null;
   #generation = 0;
   #connectedGeneration: number | null = null;
+  readonly #agents = new Map<string, string>();
 
   public constructor(
     options: PaseoRuntimeOptions,
@@ -161,6 +162,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       prompt: input.prompt,
       runId: input.runId,
     });
+    this.#agents.set(input.runId, agent.id);
     const finished = await this.#client.waitForFinish(
       agent.id,
       this.#options.executionTimeoutMs,
@@ -187,6 +189,25 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       text: finished.lastMessage,
       ...(finished.usage ? { usage: finished.usage } : {}),
     };
+  }
+
+  public async cancel(input: {
+    readonly runId: string;
+    readonly providerAgentId?: string;
+  }): Promise<void> {
+    const agentId = input.providerAgentId ?? this.#agents.get(input.runId);
+    if (!agentId) return;
+    try {
+      await this.#client.cancelAgent?.(agentId);
+    } catch (error) {
+      // Cancellation is deliberately idempotent: a terminal/missing provider agent is done.
+      this.#logger.log('warn', 'runtime.cancel.ignored', {
+        run_id: input.runId,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+      });
+    } finally {
+      this.#agents.delete(input.runId);
+    }
   }
 
   public async health(): Promise<AgentRuntimeHealth> {
@@ -224,6 +245,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#connectedGeneration = null;
     this.#workspaceId = null;
     this.#model = null;
+    this.#agents.clear();
     this.#initialization = null;
     await this.#client.close();
   }

@@ -21,7 +21,7 @@ export interface RunResult {
 }
 
 export interface RunFailure {
-  readonly code: 'runtime_execution_failed' | 'runtime_timed_out';
+  readonly code: 'runtime_execution_failed' | 'runtime_timed_out' | 'cancelled';
   readonly message: string;
 }
 

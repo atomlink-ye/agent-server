@@ -25,7 +25,7 @@ export interface UserMessage {
   readonly sessionId: string;
   readonly generation: number;
   readonly sequence: number;
-  readonly role: 'user';
+  readonly role: 'user' | 'assistant';
   readonly text: string;
   readonly taskId: string;
   readonly runId: string;
@@ -51,6 +51,13 @@ export interface SessionRepository {
     key: string,
     owner: AccessContext,
   ): Promise<UserMessage>;
+  appendAssistantMessage?(input: {
+    sessionId: string;
+    generation: number;
+    taskId: string;
+    runId: string;
+    text: string;
+  }): Promise<void>;
   reset(
     sessionId: string,
     owner: AccessContext,

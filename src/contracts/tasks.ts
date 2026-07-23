@@ -5,6 +5,12 @@ import { taskStatuses } from '../domain/tasks/task-status.js';
 
 export const MAX_TASK_REQUEST_BYTES = 64 * 1024;
 
+export const CancelTaskResponseSchema = z.object({
+  task_id: z.uuid(),
+  run_id: z.uuid(),
+  status: z.enum(['cancellation_requested', 'cancelled', 'terminal']),
+});
+
 export const TaskInvokableSchema = z
   .object({
     kind: z.enum(['agent', 'team']),
@@ -48,7 +54,7 @@ export const TaskResultSchema = z.object({
 });
 
 export const TaskErrorSchema = z.object({
-  code: z.enum(['runtime_execution_failed', 'runtime_timed_out']),
+  code: z.enum(['runtime_execution_failed', 'runtime_timed_out', 'cancelled']),
   message: z.string().min(1),
 });
 

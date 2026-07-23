@@ -41,4 +41,5 @@ export interface TaskRepository {
     ownerScope: TaskOwnerScope,
   ): Promise<readonly TaskRecord[]>;
   advanceSessionLane?(taskId: string): Promise<void>;
+  requestCancellation?(taskId: string, requestedAt: string): Promise<void>;
 }

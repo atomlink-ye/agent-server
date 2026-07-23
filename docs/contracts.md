@@ -27,14 +27,14 @@ The Phase B managed Agent API is intentionally narrow. It exposes validation, im
 
 ### Routes
 
-| Method | Path                                               | Success | Contract                                                                             |
-| ------ | -------------------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| `POST` | `/api/v1/agent-packages:validate`                  | `200`   | Read-only package validation; no `Idempotency-Key` is accepted or required.          |
-| `POST` | `/api/v1/agents:import`                            | `201`   | Creates or converges an owner-scoped definition/version; requires `Idempotency-Key`. |
-| `GET`  | `/api/v1/agents/{agentId}`                         | `200`   | Reads an owner-scoped definition summary.                                            |
-| `GET`  | `/api/v1/agents/{agentId}/versions?cursor=&limit=` | `200`   | Lists owner-scoped version summaries in repository order.                            |
-| `GET`  | `/api/v1/agent-versions/{versionId}`               | `200`   | Reads an owner-scoped version summary.                                               |
-| `POST` | `/api/v1/agent-versions/{versionId}:publish`       | `200`   | Publishes one owner-scoped version; requires `Idempotency-Key`.                      |
+| Method | Path                                               | Success | Contract                                                                                                      |
+| ------ | -------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/v1/agent-packages:validate`                  | `200`   | Read-only package validation; it does not require or use `Idempotency-Key`, and supplied headers are ignored. |
+| `POST` | `/api/v1/agents:import`                            | `201`   | Creates or converges an owner-scoped definition/version; requires `Idempotency-Key`.                          |
+| `GET`  | `/api/v1/agents/{agentId}`                         | `200`   | Reads an owner-scoped definition summary.                                                                     |
+| `GET`  | `/api/v1/agents/{agentId}/versions?cursor=&limit=` | `200`   | Lists owner-scoped version summaries in repository order.                                                     |
+| `GET`  | `/api/v1/agent-versions/{versionId}`               | `200`   | Reads an owner-scoped version summary.                                                                        |
+| `POST` | `/api/v1/agent-versions/{versionId}:publish`       | `200`   | Publishes one owner-scoped version; requires `Idempotency-Key`.                                               |
 
 `agentId`, `versionId`, and embedded resource IDs are canonical lowercase UUIDs. Invalid path IDs are rejected as `400 invalid_request` before application, repository, or idempotency work. Owner-scoped draft definitions and versions are readable and listable, and draft versions can be published. Foreign or missing resources are hidden as the same `404 agent_not_found` response.
 

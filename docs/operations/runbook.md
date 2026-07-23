@@ -23,6 +23,16 @@ If one free model is externally rate-limited, an operator may diagnose another c
 
 Baseline GET returns a stable code only. Correlate `run_id` in structured logs. A timeout may be catalog/model cold start, network latency, or provider capacity. Do not increase the timeout until daemon health, model discovery, and generation phases are distinguished. Raw provider errors remain local diagnostics.
 
+## Session reset and lane drain
+
+`POST /api/v1/sessions/{session_id}:reset` advances the generation and records a
+cancellation request for the active old-generation Task. It does not discard
+that active Task or bulk-cancel it; only non-active queued old-generation Tasks
+are terminalized with `cancelled_by_reset`. New-generation Messages remain queued
+until the active old-generation Run reaches a normal terminal state, after which
+the lane promotes the oldest eligible root. Provider cancellation forwarding and
+production recovery guarantees are not part of this minimum behavior.
+
 ## No free model
 
 This is an expected external dependency failure, not permission to select a paid model. Check the live catalog and OpenCode status. Operators may deliberately configure a known model through `PASEO_MODEL`, but automatic fallback remains free-only. Keep deterministic CI green while external availability is investigated.

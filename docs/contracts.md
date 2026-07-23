@@ -85,3 +85,28 @@ The validated package is canonicalized to stable JSON and fingerprinted with SHA
 ## Task relationship and compatibility
 
 Canonical Task admission and execution resolution accept an explicit published managed Agent version ID. A draft version is rejected as not found at that Task boundary until it is published; foreign and missing versions are likewise hidden as the owner-safe not-found result. Owner-scoped draft definitions and versions remain readable/listable through the registry API and draft versions remain publishable. The existing legacy Run compatibility route and Team invokable compatibility remain; Team execution remains the implemented sequential compatibility subset rather than a claim of the full Team V1 graph contract.
+
+## Private Workspace and Session Lane API (Phase C minimum)
+
+These routes require the existing service-account bearer authentication and derive
+tenant plus principal ownership from the authenticated request. A principal may
+own multiple product Workspaces; requested product `workspace_id` values are
+authorized by database ownership, not compared with the configured compatibility
+Workspace. Foreign or missing resources are hidden as `404`.
+
+| Method | Path                                     | Success | Safe semantics                                                                                                                                                     |
+| ------ | ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST` | `/api/v1/workspaces`                     | `201`   | Creates a private Workspace from `{ "name": "..." }`; returns `workspace_id`, name, timestamps, and a safe self link.                                              |
+| `GET`  | `/api/v1/workspaces/{workspace_id}`      | `200`   | Returns the owner-scoped Workspace summary.                                                                                                                        |
+| `POST` | `/api/v1/sessions`                       | `201`   | Creates an active ProductSession from `{ "workspace_id": "...", "agent_version_id": "..." }`, pinning the explicit Agent Version at generation `0`.                |
+| `GET`  | `/api/v1/sessions/{session_id}`          | `200`   | Returns owner-scoped session identity, generation, status, timestamps, and safe links.                                                                             |
+| `GET`  | `/api/v1/sessions/{session_id}/messages` | `200`   | Returns durable user Messages in generation/sequence order with safe Task/Run IDs and statuses.                                                                    |
+| `POST` | `/api/v1/sessions/{session_id}/messages` | `202`   | Admits Message, root Task, Run attempt 1, idempotency record, dispatch intent, and lane metadata in one transaction.                                               |
+| `POST` | `/api/v1/sessions/{session_id}:reset`    | `200`   | Increments generation; requests cancellation for the active old-generation root and cancels only non-active queued old-generation roots with `cancelled_by_reset`. |
+
+The minimum lane has one active root. Later Messages are durable queued roots
+ordered by `(generation, sequence)`. Terminal completion promotes the oldest
+eligible queued root and clears the reset cancellation request. Responses never
+include owner IDs, raw prompts, provider errors, or database details. Runtime
+Session V2, assistant/final Messages, SSE/events, and provider cancellation
+forwarding are outside this Phase C contract.

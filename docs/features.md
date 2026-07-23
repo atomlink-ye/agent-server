@@ -2,16 +2,16 @@
 
 This is the authoritative capability ledger. Status values are `implemented`, `baseline`, `planned`, and `reserved`. `baseline` is a proven seam with known temporary limitations; it is not production completion.
 
-| Feature area                     | Current status | Baseline evidence                                                                                                                                                                                                | V1 destination                                                           |
-| -------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                                                                                                                       | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts          |
-| Agents and Teams                 | Baseline       | **Phase B implemented baseline:** managed Agent YAML package validation, durable registry/API, immutable published versions, and published-only Task admission; Team remains the sequential compatibility subset | Immutable Agent/Team versions and bounded graphs                         |
-| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is reused; owner-scoped memory proposals can be reviewed into accepted entries                                                                                                      | Product Workspace, snapshots, retrieval, context assembly, memory policy |
-| Sessions, Tasks and Runs         | Baseline       | PostgreSQL-backed Task admission, Task tree reads, Run polling, dispatcher                                                                                                                                       | Product Session, cancel/retry, reconcile, recovery                       |
-| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                                                                                                                                                              | Execution cells, tool gateway, credential broker, approvals              |
-| Artifacts and Evidence           | Planned        | Result text only                                                                                                                                                                                                 | Immutable Artifact versions, evidence, source and child lineage          |
-| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes                                                                                                                                                                             | SSE, Web console, Lark adapter                                           |
-| Schedules, Triggers and Delivery | Planned        | None                                                                                                                                                                                                             | Idempotent admission, controlled schedules/events, durable delivery      |
+| Feature area                     | Current status | Baseline evidence                                                                                                                                                                                                | V1 destination                                                      |
+| -------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                                                                                                                       | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts     |
+| Agents and Teams                 | Baseline       | **Phase B implemented baseline:** managed Agent YAML package validation, durable registry/API, immutable published versions, and published-only Task admission; Team remains the sequential compatibility subset | Immutable Agent/Team versions and bounded graphs                    |
+| Workspace and Memory             | Baseline       | **Phase C implemented minimum:** private database-owned Product Workspaces with multiple-workspace principal ownership; memory proposals remain the prior governance baseline                                    | Memory snapshots, retrieval, context assembly, memory policy        |
+| Sessions, Tasks and Runs         | Baseline       | **Phase C implemented minimum:** ProductSession pinned to an explicit AgentVersion, durable user Messages, one-active-root ordered lane, reset generation, and terminal queue promotion                          | Runtime Session V2, provider cancel, retry, reconcile, recovery     |
+| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                                                                                                                                                              | Execution cells, tool gateway, credential broker, approvals         |
+| Artifacts and Evidence           | Planned        | Result text only                                                                                                                                                                                                 | Immutable Artifact versions, evidence, source and child lineage     |
+| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes                                                                                                                                                                             | SSE, Web console, Lark adapter                                      |
+| Schedules, Triggers and Delivery | Planned        | None                                                                                                                                                                                                             | Idempotent admission, controlled schedules/events, durable delivery |
 
 ## Identity and Access
 
@@ -33,7 +33,7 @@ Team compatibility remains implemented only as the existing sequential subset: `
 
 ## Workspace and Memory
 
-**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git. This phase also adds workspace-memory governance routes for authenticated service-account owner scopes: callers can create proposals with optional Task/session provenance, list proposals, review pending proposals as `accept`, `edit_and_accept`, or `reject`, and list accepted entries. A private Workspace resource and multi-workspace database authorization model are not implemented.
+**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git. Phase C adds private database-owned Product Workspaces and multiple-workspace principal ownership; workspace-memory governance remains the existing proposal/review baseline.
 
 This baseline intentionally stops at governance and provenance. It does not add agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records, not content that leaf agents read automatically.
 
@@ -41,7 +41,7 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Sessions, Tasks and Runs
 
-**Baseline:** authenticated `POST /api/v1/tasks:invoke` is the canonical public ingress and persists a root Task plus its first Run for a published managed `agent` version or the compatible published `team` subset. Authenticated `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/tree` expose owner-scoped Task state, latest Run summaries, and sequential Team child genealogy. Authenticated `POST /api/v1/runs` remains a compatibility admission route over the same canonical Task/Run model, uses a reserved UUID compatibility invokable-version sentinel for its admitted root Tasks, and `GET /api/v1/runs/{id}` never returns the prompt and collapses cross-owner reads to `404 run_not_found`. Admission reloads through the transaction-scoped repository; the PostgreSQL 16 pool lane proves visibility, replay, owner isolation, and a same-key race. One in-process dispatcher claims queued Runs and completes them through the Runtime Port or the sequential Team coordinator. Product Session, durable Messages/queue, cancel, SSE, and a production release are not implemented.
+**Baseline:** authenticated `POST /api/v1/tasks:invoke` remains the compatibility ingress. Phase C additionally implements private Workspace and ProductSession resources, explicit AgentVersion pinning, durable user Messages, transactional Task/Run admission, one active root per Session lane, ordered queued follow-ups, reset generations, and terminal promotion. Cross-owner Workspace, Session, Message, and resulting Task reads are hidden. Provider cancellation forwarding, Runtime Session V2/SSE/events, assistant/final Messages, retry/reconciliation, and production release are not implemented.
 
 **V1 acceptance:** Task is the only node invocation identity at both public and internal boundaries. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
@@ -67,10 +67,8 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Explicitly deferred from this baseline
 
-The following are not implemented and must not be inferred from the Phase B managed Agent registry work:
+The following remain deferred and must not be inferred from the Phase C minimum:
 
-- private Workspace resources or multi-workspace database authorization;
-- Product Session resources;
-- durable Messages or a durable message queue;
-- Runtime Session V2 APIs, runtime events, SSE delivery, and cancellation;
+- Runtime Session V2 APIs, runtime events, SSE delivery, and provider cancellation forwarding;
+- assistant/final Messages;
 - memory snapshots, runtime context assembly, retrieval injection, or automatic safe-memory behavior.

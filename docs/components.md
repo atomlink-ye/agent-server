@@ -38,4 +38,20 @@ compilation, child Agent resolution, and Team execution remain unchanged.
 
 This boundary does not provide latest-version lookup, shared ACLs, arbitrary
 caller-selected models, package/policy/template/schema/completion data to the
-runtime, workspace resources, sessions, or Phase C behavior.
+runtime, or provider cancellation forwarding.
+
+## Phase C Session lane boundary
+
+The Session lane owns one ProductSession generation and its durable user Message
+roots. Admission locks the lane, allocates a monotonic sequence, and inserts the
+Message, root Task, Run attempt 1, idempotency record, dispatch intent, and lane
+metadata before returning `202`. Only `active_task_id` is eligible for dispatch;
+later roots remain queued in `(generation, lane_sequence)` order.
+
+Reset increments generation, marks only non-active queued old-generation Tasks
+`cancelled` with failure detail `cancelled_by_reset`, and records a durable
+cancellation request for the active old-generation Task. The active Task remains
+the lane owner until normal terminal completion. Completion then promotes the
+oldest eligible queued root, including a new-generation root, and clears the
+cancellation request. Product Workspace ownership is tenant plus principal;
+legacy Task/Run routes retain their compatibility workspace behavior.

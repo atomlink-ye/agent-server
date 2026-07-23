@@ -119,12 +119,12 @@ the phase owner to preserve earlier gates.
 
 ### C — Workspace, Product Session, durable Message, and Session Lane
 
-- [ ] **C-1 (RED):** Add tests for three concurrent follow-ups, one active root, monotonic ordering, multiple private Workspace ownership, atomic admission, cancel-then-drain, and reset generation. Task terminal status includes `cancelled`; failure/reason code is `cancelled_by_reset`. Do not invent a top-level task status string if the current domain represents it in failure details.
-- [ ] **C-2 (interface/domain):** Implement Workspace, ProductSession, Message, SessionLane, owner-derived access, and repository contracts with queued follow-ups and one active root.
-- [ ] **C-3 (migration/repository):** Add migration 0006 and migration integration test; one transaction inserts Message, Task, Run attempt 1, idempotency, dispatch intent, and queue metadata before 202.
-- [ ] **C-4 (route/application wiring):** Add Workspace/Session/Message/reset routes, safe errors, body limits, idempotency, owner hiding, reset cancellation, old-generation terminalization as `cancelled_by_reset`, and new generation behavior.
-- [ ] **C-5 (GREEN/docs/evidence):** Rerun domain, contract, migration, and lane tests; update contracts/features/components/runbook; record `C-LANE`, `C-TRANSACTION`, `C-RESET`, `C-ROUTES`, and `C-AUTH`.
-- [ ] **C-6 (gate):** Run `make test-unit`, `make test-contract`, `make test-integration`, and `pnpm check`; commit migration, behavior, and docs/gate changes explicitly, ending with `feat: add private workspaces and durable session lanes` and `C-ORACLE`.
+- [x] **C-1 (RED):** Add tests for three concurrent follow-ups, one active root, monotonic ordering, multiple private Workspace ownership, atomic admission, cancel-then-drain, and reset generation. Task terminal status includes `cancelled`; failure/reason code is `cancelled_by_reset`. Do not invent a top-level task status string if the current domain represents it in failure details.
+- [x] **C-2 (interface/domain):** Implement Workspace, ProductSession, Message, SessionLane, owner-derived access, and repository contracts with queued follow-ups and one active root.
+- [x] **C-3 (migration/repository):** Add migration 0006 and migration integration test; one transaction inserts Message, Task, Run attempt 1, idempotency, dispatch intent, and queue metadata before 202.
+- [x] **C-4 (route/application wiring):** Add Workspace/Session/Message/reset routes, safe errors, body limits, idempotency, owner hiding, reset cancellation, old-generation terminalization as `cancelled_by_reset`, and new generation behavior.
+- [x] **C-5 (GREEN/docs/evidence):** Rerun domain, contract, migration, and lane tests; update contracts/features/components/runbook; record `C-LANE`, `C-TRANSACTION`, `C-RESET`, `C-ROUTES`, and `C-AUTH`.
+- [x] **C-6 (gate):** Run focused unit, contract, integration, and `pnpm check`; commit migration, behavior, and docs/gate changes explicitly, ending with `feat: add private workspaces and durable session lanes` and `C-ORACLE`.
 
 ### D — Runtime sessions, events, SSE, and cancel
 
@@ -256,16 +256,27 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
   passed 58/58.
 - **B-ORACLE:** Blocker-only cumulative review returned `APPROVED`; no deferred
   Phase B findings were reported. Phase B is sufficient to start Phase C.
+- **C-EVIDENCE:** Node 24 focused evidence recorded as 1/1 sessions contract,
+  1/1 real-PG session-lane integration, 13/13 focused Task/Run regressions, and
+  green type, format, docs, and exec-plan checks. The evidence is focused and
+  does not claim full-suite or production readiness.
+- **C-COMMITS:** Phase C implementation and blocker-only fix are recorded by
+  `4cbc011`, `415aa07`, and `eaf7e8b`.
+- **C-ORACLE:** Blocker-only review found that reset bulk-cancellation included
+  the lane active Task. The fix excludes `active_task_id`, preserves the active
+  old-generation Task with a durable cancellation request, and verifies
+  terminal promotion to new-generation work.
 
 ## Current blocker
 
-None. P0, Phase A, and Phase B are complete. Phase C minimum Workspace/Session
-lane is next.
+None. P0, Phase A, Phase B, and the Phase C minimum are complete. Provider
+cancellation forwarding is the next Phase D minimum action; later hardening
+remains deferred under the MVP-first review policy.
 
 ## Next exact command
 
 ```bash
-pnpm exec vitest run --config vitest.unit.config.ts src/domain/workspaces/workspace.test.ts src/domain/sessions/session-lane.test.ts
+pnpm exec vitest run --config vitest.unit.config.ts src/domain/runs/run-status.test.ts src/application/runs/execute-run.test.ts
 ```
 
 ## Completion checklist

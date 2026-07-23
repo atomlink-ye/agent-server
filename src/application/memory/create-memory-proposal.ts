@@ -38,6 +38,7 @@ export class CreateMemoryProposal {
     input: CreateMemoryProposalInput,
   ): Promise<MemoryProposal> {
     let workspaceId = input.accessContext.workspaceId;
+    let sourceMessageId = input.sourceMessageId ?? null;
     if (input.sourceTaskId) {
       const task = await this.taskRepository.findByIdForOwner(
         input.sourceTaskId,
@@ -47,6 +48,7 @@ export class CreateMemoryProposal {
         throw new SourceTaskNotFoundError();
       }
       workspaceId = task.task.workspaceId;
+      sourceMessageId = task.task.sourceMessageId ?? sourceMessageId;
     }
 
     const proposal = createMemoryProposal({
@@ -55,7 +57,7 @@ export class CreateMemoryProposal {
       originalCategory: input.category,
       sourceTaskId: input.sourceTaskId ?? null,
       sourceSessionId: input.sourceSessionId ?? null,
-      sourceMessageId: input.sourceMessageId ?? null,
+      sourceMessageId,
       sourceRunId: input.sourceRunId ?? null,
       sourceAgentVersionId: input.sourceAgentVersionId ?? null,
       sourceCandidateIndex: input.sourceCandidateIndex ?? null,
@@ -76,6 +78,7 @@ export class CreateMemoryProposal {
     const proposals: MemoryProposal[] = [];
     for (const input of inputs) {
       let workspaceId = input.accessContext.workspaceId;
+      let sourceMessageId = input.sourceMessageId ?? null;
       if (input.sourceTaskId) {
         const task = await this.taskRepository.findByIdForOwner(
           input.sourceTaskId,
@@ -83,6 +86,7 @@ export class CreateMemoryProposal {
         );
         if (!task) throw new SourceTaskNotFoundError();
         workspaceId = task.task.workspaceId;
+        sourceMessageId = task.task.sourceMessageId ?? sourceMessageId;
       }
       proposals.push(
         createMemoryProposal({
@@ -91,7 +95,7 @@ export class CreateMemoryProposal {
           originalCategory: input.category,
           sourceTaskId: input.sourceTaskId ?? null,
           sourceSessionId: input.sourceSessionId ?? null,
-          sourceMessageId: input.sourceMessageId ?? null,
+          sourceMessageId,
           sourceRunId: input.sourceRunId ?? null,
           sourceAgentVersionId: input.sourceAgentVersionId ?? null,
           sourceCandidateIndex: input.sourceCandidateIndex ?? null,

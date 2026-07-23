@@ -474,6 +474,71 @@ describe('workspace memory HTTP contracts', () => {
     expect(foreignProposals.status).toBe(404);
   });
 
+  it('lists proposals independently for two owned Product Workspaces and discloses neither to a foreign principal', async () => {
+    const firstWorkspace = '00000000-0000-4000-8000-00000000f201';
+    const secondWorkspace = '00000000-0000-4000-8000-00000000f202';
+    const createOwnedProposal = async (
+      workspaceId: string,
+      content: string,
+    ) => {
+      const app = await createTestApp(new FakeAgentRuntime(), {
+        startDispatcher: false,
+        workspaceId,
+      });
+      const task = (await (
+        await app.request('/api/v1/tasks:invoke', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            invokable: {
+              kind: 'agent',
+              version_id: defaultPublishedAgentVersionId,
+            },
+            input: { text: content },
+            workspace_id: workspaceId,
+          }),
+        })
+      ).json()) as { task_id: string };
+      await app.request('/api/v1/workspace-memory/proposals', {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content,
+          category: 'workspace',
+          source_task_id: task.task_id,
+        }),
+      });
+      return app;
+    };
+    const firstApp = await createOwnedProposal(firstWorkspace, 'first only');
+    const secondApp = await createOwnedProposal(secondWorkspace, 'second only');
+
+    const firstList = await firstApp.request(
+      `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    const secondList = await secondApp.request(
+      `/api/v1/workspaces/${secondWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(
+      (
+        (await firstList.json()) as { proposals: Array<{ content: string }> }
+      ).proposals.map((proposal) => proposal.content),
+    ).toEqual(['first only']);
+    expect(
+      (
+        (await secondList.json()) as { proposals: Array<{ content: string }> }
+      ).proposals.map((proposal) => proposal.content),
+    ).toEqual(['second only']);
+    const foreign = await firstApp.request(
+      `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreign.status).toBe(404);
+    expect(await foreign.text()).not.toContain(firstWorkspace);
+  });
+
   it('derives product workspace scope from a source task and hides it from a foreign principal', async () => {
     const workspaceId = '00000000-0000-4000-8000-00000000f101';
     const app = await createTestApp(new FakeAgentRuntime(), {

@@ -221,6 +221,7 @@ interface TaskRow {
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly session_id: string | null;
+  readonly input_message_id: string | null;
   readonly generation: number | null;
   readonly lane_sequence: number | null;
   readonly latest_run_id: string | null;
@@ -258,6 +259,7 @@ const TASK_SELECT_SQL = `
     tasks.created_at,
     tasks.updated_at,
     tasks.session_id,
+    input_message.id AS input_message_id,
     tasks.generation,
     tasks.lane_sequence,
     latest_run.id AS latest_run_id,
@@ -284,6 +286,13 @@ const TASK_SELECT_SQL = `
     ORDER BY runs.attempt DESC
     LIMIT 1
   ) AS latest_run ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT messages.id
+    FROM messages
+    WHERE messages.task_id = tasks.id AND messages.role = 'user'
+    ORDER BY messages.created_at ASC, messages.sequence ASC
+    LIMIT 1
+  ) AS input_message ON TRUE
 `;
 
 function mapTaskRow(row: TaskRow): TaskRecord {
@@ -311,6 +320,7 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     sessionId: row.session_id,
+    sourceMessageId: row.input_message_id,
     generation: row.generation === null ? null : Number(row.generation),
     laneSequence: row.lane_sequence === null ? null : Number(row.lane_sequence),
   };

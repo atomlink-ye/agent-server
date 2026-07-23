@@ -1,4 +1,5 @@
-import { lstat, mkdir, readFile, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, unlink } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import {
@@ -227,62 +228,79 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     readonly memoryCandidates?: AgentRuntimeExecution['memoryCandidates'];
   }> {
     await this.#assertSafePath(path);
-    let stat;
+    let handle;
     try {
-      stat = await lstat(path);
+      handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
       throw new RuntimeExecutionError(
         'Unable to inspect memory proposal artifact.',
       );
     }
-    if (
-      stat.isSymbolicLink() ||
-      !stat.isFile() ||
-      stat.size > MEMORY_ARTIFACT_MAX_BYTES
-    )
-      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(await readFile(path, 'utf8'));
+      const stat = await handle.stat();
+      if (!stat.isFile())
+        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+      const buffer = Buffer.alloc(MEMORY_ARTIFACT_MAX_BYTES + 1);
+      let offset = 0;
+      while (offset < buffer.length) {
+        const read = await handle.read(
+          buffer,
+          offset,
+          buffer.length - offset,
+          null,
+        );
+        offset += read.bytesRead;
+        if (read.bytesRead === 0) break;
+      }
+      if (offset > MEMORY_ARTIFACT_MAX_BYTES)
+        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+      const parsed: unknown = JSON.parse(
+        buffer.subarray(0, offset).toString('utf8'),
+      );
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        Object.keys(parsed).length !== 1 ||
+        !('proposals' in parsed) ||
+        !Array.isArray(parsed.proposals) ||
+        parsed.proposals.length > MEMORY_ARTIFACT_MAX_PROPOSALS
+      )
+        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+      const proposals = parsed.proposals.map((proposal) => {
+        if (
+          !proposal ||
+          typeof proposal !== 'object' ||
+          Object.keys(proposal).some(
+            (key) => key !== 'category' && key !== 'content',
+          )
+        )
+          throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+        const candidate = proposal as { category?: unknown; content?: unknown };
+        if (
+          typeof candidate.category !== 'string' ||
+          !MEMORY_CATEGORIES.has(candidate.category) ||
+          typeof candidate.content !== 'string' ||
+          candidate.content.trim() === '' ||
+          candidate.content.length > MEMORY_CONTENT_MAX_CHARS
+        )
+          throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+        return { category: candidate.category, content: candidate.content };
+      });
+      return proposals.length ? { memoryCandidates: proposals } : {};
     } catch {
       throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+    } finally {
+      await handle.close();
     }
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      !('proposals' in parsed) ||
-      !Array.isArray(parsed.proposals) ||
-      parsed.proposals.length > MEMORY_ARTIFACT_MAX_PROPOSALS
-    )
-      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
-    const proposals = parsed.proposals.map((proposal) => {
-      if (
-        !proposal ||
-        typeof proposal !== 'object' ||
-        Object.keys(proposal).some(
-          (key) => key !== 'category' && key !== 'content',
-        )
-      )
-        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
-      const candidate = proposal as { category?: unknown; content?: unknown };
-      if (
-        typeof candidate.category !== 'string' ||
-        !MEMORY_CATEGORIES.has(candidate.category) ||
-        typeof candidate.content !== 'string' ||
-        candidate.content.trim() === '' ||
-        candidate.content.length > MEMORY_CONTENT_MAX_CHARS
-      )
-        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
-      return { category: candidate.category, content: candidate.content };
-    });
-    return proposals.length ? { memoryCandidates: proposals } : {};
   }
 
   async #prepareArtifactPath(relativePath: string): Promise<string> {
     const scratchRoot = resolve(this.#options.cwd, 'scratchpad');
+    await this.#assertSafePath(scratchRoot, scratchRoot);
     await mkdir(scratchRoot, { recursive: true });
     const runDirectory = dirname(resolve(this.#options.cwd, relativePath));
+    await this.#assertSafePath(runDirectory, scratchRoot);
     await mkdir(runDirectory, { recursive: true });
     const absolute = resolve(this.#options.cwd, relativePath);
     await this.#assertSafePath(absolute, scratchRoot);
@@ -294,7 +312,6 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     configuredRoot = resolve(this.#options.cwd, 'scratchpad'),
   ): Promise<void> {
     const root = resolve(configuredRoot);
-    const rootReal = await realpath(root);
     const candidate = resolve(path);
     const lexicalRelative = relative(root, candidate);
     if (
@@ -305,39 +322,12 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         'Memory proposal artifact path is outside the runtime scratch root.',
       );
     }
-    let lexical = root;
-    for (const part of lexicalRelative.split('/').slice(0, -1)) {
-      lexical = join(lexical, part);
-      const stat = await lstat(lexical);
-      if (stat.isSymbolicLink())
-        throw new RuntimeExecutionError(
-          'Memory proposal artifact path contains a symbolic-link ancestor.',
-        );
+    await rejectSymlinkIfPresent(root, true);
+    let current = root;
+    for (const part of lexicalRelative.split('/').filter(Boolean)) {
+      current = join(current, part);
+      await rejectSymlinkIfPresent(current, current === candidate);
     }
-    const candidateParent = await realpath(dirname(candidate));
-    const underRoot = relative(rootReal, candidateParent);
-    if (underRoot.startsWith('..') || underRoot.split('/').includes('..')) {
-      throw new RuntimeExecutionError(
-        'Memory proposal artifact path is outside the runtime scratch root.',
-      );
-    }
-    let current = candidateParent;
-    while (current !== rootReal && current.startsWith(`${rootReal}/`)) {
-      const stat = await lstat(current);
-      if (stat.isSymbolicLink())
-        throw new RuntimeExecutionError(
-          'Memory proposal artifact path contains a symbolic-link ancestor.',
-        );
-      current = dirname(current);
-    }
-    const stat = await lstat(candidate).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') return null;
-        throw error;
-      },
-    );
-    if (stat?.isSymbolicLink())
-      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
   }
 
   public async cancel(input: {
@@ -397,6 +387,24 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#agents.clear();
     this.#initialization = null;
     await this.#client.close();
+  }
+}
+
+async function rejectSymlinkIfPresent(
+  path: string,
+  existingRequired: boolean,
+): Promise<void> {
+  try {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink())
+      throw new RuntimeExecutionError(
+        existingRequired
+          ? 'Invalid memory proposal artifact path: the runtime scratch root or its ancestor is a symbolic link (symbolic-link ancestor).'
+          : 'Memory proposal artifact path contains a symbolic-link ancestor (symbolic link).',
+      );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
   }
 }
 

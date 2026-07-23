@@ -135,11 +135,13 @@ export class CreateMemoryProposal {
 function assertProvenanceShape(input: CreateMemoryProposalInput): void {
   const runtimeFields = [
     input.sourceTaskId,
+    input.sourceMessageId,
     input.sourceRunId,
     input.sourceAgentVersionId,
     input.sourceCandidateIndex,
   ];
   const present = [
+    input.sourceMessageId,
     input.sourceRunId,
     input.sourceAgentVersionId,
     input.sourceCandidateIndex,

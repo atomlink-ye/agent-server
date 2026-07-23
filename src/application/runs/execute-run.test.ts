@@ -687,6 +687,7 @@ function createTask(
       prompt: 'private prompt',
     }),
     inputFingerprint: 'fingerprint-1',
+    sourceMessageId: `message-${id}`,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
 }

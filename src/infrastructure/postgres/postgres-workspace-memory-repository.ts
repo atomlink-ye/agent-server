@@ -128,25 +128,26 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
     try {
       const materialized: MemoryProposal[] = [];
       for (const proposal of proposals) {
-        const existing =
-          proposal.sourceRunId &&
+        const replayable =
+          proposal.sourceRunId !== null &&
+          proposal.sourceRunId !== undefined &&
           proposal.sourceCandidateIndex !== null &&
-          proposal.sourceCandidateIndex !== undefined
-            ? await selectProposalByReplayKey(
-                client,
-                proposal.sourceRunId,
-                proposal.sourceCandidateIndex,
-              )
-            : null;
-        if (existing) {
-          materialized.push(existing);
-          continue;
-        }
-        await client.query(
-          `INSERT INTO workspace_memory_proposals (id, tenant_id, workspace_id, principal_type, principal_id, original_content, original_category, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, source_task_id, source_session_id, proposer_snapshot, status, review_outcome, reviewed_content, reviewer_snapshot, reviewed_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+          proposal.sourceCandidateIndex !== undefined;
+        await client.query<MemoryProposalRow>(
+          `INSERT INTO workspace_memory_proposals (id, tenant_id, workspace_id, principal_type, principal_id, original_content, original_category, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, source_task_id, source_session_id, proposer_snapshot, status, review_outcome, reviewed_content, reviewer_snapshot, reviewed_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) ON CONFLICT (source_run_id, source_candidate_index) WHERE source_run_id IS NOT NULL AND source_candidate_index IS NOT NULL DO NOTHING`,
           proposalValues(proposal),
         );
-        materialized.push(proposal);
+        if (!replayable) {
+          materialized.push(proposal);
+          continue;
+        }
+        const existing = await selectProposalByReplayKey(
+          client,
+          proposal.sourceRunId!,
+          proposal.sourceCandidateIndex!,
+        );
+        if (existing) materialized.push(existing);
+        else materialized.push(proposal);
       }
       await client.query('COMMIT');
       return materialized;
@@ -291,6 +292,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           AND workspace_id = $2
           AND principal_type = $3
           AND principal_id = $4
+          AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
         ORDER BY accepted_at DESC, internal_order DESC
       `,
       [

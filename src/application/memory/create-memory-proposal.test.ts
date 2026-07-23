@@ -78,6 +78,12 @@ describe('CreateMemoryProposal', () => {
       { sourceTaskId: 'task', sourceRunId: 'run' },
       { sourceRunId: 'run', sourceAgentVersionId: 'version' },
       { sourceRunId: 'run', sourceCandidateIndex: 0 },
+      {
+        sourceTaskId: 'task',
+        sourceMessageId: 'message',
+        sourceRunId: 'run',
+        sourceCandidateIndex: 0,
+      },
     ];
     for (const provenance of partials) {
       await expect(
@@ -86,6 +92,41 @@ describe('CreateMemoryProposal', () => {
           category: 'project_constraint',
           accessContext,
           ...provenance,
+        }),
+      ).rejects.toBeInstanceOf(InvalidMemoryProvenanceError);
+    }
+  });
+
+  it('rejects each mismatched runtime relationship before persistence', async () => {
+    const record = {
+      task: {
+        id: 'task',
+        workspaceId: accessContext.workspaceId,
+        sourceMessageId: 'message',
+        invokableVersionId: 'version',
+      },
+      latestRun: { runId: 'run' },
+    };
+    const service = new CreateMemoryProposal(
+      new FakeWorkspaceMemoryRepository(),
+      new FakeTaskRepository(record),
+    );
+    for (const mismatch of [
+      { sourceMessageId: 'other-message' },
+      { sourceRunId: 'other-run' },
+      { sourceAgentVersionId: 'other-version' },
+    ]) {
+      await expect(
+        service.execute({
+          content: 'runtime memory',
+          category: 'project_constraint',
+          sourceTaskId: 'task',
+          sourceMessageId: 'message',
+          sourceRunId: 'run',
+          sourceAgentVersionId: 'version',
+          sourceCandidateIndex: 0,
+          accessContext,
+          ...mismatch,
         }),
       ).rejects.toBeInstanceOf(InvalidMemoryProvenanceError);
     }
@@ -122,6 +163,7 @@ class FakeWorkspaceMemoryRepository implements WorkspaceMemoryRepository {
 }
 
 class FakeTaskRepository implements TaskRepository {
+  public constructor(private readonly record: any = null) {}
   public async save(): Promise<void> {}
 
   public async findById() {
@@ -129,7 +171,7 @@ class FakeTaskRepository implements TaskRepository {
   }
 
   public async findByIdForOwner() {
-    return null;
+    return this.record;
   }
 
   public async findByRootTaskIdForOwner() {

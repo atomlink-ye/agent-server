@@ -29,18 +29,18 @@ DO $$ BEGIN
   END IF;
 END $$;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspace_memory_proposals_runtime_provenance_shape_check') THEN
-    ALTER TABLE workspace_memory_proposals ADD CONSTRAINT workspace_memory_proposals_runtime_provenance_shape_check
-      CHECK (source_run_id IS NULL OR (source_candidate_index IS NOT NULL AND source_task_id IS NOT NULL AND source_agent_version_id IS NOT NULL));
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspace_memory_entries_runtime_provenance_shape_check') THEN
-    ALTER TABLE workspace_memory_entries ADD CONSTRAINT workspace_memory_entries_runtime_provenance_shape_check
-      CHECK (source_run_id IS NULL OR (source_candidate_index IS NOT NULL AND source_task_id IS NOT NULL AND source_agent_version_id IS NOT NULL));
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspace_memory_owned_entries_runtime_provenance_shape_check') THEN
-    ALTER TABLE workspace_memory_owned_entries ADD CONSTRAINT workspace_memory_owned_entries_runtime_provenance_shape_check
-      CHECK (source_run_id IS NULL OR (source_candidate_index IS NOT NULL AND source_task_id IS NOT NULL AND source_agent_version_id IS NOT NULL));
-  END IF;
+  ALTER TABLE workspace_memory_proposals DROP CONSTRAINT IF EXISTS workspace_memory_proposals_runtime_provenance_shape_check;
+  ALTER TABLE workspace_memory_entries DROP CONSTRAINT IF EXISTS workspace_memory_entries_runtime_provenance_shape_check;
+  ALTER TABLE workspace_memory_owned_entries DROP CONSTRAINT IF EXISTS workspace_memory_owned_entries_runtime_provenance_shape_check;
+  ALTER TABLE workspace_memory_proposals ADD CONSTRAINT workspace_memory_proposals_runtime_provenance_shape_check
+    CHECK ((source_run_id IS NULL AND source_agent_version_id IS NULL AND source_candidate_index IS NULL)
+      OR (source_message_id IS NOT NULL AND source_task_id IS NOT NULL AND source_run_id IS NOT NULL AND source_agent_version_id IS NOT NULL AND source_candidate_index IS NOT NULL));
+  ALTER TABLE workspace_memory_entries ADD CONSTRAINT workspace_memory_entries_runtime_provenance_shape_check
+    CHECK ((source_run_id IS NULL AND source_agent_version_id IS NULL AND source_candidate_index IS NULL)
+      OR (source_message_id IS NOT NULL AND source_task_id IS NOT NULL AND source_run_id IS NOT NULL AND source_agent_version_id IS NOT NULL AND source_candidate_index IS NOT NULL));
+  ALTER TABLE workspace_memory_owned_entries ADD CONSTRAINT workspace_memory_owned_entries_runtime_provenance_shape_check
+    CHECK ((source_run_id IS NULL AND source_agent_version_id IS NULL AND source_candidate_index IS NULL)
+      OR (source_message_id IS NOT NULL AND source_task_id IS NOT NULL AND source_run_id IS NOT NULL AND source_agent_version_id IS NOT NULL AND source_candidate_index IS NOT NULL));
 END $$;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspace_memory_owned_entries_source_message_fk') THEN
@@ -71,8 +71,11 @@ DO $$ BEGIN
   END IF;
 END $$;
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workspace_memory_proposals_candidate_index_check') THEN
-    ALTER TABLE workspace_memory_proposals ADD CONSTRAINT workspace_memory_proposals_candidate_index_check CHECK (source_candidate_index IS NULL OR source_candidate_index >= 0);
-  END IF;
+  ALTER TABLE workspace_memory_proposals DROP CONSTRAINT IF EXISTS workspace_memory_proposals_candidate_index_check;
+  ALTER TABLE workspace_memory_entries DROP CONSTRAINT IF EXISTS workspace_memory_entries_candidate_index_check;
+  ALTER TABLE workspace_memory_owned_entries DROP CONSTRAINT IF EXISTS workspace_memory_owned_entries_candidate_index_check;
+  ALTER TABLE workspace_memory_proposals ADD CONSTRAINT workspace_memory_proposals_candidate_index_check CHECK (source_candidate_index IS NULL OR (source_candidate_index >= 0 AND source_candidate_index < 64));
+  ALTER TABLE workspace_memory_entries ADD CONSTRAINT workspace_memory_entries_candidate_index_check CHECK (source_candidate_index IS NULL OR (source_candidate_index >= 0 AND source_candidate_index < 64));
+  ALTER TABLE workspace_memory_owned_entries ADD CONSTRAINT workspace_memory_owned_entries_candidate_index_check CHECK (source_candidate_index IS NULL OR (source_candidate_index >= 0 AND source_candidate_index < 64));
 END $$;
 COMMIT;

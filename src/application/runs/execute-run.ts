@@ -223,7 +223,9 @@ export class ExecuteRun {
       runId: claim.run.id,
       prompt: resolved.prompt,
     });
-    const candidateInputs = (execution.memoryCandidates ?? [])
+    const candidateInputs = (
+      task.sourceMessageId ? (execution.memoryCandidates ?? []) : []
+    )
       .slice(0, resolved.proposalLimit)
       .flatMap((candidate, sourceCandidateIndex) => {
         if (!isSafeRuntimeCandidate(candidate)) return [];

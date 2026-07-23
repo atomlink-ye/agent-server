@@ -158,4 +158,67 @@ describe('Paseo runtime memory proposal artifact', () => {
       ).execute({ runId: 'run-parent', prompt: 'test' }),
     ).rejects.toThrow('symbolic-link ancestor');
   });
+
+  it('rejects extra top-level properties, 65 proposals, and oversized artifacts', async () => {
+    const cases = [
+      { proposals: [], extra: true },
+      {
+        proposals: Array.from({ length: 65 }, () => ({
+          category: 'project_constraint',
+          content: 'x',
+        })),
+      },
+      { proposals: [], padding: 'x'.repeat(64 * 1024) },
+    ];
+    for (const value of cases) {
+      const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
+      const artifact = join(
+        cwd,
+        'scratchpad',
+        'runs',
+        'run-1',
+        'memory-proposals.json',
+      );
+      const runtime = new PaseoRuntimeAdapter(
+        {
+          wsUrl: 'ws://test',
+          cwd,
+          workspaceTitle: 'test',
+          connectTimeoutMs: 1,
+          executionTimeoutMs: 1,
+        },
+        logger,
+        client(async () => {
+          await mkdir(join(cwd, 'scratchpad', 'runs', 'run-1'), {
+            recursive: true,
+          });
+          await writeFile(artifact, JSON.stringify(value));
+        }),
+      );
+      await expect(
+        runtime.execute({ runId: 'run-1', prompt: 'test' }),
+      ).rejects.toThrow('memory proposal artifact');
+    }
+  });
+
+  it('rejects a configured scratch root symlink before creating descendants', async () => {
+    const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
+    const target = join(cwd, 'real-scratchpad');
+    await mkdir(target, { recursive: true });
+    await symlink(target, join(cwd, 'scratchpad'));
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://test',
+        cwd,
+        workspaceTitle: 'test',
+        connectTimeoutMs: 1,
+        executionTimeoutMs: 1,
+      },
+      logger,
+      client(),
+    );
+    await expect(
+      runtime.execute({ runId: 'run-1', prompt: 'test' }),
+    ).rejects.toThrow('symbolic link');
+  });
 });

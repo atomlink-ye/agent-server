@@ -29,6 +29,34 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
 const logger = { log: () => undefined };
 
 describe('Paseo runtime memory proposal artifact', () => {
+  it('creates the run directory and sends the usable relative artifact contract', async () => {
+    const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
+    let requestPrompt = '';
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://test',
+        cwd,
+        workspaceTitle: 'test',
+        connectTimeoutMs: 1,
+        executionTimeoutMs: 1,
+      },
+      logger,
+      {
+        ...client(),
+        createOpenCodeAgent: async (input) => {
+          requestPrompt = input.prompt;
+          return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
+        },
+      },
+    );
+    await runtime.execute({ runId: 'run-contract', prompt: 'test' });
+    expect(requestPrompt).toContain(
+      'scratchpad/runs/run-contract/memory-proposals.json',
+    );
+    expect(requestPrompt).toContain('Allowed category values');
+    expect(requestPrompt).toContain('Maximum proposals: 64');
+  });
+
   it('reads valid run-scoped proposals and clears stale artifacts before execution', async () => {
     const cwd = join(tmpdir(), `agent-server-${randomUUID()}`);
     const runId = 'run-1';
@@ -112,5 +140,22 @@ describe('Paseo runtime memory proposal artifact', () => {
     await expect(
       symlinkRuntime.execute({ runId: 'run-3', prompt: 'test' }),
     ).rejects.toThrow('memory proposal artifact');
+
+    const outside = join(cwd, 'outside');
+    await mkdir(outside, { recursive: true });
+    await symlink(outside, join(cwd, 'scratchpad', 'runs', 'run-parent'));
+    await expect(
+      new PaseoRuntimeAdapter(
+        {
+          wsUrl: 'ws://test',
+          cwd,
+          workspaceTitle: 'test',
+          connectTimeoutMs: 1,
+          executionTimeoutMs: 1,
+        },
+        logger,
+        client(),
+      ).execute({ runId: 'run-parent', prompt: 'test' }),
+    ).rejects.toThrow('symbolic-link ancestor');
   });
 });

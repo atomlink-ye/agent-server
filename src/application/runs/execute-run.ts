@@ -33,7 +33,6 @@ import {
 } from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
-  private resolvedProposalLimit = 0;
   public constructor(
     private readonly completeRun: CompleteRun,
     private readonly tasks: TaskRepository,
@@ -214,7 +213,7 @@ export class ExecuteRun {
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
   ) {
-    const prompt = await this.resolveAgentPrompt(
+    const resolved = await this.resolveAgentPrompt(
       claim.run.prompt,
       ownerScope,
       invokableVersionId,
@@ -222,10 +221,10 @@ export class ExecuteRun {
     );
     const execution = await this.runtime.execute({
       runId: claim.run.id,
-      prompt,
+      prompt: resolved.prompt,
     });
     const candidateInputs = (execution.memoryCandidates ?? [])
-      .slice(0, this.resolvedProposalLimit)
+      .slice(0, resolved.proposalLimit)
       .flatMap((candidate, sourceCandidateIndex) => {
         if (!isSafeRuntimeCandidate(candidate)) return [];
         return [
@@ -238,7 +237,7 @@ export class ExecuteRun {
               ? { sourceMessageId: task.sourceMessageId }
               : {}),
             sourceRunId: claim.run.id,
-            sourceAgentVersionId: task.invokableVersionId,
+            sourceAgentVersionId: resolved.agentVersionId,
             sourceCandidateIndex,
             accessContext: {
               tenantId: task.tenantId,
@@ -303,9 +302,13 @@ export class ExecuteRun {
     ownerScope: InvokableOwnerScope,
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
-  ): Promise<string> {
+  ): Promise<{
+    readonly prompt: string;
+    readonly proposalLimit: number;
+    readonly agentVersionId: string;
+  }> {
     if (invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID) {
-      return prompt;
+      return { prompt, proposalLimit: 0, agentVersionId: invokableVersionId };
     }
 
     const agentVersion = await this.resolver.resolvePublished(
@@ -318,8 +321,6 @@ export class ExecuteRun {
         `Published agent version ${invokableVersionId} could not be loaded for execution`,
       );
     }
-    this.resolvedProposalLimit = agentVersion.proposalLimit ?? 0;
-
     let memory: string | null = null;
     if (task.memorySnapshotId && task.memorySnapshotHash) {
       if (!this.fileStore)
@@ -331,11 +332,15 @@ export class ExecuteRun {
         expectedContentHash: task.memorySnapshotHash,
       });
     }
-    return assembleContext({
-      instructions: agentVersion.instructions,
-      taskInput: prompt,
-      memory,
-    });
+    return {
+      prompt: assembleContext({
+        instructions: agentVersion.instructions,
+        taskInput: prompt,
+        memory,
+      }),
+      proposalLimit: agentVersion.proposalLimit ?? 0,
+      agentVersionId: invokableVersionId,
+    };
   }
 }
 

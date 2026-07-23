@@ -58,6 +58,7 @@ describe('ResolveAgentVersion', () => {
       source: 'managed',
       id: 'version-1',
       instructions: 'managed',
+      proposalLimit: 0,
     });
   });
 
@@ -65,6 +66,7 @@ describe('ResolveAgentVersion', () => {
     const findLegacy = vi.fn(async () => ({
       id: 'version-1',
       instructions: 'legacy',
+      proposalLimit: 0,
     })) as never;
     const resolver = new ResolveAgentVersion(
       { findVersion: vi.fn(async () => null) },
@@ -77,6 +79,7 @@ describe('ResolveAgentVersion', () => {
       source: 'legacy',
       id: 'version-1',
       instructions: 'legacy',
+      proposalLimit: 0,
     });
     expect(findLegacy).toHaveBeenCalledWith('version-1', scope);
   });

@@ -475,16 +475,24 @@ describe('workspace memory HTTP contracts', () => {
   });
 
   it('lists proposals independently for two owned Product Workspaces and discloses neither to a foreign principal', async () => {
-    const firstWorkspace = '00000000-0000-4000-8000-00000000f201';
-    const secondWorkspace = '00000000-0000-4000-8000-00000000f202';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const createWorkspace = async (name: string) => {
+      const response = await app.request('/api/v1/workspaces', {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ name }),
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { workspace_id: string }).workspace_id;
+    };
+    const firstWorkspace = await createWorkspace('first workspace');
+    const secondWorkspace = await createWorkspace('second workspace');
     const createOwnedProposal = async (
       workspaceId: string,
       content: string,
     ) => {
-      const app = await createTestApp(new FakeAgentRuntime(), {
-        startDispatcher: false,
-        workspaceId,
-      });
       const task = (await (
         await app.request('/api/v1/tasks:invoke', {
           method: 'POST',
@@ -499,7 +507,7 @@ describe('workspace memory HTTP contracts', () => {
           }),
         })
       ).json()) as { task_id: string };
-      await app.request('/api/v1/workspace-memory/proposals', {
+      await app.request(`/api/v1/workspaces/${workspaceId}/memory/proposals`, {
         method: 'POST',
         headers: authenticatedJsonHeaders,
         body: JSON.stringify({
@@ -508,16 +516,15 @@ describe('workspace memory HTTP contracts', () => {
           source_task_id: task.task_id,
         }),
       });
-      return app;
     };
-    const firstApp = await createOwnedProposal(firstWorkspace, 'first only');
-    const secondApp = await createOwnedProposal(secondWorkspace, 'second only');
+    await createOwnedProposal(firstWorkspace, 'first only');
+    await createOwnedProposal(secondWorkspace, 'second only');
 
-    const firstList = await firstApp.request(
+    const firstList = await app.request(
       `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
-    const secondList = await secondApp.request(
+    const secondList = await app.request(
       `/api/v1/workspaces/${secondWorkspace}/memory/proposals`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
@@ -531,7 +538,7 @@ describe('workspace memory HTTP contracts', () => {
         (await secondList.json()) as { proposals: Array<{ content: string }> }
       ).proposals.map((proposal) => proposal.content),
     ).toEqual(['second only']);
-    const foreign = await firstApp.request(
+    const foreign = await app.request(
       `/api/v1/workspaces/${firstWorkspace}/memory/proposals`,
       { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
     );

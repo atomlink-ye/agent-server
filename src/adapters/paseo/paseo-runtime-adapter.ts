@@ -1,5 +1,5 @@
-import { lstat, mkdir, readFile, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, mkdir, readFile, realpath, unlink } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import {
   type AgentRuntimeExecution,
@@ -27,7 +27,7 @@ export interface PaseoRuntimeOptions {
 }
 
 const MEMORY_ARTIFACT_MAX_BYTES = 64 * 1024;
-const MEMORY_ARTIFACT_MAX_PROPOSALS = 32;
+const MEMORY_ARTIFACT_MAX_PROPOSALS = 64;
 const MEMORY_CATEGORIES = new Set([
   'terminology',
   'output_preference',
@@ -166,19 +166,19 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       throw new RuntimeExecutionError('Paseo runtime is not initialized.');
     }
 
-    const artifact = join(
-      this.#options.cwd,
+    const artifactRelativePath = join(
       'scratchpad',
       'runs',
       input.runId,
       'memory-proposals.json',
     );
+    const artifact = await this.#prepareArtifactPath(artifactRelativePath);
     await this.#clearArtifact(artifact);
     const agent = await this.#client.createOpenCodeAgent({
       cwd: this.#options.cwd,
       workspaceId: this.#workspaceId,
       model: this.#model.id,
-      prompt: input.prompt,
+      prompt: `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`,
       runId: input.runId,
     });
     this.#agents.set(input.runId, agent.id);
@@ -215,6 +215,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   }
 
   async #clearArtifact(path: string): Promise<void> {
+    await this.#assertSafePath(path);
     try {
       await unlink(path);
     } catch (error) {
@@ -225,6 +226,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   async #readMemoryCandidates(path: string): Promise<{
     readonly memoryCandidates?: AgentRuntimeExecution['memoryCandidates'];
   }> {
+    await this.#assertSafePath(path);
     let stat;
     try {
       stat = await lstat(path);
@@ -275,6 +277,67 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       return { category: candidate.category, content: candidate.content };
     });
     return proposals.length ? { memoryCandidates: proposals } : {};
+  }
+
+  async #prepareArtifactPath(relativePath: string): Promise<string> {
+    const scratchRoot = resolve(this.#options.cwd, 'scratchpad');
+    await mkdir(scratchRoot, { recursive: true });
+    const runDirectory = dirname(resolve(this.#options.cwd, relativePath));
+    await mkdir(runDirectory, { recursive: true });
+    const absolute = resolve(this.#options.cwd, relativePath);
+    await this.#assertSafePath(absolute, scratchRoot);
+    return absolute;
+  }
+
+  async #assertSafePath(
+    path: string,
+    configuredRoot = resolve(this.#options.cwd, 'scratchpad'),
+  ): Promise<void> {
+    const root = resolve(configuredRoot);
+    const rootReal = await realpath(root);
+    const candidate = resolve(path);
+    const lexicalRelative = relative(root, candidate);
+    if (
+      lexicalRelative.startsWith('..') ||
+      lexicalRelative.split('/').includes('..')
+    ) {
+      throw new RuntimeExecutionError(
+        'Memory proposal artifact path is outside the runtime scratch root.',
+      );
+    }
+    let lexical = root;
+    for (const part of lexicalRelative.split('/').slice(0, -1)) {
+      lexical = join(lexical, part);
+      const stat = await lstat(lexical);
+      if (stat.isSymbolicLink())
+        throw new RuntimeExecutionError(
+          'Memory proposal artifact path contains a symbolic-link ancestor.',
+        );
+    }
+    const candidateParent = await realpath(dirname(candidate));
+    const underRoot = relative(rootReal, candidateParent);
+    if (underRoot.startsWith('..') || underRoot.split('/').includes('..')) {
+      throw new RuntimeExecutionError(
+        'Memory proposal artifact path is outside the runtime scratch root.',
+      );
+    }
+    let current = candidateParent;
+    while (current !== rootReal && current.startsWith(`${rootReal}/`)) {
+      const stat = await lstat(current);
+      if (stat.isSymbolicLink())
+        throw new RuntimeExecutionError(
+          'Memory proposal artifact path contains a symbolic-link ancestor.',
+        );
+      current = dirname(current);
+    }
+    const stat = await lstat(candidate).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      },
+    );
+    if (stat?.isSymbolicLink())
+      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
   }
 
   public async cancel(input: {
@@ -335,4 +398,14 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#initialization = null;
     await this.#client.close();
   }
+}
+
+function memoryArtifactInstruction(relativePath: string): string {
+  return [
+    'Internal runtime artifact contract (server-controlled; do not mention host paths):',
+    `Write proposals only to the exact relative path ${JSON.stringify(relativePath)}.`,
+    'The complete JSON value must match exactly {"proposals":[{"category":string,"content":string}]} with no additional properties.',
+    'Allowed category values: terminology, output_preference, project_constraint, confirmed_workflow_procedure.',
+    `Maximum proposals: ${MEMORY_ARTIFACT_MAX_PROPOSALS}; maximum content length: ${MEMORY_CONTENT_MAX_CHARS} characters.`,
+  ].join('\n');
 }

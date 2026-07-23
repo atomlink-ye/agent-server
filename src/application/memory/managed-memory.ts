@@ -18,6 +18,10 @@ export interface ManagedMemoryEntry {
   readonly acceptedAt: string;
   readonly sourceTaskId: string | null;
   readonly sourceSessionId: string | null;
+  readonly sourceMessageId: string | null;
+  readonly sourceRunId: string | null;
+  readonly sourceAgentVersionId: string | null;
+  readonly sourceCandidateIndex: number | null;
 }
 export interface ManagedMemorySnapshot {
   readonly snapshotId: string;
@@ -27,6 +31,7 @@ export interface ManagedMemorySnapshot {
   readonly manifestHash: string;
   readonly projectionStatus: string;
   readonly createdAt: string;
+  readonly entries: readonly ManagedMemoryEntry[];
 }
 
 export class ManagedMemory {
@@ -44,7 +49,7 @@ export class ManagedMemory {
     );
     if (!existing.rows?.length)
       await this.db.query(
-        `INSERT INTO workspace_memory_owned_entries (entry_id, proposal_id, tenant_id, workspace_id, content, content_hash, category, source_task_id, source_session_id, proposer_snapshot, reviewer_snapshot, accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        `INSERT INTO workspace_memory_owned_entries (entry_id, proposal_id, tenant_id, workspace_id, content, content_hash, category, source_task_id, source_session_id, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, proposer_snapshot, reviewer_snapshot, accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [
           entry.id,
           entry.proposalId,
@@ -55,6 +60,10 @@ export class ManagedMemory {
           entry.category,
           entry.sourceTaskId,
           entry.sourceSessionId,
+          entry.sourceMessageId ?? null,
+          entry.sourceRunId ?? null,
+          entry.sourceAgentVersionId ?? null,
+          entry.sourceCandidateIndex ?? null,
           JSON.stringify(entry.proposerSnapshot),
           JSON.stringify(entry.reviewerSnapshot),
           entry.acceptedAt,
@@ -71,7 +80,7 @@ export class ManagedMemory {
     workspaceId: string;
   }): Promise<readonly ManagedMemoryEntry[]> {
     const result = await this.db.query<any>(
-      'SELECT entry_id, proposal_id, content, category, accepted_at, source_task_id, source_session_id FROM workspace_memory_owned_entries WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY accepted_at ASC, entry_id ASC',
+      'SELECT entry_id, proposal_id, content, category, accepted_at, source_task_id, source_session_id, source_message_id, source_run_id, source_agent_version_id, source_candidate_index FROM workspace_memory_owned_entries WHERE tenant_id=$1 AND workspace_id=$2 ORDER BY accepted_at ASC, entry_id ASC',
       [scope.tenantId, scope.workspaceId],
     );
     return (result.rows ?? []).map((row) => ({
@@ -82,6 +91,10 @@ export class ManagedMemory {
       acceptedAt: new Date(row.accepted_at).toISOString(),
       sourceTaskId: row.source_task_id,
       sourceSessionId: row.source_session_id,
+      sourceMessageId: row.source_message_id,
+      sourceRunId: row.source_run_id,
+      sourceAgentVersionId: row.source_agent_version_id,
+      sourceCandidateIndex: row.source_candidate_index,
     }));
   }
 
@@ -125,7 +138,7 @@ export class ManagedMemory {
       workspace_id: scope.workspaceId,
       version,
       content_hash: contentHash,
-      entries: entries.map((e) => e.entryId),
+      entries,
     });
     const manifestHash = hash(manifest);
     await this.db.query(
@@ -168,6 +181,7 @@ export class ManagedMemory {
       manifestHash,
       projectionStatus: 'ready',
       createdAt: new Date().toISOString(),
+      entries,
     };
   }
 }
@@ -189,6 +203,7 @@ function snapshotRow(row: any): ManagedMemorySnapshot {
     manifestHash: row.manifest_hash,
     projectionStatus: row.projection_status,
     createdAt: new Date(row.created_at).toISOString(),
+    entries: row.entries ?? [],
   };
 }
 export function managedScope(accessContext: ServiceAccountAccessContext) {

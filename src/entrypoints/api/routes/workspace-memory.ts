@@ -111,6 +111,53 @@ export function registerWorkspaceMemoryRoutes(
     }
   });
 
+  app.post(
+    '/api/v1/workspaces/:workspaceId/memory/proposals',
+    async (context) => {
+      const scope = await productWorkspaceScope(context, dependencies);
+      if (!scope)
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      const input = CreateMemoryProposalRequestSchema.safeParse(
+        await readBoundedJson(context.req.raw),
+      );
+      if (!input.success)
+        throw new HttpError(
+          400,
+          'invalid_request',
+          'Non-empty content and category are required and no unknown fields are allowed.',
+        );
+      try {
+        const access = getAuthenticatedAccessContext(context);
+        const proposal = await dependencies.createMemoryProposal.execute({
+          content: input.data.content,
+          category: input.data.category,
+          ...(input.data.source_task_id !== undefined
+            ? { sourceTaskId: input.data.source_task_id }
+            : {}),
+          ...(input.data.source_session_id !== undefined
+            ? { sourceSessionId: input.data.source_session_id }
+            : {}),
+          accessContext: { ...access, workspaceId: scope.workspaceId },
+        });
+        return context.json(
+          {
+            proposal: toProposalResponse(proposal),
+            links: { self: `${PROPOSALS_PATH}/${proposal.id}` },
+          },
+          201,
+        );
+      } catch (error) {
+        if (error instanceof SourceTaskNotFoundError)
+          throw new HttpError(404, error.code, error.message);
+        throw error;
+      }
+    },
+  );
+
   app.get(PROPOSALS_PATH, async (context) => {
     const proposals = await dependencies.listMemoryProposals.execute(
       getAuthenticatedAccessContext(context),
@@ -362,6 +409,10 @@ function toProposalResponse(proposal: MemoryProposal): MemoryProposalResponse {
     category: proposal.originalCategory,
     source_task_id: proposal.sourceTaskId,
     source_session_id: proposal.sourceSessionId,
+    source_message_id: proposal.sourceMessageId ?? null,
+    source_run_id: proposal.sourceRunId ?? null,
+    source_agent_version_id: proposal.sourceAgentVersionId ?? null,
+    source_candidate_index: proposal.sourceCandidateIndex ?? null,
     status: proposal.status,
     review_outcome: proposal.reviewOutcome,
     reviewed_content: proposal.reviewedContent,
@@ -381,6 +432,10 @@ function toEntryResponse(
     category: entry.category,
     source_task_id: entry.sourceTaskId,
     source_session_id: entry.sourceSessionId,
+    source_message_id: entry.sourceMessageId ?? null,
+    source_run_id: entry.sourceRunId ?? null,
+    source_agent_version_id: entry.sourceAgentVersionId ?? null,
+    source_candidate_index: entry.sourceCandidateIndex ?? null,
     review_outcome: entry.reviewOutcome,
     accepted_at: entry.acceptedAt,
   };

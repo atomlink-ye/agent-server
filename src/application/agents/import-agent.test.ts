@@ -75,6 +75,22 @@ describe('ImportAgent application boundary', () => {
     ]);
   });
 
+  it('rejects an overlong normalized name before calling the registry', async () => {
+    const calls: ImportAgentAtomicCommand[] = [];
+    const registry = stubRegistry(async (command) => {
+      calls.push(command);
+      return {} as any;
+    });
+    await expect(
+      importAgent(registry, {
+        accessContext: context,
+        idempotencyKey: 'long-name',
+        source: validPackage('a'.repeat(256)),
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_agent_package' });
+    expect(calls).toHaveLength(0);
+  });
+
   it('makes exactly one atomic call per service invocation', async () => {
     const calls: ImportAgentAtomicCommand[] = [];
     const registry = stubRegistry(async (command) => {

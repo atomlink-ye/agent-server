@@ -3,15 +3,9 @@ import type { AccessContext } from '../control-plane/access-context.js';
 import type { AgentRegistry } from '../ports/agent-registry.js';
 import { createManagedAgentDefinition } from '../../domain/agents/managed-agent-definition.js';
 import { createManagedAgentDraft } from '../../domain/agents/managed-agent-version.js';
-import {
-  normalizeManagedAgentName,
-  type ManagedAgentOwner,
-} from '../../domain/agents/managed-agent-owner.js';
+import { type ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import { parseForImport } from './validate-agent-package.js';
-import {
-  AgentPackageValidationError,
-  InvalidIdempotencyKeyError,
-} from './errors.js';
+import { InvalidIdempotencyKeyError } from './errors.js';
 
 export interface ImportAgentInput {
   readonly accessContext: AccessContext;
@@ -27,10 +21,7 @@ export async function importAgent(
   assertKey(input.idempotencyKey);
   const parsed = parseForImport(input.source);
   const owner = ownerFromContext(input.accessContext);
-  const normalizedName = normalizeManagedAgentName(
-    parsed.package.metadata.name,
-  );
-  if (!normalizedName) throw new AgentPackageValidationError();
+  const normalizedName = parsed.normalizedName;
   const definition = createManagedAgentDefinition({
     ...owner,
     normalizedName,

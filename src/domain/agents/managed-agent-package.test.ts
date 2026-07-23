@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILT_IN_MODEL_POLICY_REFS,
   MAX_AST_DEPTH,
+  MAX_MANAGED_AGENT_NAME_BYTES,
   MAX_SCALAR_LENGTH,
   MAX_SOURCE_BYTES,
   parseManagedAgentPackage,
@@ -84,6 +85,28 @@ describe('managed agent package', () => {
     expect(parseManagedAgentPackage(yaml()).fingerprint).toBe(
       result.fingerprint,
     );
+  });
+
+  it('normalizes and bounds metadata names by UTF-8 bytes before fingerprinting', () => {
+    const ascii = 'a'.repeat(MAX_MANAGED_AGENT_NAME_BYTES);
+    const exact = parseManagedAgentPackage(yaml().replace('researcher', ascii));
+    expect(exact.normalizedName).toBe(ascii);
+    expect(Buffer.byteLength(exact.normalizedName, 'utf8')).toBe(255);
+    const asciiError = errorCode(yaml().replace('researcher', `${ascii}a`));
+    expect(asciiError.code).toBe('invalid_name');
+    expect(asciiError.path).toBe('$.metadata.name');
+    expect(JSON.stringify(asciiError)).not.toContain(`${ascii}a`);
+
+    const multibyte = 'é'.repeat(128);
+    expect(multibyte.length).toBeLessThan(MAX_MANAGED_AGENT_NAME_BYTES);
+    expect(Buffer.byteLength(multibyte, 'utf8')).toBe(256);
+    expect(errorCode(yaml().replace('researcher', multibyte)).code).toBe(
+      'invalid_name',
+    );
+    expect(
+      parseManagedAgentPackage(yaml().replace('researcher', 'é'.repeat(127)))
+        .normalizedName,
+    ).toBe('é'.repeat(127));
   });
 
   it('canonicalizes reordered YAML identically', () => {

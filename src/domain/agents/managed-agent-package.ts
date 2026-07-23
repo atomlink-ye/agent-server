@@ -21,6 +21,10 @@ import {
   MAX_MANAGED_PATTERN_LENGTH,
   MAX_MANAGED_PATTERN_PROGRAM_SIZE,
 } from './managed-agent-pattern.js';
+import {
+  MAX_MANAGED_AGENT_NAME_BYTES,
+  normalizeManagedAgentName,
+} from './managed-agent-owner.js';
 
 export {
   MAX_AST_DEPTH,
@@ -29,6 +33,7 @@ export {
   MAX_MANAGED_PATTERN_INPUT_LENGTH,
   MAX_MANAGED_PATTERN_LENGTH,
   MAX_MANAGED_PATTERN_PROGRAM_SIZE,
+  MAX_MANAGED_AGENT_NAME_BYTES,
   MAX_SCALAR_LENGTH,
   MAX_SCHEMA_DEPTH,
   MAX_SOURCE_BYTES,
@@ -96,6 +101,7 @@ export interface ParsedManagedAgentPackage {
   readonly package: ManagedAgentPackage;
   readonly canonicalJson: string;
   readonly fingerprint: string;
+  readonly normalizedName: string;
   readonly compiler: {
     readonly patternDialect: typeof MANAGED_PATTERN_DIALECT;
     readonly patternCompilerVersion: typeof MANAGED_PATTERN_COMPILER_VERSION;
@@ -184,6 +190,8 @@ export function parseManagedAgentPackage(
   if (!isObject(metadata)) fail('invalid_metadata', '$.metadata');
   keys(metadata, ['name'], '$.metadata');
   const name = nonEmpty(metadata.name, '$.metadata.name');
+  const normalizedName = normalizeManagedAgentName(name);
+  if (!normalizedName) fail('invalid_name', '$.metadata.name');
   const s = raw.spec;
   if (!isObject(s)) fail('invalid_spec', '$.spec');
   keys(
@@ -313,6 +321,7 @@ export function parseManagedAgentPackage(
     package: normalized,
     canonicalJson,
     fingerprint: `sha256:${createHash('sha256').update(canonicalJson).digest('hex')}`,
+    normalizedName,
     compiler: Object.freeze({
       patternDialect: MANAGED_PATTERN_DIALECT,
       patternCompilerVersion: MANAGED_PATTERN_COMPILER_VERSION,

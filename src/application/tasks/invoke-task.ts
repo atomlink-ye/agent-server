@@ -117,7 +117,11 @@ export class InvokeTask {
         await transaction.enqueueRunDispatch(run.id, run.createdAt);
 
         return {
-          task: await this.loadTask(task.id, request.accessContext),
+          task: await this.loadTask(
+            transaction.tasks,
+            task.id,
+            request.accessContext,
+          ),
           reused: false,
         };
       });
@@ -166,16 +170,21 @@ export class InvokeTask {
     }
 
     return {
-      task: await this.loadTask(existing.taskId, accessContext),
+      task: await this.loadTask(
+        transaction.tasks,
+        existing.taskId,
+        accessContext,
+      ),
       reused: true,
     };
   }
 
   private async loadTask(
+    repository: TaskRepository,
     taskId: string,
     accessContext: AccessContext,
   ): Promise<TaskRecord> {
-    const task = await this.tasks.findByIdForOwner(
+    const task = await repository.findByIdForOwner(
       taskId,
       toTaskOwnerScope(accessContext),
     );

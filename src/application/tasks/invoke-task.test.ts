@@ -82,6 +82,58 @@ describe('InvokeTask', () => {
     expect(second.task.latestRun?.runId).toBe(first.task.latestRun?.runId);
   });
 
+  it('reloads a newly admitted task through the transaction task repository', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const poolTasksRepository = new PoolVisibilityRejectingTaskRepository();
+    const useCase = new InvokeTask(
+      poolTasksRepository,
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+
+    const result = await useCase.execute({
+      idempotencyKey: 'transaction-visible-new-task',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+
+    expect(result.reused).toBe(false);
+  });
+
+  it('reloads a replayed task through the transaction task repository', async () => {
+    const repository = new InMemoryAdmissionRepository();
+    const useCase = new InvokeTask(
+      repository.tasksRepository,
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+    const first = await useCase.execute({
+      idempotencyKey: 'transaction-visible-replay',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+    const replayUseCase = new InvokeTask(
+      new PoolVisibilityRejectingTaskRepository(),
+      repository.runsRepository,
+      repository,
+      new PublishedInvokableRepository([publishedAgentVersion]),
+    );
+
+    const replay = await replayUseCase.execute({
+      idempotencyKey: 'transaction-visible-replay',
+      invokable: { kind: 'agent', versionId: publishedAgentVersion.id },
+      input: { text: 'transaction visible' },
+      accessContext: primaryAccessContext,
+    });
+
+    expect(replay.reused).toBe(true);
+    expect(first.reused).toBe(false);
+  });
+
   it('rejects a mismatched workspace_id before admission', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
@@ -245,6 +297,14 @@ class InMemoryTaskRepository implements TaskRepository {
           matchesTaskOwnerScope(task, ownerScope),
       )
       .map((task) => ({ task, latestRun: null }));
+  }
+}
+
+class PoolVisibilityRejectingTaskRepository extends InMemoryTaskRepository {
+  public override async findByIdForOwner(): Promise<null> {
+    throw new Error(
+      'pool-level task repository must not be called in transaction',
+    );
   }
 }
 

@@ -8,6 +8,8 @@ import {
   applyDurableKernelMigrations,
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
+import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgres-agent-registry.js';
 
 const definitionId = '00000000-0000-4000-8000-0000000b0001';
@@ -246,6 +248,103 @@ describe('managed agent registry migration', () => {
     );
   });
 
+  it('keeps legacy definition repository upserts mutable', async () => {
+    const db = await database();
+    const repository = new PostgresInvokableRepository(db);
+    const definition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-0000000b0023',
+      tenantId: 'legacy_tenant',
+      workspaceId: 'legacy_workspace',
+      principalType: 'user',
+      principalId: 'legacy_user',
+      name: 'Legacy Agent',
+      description: 'before',
+      now: () => new Date(now),
+    });
+    await repository.saveAgentDefinition(definition);
+    await repository.saveAgentDefinition({
+      ...definition,
+      name: 'Legacy Agent Updated',
+      description: 'after',
+      updatedAt: '2026-07-23T10:01:00.000Z',
+    });
+    await expect(
+      repository.findAgentDefinitionById(definition.id),
+    ).resolves.toMatchObject({
+      name: 'Legacy Agent Updated',
+      description: 'after',
+    });
+  });
+
+  it.each([
+    ['display name', "name = 'changed'"],
+    ['normalized name', "normalized_name = 'changed'"],
+    ['tenant owner', "tenant_id = 'changed'"],
+    ['workspace snapshot', "workspace_id = 'changed'"],
+    ['principal owner', "principal_id = 'changed'"],
+    ['timestamp', "updated_at = '2026-07-23T10:01:00.000Z'"],
+    ['discriminator', 'managed_discriminator = NULL'],
+  ])('rejects managed definition %s mutation', async (_case, assignment) => {
+    const db = await database();
+    await insertManagedDefinition(db);
+    await expect(
+      db.query(`UPDATE agent_definitions SET ${assignment} WHERE id = $1`, [
+        definitionId,
+      ]),
+    ).rejects.toThrow(/immutable|managed|definition/i);
+  });
+
+  it('prevents repository upsert from mutating a managed definition', async () => {
+    const db = await database();
+    await insertManagedDefinition(db);
+    const repository = new PostgresInvokableRepository(db);
+    await expect(
+      repository.saveAgentDefinition({
+        id: definitionId,
+        tenantId: 'tenant_changed',
+        workspaceId: 'workspace_changed',
+        principalType: 'service_account',
+        principalId: 'principal_changed',
+        name: 'Changed by repository',
+        description: 'must not persist',
+        createdAt: now,
+        updatedAt: '2026-07-23T10:01:00.000Z',
+      }),
+    ).rejects.toThrow(/immutable|managed|definition/i);
+  });
+
+  it('rejects legacy-to-managed definition conversion by UPDATE', async () => {
+    const db = await database();
+    await insertLegacyDefinition(db);
+    await expect(
+      db.query(
+        `UPDATE agent_definitions
+         SET managed_discriminator = 'managed_agent_v1', normalized_name = 'legacy-agent'
+         WHERE id = $1`,
+        [definitionId],
+      ),
+    ).rejects.toThrow(/insert|managed|definition/i);
+  });
+
+  it('enforces the 255 UTF-8 byte normalized-name boundary', async () => {
+    const db = await database();
+    const exact255 = `${'é'.repeat(127)}a`;
+    await insertManagedDefinition(
+      db,
+      '00000000-0000-4000-8000-0000000b0024',
+      'workspace_one',
+      exact255,
+    );
+    await expect(
+      insertManagedDefinition(
+        db,
+        '00000000-0000-4000-8000-0000000b0025',
+        'workspace_one',
+        'é'.repeat(128),
+      ),
+    ).rejects.toThrow(/check|255|normalized/i);
+  });
+
   it('converges equal managed canonical packages by definition and fingerprint', async () => {
     const db = await database();
     await insertManagedDefinition(db);
@@ -347,7 +446,7 @@ describe('managed agent registry migration', () => {
 
   it('reruns migration 0005 after its registry row is deleted without changing schema objects', async () => {
     const db = await database();
-    const before = await db.query(
+    const before = await db.query<{ conname: string; definition: string }>(
       `SELECT conname, contype, pg_get_constraintdef(oid) AS definition
        FROM pg_constraint
        WHERE conname IN (
@@ -370,7 +469,8 @@ describe('managed agent registry migration', () => {
     );
     const beforeTriggers = await db.query(
       `SELECT tgname, pg_get_triggerdef(oid) AS definition
-       FROM pg_trigger WHERE tgname = 'agent_versions_managed_immutable_before_update'`,
+       FROM pg_trigger WHERE tgname IN ('agent_definitions_managed_immutable_before_update', 'agent_versions_managed_immutable_before_update')
+       ORDER BY tgname`,
     );
     await db.query(
       `DELETE FROM durable_kernel_schema_migrations WHERE version = '0005_managed_agent_registry_b'`,
@@ -399,11 +499,17 @@ describe('managed agent registry migration', () => {
     );
     const afterTriggers = await db.query(
       `SELECT tgname, pg_get_triggerdef(oid) AS definition
-       FROM pg_trigger WHERE tgname = 'agent_versions_managed_immutable_before_update'`,
+       FROM pg_trigger WHERE tgname IN ('agent_definitions_managed_immutable_before_update', 'agent_versions_managed_immutable_before_update')
+       ORDER BY tgname`,
     );
     expect(after.rows).toEqual(before.rows);
     expect(afterIndexes.rows).toEqual(beforeIndexes.rows);
     expect(afterTriggers.rows).toEqual(beforeTriggers.rows);
+    expect(
+      before.rows.find(
+        (row) => row.conname === 'agent_definitions_managed_shape_check',
+      )?.definition,
+    ).toContain('octet_length(normalized_name) <= 255');
     const migrationRows = await db.query(
       `SELECT version FROM durable_kernel_schema_migrations
        WHERE version = '0005_managed_agent_registry_b'`,

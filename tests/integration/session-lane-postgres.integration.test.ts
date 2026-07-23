@@ -27,9 +27,35 @@ describe('Phase C session lanes on PostgreSQL', () => {
         `phase-c-${crypto.randomUUID()}`,
         owner,
       );
+      const definitionId = crypto.randomUUID();
+      const versionId = crypto.randomUUID();
+      const publishedAt = new Date().toISOString();
+      await pool.query(
+        `INSERT INTO agent_definitions(id,tenant_id,workspace_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,'phase-c-agent',$6,$6)`,
+        [
+          definitionId,
+          owner.tenantId,
+          owner.workspaceId,
+          owner.principalType,
+          owner.principalId,
+          publishedAt,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO agent_versions(id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,created_at,updated_at,published_at) VALUES($1,$2,$3,$4,$5,$6,'published','phase-c-agent','Do the task.',$7,$7,$7)`,
+        [
+          versionId,
+          definitionId,
+          owner.tenantId,
+          owner.workspaceId,
+          owner.principalType,
+          owner.principalId,
+          publishedAt,
+        ],
+      );
       const session = await repository.createSession({
         workspaceId: workspace.id,
-        agentVersionId: 'phase-c-published-agent',
+        agentVersionId: versionId,
         owner,
       });
       const first = await repository.postMessage(

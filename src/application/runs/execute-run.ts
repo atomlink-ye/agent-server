@@ -17,6 +17,10 @@ import {
   ExecuteTeamTask,
 } from '../tasks/execute-team-task.js';
 import { CompleteRun } from './complete-run.js';
+import {
+  createRuntimeExecutionReceipt,
+  RunCompletionPersistenceError,
+} from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
   public constructor(
@@ -68,12 +72,9 @@ export class ExecuteRun {
         );
       }
 
-      const completed =
+      const terminalRun =
         task.invokableKind === 'team'
-          ? await this.completeRun.execute({
-              claim,
-              run: await this.executeTeamTask.execute({ claim, task }),
-            })
+          ? await this.executeTeamTask.execute({ claim, task })
           : await this.executeAgentRun(
               claim,
               {
@@ -85,22 +86,11 @@ export class ExecuteRun {
               task.invokableVersionId,
             );
 
-      this.logger.log(
-        completed.status === 'succeeded' ? 'info' : 'error',
-        completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
-        {
-          run_id: claim.run.id,
-          ...(completed.runtime
-            ? {
-                provider: completed.runtime.provider,
-                model: completed.runtime.model,
-              }
-            : {}),
-          ...(completed.error ? { failure_code: completed.error.code } : {}),
-        },
-      );
-      return completed;
+      return await this.completeTerminalRun(claim, terminalRun);
     } catch (error) {
+      if (error instanceof RunCompletionPersistenceError) {
+        throw error;
+      }
       const timedOut = error instanceof RuntimeTimedOutError;
       const failure: RunFailure = timedOut
         ? {
@@ -119,13 +109,49 @@ export class ExecuteRun {
         },
         this.now,
       );
-      const completed = await this.completeRun.execute({ claim, run: failed });
       this.logger.log('error', 'run.failed', {
         run_id: claim.run.id,
         failure_code: failure.code,
         error_name: error instanceof Error ? error.name : 'UnknownError',
       });
+      return await this.completeTerminalRun(claim, failed);
+    }
+  }
+
+  private async completeTerminalRun(
+    claim: ClaimedRun,
+    run: Awaited<ReturnType<ExecuteRun['executeAgentRun']>>,
+  ) {
+    try {
+      const completed = await this.completeRun.execute({ claim, run });
+      this.logger.log(
+        completed.status === 'succeeded' ? 'info' : 'error',
+        completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
+        {
+          run_id: claim.run.id,
+          ...(completed.runtime
+            ? {
+                provider: completed.runtime.provider,
+                model: completed.runtime.model,
+              }
+            : {}),
+          ...(completed.error ? { failure_code: completed.error.code } : {}),
+        },
+      );
       return completed;
+    } catch (error) {
+      const receipt = createRuntimeExecutionReceipt(run, claim.taskId);
+      this.logger.log('error', 'run.completion_persistence_failed', {
+        run_id: receipt.runId,
+        task_id: receipt.taskId,
+        terminal_status: receipt.terminalStatus,
+        provider: receipt.provider,
+        model: receipt.model,
+        result_available: receipt.resultAvailable,
+        result_fingerprint: receipt.resultFingerprint,
+        completed_at: receipt.completedAt,
+      });
+      throw new RunCompletionPersistenceError(receipt);
     }
   }
 
@@ -157,10 +183,7 @@ export class ExecuteRun {
       this.now,
     );
 
-    return this.completeRun.execute({
-      claim,
-      run: succeeded,
-    });
+    return succeeded;
   }
 
   private async resolveAgentPrompt(

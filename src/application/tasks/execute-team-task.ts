@@ -21,6 +21,10 @@ import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import { CompleteRun } from '../runs/complete-run.js';
 import {
+  createRuntimeExecutionReceipt,
+  RunCompletionPersistenceError,
+} from '../runs/runtime-execution-receipt.js';
+import {
   decodeRootTaskRunRequestSnapshotRef,
   encodeRootTaskRunRequestSnapshotRef,
   fingerprintRootTaskRunRequest,
@@ -180,8 +184,17 @@ export class ExecuteTeamTask {
         this.now,
       );
 
-      return this.completeRun.execute({ claim, run: succeeded });
+      try {
+        return await this.completeRun.execute({ claim, run: succeeded });
+      } catch {
+        throw new RunCompletionPersistenceError(
+          createRuntimeExecutionReceipt(succeeded, claim.taskId),
+        );
+      }
     } catch (error) {
+      if (error instanceof RunCompletionPersistenceError) {
+        throw error;
+      }
       const failure: RunFailure =
         error instanceof RuntimeTimedOutError
           ? {

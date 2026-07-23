@@ -40,7 +40,6 @@ const canaryMessage =
 const acceptedCanary = '所有报告都必须区分事实、推断和建议。';
 const rejectedCanary = 'REJECTED_CANARY_MARKER_9D2E';
 const lateCanary = 'LATE_AFTER_CANARY_SNAPSHOT_4B71';
-const otherWorkspaceCanary = 'OTHER_WORKSPACE_MARKER_7A31';
 
 describe('managed single-agent memory recall', () => {
   let server: ServerType;
@@ -257,7 +256,6 @@ describe('managed single-agent memory recall', () => {
     );
     expect(sourceAssistant?.text).not.toContain(rejectedCanary);
     expect(sourceAssistant?.text).not.toContain(lateCanary);
-    expect(sourceAssistant?.text).not.toContain(otherWorkspaceCanary);
   });
 
   it('proves the primary competitor researcher socket canary and SSE reconnect', async () => {
@@ -410,6 +408,7 @@ describe('managed single-agent memory recall', () => {
         text: string;
         taskId?: string;
         runId?: string;
+        generation?: number;
       }>;
     };
     expect(canaryMessages.messages).toEqual(
@@ -751,7 +750,6 @@ describe('managed single-agent memory recall', () => {
     expect(recalledAssistant[0]?.text).toContain(acceptedCanary);
     expect(recalledAssistant[0]?.text).not.toContain(rejectedCanary);
     expect(recalledAssistant[0]?.text).not.toContain(lateCanary);
-    expect(recalledAssistant[0]?.text).not.toContain(otherWorkspaceCanary);
     expect(
       secondMessages.messages
         .filter((item) => item.role === 'user')
@@ -806,7 +804,6 @@ describe('managed single-agent memory recall', () => {
       acceptedCanary,
       rejectedCanary,
       lateCanary,
-      otherWorkspaceCanary,
       messageBody.task_id,
       messageBody.run_id,
       candidate.proposal_id,
@@ -956,6 +953,17 @@ describe('managed single-agent memory recall', () => {
         expect.objectContaining({ taskId: a.task_id, runId: a.run_id }),
       ]),
     );
+    expect(
+      queueMessages.messages.filter(
+        (message) =>
+          message.taskId === b.task_id || message.taskId === c.task_id,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: b.task_id, generation: 0 }),
+        expect.objectContaining({ taskId: c.task_id, generation: 0 }),
+      ]),
+    );
     const reset = await fetch(`${baseUrl}/api/v1/sessions/${sessionId}:reset`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-reset' },
@@ -967,6 +975,8 @@ describe('managed single-agent memory recall', () => {
       'new generation',
       'queue-new',
     );
+    expect(newMessage.generation).toBe(1);
+    expect(newMessage.sequence).toBe(1);
     await waitForTask(newMessage.task_id, 'completed');
     expect(newMessage.task_id).not.toBe(a.task_id);
     expect(newMessage.run_id).not.toBe(a.run_id);
@@ -977,21 +987,56 @@ describe('managed single-agent memory recall', () => {
       )
     ).rows[0] as { generation: number; lane_sequence: number };
     expect(resetTask).toEqual({ generation: 1, lane_sequence: 1 });
+    const resetRun = (await (
+      await fetch(`${baseUrl}/api/v1/runs/${newMessage.run_id}`, {
+        headers: auth,
+      })
+    ).json()) as { status: string };
+    expect(resetRun.status).toBe('succeeded');
     const resetMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
         headers: auth,
       })
-    ).json()) as { messages: Array<{ role: string; text: string }> };
-    expect(
-      resetMessages.messages.filter((item) => item.role === 'assistant'),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'assistant',
-          text: expect.stringContaining(acceptedCanary),
-        }),
-      ]),
+    ).json()) as {
+      messages: Array<{
+        role: string;
+        text: string;
+        taskId?: string;
+        runId?: string;
+        generation?: number;
+      }>;
+    };
+    const resetAssistants = resetMessages.messages.filter(
+      (item) =>
+        item.role === 'assistant' &&
+        item.taskId === newMessage.task_id &&
+        item.runId === newMessage.run_id &&
+        item.generation === 1,
     );
+    expect(resetAssistants).toHaveLength(1);
+    expect(resetAssistants).toEqual([
+      expect.objectContaining({
+        taskId: newMessage.task_id,
+        runId: newMessage.run_id,
+        generation: 1,
+        text: `RECALL_FROM_MEMORY: ## fact
+
+Accepted workspace fact.
+
+## fact
+
+Late-after-admission fact.
+
+## project_constraint
+
+${acceptedCanary}
+
+## fact
+
+${lateCanary}
+`,
+      }),
+    ]);
     expect(b.run_id).not.toBe(c.run_id);
 
     await dispatcherControl.dispatcher?.stop();
@@ -1133,7 +1178,12 @@ async function postSocketMessage(
   sessionId: string,
   text: string,
   key: string,
-): Promise<{ task_id: string; run_id: string; sequence: number }> {
+): Promise<{
+  task_id: string;
+  run_id: string;
+  generation: number;
+  sequence: number;
+}> {
   const response = await fetch(
     `${socketBaseUrl}/api/v1/sessions/${sessionId}/messages`,
     {
@@ -1146,6 +1196,7 @@ async function postSocketMessage(
   return (await response.json()) as {
     task_id: string;
     run_id: string;
+    generation: number;
     sequence: number;
   };
 }

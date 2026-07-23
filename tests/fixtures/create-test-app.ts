@@ -95,6 +95,17 @@ export interface CreateTestAppOptions {
   readonly sessionRepositoryControl?: {
     repository?: PostgresSessionRepository;
   };
+  readonly workspaceMemoryFixtureControl?: {
+    seedAcceptedEntry?: (
+      workspaceId: string,
+      content: string,
+    ) => Promise<{
+      proposalId: string;
+      entryId: string;
+      snapshotId: string;
+      contentHash: string;
+    }>;
+  };
 }
 
 export async function createTestApp(
@@ -245,6 +256,40 @@ export async function createTestApp(
     dispatcher.start();
     if (options.dispatcherControl)
       options.dispatcherControl.dispatcher = dispatcher;
+  }
+
+  if (options.workspaceMemoryFixtureControl) {
+    options.workspaceMemoryFixtureControl.seedAcceptedEntry = async (
+      workspaceId,
+      content,
+    ) => {
+      const accessContext = {
+        tenantId: 'tenant_alpha',
+        workspaceId,
+        principalType: 'service_account' as const,
+        principalId: 'svc_enabled',
+        serviceAccountId: 'svc_enabled',
+        policySnapshotVersion: 'policy-2026-07-22',
+      };
+      const proposal = await createMemoryProposal.execute({
+        content,
+        category: 'fact',
+        accessContext,
+      });
+      const reviewed = await reviewMemoryProposal.execute({
+        proposalId: proposal.id,
+        action: 'accept',
+        accessContext,
+      });
+      if (!reviewed.entry) throw new Error('fixture entry was not accepted');
+      const snapshot = await managedMemory.acceptEntry(reviewed.entry);
+      return {
+        proposalId: proposal.id,
+        entryId: reviewed.entry.id,
+        snapshotId: snapshot.snapshotId,
+        contentHash: snapshot.contentHash,
+      };
+    };
   }
 
   return createApp({

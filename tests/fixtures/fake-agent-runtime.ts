@@ -97,7 +97,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
         text: isCanary
           ? (this.#options.canaryResponseText ?? 'FAKE_RUNTIME_OK')
           : this.#options.deriveMemoryResponse &&
-              input.prompt.includes('所有报告都必须区分事实、推断和建议。')
+              input.prompt.includes('Pinned verified MEMORY.md:')
             ? `RECALL_FROM_MEMORY: ${input.prompt.split('Pinned verified MEMORY.md:\n')[1] ?? ''}`
             : (this.#options.responseTexts?.[this.executeCalls - 1] ??
               this.#options.responseText ??

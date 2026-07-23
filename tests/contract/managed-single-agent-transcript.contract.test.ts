@@ -54,8 +54,19 @@ const wait = async (check: () => Promise<boolean>) => {
 
 describe('managed single-agent minimum transcript', () => {
   it('runs the validate/import/publish/session/memory/events/reset/idempotency journey', async () => {
-    const runtime = new FakeAgentRuntime({ responseText: 'TRANSCRIPT_OK' });
-    const app = await createTestApp(runtime, { startDispatcher: true });
+    const uniqueToken = 'MEMORY_TOKEN_H_MINIMUM_7F3A';
+    const rejectedToken = 'MEMORY_TOKEN_REJECTED_4C91';
+    const lateToken = 'MEMORY_TOKEN_LATE_8B20';
+    const foreignToken = 'MEMORY_TOKEN_FOREIGN_2D77';
+    const runtime = new FakeAgentRuntime({
+      responseText: 'TRANSCRIPT_OK',
+      delayMs: 25,
+    });
+    const productWorkspaceId = '00000000-0000-4000-8000-00000000a0bc';
+    const app = await createTestApp(runtime, {
+      startDispatcher: true,
+      workspaceId: productWorkspaceId,
+    });
     const validate = await app.request('/api/v1/agent-packages:validate', {
       method: 'POST',
       headers,
@@ -80,11 +91,13 @@ describe('managed single-agent minimum transcript', () => {
     expect(published.status).toBe(200);
     const versionId = importedBody.version.id;
 
-    const workspace = await app.request('/api/v1/workspaces', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ name: 'Transcript Workspace' }),
-    });
+    const workspace = await app.request(
+      `/api/v1/workspaces/${productWorkspaceId}`,
+      {
+        method: 'GET',
+        headers,
+      },
+    );
     const workspaceId = ((await workspace.json()) as { workspace_id: string })
       .workspace_id;
     const session = await app.request('/api/v1/sessions', {
@@ -122,6 +135,9 @@ describe('managed single-agent minimum transcript', () => {
           body.events.some((event: any) => event.type === 'succeeded'),
         ),
     );
+    expect(
+      runtime.prompts.every((prompt) => !prompt.includes(uniqueToken)),
+    ).toBe(true);
     const events = await app.request(
       `/api/v1/runs/${messageBody.run_id}/events?after=0`,
       { headers },
@@ -155,12 +171,20 @@ describe('managed single-agent minimum transcript', () => {
     const accepted = await app.request('/api/v1/workspace-memory/proposals', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content: 'accepted memory', category: 'fact' }),
+      body: JSON.stringify({
+        content: uniqueToken,
+        category: 'fact',
+        source_task_id: messageBody.task_id,
+      }),
     });
     const rejected = await app.request('/api/v1/workspace-memory/proposals', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content: 'rejected memory', category: 'fact' }),
+      body: JSON.stringify({
+        content: rejectedToken,
+        category: 'fact',
+        source_task_id: messageBody.task_id,
+      }),
     });
     const acceptedId = (
       (await accepted.json()) as { proposal: { proposal_id: string } }
@@ -168,18 +192,31 @@ describe('managed single-agent minimum transcript', () => {
     const rejectedId = (
       (await rejected.json()) as { proposal: { proposal_id: string } }
     ).proposal.proposal_id;
+    const acceptedReview = await app.request(
+      `/api/v1/workspace-memory/proposals/${acceptedId}/review`,
+      { method: 'POST', headers, body: JSON.stringify({ action: 'accept' }) },
+    );
+    expect(acceptedReview.status).toBe(200);
+    const acceptedReviewBody = (await acceptedReview.json()) as {
+      proposal: { source_task_id: string | null };
+      entry: { source_task_id: string | null } | null;
+    };
+    expect(acceptedReviewBody.proposal.source_task_id).toBe(
+      messageBody.task_id,
+    );
+    expect(acceptedReviewBody.entry?.source_task_id).toBe(messageBody.task_id);
+    const snapshots = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+      { headers },
+    );
+    expect(snapshots.status).toBe(200);
     expect(
       (
-        await app.request(
-          `/api/v1/workspace-memory/proposals/${acceptedId}/review`,
-          {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ action: 'accept' }),
-          },
-        )
-      ).status,
-    ).toBe(200);
+        (await snapshots.json()) as {
+          snapshots: Array<{ workspaceId: string }>;
+        }
+      ).snapshots.every((snapshot) => snapshot.workspaceId === workspaceId),
+    ).toBe(true);
     expect(
       (
         await app.request(
@@ -192,6 +229,28 @@ describe('managed single-agent minimum transcript', () => {
         )
       ).status,
     ).toBe(200);
+    const late = await app.request('/api/v1/workspace-memory/proposals', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: lateToken, category: 'fact' }),
+    });
+    expect(late.status).toBe(201);
+    const foreignProposal = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${secondaryServiceAccountToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: foreignToken,
+          category: 'fact',
+          source_task_id: messageBody.task_id,
+        }),
+      },
+    );
+    expect(foreignProposal.status).toBe(404);
     const secondSession = await app.request('/api/v1/sessions', {
       method: 'POST',
       headers,
@@ -213,14 +272,52 @@ describe('managed single-agent minimum transcript', () => {
     );
     expect(secondMessage.status).toBe(202);
     await wait(async () =>
-      runtime.prompts.some((prompt) => prompt.includes('accepted memory')),
+      runtime.prompts.some((prompt) => prompt.includes(uniqueToken)),
     );
-    expect(runtime.prompts.join('\n')).not.toContain('rejected memory');
+    expect(runtime.prompts.join('\n')).toContain(uniqueToken);
+    expect(runtime.prompts.join('\n')).not.toContain(rejectedToken);
+    expect(runtime.prompts.join('\n')).not.toContain(lateToken);
+    expect(runtime.prompts.join('\n')).not.toContain(foreignToken);
     const transcriptMessages = await app.request(
       `/api/v1/sessions/${sessionId}/messages`,
       { headers },
     );
     expect(await transcriptMessages.text()).toContain('assistant');
+
+    const cancellable = await app.request(
+      `/api/v1/sessions/${secondSessionId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'idempotency-key': 'transcript-cancellable-message',
+        },
+        body: JSON.stringify({ text: 'cancel this turn' }),
+      },
+    );
+    const cancellableBody = (await cancellable.json()) as {
+      task_id: string;
+      run_id: string;
+    };
+    const cancellation = await app.request(
+      `/api/v1/tasks/${cancellableBody.task_id}:cancel`,
+      { method: 'POST', headers },
+    );
+    expect([200, 202]).toContain(cancellation.status);
+    expect(['cancellation_requested', 'cancelled', 'terminal']).toContain(
+      ((await cancellation.json()) as { status: string }).status,
+    );
+    await wait(async () =>
+      ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(
+        (
+          (await (
+            await app.request(`/api/v1/runs/${cancellableBody.run_id}`, {
+              headers,
+            })
+          ).json()) as { status: string }
+        ).status,
+      ),
+    );
 
     const replay = await app.request(`/api/v1/sessions/${sessionId}/messages`, {
       method: 'POST',
@@ -236,10 +333,10 @@ describe('managed single-agent minimum transcript', () => {
       headers: { ...headers, 'idempotency-key': 'transcript-reset' },
     });
     expect(reset.status).toBe(200);
-    const foreign = await app.request(
+    const foreignEvents = await app.request(
       `/api/v1/runs/${messageBody.run_id}/events`,
       { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
     );
-    expect(foreign.status).toBe(404);
+    expect(foreignEvents.status).toBe(404);
   });
 });

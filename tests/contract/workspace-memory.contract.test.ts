@@ -365,6 +365,84 @@ describe('workspace memory HTTP contracts', () => {
     ]);
   });
 
+  it('protects product workspace projections and completes the owner flow', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await (
+        await app.request('/api/v1/workspace-memory/proposals', {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            content: 'Projection proof.',
+            category: 'rule',
+          }),
+        })
+      ).json(),
+    );
+    const review = await app.request(
+      `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ action: 'accept' }),
+      },
+    );
+    expect(review.status).toBe(200);
+
+    const entries = await app.request(
+      '/api/v1/workspaces/workspace_main/memory/entries',
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    const snapshots = await app.request(
+      '/api/v1/workspaces/workspace_main/memory/snapshots',
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(entries.status).toBe(200);
+    const entriesBody = (await entries.json()) as { entries: unknown[] };
+    expect(entriesBody.entries).toHaveLength(1);
+    expect(snapshots.status).toBe(200);
+    const snapshotsBody = (await snapshots.json()) as {
+      snapshots: Array<{
+        snapshotId: string;
+        projectionStatus: string;
+        contentHash: string;
+      }>;
+    };
+    const snapshot = snapshotsBody.snapshots[0]!;
+    expect(snapshot.projectionStatus).toBe('ready');
+    expect(JSON.stringify(snapshot)).not.toContain('/tmp/agent-server-test');
+
+    const detail = await app.request(
+      `/api/v1/workspaces/workspace_main/memory/snapshots/${snapshot.snapshotId}`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(detail.status).toBe(200);
+    const rebuild = await app.request(
+      '/api/v1/workspaces/workspace_main/memory/snapshots:rebuild',
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+      },
+    );
+    expect(rebuild.status).toBe(201);
+    const rebuildBody = (await rebuild.json()) as {
+      snapshot: { contentHash: string };
+    };
+    expect(rebuildBody.snapshot.contentHash).toBe(snapshot.contentHash);
+
+    const unauthenticated = await app.request(
+      '/api/v1/workspaces/workspace_main/memory/entries',
+    );
+    expect(unauthenticated.status).toBe(401);
+    const foreign = await app.request(
+      '/api/v1/workspaces/workspace_foreign/memory/entries',
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreign.status).toBe(404);
+  });
+
   it('returns stable review validation, not found, and already-reviewed errors', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,

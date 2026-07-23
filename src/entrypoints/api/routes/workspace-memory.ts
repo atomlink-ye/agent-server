@@ -48,6 +48,8 @@ interface WorkspaceMemoryRouteDependencies {
 const PROPOSALS_PATH = '/api/v1/workspace-memory/proposals';
 const ENTRIES_PATH = '/api/v1/workspace-memory/entries';
 const WORKSPACE_MEMORY_CHILD_PATH = '/api/v1/workspace-memory/*';
+const PRODUCT_WORKSPACE_MEMORY_CHILD_PATH =
+  '/api/v1/workspaces/:workspaceId/memory/*';
 
 export function registerWorkspaceMemoryRoutes(
   app: Hono<ApiEnvironment>,
@@ -59,6 +61,10 @@ export function registerWorkspaceMemoryRoutes(
 
   app.use(
     WORKSPACE_MEMORY_CHILD_PATH,
+    requireServiceAccountAccess(authenticator),
+  );
+  app.use(
+    PRODUCT_WORKSPACE_MEMORY_CHILD_PATH,
     requireServiceAccountAccess(authenticator),
   );
 

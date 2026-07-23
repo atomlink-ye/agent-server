@@ -8,6 +8,7 @@ import { CreateMemoryProposal } from '../../src/application/memory/create-memory
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from '../../src/application/memory/review-memory-proposal.js';
+import { ManagedMemory } from '../../src/application/memory/managed-memory.js';
 import type { AgentRuntimePort } from '../../src/application/ports/agent-runtime.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
@@ -111,6 +112,9 @@ export async function createTestApp(
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     database,
   );
+  const managedMemory = new ManagedMemory(database, {
+    publish: async () => undefined,
+  });
   await seedDefaultPublishedAgent(invokableRepository);
   const logger = createLogger({
     service: testConfig.serviceName,
@@ -199,6 +203,7 @@ export async function createTestApp(
     listMemoryProposals,
     reviewMemoryProposal,
     listMemoryEntries,
+    managedMemory,
     agentRegistry,
     sessions,
     events,

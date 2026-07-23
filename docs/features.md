@@ -39,13 +39,13 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Sessions, Tasks and Runs
 
-**Baseline:** authenticated `POST /api/v1/tasks:invoke` is the canonical public ingress and persists a root Task plus its first Run for a published `agent` or `team` version. Authenticated `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/tree` expose owner-scoped Task state, latest Run summaries, and sequential Team child genealogy. Authenticated `POST /api/v1/runs` remains a compatibility admission route over the same canonical Task/Run model, uses a reserved UUID compatibility invokable-version sentinel for its admitted root Tasks, and `GET /api/v1/runs/{id}` never returns the prompt and collapses cross-owner reads to `404 run_not_found`. One in-process dispatcher claims queued Runs and completes them through the Runtime Port or the sequential Team coordinator.
+**Baseline:** authenticated `POST /api/v1/tasks:invoke` is the canonical public ingress and persists a root Task plus its first Run for a published `agent` or `team` version. Authenticated `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/tree` expose owner-scoped Task state, latest Run summaries, and sequential Team child genealogy. Authenticated `POST /api/v1/runs` remains a compatibility admission route over the same canonical Task/Run model, uses a reserved UUID compatibility invokable-version sentinel for its admitted root Tasks, and `GET /api/v1/runs/{id}` never returns the prompt and collapses cross-owner reads to `404 run_not_found`. Admission reloads through the transaction-scoped repository; the PostgreSQL 16 pool lane proves visibility, replay, owner isolation, and a same-key race. One in-process dispatcher claims queued Runs and completes them through the Runtime Port or the sequential Team coordinator. This phase does not claim Product Session, cancel, SSE, snapshots, or a production release.
 
 **V1 acceptance:** Task is the only node invocation identity at both public and internal boundaries. Root/child admission and idempotency are durable. Run attempts use atomic claim, lease, activation, fence, typed completion, waiting/resume, cancel, retry, reconciliation, and immutable terminal history.
 
 ## Runtime, Tools and Credentials
 
-**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden.
+**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Reconnect reuses cached Workspace/model state and protects connection ownership across races. The authenticated external smoke uses an ephemeral service-account token, exact marker, free-only selection, zero OpenCode credentials, and sanitized evidence. This phase does not claim Runtime Session V2 APIs or durable receipt reconciliation.
 
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 
@@ -55,7 +55,7 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Channels, API and Console
 
-**Baseline:** health plus authenticated Run and Task routes use common request IDs and error envelopes. `/api/v1/tasks:invoke` is the canonical public invocation route; `/api/v1/runs` remains the compatibility route. A deterministic real-socket E2E covers the current compatibility HTTP path, including bearer auth and owner-scoped reads.
+**Baseline:** health plus authenticated Run and Task routes use common request IDs and error envelopes. `/api/v1/tasks:invoke` is the canonical public invocation route; `/api/v1/runs` remains the compatibility route. A deterministic real-socket E2E covers the current compatibility HTTP path, including bearer auth and owner-scoped reads. SSE is not implemented in this phase and no production release is claimed.
 
 **V1 acceptance:** Web/API/Lark normalize into one Task proposal and authorization path; Task trees and Run events are inspectable; no UI subscribes directly to Paseo; delivery is retryable and idempotent.
 

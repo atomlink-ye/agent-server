@@ -33,6 +33,7 @@ export class CreateMemoryProposal {
   public async execute(
     input: CreateMemoryProposalInput,
   ): Promise<MemoryProposal> {
+    let workspaceId = input.accessContext.workspaceId;
     if (input.sourceTaskId) {
       const task = await this.taskRepository.findByIdForOwner(
         input.sourceTaskId,
@@ -41,10 +42,11 @@ export class CreateMemoryProposal {
       if (!task) {
         throw new SourceTaskNotFoundError();
       }
+      workspaceId = task.task.workspaceId;
     }
 
     const proposal = createMemoryProposal({
-      ...ownerScopeFromAccessContext(input.accessContext),
+      ...ownerScopeFromAccessContext(input.accessContext, workspaceId),
       originalContent: input.content,
       originalCategory: input.category,
       sourceTaskId: input.sourceTaskId ?? null,
@@ -63,10 +65,11 @@ export class CreateMemoryProposal {
 
 function ownerScopeFromAccessContext(
   accessContext: ServiceAccountAccessContext,
+  workspaceId = accessContext.workspaceId,
 ) {
   return {
     tenantId: accessContext.tenantId,
-    workspaceId: accessContext.workspaceId,
+    workspaceId,
     principalType: accessContext.principalType,
     principalId: accessContext.principalId,
   };

@@ -103,7 +103,10 @@ export async function createTestApp(
         ...testConfig,
         serviceAccounts: testConfig.serviceAccounts.map((account) => ({
           ...account,
-          workspaceId: options.workspaceId ?? account.workspaceId,
+          workspaceId:
+            account.serviceAccountId === 'svc_enabled'
+              ? (options.workspaceId ?? account.workspaceId)
+              : `foreign-${options.workspaceId ?? account.workspaceId}`,
         })),
       }
     : testConfig;

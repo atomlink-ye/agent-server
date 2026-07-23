@@ -443,6 +443,78 @@ describe('workspace memory HTTP contracts', () => {
     expect(foreign.status).toBe(404);
   });
 
+  it('derives product workspace scope from a source task and hides it from a foreign principal', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f101';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+    });
+    const taskResponse = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'product source' },
+        workspace_id: workspaceId,
+      }),
+    });
+    const task = (await taskResponse.json()) as { task_id: string };
+    const proposalResponse = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content: 'Product scoped fact.',
+          category: 'fact',
+          source_task_id: task.task_id,
+        }),
+      },
+    );
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await proposalResponse.json(),
+    );
+    const review = await app.request(
+      `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ action: 'accept' }),
+      },
+    );
+    expect(review.status).toBe(200);
+    const primaryEntriesResponse = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(
+      primaryEntriesResponse.status,
+      await primaryEntriesResponse.text(),
+    ).toBe(200);
+    expect(
+      (
+        await app.request(
+          `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}`,
+          {
+            headers: {
+              authorization: `Bearer ${secondaryServiceAccountToken}`,
+            },
+          },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(`/api/v1/workspaces/${workspaceId}/memory/entries`, {
+          headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
   it('returns stable review validation, not found, and already-reviewed errors', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,

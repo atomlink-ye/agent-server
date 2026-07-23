@@ -35,6 +35,20 @@ describe('managed single-agent memory recall', () => {
   });
 
   it('recalls only accepted memory pinned at message admission', async () => {
+    const sourceTaskResponse = await fetch(`${baseUrl}/api/v1/tasks:invoke`, {
+      method: 'POST',
+      headers: { ...jsonAuth, 'idempotency-key': 'memory-source-task' },
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'source task' },
+        workspace_id: workspaceId,
+      }),
+    });
+    expect(sourceTaskResponse.status).toBe(202);
+    const sourceTask = (await sourceTaskResponse.json()) as { task_id: string };
     const proposal = await fetch(
       `${baseUrl}/api/v1/workspace-memory/proposals`,
       {
@@ -43,6 +57,7 @@ describe('managed single-agent memory recall', () => {
         body: JSON.stringify({
           content: 'Accepted workspace fact.',
           category: 'fact',
+          source_task_id: sourceTask.task_id,
         }),
       },
     );
@@ -138,16 +153,30 @@ describe('managed single-agent memory recall', () => {
         })
       ).status,
     ).toBe(404);
-    for (let i = 0; i < 200 && runtime.executeCalls === 0; i++)
+    for (
+      let i = 0;
+      i < 200 &&
+      !runtime.prompts.some((prompt) =>
+        prompt.includes('Accepted workspace fact.'),
+      );
+      i++
+    )
       await new Promise((resolve) => setTimeout(resolve, 10));
-    if (runtime.executeCalls !== 1) {
+    if (
+      !runtime.prompts.some((prompt) =>
+        prompt.includes('Accepted workspace fact.'),
+      )
+    ) {
       const run = await fetch(`${baseUrl}/api/v1/runs/${messageBody.run_id}`, {
         headers: auth,
       });
       throw new Error(`run=${JSON.stringify(await run.json())}`);
     }
-    expect(runtime.prompts[0]).toContain('Accepted workspace fact.');
-    expect(runtime.prompts[0]).not.toContain('Rejected fact');
+    const recalledPrompt = runtime.prompts.find((prompt) =>
+      prompt.includes('Accepted workspace fact.'),
+    )!;
+    expect(recalledPrompt).not.toContain('Rejected fact');
+    expect(recalledPrompt).not.toContain('Late-after-admission fact.');
 
     let messageList: {
       messages: Array<{ role: string; text: string; run_id: string }>;

@@ -47,10 +47,16 @@ export class ReviewMemoryProposal {
     input: ReviewMemoryProposalInput,
   ): Promise<ReviewMemoryProposalResult> {
     const ownerScope = ownerScopeFromAccessContext(input.accessContext);
-    const existing = await this.memoryRepository.findProposalByIdForOwner(
-      input.proposalId,
-      ownerScope,
-    );
+    const existing = this.memoryRepository.findProposalByIdForActor
+      ? await this.memoryRepository.findProposalByIdForActor(input.proposalId, {
+          tenantId: input.accessContext.tenantId,
+          principalType: input.accessContext.principalType,
+          principalId: input.accessContext.principalId,
+        })
+      : await this.memoryRepository.findProposalByIdForOwner(
+          input.proposalId,
+          ownerScope,
+        );
     if (!existing) {
       throw new MemoryProposalNotFoundError();
     }
@@ -61,7 +67,12 @@ export class ReviewMemoryProposal {
     try {
       return await this.memoryRepository.reviewProposal({
         proposalId: input.proposalId,
-        ownerScope,
+        ownerScope: {
+          tenantId: existing.tenantId,
+          workspaceId: existing.workspaceId,
+          principalType: existing.principalType,
+          principalId: existing.principalId,
+        },
         outcome: input.action,
         reviewedContent: input.content ?? null,
         reviewerSnapshot: {
@@ -83,10 +94,16 @@ export class ReviewMemoryProposal {
     proposalId: string,
     accessContext: ServiceAccountAccessContext,
   ): Promise<MemoryProposal | null> {
-    return this.memoryRepository.findProposalByIdForOwner(
-      proposalId,
-      ownerScopeFromAccessContext(accessContext),
-    );
+    return this.memoryRepository.findProposalByIdForActor
+      ? this.memoryRepository.findProposalByIdForActor(proposalId, {
+          tenantId: accessContext.tenantId,
+          principalType: accessContext.principalType,
+          principalId: accessContext.principalId,
+        })
+      : this.memoryRepository.findProposalByIdForOwner(
+          proposalId,
+          ownerScopeFromAccessContext(accessContext),
+        );
   }
 }
 

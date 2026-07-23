@@ -136,6 +136,32 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
     return row ? mapProposalRow(row) : null;
   }
 
+  public async findProposalByIdForActor(
+    proposalId: string,
+    actorScope: {
+      tenantId: string;
+      principalType: string;
+      principalId: string;
+    },
+  ): Promise<MemoryProposal | null> {
+    const result = await this.queryable.query<MemoryProposalRow>(
+      `${MEMORY_PROPOSAL_SELECT_SQL}
+        WHERE id = $1
+          AND tenant_id = $2
+          AND principal_type = $3
+          AND principal_id = $4
+      `,
+      [
+        proposalId,
+        actorScope.tenantId,
+        actorScope.principalType,
+        actorScope.principalId,
+      ],
+    );
+    const row = result.rows?.[0];
+    return row ? mapProposalRow(row) : null;
+  }
+
   public async listProposalsByOwnerScope(
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<readonly MemoryProposal[]> {

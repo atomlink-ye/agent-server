@@ -33,6 +33,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   #workspaceId: string | null = null;
   #model: PaseoModelDescriptor | null = null;
   #lastError: string | null = null;
+  #generation = 0;
 
   public constructor(
     options: PaseoRuntimeOptions,
@@ -56,9 +57,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       return this.#initialization;
     }
 
+    const generation = ++this.#generation;
     const attempt = initialized
-      ? this.#reconnectOnce()
-      : this.#initializeOnce();
+      ? this.#reconnectOnce(generation)
+      : this.#initializeOnce(generation);
     this.#initialization = attempt;
     try {
       await attempt;
@@ -74,13 +76,17 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     }
   }
 
-  async #reconnectOnce(): Promise<void> {
+  async #reconnectOnce(generation: number): Promise<void> {
     try {
       await this.#client.connect();
     } catch (error) {
       throw new PaseoConnectionError(
         error instanceof Error ? error.message : String(error),
       );
+    }
+
+    if (await this.#discardStaleConnection(generation)) {
+      return;
     }
 
     this.#lastError = null;
@@ -91,7 +97,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     });
   }
 
-  async #initializeOnce(): Promise<void> {
+  async #initializeOnce(generation: number): Promise<void> {
     await mkdir(this.#options.cwd, { recursive: true });
     try {
       await this.#client.connect();
@@ -99,6 +105,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       throw new PaseoConnectionError(
         error instanceof Error ? error.message : String(error),
       );
+    }
+
+    if (await this.#discardStaleConnection(generation)) {
+      return;
     }
 
     const workspaceId = await this.#client.openWorkspace(this.#options.cwd);
@@ -109,6 +119,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     const models = await this.#client.listOpenCodeModels(this.#options.cwd);
     const model = selectOpenCodeModel(models, this.#options.requestedModel);
 
+    if (this.#generation !== generation) {
+      return;
+    }
+
     this.#workspaceId = workspaceId;
     this.#model = model;
     this.#lastError = null;
@@ -117,6 +131,16 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       model: model.id,
       workspace_id: workspaceId,
     });
+  }
+
+  async #discardStaleConnection(generation: number): Promise<boolean> {
+    if (this.#generation === generation) {
+      return false;
+    }
+    if (this.#initialization === null) {
+      await this.#client.close();
+    }
+    return true;
   }
 
   public async execute(input: {
@@ -194,6 +218,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   }
 
   public async close(): Promise<void> {
+    this.#generation += 1;
     this.#workspaceId = null;
     this.#model = null;
     this.#initialization = null;

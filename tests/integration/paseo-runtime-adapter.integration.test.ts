@@ -96,6 +96,32 @@ describe('PaseoRuntimeAdapter', () => {
     expect((await adapter.health()).ready).toBe(true);
   });
 
+  it('does not restore readiness when initialization finishes after close', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleConnection = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 1) await staleConnection.promise;
+    };
+
+    const staleAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(1));
+    await adapter.close();
+    staleConnection.resolve();
+    await staleAttempt;
+
+    const health = await adapter.health();
+    expect(health.ready).toBe(false);
+    expect(client.status).toBe('disposed');
+    expect(client.closeCalls).toBe(2);
+    expect(
+      health.checks.find((check) => check.name === 'paseo_workspace'),
+    ).toMatchObject({ ready: false });
+    expect(
+      health.checks.find((check) => check.name === 'opencode_model'),
+    ).toMatchObject({ ready: false });
+  });
+
   it('fails readiness when no explicitly free model exists', async () => {
     const client = new FakePaseoClient();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   AgentDefinitionResponseSchema,
@@ -6,6 +6,7 @@ import {
   AgentVersionListResponseSchema,
   ImportAgentResponseSchema,
   ValidateAgentPackageResponseSchema,
+  type AgentVersionResponse,
 } from '../../src/contracts/agents.js';
 import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import {
@@ -90,6 +91,46 @@ function packageWith(overrides: string): string {
 function expectSafe(value: unknown, forbidden: string[]): void {
   const serialized = JSON.stringify(value);
   for (const field of forbidden) expect(serialized).not.toContain(field);
+}
+
+function validBodyAtBytes(target: number): string {
+  let paddedSource = `${source}\n# `;
+  while (Buffer.byteLength(JSON.stringify({ source: paddedSource })) < target)
+    paddedSource +=
+      target - Buffer.byteLength(JSON.stringify({ source: paddedSource })) >= 4
+        ? '🙂'
+        : ' ';
+  return JSON.stringify({ source: paddedSource });
+}
+
+function splitBody(body: string): ReadableStream<Uint8Array> {
+  const bytes = new Uint8Array(Buffer.from(body));
+  return new ReadableStream({
+    start(controller) {
+      for (let offset = 0; offset < bytes.byteLength; offset += 3)
+        controller.enqueue(bytes.slice(offset, offset + 3));
+      controller.close();
+    },
+  });
+}
+
+async function requestChunked(
+  app: Awaited<ReturnType<typeof createTestApp>>,
+  path: string,
+  body: string,
+  key: string | undefined,
+  contentLength?: string,
+): Promise<Response> {
+  const request = new Request(`http://agent.test${path}`, {
+    method: 'POST',
+    headers: {
+      ...headers(primaryServiceAccountToken, key),
+      ...(contentLength ? { 'content-length': contentLength } : {}),
+    },
+    body: splitBody(body),
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
+  return app.fetch(request);
 }
 
 async function importedApp() {
@@ -317,63 +358,58 @@ describe('managed agent HTTP contracts', () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
     });
-    const accepted = JSON.stringify({ source: 'x'.repeat(65_000) });
-    const oversized = JSON.stringify({ source: 'x'.repeat(70_000) });
-    const cases = [
-      { body: accepted, length: undefined, status: 400 },
-      { body: oversized, length: '1', status: 413 },
-      {
-        body: oversized,
-        length: String(Buffer.byteLength(oversized)),
-        status: 413,
-      },
-    ] as const;
-    for (const path of [
-      '/api/v1/agent-packages:validate',
-      '/api/v1/agents:import',
-    ]) {
-      for (const item of cases) {
-        const response = await app.request(path, {
-          method: 'POST',
-          headers: {
-            ...headers(
-              primaryServiceAccountToken,
-              path.endsWith(':import') ? 'boundary-import' : undefined,
-            ),
-            ...(item.length ? { 'content-length': item.length } : {}),
-          },
-          body: item.body,
-        });
-        expect(response.status).toBe(item.status);
-        expect(
-          ErrorResponseSchema.parse(await response.json()).error.code,
-        ).toBe(
-          item.status === 413 ? 'request_too_large' : 'invalid_agent_package',
-        );
-      }
-    }
-    const validBoundary =
-      JSON.stringify({ source }) +
-      ' '.repeat(64 * 1024 - Buffer.byteLength(JSON.stringify({ source })));
-    for (const path of [
-      '/api/v1/agent-packages:validate',
-      '/api/v1/agents:import',
-    ]) {
-      const boundaryResponse = await app.request(path, {
-        method: 'POST',
-        headers: headers(
-          primaryServiceAccountToken,
-          path.endsWith(':import') ? 'boundary-import-2' : undefined,
-        ),
-        body: validBoundary,
+    const exact = validBodyAtBytes(64 * 1024);
+    const over = `${exact} `;
+    expect(Buffer.byteLength(exact)).toBe(64 * 1024);
+    expect(Buffer.byteLength(over)).toBe(64 * 1024 + 1);
+    const unboundedRead = vi
+      .spyOn(Request.prototype, 'arrayBuffer')
+      .mockImplementation(() => {
+        throw new Error('unbounded body read');
       });
-      expect(boundaryResponse.status).toBe(
-        path.endsWith(':import') ? 201 : 200,
-      );
-      const boundaryBody = await boundaryResponse.json();
-      if (path.endsWith(':import'))
-        ImportAgentResponseSchema.parse(boundaryBody);
-      else ValidateAgentPackageResponseSchema.parse(boundaryBody);
+
+    try {
+      for (const path of [
+        '/api/v1/agent-packages:validate',
+        '/api/v1/agents:import',
+      ]) {
+        const key = path.endsWith(':import') ? 'multibyte-exact' : undefined;
+        for (const contentLength of [undefined, '1']) {
+          const accepted = await requestChunked(
+            app,
+            path,
+            exact,
+            key ? `${key}-${contentLength ?? 'missing'}` : undefined,
+            contentLength,
+          );
+          expect(accepted.status).toBe(path.endsWith(':import') ? 201 : 200);
+          const acceptedBody = await accepted.json();
+          if (path.endsWith(':import'))
+            expectSafe(
+              ImportAgentResponseSchema.parse(acceptedBody),
+              forbiddenResponseFields,
+            );
+          else
+            expectSafe(
+              ValidateAgentPackageResponseSchema.parse(acceptedBody),
+              forbiddenResponseFields,
+            );
+
+          const rejected = await requestChunked(
+            app,
+            path,
+            over,
+            key ? `${key}-over-${contentLength ?? 'missing'}` : undefined,
+            contentLength,
+          );
+          expect(rejected.status).toBe(413);
+          const error = ErrorResponseSchema.parse(await rejected.json());
+          expect(error.error.code).toBe('request_too_large');
+          expectSafe(error, [source, '🙂']);
+        }
+      }
+    } finally {
+      unboundedRead.mockRestore();
     }
   });
 
@@ -503,16 +539,9 @@ describe('managed agent HTTP contracts', () => {
         ImportAgentResponseSchema.parse(await response.json()).version.id,
       );
     }
-    const allVersions = AgentVersionListResponseSchema.parse(
-      await (
-        await app.request(
-          `/api/v1/agents/${body.agent.id}/versions?limit=100`,
-          { headers: headers() },
-        )
-      ).json(),
-    );
-    expectSafe(allVersions, forbiddenResponseFields);
     const seen: string[] = [];
+    const cursors: string[] = [];
+    let previous: AgentVersionResponse | undefined;
     let cursor: string | null = null;
     for (;;) {
       const response = await app.request(
@@ -520,12 +549,26 @@ describe('managed agent HTTP contracts', () => {
         { headers: headers() },
       );
       const page = AgentVersionListResponseSchema.parse(await response.json());
+      expectSafe(page, forbiddenResponseFields);
+      for (const item of page.items) {
+        if (previous)
+          expect(
+            [previous.created_at, previous.id].join('\0') <
+              [item.created_at, item.id].join('\0'),
+          ).toBe(true);
+        previous = item;
+      }
       seen.push(...page.items.map((item) => item.id));
       cursor = page.next_cursor;
+      if (cursor) cursors.push(cursor);
       if (!cursor) break;
     }
-    expect(seen).toEqual(allVersions.items.map((item) => item.id));
+    expect(seen).toHaveLength(ids.length);
+    expect(new Set(seen)).toEqual(new Set(ids));
     expect(new Set(seen).size).toBe(ids.length);
+    expect(cursor).toBeNull();
+    expect(cursors.length).toBeGreaterThan(0);
+    expect(new Set(cursors).size).toBe(cursors.length);
     for (const query of ['0', '-1', '101', 'nope']) {
       const response = await app.request(
         `/api/v1/agents/${body.agent.id}/versions?limit=${query}`,
@@ -590,6 +633,30 @@ describe('managed agent HTTP contracts', () => {
     const error = ErrorResponseSchema.parse(await response.json());
     expect(error.error.code).toBe('invalid_agent_package');
     expectSafe(error, forbidden);
+    const invalidImport = await app.request('/api/v1/agents:import', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'paid-model-import'),
+      body: JSON.stringify({ source: modelInjected }),
+    });
+    expect(invalidImport.status).toBe(400);
+    const invalidImportError = ErrorResponseSchema.parse(
+      await invalidImport.json(),
+    );
+    expect(invalidImportError.error.code).toBe('invalid_agent_package');
+    expectSafe(invalidImportError, [...forbidden, source, 'paid/model']);
+    const validAfterRejectedImport = await app.request(
+      '/api/v1/agents:import',
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'paid-model-import'),
+        body: JSON.stringify({ source }),
+      },
+    );
+    expect(validAfterRejectedImport.status).toBe(201);
+    const createdAfterRejectedImport = ImportAgentResponseSchema.parse(
+      await validAfterRejectedImport.json(),
+    );
+    expectSafe(createdAfterRejectedImport, forbiddenResponseFields);
     const imported = await importedApp();
     for (const request of [
       imported.app.request(`/api/v1/agents/${imported.body.agent.id}`, {

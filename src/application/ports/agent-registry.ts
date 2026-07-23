@@ -19,6 +19,14 @@ export interface AgentRegistry {
     owner: ManagedAgentOwner,
     versionId: string,
   ): Promise<ManagedAgentVersion | null>;
+  /**
+   * Returns an owner-hidden, repository-ordered page. The repository returns
+   * ascending lexicographic (createdAt, id) order. A cursor is opaque to the
+   * application and encodes the last emitted (createdAt, id); the next page
+   * uses a strict greater-than comparison, with id breaking equal timestamps.
+   * This guarantees no skips or duplicates. nextCursor is null only when the
+   * result is exhausted. Adapter encoding and comparison live in the adapter.
+   */
   listVersionsForOwner(
     owner: ManagedAgentOwner,
     command: ListAgentVersionsCommand,

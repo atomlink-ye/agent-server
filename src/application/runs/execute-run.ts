@@ -1,4 +1,8 @@
-import { transitionRun, type RunFailure } from '../../domain/runs/run.js';
+import {
+  transitionRun,
+  type Run,
+  type RunFailure,
+} from '../../domain/runs/run.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { transitionTask } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
@@ -58,6 +62,8 @@ export class ExecuteRun {
       fencing_token: claim.fencingToken,
     });
 
+    let completed: Run;
+
     try {
       const task = await this.tasks.findById(claim.taskId);
       if (!task) {
@@ -86,7 +92,7 @@ export class ExecuteRun {
               task.invokableVersionId,
             );
 
-      return await this.completeTerminalRun(claim, terminalRun);
+      completed = await this.completeTerminalRun(claim, terminalRun);
     } catch (error) {
       if (error instanceof RunCompletionPersistenceError) {
         this.reportCompletionPersistenceFailure(error.receipt);
@@ -110,13 +116,8 @@ export class ExecuteRun {
         },
         this.now,
       );
-      this.logger.log('error', 'run.failed', {
-        run_id: claim.run.id,
-        failure_code: failure.code,
-        error_name: error instanceof Error ? error.name : 'UnknownError',
-      });
       try {
-        return await this.completeTerminalRun(claim, failed);
+        completed = await this.completeTerminalRun(claim, failed);
       } catch (completionError) {
         if (completionError instanceof RunCompletionPersistenceError) {
           this.reportCompletionPersistenceFailure(completionError.receipt);
@@ -124,6 +125,9 @@ export class ExecuteRun {
         throw completionError;
       }
     }
+
+    this.reportCompletedRun(claim, completed);
+    return completed;
   }
 
   private async completeTerminalRun(
@@ -138,6 +142,10 @@ export class ExecuteRun {
       throw new RunCompletionPersistenceError(receipt);
     }
 
+    return completed;
+  }
+
+  private reportCompletedRun(claim: ClaimedRun, completed: Run): void {
     this.logger.log(
       completed.status === 'succeeded' ? 'info' : 'error',
       completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
@@ -152,7 +160,6 @@ export class ExecuteRun {
         ...(completed.error ? { failure_code: completed.error.code } : {}),
       },
     );
-    return completed;
   }
 
   private reportCompletionPersistenceFailure(

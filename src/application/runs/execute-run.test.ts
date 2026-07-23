@@ -81,7 +81,7 @@ describe('ExecuteRun', () => {
     });
   });
 
-  it('does not classify a logger failure after persistence as persistence failure', async () => {
+  it('does not retry completion or report persistence failure when terminal logging fails', async () => {
     const claim = createClaim();
     const task = createTask();
     const succeededRun = transitionRun(
@@ -93,22 +93,8 @@ describe('ExecuteRun', () => {
       },
       () => new Date('2026-07-23T00:00:00.000Z'),
     );
-    const failedRun = transitionRun(
-      claim.run,
-      'failed',
-      {
-        error: {
-          code: 'runtime_execution_failed',
-          message: 'The runtime could not complete the run.',
-        },
-      },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-    );
     const completeRun = {
-      execute: vi
-        .fn()
-        .mockResolvedValueOnce(succeededRun)
-        .mockResolvedValueOnce(failedRun),
+      execute: vi.fn().mockResolvedValueOnce(succeededRun),
     } as unknown as CompleteRun;
     const loggerFailure = new Error('logger unavailable');
     const logger = {
@@ -123,10 +109,8 @@ describe('ExecuteRun', () => {
       logger,
     });
 
-    await expect(executeRun.execute(claim)).resolves.toMatchObject({
-      status: 'failed',
-    });
-    expect(completeRun.execute).toHaveBeenCalledTimes(2);
+    await expect(executeRun.execute(claim)).rejects.toBe(loggerFailure);
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
     expect(logger.log).not.toHaveBeenCalledWith(
       'error',
       'run.completion_persistence_failed',

@@ -4,6 +4,7 @@ import {
   createTestApp,
   defaultPublishedAgentVersionId,
   primaryServiceAccountToken,
+  secondaryServiceAccountToken,
 } from '../tests/fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../tests/fixtures/fake-agent-runtime.js';
 
@@ -241,6 +242,14 @@ describe('managed single-agent memory recall', () => {
         })
       ).status,
     ).toBe(200);
+    expect(
+      (
+        await fetch(
+          `${baseUrl}/api/v1/agents/00000000-0000-4000-8000-00000000dead`,
+          { headers: auth },
+        )
+      ).status,
+    ).toBe(404);
     const imported = await fetch(`${baseUrl}/api/v1/agents:import`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-canary-import' },
@@ -304,6 +313,31 @@ describe('managed single-agent memory recall', () => {
       (proposal) => proposal.content === 'CANARY_CONSTRAINT_UNIQUE_7F31',
     );
     expect(candidate).toMatchObject({ source_task_id: messageBody.task_id });
+    const sourceTask = (await (
+      await fetch(`${baseUrl}/api/v1/tasks/${messageBody.task_id}`, {
+        headers: auth,
+      })
+    ).json()) as { invokable: { version_id: string } };
+    expect(sourceTask.invokable.version_id).toBe(importedBody.version.id);
+    const sourceMessages = (await (
+      await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
+        headers: auth,
+      })
+    ).json()) as {
+      messages: Array<{
+        taskId?: string;
+        task_id?: string;
+        runId?: string;
+        run_id?: string;
+      }>;
+    };
+    expect(
+      sourceMessages.messages.some(
+        (item) =>
+          (item.taskId ?? item.task_id) === messageBody.task_id &&
+          (item.runId ?? item.run_id) === messageBody.run_id,
+      ),
+    ).toBe(true);
     const eventPage = (await (
       await fetch(
         `${baseUrl}/api/v1/runs/${messageBody.run_id}/events?after=0`,
@@ -393,6 +427,18 @@ describe('managed single-agent memory recall', () => {
         )
       ).status,
     ).toBe(200);
+    expect(
+      (
+        await fetch(
+          `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/entries`,
+          {
+            headers: {
+              authorization: `Bearer ${secondaryServiceAccountToken}`,
+            },
+          },
+        )
+      ).status,
+    ).toBe(404);
     expect(
       (
         await fetch(

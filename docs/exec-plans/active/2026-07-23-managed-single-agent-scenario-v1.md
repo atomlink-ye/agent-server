@@ -126,14 +126,14 @@ the phase owner to preserve earlier gates.
 - [x] **C-5 (GREEN/docs/evidence):** Rerun domain, contract, migration, and lane tests; update contracts/features/components/runbook; record `C-LANE`, `C-TRANSACTION`, `C-RESET`, `C-ROUTES`, and `C-AUTH`.
 - [x] **C-6 (gate):** Run focused unit, contract, integration, and `pnpm check`; commit migration, behavior, and docs/gate changes explicitly, ending with `feat: add private workspaces and durable session lanes` and `C-ORACLE`.
 
-### D — Runtime sessions, events, SSE, and cancel
+### D — Runtime sessions, events, SSE, and cancel (MVP complete)
 
-- [ ] **D-1 (RED):** Add tests for the exact `AgentRuntimePort` methods, normalized events, cursor/SSE, final message, cancel, reconnect, stale fence, usage, and redaction.
-- [ ] **D-2 (interface/domain):** Implement the runtime port and immutable execution envelope; extend the Paseo seam for resume/cancel/events without exposing provider IDs/raw errors.
-- [ ] **D-3 (migration/repository):** Add migration 0007 for RuntimeSessionBinding, RunEvent, cancellation, usage, durable receipts, and monotonic sequence/fence constraints; add migration integration test before consumers.
-- [ ] **D-4 (route/application wiring):** Add event read/stream/cancel services and routes with subscribe-before-hydrate, Last-Event-ID, idempotent terminal events, final message persistence, bounded usage, and safe redaction.
-- [ ] **D-5 (GREEN/docs/evidence):** Rerun focused tests and update runtime/run/event contracts, components, features, and runbook; record `D-PORT`, `D-EVENTS`, `D-SSE`, `D-SAFETY`, and `A-RECEIPT` completion.
-- [ ] **D-6 (gate):** Run unit, contract, integration, E2E, Paseo smoke, and `pnpm check`; make migration, behavior, and docs/gate commits explicitly, ending with `feat: add runtime sessions events and cancellation` and `D-ORACLE`.
+- [x] **D-1 (RED):** Add the minimum regressions for normalized events, cursor/SSE replay, final Message, cancellation, owner hiding, and safe payloads. Full Runtime Session V2, incremental deltas, rich usage, retry, and receipt recovery are outside the MVP-first RED scope.
+- [x] **D-2 (interface/domain):** Preserve `execute()` and health; add only the minimal cancel seam, runtime binding, safe normalized event envelope, and terminal lifecycle behavior without exposing provider wire objects or raw errors.
+- [x] **D-3 (migration/repository):** Add and replay migration 0007 for RuntimeSessionBinding, RunEvent, cancellation columns, assistant role, and monotonic sequence constraints. Do not claim production atomic crash recovery or durable receipts.
+- [x] **D-4 (route/application wiring):** Add authenticated event page/SSE replay with cursor/Last-Event-ID and terminal close, owner-scoped Task cancel, final assistant Message persistence, lane advancement, and safe redaction.
+- [x] **D-5 (GREEN/docs/evidence):** Update runtime/run/event contracts, components, features, runbook, and follow-up ledger. Record focused Node 24 evidence: contract 30, real-PG session lifecycle 1, unit 12, and green checks.
+- [x] **D-6 (gate):** Blocker-only Oracle identified five core blockers; all five were fixed. Commits are `3fa30de` (behavior), `7ad0542` (blocker fixes), and formatting-only `b43eddf`; docs closeout follows this plan update. Phase E is next. No claim is made for production atomic crash recovery or full SDK session API.
 
 ### E — Memory ownership and immutable file snapshots
 
@@ -269,9 +269,9 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
 
 ## Current blocker
 
-None. P0, Phase A, Phase B, and the Phase C minimum are complete. Provider
-cancellation forwarding is the next Phase D minimum action; later hardening
-remains deferred under the MVP-first review policy.
+None. P0, Phase A, Phase B, Phase C, and the Phase D minimum are complete.
+Phase E is next; consolidated runtime hardening remains deferred under the
+MVP-first review policy.
 
 ## Next exact command
 

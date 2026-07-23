@@ -108,5 +108,7 @@ The minimum lane has one active root. Later Messages are durable queued roots
 ordered by `(generation, sequence)`. Terminal completion promotes the oldest
 eligible queued root and clears the reset cancellation request. Responses never
 include owner IDs, raw prompts, provider errors, or database details. Runtime
-Session V2, assistant/final Messages, SSE/events, and provider cancellation
-forwarding are outside this Phase C contract.
+Full Runtime Session V2 create/resume/status remains outside this MVP contract.
+The minimum Phase D contract adds assistant/final Messages, replayable SSE/events,
+and owner-scoped provider cancellation; incremental deltas, rich usage, retries,
+and receipts remain deferred.

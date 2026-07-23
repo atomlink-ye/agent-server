@@ -14,17 +14,20 @@ interface AgentRuntimePort {
     usage?: RunUsage;
   }>;
   health(): Promise<AgentRuntimeHealth>;
+  cancel(input: { runId: string; providerAgentId?: string }): Promise<void>;
   close(): Promise<void>;
 }
 ```
 
-The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, or execution failure. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` with an ephemeral safe `RuntimeExecutionReceipt` emitted only through sanitized structured logging; it is distinct from runtime execution failure. No durable receipt or reconciliation exists in this baseline.
+The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, execution failure, or cancellation. The minimum Phase D application lane persists `started`, final `output`, and one terminal normalized event, plus one final assistant Message for a successful ProductSession Run. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` with an ephemeral safe `RuntimeExecutionReceipt` emitted only through sanitized structured logging; it is distinct from runtime execution failure. No durable receipt or reconciliation exists in this baseline.
 
 The current adapter caches the selected Workspace and free model across reconnects. Attempt generation and connection ownership protect stale initialize/reconnect work from replacing a newer connection. The tests do not establish that a pending `close()` is safe against a newer initialization; close ownership remains a follow-up. Health exposes only safe readiness details.
 
 ## V1 leaf-runtime port
 
 The V1 port accepts only an already persisted, claimed, fenced leaf Agent Run. Team graphs are rejected. It adds capabilities, create/resume session, typed submit, stream/timeline cursor, status, cancel, close, and health. Every input and writeback carries tenant, Task, Run, attempt, activation, owner, fence, current Invokable version, effective principal, Workspace, and credential-policy binding. These Runtime Session V2 APIs are not exposed by the current baseline; the pinned SDK 0.1.110 capability characterization is evidence for a later phase, not a claim of implementation.
+
+Full Runtime Session V2 create/resume/status APIs are not exposed by the current baseline. The pinned SDK 0.1.110 capability characterization is evidence for a later phase, not a claim of implementation; incremental provider deltas and rich usage remain deferred.
 
 ## Compatibility requirements
 

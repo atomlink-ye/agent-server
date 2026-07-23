@@ -33,6 +33,14 @@ until the active old-generation Run reaches a normal terminal state, after which
 the lane promotes the oldest eligible root. Provider cancellation forwarding and
 production recovery guarantees are not part of this minimum behavior.
 
+## Run event replay and SSE
+
+Use `GET /api/v1/runs/{run_id}/events?after=0` to inspect the persisted timeline. Resume with `next_cursor`; do not reuse an event sequence already consumed. For live observation, use the authenticated `/events/stream` route with `after` or `Last-Event-ID`. The stream replays committed events, polls the database, and closes after `succeeded`, `failed`, or `cancelled`. This is a single-node MVP polling path, not a production pub/sub or long-disconnect recovery guarantee.
+
+## Task cancellation
+
+Use `POST /api/v1/tasks/{task_id}:cancel`. A queued Task returns `cancelled` after local terminalization; active work returns `cancellation_requested` after the durable request is recorded and one runtime cancel is forwarded. A terminal Task returns `terminal` idempotently. Foreign or missing Tasks intentionally return `404`. Correlate only opaque Task/Run IDs and stable status codes; never copy prompts, provider errors, credentials, or local paths into tickets.
+
 ## No free model
 
 This is an expected external dependency failure, not permission to select a paid model. Check the live catalog and OpenCode status. Operators may deliberately configure a known model through `PASEO_MODEL`, but automatic fallback remains free-only. Keep deterministic CI green while external availability is investigated.
@@ -91,4 +99,4 @@ version and compiler snapshot.
 
 ## Recovery boundary
 
-The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, the typed `RunCompletionPersistenceError` produces only an ephemeral receipt and sanitized structured log; the Run may remain `running` until later recovery. Stop automated retry for the affected work, preserve only sanitized logs and relevant IDs, and escalate to the owning orchestration operator. Do not claim receipt retrieval, reconciliation, or `runtime_execution_failed`. Durable receipt storage belongs to Phase D migration 0007, with broader recovery in Phase H. Multi-node workers/reconcilers are not a Phase A goal.
+The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, the typed `RunCompletionPersistenceError` produces only an ephemeral receipt and sanitized structured log; the Run may remain `running` until later recovery. Stop automated retry for the affected work, preserve only sanitized logs and relevant IDs, and escalate to the owning orchestration operator. Do not claim receipt retrieval, reconciliation, or `runtime_execution_failed`. Durable receipt storage and broader recovery remain deferred. Multi-node workers/reconcilers are not part of the minimum runtime event lane.

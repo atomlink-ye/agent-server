@@ -13,7 +13,7 @@ Changing a public field, status meaning, model-selection authority, or runtime r
 
 ## Managed Agent package and registry API
 
-The Phase B managed Agent API is intentionally narrow. It exposes validation, import, owner-scoped reads, version listing, and publication only. Every route requires an enabled service-account bearer token. The server derives tenant, workspace, and principal ownership from the authenticated token; callers cannot choose those values. Every response carries the supplied `x-request-id`, or a generated request ID when the header is absent. Errors use the common envelope:
+The Phase B managed Agent API is intentionally narrow. It exposes validation, import, owner-scoped reads, version listing, and publication only. Every route requires an enabled service-account bearer token. Managed Agent identity and read/publish scope are derived from authenticated `tenant` plus `principal`. The authenticated workspace is carried only as a legacy compatibility snapshot on import; it does not participate in managed identity, read, or publish scope. Callers cannot supply tenant, principal, or workspace values. Every response carries the supplied `x-request-id`, or a generated request ID when the header is absent. Errors use the common envelope:
 
 ```json
 {

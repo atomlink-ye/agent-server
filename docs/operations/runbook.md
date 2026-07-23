@@ -65,16 +65,19 @@ When `DATABASE_URL` is absent, ordinary deterministic integration may skip the
 real-PG tests, but the required PostgreSQL CI job must fail rather than
 substitute PGlite. Keep those jobs independent.
 
-For ownership failures, verify only tenant, principal, workspace snapshot, and
-version identifier from sanitized metadata. Managed lookup uses tenant plus
-principal; legacy fallback additionally uses the authenticated workspace. A
-managed draft intentionally blocks fallback. For idempotency failures, compare
-the request key and canonical fingerprint without printing request bodies. For
-cursor failures, verify opaque cursor handling, ascending `(created_at, id)`
-ordering, strict advancement, and page bounds. Never put raw YAML, prompts,
-secrets, credentials, filesystem paths, or raw provider errors in logs or
-evidence. A future `re2js` compiler upgrade requires a new package version and
-compiler snapshot.
+For ownership failures, correlate only with redacted or one-way hashed
+owner-scope tokens: managed lookup uses tenant plus principal, while the
+authenticated workspace is only a legacy import snapshot. Use a safe request
+correlation and a one-way hashed version correlation when needed; an existing
+request ID is safe only when it is already opaque or redacted. Never record raw
+tenant, principal, workspace, request body, idempotency key, or version
+identifier in logs or evidence. For idempotency failures, compare a one-way
+hash of the request key and canonical fingerprint without printing request
+bodies. For cursor failures, verify opaque cursor handling, ascending
+`(created_at, id)` ordering, strict advancement, and page bounds. Never put raw
+YAML, prompts, secrets, credentials, filesystem paths, or raw provider errors
+in logs or evidence. A future `re2js` compiler upgrade requires a new package
+version and compiler snapshot.
 
 ## Recovery boundary
 

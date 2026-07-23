@@ -19,10 +19,15 @@ export interface AgentRegistry {
     owner: ManagedAgentOwner,
     versionId: string,
   ): Promise<ManagedAgentVersion | null>;
-  listVersions(
+  listVersionsForOwner(
     owner: ManagedAgentOwner,
     definitionId: string,
-  ): Promise<readonly ManagedAgentVersion[]>;
+  ): Promise<ManagedAgentVersionPage>;
+}
+
+export interface ManagedAgentVersionPage {
+  readonly items: readonly ManagedAgentVersion[];
+  readonly nextCursor: string | null;
 }
 
 export interface ImportAgentAtomicCommand {

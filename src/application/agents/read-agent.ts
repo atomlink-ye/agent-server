@@ -31,12 +31,15 @@ export async function listAgentVersions(
   accessContext: AccessContext,
   definitionId: string,
 ) {
-  const values = await registry.listVersions(
+  const page = await registry.listVersionsForOwner(
     ownerFromContext(accessContext),
     definitionId,
   );
-  return [...values].sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-  );
+  return {
+    items: [...page.items].sort(
+      (a, b) =>
+        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    ),
+    nextCursor: page.nextCursor,
+  };
 }

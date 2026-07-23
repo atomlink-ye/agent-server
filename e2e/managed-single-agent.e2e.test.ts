@@ -242,6 +242,20 @@ describe('managed single-agent memory recall', () => {
         })
       ).status,
     ).toBe(200);
+    const oldTaskResponse = await fetch(`${baseUrl}/api/v1/tasks:invoke`, {
+      method: 'POST',
+      headers: { ...jsonAuth, 'idempotency-key': 'socket-old-v1' },
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'old version pin' },
+        workspace_id: workspaceId,
+      }),
+    });
+    const oldTaskId = ((await oldTaskResponse.json()) as { task_id: string })
+      .task_id;
     expect(
       (
         await fetch(
@@ -257,6 +271,10 @@ describe('managed single-agent memory recall', () => {
     });
     expect(imported.status).toBe(201);
     const importedBody = (await imported.json()) as { version: { id: string } };
+    await waitForTask(oldTaskId);
+    expect(
+      runtime.prompts.some((prompt) => prompt.includes('Do the task.')),
+    ).toBe(true);
     expect(
       (
         await fetch(

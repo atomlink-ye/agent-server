@@ -7,6 +7,7 @@ import type {
   Workspace,
 } from '../../application/ports/session-repository.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
+import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
 
 interface Q {
   query<R = Record<string, unknown>>(
@@ -128,7 +129,7 @@ export class PostgresSessionRepository implements SessionRepository {
         fp = createHash('sha256').update(text).digest('hex'),
         active = row.active_task_id ?? taskId;
       await c.query(
-        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,'queued','api','agent',$6,$7,$8,$9,$9,$10,$11,$12)`,
+        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,parent_task_id,parent_run_id,depth,logical_step_key,node_path,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,NULL,NULL,0,NULL,NULL,'queued','api','agent',$6,$7,$8,$9,$9,$10,$11,$12)`,
         [
           taskId,
           o.tenantId,
@@ -136,7 +137,7 @@ export class PostgresSessionRepository implements SessionRepository {
           o.principalType,
           o.principalId,
           row.published_agent_version_id,
-          `session:${id}:${seq}`,
+          encodeRootTaskRunRequestSnapshotRef({ prompt: text }),
           fp,
           now,
           id,

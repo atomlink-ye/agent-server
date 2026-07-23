@@ -42,6 +42,8 @@ export class CompleteRun {
       );
     }
 
+    await this.tasks.advanceSessionLane?.(input.claim.taskId);
+
     return completedRun;
   }
 }

@@ -116,7 +116,7 @@ export class PostgresTaskRepository implements TaskRepository {
       `${TASK_SELECT_SQL}
         WHERE tasks.id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
       `,
@@ -141,7 +141,7 @@ export class PostgresTaskRepository implements TaskRepository {
       `${TASK_SELECT_SQL}
         WHERE tasks.root_task_id = $1
           AND tasks.tenant_id = $2
-          AND tasks.workspace_id = $3
+          AND (tasks.workspace_id = $3 OR tasks.session_id IS NOT NULL)
           AND tasks.principal_type = $4
           AND tasks.principal_id = $5
         ORDER BY tasks.depth ASC, tasks.node_path ASC NULLS FIRST, tasks.created_at ASC, tasks.id ASC
@@ -156,6 +156,29 @@ export class PostgresTaskRepository implements TaskRepository {
     );
 
     return (result.rows ?? []).map(mapTaskRow);
+  }
+
+  public async advanceSessionLane(taskId: string): Promise<void> {
+    await this.database.query(
+      `
+        WITH next_task AS (
+          SELECT queued.id
+          FROM session_lanes lane
+          JOIN tasks current_task ON current_task.id = lane.active_task_id
+          JOIN tasks queued ON queued.session_id = current_task.session_id
+            AND queued.generation = lane.generation
+            AND queued.status = 'queued'
+          WHERE lane.active_task_id = $1
+          ORDER BY queued.generation ASC, queued.lane_sequence ASC, queued.created_at ASC
+          LIMIT 1
+        )
+        UPDATE session_lanes
+        SET active_task_id = (SELECT id FROM next_task),
+            active_cancellation_requested = false
+        WHERE active_task_id = $1
+      `,
+      [taskId],
+    );
   }
 }
 

@@ -217,6 +217,7 @@ describe('managed agent registry migration', () => {
       '0004_workspace_memory_proposal_mvp',
       '0005_managed_agent_registry_b',
       '0005b_managed_agent_registry_hardening',
+      '0006_workspace_session_lane_c',
     ]);
   });
 

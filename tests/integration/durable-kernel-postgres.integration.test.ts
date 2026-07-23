@@ -110,6 +110,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0004_workspace_memory_proposal_mvp' },
       { version: '0005_managed_agent_registry_b' },
       { version: '0005b_managed_agent_registry_hardening' },
+      { version: '0006_workspace_session_lane_c' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -140,6 +141,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0004_workspace_memory_proposal_mvp' },
       { version: '0005_managed_agent_registry_b' },
       { version: '0005b_managed_agent_registry_hardening' },
+      { version: '0006_workspace_session_lane_c' },
     ]);
   });
 

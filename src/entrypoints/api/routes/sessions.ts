@@ -31,8 +31,10 @@ export function registerSessionRoutes(
   const auth = requireServiceAccountAccess(
     new ServiceAccountAuthenticator(d.config.serviceAccounts ?? []),
   );
-  app.use('/api/v1/workspaces*', auth);
-  app.use('/api/v1/sessions*', auth);
+  app.use('/api/v1/workspaces', auth);
+  app.use('/api/v1/workspaces/*', auth);
+  app.use('/api/v1/sessions', auth);
+  app.use('/api/v1/sessions/*', auth);
   app.post('/api/v1/workspaces', async (c) => {
     const p = WorkspaceCreateSchema.safeParse(await json(c));
     if (!p.success)
@@ -179,7 +181,7 @@ export function registerSessionRoutes(
   });
   app.post('/api/v1/sessions/:sessionId:reset', async (c) => {
     const s = await d.sessions.reset(
-      String(c.req.param('sessionId')),
+      c.req.path.split('/sessions/')[1]?.split(':reset')[0] ?? '',
       getAuthenticatedAccessContext(c),
       c.req.header('idempotency-key') ??
         `request:${String(c.get('requestId'))}`,

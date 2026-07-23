@@ -32,6 +32,8 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     version: randomUUID(),
     alternateTask: randomUUID(),
     alternateMessage: randomUUID(),
+    alternateSession: randomUUID(),
+    isolatedSessionMessage: randomUUID(),
     alternateRun: randomUUID(),
     alternateDefinition: randomUUID(),
     alternateVersion: randomUUID(),
@@ -138,6 +140,21 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       [ids.alternateMessage, ids.session, ids.alternateTask],
     );
     await pool.query(
+      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,now(),now())`,
+      [
+        ids.alternateSession,
+        owner.workspaceId,
+        owner.tenantId,
+        owner.principalType,
+        owner.principalId,
+        ids.version,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) VALUES ($1,$2,0,1,'user','isolated session input',$3,now())`,
+      [ids.isolatedSessionMessage, ids.alternateSession, ids.task],
+    );
+    await pool.query(
       `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker',$3,now()+interval '1 hour',1,now(),now())`,
       [ids.alternateRun, ids.alternateTask, randomUUID()],
     );
@@ -155,6 +172,9 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     await pool.query('DELETE FROM messages WHERE id=$1', [
       ids.alternateMessage,
     ]);
+    await pool.query('DELETE FROM messages WHERE id=$1', [
+      ids.isolatedSessionMessage,
+    ]);
     await pool.query('DELETE FROM tasks WHERE id=$1', [ids.task]);
     await pool.query('DELETE FROM tasks WHERE id=$1', [ids.alternateTask]);
     await pool.query('DELETE FROM agent_versions WHERE id=$1', [ids.version]);
@@ -168,6 +188,9 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       ids.alternateDefinition,
     ]);
     await pool.query('DELETE FROM product_sessions WHERE id=$1', [ids.session]);
+    await pool.query('DELETE FROM product_sessions WHERE id=$1', [
+      ids.alternateSession,
+    ]);
     await pool.query('DELETE FROM workspaces WHERE id=$1', [owner.workspaceId]);
     await pool.end();
   });
@@ -258,6 +281,29 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       ).rejects.toThrow(/provenance/i);
     }
 
+    const proposalOwnerMismatches: Array<[string, string]> = [
+      ['tenantId', 'wrong-proposal-tenant'],
+      ['workspaceId', randomUUID()],
+      ['principalType', 'user'],
+      ['principalId', 'wrong-proposal-principal'],
+    ];
+    for (const [index, [field, value]] of proposalOwnerMismatches.entries()) {
+      await expect(
+        repository.createProposalsBatch([
+          makeProposal({ [field]: value, sourceCandidateIndex: index + 6 }),
+        ]),
+      ).rejects.toThrow(/provenance/i);
+    }
+
+    await expect(
+      repository.createProposalsBatch([
+        makeProposal({
+          sourceMessageId: ids.isolatedSessionMessage,
+          sourceCandidateIndex: 10,
+        }),
+      ]),
+    ).rejects.toThrow(/provenance/i);
+
     await pool.query('UPDATE workspaces SET tenant_id=$1 WHERE id=$2', [
       'wrong-tenant',
       owner.workspaceId,
@@ -267,6 +313,32 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     ).rejects.toThrow(/provenance/i);
     await pool.query('UPDATE workspaces SET tenant_id=$1 WHERE id=$2', [
       owner.tenantId,
+      owner.workspaceId,
+    ]);
+    await pool.query('UPDATE workspaces SET principal_type=$1 WHERE id=$2', [
+      'user',
+      owner.workspaceId,
+    ]);
+    await expect(
+      repository.createProposalsBatch([
+        makeProposal({ sourceCandidateIndex: 11 }),
+      ]),
+    ).rejects.toThrow(/provenance/i);
+    await pool.query('UPDATE workspaces SET principal_type=$1 WHERE id=$2', [
+      owner.principalType,
+      owner.workspaceId,
+    ]);
+    await pool.query('UPDATE workspaces SET principal_id=$1 WHERE id=$2', [
+      'wrong-workspace-principal',
+      owner.workspaceId,
+    ]);
+    await expect(
+      repository.createProposalsBatch([
+        makeProposal({ sourceCandidateIndex: 12 }),
+      ]),
+    ).rejects.toThrow(/provenance/i);
+    await pool.query('UPDATE workspaces SET principal_id=$1 WHERE id=$2', [
+      owner.principalId,
       owner.workspaceId,
     ]);
   });

@@ -260,6 +260,22 @@ describe('managed agent registry migration', () => {
     });
   });
 
+  it('rejects draft publication when the primary-key id changes', async () => {
+    const db = await database();
+    await insertManagedDefinition(db);
+    const draftId = '00000000-0000-4000-8000-0000000b0102';
+    const replacementId = '00000000-0000-4000-8000-0000000b0103';
+    await insertManagedVersion(db, draftId);
+    await expect(
+      db.query(
+        `UPDATE agent_versions
+         SET id = $2, status = 'published', published_at = $3, updated_at = $3
+         WHERE id = $1`,
+        [draftId, replacementId, '2026-07-23T10:01:00.000Z'],
+      ),
+    ).rejects.toThrow(/immutable|identity|managed/i);
+  });
+
   it('rejects converting a legacy version into a managed version by UPDATE', async () => {
     const db = await database();
     await insertLegacyDefinition(db);
@@ -333,42 +349,47 @@ describe('managed agent registry migration', () => {
         [now],
       ),
     ).rejects.toThrow(/check|operation/i);
-    const indexes = await db.query<{ indexname: string; indexdef: string }>(
-      `SELECT indexname, indexdef FROM pg_indexes
-       WHERE indexname IN (
-         'agent_definitions_managed_owner_name_uq',
-         'agent_definitions_id_discriminator_uq',
-         'agent_versions_managed_definition_fingerprint_uq',
-         'agent_definitions_managed_owner_hidden_idx',
-         'agent_versions_managed_owner_hidden_idx',
-         'agent_versions_definition_created_cursor_idx'
-       )
-       ORDER BY indexname`,
+    const expectIndexDefinition = async (
+      indexName: string,
+      expected: string,
+    ): Promise<void> => {
+      const result = await db.query<{ indexdef: string }>(
+        'SELECT indexdef FROM pg_indexes WHERE indexname = $1',
+        [indexName],
+      );
+      expect(result.rows).toHaveLength(1);
+      const normalize = (value: string): string =>
+        value
+          .replaceAll('"', '')
+          .replaceAll("'managed_agent_v1'::text", 'managed_agent_v1')
+          .replace(/\s+/g, ' ')
+          .trim();
+      expect(normalize(result.rows[0]!.indexdef)).toBe(normalize(expected));
+    };
+    await expectIndexDefinition(
+      'agent_definitions_managed_owner_name_uq',
+      'CREATE UNIQUE INDEX agent_definitions_managed_owner_name_uq ON public.agent_definitions USING btree (tenant_id, principal_type, principal_id, normalized_name) WHERE (managed_discriminator = managed_agent_v1)',
     );
-    expect(indexes.rows).toHaveLength(6);
-    const indexDefs = new Map(
-      indexes.rows.map((row) => [row.indexname, row.indexdef]),
+    await expectIndexDefinition(
+      'agent_versions_managed_definition_fingerprint_uq',
+      'CREATE UNIQUE INDEX agent_versions_managed_definition_fingerprint_uq ON public.agent_versions USING btree (definition_id, fingerprint) WHERE (managed_discriminator = managed_agent_v1)',
     );
-    expect(indexDefs.get('agent_definitions_managed_owner_name_uq')).toMatch(
-      /\(tenant_id, principal_type, principal_id, normalized_name\).*managed_discriminator.*managed_agent_v1/i,
+    await expectIndexDefinition(
+      'agent_definitions_managed_owner_hidden_idx',
+      'CREATE INDEX agent_definitions_managed_owner_hidden_idx ON public.agent_definitions USING btree (tenant_id, principal_type, principal_id, updated_at DESC, id) WHERE (managed_discriminator = managed_agent_v1)',
     );
-    expect(
-      indexDefs.get('agent_versions_managed_definition_fingerprint_uq'),
-    ).toMatch(
-      /\(definition_id, fingerprint\).*managed_discriminator.*managed_agent_v1/i,
+    await expectIndexDefinition(
+      'agent_versions_managed_owner_hidden_idx',
+      'CREATE INDEX agent_versions_managed_owner_hidden_idx ON public.agent_versions USING btree (tenant_id, principal_type, principal_id, updated_at DESC, id) WHERE (managed_discriminator = managed_agent_v1)',
     );
-    expect(indexDefs.get('agent_definitions_id_discriminator_uq')).toMatch(
-      /\(id, managed_discriminator\)/i,
+    await expectIndexDefinition(
+      'agent_versions_definition_created_cursor_idx',
+      'CREATE INDEX agent_versions_definition_created_cursor_idx ON public.agent_versions USING btree (definition_id, created_at, id)',
     );
-    expect(indexDefs.get('agent_definitions_managed_owner_hidden_idx')).toMatch(
-      /\(tenant_id, principal_type, principal_id, updated_at DESC, id\).*managed_discriminator.*managed_agent_v1/i,
+    await expectIndexDefinition(
+      'agent_definitions_id_discriminator_uq',
+      'CREATE UNIQUE INDEX agent_definitions_id_discriminator_uq ON public.agent_definitions USING btree (id, managed_discriminator)',
     );
-    expect(indexDefs.get('agent_versions_managed_owner_hidden_idx')).toMatch(
-      /\(tenant_id, principal_type, principal_id, updated_at DESC, id\).*managed_discriminator.*managed_agent_v1/i,
-    );
-    expect(
-      indexDefs.get('agent_versions_definition_created_cursor_idx'),
-    ).toMatch(/\(definition_id, created_at, id\)/i);
     const idempotencyKey = await db.query<{ definition: string }>(
       `SELECT pg_get_constraintdef(oid) AS definition
        FROM pg_constraint WHERE conname = 'agent_registry_idempotency_pkey'`,

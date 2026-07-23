@@ -89,7 +89,7 @@ BEGIN
   END IF;
   IF OLD.managed_discriminator IS NULL THEN RETURN NEW; END IF;
   IF OLD.status = 'draft' AND NEW.status = 'published'
-     AND NEW.definition_id = OLD.definition_id AND NEW.tenant_id = OLD.tenant_id AND NEW.workspace_id = OLD.workspace_id
+     AND NEW.id = OLD.id AND NEW.definition_id = OLD.definition_id AND NEW.tenant_id = OLD.tenant_id AND NEW.workspace_id = OLD.workspace_id
      AND NEW.principal_type = OLD.principal_type AND NEW.principal_id = OLD.principal_id
      AND NEW.name IS NOT DISTINCT FROM OLD.name AND NEW.description IS NOT DISTINCT FROM OLD.description
      AND NEW.instructions IS NOT DISTINCT FROM OLD.instructions AND NEW.managed_discriminator IS NOT DISTINCT FROM OLD.managed_discriminator

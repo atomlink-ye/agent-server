@@ -77,3 +77,16 @@ reconciliation, backup/restore, multi-node locking, object storage/KMS,
 sandboxing, advanced context assembly, model-based gardening, auto-safe
 enablement, or rollout readiness. The minimum scenario is approved; deferred
 hardening remains in the Follow-up Ledger.
+
+## Filesystem threat boundary
+
+In the single-node MVP, Paseo and Agent Server share one trusted operating-system
+account. Runtime content is untrusted, but hostile filesystem racing by another
+process with that same UID is explicitly outside the threat boundary. Supporting
+that threat requires a separate UID, container, or sandbox.
+
+The existing `lstat`/`realpath` checks, server-created random run directory,
+final `O_NOFOLLOW` open, regular-file `fstat`, and bounded max+1 read are
+defense-in-depth checks; they are not a complete sandbox against same-UID
+interference. Native descriptor-relative `openat`-style handling and a separate
+UID/container remain deferred hardening work.

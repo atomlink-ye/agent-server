@@ -65,6 +65,46 @@ describe('ExecuteRun', () => {
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
 
+  it('succeeds without persisting runtime candidates for a direct Task with no source Message', async () => {
+    const claim = createClaim();
+    const task = createTask(
+      'agent',
+      'managed-version-1',
+      'task-without-message',
+      null,
+    );
+    const resolver = new ResolveAgentVersion(
+      {
+        findVersion: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: { spec: { instructions: 'managed instructions' } },
+        })) as never,
+      },
+      { findPublishedAgentVersionById: vi.fn(async () => null) },
+    );
+    const runtime = createRuntimeWithCandidates();
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const batch = vi.fn(async () => undefined);
+
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime,
+      task,
+      resolver,
+      createMemoryProposal: { executeBatch: batch } as never,
+    });
+
+    const completed = await executeRun.execute(claim);
+
+    expect(completed.status).toBe('succeeded');
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(batch).not.toHaveBeenCalled();
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed when the shared resolver returns null without a legacy lookup in ExecuteRun', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'draft-or-foreign-version');
@@ -672,6 +712,7 @@ function createTask(
   invokableKind: 'agent' | 'team' = 'agent',
   invokableVersionId = RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
   id = 'task-1',
+  sourceMessageId: string | null = `message-${id}`,
 ): Task {
   return createRootTask({
     id,
@@ -687,7 +728,7 @@ function createTask(
       prompt: 'private prompt',
     }),
     inputFingerprint: 'fingerprint-1',
-    sourceMessageId: `message-${id}`,
+    sourceMessageId,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
 }

@@ -14,6 +14,7 @@ import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { createRuntimeExecutionReceipt } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
@@ -351,6 +352,110 @@ describe('ExecuteRun', () => {
       'Cannot create runtime execution receipt for running run',
     );
   });
+
+  it('raises typed recoverable persistence failure for runtime memory candidates', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'managed-version-1');
+    const runtime = createRuntimeWithCandidates();
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const resolver = new ResolveAgentVersion(
+      {
+        findVersion: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'instructions',
+              memory: { proposalLimit: 1 },
+            },
+          },
+        })) as never,
+      },
+      { findPublishedAgentVersionById: vi.fn(async () => null) },
+    );
+    const createMemoryProposal = {
+      execute: vi.fn(async () => {
+        throw new Error('control plane down');
+      }),
+    } as never;
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime,
+      task,
+      resolver,
+      createMemoryProposal,
+    });
+
+    await expect(executeRun.execute(claim)).rejects.toMatchObject({
+      name: 'RuntimeMemoryPersistenceError',
+      code: 'runtime_memory_persistence_failed',
+    });
+    expect(completeRun.execute).not.toHaveBeenCalled();
+  });
+
+  it('applies immutable proposal limit and rejects secret-like runtime candidates', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'managed-version-1');
+    const runtime = {
+      ...createRuntime(),
+      execute: vi.fn(async () => ({
+        provider: 'test-provider',
+        model: 'test-model',
+        text: 'safe result',
+        memoryCandidates: [
+          { category: 'project_constraint', content: 'api_key=secret' },
+          { category: 'project_constraint', content: 'safe constraint' },
+          { category: 'project_constraint', content: 'over limit candidate' },
+        ],
+      })),
+    } as AgentRuntimePort;
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const batch = vi.fn(
+      async (inputs: readonly { content: string }[]) => inputs as never,
+    );
+    const createMemoryProposal = {
+      execute: vi.fn(),
+      executeBatch: batch,
+    } as unknown as CreateMemoryProposal;
+    const resolver = new ResolveAgentVersion(
+      {
+        findVersion: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'instructions',
+              memory: { proposalLimit: 2 },
+            },
+          },
+        })) as never,
+      },
+      { findPublishedAgentVersionById: vi.fn(async () => null) },
+    );
+    await new ExecuteRun(
+      completeRun,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      {} as never,
+      {} as never,
+      runtime,
+      { log: vi.fn() },
+      () => new Date(),
+      resolver,
+      undefined,
+      undefined,
+      createMemoryProposal,
+    ).execute(claim);
+    expect(batch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ content: 'safe constraint' }),
+      ]),
+    );
+    expect(batch.mock.calls[0]?.[0]).toHaveLength(1);
+  });
 });
 
 function createExecuteRun(input: {
@@ -379,6 +484,7 @@ function createDirectExecuteRun(input: {
   readonly runtime: AgentRuntimePort;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
+  readonly createMemoryProposal?: CreateMemoryProposal;
 }): ExecuteRun {
   const tasks = {
     findById: vi.fn(async () => input.task),
@@ -393,7 +499,24 @@ function createDirectExecuteRun(input: {
     { log: vi.fn() },
     () => new Date('2026-07-23T00:00:00.000Z'),
     input.resolver,
+    undefined,
+    undefined,
+    input.createMemoryProposal,
   );
+}
+
+function createRuntimeWithCandidates(): AgentRuntimePort {
+  return {
+    ...createRuntime(),
+    execute: vi.fn(async () => ({
+      provider: 'test-provider',
+      model: 'test-model',
+      text: 'safe result',
+      memoryCandidates: [
+        { category: 'project_constraint', content: 'keep logs' },
+      ],
+    })),
+  };
 }
 
 function createRuntime(error?: Error): AgentRuntimePort {

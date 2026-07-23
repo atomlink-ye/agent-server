@@ -29,6 +29,7 @@ import { CompleteRun } from './complete-run.js';
 import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
+  RuntimeMemoryPersistenceError,
 } from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
@@ -115,6 +116,14 @@ export class ExecuteRun {
     } catch (error) {
       if (error instanceof RunCompletionPersistenceError) {
         this.reportCompletionPersistenceFailure(error.receipt);
+        throw error;
+      }
+      if (error instanceof RuntimeMemoryPersistenceError) {
+        this.logger.log('error', 'run.memory_persistence_failed', {
+          run_id: error.receipt.runId,
+          terminal_status: error.receipt.terminalStatus,
+          result_available: error.receipt.resultAvailable,
+        });
         throw error;
       }
       const timedOut = error instanceof RuntimeTimedOutError;
@@ -215,36 +224,61 @@ export class ExecuteRun {
       runId: claim.run.id,
       prompt,
     });
-    for (const [sourceCandidateIndex, candidate] of (
-      execution.memoryCandidates ?? []
-    )
+    const candidateInputs = (execution.memoryCandidates ?? [])
       .slice(0, this.resolvedProposalLimit)
-      .entries()) {
-      if (!isSafeRuntimeCandidate(candidate)) continue;
-      try {
-        await this.createMemoryProposal?.execute({
-          content: candidate.content,
-          category: candidate.category,
-          sourceTaskId: task.id,
-          ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
-          sourceRunId: claim.run.id,
-          sourceAgentVersionId: task.invokableVersionId,
-          sourceCandidateIndex,
-          accessContext: {
-            tenantId: task.tenantId,
-            serviceAccountId: task.principalId,
-            workspaceId: task.workspaceId,
-            principalType: task.principalType as 'service_account',
-            principalId: task.principalId,
-            policySnapshotVersion: task.policySnapshotVersion,
+      .flatMap((candidate, sourceCandidateIndex) => {
+        if (!isSafeRuntimeCandidate(candidate)) return [];
+        return [
+          {
+            content: candidate.content,
+            category: candidate.category,
+            sourceTaskId: task.id,
+            ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
+            ...(task.sourceMessageId
+              ? { sourceMessageId: task.sourceMessageId }
+              : {}),
+            sourceRunId: claim.run.id,
+            sourceAgentVersionId: task.invokableVersionId,
+            sourceCandidateIndex,
+            accessContext: {
+              tenantId: task.tenantId,
+              serviceAccountId: task.principalId,
+              workspaceId: task.workspaceId,
+              principalType: task.principalType as 'service_account',
+              principalId: task.principalId,
+              policySnapshotVersion: task.policySnapshotVersion,
+            },
           },
-        });
-      } catch (error) {
-        this.logger.log('error', 'run.memory_persistence_failed', {
-          run_id: claim.run.id,
-          error_name: error instanceof Error ? error.name : 'UnknownError',
-        });
+        ];
+      });
+    try {
+      if (candidateInputs.length && this.createMemoryProposal) {
+        if (this.createMemoryProposal.executeBatch) {
+          await this.createMemoryProposal.executeBatch(candidateInputs);
+        } else {
+          for (const input of candidateInputs)
+            await this.createMemoryProposal.execute(input);
+        }
       }
+    } catch (error) {
+      const receipt = createRuntimeExecutionReceipt(
+        transitionRun(
+          claim.run,
+          'succeeded',
+          {
+            runtime: { provider: execution.provider, model: execution.model },
+            result: { text: execution.text },
+            ...(execution.usage ? { usage: execution.usage } : {}),
+          },
+          this.now,
+        ),
+        claim.taskId,
+      );
+      this.logger.log('error', 'run.memory_persistence_failed', {
+        run_id: claim.run.id,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+      });
+      throw new RuntimeMemoryPersistenceError(receipt);
     }
     const succeeded = transitionRun(
       claim.run,

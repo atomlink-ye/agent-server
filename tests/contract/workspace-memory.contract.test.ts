@@ -408,6 +408,15 @@ describe('workspace memory HTTP contracts', () => {
     );
     expect(review.status).toBe(200);
 
+    const productProposals = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/proposals`,
+      { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
+    );
+    expect(productProposals.status).toBe(200);
+    expect(
+      ((await productProposals.json()) as { proposals: unknown[] }).proposals,
+    ).toHaveLength(1);
+
     const entries = await app.request(
       `/api/v1/workspaces/${workspaceId}/memory/entries`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
@@ -458,6 +467,11 @@ describe('workspace memory HTTP contracts', () => {
       { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
     );
     expect(foreign.status).toBe(404);
+    const foreignProposals = await app.request(
+      `/api/v1/workspaces/${workspaceId}/memory/proposals`,
+      { headers: { authorization: `Bearer ${secondaryServiceAccountToken}` } },
+    );
+    expect(foreignProposals.status).toBe(404);
   });
 
   it('derives product workspace scope from a source task and hides it from a foreign principal', async () => {

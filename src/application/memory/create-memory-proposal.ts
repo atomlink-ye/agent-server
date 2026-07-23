@@ -69,6 +69,49 @@ export class CreateMemoryProposal {
 
     return this.memoryRepository.createProposal(proposal);
   }
+
+  public async executeBatch(
+    inputs: readonly CreateMemoryProposalInput[],
+  ): Promise<readonly MemoryProposal[]> {
+    const proposals: MemoryProposal[] = [];
+    for (const input of inputs) {
+      let workspaceId = input.accessContext.workspaceId;
+      if (input.sourceTaskId) {
+        const task = await this.taskRepository.findByIdForOwner(
+          input.sourceTaskId,
+          ownerScopeFromAccessContext(input.accessContext),
+        );
+        if (!task) throw new SourceTaskNotFoundError();
+        workspaceId = task.task.workspaceId;
+      }
+      proposals.push(
+        createMemoryProposal({
+          ...ownerScopeFromAccessContext(input.accessContext, workspaceId),
+          originalContent: input.content,
+          originalCategory: input.category,
+          sourceTaskId: input.sourceTaskId ?? null,
+          sourceSessionId: input.sourceSessionId ?? null,
+          sourceMessageId: input.sourceMessageId ?? null,
+          sourceRunId: input.sourceRunId ?? null,
+          sourceAgentVersionId: input.sourceAgentVersionId ?? null,
+          sourceCandidateIndex: input.sourceCandidateIndex ?? null,
+          proposerSnapshot: {
+            principalType: input.accessContext.principalType,
+            principalId: input.accessContext.principalId,
+            policySnapshotVersion: input.accessContext.policySnapshotVersion,
+          },
+          ...(input.now ? { now: input.now } : {}),
+        }),
+      );
+    }
+    if (this.memoryRepository.createProposalsBatch) {
+      return this.memoryRepository.createProposalsBatch(proposals);
+    }
+    const result: MemoryProposal[] = [];
+    for (const proposal of proposals)
+      result.push(await this.memoryRepository.createProposal(proposal));
+    return result;
+  }
 }
 
 function ownerScopeFromAccessContext(

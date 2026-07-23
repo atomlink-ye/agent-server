@@ -26,6 +26,15 @@ export class RunCompletionPersistenceError extends Error {
   }
 }
 
+export class RuntimeMemoryPersistenceError extends Error {
+  public readonly code = 'runtime_memory_persistence_failed' as const;
+
+  public constructor(public readonly receipt: RuntimeExecutionReceipt) {
+    super('Runtime memory persistence failed; the run remains recoverable.');
+    this.name = 'RuntimeMemoryPersistenceError';
+  }
+}
+
 export function createRuntimeExecutionReceipt(
   run: Run,
   taskId?: string,

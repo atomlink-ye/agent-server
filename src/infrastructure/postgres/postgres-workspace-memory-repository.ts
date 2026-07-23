@@ -143,7 +143,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           continue;
         }
         await client.query(
-          `INSERT INTO workspace_memory_proposals (id, tenant_id, workspace_id, principal_type, principal_id, original_content, original_category, source_task_id, source_session_id, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, proposer_snapshot, status, review_outcome, reviewed_content, reviewer_snapshot, reviewed_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+          `INSERT INTO workspace_memory_proposals (id, tenant_id, workspace_id, principal_type, principal_id, original_content, original_category, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, source_task_id, source_session_id, proposer_snapshot, status, review_outcome, reviewed_content, reviewer_snapshot, reviewed_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
           proposalValues(proposal),
         );
         materialized.push(proposal);
@@ -169,6 +169,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           AND workspace_id = $3
           AND principal_type = $4
           AND principal_id = $5
+          AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
       `,
       [
         proposalId,
@@ -197,6 +198,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           AND tenant_id = $2
           AND principal_type = $3
           AND principal_id = $4
+          AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
       `,
       [
         proposalId,
@@ -218,6 +220,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           AND workspace_id = $2
           AND principal_type = $3
           AND principal_id = $4
+          AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
         ORDER BY created_at DESC, internal_order DESC
       `,
       [
@@ -312,6 +315,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           AND workspace_id = $3
           AND principal_type = $4
           AND principal_id = $5
+          AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
       `,
       [
         proposalId,
@@ -400,6 +404,7 @@ async function selectProposalByIdForOwner(
         AND workspace_id = $3
         AND principal_type = $4
         AND principal_id = $5
+        AND (source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded'))
       ${forUpdate ? 'FOR UPDATE' : ''}
     `,
     [
@@ -517,12 +522,12 @@ function proposalValues(proposal: MemoryProposal): readonly unknown[] {
     proposal.principalId,
     proposal.originalContent,
     proposal.originalCategory,
-    proposal.sourceTaskId,
-    proposal.sourceSessionId,
     proposal.sourceMessageId ?? null,
     proposal.sourceRunId ?? null,
     proposal.sourceAgentVersionId ?? null,
     proposal.sourceCandidateIndex ?? null,
+    proposal.sourceTaskId,
+    proposal.sourceSessionId,
     JSON.stringify(proposal.proposerSnapshot),
     proposal.status,
     proposal.reviewOutcome,

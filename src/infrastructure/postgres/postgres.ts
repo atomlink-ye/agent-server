@@ -32,6 +32,7 @@ const durableKernelMigrationFileNames = [
   '0007_runtime_events_d.sql',
   '0008_managed_memory_e.sql',
   '0009_session_reset_idempotency_hardening.sql',
+  '0010_runtime_memory_provenance.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 

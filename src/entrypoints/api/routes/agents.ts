@@ -20,6 +20,7 @@ import type { AgentRegistry } from '../../../application/ports/agent-registry.js
 import { HttpError } from '../../../contracts/http.js';
 import {
   AgentDefinitionResponseSchema,
+  AgentIdSchema,
   AgentVersionListResponseSchema,
   AgentVersionResponseSchema,
   ImportAgentRequestSchema,
@@ -28,6 +29,7 @@ import {
   PublishAgentVersionRequestSchema,
   ValidateAgentPackageRequestSchema,
 } from '../../../contracts/agents.js';
+import { readBoundedJson } from '../read-bounded-json.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   getAuthenticatedAccessContext,
@@ -62,7 +64,7 @@ export function registerAgentRoutes(
 
   app.post(validatePath, async (c) => {
     const input = ValidateAgentPackageRequestSchema.safeParse(
-      await readJson(c.req.raw),
+      await readBoundedJson(c.req.raw, MAX_AGENT_REQUEST_BYTES),
     );
     if (!input.success) throw invalidRequest();
     try {
@@ -87,7 +89,9 @@ export function registerAgentRoutes(
   });
 
   app.post(importPath, async (c) => {
-    const input = ImportAgentRequestSchema.safeParse(await readJson(c.req.raw));
+    const input = ImportAgentRequestSchema.safeParse(
+      await readBoundedJson(c.req.raw, MAX_AGENT_REQUEST_BYTES),
+    );
     if (!input.success) throw invalidRequest();
     try {
       const result = await importAgent(dependencies.agentRegistry, {
@@ -107,6 +111,7 @@ export function registerAgentRoutes(
   });
 
   app.get('/api/v1/agents/:agentId', async (c) => {
+    assertUuidPath(c.req.param('agentId'));
     try {
       return c.json(
         AgentDefinitionResponseSchema.parse(
@@ -125,6 +130,7 @@ export function registerAgentRoutes(
     }
   });
   app.get('/api/v1/agents/:agentId/versions', async (c) => {
+    assertUuidPath(c.req.param('agentId'));
     const limit =
       c.req.query('limit') === undefined ? 20 : Number(c.req.query('limit'));
     try {
@@ -149,6 +155,7 @@ export function registerAgentRoutes(
     }
   });
   app.get('/api/v1/agent-versions/:versionId', async (c) => {
+    assertUuidPath(c.req.param('versionId'));
     try {
       return c.json(
         AgentVersionResponseSchema.parse(
@@ -167,15 +174,16 @@ export function registerAgentRoutes(
     }
   });
   app.post('/api/v1/agent-versions/:versionId:publish', async (c) => {
+    const versionId =
+      c.req.param('versionId') ??
+      c.req.path.match(/\/agent-versions\/([^:]+):publish$/)?.[1] ??
+      '';
+    assertUuidPath(versionId);
     const input = PublishAgentVersionRequestSchema.safeParse(
-      await readJson(c.req.raw),
+      await readBoundedJson(c.req.raw, MAX_AGENT_REQUEST_BYTES),
     );
     if (!input.success) throw invalidRequest();
     try {
-      const versionId =
-        c.req.param('versionId') ??
-        c.req.path.match(/\/agent-versions\/([^:]+):publish$/)?.[1] ??
-        '';
       const version = await publishAgentVersion(dependencies.agentRegistry, {
         accessContext: getAuthenticatedAccessContext(c),
         idempotencyKey: c.req.header('idempotency-key') ?? '',
@@ -191,51 +199,8 @@ export function registerAgentRoutes(
   });
 }
 
-async function readJson(request: Request): Promise<unknown> {
-  const declared = Number.parseInt(
-    request.headers.get('content-length') ?? '0',
-    10,
-  );
-  if (Number.isFinite(declared) && declared > MAX_AGENT_REQUEST_BYTES)
-    throw new HttpError(
-      413,
-      'request_too_large',
-      'The request body exceeds 64 KiB.',
-    );
-  const reader = request.body?.getReader();
-  if (!reader) return {};
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    size += chunk.value.byteLength;
-    if (size > MAX_AGENT_REQUEST_BYTES) {
-      await reader.cancel();
-      throw new HttpError(
-        413,
-        'request_too_large',
-        'The request body exceeds 64 KiB.',
-      );
-    }
-    chunks.push(chunk.value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  if (bytes.byteLength === 0) return {};
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-  } catch {
-    throw new HttpError(
-      400,
-      'invalid_json',
-      'The request body is not valid JSON.',
-    );
-  }
+function assertUuidPath(value: string | undefined): asserts value is string {
+  if (!AgentIdSchema.safeParse(value).success) throw invalidRequest();
 }
 function invalidRequest(): HttpError {
   return new HttpError(

@@ -1,6 +1,26 @@
 import { z } from 'zod';
 
 export const MAX_AGENT_REQUEST_BYTES = 64 * 1024;
+const uuidPattern =
+  '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+export const AgentIdSchema = z.string().regex(new RegExp(`^${uuidPattern}$`));
+const timestampSchema = z.iso.datetime({ offset: true });
+const fingerprintSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+const compilerSchema = z
+  .object({
+    pattern_dialect: z.literal('re2'),
+    pattern_compiler_version: z.literal('re2js-2.8.6'),
+  })
+  .strict();
+const definitionSelfLinkSchema = z
+  .string()
+  .regex(new RegExp(`^/api/v1/agents/${uuidPattern}$`));
+const definitionVersionsLinkSchema = z
+  .string()
+  .regex(new RegExp(`^/api/v1/agents/${uuidPattern}/versions$`));
+const versionSelfLinkSchema = z
+  .string()
+  .regex(new RegExp(`^/api/v1/agent-versions/${uuidPattern}$`));
 
 export const ValidateAgentPackageRequestSchema = z
   .object({ source: z.string() })
@@ -8,50 +28,50 @@ export const ValidateAgentPackageRequestSchema = z
 export const ImportAgentRequestSchema = ValidateAgentPackageRequestSchema;
 export const PublishAgentVersionRequestSchema = z.object({}).strict();
 
-const compilerSchema = z
+const definitionLinksSchema = z
   .object({
-    pattern_dialect: z.string(),
-    pattern_compiler_version: z.string(),
+    self: definitionSelfLinkSchema,
+    versions: definitionVersionsLinkSchema,
   })
   .strict();
-const definitionLinksSchema = z
-  .object({ self: z.string(), versions: z.string() })
-  .strict();
 const versionLinksSchema = z
-  .object({ self: z.string(), definition: z.string() })
+  .object({
+    self: versionSelfLinkSchema,
+    definition: definitionSelfLinkSchema,
+  })
   .strict();
 
 export const ValidateAgentPackageResponseSchema = z
   .object({
     valid: z.literal(true),
-    fingerprint: z.string(),
-    metadata: z.object({ normalized_name: z.string() }).strict(),
+    fingerprint: fingerprintSchema,
+    metadata: z.object({ normalized_name: z.string().min(1) }).strict(),
     compiler: compilerSchema,
   })
   .strict();
 
 export const AgentDefinitionResponseSchema = z
   .object({
-    id: z.string(),
-    normalized_name: z.string(),
-    display_name: z.string(),
-    created_at: z.string(),
-    updated_at: z.string(),
+    id: AgentIdSchema,
+    normalized_name: z.string().min(1),
+    display_name: z.string().min(1),
+    created_at: timestampSchema,
+    updated_at: timestampSchema,
     links: definitionLinksSchema,
   })
   .strict();
 
 export const AgentVersionResponseSchema = z
   .object({
-    id: z.string(),
-    definition_id: z.string(),
+    id: AgentIdSchema,
+    definition_id: AgentIdSchema,
     status: z.enum(['draft', 'published']),
-    display_name: z.string(),
-    fingerprint: z.string(),
+    display_name: z.string().min(1),
+    fingerprint: fingerprintSchema,
     compiler: compilerSchema,
-    created_at: z.string(),
-    updated_at: z.string(),
-    published_at: z.string().nullable(),
+    created_at: timestampSchema,
+    updated_at: timestampSchema,
+    published_at: timestampSchema.nullable(),
     links: versionLinksSchema,
   })
   .strict();

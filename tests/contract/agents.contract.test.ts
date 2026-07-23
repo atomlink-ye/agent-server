@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   AgentDefinitionResponseSchema,
+  AgentIdSchema,
   AgentVersionResponseSchema,
   AgentVersionListResponseSchema,
   ImportAgentResponseSchema,
@@ -114,6 +115,16 @@ function splitBody(body: string): ReadableStream<Uint8Array> {
   });
 }
 
+function splitBytes(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (let offset = 0; offset < bytes.byteLength; offset += 2)
+        controller.enqueue(bytes.slice(offset, offset + 2));
+      controller.close();
+    },
+  });
+}
+
 async function requestChunked(
   app: Awaited<ReturnType<typeof createTestApp>>,
   path: string,
@@ -131,6 +142,26 @@ async function requestChunked(
     duplex: 'half',
   } as RequestInit & { duplex: 'half' });
   return app.fetch(request);
+}
+
+async function requestRawBytes(
+  app: Awaited<ReturnType<typeof createTestApp>>,
+  path: string,
+  bytes: Uint8Array,
+  key?: string,
+  contentLength?: string,
+): Promise<Response> {
+  return app.fetch(
+    new Request(`http://agent.test${path}`, {
+      method: 'POST',
+      headers: {
+        ...headers(primaryServiceAccountToken, key),
+        ...(contentLength ? { 'content-length': contentLength } : {}),
+      },
+      body: splitBytes(bytes),
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' }),
+  );
 }
 
 async function importedApp() {
@@ -354,6 +385,63 @@ describe('managed agent HTTP contracts', () => {
     }
   });
 
+  it('exposes exactly the six approved managed Agent routes', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const actual = app.routes
+      .filter(
+        (route) =>
+          route.path.startsWith('/api/v1/agent') && route.method !== 'ALL',
+      )
+      .map((route) => `${route.method} ${route.path}`)
+      .sort();
+    expect(actual).toEqual(
+      [
+        'GET /api/v1/agent-versions/:versionId',
+        'GET /api/v1/agents/:agentId',
+        'GET /api/v1/agents/:agentId/versions',
+        'POST /api/v1/agent-packages:validate',
+        'POST /api/v1/agent-versions/:versionId:publish',
+        'POST /api/v1/agents:import',
+      ].sort(),
+    );
+  });
+
+  it('rejects noncanonical UUID path parameters before application calls', async () => {
+    const { app, body } = await importedApp();
+    const invalid = '00000000-0000-4000-8000-00000000000Z';
+    const requests = [
+      app.request(`/api/v1/agents/${invalid}`, { headers: headers() }),
+      app.request(`/api/v1/agents/${invalid}/versions`, {
+        headers: headers(),
+      }),
+      app.request(`/api/v1/agent-versions/${invalid}`, {
+        headers: headers(),
+      }),
+      app.request(`/api/v1/agent-versions/${invalid}:publish`, {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'invalid-path'),
+        body: '{}',
+      }),
+    ];
+    for (const response of await Promise.all(requests)) {
+      expect(response.status).toBe(400);
+      const error = ErrorResponseSchema.parse(await response.json());
+      expect(error.error.code).toBe('invalid_request');
+      expect(JSON.stringify(error)).not.toContain(invalid);
+    }
+    const publishAfterInvalidPath = await app.request(
+      `/api/v1/agent-versions/${body.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'invalid-path'),
+        body: '{}',
+      },
+    );
+    expect(publishAfterInvalidPath.status).toBe(200);
+  });
+
   it('enforces the UTF-8 body boundary independently of Content-Length', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
@@ -410,6 +498,36 @@ describe('managed agent HTTP contracts', () => {
       }
     } finally {
       unboundedRead.mockRestore();
+    }
+  });
+
+  it('maps invalid UTF-8 bytes to invalid_json without replacement or echo', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const bytes = new Uint8Array(
+      Buffer.concat([
+        Buffer.from('{"source":"'),
+        Buffer.from([0xc3, 0x28]),
+        Buffer.from('"}'),
+      ]),
+    );
+    for (const path of [
+      '/api/v1/agent-packages:validate',
+      '/api/v1/agents:import',
+    ]) {
+      const response = await requestRawBytes(
+        app,
+        path,
+        bytes,
+        path.endsWith(':import') ? 'invalid-utf8' : undefined,
+        '1',
+      );
+      expect(response.status).toBe(400);
+      const error = ErrorResponseSchema.parse(await response.json());
+      expect(error.error.code).toBe('invalid_json');
+      expect(JSON.stringify(error)).not.toContain('\ufffd');
+      expect(JSON.stringify(error)).not.toContain('source');
     }
   });
 
@@ -684,5 +802,43 @@ describe('managed agent HTTP contracts', () => {
       },
     );
     expect(publish.headers.get('x-request-id')).toBe('req-agent');
+  });
+
+  it('keeps public Agent schemas strict and resource-shaped', async () => {
+    const { body } = await importedApp();
+    expect(() => AgentIdSchema.parse('not-a-uuid')).toThrow();
+    expect(() =>
+      AgentDefinitionResponseSchema.parse({
+        ...body.agent,
+        id: 'not-a-uuid',
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentVersionResponseSchema.parse({
+        ...body.version,
+        fingerprint: 'sha256:BAD',
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentVersionResponseSchema.parse({
+        ...body.version,
+        updated_at: 'yesterday',
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentDefinitionResponseSchema.parse({
+        ...body.agent,
+        links: { ...body.agent.links, self: 'https://evil.test/agent' },
+      }),
+    ).toThrow();
+    expect(() =>
+      AgentVersionResponseSchema.parse({
+        ...body.version,
+        compiler: {
+          pattern_dialect: 'custom',
+          pattern_compiler_version: 'unknown',
+        },
+      }),
+    ).toThrow();
   });
 });

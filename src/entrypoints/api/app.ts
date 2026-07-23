@@ -39,7 +39,7 @@ export interface AppDependencies {
   readonly listMemoryProposals: ListMemoryProposals;
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
-  readonly agentRegistry?: AgentRegistry;
+  readonly agentRegistry: AgentRegistry;
   readonly version?: string;
 }
 
@@ -73,11 +73,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   registerWorkspaceMemoryRoutes(app, dependencies);
-  if (dependencies.agentRegistry)
-    registerAgentRoutes(app, {
-      ...dependencies,
-      agentRegistry: dependencies.agentRegistry,
-    });
+  registerAgentRoutes(app, dependencies);
 
   app.notFound((context) => {
     return context.json(

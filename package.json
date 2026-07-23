@@ -25,7 +25,7 @@
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",
-    "eval:smoke": "node scripts/ci/pending-lane.mjs eval-smoke",
+    "eval:smoke": "node --import tsx scripts/eval/memory-policy-eval.ts",
     "ci": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
     "clean": "node scripts/dev/clean.mjs"
   },

@@ -45,7 +45,7 @@ This baseline intentionally stops at governance and provenance. It does not add 
 
 ## Runtime, Tools and Credentials
 
-**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Reconnect reuses cached Workspace/model state and protects connection ownership across races. The authenticated external smoke uses an ephemeral service-account token, exact marker, free-only selection, zero OpenCode credentials, and sanitized evidence. This phase does not claim Runtime Session V2 APIs or durable receipt reconciliation.
+**Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Reconnect reuses cached Workspace/model state, and tested attempt-generation/connection ownership protects stale initialize/reconnect attempts from replacing newer state. Pending `close()` ownership is not proven and remains deferred. The authenticated external smoke uses an ephemeral service-account token, exact marker, free-only selection, zero OpenCode credentials, and sanitized evidence. This phase does not claim Runtime Session V2 APIs or durable receipt reconciliation.
 
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 

@@ -116,12 +116,59 @@ describe('Phase C session contracts', () => {
     );
     expect(reset.status).toBe(200);
     expect(((await reset.json()) as { generation: number }).generation).toBe(1);
+    const afterResetMessage = await app.request(
+      `/api/v1/sessions/${session.session_id}/messages`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'after-reset'),
+        body: JSON.stringify({ text: 'after reset' }),
+      },
+    );
+    const afterResetTask = (await afterResetMessage.json()) as {
+      task_id: string;
+    };
+    const replayReset = await app.request(
+      `/api/v1/sessions/${session.session_id}:reset`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'reset-1'),
+      },
+    );
+    expect(replayReset.status).toBe(200);
+    expect(
+      ((await replayReset.json()) as { generation: number }).generation,
+    ).toBe(1);
+    const afterResetTaskResponse = await app.request(
+      `/api/v1/tasks/${afterResetTask.task_id}`,
+      { headers: headers(primaryServiceAccountToken) },
+    );
+    expect(
+      (await afterResetTaskResponse.json()) as { status: string },
+    ).toMatchObject({ status: 'queued' });
+    const differentReset = await app.request(
+      `/api/v1/sessions/${session.session_id}:reset`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'reset-2'),
+      },
+    );
+    expect(
+      ((await differentReset.json()) as { generation: number }).generation,
+    ).toBe(2);
+    const foreignReset = await app.request(
+      `/api/v1/sessions/${session.session_id}:reset`,
+      {
+        method: 'POST',
+        headers: headers(secondaryServiceAccountToken, 'foreign-reset'),
+      },
+    );
+    expect(foreignReset.status).toBe(404);
     const messagesAfterReset = await app.request(
       `/api/v1/sessions/${session.session_id}/messages`,
       { headers: headers(primaryServiceAccountToken) },
     );
     expect(
       ((await messagesAfterReset.json()) as { messages: unknown[] }).messages,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 });

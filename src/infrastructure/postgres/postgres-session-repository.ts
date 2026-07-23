@@ -253,7 +253,7 @@ export class PostgresSessionRepository implements SessionRepository {
       c.release?.();
     }
   }
-  async reset(id: string, o: AccessContext, _key: string) {
+  async reset(id: string, o: AccessContext, key: string) {
     const c = await this.acquire();
     await c.query('BEGIN');
     try {
@@ -265,8 +265,20 @@ export class PostgresSessionRepository implements SessionRepository {
         await c.query('ROLLBACK');
         return null;
       }
-      const s = r.rows[0],
-        g = Number(s.generation) + 1,
+      const s = r.rows[0];
+      const replay = await c.query(
+        `SELECT generation, updated_at FROM session_reset_idempotency WHERE session_id=$1 AND idempotency_key=$2`,
+        [id, key],
+      );
+      if (replay.rows?.[0]) {
+        await c.query('COMMIT');
+        return {
+          ...mapSession(s),
+          generation: Number(replay.rows[0].generation),
+          updatedAt: new Date(replay.rows[0].updated_at).toISOString(),
+        } as ProductSession;
+      }
+      const g = Number(s.generation) + 1,
         now = iso();
       await c.query(
         `UPDATE tasks
@@ -284,6 +296,10 @@ export class PostgresSessionRepository implements SessionRepository {
       await c.query(
         `UPDATE product_sessions SET generation=$2,updated_at=$3 WHERE id=$1`,
         [id, g, now],
+      );
+      await c.query(
+        `INSERT INTO session_reset_idempotency(session_id,idempotency_key,generation,updated_at) VALUES($1,$2,$3,$4)`,
+        [id, key, g, now],
       );
       await c.query('COMMIT');
       return {

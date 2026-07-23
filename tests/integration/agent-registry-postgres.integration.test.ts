@@ -220,6 +220,7 @@ describe('managed agent registry migration', () => {
       '0006_workspace_session_lane_c',
       '0007_runtime_events_d',
       '0008_managed_memory_e',
+      '0009_session_reset_idempotency_hardening',
     ]);
   });
 

@@ -180,11 +180,17 @@ export function registerSessionRoutes(
     );
   });
   app.post('/api/v1/sessions/:sessionId:reset', async (c) => {
+    const key = c.req.header('idempotency-key');
+    if (key !== undefined && (key.trim().length === 0 || key.length > 256))
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'Idempotency-Key must be non-empty and at most 256 characters.',
+      );
     const s = await d.sessions.reset(
       c.req.path.split('/sessions/')[1]?.split(':reset')[0] ?? '',
       getAuthenticatedAccessContext(c),
-      c.req.header('idempotency-key') ??
-        `request:${String(c.get('requestId'))}`,
+      key ?? `request:${String(c.get('requestId'))}`,
     );
     if (!s)
       throw new HttpError(

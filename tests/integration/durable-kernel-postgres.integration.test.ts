@@ -108,6 +108,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
       { version: '0004_workspace_memory_proposal_mvp' },
+      { version: '0005_managed_agent_registry_b' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -136,6 +137,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
       { version: '0004_workspace_memory_proposal_mvp' },
+      { version: '0005_managed_agent_registry_b' },
     ]);
   });
 

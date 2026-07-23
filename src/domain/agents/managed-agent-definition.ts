@@ -15,10 +15,11 @@ export function createManagedAgentDefinition(
     now?: () => Date;
   },
 ): AgentDefinition {
-  const at = (options.now ?? (() => new Date()))().toISOString();
+  const { id, now, ...durable } = options;
+  const at = (now ?? (() => new Date()))().toISOString();
   return Object.freeze({
-    ...options,
-    id: options.id ?? randomUUID(),
+    ...durable,
+    id: id ?? randomUUID(),
     createdAt: at,
     updatedAt: at,
   });

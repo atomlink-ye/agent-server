@@ -21,8 +21,14 @@ export interface AgentRegistry {
   ): Promise<ManagedAgentVersion | null>;
   listVersionsForOwner(
     owner: ManagedAgentOwner,
-    definitionId: string,
-  ): Promise<ManagedAgentVersionPage>;
+    command: ListAgentVersionsCommand,
+  ): Promise<ManagedAgentVersionPage | null>;
+}
+
+export interface ListAgentVersionsCommand {
+  readonly definitionId: string;
+  readonly cursor: string | null;
+  readonly limit: number;
 }
 
 export interface ManagedAgentVersionPage {

@@ -19,6 +19,13 @@ export class AgentNotFoundError extends Error {
     this.name = 'AgentNotFoundError';
   }
 }
+export class InvalidAgentListLimitError extends Error {
+  readonly code = 'invalid_limit';
+  constructor() {
+    super('The requested list limit is invalid.');
+    this.name = 'InvalidAgentListLimitError';
+  }
+}
 export class AgentPackageValidationError extends Error {
   readonly code = 'invalid_agent_package';
   constructor() {

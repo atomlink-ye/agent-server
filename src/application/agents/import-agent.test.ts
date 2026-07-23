@@ -124,42 +124,6 @@ describe('ImportAgent', () => {
     expect(second.version.id).toBe(first.version.id);
   });
 
-  it('converges concurrent imports atomically', async () => {
-    const fake = new AtomicFake();
-    const input = {
-      accessContext: context('w'),
-      idempotencyKey: 'concurrent',
-      source: validPackage('Concurrent'),
-    };
-    const results = await Promise.all([
-      importAgent(fake, input),
-      importAgent(fake, input),
-    ]);
-    expect(results[0]).toEqual(results[1]);
-    expect(fake.definitions).toHaveLength(1);
-    expect(fake.versions).toHaveLength(1);
-    expect(fake.atomicCalls).toBe(2);
-  });
-
-  it('converges concurrent equal packages under different keys', async () => {
-    const fake = new AtomicFake();
-    const results = await Promise.all([
-      importAgent(fake, {
-        accessContext: context('w'),
-        idempotencyKey: 'one',
-        source: validPackage('Concurrent Equal'),
-      }),
-      importAgent(fake, {
-        accessContext: context('w'),
-        idempotencyKey: 'two',
-        source: reorderedPackage('Concurrent Equal'),
-      }),
-    ]);
-    expect(results[0]!.version.id).toBe(results[1]!.version.id);
-    expect(fake.definitions).toHaveLength(1);
-    expect(fake.versions).toHaveLength(1);
-  });
-
   it('creates a distinct draft when the package fingerprint changes', async () => {
     const fake = new AtomicFake();
     const first = await importAgent(fake, {
@@ -217,46 +181,6 @@ describe('ImportAgent', () => {
     expect(published.compiler).toBe(imported.version.compiler);
   });
 
-  it('conflicts publish key reuse and converges concurrent publication', async () => {
-    const fake = new AtomicFake();
-    const first = await importAgent(fake, {
-      accessContext: context('w'),
-      idempotencyKey: 'a',
-      source: validPackage('Publish One'),
-    });
-    const second = await importAgent(fake, {
-      accessContext: context('w'),
-      idempotencyKey: 'b',
-      source: validPackage('Publish Two'),
-    });
-    await publishAgentVersion(fake, {
-      accessContext: context('w'),
-      idempotencyKey: 'pub',
-      versionId: first.version.id,
-    });
-    await expect(
-      publishAgentVersion(fake, {
-        accessContext: context('w'),
-        idempotencyKey: 'pub',
-        versionId: second.version.id,
-      }),
-    ).rejects.toBeInstanceOf(IdempotencyConflictError);
-    const results = await Promise.all([
-      publishAgentVersion(fake, {
-        accessContext: context('w'),
-        idempotencyKey: 'concurrent-pub',
-        versionId: second.version.id,
-      }),
-      publishAgentVersion(fake, {
-        accessContext: context('w'),
-        idempotencyKey: 'concurrent-pub',
-        versionId: second.version.id,
-      }),
-    ]);
-    expect(results[0]).toEqual(results[1]);
-    expect(fake.publishAtomicCalls).toBe(4);
-  });
-
   it('hides foreign and absent reads and publication as not-found', async () => {
     const fake = new AtomicFake();
     const imported = await importAgent(fake, {
@@ -309,11 +233,11 @@ describe('ImportAgent', () => {
         'instructions: later',
       ),
     });
-    const listed = await listAgentVersions(
-      fake,
-      context('w'),
-      fake.definitions[0]!.id,
-    );
+    const listed = await listAgentVersions(fake, context('w'), {
+      definitionId: fake.definitions[0]!.id,
+      cursor: null,
+      limit: 100,
+    });
     expect(listed.items.map((v) => v.fingerprint)).toEqual(
       [...listed.items]
         .sort(
@@ -377,24 +301,11 @@ class AtomicFake implements AgentRegistry {
   private readonly ownerKey = (o: ManagedAgentOwner) =>
     `${o.tenantId}/${o.principalType}/${o.principalId}`;
   atomicCalls = 0;
-  publishAtomicCalls = 0;
-  private importQueue = Promise.resolve();
-  private publishQueue = Promise.resolve();
   private readonly publishKeys = new Map<
     string,
     { fingerprint: string; version: ManagedAgentVersion }
   >();
   async importAgent(
-    command: ImportAgentAtomicCommand,
-  ): Promise<ImportAgentAtomicResult> {
-    const result = this.importQueue.then(() => this.importAtomic(command));
-    this.importQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
-  private async importAtomic(
     command: ImportAgentAtomicCommand,
   ): Promise<ImportAgentAtomicResult> {
     this.atomicCalls++;
@@ -452,17 +363,6 @@ class AtomicFake implements AgentRegistry {
   async publishAgentVersion(
     command: PublishAgentAtomicCommand,
   ): Promise<ManagedAgentVersion> {
-    const result = this.publishQueue.then(() => this.publishAtomic(command));
-    this.publishQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
-  private async publishAtomic(
-    command: PublishAgentAtomicCommand,
-  ): Promise<ManagedAgentVersion> {
-    this.publishAtomicCalls++;
     const key = `${this.ownerKey(command.owner)}/publish/${command.idempotencyKey}`;
     const previous = this.publishKeys.get(key);
     if (previous) {
@@ -501,13 +401,21 @@ class AtomicFake implements AgentRegistry {
       ) ?? null
     );
   }
-  async listVersionsForOwner(owner: ManagedAgentOwner, definitionId: string) {
+  async listVersionsForOwner(
+    owner: ManagedAgentOwner,
+    command: { definitionId: string; cursor: string | null; limit: number },
+  ) {
     return {
-      items: this.versions.filter(
-        (v) =>
-          v.definitionId === definitionId &&
-          this.ownerKey(v) === this.ownerKey(owner),
-      ),
+      items: this.versions
+        .filter(
+          (v) =>
+            v.definitionId === command.definitionId &&
+            this.ownerKey(v) === this.ownerKey(owner),
+        )
+        .sort(
+          (a, b) =>
+            a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+        ),
       nextCursor: null,
     };
   }

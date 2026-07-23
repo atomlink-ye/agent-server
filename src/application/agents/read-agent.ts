@@ -2,6 +2,8 @@ import type { AccessContext } from '../control-plane/access-context.js';
 import type { AgentRegistry } from '../ports/agent-registry.js';
 import { ownerFromContext } from './import-agent.js';
 import { AgentNotFoundError } from './errors.js';
+import { InvalidAgentListLimitError } from './errors.js';
+import type { ListAgentVersionsCommand } from '../ports/agent-registry.js';
 export async function readAgentDefinition(
   registry: AgentRegistry,
   accessContext: AccessContext,
@@ -29,17 +31,17 @@ export async function readAgentVersion(
 export async function listAgentVersions(
   registry: AgentRegistry,
   accessContext: AccessContext,
-  definitionId: string,
+  input: ListAgentVersionsCommand,
 ) {
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    throw new InvalidAgentListLimitError();
   const page = await registry.listVersionsForOwner(
     ownerFromContext(accessContext),
-    definitionId,
+    input,
   );
+  if (!page) throw new AgentNotFoundError();
   return {
-    items: [...page.items].sort(
-      (a, b) =>
-        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-    ),
+    items: page.items,
     nextCursor: page.nextCursor,
   };
 }

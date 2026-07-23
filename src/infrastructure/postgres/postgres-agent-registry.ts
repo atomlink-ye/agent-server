@@ -152,7 +152,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
       if (!version)
         throw new Error('Managed agent version could not be persisted.');
       await db.query(
-        `UPDATE agent_registry_idempotency SET definition_id=$6, version_id=$7, updated_at=$8
+        `UPDATE agent_registry_idempotency SET definition_id=$6, version_id=$7, updated_at=GREATEST(created_at, now())
            WHERE operation='import' AND tenant_id=$1 AND principal_type=$2 AND principal_id=$3 AND idempotency_key=$4 AND request_fingerprint=$5`,
         [
           command.owner.tenantId,
@@ -162,7 +162,6 @@ export class PostgresAgentRegistry implements AgentRegistry {
           command.requestFingerprint,
           definition.id,
           version.id,
-          command.version.updatedAt,
         ],
       );
       return {

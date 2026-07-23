@@ -641,6 +641,44 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(page?.items).toHaveLength(1);
     expect(page?.nextCursor).toBeNull();
   });
+
+  it('keeps import idempotency timestamps on database time when entity timestamps are stale', async () => {
+    const db = await database();
+    const registry = new PostgresAgentRegistry(db);
+    const parsed = parseManagedAgentPackage(source);
+    const stale = () => new Date('2000-01-01T00:00:00.000Z');
+    const definition = createManagedAgentDefinition({
+      ...owner,
+      normalizedName: 'stale-agent',
+      displayName: 'Stale Agent',
+      id: '00000000-0000-4000-8000-0000000c0002',
+      now: stale,
+    });
+    const version = createManagedAgentDraft({
+      definition,
+      parsed,
+      id: '00000000-0000-4000-8000-0000000c0102',
+      now: stale,
+    });
+    await registry.importAgent({
+      owner,
+      compatibilityWorkspaceId: 'workspace-stale',
+      idempotencyKey: 'stale-import',
+      requestFingerprint: 'stale-fingerprint',
+      normalizedName: 'stale-agent',
+      definition,
+      version,
+    });
+    const row = await db.query<{ created_at: string; updated_at: string }>(
+      `SELECT created_at::text, updated_at::text FROM agent_registry_idempotency
+        WHERE tenant_id=$1 AND idempotency_key='stale-import'`,
+      [owner.tenantId],
+    );
+    expect(row.rows).toHaveLength(1);
+    expect(Date.parse(row.rows[0]!.updated_at)).toBeGreaterThanOrEqual(
+      Date.parse(row.rows[0]!.created_at),
+    );
+  });
 });
 
 const describeRealPostgres = connectionString ? describe : describe.skip;
@@ -751,6 +789,48 @@ describeRealPostgres(
           requestFingerprint: 'different-fp',
         }),
       ).rejects.toThrow('idempotency');
+    });
+
+    it('keeps import idempotency timestamps on database time for stale entities', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_stale_time';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const command = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d00d1',
+        '00000000-0000-4000-8000-0000000d01d1',
+        'stale-import',
+        'stale-fp',
+      );
+      const staleDefinition = createManagedAgentDefinition({
+        ...command.owner,
+        normalizedName: command.normalizedName,
+        displayName: command.definition.displayName,
+        id: command.definition.id,
+        now: () => new Date('2000-01-01T00:00:00.000Z'),
+      });
+      const staleVersion = createManagedAgentDraft({
+        definition: staleDefinition,
+        parsed: parseManagedAgentPackage(source),
+        id: command.version.id,
+        now: () => new Date('2000-01-01T00:00:00.000Z'),
+      });
+      await registry.importAgent({
+        ...command,
+        definition: staleDefinition,
+        version: staleVersion,
+      });
+      const row = await pool.query<{ created_at: string; updated_at: string }>(
+        `SELECT created_at::text, updated_at::text FROM agent_registry_idempotency
+          WHERE tenant_id=$1 AND idempotency_key=$2`,
+        [tenant, 'stale-import'],
+      );
+      expect(row.rows).toHaveLength(1);
+      expect(Date.parse(row.rows[0]!.updated_at)).toBeGreaterThanOrEqual(
+        Date.parse(row.rows[0]!.created_at),
+      );
     });
 
     it('converges concurrent different-key equal-canonical imports to one definition and version', async () => {

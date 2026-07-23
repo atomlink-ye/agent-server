@@ -35,6 +35,30 @@ async function insertManagedVersion(
   fingerprint = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   status = 'draft',
 ): Promise<void> {
+  await insertVersionWithOptions(db, { id, fingerprint, status });
+}
+
+interface ManagedVersionOptions {
+  readonly id?: string;
+  readonly fingerprint?: string | null;
+  readonly status?: string;
+  readonly managedDiscriminator?: string | null;
+  readonly canonicalPackage?: string | null;
+  readonly patternMetadata?: string | null;
+  readonly compilerMetadata?: string | null;
+  readonly policySnapshot?: string | null;
+  readonly referenceSnapshot?: string | null;
+  readonly toolSkillSnapshot?: string | null;
+  readonly validationReport?: string | null;
+  readonly compiledPackage?: string | null;
+  readonly executionSnapshot?: string | null;
+  readonly definitionId?: string;
+}
+
+async function insertVersionWithOptions(
+  db: PGlite,
+  options: ManagedVersionOptions = {},
+): Promise<void> {
   await db.query(
     `INSERT INTO agent_versions
       (id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, instructions,
@@ -42,10 +66,68 @@ async function insertManagedVersion(
        reference_snapshot, tool_skill_snapshot, validation_report, compiled_package, execution_snapshot,
        created_at, updated_at, published_at)
      VALUES ($1, $2, 'tenant_one', 'workspace_one', 'service_account', 'principal_one', $3, 'Agent v1', 'desc', 'instructions',
-       'managed_agent_v1', '{"spec":"canonical"}', $4, '{"pattern":"p"}', '{"compiler":"c"}', '{"policy":"v1"}',
-       '{"refs":[]}', '{"tools":[],"skills":[]}', '{"valid":true}', '{"compiled":true}', '{"mode":"managed"}',
-       $5, $5, NULL)`,
-    [id, definitionId, status, fingerprint, now],
+       $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb,
+       $15, $15, NULL)`,
+    [
+      options.id ?? versionId,
+      options.definitionId ?? definitionId,
+      options.status ?? 'draft',
+      options.managedDiscriminator === undefined
+        ? 'managed_agent_v1'
+        : options.managedDiscriminator,
+      options.canonicalPackage === undefined
+        ? '{"spec":"canonical"}'
+        : options.canonicalPackage,
+      options.fingerprint === undefined
+        ? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        : options.fingerprint,
+      options.patternMetadata === undefined
+        ? '{"pattern":"p"}'
+        : options.patternMetadata,
+      options.compilerMetadata === undefined
+        ? '{"compiler":"c"}'
+        : options.compilerMetadata,
+      options.policySnapshot === undefined
+        ? '{"policy":"v1"}'
+        : options.policySnapshot,
+      options.referenceSnapshot === undefined
+        ? '{"refs":[]}'
+        : options.referenceSnapshot,
+      options.toolSkillSnapshot === undefined
+        ? '{"tools":[],"skills":[]}'
+        : options.toolSkillSnapshot,
+      options.validationReport === undefined
+        ? '{"valid":true}'
+        : options.validationReport,
+      options.compiledPackage === undefined
+        ? '{"compiled":true}'
+        : options.compiledPackage,
+      options.executionSnapshot === undefined
+        ? '{"mode":"managed"}'
+        : options.executionSnapshot,
+      now,
+    ],
+  );
+}
+
+async function insertLegacyDefinition(
+  db: PGlite,
+  id = definitionId,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO agent_definitions
+      (id, tenant_id, workspace_id, principal_type, principal_id, name, description, created_at, updated_at)
+     VALUES ($1, 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'Legacy Agent', NULL, $2, $2)`,
+    [id, now],
+  );
+}
+
+async function insertLegacyVersion(db: PGlite, id = versionId): Promise<void> {
+  await db.query(
+    `INSERT INTO agent_versions
+      (id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, instructions, created_at, updated_at, published_at)
+     VALUES ($1, $2, 'tenant_one', 'workspace_one', 'service_account', 'principal_one', 'draft', 'Legacy Agent v1', NULL, 'legacy instructions', $3, $3, NULL)`,
+    [id, definitionId, now],
   );
 }
 
@@ -178,7 +260,62 @@ describe('managed agent registry migration', () => {
     });
   });
 
-  it('rejects malformed managed and idempotency rows and exposes cursor indexes', async () => {
+  it('rejects converting a legacy version into a managed version by UPDATE', async () => {
+    const db = await database();
+    await insertLegacyDefinition(db);
+    await insertLegacyVersion(db);
+    await expect(
+      db.query(
+        `UPDATE agent_versions SET
+          status = 'published', published_at = $2, updated_at = $2,
+          managed_discriminator = 'managed_agent_v1', canonical_package = '{"spec":"canonical"}',
+          fingerprint = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          pattern_metadata = '{"pattern":"p"}', compiler_metadata = '{"compiler":"c"}',
+          policy_snapshot = '{"policy":"v1"}', reference_snapshot = '{"refs":[]}',
+          tool_skill_snapshot = '{"tools":[],"skills":[]}', validation_report = '{"valid":true}',
+          compiled_package = '{"compiled":true}', execution_snapshot = '{"mode":"managed"}'
+         WHERE id = $1`,
+        [versionId, '2026-07-23T10:01:00.000Z'],
+      ),
+    ).rejects.toThrow(/managed|immutable|insert/i);
+    const row = await db.query(
+      'SELECT managed_discriminator FROM agent_versions WHERE id = $1',
+      [versionId],
+    );
+    expect(row.rows[0]).toEqual({ managed_discriminator: null });
+  });
+
+  it('requires managed versions to reference managed definitions', async () => {
+    const db = await database();
+    await insertLegacyDefinition(db);
+    await expect(insertManagedVersion(db)).rejects.toThrow(
+      /foreign|managed|definition/i,
+    );
+  });
+
+  it.each([
+    ['canonical package', { canonicalPackage: null }],
+    ['fingerprint', { fingerprint: null }],
+    ['pattern metadata', { patternMetadata: null }],
+    ['compiler metadata', { compilerMetadata: null }],
+    ['policy snapshot', { policySnapshot: null }],
+    ['reference snapshot', { referenceSnapshot: null }],
+    ['tool/skill snapshot', { toolSkillSnapshot: null }],
+    ['validation report', { validationReport: null }],
+    ['compiled package', { compiledPackage: null }],
+    ['execution snapshot', { executionSnapshot: null }],
+    ['non-SHA256 fingerprint', { fingerprint: 'not-a-sha256' }],
+    ['discriminator/field mismatch', { managedDiscriminator: null }],
+    ['invalid status shape', { status: 'published' }],
+  ])('rejects malformed managed version insert: %s', async (_case, options) => {
+    const db = await database();
+    await insertManagedDefinition(db);
+    await expect(insertVersionWithOptions(db, options)).rejects.toThrow(
+      /check|foreign|managed|published|fingerprint/i,
+    );
+  });
+
+  it('rejects malformed idempotency rows and exposes every required index explicitly', async () => {
     const db = await database();
     await expect(
       db.query(
@@ -196,11 +333,51 @@ describe('managed agent registry migration', () => {
         [now],
       ),
     ).rejects.toThrow(/check|operation/i);
-    const indexes = await db.query<{ indexname: string }>(
-      `SELECT indexname FROM pg_indexes WHERE tablename IN ('agent_definitions', 'agent_versions')`,
+    const indexes = await db.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes
+       WHERE indexname IN (
+         'agent_definitions_managed_owner_name_uq',
+         'agent_definitions_id_discriminator_uq',
+         'agent_versions_managed_definition_fingerprint_uq',
+         'agent_definitions_managed_owner_hidden_idx',
+         'agent_versions_managed_owner_hidden_idx',
+         'agent_versions_definition_created_cursor_idx'
+       )
+       ORDER BY indexname`,
     );
-    expect(indexes.rows.map((row) => row.indexname).join(' ')).toMatch(
-      /cursor|owner|fingerprint/i,
+    expect(indexes.rows).toHaveLength(6);
+    const indexDefs = new Map(
+      indexes.rows.map((row) => [row.indexname, row.indexdef]),
     );
+    expect(indexDefs.get('agent_definitions_managed_owner_name_uq')).toMatch(
+      /\(tenant_id, principal_type, principal_id, normalized_name\).*managed_discriminator.*managed_agent_v1/i,
+    );
+    expect(
+      indexDefs.get('agent_versions_managed_definition_fingerprint_uq'),
+    ).toMatch(
+      /\(definition_id, fingerprint\).*managed_discriminator.*managed_agent_v1/i,
+    );
+    expect(indexDefs.get('agent_definitions_id_discriminator_uq')).toMatch(
+      /\(id, managed_discriminator\)/i,
+    );
+    expect(indexDefs.get('agent_definitions_managed_owner_hidden_idx')).toMatch(
+      /\(tenant_id, principal_type, principal_id, updated_at DESC, id\).*managed_discriminator.*managed_agent_v1/i,
+    );
+    expect(indexDefs.get('agent_versions_managed_owner_hidden_idx')).toMatch(
+      /\(tenant_id, principal_type, principal_id, updated_at DESC, id\).*managed_discriminator.*managed_agent_v1/i,
+    );
+    expect(
+      indexDefs.get('agent_versions_definition_created_cursor_idx'),
+    ).toMatch(/\(definition_id, created_at, id\)/i);
+    const idempotencyKey = await db.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint WHERE conname = 'agent_registry_idempotency_pkey'`,
+    );
+    expect(idempotencyKey.rows).toEqual([
+      {
+        definition:
+          'PRIMARY KEY (operation, tenant_id, principal_type, principal_id, idempotency_key)',
+      },
+    ]);
   });
 });

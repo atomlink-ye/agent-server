@@ -5,14 +5,17 @@ ALTER TABLE agent_definitions
   ADD COLUMN IF NOT EXISTS normalized_name text NULL;
 
 ALTER TABLE agent_definitions
-  ADD CONSTRAINT agent_definitions_managed_shape_check CHECK (
+  ADD CONSTRAINT agent_definitions_managed_shape_check CHECK ((
     (managed_discriminator IS NULL AND normalized_name IS NULL)
     OR (managed_discriminator = 'managed_agent_v1' AND normalized_name IS NOT NULL AND length(btrim(normalized_name)) > 0)
-  );
+  ) IS TRUE);
 
 CREATE UNIQUE INDEX IF NOT EXISTS agent_definitions_managed_owner_name_uq
   ON agent_definitions (tenant_id, principal_type, principal_id, normalized_name)
   WHERE managed_discriminator = 'managed_agent_v1';
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_definitions_id_discriminator_uq
+  ON agent_definitions (id, managed_discriminator);
 
 CREATE INDEX IF NOT EXISTS agent_definitions_managed_owner_hidden_idx
   ON agent_definitions (tenant_id, principal_type, principal_id, updated_at DESC, id)
@@ -32,7 +35,7 @@ ALTER TABLE agent_versions
   ADD COLUMN IF NOT EXISTS execution_snapshot jsonb NULL;
 
 ALTER TABLE agent_versions
-  ADD CONSTRAINT agent_versions_managed_shape_check CHECK (
+  ADD CONSTRAINT agent_versions_managed_shape_check CHECK ((
     (managed_discriminator IS NULL AND canonical_package IS NULL AND fingerprint IS NULL AND pattern_metadata IS NULL
       AND compiler_metadata IS NULL AND policy_snapshot IS NULL AND reference_snapshot IS NULL
       AND tool_skill_snapshot IS NULL AND validation_report IS NULL AND compiled_package IS NULL AND execution_snapshot IS NULL)
@@ -40,7 +43,7 @@ ALTER TABLE agent_versions
       AND fingerprint ~ '^[0-9a-f]{64}$' AND pattern_metadata IS NOT NULL AND compiler_metadata IS NOT NULL
       AND policy_snapshot IS NOT NULL AND reference_snapshot IS NOT NULL AND tool_skill_snapshot IS NOT NULL
       AND validation_report IS NOT NULL AND compiled_package IS NOT NULL AND execution_snapshot IS NOT NULL)
-  );
+  ) IS TRUE);
 
 CREATE UNIQUE INDEX IF NOT EXISTS agent_versions_managed_definition_fingerprint_uq
   ON agent_versions (definition_id, fingerprint)
@@ -52,6 +55,11 @@ CREATE INDEX IF NOT EXISTS agent_versions_managed_owner_hidden_idx
 
 CREATE INDEX IF NOT EXISTS agent_versions_definition_created_cursor_idx
   ON agent_versions (definition_id, created_at ASC, id ASC);
+
+ALTER TABLE agent_versions
+  ADD CONSTRAINT agent_versions_managed_definition_fk
+  FOREIGN KEY (definition_id, managed_discriminator)
+  REFERENCES agent_definitions (id, managed_discriminator);
 
 CREATE TABLE IF NOT EXISTS agent_registry_idempotency (
   operation text NOT NULL,
@@ -76,6 +84,9 @@ CREATE TABLE IF NOT EXISTS agent_registry_idempotency (
 CREATE OR REPLACE FUNCTION prevent_managed_agent_version_mutation()
 RETURNS trigger AS $$
 BEGIN
+  IF OLD.managed_discriminator IS NULL AND NEW.managed_discriminator IS NOT NULL THEN
+    RAISE EXCEPTION 'Managed agent versions may only be created by INSERT';
+  END IF;
   IF OLD.managed_discriminator IS NULL THEN RETURN NEW; END IF;
   IF OLD.status = 'draft' AND NEW.status = 'published'
      AND NEW.definition_id = OLD.definition_id AND NEW.tenant_id = OLD.tenant_id AND NEW.workspace_id = OLD.workspace_id

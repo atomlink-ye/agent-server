@@ -9,18 +9,24 @@ import {
   parseManagedAgentYaml,
 } from './managed-agent-yaml.js';
 import {
-  MAX_PATTERN_INPUT_LENGTH,
   MAX_SCHEMA_DEPTH,
   type JsonSchema,
   ManagedAgentSchemaError,
   validateJsonSchema,
 } from './managed-agent-schema.js';
+import {
+  MAX_MANAGED_PATTERN_INPUT_LENGTH,
+  MAX_MANAGED_PATTERN_LENGTH,
+  MAX_MANAGED_PATTERN_PROGRAM_SIZE,
+} from './managed-agent-pattern.js';
 
 export {
   MAX_AST_DEPTH,
   MAX_AST_NODES,
   MAX_COLLECTION_SIZE,
-  MAX_PATTERN_INPUT_LENGTH,
+  MAX_MANAGED_PATTERN_INPUT_LENGTH,
+  MAX_MANAGED_PATTERN_LENGTH,
+  MAX_MANAGED_PATTERN_PROGRAM_SIZE,
   MAX_SCALAR_LENGTH,
   MAX_SCHEMA_DEPTH,
   MAX_SOURCE_BYTES,

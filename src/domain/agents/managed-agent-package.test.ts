@@ -151,16 +151,31 @@ describe('managed agent package', () => {
     expect(value.spec.skills).toEqual([]);
   });
 
-  it('rejects unsafe regexes and accepts a safe anchored pattern', () => {
-    const safe = yaml().replace(
-      'type: string, min: 1, additionalProperties: false',
-      'type: string, min: 1, pattern: "^[a-z][a-z0-9_-]*$", additionalProperties: false',
-    );
-    expect(() => parseManagedAgentPackage(safe)).not.toThrow();
-    for (const pattern of ['(a+)+$', '(a|aa)+$', '(?=a)a', 'a\\\\1', 'a*a*']) {
-      const source = safe.replace('^[a-z][a-z0-9_-]*$', pattern);
-      expect(errorCode(source).code).toBe('invalid_regex');
+  it('accepts ordinary RE2 schema patterns and retains the original source', () => {
+    for (const pattern of ['^(foo|bar)$', 'a?b?', '^[a-z]+$', '^a{2,4}$']) {
+      const source = yaml().replace(
+        'type: string, min: 1, additionalProperties: false',
+        `type: string, min: 1, pattern: "${pattern}", additionalProperties: false`,
+      );
+      const parsed = parseManagedAgentPackage(source);
+      expect(parsed.package.spec.input.schema.properties?.topic?.pattern).toBe(
+        pattern,
+      );
+      expect(parsed.canonicalJson).toContain(pattern);
     }
+    const a = parseManagedAgentPackage(
+      yaml().replace(
+        'type: string, min: 1, additionalProperties: false',
+        'type: string, pattern: "^(foo|bar)$", min: 1, additionalProperties: false',
+      ),
+    );
+    const b = parseManagedAgentPackage(
+      yaml().replace(
+        'type: string, min: 1, additionalProperties: false',
+        'type: string, min: 1, pattern: "^(foo|bar)$", additionalProperties: false',
+      ),
+    );
+    expect(a.fingerprint).toBe(b.fingerprint);
   });
 
   it('rejects inapplicable and nested unsupported schema fields', () => {

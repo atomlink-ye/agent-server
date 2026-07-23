@@ -33,9 +33,9 @@ Team compatibility remains implemented only as the existing sequential subset: `
 
 ## Workspace and Memory
 
-**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git. Phase C adds private database-owned Product Workspaces and multiple-workspace principal ownership; workspace-memory governance remains the existing proposal/review baseline.
+**Implemented minimum:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. Phase C adds private database-owned Product Workspaces and multiple-workspace principal ownership. Phase E adds Product-Workspace-owned accepted entries, immutable monotonic snapshots, verified local `MEMORY.md`/`manifest.json` projections, and authenticated read/rebuild routes. Responses expose no local filesystem paths.
 
-This baseline intentionally stops at governance and provenance. It does not add agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records, not content that leaf agents read automatically.
+Legacy principal-private proposals and accepted entries remain separate and are not merged into Product Workspace snapshots. This minimum intentionally stops before agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records and verified projections, not content that leaf agents read automatically.
 
 **V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 
@@ -70,4 +70,4 @@ This baseline intentionally stops at governance and provenance. It does not add 
 The following remain deferred and must not be inferred from the Phase C minimum:
 
 - Full Runtime Session V2 create/resume/status APIs, incremental provider deltas, rich usage, retries/receipts, and production recovery;
-- memory snapshots, runtime context assembly, retrieval injection, or automatic safe-memory behavior.
+- runtime context assembly, retrieval injection, or automatic safe-memory behavior. Snapshot projection is local MVP behavior only; production durability is deferred.

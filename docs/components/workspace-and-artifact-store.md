@@ -16,6 +16,14 @@ This phase adds a narrow durable workspace-memory governance baseline in Postgre
 - materialize accepted proposals into accepted memory entries;
 - list accepted entries for the authenticated owner scope.
 
+Phase E extends the Product Workspace path with one workspace-owned immutable
+entry per accepted proposal, monotonic immutable snapshots, deterministic
+`MEMORY.md` rendering, a manifest and SHA-256 content hash, and authenticated
+entry/snapshot/detail/rebuild routes. Local projection verifies both files before
+atomic publication; public responses never expose the configured local path.
+Legacy principal-private entries remain on the prior routes and are excluded
+from Product Workspace snapshots.
+
 Accepted entries are records of reviewed memory, not an implemented retrieval system. No embedding generation, vector search, ranking, context assembly, runtime prompt injection, or automatic agent recall happens in this component yet. Owner scope remains derived from configured service-account bindings until user identity and shared Workspace ACLs land.
 
 ## V1 filesystem boundary

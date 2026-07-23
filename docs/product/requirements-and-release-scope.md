@@ -15,6 +15,7 @@ Every capability is classified as `baseline`, `V1_MUST`, `V1_SHOULD`, `V1_RESERV
 - Automatic catalog selection chooses only an explicitly free model.
 - Real external smoke returns the exact marker and cleans its managed processes.
 - Product, feature, component, contract, quality, operations, ADR, and agent-workflow documents are internally linked and offline-readable.
+- Phase E minimum: an accepted Product Workspace entry can be rendered into a verified immutable local `MEMORY.md`/manifest snapshot, read through authenticated routes, and rebuilt with a stable content hash; local paths are never public.
 
 ## V1 reliability requirements
 

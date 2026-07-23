@@ -61,6 +61,22 @@ The smoke uses an ephemeral service-account token only for create/poll, retains 
 
 ## Managed Agent registry operations
 
+## Product Workspace memory projection
+
+After an accepted proposal, the minimum local projection renders all accepted
+Product Workspace entries in stable `accepted_at ASC, entry_id ASC` order. The
+FileStore writes `MEMORY.md` and `manifest.json` to a temporary directory,
+verifies the SHA-256 rendered-content hash, atomically renames the snapshot
+directory, and publishes `latest-ready` only after verification succeeds.
+
+Use the authenticated workspace memory entries/snapshots routes to inspect the
+projection and `POST .../memory/snapshots:rebuild` to create the next immutable
+version. A hash or write failure marks the projection failed and must not
+publish a ready/latest pointer. Public responses contain identifiers, hashes,
+versions, and status only; never a local path. This is an MVP local projection:
+fsync, KMS, object storage, backup/restore, multi-node locking, crash fallback,
+and production durability guarantees are deferred.
+
 Migration `0005_managed_agent_registry_b` is forward-only. Apply the complete
 migration set in order; reruns must not rewrite published versions or reset
 idempotency state. If a migration stops part-way, preserve only the sanitized

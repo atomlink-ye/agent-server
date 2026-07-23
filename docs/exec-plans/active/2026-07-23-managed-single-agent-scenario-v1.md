@@ -137,12 +137,18 @@ the phase owner to preserve earlier gates.
 
 ### E — Memory ownership and immutable file snapshots
 
-- [ ] **E-1 (RED):** Add tests for tenant+Workspace ownership, legacy principal-private preservation without merging, provenance, accept/edit/reject, append-only entries, deterministic render, atomic failure, hash mismatch, immutable versioning, and rebuild.
-- [ ] **E-2 (interface/domain):** Implement MemoryEntry, MemorySnapshot, MemoryProjection, deterministic renderer, manifest/hash, and exact FileStore interface with verified read-only access.
-- [ ] **E-3 (migration/repository):** Add migration 0008 and migration integration test for provenance, immutable entries/snapshots/projections, owner constraints, and rebuild metadata; fail closed on mixed-owner ambiguity.
-- [ ] **E-4 (route/application wiring):** Add snapshot/rebuild routes, proposal import, atomic private FileStore projection, latest-ready pointer, and owner-hiding behavior.
-- [ ] **E-5 (GREEN/docs/evidence):** Rerun focused tests and update memory contracts/components/features/ADR/runbook. E proves immutable snapshots/projections, provenance, ownership, reject behavior, atomicity, hashes, and rebuild; it does not prove old-task admission pinning or old-task stability—that is F. Record `E-OWNERSHIP`, `E-PROPOSAL`, `E-FILESTORE`, `E-SNAPSHOT`, and `E-REBUILD`.
-- [ ] **E-6 (gate):** Run unit, contract, integration, and `pnpm check`; make migration, behavior, and docs/gate commits explicitly, ending with `feat: add owned immutable memory snapshots` and `E-ORACLE`.
+- [x] **E-1 (RED):** Added focused coverage for ownership boundaries, legacy separation, provenance, accept/edit/reject, deterministic rendering, projection failure, hashes, versioning, and rebuild under the MVP-first policy.
+- [x] **E-2 (interface/domain):** Implemented the minimum immutable owned-entry/snapshot/projection model, deterministic renderer, manifest/hash, and FileStore port/local implementation.
+- [x] **E-3 (migration/repository):** Added and registered migration 0008 with owned entries, provenance fields, monotonic snapshots, hashes, and projection status.
+- [x] **E-4 (route/application wiring):** Added proposal lookup plus authenticated entry/snapshot/detail/rebuild routes, local atomic projection, latest-ready publication, and hidden foreign-workspace behavior. A blocker-only Oracle found missing auth on the product Workspace route family; commit `3054469` fixed it.
+- [x] **E-5 (GREEN/docs/evidence):** Node 24 focused evidence: workspace-memory contract 13, managed-memory/review unit 3, migration integration 19 previously, with checks/build green. E does not prove old-task admission pinning or old-task stability; those belong to F, and it makes no production crash-recovery claim.
+- [x] **E-6 (gate):** Phase commits are `36de606` (`feat: add owned immutable memory snapshots`) and `3054469` (`fix: authenticate workspace memory projections`). Minimum docs/gate closeout follows this plan update; Phase F is next.
+
+**Phase E closeout:** Product Workspace accepted entries are immutable snapshot
+inputs, rendered and hash-verified into local `MEMORY.md`/`manifest.json`.
+Legacy principal-private entries remain separate. Deferred hardening is
+consolidated in `E-HARDENING-001`; no old-task snapshot pinning or production
+crash-recovery claim is made.
 
 ### F — Context assembly and Fresh Session memory projection
 

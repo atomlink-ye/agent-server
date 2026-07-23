@@ -74,12 +74,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
-  const invokeTask = new InvokeTask(
-    taskRepository,
-    runRepository,
-    admissionRepository,
-    invokableRepository,
-  );
+  const invokeTask = new InvokeTask(admissionRepository, invokableRepository);
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
   const createMemoryProposal = new CreateMemoryProposal(

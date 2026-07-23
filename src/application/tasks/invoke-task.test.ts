@@ -55,8 +55,6 @@ describe('InvokeTask', () => {
   it('reuses the original task when the same key is replayed with the same canonical request', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
       () => new Date('2026-07-22T12:10:00.000Z'),
@@ -86,8 +84,6 @@ describe('InvokeTask', () => {
     const repository = new InMemoryAdmissionRepository();
     const poolTasksRepository = new PoolVisibilityRejectingTaskRepository();
     const useCase = new InvokeTask(
-      poolTasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
     );
@@ -105,8 +101,6 @@ describe('InvokeTask', () => {
   it('reloads a replayed task through the transaction task repository', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
     );
@@ -117,8 +111,6 @@ describe('InvokeTask', () => {
       accessContext: primaryAccessContext,
     });
     const replayUseCase = new InvokeTask(
-      new PoolVisibilityRejectingTaskRepository(),
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
     );
@@ -137,8 +129,6 @@ describe('InvokeTask', () => {
   it('rejects a mismatched workspace_id before admission', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
     );
@@ -157,8 +147,6 @@ describe('InvokeTask', () => {
   it('rejects the same key when the canonical request fingerprint changes', async () => {
     const repository = new InMemoryAdmissionRepository();
     const useCase = new InvokeTask(
-      repository.tasksRepository,
-      repository.runsRepository,
       repository,
       new PublishedInvokableRepository([publishedAgentVersion]),
       () => new Date('2026-07-22T12:10:00.000Z'),

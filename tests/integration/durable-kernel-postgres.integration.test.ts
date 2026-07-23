@@ -910,8 +910,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invoked = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       () => new Date('2026-07-22T12:15:00.000Z'),
@@ -1457,8 +1455,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invocation = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       clock.now,
@@ -1653,8 +1649,6 @@ describe('durable kernel postgres bootstrap', () => {
     const runs = new PostgresRunRepository(database);
     const admissions = new PostgresAdmissionRepository(database);
     const invocation = await new InvokeTask(
-      tasks,
-      runs,
       admissions,
       invokables,
       clock.now,

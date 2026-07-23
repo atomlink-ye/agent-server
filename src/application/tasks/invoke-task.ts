@@ -16,7 +16,6 @@ import type {
   TaskRecord,
   TaskRepository,
 } from '../ports/task-repository.js';
-import type { RunRepository } from '../ports/run-repository.js';
 import { createRun } from '../../domain/runs/run.js';
 import { createRootTask } from '../../domain/tasks/task.js';
 import {
@@ -44,8 +43,6 @@ export interface InvokeTaskResult {
 
 export class InvokeTask {
   public constructor(
-    private readonly tasks: TaskRepository,
-    private readonly runs: RunRepository,
     private readonly admissions: AdmissionRepository,
     private readonly invokables: InvokableRepository,
     private readonly now: () => Date = () => new Date(),

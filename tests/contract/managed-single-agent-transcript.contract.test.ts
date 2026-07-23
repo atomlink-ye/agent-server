@@ -301,6 +301,16 @@ describe('managed single-agent minimum transcript', () => {
       task_id: string;
       run_id: string;
     };
+    await wait(async () => {
+      const response = await app.request(
+        `/api/v1/runs/${cancellableBody.run_id}/events`,
+        { headers },
+      );
+      const body = (await response.json()) as {
+        events: Array<{ type: string }>;
+      };
+      return body.events.some((event) => event.type === 'started');
+    });
     const cancellation = await app.request(
       `/api/v1/tasks/${cancellableBody.task_id}:cancel`,
       { method: 'POST', headers },
@@ -320,6 +330,19 @@ describe('managed single-agent minimum transcript', () => {
         ).status,
       ),
     );
+    const cancelledRun = (await (
+      await app.request(`/api/v1/runs/${cancellableBody.run_id}`, { headers })
+    ).json()) as { status: string };
+    expect(cancelledRun.status).toBe('cancelled');
+    const cancelledEvents = (await (
+      await app.request(`/api/v1/runs/${cancellableBody.run_id}/events`, {
+        headers,
+      })
+    ).json()) as { events: Array<{ type: string }> };
+    expect(cancelledEvents.events.map((event) => event.type)).toEqual([
+      'started',
+      'cancelled',
+    ]);
 
     const replay = await app.request(`/api/v1/sessions/${sessionId}/messages`, {
       method: 'POST',

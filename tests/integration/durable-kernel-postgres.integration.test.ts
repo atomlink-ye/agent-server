@@ -115,6 +115,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0008_managed_memory_e' },
       { version: '0009_session_reset_idempotency_hardening' },
       { version: '0010_runtime_memory_provenance' },
+      { version: '0011_runtime_memory_provenance_integrity' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -150,6 +151,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0008_managed_memory_e' },
       { version: '0009_session_reset_idempotency_hardening' },
       { version: '0010_runtime_memory_provenance' },
+      { version: '0011_runtime_memory_provenance_integrity' },
     ]);
   });
 

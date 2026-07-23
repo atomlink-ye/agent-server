@@ -145,6 +145,14 @@ describe('task HTTP contracts', () => {
     const cancelledBody = await cancelled.text();
     expect(cancelled.status, cancelledBody).toBe(202);
     expect(JSON.parse(cancelledBody).status).toBe('cancelled');
+    const repeated = await app.request(`/api/v1/tasks/${taskId}:cancel`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect([200, 202]).toContain(repeated.status);
+    expect(((await repeated.json()) as { status: string }).status).toBe(
+      'terminal',
+    );
     const foreign = await app.request(`/api/v1/tasks/${taskId}:cancel`, {
       method: 'POST',
       headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },

@@ -14,6 +14,7 @@ import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import { CancelTask } from '../../src/application/tasks/cancel-task.js';
 
 const connectionString =
   'postgresql://postgres:postgres@127.0.0.1:55432/agent_server_test';
@@ -275,6 +276,105 @@ describe('Phase C session lanes on PostgreSQL', () => {
         [session.id],
       );
       expect(unblocked.rows[0].active_task_id).toBe(newGeneration.taskId);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('promotes exactly the next task after active cancellation without an assistant message', async () => {
+    const pool = new Pool({ connectionString, max: 8 });
+    try {
+      await applyDurableKernelMigrations(pool);
+      const repository = new PostgresSessionRepository(pool);
+      const workspace = await repository.createWorkspace(
+        `cancel-lane-${crypto.randomUUID()}`,
+        owner,
+      );
+      const definitionId = crypto.randomUUID();
+      const versionId = crypto.randomUUID();
+      const now = '2026-01-01T00:00:00.000Z';
+      await pool.query(
+        `INSERT INTO agent_definitions(id,tenant_id,workspace_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,'cancel-lane-agent',$6,$6)`,
+        [
+          definitionId,
+          owner.tenantId,
+          workspace.id,
+          owner.principalType,
+          owner.principalId,
+          now,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO agent_versions(id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,created_at,updated_at,published_at) VALUES($1,$2,$3,$4,$5,$6,'published','cancel-lane-agent','Do the task.',$7,$7,$7)`,
+        [
+          versionId,
+          definitionId,
+          owner.tenantId,
+          workspace.id,
+          owner.principalType,
+          owner.principalId,
+          now,
+        ],
+      );
+      const session = await repository.createSession({
+        workspaceId: workspace.id,
+        agentVersionId: versionId,
+        owner,
+      });
+      const first = await repository.postMessage(
+        session.id,
+        'first',
+        crypto.randomUUID(),
+        owner,
+      );
+      const second = await repository.postMessage(
+        session.id,
+        'second',
+        crypto.randomUUID(),
+        owner,
+      );
+      const runs = new PostgresRunRepository(pool);
+      const tasks = new PostgresTaskRepository(pool);
+      const claim = await runs.claimQueuedById({
+        runId: first.runId,
+        workerId: 'cancel-lane-worker',
+        activationId: crypto.randomUUID(),
+        claimedAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      expect(claim?.taskId).toBe(first.taskId);
+      const cancelOwner = {
+        ...owner,
+        workspaceId: workspace.id,
+        policySnapshotVersion: 'phase-c-test',
+      };
+      const runtime = new FakeAgentRuntime();
+      const cancelled = await new CancelTask(tasks, runs, runtime).execute(
+        first.taskId,
+        cancelOwner,
+      );
+      expect(cancelled?.status).toBe('cancellation_requested');
+      expect(runtime.cancelCalls).toBe(1);
+      const complete = new CompleteRun(runs, tasks, undefined, repository);
+      const persisted = await complete.execute({
+        claim: claim!,
+        run: transitionRun(claim!.run, 'succeeded', {
+          result: { text: 'late success' },
+        }),
+      });
+      expect(persisted.status).toBe('cancelled');
+      const lane = await pool.query(
+        'SELECT active_task_id FROM session_lanes WHERE session_id=$1',
+        [session.id],
+      );
+      expect(lane.rows[0]!.active_task_id).toBe(second.taskId);
+      const messages = await repository.listMessages(session.id, owner);
+      expect(
+        messages?.filter(
+          (message: { role: string }) => message.role === 'assistant',
+        ),
+      ).toHaveLength(0);
+      expect((await tasks.findById(first.taskId))?.status).toBe('cancelled');
     } finally {
       await pool.end();
     }

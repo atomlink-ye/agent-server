@@ -586,6 +586,51 @@ describe('ExecuteRun', () => {
     await executeRun.execute(claims[2]!);
     expect(batch).toHaveBeenCalledTimes(2);
   });
+
+  it.each([false, true])(
+    'does not emit terminal events when persistence arbitrates cancellation after runtime %s',
+    async (runtimeFails) => {
+      const claim = createClaim();
+      const task = createTask();
+      const events = {
+        bind: vi.fn(async () => undefined),
+        append: vi.fn(async () => undefined),
+      };
+      const completeRun = {
+        execute: vi.fn(async () =>
+          transitionRun(
+            claim.run,
+            'cancelled',
+            { error: { code: 'cancelled', message: 'The run was cancelled.' } },
+            () => new Date('2026-07-23T00:00:02.000Z'),
+          ),
+        ),
+      } as unknown as CompleteRun;
+      const executeRun = new ExecuteRun(
+        completeRun,
+        {
+          findById: vi.fn(async () => task),
+          save: vi.fn(async () => undefined),
+        } as never,
+        {} as never,
+        {} as never,
+        createRuntime(runtimeFails ? new Error('late failure') : undefined),
+        { log: vi.fn() },
+        () => new Date('2026-07-23T00:00:01.000Z'),
+        new ResolveAgentVersion(
+          { findVersion: vi.fn(async () => null) } as never,
+          {} as never,
+        ),
+        events as never,
+      );
+      await executeRun.execute(claim);
+      expect(
+        (events.append.mock.calls as unknown as Array<Array<unknown>>).map(
+          (call) => call[1],
+        ),
+      ).toEqual(['started']);
+    },
+  );
 });
 
 function createExecuteRun(input: {

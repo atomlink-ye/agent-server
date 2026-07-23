@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { AccessContext } from '../control-plane/access-context.js';
+import { CancelTask } from './cancel-task.js';
+import { createRun, rehydrateRun, type Run } from '../../domain/runs/run.js';
+import { createRootTask, type Task } from '../../domain/tasks/task.js';
+
+const owner: AccessContext = {
+  tenantId: 'tenant',
+  workspaceId: 'workspace',
+  principalType: 'service_account',
+  principalId: 'principal',
+  policySnapshotVersion: 'policy',
+};
+
+describe('CancelTask', () => {
+  it.each([
+    ['queued_cancelled', 'cancelled'],
+    ['running_requested', 'cancellation_requested'],
+    ['running_already_requested', 'cancellation_requested'],
+    ['terminal', 'terminal'],
+  ] as const)(
+    'maps %s without duplicate side effects',
+    async (outcome, status) => {
+      const task = fixtureTask();
+      const run = fixtureRun(
+        outcome === 'queued_cancelled'
+          ? 'queued'
+          : outcome.startsWith('running')
+            ? 'running'
+            : 'succeeded',
+      );
+      const runtime = { cancel: vi.fn(async () => undefined) };
+      const events = { append: vi.fn(async () => undefined) };
+      const runs = {
+        findByTaskId: vi.fn(async () => run),
+        requestCancellation: vi.fn(async () => outcome),
+      };
+      const tasks = {
+        findByIdForOwner: vi.fn(async () => ({ task, latestRun: null })),
+        save: vi.fn(async () => undefined),
+        advanceSessionLane: vi.fn(async () => undefined),
+      };
+
+      const result = await new CancelTask(
+        tasks as never,
+        runs as never,
+        runtime as never,
+        events as never,
+      ).execute(task.id, owner);
+
+      expect(result).toMatchObject({ taskId: task.id, runId: run.id, status });
+      expect(runtime.cancel).toHaveBeenCalledTimes(
+        outcome === 'running_requested' ? 1 : 0,
+      );
+      expect(tasks.save).toHaveBeenCalledTimes(
+        outcome === 'queued_cancelled' ? 1 : 0,
+      );
+      expect(tasks.advanceSessionLane).toHaveBeenCalledTimes(
+        outcome === 'queued_cancelled' ? 1 : 0,
+      );
+      expect(events.append).toHaveBeenCalledTimes(
+        outcome === 'queued_cancelled' ? 1 : 0,
+      );
+    },
+  );
+
+  it('returns null when owner or run arbitration cannot find the task', async () => {
+    const runs = {
+      findByTaskId: vi.fn(async () => null),
+      requestCancellation: vi.fn(),
+    };
+    const tasks = { findByIdForOwner: vi.fn(async () => null) };
+    const result = await new CancelTask(
+      tasks as never,
+      runs as never,
+      {} as never,
+    ).execute('missing', owner);
+    expect(result).toBeNull();
+    expect(runs.requestCancellation).not.toHaveBeenCalled();
+  });
+});
+
+function fixtureTask(): Task {
+  return createRootTask({
+    id: '00000000-0000-4000-8000-000000000001',
+    tenantId: owner.tenantId,
+    workspaceId: owner.workspaceId,
+    principalType: owner.principalType,
+    principalId: owner.principalId,
+    policySnapshotVersion: owner.policySnapshotVersion,
+    ingress: 'api',
+    invokableKind: 'agent',
+    invokableVersionId: '00000000-0000-4000-8000-000000000002',
+    inputSnapshotRef: 'snapshot',
+    inputFingerprint: 'fingerprint',
+    now: () => new Date('2020-01-01T00:00:00.000Z'),
+  });
+}
+
+function fixtureRun(status: Run['status']): Run {
+  const queued = createRun('prompt', {
+    id: '00000000-0000-4000-8000-000000000003',
+    now: () => new Date('2026-07-24T00:00:00.000Z'),
+  });
+  if (status === 'queued') return queued;
+  return rehydrateRun({
+    ...queued,
+    status,
+    updatedAt: '2026-07-24T00:00:01.000Z',
+    ...(status === 'succeeded' ? { result: { text: 'done' } } : {}),
+  } as Run);
+}

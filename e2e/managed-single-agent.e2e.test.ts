@@ -1,4 +1,5 @@
 import { serve, type ServerType } from '@hono/node-server';
+import type { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createTestApp,
@@ -45,6 +46,7 @@ describe('managed single-agent memory recall', () => {
   let baseUrl: string;
   let runtime: FakeAgentRuntime;
   const dispatcherControl: { dispatcher?: PostgresRunDispatcher } = {};
+  const databaseControl: { database?: PGlite } = {};
 
   beforeAll(async () => {
     runtime = new FakeAgentRuntime({
@@ -63,6 +65,7 @@ describe('managed single-agent memory recall', () => {
     const app = await createTestApp(runtime, {
       workspaceId,
       dispatcherControl,
+      databaseControl,
     });
     server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
     if (!server.listening)
@@ -78,6 +81,7 @@ describe('managed single-agent memory recall', () => {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
+    await databaseControl.database?.close();
   });
 
   it('recalls only accepted memory pinned at message admission', async () => {

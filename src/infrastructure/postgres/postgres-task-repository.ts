@@ -45,10 +45,12 @@ export class PostgresTaskRepository implements TaskRepository {
           invokable_version_id,
           input_snapshot_ref,
           input_fingerprint,
+           memory_snapshot_id,
+           memory_snapshot_hash,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -68,6 +70,8 @@ export class PostgresTaskRepository implements TaskRepository {
           invokable_version_id = EXCLUDED.invokable_version_id,
           input_snapshot_ref = EXCLUDED.input_snapshot_ref,
           input_fingerprint = EXCLUDED.input_fingerprint,
+           memory_snapshot_id = EXCLUDED.memory_snapshot_id,
+           memory_snapshot_hash = EXCLUDED.memory_snapshot_hash,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at
       `,
@@ -90,6 +94,8 @@ export class PostgresTaskRepository implements TaskRepository {
         task.invokableVersionId,
         task.inputSnapshotRef,
         task.inputFingerprint,
+        task.memorySnapshotId ?? null,
+        task.memorySnapshotHash ?? null,
         task.createdAt,
         task.updatedAt,
       ],
@@ -210,6 +216,8 @@ interface TaskRow {
   readonly invokable_version_id: string;
   readonly input_snapshot_ref: string;
   readonly input_fingerprint: string;
+  readonly memory_snapshot_id: string | null;
+  readonly memory_snapshot_hash: string | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly session_id: string | null;
@@ -245,6 +253,8 @@ const TASK_SELECT_SQL = `
     tasks.invokable_version_id,
     tasks.input_snapshot_ref,
     tasks.input_fingerprint,
+    tasks.memory_snapshot_id,
+    tasks.memory_snapshot_hash,
     tasks.created_at,
     tasks.updated_at,
     tasks.session_id,
@@ -296,6 +306,8 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     invokableVersionId: row.invokable_version_id,
     inputSnapshotRef: row.input_snapshot_ref,
     inputFingerprint: row.input_fingerprint,
+    memorySnapshotId: row.memory_snapshot_id,
+    memorySnapshotHash: row.memory_snapshot_hash,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     sessionId: row.session_id,

@@ -51,6 +51,16 @@ export class PostgresSessionRepository implements SessionRepository {
   }) {
     const w = await this.getWorkspace(i.workspaceId, i.owner);
     if (!w) return Promise.reject(new Error('not_found'));
+    const published = await this.db.query(
+      `SELECT id FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND status='published'`,
+      [
+        i.agentVersionId,
+        i.owner.tenantId,
+        i.owner.principalType,
+        i.owner.principalId,
+      ],
+    );
+    if (!published.rows?.[0]) return Promise.reject(new Error('not_found'));
     const now = iso(),
       id = randomUUID();
     await this.db.query(
@@ -128,8 +138,14 @@ export class PostgresSessionRepository implements SessionRepository {
         msgId = randomUUID(),
         fp = createHash('sha256').update(text).digest('hex'),
         active = row.active_task_id ?? taskId;
+      const pinned = await c.query(
+        `SELECT snapshot_id, content_hash FROM workspace_memory_snapshots WHERE tenant_id=$1 AND workspace_id=$2 AND projection_status='ready' ORDER BY version DESC LIMIT 1`,
+        [o.tenantId, row.workspace_id],
+      );
+      const memorySnapshotId = pinned.rows?.[0]?.snapshot_id ?? null;
+      const memorySnapshotHash = pinned.rows?.[0]?.content_hash ?? null;
       await c.query(
-        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,parent_task_id,parent_run_id,depth,logical_step_key,node_path,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,NULL,NULL,0,NULL,NULL,'queued','api','agent',$6,$7,$8,$9,$9,$10,$11,$12)`,
+        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,parent_task_id,parent_run_id,depth,logical_step_key,node_path,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,memory_snapshot_id,memory_snapshot_hash,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,NULL,NULL,0,NULL,NULL,'queued','api','agent',$6,$7,$8,$9,$10,$11,$11,$12,$13,$14)`,
         [
           taskId,
           o.tenantId,
@@ -139,6 +155,8 @@ export class PostgresSessionRepository implements SessionRepository {
           row.published_agent_version_id,
           encodeRootTaskRunRequestSnapshotRef({ prompt: text }),
           fp,
+          memorySnapshotId,
+          memorySnapshotHash,
           now,
           id,
           row.generation,

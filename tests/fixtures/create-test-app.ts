@@ -88,6 +88,7 @@ export const testConfig = {
 
 export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
+  readonly workspaceId?: string;
 }
 
 export async function createTestApp(
@@ -97,6 +98,29 @@ export async function createTestApp(
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
+  const effectiveConfig = options.workspaceId
+    ? {
+        ...testConfig,
+        serviceAccounts: testConfig.serviceAccounts.map((account) => ({
+          ...account,
+          workspaceId: options.workspaceId ?? account.workspaceId,
+        })),
+      }
+    : testConfig;
+  if (options.workspaceId) {
+    const now = new Date().toISOString();
+    await database.query(
+      `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)`,
+      [
+        options.workspaceId,
+        'tenant_alpha',
+        'service_account',
+        'svc_enabled',
+        'E2E Workspace',
+        now,
+      ],
+    );
+  }
   const agentRegistry = new PostgresAgentRegistry(database);
   const sessions = new PostgresSessionRepository(database);
   const events = new PostgresRunEventRepository(database);
@@ -112,10 +136,23 @@ export async function createTestApp(
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     database,
   );
-  const managedMemory = new ManagedMemory(database, {
-    publish: async () => undefined,
-  });
-  await seedDefaultPublishedAgent(invokableRepository);
+  const projectedMemory = new Map<string, string>();
+  const fileStore = {
+    publish: async (snapshot: { snapshotId: string; memory: string }) => {
+      projectedMemory.set(snapshot.snapshotId, snapshot.memory);
+    },
+    readVerified: async (input: { snapshotId: string }) => {
+      const content = projectedMemory.get(input.snapshotId);
+      if (content === undefined)
+        throw new Error('Memory snapshot verification failed');
+      return content;
+    },
+  };
+  const managedMemory = new ManagedMemory(database, fileStore);
+  await seedDefaultPublishedAgent(
+    invokableRepository,
+    options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+  );
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
@@ -175,6 +212,7 @@ export async function createTestApp(
     undefined,
     resolveAgentVersion,
     events,
+    fileStore,
   );
   if (options.startDispatcher ?? true) {
     const dispatcher = new PostgresRunDispatcher(
@@ -190,7 +228,7 @@ export async function createTestApp(
   }
 
   return createApp({
-    config: testConfig,
+    config: effectiveConfig,
     logger,
     readiness: new RuntimeReadinessProbe(runtime),
     runtime,
@@ -213,13 +251,14 @@ export async function createTestApp(
 
 async function seedDefaultPublishedAgent(
   invokables: PostgresInvokableRepository,
+  workspaceId: string,
 ): Promise<void> {
   const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
   const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
   const definition = createAgentDefinition({
     id: '00000000-0000-4000-8000-0000000a0001',
     tenantId: 'tenant_alpha',
-    workspaceId: 'workspace_main',
+    workspaceId,
     principalType: 'service_account',
     principalId: 'svc_enabled',
     name: 'Default Task Agent',

@@ -139,6 +139,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     undefined,
     resolveAgentVersion,
     events,
+    new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {

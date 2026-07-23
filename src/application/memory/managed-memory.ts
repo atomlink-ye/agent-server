@@ -142,6 +142,7 @@ export class ManagedMemory {
     );
     try {
       await this.fileStore.publish({
+        tenantId: scope.tenantId,
         workspaceId: scope.workspaceId,
         snapshotId,
         memory,

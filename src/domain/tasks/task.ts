@@ -27,6 +27,8 @@ export interface Task {
   readonly generation?: number | null;
   readonly laneSequence?: number | null;
   readonly failureDetail?: string | null;
+  readonly memorySnapshotId?: string | null;
+  readonly memorySnapshotHash?: string | null;
 }
 
 export type TaskSnapshot = Task;

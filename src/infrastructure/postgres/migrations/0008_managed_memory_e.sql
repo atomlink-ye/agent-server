@@ -1,4 +1,6 @@
 BEGIN;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS memory_snapshot_id uuid NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS memory_snapshot_hash text NULL;
 CREATE TABLE IF NOT EXISTS workspace_memory_owned_entries (
   entry_id uuid PRIMARY KEY, proposal_id uuid NOT NULL UNIQUE, tenant_id text NOT NULL, workspace_id text NOT NULL,
   content text NOT NULL, content_hash text NOT NULL, category text NOT NULL, source_task_id uuid, source_session_id text,

@@ -18,6 +18,8 @@ import type {
 import type { ClaimedRun } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
+import type { FileStore } from '../ports/file-store.js';
+import { assembleContext } from '../context/assemble-context.js';
 import {
   buildPublishedAgentPrompt,
   ExecuteTeamTask,
@@ -42,6 +44,7 @@ export class ExecuteRun {
       invokables,
     ),
     private readonly events?: RunEventRepository,
+    private readonly fileStore?: FileStore,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -102,6 +105,7 @@ export class ExecuteRun {
                 principalId: task.principalId,
               },
               task.invokableVersionId,
+              task,
             );
 
       completed = await this.completeTerminalRun(claim, terminalRun);
@@ -196,11 +200,13 @@ export class ExecuteRun {
     claim: ClaimedRun,
     ownerScope: InvokableOwnerScope,
     invokableVersionId: string,
+    task: import('../../domain/tasks/task.js').Task,
   ) {
     const prompt = await this.resolveAgentPrompt(
       claim.run.prompt,
       ownerScope,
       invokableVersionId,
+      task,
     );
     const execution = await this.runtime.execute({
       runId: claim.run.id,
@@ -228,6 +234,7 @@ export class ExecuteRun {
     prompt: string,
     ownerScope: InvokableOwnerScope,
     invokableVersionId: string,
+    task: import('../../domain/tasks/task.js').Task,
   ): Promise<string> {
     if (invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID) {
       return prompt;
@@ -244,6 +251,21 @@ export class ExecuteRun {
       );
     }
 
-    return buildPublishedAgentPrompt(agentVersion.instructions, prompt);
+    let memory: string | null = null;
+    if (task.memorySnapshotId && task.memorySnapshotHash) {
+      if (!this.fileStore)
+        throw new Error('Pinned memory projection is unavailable');
+      memory = await this.fileStore.readVerified({
+        tenantId: task.tenantId,
+        workspaceId: task.workspaceId,
+        snapshotId: task.memorySnapshotId,
+        expectedContentHash: task.memorySnapshotHash,
+      });
+    }
+    return assembleContext({
+      instructions: agentVersion.instructions,
+      taskInput: prompt,
+      memory,
+    });
   }
 }

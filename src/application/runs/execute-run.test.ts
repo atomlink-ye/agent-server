@@ -55,7 +55,8 @@ describe('ExecuteRun', () => {
     expect(runtime.execute).toHaveBeenCalledTimes(1);
     expect(runtime.execute).toHaveBeenCalledWith({
       runId: claim.run.id,
-      prompt: 'managed instructions\n\nTask input:\nprivate prompt',
+      prompt:
+        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions\n\nCurrent Task input:\nprivate prompt',
     });
     expect(
       JSON.stringify(vi.mocked(runtime.execute).mock.calls[0]?.[0]),
@@ -126,7 +127,8 @@ describe('ExecuteRun', () => {
 
     expect(runtime.execute).toHaveBeenCalledWith({
       runId: claim.run.id,
-      prompt: 'legacy instructions\n\nTask input:\nprivate prompt',
+      prompt:
+        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions\n\nCurrent Task input:\nprivate prompt',
     });
   });
 

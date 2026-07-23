@@ -53,6 +53,7 @@ describe('ManagedMemory', () => {
       publish: async (snapshot) => {
         published.push(snapshot);
       },
+      readVerified: async () => 'Use UTC.',
     });
     const snapshot = await memory.acceptEntry(entry);
     expect(snapshot.projectionStatus).toBe('ready');

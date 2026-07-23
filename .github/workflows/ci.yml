@@ -26,8 +26,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,3 +35,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: make ci
       - run: make test-real-pg
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_test

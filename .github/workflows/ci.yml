@@ -12,6 +12,18 @@ jobs:
   deterministic-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: make ci
+
+  real-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -33,7 +45,6 @@ jobs:
           node-version: 24
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: make ci
       - run: make test-real-pg
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_test

@@ -74,6 +74,8 @@ type IdempotencyRow = {
 };
 
 export class PostgresAgentRegistry implements AgentRegistry {
+  private queryOnlyTransactionTail: Promise<void> = Promise.resolve();
+
   public constructor(
     private readonly database: PostgresQueryable | PostgresConnectable,
   ) {}
@@ -317,26 +319,58 @@ export class PostgresAgentRegistry implements AgentRegistry {
   private async transaction<T>(
     work: (db: PostgresQueryable) => Promise<T>,
   ): Promise<T> {
-    let client: PostgresQueryable = this.database;
-    let release: (() => void) | undefined;
-    if (
-      'connect' in this.database &&
-      typeof this.database.connect === 'function'
-    ) {
-      const connected = await this.database.connect();
-      client = connected;
-      release = () => connected.release();
+    const connectable =
+      'connect' in this.database && typeof this.database.connect === 'function';
+    if (!connectable) {
+      let result!: T;
+      let failure: unknown;
+      const run = this.queryOnlyTransactionTail.then(async () => {
+        try {
+          result = await this.runTransaction(this.database, work);
+        } catch (error) {
+          failure = error;
+        }
+      });
+      this.queryOnlyTransactionTail = run.then(() => undefined);
+      await run;
+      if (failure !== undefined) throw failure;
+      return result;
     }
-    await client.query('BEGIN');
+
+    const connected = await (this.database as PostgresConnectable).connect();
     try {
+      return await this.runTransaction(connected, work);
+    } finally {
+      connected.release();
+    }
+  }
+
+  private async runTransaction<T>(
+    client: PostgresQueryable,
+    work: (db: PostgresQueryable) => Promise<T>,
+  ): Promise<T> {
+    let began = false;
+    try {
+      await client.query('BEGIN');
+      began = true;
       const result = await work(client);
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (began) await this.bestEffortRollback(client, began);
       throw error;
-    } finally {
-      release?.();
+    }
+  }
+
+  private async bestEffortRollback(
+    client: PostgresQueryable,
+    began: boolean,
+  ): Promise<void> {
+    if (!began) return;
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // Preserve the original work/commit error.
     }
   }
 }
@@ -490,12 +524,18 @@ function decodeCursor(value: string): { createdAt: string; id: string } {
       decoded.length !== 2 ||
       typeof decoded[0] !== 'string' ||
       typeof decoded[1] !== 'string' ||
-      !Number.isFinite(Date.parse(decoded[0])) ||
-      !/^[0-9a-f-]{36}$/i.test(decoded[1])
+      decoded[0] !== new Date(decoded[0]).toISOString() ||
+      !isCanonicalUuid(decoded[1])
     )
       throw new Error();
     return { createdAt: decoded[0], id: decoded[1] };
   } catch {
     throw new InvalidAgentListCursorError();
   }
+}
+
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

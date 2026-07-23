@@ -87,6 +87,7 @@ describe('PaseoRuntimeAdapter', () => {
 
     staleReconnect.resolve();
     await staleAttempt;
+    expect(client.closeCalls).toBe(1);
     const coalescedAttempt = adapter.initialize();
     await Promise.resolve();
     expect(client.connectCalls).toBe(3);

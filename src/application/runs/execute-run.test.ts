@@ -9,6 +9,7 @@ import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
@@ -16,6 +17,119 @@ import { ExecuteRun } from './execute-run.js';
 import { createRuntimeExecutionReceipt } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
+  it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'managed-version-1');
+    const findVersion = vi.fn(async () => ({
+      id: 'managed-version-1',
+      status: 'published',
+      package: { spec: { instructions: 'managed instructions' } },
+    })) as never;
+    const findLegacy = vi.fn(async () => null);
+    const resolver = new ResolveAgentVersion(
+      { findVersion },
+      { findPublishedAgentVersionById: findLegacy },
+    );
+    const runtime = createRuntime();
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime,
+      task,
+      resolver,
+    });
+
+    await executeRun.execute(claim);
+
+    expect(findVersion).toHaveBeenCalledWith(
+      {
+        tenantId: 'tenant-1',
+        principalType: 'user',
+        principalId: 'user-1',
+      },
+      'managed-version-1',
+    );
+    expect(findLegacy).not.toHaveBeenCalled();
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(runtime.execute).toHaveBeenCalledWith({
+      runId: claim.run.id,
+      prompt: 'managed instructions\n\nTask input:\nprivate prompt',
+    });
+    expect(
+      JSON.stringify(vi.mocked(runtime.execute).mock.calls[0]?.[0]),
+    ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when the shared resolver returns null without a legacy lookup in ExecuteRun', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'draft-or-foreign-version');
+    const findVersion = vi.fn(async () => ({
+      id: 'draft-or-foreign-version',
+      status: 'draft',
+      package: { spec: { instructions: 'not executable' } },
+    })) as never;
+    const findLegacy = vi.fn(async () => ({
+      id: 'draft-or-foreign-version',
+      instructions: 'legacy must not be consulted by ExecuteRun',
+    })) as never;
+    const resolver = new ResolveAgentVersion(
+      { findVersion },
+      { findPublishedAgentVersionById: findLegacy },
+    );
+    const runtime = createRuntime();
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime,
+      task,
+      resolver,
+    });
+
+    const completed = await executeRun.execute(claim);
+
+    expect(completed.status).toBe('failed');
+    expect(completed.error?.code).toBe('runtime_execution_failed');
+    expect(runtime.execute).not.toHaveBeenCalled();
+    expect(findLegacy).not.toHaveBeenCalled();
+    expect(completeRun.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the legacy fallback prompt shape through the shared resolver', async () => {
+    const claim = createClaim();
+    const task = createTask('agent', 'legacy-version-1');
+    const runtime = createRuntime();
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const resolver = new ResolveAgentVersion(
+      { findVersion: vi.fn(async () => null) },
+      {
+        findPublishedAgentVersionById: vi.fn(async () => ({
+          id: 'legacy-version-1',
+          instructions: 'legacy instructions',
+        })) as never,
+      },
+    );
+    const executeRun = createDirectExecuteRun({
+      completeRun,
+      runtime,
+      task,
+      resolver,
+    });
+
+    await executeRun.execute(claim);
+
+    expect(runtime.execute).toHaveBeenCalledWith({
+      runId: claim.run.id,
+      prompt: 'legacy instructions\n\nTask input:\nprivate prompt',
+    });
+  });
+
   it('reports persistence failure with a receipt after runtime success', async () => {
     const claim = createClaim();
     const task = createTask();
@@ -258,6 +372,28 @@ function createExecuteRun(input: {
   );
 }
 
+function createDirectExecuteRun(input: {
+  readonly completeRun: CompleteRun;
+  readonly runtime: AgentRuntimePort;
+  readonly task: Task;
+  readonly resolver: ResolveAgentVersion;
+}): ExecuteRun {
+  const tasks = {
+    findById: vi.fn(async () => input.task),
+    save: vi.fn(async () => undefined),
+  } as unknown as TaskRepository;
+  return new ExecuteRun(
+    input.completeRun,
+    tasks,
+    {} as InvokableRepository,
+    {} as never,
+    input.runtime,
+    { log: vi.fn() },
+    () => new Date('2026-07-23T00:00:00.000Z'),
+    input.resolver,
+  );
+}
+
 function createRuntime(error?: Error): AgentRuntimePort {
   return {
     initialize: vi.fn(async () => undefined),
@@ -301,7 +437,10 @@ function createClaim(): ClaimedRun {
   };
 }
 
-function createTask(invokableKind: 'agent' | 'team' = 'agent'): Task {
+function createTask(
+  invokableKind: 'agent' | 'team' = 'agent',
+  invokableVersionId = RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+): Task {
   return createRootTask({
     id: 'task-1',
     tenantId: 'tenant-1',
@@ -311,7 +450,7 @@ function createTask(invokableKind: 'agent' | 'team' = 'agent'): Task {
     policySnapshotVersion: 'policy-1',
     ingress: 'api',
     invokableKind,
-    invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+    invokableVersionId,
     inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
       prompt: 'private prompt',
     }),

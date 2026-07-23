@@ -7,6 +7,7 @@ import {
   secondaryServiceAccountToken,
 } from '../tests/fixtures/create-test-app.js';
 import { FakeAgentRuntime } from '../tests/fixtures/fake-agent-runtime.js';
+import type { PostgresRunDispatcher } from '../src/infrastructure/postgres/postgres-run-dispatcher.js';
 
 const workspaceId = '00000000-0000-4000-8000-00000000f001';
 const auth = { authorization: `Bearer ${primaryServiceAccountToken}` };
@@ -38,16 +39,20 @@ describe('managed single-agent memory recall', () => {
   let server: ServerType;
   let baseUrl: string;
   let runtime: FakeAgentRuntime;
+  const dispatcherControl: { dispatcher?: PostgresRunDispatcher } = {};
 
   beforeAll(async () => {
     runtime = new FakeAgentRuntime({
       responseText: 'FRESH_SESSION_OK',
-      delayMs: 10,
+      delayMs: 500,
       memoryCandidates: [
         { content: 'CANARY_CONSTRAINT_UNIQUE_7F31', category: 'constraint' },
       ],
     });
-    const app = await createTestApp(runtime, { workspaceId });
+    const app = await createTestApp(runtime, {
+      workspaceId,
+      dispatcherControl,
+    });
     server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
     if (!server.listening)
       await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -58,6 +63,7 @@ describe('managed single-agent memory recall', () => {
   });
 
   afterAll(async () => {
+    await dispatcherControl.dispatcher?.stop();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
@@ -242,18 +248,45 @@ describe('managed single-agent memory recall', () => {
         })
       ).status,
     ).toBe(200);
+    const imported = await fetch(`${baseUrl}/api/v1/agents:import`, {
+      method: 'POST',
+      headers: { ...jsonAuth, 'idempotency-key': 'socket-canary-import-v1' },
+      body: JSON.stringify({ source: canarySource }),
+    });
+    expect(imported.status).toBe(201);
+    const importedBody = (await imported.json()) as {
+      agent: { id: string };
+      version: { id: string };
+    };
+    expect(
+      (
+        await fetch(
+          `${baseUrl}/api/v1/agent-versions/${importedBody.version.id}:publish`,
+          {
+            method: 'POST',
+            headers: {
+              ...jsonAuth,
+              'idempotency-key': 'socket-canary-publish-v1',
+            },
+            body: '{}',
+          },
+        )
+      ).status,
+    ).toBe(200);
+    runtime.ready = false;
     const oldTaskResponse = await fetch(`${baseUrl}/api/v1/tasks:invoke`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-old-v1' },
       body: JSON.stringify({
         invokable: {
           kind: 'agent',
-          version_id: defaultPublishedAgentVersionId,
+          version_id: importedBody.version.id,
         },
         input: { text: 'old version pin' },
         workspace_id: workspaceId,
       }),
     });
+    expect(oldTaskResponse.status).toBe(202);
     const oldTaskId = ((await oldTaskResponse.json()) as { task_id: string })
       .task_id;
     expect(
@@ -264,17 +297,21 @@ describe('managed single-agent memory recall', () => {
         )
       ).status,
     ).toBe(404);
-    const imported = await fetch(`${baseUrl}/api/v1/agents:import`, {
+    const v2Source = canarySource.replace(
+      'Produce a concise competitor research result.',
+      'Produce a v2 competitor research result.',
+    );
+    const importedV2 = await fetch(`${baseUrl}/api/v1/agents:import`, {
       method: 'POST',
-      headers: { ...jsonAuth, 'idempotency-key': 'socket-canary-import' },
-      body: JSON.stringify({ source: canarySource }),
+      headers: { ...jsonAuth, 'idempotency-key': 'socket-canary-import-v2' },
+      body: JSON.stringify({ source: v2Source }),
     });
-    expect(imported.status).toBe(201);
-    const importedBody = (await imported.json()) as { version: { id: string } };
-    await waitForTask(oldTaskId);
-    expect(
-      runtime.prompts.some((prompt) => prompt.includes('Do the task.')),
-    ).toBe(true);
+    expect(importedV2.status).toBe(201);
+    const importedV2Body = (await importedV2.json()) as {
+      agent: { id: string };
+      version: { id: string };
+    };
+    expect(importedV2Body.agent.id).toBe(importedBody.agent.id);
     expect(
       (
         await fetch(
@@ -283,13 +320,23 @@ describe('managed single-agent memory recall', () => {
             method: 'POST',
             headers: {
               ...jsonAuth,
-              'idempotency-key': 'socket-canary-publish',
+              'idempotency-key': 'socket-canary-publish-v2',
             },
             body: '{}',
           },
         )
       ).status,
     ).toBe(200);
+    const pinnedTask = (await (
+      await fetch(`${baseUrl}/api/v1/tasks/${oldTaskId}`, { headers: auth })
+    ).json()) as { invokable: { version_id: string }; status: string };
+    expect(pinnedTask.invokable.version_id).toBe(importedBody.version.id);
+    runtime.ready = true;
+    await waitForTask(oldTaskId, 'completed');
+    expect(runtime.prompts.some((prompt) => prompt.includes('v2'))).toBe(false);
+    expect(
+      runtime.prompts.some((prompt) => prompt.includes('concise competitor')),
+    ).toBe(true);
     const sessionResponse = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -315,7 +362,7 @@ describe('managed single-agent memory recall', () => {
       task_id: string;
       run_id: string;
     };
-    await waitForSocketRun(messageBody.run_id);
+    await waitForSocketRun(messageBody.run_id, 'succeeded');
     const proposals = (await (
       await fetch(`${baseUrl}/api/v1/workspace-memory/proposals`, {
         headers: auth,
@@ -371,15 +418,26 @@ describe('managed single-agent memory recall', () => {
       `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
       { headers: auth },
     );
-    const firstSseText = await firstSse.text();
-    expect((firstSseText.match(/event: succeeded/g) ?? []).length).toBe(1);
+    expect(firstSse.status).toBe(200);
+    const reader = firstSse.body!.getReader();
+    const firstChunk = await reader.read();
+    const firstChunkText = new TextDecoder().decode(firstChunk.value);
+    const receivedId = Number(firstChunkText.match(/^id: (\d+)$/m)?.[1]);
+    expect(Number.isSafeInteger(receivedId)).toBe(true);
+    await reader.cancel();
     const reconnect = await fetch(
       `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
-      { headers: { ...auth, 'last-event-id': '1' } },
+      { headers: { ...auth, 'last-event-id': String(receivedId) } },
     );
     const reconnectText = await reconnect.text();
     expect(reconnectText).toContain('event: succeeded');
     expect((reconnectText.match(/event: succeeded/g) ?? []).length).toBe(1);
+    const terminalCursor = await fetch(
+      `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream?after=3`,
+      { headers: auth },
+    );
+    expect(terminalCursor.status).toBe(200);
+    expect(await terminalCursor.text()).toBe('');
     expect(
       (await (
         await fetch(
@@ -423,7 +481,7 @@ describe('managed single-agent memory recall', () => {
       },
     );
     const recallBody = (await recall.json()) as { run_id: string };
-    await waitForSocketRun(recallBody.run_id);
+    await waitForSocketRun(recallBody.run_id, 'succeeded');
     expect(
       runtime.prompts.some((prompt) =>
         prompt.includes('CANARY_CONSTRAINT_UNIQUE_7F31'),
@@ -471,6 +529,7 @@ describe('managed single-agent memory recall', () => {
 
   it('proves socket queue durability, cancellation, reset, and dispatcher recovery', async () => {
     runtime.ready = false;
+    const executeCallsBeforeRecovery = runtime.executeCalls;
     const queued = await fetch(`${baseUrl}/api/v1/tasks:invoke`, {
       method: 'POST',
       headers: jsonAuth,
@@ -495,7 +554,8 @@ describe('managed single-agent memory recall', () => {
       ).status,
     ).toBe('queued');
     runtime.ready = true;
-    await waitForTask(queuedBody.task_id);
+    await waitForTask(queuedBody.task_id, 'completed');
+    expect(runtime.executeCalls - executeCallsBeforeRecovery).toBe(1);
     const session = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -509,13 +569,35 @@ describe('managed single-agent memory recall', () => {
     const a = await postSocketMessage(sessionId, 'A', 'queue-a');
     const b = await postSocketMessage(sessionId, 'B', 'queue-b');
     const c = await postSocketMessage(sessionId, 'C', 'queue-c');
+    await waitForTaskStatus(a.task_id, 'active');
+    expect(await taskStatus(b.task_id)).toBe('queued');
+    expect(await taskStatus(c.task_id)).toBe('queued');
     const cancellation = await fetch(
       `${baseUrl}/api/v1/tasks/${a.task_id}:cancel`,
       { method: 'POST', headers: jsonAuth },
     );
-    expect([200, 202]).toContain(cancellation.status);
-    await waitForTask(b.task_id);
-    await waitForTask(c.task_id);
+    expect(cancellation.status).toBe(202);
+    expect(await cancellation.json()).toMatchObject({
+      task_id: a.task_id,
+      run_id: a.run_id,
+      status: 'cancellation_requested',
+    });
+    expect(runtime.cancelledRunIds).toContain(a.run_id);
+    // The fake runtime records cancellation but does not expose provider-side
+    // interruption, so this test only asserts durable convergence to a
+    // terminal task and does not claim runtime cancellation.
+    await waitForTask(a.task_id, 'completed');
+    await waitForTask(b.task_id, 'completed');
+    await waitForTask(c.task_id, 'completed');
+    expect(
+      runtime.prompts.findIndex((prompt) =>
+        prompt.includes('Current Task input:\nB'),
+      ),
+    ).toBeLessThan(
+      runtime.prompts.findIndex((prompt) =>
+        prompt.includes('Current Task input:\nC'),
+      ),
+    );
     const reset = await fetch(`${baseUrl}/api/v1/sessions/${sessionId}:reset`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-reset' },
@@ -526,7 +608,9 @@ describe('managed single-agent memory recall', () => {
       'new generation',
       'queue-new',
     );
-    await waitForTask(newMessage.task_id);
+    await waitForTask(newMessage.task_id, 'completed');
+    expect(newMessage.task_id).not.toBe(a.task_id);
+    expect(newMessage.run_id).not.toBe(a.run_id);
     expect(
       await (
         await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
@@ -538,27 +622,61 @@ describe('managed single-agent memory recall', () => {
   });
 });
 
-async function waitForSocketRun(runId: string): Promise<void> {
+async function waitForSocketRun(
+  runId: string,
+  expectedStatus: 'succeeded' | 'failed' | 'cancelled' | 'timed_out',
+): Promise<void> {
   for (let i = 0; i < 200; i++) {
     const body = (await (
       await fetch(`${socketBaseUrl}/api/v1/runs/${runId}`, { headers: auth })
     ).json()) as { status: string };
-    if (['succeeded', 'failed', 'cancelled', 'timed_out'].includes(body.status))
+    if (
+      ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(body.status)
+    ) {
+      expect(body.status).toBe(expectedStatus);
       return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`run did not terminate: ${runId}`);
 }
 
-async function waitForTask(taskId: string): Promise<void> {
+async function waitForTask(
+  taskId: string,
+  expectedStatus: 'running' | 'completed' | 'failed' | 'cancelled',
+): Promise<void> {
   for (let i = 0; i < 200; i++) {
     const body = (await (
       await fetch(`${socketBaseUrl}/api/v1/tasks/${taskId}`, { headers: auth })
     ).json()) as { status: string };
-    if (['completed', 'failed', 'cancelled'].includes(body.status)) return;
+    if (body.status === expectedStatus) return;
+    if (['completed', 'failed', 'cancelled'].includes(body.status)) {
+      throw new Error(
+        `task ${taskId} reached ${body.status}; expected ${expectedStatus}`,
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`task did not terminate: ${taskId}`);
+}
+
+async function waitForTaskStatus(
+  taskId: string,
+  expectedStatus: 'active' | 'queued',
+): Promise<void> {
+  for (let i = 0; i < 200; i++) {
+    if ((await taskStatus(taskId)) === expectedStatus) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`task ${taskId} did not reach ${expectedStatus}`);
+}
+
+async function taskStatus(taskId: string): Promise<string> {
+  const response = await fetch(`${socketBaseUrl}/api/v1/tasks/${taskId}`, {
+    headers: auth,
+  });
+  expect(response.status).toBe(200);
+  return ((await response.json()) as { status: string }).status;
 }
 
 async function postSocketMessage(

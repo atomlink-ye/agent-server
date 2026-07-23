@@ -13,6 +13,7 @@ import {
   MAX_RUN_REQUEST_BYTES,
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
+import { terminalRunStatuses } from '../../../domain/runs/run-status.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   getAuthenticatedAccessContext,
@@ -151,11 +152,9 @@ export function registerRunRoutes(
   });
   app.get('/api/v1/runs/:runId/events/stream', async (context) => {
     const runId = context.req.param('runId');
+    const accessContext = getAuthenticatedAccessContext(context);
     if (
-      !(await dependencies.getRun.execute(
-        runId,
-        getAuthenticatedAccessContext(context),
-      )) ||
+      !(await dependencies.getRun.execute(runId, accessContext)) ||
       !dependencies.events
     )
       throw new HttpError(
@@ -172,14 +171,28 @@ export function registerRunRoutes(
         'invalid_cursor',
         'Cursor must be a nonnegative integer.',
       );
+    let stopStream: () => void = () => undefined;
     return new Response(
       new ReadableStream({
+        cancel() {
+          stopStream();
+        },
         async start(controller) {
           const encoder = new TextEncoder();
+          let stopped = false;
+          const stop = () => {
+            stopped = true;
+          };
+          stopStream = stop;
+          context.req.raw.signal.addEventListener('abort', stop, {
+            once: true,
+          });
           try {
             for (;;) {
+              if (stopped) return;
               const page = await dependencies.events!.list(runId, cursor);
               for (const event of page.events) {
+                if (stopped) return;
                 cursor = event.sequence;
                 controller.enqueue(
                   encoder.encode(
@@ -189,14 +202,22 @@ export function registerRunRoutes(
               }
               if (
                 page.events.some((event) =>
-                  ['succeeded', 'failed', 'cancelled'].includes(event.type),
+                  ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(
+                    event.type,
+                  ),
                 )
               )
                 break;
-              await new Promise((resolve) => setTimeout(resolve, 100));
+              const run = await dependencies.getRun.execute(
+                runId,
+                accessContext,
+              );
+              if (run && terminalRunStatuses.has(run.status)) break;
+              await waitForStreamPoll(context.req.raw.signal, stop);
             }
           } finally {
-            controller.close();
+            context.req.raw.signal.removeEventListener('abort', stop);
+            if (!stopped) controller.close();
           }
         },
       }),
@@ -207,6 +228,28 @@ export function registerRunRoutes(
           connection: 'keep-alive',
         },
       },
+    );
+  });
+}
+
+async function waitForStreamPoll(
+  signal: AbortSignal,
+  stop: () => void,
+): Promise<void> {
+  if (signal.aborted) {
+    stop();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 100);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        stop();
+        resolve();
+      },
+      { once: true },
     );
   });
 }

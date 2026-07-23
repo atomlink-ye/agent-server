@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
+import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
+import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
+import { ReviewMemoryProposal } from '../../src/application/memory/review-memory-proposal.js';
 import type { AgentRuntimePort } from '../../src/application/ports/agent-runtime.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
@@ -26,6 +30,7 @@ import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/
 import { PostgresRunDispatcher } from '../../src/infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
@@ -91,6 +96,9 @@ export async function createTestApp(
   const taskRepository = new PostgresTaskRepository(database);
   const admissionRepository = new PostgresAdmissionRepository(database);
   const invokableRepository = new PostgresInvokableRepository(database);
+  const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
+    database,
+  );
   await seedDefaultPublishedAgent(invokableRepository);
   const logger = createLogger({
     service: testConfig.serviceName,
@@ -112,6 +120,17 @@ export async function createTestApp(
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
+  const createMemoryProposal = new CreateMemoryProposal(
+    workspaceMemoryRepository,
+    taskRepository,
+  );
+  const listMemoryProposals = new ListMemoryProposals(
+    workspaceMemoryRepository,
+  );
+  const reviewMemoryProposal = new ReviewMemoryProposal(
+    workspaceMemoryRepository,
+  );
+  const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
   const completeRun = new CompleteRun(runRepository, taskRepository);
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
@@ -151,6 +170,10 @@ export async function createTestApp(
     invokeTask,
     getTask,
     getTaskTree,
+    createMemoryProposal,
+    listMemoryProposals,
+    reviewMemoryProposal,
+    listMemoryEntries,
   });
 }
 

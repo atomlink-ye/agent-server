@@ -34,6 +34,8 @@ The administrator connects identity providers, grants tenant/workspace roles, ma
 
 An internal service submits an idempotent Task proposal through the API and polls or subscribes to normalized events. It does not create Paseo sessions, choose worker activations, forge principals, or pass provider secrets. Lark and Web use the same Task admission contract.
 
+In the current workspace-memory baseline, an authenticated service can also propose durable Workspace memory, attach optional Task/session provenance, review the proposal, and list accepted entries. This proves the governance loop only. The agent runtime does not retrieve those entries or receive them as injected context.
+
 ## Baseline developer journey
 
 The repository baseline proves the smallest developer loop:
@@ -43,6 +45,7 @@ The repository baseline proves the smallest developer loop:
 3. `make dev` starts an isolated local runtime and API.
 4. `POST /api/v1/runs` returns `202` and a stable Run URL.
 5. Polling returns an explicit terminal result.
-6. `make paseo-smoke` proves the same seam against a live free model without model credentials.
+6. Workspace-memory proposal routes create, review, and list accepted records under the authenticated owner scope.
+7. `make paseo-smoke` proves the same seam against a live free model without model credentials.
 
 This baseline journey is infrastructure evidence. It is not the end-user V1 workflow.

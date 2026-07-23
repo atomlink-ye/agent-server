@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
+import { CreateMemoryProposal } from './application/memory/create-memory-proposal.js';
+import { ListMemoryEntries } from './application/memory/list-memory-entries.js';
+import { ListMemoryProposals } from './application/memory/list-memory-proposals.js';
+import { ReviewMemoryProposal } from './application/memory/review-memory-proposal.js';
 import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
@@ -24,6 +28,7 @@ import {
 import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
+import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
 import type { AppConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
 
@@ -50,6 +55,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
+  const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const runtime = new PaseoRuntimeAdapter(
     {
       wsUrl: config.paseo.wsUrl,
@@ -76,6 +82,17 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
+  const createMemoryProposal = new CreateMemoryProposal(
+    workspaceMemoryRepository,
+    taskRepository,
+  );
+  const listMemoryProposals = new ListMemoryProposals(
+    workspaceMemoryRepository,
+  );
+  const reviewMemoryProposal = new ReviewMemoryProposal(
+    workspaceMemoryRepository,
+  );
+  const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
   const completeRun = new CompleteRun(runRepository, taskRepository);
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
@@ -111,6 +128,10 @@ export async function createService(config: AppConfig, logger: Logger) {
     invokeTask,
     getTask,
     getTaskTree,
+    createMemoryProposal,
+    listMemoryProposals,
+    reviewMemoryProposal,
+    listMemoryEntries,
   });
   dispatcher.start();
 

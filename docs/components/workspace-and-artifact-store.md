@@ -6,7 +6,17 @@ A Product Workspace is a long-lived research boundary containing members, source
 
 ## Baseline state
 
-Local scripts create an ignored `.local/agent-workspace` or per-smoke directory. The Paseo adapter opens it once and reuses the returned Workspace ID. It contains no product ACL, source snapshot, Artifact manifest, or durable memory.
+Local scripts create an ignored `.local/agent-workspace` or per-smoke directory. The Paseo adapter opens it once and reuses the returned Workspace ID. It contains no product ACL, source snapshot, Artifact manifest, retrieval index, or runtime-readable agent memory.
+
+This phase adds a narrow durable workspace-memory governance baseline in PostgreSQL:
+
+- create and list owner-scoped memory proposals;
+- retain optional `source_task_id` and `source_session_id` provenance;
+- review pending proposals as `accept`, `edit_and_accept`, or `reject`;
+- materialize accepted proposals into accepted memory entries;
+- list accepted entries for the authenticated owner scope.
+
+Accepted entries are records of reviewed memory, not an implemented retrieval system. No embedding generation, vector search, ranking, context assembly, runtime prompt injection, or automatic agent recall happens in this component yet. Owner scope remains derived from configured service-account bindings until user identity and shared Workspace ACLs land.
 
 ## V1 filesystem boundary
 

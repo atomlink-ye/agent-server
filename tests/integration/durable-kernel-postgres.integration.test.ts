@@ -13,6 +13,7 @@ import {
 } from '../../src/application/tasks/admit-root-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
+import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
 import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import {
   createDraftAgentVersion,
@@ -34,6 +35,7 @@ import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/p
 import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { TestClock } from '../fixtures/test-clock.js';
@@ -105,6 +107,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0001_durable_kernel_a' },
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
+      { version: '0004_workspace_memory_proposal_mvp' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -132,7 +135,313 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0001_durable_kernel_a' },
       { version: '0002_phase_2a_authenticated_admission' },
       { version: '0003_sequential_team_mvp' },
+      { version: '0004_workspace_memory_proposal_mvp' },
     ]);
+  });
+
+  it('persists owner-scoped workspace memory proposals and transactionally creates accepted entries', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const repository = new PostgresWorkspaceMemoryRepository(database);
+    const ownerScope = {
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+    } as const;
+    const proposerSnapshot = {
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      policySnapshotVersion: primaryAccessContext.policySnapshotVersion,
+    } as const;
+    const reviewerSnapshot = {
+      principalType: primaryAccessContext.principalType,
+      principalId: 'reviewer_alpha',
+      policySnapshotVersion: 'policy-review',
+    } as const;
+    const proposal = createMemoryProposal({
+      id: '00000000-0000-4000-8000-000000090011',
+      ...ownerScope,
+      originalContent: 'ACME prefers async status updates.',
+      originalCategory: 'customer_preference',
+      sourceTaskId: null,
+      sourceSessionId: 'session-alpha',
+      proposerSnapshot,
+      now: () => new Date('2026-07-23T10:00:00.000Z'),
+    });
+
+    await repository.createProposal(proposal);
+
+    await expect(
+      repository.findProposalByIdForOwner(proposal.id, ownerScope),
+    ).resolves.toMatchObject({ id: proposal.id, status: 'pending' });
+    await expect(
+      repository.findProposalByIdForOwner(proposal.id, {
+        ...ownerScope,
+        principalId: 'svc_other',
+      }),
+    ).resolves.toBeNull();
+
+    const reviewed = await repository.reviewProposal({
+      proposalId: proposal.id,
+      ownerScope,
+      outcome: 'edit_and_accept',
+      reviewedContent: 'ACME prefers concise async status updates.',
+      reviewerSnapshot,
+      now: () => new Date('2026-07-23T10:05:00.000Z'),
+      entryIdFactory: () => '00000000-0000-4000-8000-000000090111',
+    });
+
+    expect(reviewed.proposal).toMatchObject({
+      id: proposal.id,
+      status: 'accepted',
+      reviewOutcome: 'edit_and_accept',
+      reviewedContent: 'ACME prefers concise async status updates.',
+    });
+    expect(reviewed.entry).toMatchObject({
+      id: '00000000-0000-4000-8000-000000090111',
+      proposalId: proposal.id,
+      content: 'ACME prefers concise async status updates.',
+      category: 'customer_preference',
+      reviewOutcome: 'edit_and_accept',
+    });
+
+    await expect(
+      repository.reviewProposal({
+        proposalId: proposal.id,
+        ownerScope,
+        outcome: 'accept',
+        reviewedContent: null,
+        reviewerSnapshot,
+        now: () => new Date('2026-07-23T10:06:00.000Z'),
+      }),
+    ).rejects.toThrow(/non-pending|already reviewed/i);
+
+    await expect(
+      repository.listProposalsByOwnerScope(ownerScope),
+    ).resolves.toMatchObject([{ id: proposal.id, status: 'accepted' }]);
+    await expect(
+      repository.listAcceptedEntriesByOwnerScope(ownerScope),
+    ).resolves.toMatchObject([
+      {
+        id: '00000000-0000-4000-8000-000000090111',
+        proposalId: proposal.id,
+        content: 'ACME prefers concise async status updates.',
+      },
+    ]);
+    await expect(
+      repository.listAcceptedEntriesByOwnerScope({
+        ...ownerScope,
+        principalId: 'svc_other',
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('lists same-timestamp workspace memory proposals in insertion-newest order', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const repository = new PostgresWorkspaceMemoryRepository(database);
+    const ownerScope = {
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+    } as const;
+    const proposerSnapshot = {
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      policySnapshotVersion: primaryAccessContext.policySnapshotVersion,
+    } as const;
+    const sameTimestamp = () => new Date('2026-07-23T10:00:00.000Z');
+    const first = createMemoryProposal({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      ...ownerScope,
+      originalContent: 'First same-timestamp proposal.',
+      originalCategory: 'general',
+      sourceTaskId: null,
+      sourceSessionId: null,
+      proposerSnapshot,
+      now: sameTimestamp,
+    });
+    const second = createMemoryProposal({
+      id: '00000000-0000-4000-8000-000000000001',
+      ...ownerScope,
+      originalContent: 'Second same-timestamp proposal.',
+      originalCategory: 'general',
+      sourceTaskId: null,
+      sourceSessionId: null,
+      proposerSnapshot,
+      now: sameTimestamp,
+    });
+
+    await repository.createProposal(first);
+    await repository.createProposal(second);
+
+    await expect(
+      repository.listProposalsByOwnerScope(ownerScope),
+    ).resolves.toMatchObject([{ id: second.id }, { id: first.id }]);
+  });
+
+  it('lists same-timestamp accepted workspace memory entries in insertion-newest order', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    const repository = new PostgresWorkspaceMemoryRepository(database);
+    const ownerScope = {
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+    } as const;
+    const proposerSnapshot = {
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      policySnapshotVersion: primaryAccessContext.policySnapshotVersion,
+    } as const;
+    const reviewerSnapshot = {
+      principalType: primaryAccessContext.principalType,
+      principalId: 'reviewer_alpha',
+      policySnapshotVersion: 'policy-review',
+    } as const;
+    const proposalTimestamp = () => new Date('2026-07-23T10:00:00.000Z');
+    const acceptedTimestamp = () => new Date('2026-07-23T10:05:00.000Z');
+    const first = createMemoryProposal({
+      id: '00000000-0000-4000-8000-000000000101',
+      ...ownerScope,
+      originalContent: 'First accepted memory.',
+      originalCategory: 'general',
+      sourceTaskId: null,
+      sourceSessionId: null,
+      proposerSnapshot,
+      now: proposalTimestamp,
+    });
+    const second = createMemoryProposal({
+      id: '00000000-0000-4000-8000-000000000102',
+      ...ownerScope,
+      originalContent: 'Second accepted memory.',
+      originalCategory: 'general',
+      sourceTaskId: null,
+      sourceSessionId: null,
+      proposerSnapshot,
+      now: proposalTimestamp,
+    });
+
+    await repository.createProposal(first);
+    await repository.createProposal(second);
+    const firstReview = await repository.reviewProposal({
+      proposalId: first.id,
+      ownerScope,
+      outcome: 'accept',
+      reviewedContent: null,
+      reviewerSnapshot,
+      now: acceptedTimestamp,
+      entryIdFactory: () => 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    });
+    const secondReview = await repository.reviewProposal({
+      proposalId: second.id,
+      ownerScope,
+      outcome: 'accept',
+      reviewedContent: null,
+      reviewerSnapshot,
+      now: acceptedTimestamp,
+      entryIdFactory: () => '00000000-0000-4000-8000-000000000001',
+    });
+
+    await expect(
+      repository.listAcceptedEntriesByOwnerScope(ownerScope),
+    ).resolves.toMatchObject([
+      { id: secondReview.entry?.id, proposalId: second.id },
+      { id: firstReview.entry?.id, proposalId: first.id },
+    ]);
+  });
+
+  it('rejects workspace memory entries whose owner scope does not match the proposal owner scope', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+
+    await database.query(`
+      INSERT INTO workspace_memory_proposals (
+        id,
+        tenant_id,
+        workspace_id,
+        principal_type,
+        principal_id,
+        original_content,
+        original_category,
+        source_task_id,
+        source_session_id,
+        proposer_snapshot,
+        status,
+        review_outcome,
+        reviewed_content,
+        reviewer_snapshot,
+        reviewed_at,
+        created_at,
+        updated_at
+      ) VALUES (
+        '00000000-0000-4000-8000-000000090012',
+        'tenant_alpha',
+        'workspace_main',
+        'service_account',
+        'svc_alpha',
+        'ACME prefers async status updates.',
+        'customer_preference',
+        NULL,
+        'session-alpha',
+        '{"principalType":"service_account","principalId":"svc_alpha","policySnapshotVersion":"policy-2026-07-22"}'::jsonb,
+        'accepted',
+        'accept',
+        NULL,
+        '{"principalType":"service_account","principalId":"reviewer_alpha","policySnapshotVersion":"policy-review"}'::jsonb,
+        '2026-07-23T10:05:00.000Z',
+        '2026-07-23T10:00:00.000Z',
+        '2026-07-23T10:05:00.000Z'
+      )
+    `);
+
+    await expect(
+      database.query(`
+        INSERT INTO workspace_memory_entries (
+          id,
+          proposal_id,
+          tenant_id,
+          workspace_id,
+          principal_type,
+          principal_id,
+          content,
+          category,
+          source_task_id,
+          source_session_id,
+          proposer_snapshot,
+          reviewer_snapshot,
+          review_outcome,
+          accepted_at
+        ) VALUES (
+          '00000000-0000-4000-8000-000000090112',
+          '00000000-0000-4000-8000-000000090012',
+          'tenant_alpha',
+          'workspace_main',
+          'service_account',
+          'svc_other',
+          'ACME prefers async status updates.',
+          'customer_preference',
+          NULL,
+          'session-alpha',
+          '{"principalType":"service_account","principalId":"svc_alpha","policySnapshotVersion":"policy-2026-07-22"}'::jsonb,
+          '{"principalType":"service_account","principalId":"reviewer_alpha","policySnapshotVersion":"policy-review"}'::jsonb,
+          'accept',
+          '2026-07-23T10:05:00.000Z'
+        )
+      `),
+    ).rejects.toThrow(
+      /workspace_memory_entries_proposal_owner_scope_fk|foreign key/i,
+    );
   });
 
   it('persists durable agent and team registry records with compiled sequential plans', async () => {

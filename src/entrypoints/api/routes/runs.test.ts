@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ReadinessProbe } from '../../../application/health/readiness.js';
+import type { CreateMemoryProposal } from '../../../application/memory/create-memory-proposal.js';
+import type { ListMemoryEntries } from '../../../application/memory/list-memory-entries.js';
+import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
+import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
 import type {
   AgentRuntimeExecution,
   AgentRuntimeHealth,
@@ -69,6 +73,22 @@ describe('run routes', () => {
       getTaskTree: {
         execute: async () => null,
       } as unknown as GetTaskTree,
+      createMemoryProposal: {
+        execute: async () => {
+          throw new Error('not implemented in run route tests');
+        },
+      } as unknown as CreateMemoryProposal,
+      listMemoryProposals: {
+        execute: async () => [],
+      } as unknown as ListMemoryProposals,
+      reviewMemoryProposal: {
+        execute: async () => {
+          throw new Error('not implemented in run route tests');
+        },
+      } as unknown as ReviewMemoryProposal,
+      listMemoryEntries: {
+        execute: async () => [],
+      } as unknown as ListMemoryEntries,
     });
 
     const headers = {

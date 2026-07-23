@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUILT_IN_MODEL_POLICY_REFS,
+  MAX_AST_DEPTH,
+  MAX_SCALAR_LENGTH,
   MAX_SOURCE_BYTES,
   parseManagedAgentPackage,
   type ManagedAgentPackage,
@@ -50,6 +52,8 @@ function errorCode(source: string) {
     parseManagedAgentPackage(source);
     throw new Error('expected rejection');
   } catch (error) {
+    if (error instanceof Error && error.message === 'expected rejection')
+      throw error;
     return error as { code?: string; path?: string };
   }
 }
@@ -114,6 +118,95 @@ describe('managed agent package', () => {
         yaml().replace('    - ref: web-search\n      kind: tool', tooManyTools),
       ),
     ).toThrow();
+  });
+
+  it('rejects a scalar exceeding the bound inside a YAML pair value', () => {
+    const error = errorCode(
+      yaml().replace(
+        'Be concise and cite sources.',
+        'x'.repeat(MAX_SCALAR_LENGTH + 1),
+      ),
+    );
+    expect(error.code).toBe('scalar_limit');
+  });
+
+  it('rejects excessive nested YAML AST depth with a stable code', () => {
+    let source = 'a:';
+    for (let index = 0; index < MAX_AST_DEPTH + 2; index += 1)
+      source += `\n${' '.repeat((index + 1) * 2)}a:`;
+    source += `\n${' '.repeat((MAX_AST_DEPTH + 3) * 2)}value`;
+    expect(errorCode(source).code).toBe('complexity_limit');
+  });
+
+  it('preserves valid empty tool and skill sequences', () => {
+    const value = parseManagedAgentPackage(
+      yaml()
+        .replace(
+          '  tools:\n    - ref: web-search\n      kind: tool',
+          '  tools: []',
+        )
+        .replace('  skills:\n    - ref: research', '  skills: []'),
+    ).package;
+    expect(value.spec.tools).toEqual([]);
+    expect(value.spec.skills).toEqual([]);
+  });
+
+  it('rejects unsafe regexes and accepts a safe anchored pattern', () => {
+    const safe = yaml().replace(
+      'type: string, min: 1, additionalProperties: false',
+      'type: string, min: 1, pattern: "^[a-z][a-z0-9_-]*$", additionalProperties: false',
+    );
+    expect(() => parseManagedAgentPackage(safe)).not.toThrow();
+    for (const pattern of ['(a+)+$', '(a|aa)+$', '(?=a)a', 'a\\\\1', 'a*a*']) {
+      const source = safe.replace('^[a-z][a-z0-9_-]*$', pattern);
+      expect(errorCode(source).code).toBe('invalid_regex');
+    }
+  });
+
+  it('rejects inapplicable and nested unsupported schema fields', () => {
+    const stringProperties = yaml().replace(
+      'type: string, min: 1, additionalProperties: false',
+      'type: string, properties: { x: { $ref: nope } }, additionalProperties: false',
+    );
+    expect(errorCode(stringProperties).code).toBe('unknown_schema_field');
+    const arrayProperties = yaml().replace(
+      'type: string, min: 1, additionalProperties: false',
+      'type: array, properties: { x: { type: string, additionalProperties: false } }, additionalProperties: false',
+    );
+    expect(errorCode(arrayProperties).code).toBe('unknown_schema_field');
+  });
+
+  it('keeps secret-bearing schema property names out of public errors', () => {
+    const source = yaml()
+      .replace(
+        'topic: { type: string, min: 1, additionalProperties: false }',
+        'passwordToken: { type: string, properties: { x: { $ref: secret-value } }, additionalProperties: false }',
+      )
+      .replace('input.topic', 'input.passwordToken');
+    const error = errorCode(source);
+    expect(error.code).toBe('unknown_schema_field');
+    expect(JSON.stringify(error)).not.toContain('passwordToken');
+    expect(JSON.stringify(error)).not.toContain('secret-value');
+  });
+
+  it('rejects tags and anchors below YAML pair descendants', () => {
+    for (const replacement of [
+      'topic: !!str { type: string, additionalProperties: false }',
+      'topic: &schema { type: string, additionalProperties: false }',
+    ]) {
+      expect(() =>
+        parseManagedAgentPackage(
+          yaml().replace(
+            'topic: { type: string, min: 1, additionalProperties: false }',
+            replacement,
+          ),
+        ),
+      ).toThrow();
+    }
+  });
+
+  it('does not let the rejection helper accept its own sentinel', () => {
+    expect(() => errorCode(yaml())).toThrow('expected rejection');
   });
 
   it('enforces model policy allowlists and forbids concrete model selection', () => {

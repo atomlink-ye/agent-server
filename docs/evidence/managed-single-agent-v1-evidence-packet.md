@@ -39,9 +39,12 @@ recovery or receipt reconciliation evidence.
 
 ### H-TRANSCRIPT
 
-Managed single-agent transcript: 1/1 passed through the real HTTP socket,
-including governed memory, Fresh Session pin/recall, and final assistant
-Message persistence.
+Managed single-agent transcript contract: 1/1 passed as an in-process
+authenticated Hono `app.request` contract test, including governed memory,
+Fresh Session pin/recall, and final assistant Message persistence. This is not
+real-socket evidence. Separate Vitest E2E tests provide the real ephemeral HTTP
+socket evidence; the packet records that lane separately as `make e2e-smoke`
+2/2.
 
 ### H-RECOVERY
 

@@ -36,6 +36,8 @@ model-based gardening, auto-safe rollout, UI, or distributed operations.
 ## Evidence and release status
 
 The draft evidence packet records fresh Node24 deterministic, PostgreSQL16,
-real-socket, Paseo/OpenCode, evaluation, and dry-run inspection results. Final
+separate real-ephemeral-socket E2E, Paseo/OpenCode, evaluation, and dry-run
+inspection results. The in-process transcript contract is not socket evidence.
+Final
 release status remains **PENDING** until H-6 blocker-only Oracle review and
 archive steps are complete.

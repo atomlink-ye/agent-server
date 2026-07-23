@@ -291,14 +291,16 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
 
 ## Current blocker
 
-None. P0, Phase A, Phase B, Phase C, and the Phase D minimum are complete.
-Phase E is next; consolidated runtime hardening remains deferred under the
-MVP-first review policy.
+H-6 final review found transcript provenance and cancellation-evidence blockers
+that are currently being fixed. H-6 remains unchecked; the spec and plan stay
+active until the focused transcript contract test passes, blocker-only Oracle
+re-review completes, and archive is explicitly approved. Earlier phase gates
+remain recorded; no Phase D/Phase E next-phase wording applies here.
 
 ## Next exact command
 
 ```bash
-pnpm exec vitest run --config vitest.unit.config.ts src/domain/runs/run-status.test.ts src/application/runs/execute-run.test.ts
+pnpm exec vitest run --config vitest.contract.config.ts tests/contract/managed-single-agent-transcript.contract.test.ts
 ```
 
 ## Completion checklist

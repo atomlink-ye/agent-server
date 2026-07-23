@@ -87,8 +87,9 @@ part of this deterministic policy gate.
 ## Draft managed single-agent release evidence
 
 The Phase H draft packet records fresh Node24 deterministic, PostgreSQL16,
-real-socket, Paseo/OpenCode, evaluation, fault, transcript, and dry-run
-inspection evidence. It remains `PENDING` until blocker-only Oracle review and
+separate real-ephemeral-socket E2E, Paseo/OpenCode, evaluation, fault,
+in-process transcript-contract, and dry-run inspection evidence. It remains
+`PENDING` until blocker-only Oracle review and
 archive; passing evidence is not a production readiness claim.
 
 Real-PG tests may skip only in the ordinary local deterministic suite when

@@ -91,6 +91,7 @@ export interface CreateTestAppOptions {
   readonly workspaceId?: string;
   readonly projectionFailures?: number;
   readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
+  readonly databaseControl?: { database?: PGlite };
 }
 
 export async function createTestApp(
@@ -100,6 +101,7 @@ export async function createTestApp(
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
+  if (options.databaseControl) options.databaseControl.database = database;
   const effectiveConfig = options.workspaceId
     ? {
         ...testConfig,

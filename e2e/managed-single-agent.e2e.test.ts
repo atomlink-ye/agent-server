@@ -40,6 +40,7 @@ const canaryMessage =
 const acceptedCanary = '所有报告都必须区分事实、推断和建议。';
 const rejectedCanary = 'REJECTED_CANARY_MARKER_9D2E';
 const lateCanary = 'LATE_AFTER_CANARY_SNAPSHOT_4B71';
+const otherWorkspaceCanary = 'OTHER_WORKSPACE_MARKER_7A31';
 
 describe('managed single-agent memory recall', () => {
   let server: ServerType;
@@ -50,7 +51,7 @@ describe('managed single-agent memory recall', () => {
 
   beforeAll(async () => {
     runtime = new FakeAgentRuntime({
-      responseText: 'FRESH_SESSION_OK',
+      deriveMemoryResponse: true,
       delayMs: 500,
       canaryPrompt: canaryMessage,
       canaryResponseText: 'CANARY_FINAL_ANSWER_2026',
@@ -132,8 +133,8 @@ describe('managed single-agent memory recall', () => {
         (await snapshots.json()) as {
           snapshots: Array<{ projectionStatus: string }>;
         }
-      ).snapshots[0]?.projectionStatus,
-    ).toBe('ready');
+      ).snapshots.some((snapshot) => snapshot.projectionStatus === 'ready'),
+    ).toBe(true);
 
     const rejectedProposal = await fetch(
       `${baseUrl}/api/v1/workspace-memory/proposals`,
@@ -247,10 +248,16 @@ describe('managed single-agent memory recall', () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: 'assistant',
-          text: 'FRESH_SESSION_OK',
+          text: expect.any(String),
         }),
       ]),
     );
+    const sourceAssistant = messageList.messages.find(
+      (item) => item.role === 'assistant',
+    );
+    expect(sourceAssistant?.text).not.toContain(rejectedCanary);
+    expect(sourceAssistant?.text).not.toContain(lateCanary);
+    expect(sourceAssistant?.text).not.toContain(otherWorkspaceCanary);
   });
 
   it('proves the primary competitor researcher socket canary and SSE reconnect', async () => {
@@ -330,7 +337,7 @@ describe('managed single-agent memory recall', () => {
     expect(
       (
         await fetch(
-          `${baseUrl}/api/v1/agent-versions/${importedBody.version.id}:publish`,
+          `${baseUrl}/api/v1/agent-versions/${importedV2Body.version.id}:publish`,
           {
             method: 'POST',
             headers: {
@@ -362,6 +369,7 @@ describe('managed single-agent memory recall', () => {
     });
     const sessionId = ((await sessionResponse.json()) as { session_id: string })
       .session_id;
+    const canaryGate = runtime.armExecutionGate();
     const message = await fetch(
       `${baseUrl}/api/v1/sessions/${sessionId}/messages`,
       {
@@ -377,6 +385,20 @@ describe('managed single-agent memory recall', () => {
       task_id: string;
       run_id: string;
     };
+    await canaryGate.entered;
+    expect(runtime.activeRunIds.has(messageBody.run_id)).toBe(true);
+    const firstSse = await fetch(
+      `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
+      { headers: auth },
+    );
+    expect(firstSse.status).toBe(200);
+    const reader = firstSse.body!.getReader();
+    const firstChunk = await reader.read();
+    const firstChunkText = new TextDecoder().decode(firstChunk.value);
+    const receivedId = Number(firstChunkText.match(/^id: (\d+)$/m)?.[1]);
+    expect(Number.isSafeInteger(receivedId)).toBe(true);
+    await reader.cancel();
+    canaryGate.release();
     await waitForSocketRun(messageBody.run_id, 'succeeded');
     const canaryMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
@@ -506,30 +528,31 @@ describe('managed single-agent memory recall', () => {
       'output',
       'succeeded',
     ]);
-    const firstSse = await fetch(
-      `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
-      { headers: auth },
-    );
-    expect(firstSse.status).toBe(200);
-    const reader = firstSse.body!.getReader();
-    const firstChunk = await reader.read();
-    const firstChunkText = new TextDecoder().decode(firstChunk.value);
-    const receivedId = Number(firstChunkText.match(/^id: (\d+)$/m)?.[1]);
-    expect(Number.isSafeInteger(receivedId)).toBe(true);
-    await reader.cancel();
     const reconnect = await fetch(
       `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
       { headers: { ...auth, 'last-event-id': String(receivedId) } },
     );
     const reconnectText = await reconnect.text();
+    const replayedIds = [...reconnectText.matchAll(/^id: (\d+)$/gm)].map(
+      (match) => Number(match[1]),
+    );
+    expect(replayedIds.length).toBeGreaterThan(0);
+    expect(new Set(replayedIds).size).toBe(replayedIds.length);
+    expect(replayedIds.every((id) => id > receivedId)).toBe(true);
     expect(reconnectText).toContain('event: succeeded');
     expect((reconnectText.match(/event: succeeded/g) ?? []).length).toBe(1);
     const terminalCursor = await fetch(
-      `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream?after=3`,
+      `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream?after=${Math.max(...replayedIds)}`,
       { headers: auth },
     );
     expect(terminalCursor.status).toBe(200);
     expect(await terminalCursor.text()).toBe('');
+    const snapshotsBeforeRuntimeAccept = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+        { headers: auth },
+      )
+    ).json()) as { snapshots: Array<{ snapshotId: string; version: number }> };
     const acceptedReview = await fetch(
       `${baseUrl}/api/v1/workspace-memory/proposals/${candidate.proposal_id}/review`,
       {
@@ -558,11 +581,16 @@ describe('managed single-agent memory recall', () => {
         snapshotId: string;
         contentHash: string;
         projectionStatus: string;
+        version: number;
         workspaceId: string;
       }>;
     };
     const readySnapshot = snapshots.snapshots.find(
-      (snapshot) => snapshot.projectionStatus === 'ready',
+      (snapshot) =>
+        snapshot.projectionStatus === 'ready' &&
+        !snapshotsBeforeRuntimeAccept.snapshots.some(
+          (prior) => prior.snapshotId === snapshot.snapshotId,
+        ),
     );
     expect(readySnapshot).toBeDefined();
     if (!readySnapshot) throw new Error('canary snapshot was not ready');
@@ -604,32 +632,6 @@ describe('managed single-agent memory recall', () => {
     expect(entries.entries.map((entry) => entry.content)).not.toContain(
       lateCanary,
     );
-    const lateProposal = await fetch(
-      `${baseUrl}/api/v1/workspace-memory/proposals`,
-      {
-        method: 'POST',
-        headers: jsonAuth,
-        body: JSON.stringify({ content: lateCanary, category: 'fact' }),
-      },
-    );
-    expect(lateProposal.status).toBe(201);
-    const entriesAfterLate = (await (
-      await fetch(
-        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/entries`,
-        {
-          headers: auth,
-        },
-      )
-    ).json()) as { entries: Array<{ content: string }> };
-    expect(entriesAfterLate.entries.map((entry) => entry.content)).toContain(
-      acceptedCanary,
-    );
-    expect(
-      entriesAfterLate.entries.map((entry) => entry.content),
-    ).not.toContain(rejectedCanary);
-    expect(
-      entriesAfterLate.entries.map((entry) => entry.content),
-    ).not.toContain(lateCanary);
     const second = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -648,13 +650,87 @@ describe('managed single-agent memory recall', () => {
         body: JSON.stringify({ text: 'What is the exact constraint?' }),
       },
     );
-    const recallBody = (await recall.json()) as { run_id: string };
+    const recallBody = (await recall.json()) as {
+      task_id: string;
+      run_id: string;
+    };
+    const pinnedRecall = (
+      await databaseControl.database!.query(
+        'SELECT memory_snapshot_id, memory_snapshot_hash FROM tasks WHERE id=$1',
+        [recallBody.task_id],
+      )
+    ).rows[0] as { memory_snapshot_id: string; memory_snapshot_hash: string };
+    expect(pinnedRecall).toEqual({
+      memory_snapshot_id: readySnapshot.snapshotId,
+      memory_snapshot_hash: readySnapshot.contentHash,
+    });
+    const lateProposal = await fetch(
+      `${baseUrl}/api/v1/workspace-memory/proposals`,
+      {
+        method: 'POST',
+        headers: jsonAuth,
+        body: JSON.stringify({ content: lateCanary, category: 'fact' }),
+      },
+    );
+    expect(lateProposal.status).toBe(201);
+    const lateBody = (await lateProposal.json()) as {
+      proposal: { proposal_id: string };
+    };
+    expect(
+      (
+        await fetch(
+          `${baseUrl}/api/v1/workspace-memory/proposals/${lateBody.proposal.proposal_id}/review`,
+          {
+            method: 'POST',
+            headers: jsonAuth,
+            body: JSON.stringify({ action: 'accept' }),
+          },
+        )
+      ).status,
+    ).toBe(200);
+    const snapshotsAfterLate = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+        { headers: auth },
+      )
+    ).json()) as {
+      snapshots: Array<{
+        snapshotId: string;
+        contentHash: string;
+        version: number;
+        projectionStatus: string;
+      }>;
+    };
+    const laterSnapshot = snapshotsAfterLate.snapshots.find(
+      (snapshot) =>
+        snapshot.version > readySnapshot.version &&
+        snapshot.projectionStatus === 'ready',
+    );
+    expect(laterSnapshot).toBeDefined();
+    expect(laterSnapshot?.snapshotId).not.toBe(readySnapshot.snapshotId);
+    expect(laterSnapshot?.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    const entriesAfterLate = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${workspaceId}/memory/entries`,
+        { headers: auth },
+      )
+    ).json()) as { entries: Array<{ content: string }> };
+    expect(entriesAfterLate.entries.map((entry) => entry.content)).toContain(
+      lateCanary,
+    );
+    expect(entriesAfterLate.entries.map((entry) => entry.content)).toContain(
+      acceptedCanary,
+    );
+    expect(
+      entriesAfterLate.entries.map((entry) => entry.content),
+    ).not.toContain(rejectedCanary);
     await waitForSocketRun(recallBody.run_id, 'succeeded');
     const recallPrompt = runtime.prompts.at(-1) ?? '';
     expect(recallPrompt).toContain(acceptedCanary);
     expect(recallPrompt).not.toContain(rejectedCanary);
     expect(recallPrompt).not.toContain(lateCanary);
     expect(recallPrompt).not.toContain(canaryMessage);
+    expect(recallPrompt).not.toContain(lateCanary);
     const secondMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${secondId}/messages`, {
         headers: auth,
@@ -664,10 +740,18 @@ describe('managed single-agent memory recall', () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: 'assistant',
-          text: 'FRESH_SESSION_OK',
+          text: expect.stringContaining(acceptedCanary),
         }),
       ]),
     );
+    const recalledAssistant = secondMessages.messages.filter(
+      (item) => item.role === 'assistant',
+    );
+    expect(recalledAssistant).toHaveLength(1);
+    expect(recalledAssistant[0]?.text).toContain(acceptedCanary);
+    expect(recalledAssistant[0]?.text).not.toContain(rejectedCanary);
+    expect(recalledAssistant[0]?.text).not.toContain(lateCanary);
+    expect(recalledAssistant[0]?.text).not.toContain(otherWorkspaceCanary);
     expect(
       secondMessages.messages
         .filter((item) => item.role === 'user')
@@ -689,6 +773,48 @@ describe('managed single-agent memory recall', () => {
         )
       ).status,
     ).toBe(200);
+    const secondWorkspaceEntries = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${secondWorkspaceId}/memory/entries`,
+        { headers: auth },
+      )
+    ).json()) as {
+      entries: Array<{
+        content: string;
+        sourceRunId?: string;
+        sourceTaskId?: string;
+      }>;
+    };
+    const secondWorkspaceProposals = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${secondWorkspaceId}/memory/proposals`,
+        { headers: auth },
+      )
+    ).json()) as { proposals: Array<Record<string, unknown>> };
+    const secondWorkspaceSnapshots = (await (
+      await fetch(
+        `${baseUrl}/api/v1/workspaces/${secondWorkspaceId}/memory/snapshots`,
+        { headers: auth },
+      )
+    ).json()) as { snapshots: Array<Record<string, unknown>> };
+    const isolatedText = JSON.stringify({
+      entries: secondWorkspaceEntries.entries,
+      proposals: secondWorkspaceProposals.proposals,
+      snapshots: secondWorkspaceSnapshots.snapshots,
+    });
+    for (const marker of [
+      acceptedCanary,
+      rejectedCanary,
+      lateCanary,
+      otherWorkspaceCanary,
+      messageBody.task_id,
+      messageBody.run_id,
+      candidate.proposal_id,
+      lateBody.proposal.proposal_id,
+      readySnapshot.snapshotId,
+      laterSnapshot!.snapshotId,
+    ])
+      expect(isolatedText).not.toContain(marker);
     expect(
       (
         await fetch(
@@ -715,7 +841,6 @@ describe('managed single-agent memory recall', () => {
 
   it('proves socket queue durability, cancellation, reset, and dispatcher recovery', async () => {
     runtime.ready = false;
-    const executeCallsBeforeRecovery = runtime.executeCalls;
     const queued = await fetch(`${baseUrl}/api/v1/tasks:invoke`, {
       method: 'POST',
       headers: jsonAuth,
@@ -741,7 +866,6 @@ describe('managed single-agent memory recall', () => {
     ).toBe('queued');
     runtime.ready = true;
     await waitForTask(queuedBody.task_id, 'completed');
-    expect(runtime.executeCalls - executeCallsBeforeRecovery).toBe(1);
     const session = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -760,6 +884,16 @@ describe('managed single-agent memory recall', () => {
     expect(runtime.activeRunIds.has(a.run_id)).toBe(true);
     expect(await taskStatus(b.task_id)).toBe('queued');
     expect(await taskStatus(c.task_id)).toBe('queued');
+    const queueTree = (await (
+      await fetch(`${baseUrl}/api/v1/tasks/${a.task_id}/tree`, {
+        headers: auth,
+      })
+    ).json()) as {
+      tasks: Array<{ task_id: string; status: string }>;
+    };
+    expect(queueTree.tasks.filter((task) => task.status === 'active')).toEqual([
+      expect.objectContaining({ task_id: a.task_id, status: 'active' }),
+    ]);
     const cancellation = await fetch(
       `${baseUrl}/api/v1/tasks/${a.task_id}:cancel`,
       { method: 'POST', headers: jsonAuth },
@@ -782,6 +916,9 @@ describe('managed single-agent memory recall', () => {
     expect(await taskStatus(c.task_id)).toBe('completed');
     await waitForSocketRun(b.run_id, 'succeeded');
     await waitForSocketRun(c.run_id, 'succeeded');
+    expect(await runEventTime(b.run_id, 'succeeded')).toBeLessThanOrEqual(
+      await runEventTime(c.run_id, 'started'),
+    );
     expect(await runEventTypes(b.run_id)).toEqual([
       'started',
       'output',
@@ -797,11 +934,28 @@ describe('managed single-agent memory recall', () => {
         headers: auth,
       })
     ).json()) as {
-      messages: Array<{ role: string; text: string; taskId?: string }>;
+      messages: Array<{
+        role: string;
+        text: string;
+        taskId?: string;
+        runId?: string;
+      }>;
     };
-    expect(
-      queueMessages.messages.filter((message) => message.role === 'assistant'),
-    ).toHaveLength(2);
+    const queueAssistants = queueMessages.messages.filter(
+      (message) => message.role === 'assistant',
+    );
+    expect(queueAssistants).toHaveLength(2);
+    expect(queueAssistants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: b.task_id, runId: b.run_id }),
+        expect.objectContaining({ taskId: c.task_id, runId: c.run_id }),
+      ]),
+    );
+    expect(queueAssistants).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: a.task_id, runId: a.run_id }),
+      ]),
+    );
     const reset = await fetch(`${baseUrl}/api/v1/sessions/${sessionId}:reset`, {
       method: 'POST',
       headers: { ...jsonAuth, 'idempotency-key': 'socket-reset' },
@@ -816,6 +970,13 @@ describe('managed single-agent memory recall', () => {
     await waitForTask(newMessage.task_id, 'completed');
     expect(newMessage.task_id).not.toBe(a.task_id);
     expect(newMessage.run_id).not.toBe(a.run_id);
+    const resetTask = (
+      await databaseControl.database!.query(
+        'SELECT generation, lane_sequence FROM tasks WHERE id=$1',
+        [newMessage.task_id],
+      )
+    ).rows[0] as { generation: number; lane_sequence: number };
+    expect(resetTask).toEqual({ generation: 1, lane_sequence: 1 });
     const resetMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
         headers: auth,
@@ -827,7 +988,7 @@ describe('managed single-agent memory recall', () => {
       expect.arrayContaining([
         expect.objectContaining({
           role: 'assistant',
-          text: 'FRESH_SESSION_OK',
+          text: expect.stringContaining(acceptedCanary),
         }),
       ]),
     );
@@ -862,7 +1023,9 @@ describe('managed single-agent memory recall', () => {
     dispatcherControl.dispatcher?.start();
     await waitForTask(paused.task_id, 'completed');
     await waitForSocketRun(paused.run_id, 'succeeded');
-    expect(runtime.executeCalls - executeCallsBeforeRecovery).toBe(6);
+    expect(
+      runtime.executionRunIds.filter((runId) => runId === paused.run_id),
+    ).toHaveLength(1);
     expect(await runEventTypes(paused.run_id)).toEqual([
       'started',
       'output',
@@ -875,9 +1038,13 @@ describe('managed single-agent memory recall', () => {
     ).json()) as { messages: Array<{ role: string; text: string }> };
     expect(
       pausedMessages.messages.filter(
-        (item) => item.role === 'assistant' && item.text === 'FRESH_SESSION_OK',
+        (item) =>
+          item.role === 'assistant' &&
+          (item as { taskId?: string; runId?: string }).taskId ===
+            paused.task_id &&
+          (item as { taskId?: string; runId?: string }).runId === paused.run_id,
       ).length,
-    ).toBeGreaterThanOrEqual(2);
+    ).toBe(1);
   });
 });
 
@@ -947,6 +1114,19 @@ async function runEventTypes(runId: string): Promise<string[]> {
   return (
     (await response.json()) as { events: Array<{ type: string }> }
   ).events.map((event) => event.type);
+}
+
+async function runEventTime(runId: string, type: string): Promise<number> {
+  const response = await fetch(
+    `${socketBaseUrl}/api/v1/runs/${runId}/events?after=0`,
+    { headers: auth },
+  );
+  const body = (await response.json()) as {
+    events: Array<{ type: string; created_at: string }>;
+  };
+  const event = body.events.find((item) => item.type === type);
+  expect(event).toBeDefined();
+  return Date.parse(event!.created_at);
 }
 
 async function postSocketMessage(

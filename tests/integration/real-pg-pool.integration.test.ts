@@ -132,6 +132,11 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
   });
 
   it('settles concurrent same-key calls to one committed task and run without rollback leakage', async () => {
+    const concurrentInvoke = new InvokeTask(
+      new PostgresAdmissionRepository(pool!),
+      new BarrierInvokableRepository(readerPool!, createTwoPartyBarrier()),
+      () => new Date('2026-07-23T12:00:00.000Z'),
+    );
     const request = {
       idempotencyKey: 'real-pg-concurrent',
       invokable: { kind: 'agent' as const, versionId: agentVersionId },
@@ -139,7 +144,7 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
       accessContext: owner,
     };
     const results = await Promise.all(
-      Array.from({ length: 2 }, () => invoke!.execute(request)),
+      Array.from({ length: 2 }, () => concurrentInvoke.execute(request)),
     );
     const taskIds = new Set(results.map((result) => result.task.task.id));
     const runIds = new Set(
@@ -187,6 +192,41 @@ describeRealPostgres('real PostgreSQL admission pool', () => {
     ).resolves.toBeNull();
   });
 });
+
+class BarrierInvokableRepository extends PostgresInvokableRepository {
+  public constructor(
+    database: ConstructorParameters<typeof PostgresInvokableRepository>[0],
+    private readonly arrive: () => Promise<void>,
+  ) {
+    super(database);
+  }
+
+  public override async findPublishedAgentVersionById(
+    ...args: Parameters<
+      PostgresInvokableRepository['findPublishedAgentVersionById']
+    >
+  ) {
+    const version = await super.findPublishedAgentVersionById(...args);
+    await this.arrive();
+    return version;
+  }
+}
+
+function createTwoPartyBarrier(): () => Promise<void> {
+  let arrivals = 0;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  return async () => {
+    arrivals += 1;
+    if (arrivals === 2) {
+      release();
+    }
+    await released;
+  };
+}
 
 async function cleanTestRows(
   pool: ReturnType<typeof createPostgresPool>,

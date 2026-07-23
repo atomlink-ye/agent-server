@@ -47,6 +47,26 @@ describe('PaseoRuntimeAdapter', () => {
     expect(client.createAgentCalls).toBe(2);
   });
 
+  it('reconnects a cached workspace when the websocket disconnects', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const result = await adapter.execute({
+      runId: 'run-after-disconnect',
+      prompt: 'continue',
+    });
+
+    expect(result.text).toBe('PASEO_FAKE_OK');
+    expect(client.connectCalls).toBe(2);
+    expect(client.openWorkspaceCalls).toBe(1);
+    expect(client.titleCalls).toBe(1);
+    expect(client.listModelsCalls).toBe(1);
+    expect(client.createAgentCalls).toBe(1);
+    expect((await adapter.health()).ready).toBe(true);
+  });
+
   it('fails readiness when no explicitly free model exists', async () => {
     const client = new FakePaseoClient();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];

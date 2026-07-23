@@ -48,21 +48,43 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   }
 
   public async initialize(): Promise<void> {
-    if (this.#workspaceId && this.#model) {
+    const initialized = this.#workspaceId !== null && this.#model !== null;
+    if (initialized && this.#client.connectionStatus() === 'connected') {
       return;
     }
     if (this.#initialization) {
       return this.#initialization;
     }
 
-    this.#initialization = this.#initializeOnce();
+    this.#initialization = initialized
+      ? this.#reconnectOnce()
+      : this.#initializeOnce();
     try {
       await this.#initialization;
     } catch (error) {
       this.#initialization = null;
       this.#lastError = 'Runtime initialization failed.';
       throw error;
+    } finally {
+      this.#initialization = null;
     }
+  }
+
+  async #reconnectOnce(): Promise<void> {
+    try {
+      await this.#client.connect();
+    } catch (error) {
+      throw new PaseoConnectionError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
+    this.#lastError = null;
+    this.#logger.log('info', 'runtime.reconnected', {
+      provider: 'opencode',
+      ...(this.#model ? { model: this.#model.id } : {}),
+      ...(this.#workspaceId ? { workspace_id: this.#workspaceId } : {}),
+    });
   }
 
   async #initializeOnce(): Promise<void> {

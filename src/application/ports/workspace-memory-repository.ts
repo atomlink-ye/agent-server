@@ -30,6 +30,9 @@ export interface ReviewMemoryProposalRepositoryResult {
 
 export interface WorkspaceMemoryRepository {
   createProposal(proposal: MemoryProposal): Promise<MemoryProposal>;
+  createProposalsBatch?(
+    proposals: readonly MemoryProposal[],
+  ): Promise<readonly MemoryProposal[]>;
   findProposalByIdForOwner(
     proposalId: string,
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,

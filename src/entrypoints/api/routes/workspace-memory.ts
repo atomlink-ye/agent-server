@@ -121,6 +121,28 @@ export function registerWorkspaceMemoryRoutes(
     return context.json(response, 200);
   });
 
+  app.get(
+    '/api/v1/workspaces/:workspaceId/memory/proposals',
+    async (context) => {
+      const scope = await productWorkspaceScope(context, dependencies);
+      if (!scope)
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      const access = getAuthenticatedAccessContext(context);
+      const proposals = await dependencies.listMemoryProposals.execute({
+        ...access,
+        workspaceId: scope.workspaceId,
+      });
+      return context.json(
+        { proposals: proposals.map(toProposalResponse) },
+        200,
+      );
+    },
+  );
+
   app.get(`${PROPOSALS_PATH}/:proposalId`, async (context) => {
     const id = z.uuid().safeParse(context.req.param('proposalId'));
     if (!id.success)

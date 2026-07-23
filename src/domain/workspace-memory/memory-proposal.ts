@@ -30,6 +30,10 @@ export interface MemoryProposal extends WorkspaceMemoryOwnerScope {
   readonly originalCategory: string;
   readonly sourceTaskId: string | null;
   readonly sourceSessionId: string | null;
+  readonly sourceMessageId?: string | null;
+  readonly sourceRunId?: string | null;
+  readonly sourceAgentVersionId?: string | null;
+  readonly sourceCandidateIndex?: number | null;
   readonly proposerSnapshot: WorkspaceMemoryActorSnapshot;
   readonly status: MemoryProposalStatus;
   readonly reviewOutcome: MemoryReviewOutcome | null;
@@ -49,6 +53,10 @@ export interface WorkspaceMemoryEntry extends WorkspaceMemoryOwnerScope {
   readonly category: string;
   readonly sourceTaskId: string | null;
   readonly sourceSessionId: string | null;
+  readonly sourceMessageId?: string | null;
+  readonly sourceRunId?: string | null;
+  readonly sourceAgentVersionId?: string | null;
+  readonly sourceCandidateIndex?: number | null;
   readonly proposerSnapshot: WorkspaceMemoryActorSnapshot;
   readonly reviewerSnapshot: WorkspaceMemoryActorSnapshot;
   readonly reviewOutcome: AcceptedMemoryReviewOutcome;
@@ -63,6 +71,10 @@ export interface CreateMemoryProposalOptions extends WorkspaceMemoryOwnerScope {
   readonly originalCategory: string;
   readonly sourceTaskId?: string | null;
   readonly sourceSessionId?: string | null;
+  readonly sourceMessageId?: string | null;
+  readonly sourceRunId?: string | null;
+  readonly sourceAgentVersionId?: string | null;
+  readonly sourceCandidateIndex?: number | null;
   readonly proposerSnapshot: WorkspaceMemoryActorSnapshot;
   readonly now?: () => Date;
 }
@@ -102,6 +114,10 @@ export function createMemoryProposal(
     originalCategory: options.originalCategory,
     sourceTaskId: options.sourceTaskId ?? null,
     sourceSessionId: options.sourceSessionId ?? null,
+    sourceMessageId: options.sourceMessageId ?? null,
+    sourceRunId: options.sourceRunId ?? null,
+    sourceAgentVersionId: options.sourceAgentVersionId ?? null,
+    sourceCandidateIndex: options.sourceCandidateIndex ?? null,
     proposerSnapshot: options.proposerSnapshot,
     status: 'pending',
     reviewOutcome: null,
@@ -187,6 +203,10 @@ export function createWorkspaceMemoryEntryFromAcceptedProposal(
     category: proposal.originalCategory,
     sourceTaskId: proposal.sourceTaskId,
     sourceSessionId: proposal.sourceSessionId,
+    sourceMessageId: proposal.sourceMessageId ?? null,
+    sourceRunId: proposal.sourceRunId ?? null,
+    sourceAgentVersionId: proposal.sourceAgentVersionId ?? null,
+    sourceCandidateIndex: proposal.sourceCandidateIndex ?? null,
     proposerSnapshot: proposal.proposerSnapshot,
     reviewerSnapshot: proposal.reviewerSnapshot,
     reviewOutcome: proposal.reviewOutcome,

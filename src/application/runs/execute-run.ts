@@ -32,6 +32,7 @@ import {
 } from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
+  private resolvedProposalLimit = 0;
   public constructor(
     private readonly completeRun: CompleteRun,
     private readonly tasks: TaskRepository,
@@ -214,21 +215,36 @@ export class ExecuteRun {
       runId: claim.run.id,
       prompt,
     });
-    for (const candidate of execution.memoryCandidates ?? []) {
-      await this.createMemoryProposal?.execute({
-        content: candidate.content,
-        category: candidate.category,
-        sourceTaskId: task.id,
-        ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
-        accessContext: {
-          tenantId: task.tenantId,
-          serviceAccountId: task.principalId,
-          workspaceId: task.workspaceId,
-          principalType: task.principalType as 'service_account',
-          principalId: task.principalId,
-          policySnapshotVersion: task.policySnapshotVersion,
-        },
-      });
+    for (const [sourceCandidateIndex, candidate] of (
+      execution.memoryCandidates ?? []
+    )
+      .slice(0, this.resolvedProposalLimit)
+      .entries()) {
+      if (!isSafeRuntimeCandidate(candidate)) continue;
+      try {
+        await this.createMemoryProposal?.execute({
+          content: candidate.content,
+          category: candidate.category,
+          sourceTaskId: task.id,
+          ...(task.sessionId ? { sourceSessionId: task.sessionId } : {}),
+          sourceRunId: claim.run.id,
+          sourceAgentVersionId: task.invokableVersionId,
+          sourceCandidateIndex,
+          accessContext: {
+            tenantId: task.tenantId,
+            serviceAccountId: task.principalId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType as 'service_account',
+            principalId: task.principalId,
+            policySnapshotVersion: task.policySnapshotVersion,
+          },
+        });
+      } catch (error) {
+        this.logger.log('error', 'run.memory_persistence_failed', {
+          run_id: claim.run.id,
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
     }
     const succeeded = transitionRun(
       claim.run,
@@ -268,6 +284,7 @@ export class ExecuteRun {
         `Published agent version ${invokableVersionId} could not be loaded for execution`,
       );
     }
+    this.resolvedProposalLimit = agentVersion.proposalLimit ?? 0;
 
     let memory: string | null = null;
     if (task.memorySnapshotId && task.memorySnapshotHash) {
@@ -286,4 +303,22 @@ export class ExecuteRun {
       memory,
     });
   }
+}
+
+function isSafeRuntimeCandidate(candidate: {
+  readonly category: string;
+  readonly content: string;
+}): boolean {
+  return (
+    [
+      'terminology',
+      'output_preference',
+      'project_constraint',
+      'confirmed_workflow_procedure',
+    ].includes(candidate.category) &&
+    candidate.content.length <= 4096 &&
+    !/-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:api[_ -]?key|secret|token|password)\s*[:=]|\b[\w.+-]+@[\w-]+\.[\w.-]+\b/i.test(
+      candidate.content,
+    )
+  );
 }

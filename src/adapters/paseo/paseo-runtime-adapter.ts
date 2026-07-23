@@ -1,4 +1,5 @@
-import { mkdir } from 'node:fs/promises';
+import { lstat, mkdir, readFile, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import {
   type AgentRuntimeExecution,
@@ -24,6 +25,16 @@ export interface PaseoRuntimeOptions {
   readonly connectTimeoutMs: number;
   readonly executionTimeoutMs: number;
 }
+
+const MEMORY_ARTIFACT_MAX_BYTES = 64 * 1024;
+const MEMORY_ARTIFACT_MAX_PROPOSALS = 32;
+const MEMORY_CATEGORIES = new Set([
+  'terminology',
+  'output_preference',
+  'project_constraint',
+  'confirmed_workflow_procedure',
+]);
+const MEMORY_CONTENT_MAX_CHARS = 4096;
 
 export class PaseoRuntimeAdapter implements AgentRuntimePort {
   readonly #client: PaseoClientPort;
@@ -155,6 +166,14 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       throw new RuntimeExecutionError('Paseo runtime is not initialized.');
     }
 
+    const artifact = join(
+      this.#options.cwd,
+      'scratchpad',
+      'runs',
+      input.runId,
+      'memory-proposals.json',
+    );
+    await this.#clearArtifact(artifact);
     const agent = await this.#client.createOpenCodeAgent({
       cwd: this.#options.cwd,
       workspaceId: this.#workspaceId,
@@ -183,12 +202,79 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       );
     }
 
+    const memory = await this.#readMemoryCandidates(artifact);
     return {
       provider: agent.provider || 'opencode',
       model: agent.model ?? this.#model.id,
       text: finished.lastMessage,
       ...(finished.usage ? { usage: finished.usage } : {}),
+      ...(memory.memoryCandidates
+        ? { memoryCandidates: memory.memoryCandidates }
+        : {}),
     };
+  }
+
+  async #clearArtifact(path: string): Promise<void> {
+    try {
+      await unlink(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+
+  async #readMemoryCandidates(path: string): Promise<{
+    readonly memoryCandidates?: AgentRuntimeExecution['memoryCandidates'];
+  }> {
+    let stat;
+    try {
+      stat = await lstat(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+      throw new RuntimeExecutionError(
+        'Unable to inspect memory proposal artifact.',
+      );
+    }
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size > MEMORY_ARTIFACT_MAX_BYTES
+    )
+      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readFile(path, 'utf8'));
+    } catch {
+      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+    }
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !('proposals' in parsed) ||
+      !Array.isArray(parsed.proposals) ||
+      parsed.proposals.length > MEMORY_ARTIFACT_MAX_PROPOSALS
+    )
+      throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+    const proposals = parsed.proposals.map((proposal) => {
+      if (
+        !proposal ||
+        typeof proposal !== 'object' ||
+        Object.keys(proposal).some(
+          (key) => key !== 'category' && key !== 'content',
+        )
+      )
+        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+      const candidate = proposal as { category?: unknown; content?: unknown };
+      if (
+        typeof candidate.category !== 'string' ||
+        !MEMORY_CATEGORIES.has(candidate.category) ||
+        typeof candidate.content !== 'string' ||
+        candidate.content.trim() === '' ||
+        candidate.content.length > MEMORY_CONTENT_MAX_CHARS
+      )
+        throw new RuntimeExecutionError('Invalid memory proposal artifact.');
+      return { category: candidate.category, content: candidate.content };
+    });
+    return proposals.length ? { memoryCandidates: proposals } : {};
   }
 
   public async cancel(input: {

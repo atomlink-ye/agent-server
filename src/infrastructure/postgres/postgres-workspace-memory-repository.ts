@@ -46,6 +46,10 @@ interface MemoryProposalRow {
   readonly original_category: string;
   readonly source_task_id: string | null;
   readonly source_session_id: string | null;
+  readonly source_message_id: string | null;
+  readonly source_run_id: string | null;
+  readonly source_agent_version_id: string | null;
+  readonly source_candidate_index: number | null;
   readonly proposer_snapshot: WorkspaceMemoryActorSnapshot | string;
   readonly status: MemoryProposal['status'];
   readonly review_outcome: MemoryProposal['reviewOutcome'];
@@ -67,6 +71,10 @@ interface WorkspaceMemoryEntryRow {
   readonly category: string;
   readonly source_task_id: string | null;
   readonly source_session_id: string | null;
+  readonly source_message_id: string | null;
+  readonly source_run_id: string | null;
+  readonly source_agent_version_id: string | null;
+  readonly source_candidate_index: number | null;
   readonly proposer_snapshot: WorkspaceMemoryActorSnapshot | string;
   readonly reviewer_snapshot: WorkspaceMemoryActorSnapshot | string;
   readonly review_outcome: WorkspaceMemoryEntry['reviewOutcome'];
@@ -91,6 +99,7 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           principal_id,
           original_content,
           original_category,
+          source_message_id, source_run_id, source_agent_version_id, source_candidate_index,
           source_task_id,
           source_session_id,
           proposer_snapshot,
@@ -102,13 +111,51 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
         )
       `,
       proposalValues(proposal),
     );
 
     return proposal;
+  }
+
+  public async createProposalsBatch(
+    proposals: readonly MemoryProposal[],
+  ): Promise<readonly MemoryProposal[]> {
+    const client = await this.acquireClient();
+    await client.query('BEGIN');
+    try {
+      const materialized: MemoryProposal[] = [];
+      for (const proposal of proposals) {
+        const existing =
+          proposal.sourceRunId &&
+          proposal.sourceCandidateIndex !== null &&
+          proposal.sourceCandidateIndex !== undefined
+            ? await selectProposalByReplayKey(
+                client,
+                proposal.sourceRunId,
+                proposal.sourceCandidateIndex,
+              )
+            : null;
+        if (existing) {
+          materialized.push(existing);
+          continue;
+        }
+        await client.query(
+          `INSERT INTO workspace_memory_proposals (id, tenant_id, workspace_id, principal_type, principal_id, original_content, original_category, source_task_id, source_session_id, source_message_id, source_run_id, source_agent_version_id, source_candidate_index, proposer_snapshot, status, review_outcome, reviewed_content, reviewer_snapshot, reviewed_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+          proposalValues(proposal),
+        );
+        materialized.push(proposal);
+      }
+      await client.query('COMMIT');
+      return materialized;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release?.();
+    }
   }
 
   public async findProposalByIdForOwner(
@@ -302,6 +349,10 @@ const MEMORY_PROPOSAL_SELECT_SQL = `
     original_category,
     source_task_id,
     source_session_id,
+    source_message_id,
+    source_run_id,
+    source_agent_version_id,
+    source_candidate_index,
     proposer_snapshot,
     status,
     review_outcome,
@@ -325,6 +376,10 @@ const WORKSPACE_MEMORY_ENTRY_SELECT_SQL = `
     category,
     source_task_id,
     source_session_id,
+    source_message_id,
+    source_run_id,
+    source_agent_version_id,
+    source_candidate_index,
     proposer_snapshot,
     reviewer_snapshot,
     review_outcome,
@@ -356,6 +411,19 @@ async function selectProposalByIdForOwner(
     ],
   );
 
+  const row = result.rows?.[0];
+  return row ? mapProposalRow(row) : null;
+}
+
+async function selectProposalByReplayKey(
+  database: PostgresQueryable,
+  sourceRunId: string,
+  sourceCandidateIndex: number,
+): Promise<MemoryProposal | null> {
+  const result = await database.query<MemoryProposalRow>(
+    `${MEMORY_PROPOSAL_SELECT_SQL} WHERE source_run_id = $1 AND source_candidate_index = $2`,
+    [sourceRunId, sourceCandidateIndex],
+  );
   const row = result.rows?.[0];
   return row ? mapProposalRow(row) : null;
 }
@@ -405,12 +473,16 @@ async function insertAcceptedEntry(
         category,
         source_task_id,
         source_session_id,
+        source_message_id,
+        source_run_id,
+        source_agent_version_id,
+        source_candidate_index,
         proposer_snapshot,
         reviewer_snapshot,
         review_outcome,
         accepted_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
       )
     `,
     [
@@ -424,6 +496,10 @@ async function insertAcceptedEntry(
       entry.category,
       entry.sourceTaskId,
       entry.sourceSessionId,
+      entry.sourceMessageId ?? null,
+      entry.sourceRunId ?? null,
+      entry.sourceAgentVersionId ?? null,
+      entry.sourceCandidateIndex ?? null,
       JSON.stringify(entry.proposerSnapshot),
       JSON.stringify(entry.reviewerSnapshot),
       entry.reviewOutcome,
@@ -443,6 +519,10 @@ function proposalValues(proposal: MemoryProposal): readonly unknown[] {
     proposal.originalCategory,
     proposal.sourceTaskId,
     proposal.sourceSessionId,
+    proposal.sourceMessageId ?? null,
+    proposal.sourceRunId ?? null,
+    proposal.sourceAgentVersionId ?? null,
+    proposal.sourceCandidateIndex ?? null,
     JSON.stringify(proposal.proposerSnapshot),
     proposal.status,
     proposal.reviewOutcome,
@@ -467,6 +547,10 @@ function mapProposalRow(row: MemoryProposalRow): MemoryProposal {
     originalCategory: row.original_category,
     sourceTaskId: row.source_task_id,
     sourceSessionId: row.source_session_id,
+    sourceMessageId: row.source_message_id,
+    sourceRunId: row.source_run_id,
+    sourceAgentVersionId: row.source_agent_version_id,
+    sourceCandidateIndex: row.source_candidate_index,
     proposerSnapshot: parseJson(row.proposer_snapshot),
     status: row.status,
     reviewOutcome: row.review_outcome,
@@ -494,6 +578,10 @@ function mapEntryRow(row: WorkspaceMemoryEntryRow): WorkspaceMemoryEntry {
     category: row.category,
     sourceTaskId: row.source_task_id,
     sourceSessionId: row.source_session_id,
+    sourceMessageId: row.source_message_id,
+    sourceRunId: row.source_run_id,
+    sourceAgentVersionId: row.source_agent_version_id,
+    sourceCandidateIndex: row.source_candidate_index,
     proposerSnapshot: parseJson(row.proposer_snapshot),
     reviewerSnapshot: parseJson(row.reviewer_snapshot),
     reviewOutcome: row.review_outcome,

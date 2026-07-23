@@ -11,6 +11,10 @@ export interface CreateMemoryProposalInput {
   readonly category: string;
   readonly sourceTaskId?: string | null;
   readonly sourceSessionId?: string | null;
+  readonly sourceMessageId?: string | null;
+  readonly sourceRunId?: string | null;
+  readonly sourceAgentVersionId?: string | null;
+  readonly sourceCandidateIndex?: number | null;
   readonly accessContext: ServiceAccountAccessContext;
   readonly now?: () => Date;
 }
@@ -51,6 +55,10 @@ export class CreateMemoryProposal {
       originalCategory: input.category,
       sourceTaskId: input.sourceTaskId ?? null,
       sourceSessionId: input.sourceSessionId ?? null,
+      sourceMessageId: input.sourceMessageId ?? null,
+      sourceRunId: input.sourceRunId ?? null,
+      sourceAgentVersionId: input.sourceAgentVersionId ?? null,
+      sourceCandidateIndex: input.sourceCandidateIndex ?? null,
       proposerSnapshot: {
         principalType: input.accessContext.principalType,
         principalId: input.accessContext.principalId,

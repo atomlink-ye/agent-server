@@ -10,6 +10,7 @@ export type ResolvedAgentVersion = Readonly<{
   source: 'managed' | 'legacy';
   id: string;
   instructions: string;
+  proposalLimit?: number;
 }>;
 
 export class ResolveAgentVersion {
@@ -35,6 +36,7 @@ export class ResolveAgentVersion {
         source: 'managed',
         id: managedVersion.id,
         instructions: managedVersion.package.spec.instructions,
+        proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
       };
     }
     const legacyVersion = await this.legacy.findPublishedAgentVersionById(
@@ -46,6 +48,7 @@ export class ResolveAgentVersion {
           source: 'legacy',
           id: legacyVersion.id,
           instructions: legacyVersion.instructions,
+          proposalLimit: 0,
         }
       : null;
   }

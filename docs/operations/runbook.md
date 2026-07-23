@@ -41,6 +41,40 @@ Stop the isolated processes, preserve a sanitized path/timestamp, revoke any rea
 
 The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
 
+## Managed Agent registry operations
+
+Migration `0005_managed_agent_registry_b` is forward-only. Apply the complete
+migration set in order; reruns must not rewrite published versions or reset
+idempotency state. If a migration stops part-way, preserve only the sanitized
+migration error and database identifier, verify the schema version, and rerun
+the normal migration command after the database issue is fixed. Do not manually
+delete rows or edit published data. Rollback means disabling managed routes and
+the managed-first resolver while retaining schema and data for forward recovery;
+there is no destructive down migration.
+
+The deterministic lane uses PGlite for fast single-process behavior. Independent
+required PostgreSQL 16 jobs use real `pg.Pool` connections for concurrency,
+locks, and database-enforced immutability. Run the exact real database lane:
+
+```bash
+make test-real-pg
+```
+
+When `DATABASE_URL` is absent, ordinary deterministic integration may skip the
+real-PG tests, but the required PostgreSQL CI job must fail rather than
+substitute PGlite. Keep those jobs independent.
+
+For ownership failures, verify only tenant, principal, workspace snapshot, and
+version identifier from sanitized metadata. Managed lookup uses tenant plus
+principal; legacy fallback additionally uses the authenticated workspace. A
+managed draft intentionally blocks fallback. For idempotency failures, compare
+the request key and canonical fingerprint without printing request bodies. For
+cursor failures, verify opaque cursor handling, ascending `(created_at, id)`
+ordering, strict advancement, and page bounds. Never put raw YAML, prompts,
+secrets, credentials, filesystem paths, or raw provider errors in logs or
+evidence. A future `re2js` compiler upgrade requires a new package version and
+compiler snapshot.
+
 ## Recovery boundary
 
 The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, the typed `RunCompletionPersistenceError` produces only an ephemeral receipt and sanitized structured log; the Run may remain `running` until later recovery. Stop automated retry for the affected work, preserve only sanitized logs and relevant IDs, and escalate to the owning orchestration operator. Do not claim receipt retrieval, reconciliation, or `runtime_execution_failed`. Durable receipt storage belongs to Phase D migration 0007, with broader recovery in Phase H. Multi-node workers/reconcilers are not a Phase A goal.

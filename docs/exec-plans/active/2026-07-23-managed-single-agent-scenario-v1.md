@@ -81,11 +81,11 @@ the phase owner to preserve earlier gates.
 
 ### B — Managed Agent YAML and registry API
 
-- [ ] **B-1 (RED):** Add parser/domain/application/contract tests for safe YAML 1.2 parsing, disabled aliases/anchors, strict restricted JSON Schema, exact `{{ input.<field> }}` template grammar, bounded secret scanning without echo, and built-in free-only model policy.
-- [ ] **B-2 (interface/domain/GREEN):** Implement exact package types, normalization, canonical JSON/SHA-256 fingerprint, template compiler, schema validator, owner-scoped AgentDefinition, and immutable AgentVersion; rerun B-1 tests GREEN.
-- [ ] **B-3 (migration/repository):** Add `0005`, registry port/repository, idempotency, owner constraints, and `tests/integration/agent-registry-postgres.integration.test.ts`; run migration-first RED then GREEN against 0005. The real PostgreSQL contract evidence must cover same-owner/key/exact-body import replay; same-key/different-body conflict; different-key/equal-canonical-package convergence; changed fingerprints creating a new draft under the same owner/name definition; concurrent import convergence; publish replay, same-key conflict, and one concurrent draft→published transition; owner-hidden definition/version reads, list, and publish; database-enforced published immutability; and multi-page cursor traversal in ascending `(createdAt,id)` order, including equal-`createdAt` ties, strict cursor advancement, and no skipped or duplicated versions.
-- [ ] **B-4 (route/application wiring):** Add validate/import/read/version/publish routes and contracts; enforce idempotency, owner hiding, published immutability, and Task acceptance only for published versions.
-- [ ] **B-5 (docs/evidence):** Update contracts/features/components/ADR as needed and record `B-YAML`, `B-IMPORT`, `B-ROUTES`, and `B-POLICY`.
+- [x] **B-1 (RED):** Add parser/domain/application/contract tests for safe YAML 1.2 parsing, disabled aliases/anchors, strict restricted JSON Schema, exact `{{ input.<field> }}` template grammar, bounded secret scanning without echo, and built-in free-only model policy.
+- [x] **B-2 (interface/domain/GREEN):** Implement exact package types, normalization, canonical JSON/SHA-256 fingerprint, template compiler, schema validator, owner-scoped AgentDefinition, and immutable AgentVersion; rerun B-1 tests GREEN.
+- [x] **B-3 (migration/repository):** Add `0005`, registry port/repository, idempotency, owner constraints, and integration coverage for migration replay, races, owner hiding, database immutability, and tied cursor traversal.
+- [x] **B-4 (route/application wiring):** Add validate/import/read/version/publish routes and contracts; enforce idempotency, owner hiding, published immutability, and Task acceptance only for published versions.
+- [x] **B-5 (docs/evidence):** Update the managed registry component, operations, quality, and active-plan evidence record.
 - [ ] **B-6 (gate):** Run unit, contract, integration, and `pnpm check`; commit migration, behavior, and docs/gate changes explicitly, ending with `feat: add managed agent registry and package validation` and `B-ORACLE`.
 
 ### C — Workspace, Product Session, durable Message, and Session Lane
@@ -206,15 +206,27 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
   and `f0d5f94`.
 - **A-ORACLE:** Final cumulative Phase A review returned `APPROVED` after the
   focused, real-PG, deterministic CI, external Paseo, and documentation gates.
+- **B-YAML:** Package-domain evidence is 30 tests at the accepted checkpoint;
+  application/domain boundary reviews are approved.
+- **B-POLICY:** Human Gate approval is recorded for the exact pinned `re2js`
+  compiler decision. A future compiler upgrade requires a new package version
+  and compiler snapshot.
+- **B-IMPORT:** Migration-focused Node 24 evidence is 25/25 at the accepted
+  checkpoint. Relevant range: `165d966..81af392`.
+- **B-MIGRATION:** Latest registry Node 24 real evidence is 40/40, with the
+  required real-PG lane 44/44. Relevant range: `ec2761d..87ec2fa`.
+- **B-ROUTES:** API contract evidence is 60 tests on Node 24; resolver/Task
+  admission focused and contract evidence is recorded by `d88a679` and
+  `b7c1464`. Relevant route range: `bbeadf6..d1b4047`.
 
 ## Current blocker
 
-None. P0 and Phase A are complete; Phase B managed-package RED tests are next.
+None. P0, Phase A, and B-1 through B-5 are complete; B-6 remains unchecked.
 
 ## Next exact command
 
 ```bash
-pnpm exec vitest run --config vitest.unit.config.ts src/domain/agents/managed-agent-package.test.ts src/application/agents/import-agent.test.ts
+make test-unit && make test-contract && make test-integration && pnpm check
 ```
 
 ## Completion checklist

@@ -366,9 +366,25 @@ describe('workspace memory HTTP contracts', () => {
   });
 
   it('protects product workspace projections and completes the owner flow', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f102';
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
+      workspaceId,
     });
+    const sourceTask = (await (
+      await app.request('/api/v1/tasks:invoke', {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          invokable: {
+            kind: 'agent',
+            version_id: defaultPublishedAgentVersionId,
+          },
+          input: { text: 'projection source' },
+          workspace_id: workspaceId,
+        }),
+      })
+    ).json()) as { task_id: string };
     const proposal = CreateMemoryProposalResponseSchema.parse(
       await (
         await app.request('/api/v1/workspace-memory/proposals', {
@@ -377,6 +393,7 @@ describe('workspace memory HTTP contracts', () => {
           body: JSON.stringify({
             content: 'Projection proof.',
             category: 'rule',
+            source_task_id: sourceTask.task_id,
           }),
         })
       ).json(),
@@ -392,11 +409,11 @@ describe('workspace memory HTTP contracts', () => {
     expect(review.status).toBe(200);
 
     const entries = await app.request(
-      '/api/v1/workspaces/workspace_main/memory/entries',
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
     const snapshots = await app.request(
-      '/api/v1/workspaces/workspace_main/memory/snapshots',
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
     expect(entries.status).toBe(200);
@@ -415,12 +432,12 @@ describe('workspace memory HTTP contracts', () => {
     expect(JSON.stringify(snapshot)).not.toContain('/tmp/agent-server-test');
 
     const detail = await app.request(
-      `/api/v1/workspaces/workspace_main/memory/snapshots/${snapshot.snapshotId}`,
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots/${snapshot.snapshotId}`,
       { headers: { authorization: `Bearer ${primaryServiceAccountToken}` } },
     );
     expect(detail.status).toBe(200);
     const rebuild = await app.request(
-      '/api/v1/workspaces/workspace_main/memory/snapshots:rebuild',
+      `/api/v1/workspaces/${workspaceId}/memory/snapshots:rebuild`,
       {
         method: 'POST',
         headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
@@ -433,7 +450,7 @@ describe('workspace memory HTTP contracts', () => {
     expect(rebuildBody.snapshot.contentHash).toBe(snapshot.contentHash);
 
     const unauthenticated = await app.request(
-      '/api/v1/workspaces/workspace_main/memory/entries',
+      `/api/v1/workspaces/${workspaceId}/memory/entries`,
     );
     expect(unauthenticated.status).toBe(401);
     const foreign = await app.request(
@@ -513,6 +530,95 @@ describe('workspace memory HTTP contracts', () => {
         })
       ).status,
     ).toBe(404);
+  });
+
+  it('retries an accepted review after projection failure and rejects conflicting replay', async () => {
+    const workspaceId = '00000000-0000-4000-8000-00000000f103';
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+      workspaceId,
+      projectionFailures: 1,
+    });
+    const taskResponse = await app.request('/api/v1/tasks:invoke', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        invokable: {
+          kind: 'agent',
+          version_id: defaultPublishedAgentVersionId,
+        },
+        input: { text: 'retry source' },
+        workspace_id: workspaceId,
+      }),
+    });
+    const task = (await taskResponse.json()) as { task_id: string };
+    const proposalResponse = await app.request(
+      '/api/v1/workspace-memory/proposals',
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({
+          content: 'Retryable fact.',
+          category: 'fact',
+          source_task_id: task.task_id,
+        }),
+      },
+    );
+    const proposal = CreateMemoryProposalResponseSchema.parse(
+      await proposalResponse.json(),
+    );
+    const reviewPath = `/api/v1/workspace-memory/proposals/${proposal.proposal.proposal_id}/review`;
+    expect(
+      (
+        await app.request(reviewPath, {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({ action: 'accept' }),
+        })
+      ).status,
+    ).toBe(500);
+    const retry = await app.request(reviewPath, {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({ action: 'accept' }),
+    });
+    expect(retry.status).toBe(200);
+    const legacyEntries = ListMemoryEntriesResponseSchema.parse(
+      await (
+        await app.request('/api/v1/workspace-memory/entries', {
+          headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+        })
+      ).json(),
+    );
+    expect(legacyEntries.entries).toHaveLength(1);
+    const ownedEntries = (await (
+      await app.request(`/api/v1/workspaces/${workspaceId}/memory/entries`, {
+        headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+      })
+    ).json()) as { entries: unknown[] };
+    expect(ownedEntries.entries).toHaveLength(1);
+    expect(
+      (
+        await app.request(
+          `/api/v1/workspaces/${workspaceId}/memory/snapshots`,
+          {
+            headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+          },
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await app.request(reviewPath, {
+          method: 'POST',
+          headers: authenticatedJsonHeaders,
+          body: JSON.stringify({
+            action: 'edit_and_accept',
+            content: 'Conflicting replay.',
+          }),
+        })
+      ).status,
+    ).toBe(409);
   });
 
   it('returns stable review validation, not found, and already-reviewed errors', async () => {

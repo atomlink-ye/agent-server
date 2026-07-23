@@ -1,3 +1,4 @@
+import type { Context } from 'hono';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -34,7 +35,7 @@ import {
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { ManagedMemory } from '../../../application/memory/managed-memory.js';
-import { managedScope } from '../../../application/memory/managed-memory.js';
+import type { SessionRepository } from '../../../application/ports/session-repository.js';
 
 interface WorkspaceMemoryRouteDependencies {
   readonly config: AppConfig;
@@ -43,6 +44,7 @@ interface WorkspaceMemoryRouteDependencies {
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
   readonly managedMemory?: ManagedMemory;
+  readonly sessions?: SessionRepository;
 }
 
 const PROPOSALS_PATH = '/api/v1/workspace-memory/proposals';
@@ -199,11 +201,8 @@ export function registerWorkspaceMemoryRoutes(
   });
 
   app.get('/api/v1/workspaces/:workspaceId/memory/entries', async (context) => {
-    const access = getAuthenticatedAccessContext(context);
-    if (
-      context.req.param('workspaceId') !== access.workspaceId ||
-      !dependencies.managedMemory
-    )
+    const scope = await productWorkspaceScope(context, dependencies);
+    if (!scope || !dependencies.managedMemory)
       throw new HttpError(
         404,
         'not_found',
@@ -211,9 +210,7 @@ export function registerWorkspaceMemoryRoutes(
       );
     return context.json(
       {
-        entries: await dependencies.managedMemory.listEntries(
-          managedScope(access),
-        ),
+        entries: await dependencies.managedMemory.listEntries(scope),
       },
       200,
     );
@@ -221,11 +218,8 @@ export function registerWorkspaceMemoryRoutes(
   app.get(
     '/api/v1/workspaces/:workspaceId/memory/snapshots',
     async (context) => {
-      const access = getAuthenticatedAccessContext(context);
-      if (
-        context.req.param('workspaceId') !== access.workspaceId ||
-        !dependencies.managedMemory
-      )
+      const scope = await productWorkspaceScope(context, dependencies);
+      if (!scope || !dependencies.managedMemory)
         throw new HttpError(
           404,
           'not_found',
@@ -233,9 +227,7 @@ export function registerWorkspaceMemoryRoutes(
         );
       return context.json(
         {
-          snapshots: await dependencies.managedMemory.listSnapshots(
-            managedScope(access),
-          ),
+          snapshots: await dependencies.managedMemory.listSnapshots(scope),
         },
         200,
       );
@@ -244,18 +236,15 @@ export function registerWorkspaceMemoryRoutes(
   app.get(
     '/api/v1/workspaces/:workspaceId/memory/snapshots/:snapshotId',
     async (context) => {
-      const access = getAuthenticatedAccessContext(context);
-      if (
-        context.req.param('workspaceId') !== access.workspaceId ||
-        !dependencies.managedMemory
-      )
+      const scope = await productWorkspaceScope(context, dependencies);
+      if (!scope || !dependencies.managedMemory)
         throw new HttpError(
           404,
           'not_found',
           'The requested resource does not exist.',
         );
       const snapshot = await dependencies.managedMemory.getSnapshot(
-        managedScope(access),
+        scope,
         context.req.param('snapshotId'),
       );
       if (!snapshot)
@@ -270,11 +259,8 @@ export function registerWorkspaceMemoryRoutes(
   app.post(
     '/api/v1/workspaces/:workspaceId/memory/snapshots:rebuild',
     async (context) => {
-      const access = getAuthenticatedAccessContext(context);
-      if (
-        context.req.param('workspaceId') !== access.workspaceId ||
-        !dependencies.managedMemory
-      )
+      const scope = await productWorkspaceScope(context, dependencies);
+      if (!scope || !dependencies.managedMemory)
         throw new HttpError(
           404,
           'not_found',
@@ -282,14 +268,33 @@ export function registerWorkspaceMemoryRoutes(
         );
       return context.json(
         {
-          snapshot: await dependencies.managedMemory.rebuild(
-            managedScope(access),
-          ),
+          snapshot: await dependencies.managedMemory.rebuild(scope),
         },
         201,
       );
     },
   );
+}
+
+async function productWorkspaceScope(
+  context: Context<ApiEnvironment>,
+  dependencies: WorkspaceMemoryRouteDependencies,
+): Promise<{ tenantId: string; workspaceId: string } | null> {
+  const access = getAuthenticatedAccessContext(context);
+  const workspaceId = context.req.param('workspaceId');
+  if (
+    !dependencies.sessions ||
+    !workspaceId ||
+    !z.uuid().safeParse(workspaceId).success
+  )
+    return null;
+  const workspace = await dependencies.sessions.getWorkspace(
+    workspaceId,
+    access,
+  );
+  return workspace
+    ? { tenantId: access.tenantId, workspaceId: workspace.id }
+    : null;
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {

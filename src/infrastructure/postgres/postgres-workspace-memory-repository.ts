@@ -254,6 +254,30 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
     return (result.rows ?? []).map(mapEntryRow);
   }
 
+  public async findAcceptedEntryByProposalForOwner(
+    proposalId: string,
+    ownerScope: WorkspaceMemoryRepositoryOwnerScope,
+  ): Promise<WorkspaceMemoryEntry | null> {
+    const result = await this.queryable.query<WorkspaceMemoryEntryRow>(
+      `${WORKSPACE_MEMORY_ENTRY_SELECT_SQL}
+        WHERE proposal_id = $1
+          AND tenant_id = $2
+          AND workspace_id = $3
+          AND principal_type = $4
+          AND principal_id = $5
+      `,
+      [
+        proposalId,
+        ownerScope.tenantId,
+        ownerScope.workspaceId,
+        ownerScope.principalType,
+        ownerScope.principalId,
+      ],
+    );
+    const row = result.rows?.[0];
+    return row ? mapEntryRow(row) : null;
+  }
+
   private get queryable(): PostgresQueryable {
     return this.database as PostgresQueryable;
   }

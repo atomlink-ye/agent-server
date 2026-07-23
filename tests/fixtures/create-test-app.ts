@@ -89,6 +89,7 @@ export const testConfig = {
 export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
   readonly workspaceId?: string;
+  readonly projectionFailures?: number;
 }
 
 export async function createTestApp(
@@ -140,8 +141,13 @@ export async function createTestApp(
     database,
   );
   const projectedMemory = new Map<string, string>();
+  let projectionFailures = options.projectionFailures ?? 0;
   const fileStore = {
     publish: async (snapshot: { snapshotId: string; memory: string }) => {
+      if (projectionFailures > 0) {
+        projectionFailures -= 1;
+        throw new Error('projection failure');
+      }
       projectedMemory.set(snapshot.snapshotId, snapshot.memory);
     },
     readVerified: async (input: { snapshotId: string }) => {

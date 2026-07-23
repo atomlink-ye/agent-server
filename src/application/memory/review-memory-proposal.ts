@@ -61,6 +61,26 @@ export class ReviewMemoryProposal {
       throw new MemoryProposalNotFoundError();
     }
     if (existing.status !== 'pending') {
+      const sameDecision =
+        existing.status === 'accepted' &&
+        existing.reviewOutcome === input.action &&
+        (input.action === 'edit_and_accept'
+          ? existing.reviewedContent === (input.content ?? null)
+          : input.content == null);
+      const entry =
+        sameDecision &&
+        this.memoryRepository.findAcceptedEntryByProposalForOwner
+          ? await this.memoryRepository.findAcceptedEntryByProposalForOwner(
+              existing.id,
+              {
+                tenantId: existing.tenantId,
+                workspaceId: existing.workspaceId,
+                principalType: existing.principalType,
+                principalId: existing.principalId,
+              },
+            )
+          : null;
+      if (sameDecision && entry) return { proposal: existing, entry };
       throw new MemoryProposalAlreadyReviewedError();
     }
 

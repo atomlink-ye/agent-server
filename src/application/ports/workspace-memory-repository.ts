@@ -38,6 +38,10 @@ export interface WorkspaceMemoryRepository {
     proposalId: string,
     actorScope: WorkspaceMemoryRepositoryActorScope,
   ): Promise<MemoryProposal | null>;
+  findAcceptedEntryByProposalForOwner?(
+    proposalId: string,
+    ownerScope: WorkspaceMemoryRepositoryOwnerScope,
+  ): Promise<WorkspaceMemoryEntry | null>;
   listProposalsByOwnerScope(
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<readonly MemoryProposal[]>;

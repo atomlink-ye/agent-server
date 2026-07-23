@@ -50,7 +50,7 @@ canary.
 
 Fresh Node 24 (`v24.18.0`) verification after the final Paseo adapter smoke fix:
 
-- `make ci`: unit 159, contract 71, deterministic integration 89 with 23
+- `make ci`: unit 159, contract 71, deterministic integration 84 with 28
   expected real-PG skips, E2E 5, build/checks green.
 - `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/agent_server_test make test-real-pg`:
   67/67 passed.

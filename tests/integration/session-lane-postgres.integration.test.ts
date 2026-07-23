@@ -16,8 +16,11 @@ import { transitionRun } from '../../src/domain/runs/run.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { CancelTask } from '../../src/application/tasks/cancel-task.js';
 
-const connectionString =
-  'postgresql://postgres:postgres@127.0.0.1:55432/agent_server_test';
+const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+const required = process.env.REAL_POSTGRES_REQUIRED === '1';
+if (required && !connectionString)
+  throw new Error('real PostgreSQL is required');
+const describeRealPostgres = connectionString ? describe : describe.skip;
 const owner = {
   tenantId: 'phase_c_test_tenant',
   workspaceId: 'compatibility_workspace',
@@ -26,9 +29,9 @@ const owner = {
   policySnapshotVersion: 'phase-c-test',
 };
 
-describe('Phase C session lanes on PostgreSQL', () => {
+describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
   it('atomically admits concurrent ordered roots and reset cancellation', async () => {
-    const pool = new Pool({ connectionString, max: 8 });
+    const pool = new Pool({ connectionString: connectionString!, max: 8 });
     try {
       await applyDurableKernelMigrations(pool);
       const repository = new PostgresSessionRepository(pool);
@@ -282,7 +285,7 @@ describe('Phase C session lanes on PostgreSQL', () => {
   });
 
   it('promotes exactly the next task after active cancellation without an assistant message', async () => {
-    const pool = new Pool({ connectionString, max: 8 });
+    const pool = new Pool({ connectionString: connectionString!, max: 8 });
     try {
       await applyDurableKernelMigrations(pool);
       const repository = new PostgresSessionRepository(pool);

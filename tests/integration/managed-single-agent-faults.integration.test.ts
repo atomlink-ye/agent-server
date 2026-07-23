@@ -23,7 +23,11 @@ import {
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
-const url = 'postgresql://postgres:postgres@127.0.0.1:55432/agent_server_test';
+const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+const required = process.env.REAL_POSTGRES_REQUIRED === '1';
+if (required && !connectionString)
+  throw new Error('real PostgreSQL is required');
+const describeRealPostgres = connectionString ? describe : describe.skip;
 const owner = {
   tenantId: 'h_faults',
   workspaceId: 'h_compat',
@@ -53,9 +57,9 @@ async function applyCurrentProvenanceMigration(pool: Pool): Promise<void> {
   ]);
 }
 
-describe('managed single-agent minimum fault evidence', () => {
+describeRealPostgres('managed single-agent minimum fault evidence', () => {
   it('restarts dispatcher discovery without duplicating execution', async () => {
-    const pool = new Pool({ connectionString: url, max: 4 });
+    const pool = new Pool({ connectionString: connectionString!, max: 4 });
     try {
       await applyCurrentProvenanceMigration(pool);
       const runs = new PostgresRunRepository(pool);
@@ -127,7 +131,7 @@ describe('managed single-agent minimum fault evidence', () => {
   });
 
   it('keeps the prior ready memory snapshot readable after a failed projection', async () => {
-    const pool = new Pool({ connectionString: url, max: 2 });
+    const pool = new Pool({ connectionString: connectionString!, max: 2 });
     const projected = new Map<string, string>();
     let fail = false;
     const store = {

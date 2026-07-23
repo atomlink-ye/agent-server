@@ -18,7 +18,7 @@ errors, or raw owner/resource identifiers.
 
 | Command / lane                       | Result                                                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `make ci`                            | unit 159; contract 71; deterministic integration 89; 23 expected real-PG skips; E2E 5; checks/build green     |
+| `make ci`                            | unit 159; contract 71; deterministic integration 84; 28 expected real-PG skips; E2E 5; checks/build green     |
 | `DATABASE_URL=... make test-real-pg` | PostgreSQL16: 67/67 passed                                                                                    |
 | `pnpm test:e2e`                      | 5/5 passed over real ephemeral TCP HTTP/SSE                                                                   |
 | `make paseo-smoke`                   | provider `opencode`; model `opencode/mimo-v2.5-free`; terminal succeeded; marker `PASEO_OPENCODE_BASELINE_OK` |

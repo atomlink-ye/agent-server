@@ -210,7 +210,12 @@ export class PostgresSessionRepository implements SessionRepository {
         g = Number(s.generation) + 1,
         now = iso();
       await c.query(
-        `UPDATE tasks SET status='cancelled',failure_detail='cancelled_by_reset',updated_at=$2 WHERE session_id=$1 AND generation=$3 AND status='queued'`,
+        `UPDATE tasks
+            SET status='cancelled', failure_detail='cancelled_by_reset', updated_at=$2
+          WHERE session_id=$1
+            AND generation=$3
+            AND status='queued'
+            AND id <> (SELECT active_task_id FROM session_lanes WHERE session_id=$1)`,
         [id, now, g - 1],
       );
       await c.query(

@@ -99,7 +99,7 @@ describe('Phase C session lanes on PostgreSQL', () => {
       );
       expect(reset?.generation).toBe(1);
       const afterReset = await pool.query(
-        `SELECT t.status, t.failure_detail, l.active_task_id,
+        `SELECT t.id, t.status, t.failure_detail, l.active_task_id,
                 l.active_cancellation_requested
            FROM tasks t
            JOIN session_lanes l ON l.session_id = t.session_id
@@ -109,7 +109,9 @@ describe('Phase C session lanes on PostgreSQL', () => {
       );
       expect(
         afterReset.rows
-          .slice(1)
+          .filter((row) =>
+            followUps.slice(1).some((message) => message.taskId === row.id),
+          )
           .every(
             (row) =>
               row.status === 'cancelled' &&
@@ -118,6 +120,16 @@ describe('Phase C session lanes on PostgreSQL', () => {
       ).toBe(true);
       expect(afterReset.rows[0]!.active_task_id).toBe(followUps[0]!.taskId);
       expect(afterReset.rows[0]!.active_cancellation_requested).toBe(true);
+      const activeAfterReset = await pool.query(
+        `SELECT t.status, t.failure_detail
+           FROM tasks t
+          WHERE t.id = (SELECT active_task_id FROM session_lanes WHERE session_id = $1)`,
+        [session.id],
+      );
+      expect(activeAfterReset.rows[0]).toEqual({
+        status: 'queued',
+        failure_detail: null,
+      });
 
       const newGeneration = await repository.postMessage(
         session.id,

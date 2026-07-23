@@ -29,6 +29,35 @@ then repository contracts/components/operations docs, then code and tests as
 evidence. Baseline commit is `3e5e61d`; Paseo is `0.1.110`; authentication is
 the existing service-account bearer contract.
 
+## Execution tempo and review triage
+
+The current user directive prioritizes the minimum viable A-H vertical slice
+and a working end-to-end scenario over production-grade completeness within any
+single phase.
+
+- Advance a phase once its core happy path, essential owner/failure boundary,
+  immediate integration seam, and downstream dependency are proven.
+- Fix a review finding immediately only when it blocks minimum phase acceptance,
+  a later phase, focused verification/migration, or core-path data/owner safety.
+- Classify non-blocking hardening, defense in depth, uncommon edge/recovery
+  cases, exhaustive coverage, performance, maintainability, cleanup, and polish
+  as `deferred_hardening`; record an owner/target in the Follow-up Ledger or
+  post-E2E backlog and continue.
+- `CHANGES_REQUIRED` is review input, not an automatic requirement to close
+  every finding before advancing. The orchestrator records each finding as
+  `phase_blocker` or `deferred_hardening`.
+- Prefer focused tests and one minimum phase review. Do not repeat broad gates or
+  review loops after every micro-change when remaining issues do not block the
+  next phase.
+- After the primary API/SSE/E2E A-H transcript passes, run the consolidated
+  security, reliability, edge-case, simplification, performance, and production
+  hardening pass.
+
+Specialist lifecycle for this plan is: consume the terminal result, classify
+its findings, call `reconcile_task`, and reuse a matching session only with an
+explicit `task_id`. All terminal jobs must be reconciled before the final
+response.
+
 ## P0 truth and control record
 
 The worktree already contains the approved spec, this active plan, the

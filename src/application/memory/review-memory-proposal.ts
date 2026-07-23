@@ -78,6 +78,16 @@ export class ReviewMemoryProposal {
       throw error;
     }
   }
+
+  public async findForAccess(
+    proposalId: string,
+    accessContext: ServiceAccountAccessContext,
+  ): Promise<MemoryProposal | null> {
+    return this.memoryRepository.findProposalByIdForOwner(
+      proposalId,
+      ownerScopeFromAccessContext(accessContext),
+    );
+  }
 }
 
 function ownerScopeFromAccessContext(

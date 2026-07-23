@@ -6,6 +6,7 @@ import { CreateMemoryProposal } from './application/memory/create-memory-proposa
 import { ListMemoryEntries } from './application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from './application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from './application/memory/review-memory-proposal.js';
+import { ManagedMemory } from './application/memory/managed-memory.js';
 import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
@@ -36,6 +37,7 @@ import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-r
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
+import { LocalFileStore } from './infrastructure/files/local-file-store.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -61,6 +63,10 @@ export async function createService(config: AppConfig, logger: Logger) {
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
+  const managedMemory = new ManagedMemory(
+    pool,
+    new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
+  );
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const events = new PostgresRunEventRepository(pool);
@@ -157,6 +163,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     listMemoryProposals,
     reviewMemoryProposal,
     listMemoryEntries,
+    managedMemory,
     agentRegistry,
     sessions,
     events,

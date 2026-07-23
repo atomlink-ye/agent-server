@@ -27,6 +27,7 @@ import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 import type { SessionRepository } from '../../application/ports/session-repository.js';
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
+import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 
 export interface AppDependencies {
@@ -47,6 +48,7 @@ export interface AppDependencies {
   readonly sessions?: SessionRepository;
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
+  readonly managedMemory?: ManagedMemory;
   readonly version?: string;
 }
 

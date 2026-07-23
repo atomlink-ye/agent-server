@@ -33,6 +33,8 @@ import {
   requireServiceAccountAccess,
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
+import type { ManagedMemory } from '../../../application/memory/managed-memory.js';
+import { managedScope } from '../../../application/memory/managed-memory.js';
 
 interface WorkspaceMemoryRouteDependencies {
   readonly config: AppConfig;
@@ -40,6 +42,7 @@ interface WorkspaceMemoryRouteDependencies {
   readonly listMemoryProposals: ListMemoryProposals;
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
+  readonly managedMemory?: ManagedMemory;
 }
 
 const PROPOSALS_PATH = '/api/v1/workspace-memory/proposals';
@@ -110,6 +113,27 @@ export function registerWorkspaceMemoryRoutes(
     return context.json(response, 200);
   });
 
+  app.get(`${PROPOSALS_PATH}/:proposalId`, async (context) => {
+    const id = z.uuid().safeParse(context.req.param('proposalId'));
+    if (!id.success)
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'proposal_id must be a valid UUID.',
+      );
+    const proposal = await dependencies.reviewMemoryProposal.findForAccess(
+      id.data,
+      getAuthenticatedAccessContext(context),
+    );
+    if (!proposal)
+      throw new HttpError(
+        404,
+        'memory_proposal_not_found',
+        'The requested memory proposal does not exist.',
+      );
+    return context.json({ proposal: toProposalResponse(proposal) }, 200);
+  });
+
   app.post(`${PROPOSALS_PATH}/:proposalId/review`, async (context) => {
     const proposalId = z.uuid().safeParse(context.req.param('proposalId'));
     if (!proposalId.success) {
@@ -143,6 +167,8 @@ export function registerWorkspaceMemoryRoutes(
         proposal: toProposalResponse(result.proposal),
         entry: result.entry ? toEntryResponse(result.entry) : null,
       };
+      if (result.entry && dependencies.managedMemory)
+        await dependencies.managedMemory.acceptEntry(result.entry);
       return context.json(response, 200);
     } catch (error) {
       if (error instanceof MemoryProposalNotFoundError) {
@@ -165,6 +191,99 @@ export function registerWorkspaceMemoryRoutes(
     };
     return context.json(response, 200);
   });
+
+  app.get('/api/v1/workspaces/:workspaceId/memory/entries', async (context) => {
+    const access = getAuthenticatedAccessContext(context);
+    if (
+      context.req.param('workspaceId') !== access.workspaceId ||
+      !dependencies.managedMemory
+    )
+      throw new HttpError(
+        404,
+        'not_found',
+        'The requested resource does not exist.',
+      );
+    return context.json(
+      {
+        entries: await dependencies.managedMemory.listEntries(
+          managedScope(access),
+        ),
+      },
+      200,
+    );
+  });
+  app.get(
+    '/api/v1/workspaces/:workspaceId/memory/snapshots',
+    async (context) => {
+      const access = getAuthenticatedAccessContext(context);
+      if (
+        context.req.param('workspaceId') !== access.workspaceId ||
+        !dependencies.managedMemory
+      )
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      return context.json(
+        {
+          snapshots: await dependencies.managedMemory.listSnapshots(
+            managedScope(access),
+          ),
+        },
+        200,
+      );
+    },
+  );
+  app.get(
+    '/api/v1/workspaces/:workspaceId/memory/snapshots/:snapshotId',
+    async (context) => {
+      const access = getAuthenticatedAccessContext(context);
+      if (
+        context.req.param('workspaceId') !== access.workspaceId ||
+        !dependencies.managedMemory
+      )
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      const snapshot = await dependencies.managedMemory.getSnapshot(
+        managedScope(access),
+        context.req.param('snapshotId'),
+      );
+      if (!snapshot)
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      return context.json({ snapshot }, 200);
+    },
+  );
+  app.post(
+    '/api/v1/workspaces/:workspaceId/memory/snapshots:rebuild',
+    async (context) => {
+      const access = getAuthenticatedAccessContext(context);
+      if (
+        context.req.param('workspaceId') !== access.workspaceId ||
+        !dependencies.managedMemory
+      )
+        throw new HttpError(
+          404,
+          'not_found',
+          'The requested resource does not exist.',
+        );
+      return context.json(
+        {
+          snapshot: await dependencies.managedMemory.rebuild(
+            managedScope(access),
+          ),
+        },
+        201,
+      );
+    },
+  );
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {

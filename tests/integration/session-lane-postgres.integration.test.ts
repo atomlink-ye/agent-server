@@ -4,6 +4,14 @@ import { PostgresSessionRepository } from '../../src/infrastructure/postgres/pos
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
+import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { ResolveAgentVersion } from '../../src/application/agents/resolve-agent-version.js';
+import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
+import { ExecuteRun } from '../../src/application/runs/execute-run.js';
+import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
+import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
+import { createLogger } from '../../src/shared/observability/logger.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 
@@ -35,7 +43,7 @@ describe('Phase C session lanes on PostgreSQL', () => {
         [
           definitionId,
           owner.tenantId,
-          owner.workspaceId,
+          workspace.id,
           owner.principalType,
           owner.principalId,
           publishedAt,
@@ -47,7 +55,7 @@ describe('Phase C session lanes on PostgreSQL', () => {
           versionId,
           definitionId,
           owner.tenantId,
-          owner.workspaceId,
+          workspace.id,
           owner.principalType,
           owner.principalId,
           publishedAt,
@@ -101,6 +109,7 @@ describe('Phase C session lanes on PostgreSQL', () => {
 
       const runs = new PostgresRunRepository(pool);
       const tasks = new PostgresTaskRepository(pool);
+      const invokables = new PostgresInvokableRepository(pool);
       const claim = await runs.claimQueuedById({
         runId: first.runId,
         workerId: 'phase-c-worker',
@@ -110,11 +119,66 @@ describe('Phase C session lanes on PostgreSQL', () => {
       });
       expect(claim?.taskId).toBe(first.taskId);
       if (!claim) throw new Error('expected first lane run to claim');
-      await new CompleteRun(runs, tasks, undefined, repository).execute({
-        claim,
-        run: transitionRun(claim.run, 'succeeded', {
-          result: { text: 'done' },
+      const runtime = new FakeAgentRuntime({
+        responseText: 'done',
+        memoryCandidates: [
+          {
+            content: 'REAL_PG_PRODUCT_SESSION_CANDIDATE',
+            category: 'project_constraint',
+          },
+        ],
+      });
+      const complete = new CompleteRun(runs, tasks, undefined, repository);
+      const execute = new ExecuteRun(
+        complete,
+        tasks,
+        invokables,
+        new ExecuteTeamTask(tasks, runs, invokables, runtime, complete),
+        runtime,
+        createLogger({
+          service: 'session-lane-test',
+          minimumLevel: 'error',
+          write: () => undefined,
         }),
+        undefined,
+        new ResolveAgentVersion(
+          {
+            findVersion: async () =>
+              ({
+                status: 'published',
+                id: versionId,
+                package: {
+                  spec: {
+                    instructions: 'instructions',
+                    memory: { proposalLimit: 1 },
+                  },
+                },
+              }) as never,
+          },
+          invokables,
+        ),
+        undefined,
+        undefined,
+        new CreateMemoryProposal(
+          new PostgresWorkspaceMemoryRepository(pool),
+          tasks,
+        ),
+      );
+      await execute.execute(claim);
+      const proposals = await new PostgresWorkspaceMemoryRepository(
+        pool,
+      ).listProposalsByOwnerScope({ ...owner, workspaceId: workspace.id });
+      expect(proposals).toHaveLength(1);
+      expect(proposals[0]).toMatchObject({
+        originalContent: 'REAL_PG_PRODUCT_SESSION_CANDIDATE',
+        originalCategory: 'project_constraint',
+        sourceTaskId: first.taskId,
+        sourceSessionId: session.id,
+        sourceMessageId: first.id,
+        sourceRunId: first.runId,
+        sourceAgentVersionId: versionId,
+        sourceCandidateIndex: 0,
+        status: 'pending',
       });
       const completedMessages = await repository.listMessages(
         session.id,

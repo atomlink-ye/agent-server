@@ -43,12 +43,36 @@ describe('ImportAgent application boundary', () => {
         principalType: 'service_account',
         principalId: 'principal',
       },
+      compatibilityWorkspaceId: 'workspace',
       normalizedName: 'my-agent',
       idempotencyKey: 'request-1',
       requestFingerprint: hash(source),
       version: { package: { metadata: { name: 'My Agent' } }, status: 'draft' },
     });
     expect(calls[0]).not.toHaveProperty('owner.workspaceId');
+  });
+
+  it('keeps workspace out of managed owner identity but carries its compatibility snapshot', async () => {
+    const calls: ImportAgentAtomicCommand[] = [];
+    const registry = stubRegistry(async (command) => {
+      calls.push(command);
+      return {} as any;
+    });
+    await importAgent(registry, {
+      accessContext: context,
+      idempotencyKey: 'one',
+      source: validPackage('Agent'),
+    });
+    await importAgent(registry, {
+      accessContext: { ...context, workspaceId: 'workspace-2' },
+      idempotencyKey: 'two',
+      source: validPackage('Agent'),
+    });
+    expect(calls[0]!.owner).toEqual(calls[1]!.owner);
+    expect(calls.map((call) => call.compatibilityWorkspaceId)).toEqual([
+      'workspace',
+      'workspace-2',
+    ]);
   });
 
   it('makes exactly one atomic call per service invocation', async () => {

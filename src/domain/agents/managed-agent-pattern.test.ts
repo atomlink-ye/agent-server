@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RE2JS } from 're2js';
 import {
   MANAGED_PATTERN_COMPILER_VERSION,
   MANAGED_PATTERN_DIALECT,
@@ -49,8 +50,20 @@ describe('managed RE2 patterns', () => {
     expect(() =>
       validateManagedPattern('a'.repeat(MAX_MANAGED_PATTERN_LENGTH + 1)),
     ).toThrow();
-    const largeProgram = `(?:${Array.from({ length: 500 }, (_, i) => `x${i}`).join('|')})`;
-    expect(() => validateManagedPattern(largeProgram)).toThrow();
+    const largeProgram = '(ab){1000}';
+    const compiled = RE2JS.compile(largeProgram);
+    expect(largeProgram.length).toBeLessThan(MAX_MANAGED_PATTERN_LENGTH);
+    expect(compiled.programSize()).toBeGreaterThan(
+      MAX_MANAGED_PATTERN_PROGRAM_SIZE,
+    );
+    let error: unknown;
+    try {
+      validateManagedPattern(largeProgram);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({ code: 'invalid_regex', path: '$.pattern' });
+    expect(JSON.stringify(error)).not.toContain(largeProgram);
     expect(() =>
       matchesManagedPattern(
         'a',

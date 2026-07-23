@@ -15,6 +15,8 @@ import {
   validateJsonSchema,
 } from './managed-agent-schema.js';
 import {
+  MANAGED_PATTERN_COMPILER_VERSION,
+  MANAGED_PATTERN_DIALECT,
   MAX_MANAGED_PATTERN_INPUT_LENGTH,
   MAX_MANAGED_PATTERN_LENGTH,
   MAX_MANAGED_PATTERN_PROGRAM_SIZE,
@@ -94,6 +96,10 @@ export interface ParsedManagedAgentPackage {
   readonly package: ManagedAgentPackage;
   readonly canonicalJson: string;
   readonly fingerprint: string;
+  readonly compiler: {
+    readonly patternDialect: typeof MANAGED_PATTERN_DIALECT;
+    readonly patternCompilerVersion: typeof MANAGED_PATTERN_COMPILER_VERSION;
+  };
 }
 
 const fail = (code: string, path?: string): never => {
@@ -307,6 +313,10 @@ export function parseManagedAgentPackage(
     package: normalized,
     canonicalJson,
     fingerprint: `sha256:${createHash('sha256').update(canonicalJson).digest('hex')}`,
+    compiler: Object.freeze({
+      patternDialect: MANAGED_PATTERN_DIALECT,
+      patternCompilerVersion: MANAGED_PATTERN_COMPILER_VERSION,
+    }),
   };
 }
 function canonical(value: unknown): string {

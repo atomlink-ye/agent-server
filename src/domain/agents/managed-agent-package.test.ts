@@ -70,6 +70,22 @@ describe('managed agent package', () => {
     expect(result.fingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
+  it('returns immutable compiler identity outside the canonical user package', () => {
+    const result = parseManagedAgentPackage(yaml());
+    expect(result.compiler).toEqual({
+      patternDialect: 're2',
+      patternCompilerVersion: 're2js-2.8.6',
+    });
+    expect(Object.isFrozen(result.compiler)).toBe(true);
+    expect(result.canonicalJson).not.toContain('re2js-2.8.6');
+    expect(() => {
+      (result.compiler as { patternDialect: string }).patternDialect = 'native';
+    }).toThrow();
+    expect(parseManagedAgentPackage(yaml()).fingerprint).toBe(
+      result.fingerprint,
+    );
+  });
+
   it('canonicalizes reordered YAML identically', () => {
     const a = parseManagedAgentPackage(yaml());
     const b = parseManagedAgentPackage(

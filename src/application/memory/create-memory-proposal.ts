@@ -60,7 +60,9 @@ export class CreateMemoryProposal {
       }
       await validateRuntimeProvenance(input, task, this.taskRepository);
       workspaceId = task.task.workspaceId;
-      sourceMessageId = task.task.sourceMessageId ?? sourceMessageId;
+      sourceMessageId = input.sourceRunId
+        ? (task.task.sourceMessageId ?? sourceMessageId)
+        : sourceMessageId;
     }
 
     const proposal = createMemoryProposal({
@@ -100,7 +102,9 @@ export class CreateMemoryProposal {
         if (!task) throw new SourceTaskNotFoundError();
         await validateRuntimeProvenance(input, task, this.taskRepository);
         workspaceId = task.task.workspaceId;
-        sourceMessageId = task.task.sourceMessageId ?? sourceMessageId;
+        sourceMessageId = input.sourceRunId
+          ? (task.task.sourceMessageId ?? sourceMessageId)
+          : sourceMessageId;
       }
       proposals.push(
         createMemoryProposal({

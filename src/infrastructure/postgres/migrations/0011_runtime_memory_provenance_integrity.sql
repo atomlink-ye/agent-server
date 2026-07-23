@@ -7,7 +7,6 @@ RETURNS trigger AS $$
 BEGIN
   IF NEW.source_run_id IS NULL
      AND NEW.source_message_id IS NULL
-     AND NEW.source_task_id IS NULL
      AND NEW.source_agent_version_id IS NULL
      AND NEW.source_candidate_index IS NULL THEN
     RETURN NEW;
@@ -26,6 +25,8 @@ BEGIN
     FROM messages AS m
     JOIN product_sessions AS ps
       ON ps.id = m.session_id
+    JOIN workspaces AS w
+      ON w.id = ps.workspace_id
     JOIN tasks AS t
       ON t.id = m.task_id
      AND t.session_id = ps.id
@@ -42,14 +43,28 @@ BEGIN
       AND ps.principal_type = t.principal_type
       AND ps.principal_id = t.principal_id
       AND ps.workspace_id::text = t.workspace_id
+      AND w.tenant_id = ps.tenant_id
+      AND w.principal_type = ps.principal_type
+      AND w.principal_id = ps.principal_id
+      AND w.tenant_id = t.tenant_id
+      AND w.principal_type = t.principal_type
+      AND w.principal_id = t.principal_id
       AND NEW.tenant_id = ps.tenant_id
+      AND NEW.tenant_id = w.tenant_id
       AND NEW.principal_type = ps.principal_type
+      AND NEW.principal_type = w.principal_type
       AND NEW.principal_id = ps.principal_id
+      AND NEW.principal_id = w.principal_id
       AND NEW.workspace_id = ps.workspace_id::text
+      AND NEW.workspace_id = w.id::text
       AND av.tenant_id = ps.tenant_id
       AND av.principal_type = ps.principal_type
       AND av.principal_id = ps.principal_id
       AND av.workspace_id = ps.workspace_id::text
+      AND av.tenant_id = w.tenant_id
+      AND av.principal_type = w.principal_type
+      AND av.principal_id = w.principal_id
+      AND av.workspace_id = w.id::text
   ) THEN
     RAISE EXCEPTION 'Runtime memory proposal provenance does not match one durable owned tuple';
   END IF;

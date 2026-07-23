@@ -5,6 +5,7 @@ import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/post
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
+  resolveDurableKernelMigrationFilePath,
 } from '../../src/infrastructure/postgres/postgres.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
@@ -29,6 +30,11 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     run: randomUUID(),
     definition: randomUUID(),
     version: randomUUID(),
+    alternateTask: randomUUID(),
+    alternateMessage: randomUUID(),
+    alternateRun: randomUUID(),
+    alternateDefinition: randomUUID(),
+    alternateVersion: randomUUID(),
   };
 
   beforeAll(async () => {
@@ -94,6 +100,47 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,result,created_at,updated_at) VALUES ($1,$2,1,'succeeded',NULL,NULL,NULL,1,'{"text":"done"}',now(),now())`,
       [ids.run, ids.task],
     );
+    await pool.query(
+      `INSERT INTO agent_definitions(id,tenant_id,workspace_id,principal_type,principal_id,name,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,'Alternate agent',now(),now())`,
+      [
+        ids.alternateDefinition,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO agent_versions(id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,instructions,created_at,updated_at,published_at) VALUES ($1,$2,$3,$4,$5,$6,'published','Alternate version','instructions',now(),now(),now())`,
+      [
+        ids.alternateVersion,
+        ids.alternateDefinition,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,session_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,'policy',$1,0,'active','api','agent',$6,'ref','alternate-fingerprint',$7,now(),now())`,
+      [
+        ids.alternateTask,
+        owner.tenantId,
+        owner.workspaceId,
+        owner.principalType,
+        owner.principalId,
+        ids.version,
+        ids.session,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) VALUES ($1,$2,0,2,'user','alternate input',$3,now())`,
+      [ids.alternateMessage, ids.session, ids.alternateTask],
+    );
+    await pool.query(
+      `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker',$3,now()+interval '1 hour',1,now(),now())`,
+      [ids.alternateRun, ids.alternateTask, randomUUID()],
+    );
   });
 
   afterAll(async () => {
@@ -103,11 +150,22 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       [owner.tenantId],
     );
     await pool.query('DELETE FROM runs WHERE id=$1', [ids.run]);
+    await pool.query('DELETE FROM runs WHERE id=$1', [ids.alternateRun]);
     await pool.query('DELETE FROM messages WHERE id=$1', [ids.message]);
+    await pool.query('DELETE FROM messages WHERE id=$1', [
+      ids.alternateMessage,
+    ]);
     await pool.query('DELETE FROM tasks WHERE id=$1', [ids.task]);
+    await pool.query('DELETE FROM tasks WHERE id=$1', [ids.alternateTask]);
     await pool.query('DELETE FROM agent_versions WHERE id=$1', [ids.version]);
+    await pool.query('DELETE FROM agent_versions WHERE id=$1', [
+      ids.alternateVersion,
+    ]);
     await pool.query('DELETE FROM agent_definitions WHERE id=$1', [
       ids.definition,
+    ]);
+    await pool.query('DELETE FROM agent_definitions WHERE id=$1', [
+      ids.alternateDefinition,
     ]);
     await pool.query('DELETE FROM product_sessions WHERE id=$1', [ids.session]);
     await pool.query('DELETE FROM workspaces WHERE id=$1', [owner.workspaceId]);
@@ -147,5 +205,108 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       [ids.run],
     );
     expect(rows.rows).toHaveLength(1);
+  });
+
+  it('enforces every runtime relationship and authoritative Workspace owner on insert/update', async () => {
+    if (!pool) return;
+    const repository = new PostgresWorkspaceMemoryRepository(pool);
+    const makeProposal = (overrides: Record<string, string | number> = {}) =>
+      createMemoryProposal({
+        ...owner,
+        id: randomUUID(),
+        originalContent: 'integrity case',
+        originalCategory: 'project_constraint',
+        sourceTaskId: ids.task,
+        sourceMessageId: ids.message,
+        sourceRunId: ids.run,
+        sourceAgentVersionId: ids.version,
+        sourceCandidateIndex: 0,
+        ...overrides,
+        proposerSnapshot: {
+          principalType: owner.principalType,
+          principalId: owner.principalId,
+          policySnapshotVersion: 'policy',
+        },
+      });
+
+    await expect(
+      repository.createProposalsBatch([
+        makeProposal({ sourceCandidateIndex: 5 }),
+      ]),
+    ).resolves.toHaveLength(1);
+    const updateId = randomUUID();
+    await repository.createProposalsBatch([
+      makeProposal({ id: updateId, sourceCandidateIndex: 1 }),
+    ]);
+    await expect(
+      pool.query(
+        'UPDATE workspace_memory_proposals SET source_message_id=$1 WHERE id=$2',
+        [ids.alternateMessage, updateId],
+      ),
+    ).rejects.toThrow(/provenance/i);
+
+    const mismatches: Array<[string, string]> = [
+      ['sourceTaskId', ids.alternateTask],
+      ['sourceRunId', ids.alternateRun],
+      ['sourceAgentVersionId', ids.alternateVersion],
+    ];
+    for (const [index, [field, value]] of mismatches.entries()) {
+      await expect(
+        repository.createProposalsBatch([
+          makeProposal({ [field]: value, sourceCandidateIndex: index + 2 }),
+        ]),
+      ).rejects.toThrow(/provenance/i);
+    }
+
+    await pool.query('UPDATE workspaces SET tenant_id=$1 WHERE id=$2', [
+      'wrong-tenant',
+      owner.workspaceId,
+    ]);
+    await expect(
+      repository.createProposalsBatch([makeProposal()]),
+    ).rejects.toThrow(/provenance/i);
+    await pool.query('UPDATE workspaces SET tenant_id=$1 WHERE id=$2', [
+      owner.tenantId,
+      owner.workspaceId,
+    ]);
+  });
+
+  it('replays migration 0011 and retains valid insert/update and update rejection', async () => {
+    if (!pool) return;
+    const repository = new PostgresWorkspaceMemoryRepository(pool);
+    const id = randomUUID();
+    const valid = createMemoryProposal({
+      ...owner,
+      id,
+      originalContent: 'replayed integrity case',
+      originalCategory: 'project_constraint',
+      sourceTaskId: ids.task,
+      sourceMessageId: ids.message,
+      sourceRunId: ids.run,
+      sourceAgentVersionId: ids.version,
+      sourceCandidateIndex: 3,
+      proposerSnapshot: {
+        principalType: owner.principalType,
+        principalId: owner.principalId,
+        policySnapshotVersion: 'policy',
+      },
+    });
+    await pool.query(
+      `DELETE FROM durable_kernel_schema_migrations WHERE version='0011_runtime_memory_provenance_integrity'`,
+    );
+    await applyDurableKernelMigrations(pool, [
+      resolveDurableKernelMigrationFilePath(
+        '0011_runtime_memory_provenance_integrity.sql',
+      ),
+    ]);
+    await expect(
+      repository.createProposalsBatch([valid]),
+    ).resolves.toHaveLength(1);
+    await expect(
+      pool.query(
+        'UPDATE workspace_memory_proposals SET source_run_id=$1 WHERE id=$2',
+        [ids.alternateRun, id],
+      ),
+    ).rejects.toThrow(/provenance/i);
   });
 });

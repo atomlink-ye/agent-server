@@ -407,6 +407,10 @@ describe('workspace memory HTTP contracts', () => {
       `INSERT INTO messages(id,session_id,generation,sequence,role,text,task_id,created_at) VALUES ($1,$2,0,1,'user','runtime provenance fixture',$3,now())`,
       [messageId, sessionId, invoked.task_id],
     );
+    await databaseControl.database!.query(
+      'UPDATE tasks SET session_id=$1 WHERE id=$2',
+      [sessionId, invoked.task_id],
+    );
     const proposal = createMemoryProposal({
       tenantId: 'tenant_alpha',
       workspaceId,

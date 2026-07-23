@@ -186,6 +186,8 @@ describe('managed single-agent minimum transcript', () => {
         source_task_id: messageBody.task_id,
       }),
     });
+    expect(accepted.status).toBe(201);
+    expect(rejected.status).toBe(201);
     const acceptedId = (
       (await accepted.json()) as { proposal: { proposal_id: string } }
     ).proposal.proposal_id;

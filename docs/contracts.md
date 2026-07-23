@@ -36,13 +36,13 @@ The Phase B managed Agent API is intentionally narrow. It exposes validation, im
 | `GET`  | `/api/v1/agent-versions/{versionId}`               | `200`   | Reads an owner-scoped version summary.                                               |
 | `POST` | `/api/v1/agent-versions/{versionId}:publish`       | `200`   | Publishes one owner-scoped version; requires `Idempotency-Key`.                      |
 
-`agentId`, `versionId`, and embedded resource IDs are canonical lowercase UUIDs. Invalid path IDs are rejected as `400 invalid_request` before application, repository, or idempotency work. Draft and foreign resources are hidden as the same `404 agent_not_found` response.
+`agentId`, `versionId`, and embedded resource IDs are canonical lowercase UUIDs. Invalid path IDs are rejected as `400 invalid_request` before application, repository, or idempotency work. Owner-scoped draft definitions and versions are readable and listable, and draft versions can be published. Foreign or missing resources are hidden as the same `404 agent_not_found` response.
 
 ### Request limits and idempotency
 
 Validate and import accept only strict JSON objects of the exact shape `{ "source": "..." }`. Unknown fields, including owner, tenant, principal, workspace, or model fields, are rejected. The request body limit is 64 KiB of actual UTF-8 bytes, regardless of the `Content-Length` header. Malformed or non-UTF-8 JSON is `400 invalid_json`; an oversized body is `413 request_too_large`; a valid JSON object with the wrong shape is `400 invalid_request`.
 
-Validation is read-only and key-free. Import requires a non-empty `Idempotency-Key` no longer than 255 characters. Reusing a key with the same request replays the original result; reusing it for a different request is `409 idempotency_conflict`. Blank, missing, or oversized keys are `400 invalid_idempotency_key`.
+Validation is read-only and key-free. It does not use `Idempotency-Key`; if a caller supplies that header, validation ignores it. Clients should omit the header. Import requires a non-empty `Idempotency-Key` no longer than 255 characters. Reusing a key with the same request replays the original result; reusing it for a different request is `409 idempotency_conflict`. Blank, missing, or oversized keys are `400 invalid_idempotency_key`.
 
 Publish accepts an empty body or the exact JSON object `{}` only. It requires the same idempotency-key rules. Replaying the same key and version returns the same published summary; using that key for another version returns `409 idempotency_conflict`. Invalid JSON and unknown publish fields retain the `400 invalid_json`/`400 invalid_request` mappings.
 
@@ -84,4 +84,4 @@ The validated package is canonicalized to stable JSON and fingerprinted with SHA
 
 ## Task relationship and compatibility
 
-Canonical Task admission accepts an explicit published managed Agent version ID. Draft versions, foreign versions, and missing versions are not admissible and are hidden as the owner-safe not-found result. The existing legacy Run compatibility route and Team invokable compatibility remain; Team execution remains the implemented sequential compatibility subset rather than a claim of the full Team V1 graph contract.
+Canonical Task admission and execution resolution accept an explicit published managed Agent version ID. A draft version is rejected as not found at that Task boundary until it is published; foreign and missing versions are likewise hidden as the owner-safe not-found result. Owner-scoped draft definitions and versions remain readable/listable through the registry API and draft versions remain publishable. The existing legacy Run compatibility route and Team invokable compatibility remain; Team execution remains the implemented sequential compatibility subset rather than a claim of the full Team V1 graph contract.

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 import { RuntimeReadinessProbe } from '../../src/application/health/readiness.js';
+import { ResolveAgentVersion } from '../../src/application/agents/resolve-agent-version.js';
 import { CreateMemoryProposal } from '../../src/application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from '../../src/application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
@@ -98,6 +99,10 @@ export async function createTestApp(
   const taskRepository = new PostgresTaskRepository(database);
   const admissionRepository = new PostgresAdmissionRepository(database);
   const invokableRepository = new PostgresInvokableRepository(database);
+  const resolveAgentVersion = new ResolveAgentVersion(
+    agentRegistry,
+    invokableRepository,
+  );
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     database,
   );
@@ -114,7 +119,11 @@ export async function createTestApp(
   );
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
-  const invokeTask = new InvokeTask(admissionRepository, invokableRepository);
+  const invokeTask = new InvokeTask(
+    admissionRepository,
+    invokableRepository,
+    resolveAgentVersion,
+  );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
   const createMemoryProposal = new CreateMemoryProposal(
@@ -143,6 +152,8 @@ export async function createTestApp(
     executeTeamTask,
     runtime,
     logger,
+    undefined,
+    resolveAgentVersion,
   );
   if (options.startDispatcher ?? true) {
     const dispatcher = new PostgresRunDispatcher(

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../control-plane/access-context.js';
+import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import type {
   AdmissionOwnerScope,
   AdmissionRepository,
@@ -45,8 +46,21 @@ export class InvokeTask {
   public constructor(
     private readonly admissions: AdmissionRepository,
     private readonly invokables: InvokableRepository,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+    resolverOrNow: ResolveAgentVersion | (() => Date) = new ResolveAgentVersion(
+      { findVersion: async () => null },
+      invokables,
+    ),
+    now: () => Date = () => new Date(),
+  ) {
+    this.resolver =
+      typeof resolverOrNow === 'function'
+        ? new ResolveAgentVersion({ findVersion: async () => null }, invokables)
+        : resolverOrNow;
+    this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
+  }
+
+  private readonly resolver: ResolveAgentVersion;
+  private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
     const resolvedWorkspaceId = resolveWorkspaceId(
@@ -198,7 +212,7 @@ export class InvokeTask {
   ): Promise<void> {
     const version =
       request.invokable.kind === 'agent'
-        ? await this.invokables.findPublishedAgentVersionById(
+        ? await this.resolver.resolvePublished(
             request.invokable.versionId,
             toInvokableOwnerScope(request.accessContext),
           )

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
+import { ResolveAgentVersion } from './application/agents/resolve-agent-version.js';
 import { CreateMemoryProposal } from './application/memory/create-memory-proposal.js';
 import { ListMemoryEntries } from './application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from './application/memory/list-memory-proposals.js';
@@ -58,6 +59,10 @@ export async function createService(config: AppConfig, logger: Logger) {
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const agentRegistry = new PostgresAgentRegistry(pool);
+  const resolveAgentVersion = new ResolveAgentVersion(
+    agentRegistry,
+    invokableRepository,
+  );
   const runtime = new PaseoRuntimeAdapter(
     {
       wsUrl: config.paseo.wsUrl,
@@ -76,7 +81,11 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const submitRun = new SubmitRun(admitRootTask, runRepository);
   const getRun = new GetRun(runRepository);
-  const invokeTask = new InvokeTask(admissionRepository, invokableRepository);
+  const invokeTask = new InvokeTask(
+    admissionRepository,
+    invokableRepository,
+    resolveAgentVersion,
+  );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
   const createMemoryProposal = new CreateMemoryProposal(
@@ -105,6 +114,8 @@ export async function createService(config: AppConfig, logger: Logger) {
     executeTeamTask,
     runtime,
     logger,
+    undefined,
+    resolveAgentVersion,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {

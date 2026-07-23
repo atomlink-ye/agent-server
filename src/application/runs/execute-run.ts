@@ -6,6 +6,7 @@ import {
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { transitionTask } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import {
   type AgentRuntimePort,
   RuntimeTimedOutError,
@@ -35,6 +36,10 @@ export class ExecuteRun {
     private readonly runtime: AgentRuntimePort,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
+    private readonly resolver: ResolveAgentVersion = new ResolveAgentVersion(
+      { findVersion: async () => null },
+      invokables,
+    ),
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -217,7 +222,7 @@ export class ExecuteRun {
       return prompt;
     }
 
-    const agentVersion = await this.invokables.findPublishedAgentVersionById(
+    const agentVersion = await this.resolver.resolvePublished(
       invokableVersionId,
       ownerScope,
     );

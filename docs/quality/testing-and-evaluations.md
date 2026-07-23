@@ -84,6 +84,13 @@ part of this deterministic policy gate.
 
 `make eval-smoke` intentionally reports skipped until that real boundary exists; a placeholder must never report a false pass.
 
+## Draft managed single-agent release evidence
+
+The Phase H draft packet records fresh Node24 deterministic, PostgreSQL16,
+real-socket, Paseo/OpenCode, evaluation, fault, transcript, and dry-run
+inspection evidence. It remains `PENDING` until blocker-only Oracle review and
+archive; passing evidence is not a production readiness claim.
+
 Real-PG tests may skip only in the ordinary local deterministic suite when
 `DATABASE_URL` is absent. They are not an acceptable skip in required
 PostgreSQL 16 CI.

@@ -9,6 +9,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public Phase B registry surface.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.
+- [Managed Single-Agent V1 evidence packet](evidence/managed-single-agent-v1-evidence-packet.md) records the draft end-to-end release evidence and pending reviewer status.
 
 Changing a public field, status meaning, model-selection authority, or runtime responsibility is a Human Gate and requires contract tests plus documentation updates.
 

@@ -45,6 +45,7 @@ flowchart TD
 | Workspace memory proposals/review/entries      | Implemented; governance-only baseline  |
 | Deterministic CI                               | Implemented; no model network calls    |
 | Zero-model-credential external smoke           | Implemented; optional/manual/scheduled |
+| Managed Single-Agent V1 evidence               | Draft; H-6 final review pending        |
 | OIDC users, shared ACLs, credentials, approval | Planned V1                             |
 | Artifacts, evidence, Lark, Web console         | Planned V1                             |
 
@@ -124,6 +125,8 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Contracts](docs/contracts.md): Run compatibility, Task, health, runtime, and invokable registry interfaces.
 - [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
 - [Operations](docs/operations.md): local development and incident runbook.
+- [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
+- [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): draft command and fault evidence; final status pending.
 - [Decisions](docs/decisions.md): accepted architectural decisions.
 - [Agent handbook](docs/agents.md): mandatory workflow for coding agents.
 - [Exec Plans](docs/exec-plans.md): active-to-completed work protocol.

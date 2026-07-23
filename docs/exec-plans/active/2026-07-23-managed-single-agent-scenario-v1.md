@@ -180,12 +180,17 @@ enablement or model-based gardening claim is made.
 
 ### H — Fault injection, operations, and release evidence
 
-- [ ] **H-1 (RED):** Add deterministic fault tests for admission crash, worker crash, runtime/DB receipt failure, reconnects, snapshot crash/hash mismatch, reset race, follow-ups, duplicate review, idempotency, isolation, stale activation, cancellation, and restart.
-- [ ] **H-2 (interface/recovery):** Implement bounded forward recovery only: lease/fence rejection, receipt reconciliation, reconnect normalization, previous-ready snapshot fallback, idempotent reset/review, and durable dispatch draining. H adds no production schema.
-- [ ] **H-3 (migration/recovery/docs):** Add the dry-run reconciliation script, V1 runbook, rollback controls, migration list, limitations, escalation, and Evidence Packet structure without secrets, private paths, or raw provider errors.
-- [ ] **H-4 (route/application wiring/GREEN):** Add the full deterministic API transcript covering YAML through second-session recall, queue, SSE cursor, cancel, rejection, reset, isolation, and recovery. Run `make test-unit`, `make test-contract`, `make test-integration`, `make e2e-smoke`, `make paseo-smoke`, `make eval-smoke`, `make ci`, `pnpm check:docs`, and `pnpm check:exec-plans`; record external blockers explicitly.
-- [ ] **H-5 (docs/evidence):** Synchronize README, product/features/components/contracts, ADRs, operations, quality, and agent instructions; verify no stale claims, unchecked implementation items, debug output, credentials, raw prompts/paths/provider errors, or unexplained skipped evidence remain.
+- [x] **H-1 (RED):** Focused H fault evidence is 3/3 passed, covering the minimum deterministic failure and fail-closed boundary. This is not exhaustive crash or receipt recovery.
+- [x] **H-2 (interface/recovery):** Recorded bounded dry-run recovery inspection without mutation: mode DRY_RUN, 46 nonterminal runs, 81 queued dispatches, 0 pending memory projections, 4 failed memory projections, 0 snapshots lacking ready projection, and runtime receipt reconciliation unavailable.
+- [x] **H-3 (migration/recovery/docs):** Added the draft managed single-agent runbook, ADR, evidence packet, rollback/limitations/escalation boundary, and migration list without secrets, paths, prompts, or raw provider errors.
+- [x] **H-4 (route/application wiring/GREEN):** Fresh evidence records transcript 1/1, `make ci` (unit 133, contract 68, deterministic integration 75 with 16 expected real-PG skips, E2E 2, checks/build green), PostgreSQL16 `make test-real-pg` 59/59, `make e2e-smoke` 2/2, `make paseo-smoke` succeeded with the exact marker, and `make eval-smoke` 13 cases with all four zero-tolerance counters at 0.
+- [x] **H-5 (docs/evidence):** Updated README, features, components, contracts, quality, operations, ADR, evidence packet, and ledger for truthful current status. Draft release status remains PENDING; no production readiness claim is made.
 - [ ] **H-6 (final gate/cleanup):** Review full fault matrix, final real-PG lane, Paseo canary, Node24 gate, docs, and Evidence Packet; make explicit recovery, behavior, and docs/gate commits and final release commit/review. At H completion set both spec and plan `status: completed`, move both to `docs/exec-plans/completed/`, update links, run `pnpm check:exec-plans` and `pnpm check:docs`, and ensure no unchecked boxes remain.
+
+**H draft closeout:** Evidence IDs are `H-FAULTS`, `H-RECOVERY`,
+`H-TRANSCRIPT`, `H-OPS`, and `H-PACKET`. H-6 remains unchecked pending the
+final blocker-only Oracle, release decision, and archive; the Active Plan and
+spec remain active.
 
 ## Coverage matrix
 

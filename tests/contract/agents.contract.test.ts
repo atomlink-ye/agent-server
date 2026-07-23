@@ -50,12 +50,46 @@ spec:
     command: done
 `;
 
+const forbiddenResponseFields = [
+  'package',
+  'canonicalJson',
+  'instructions',
+  'prompt',
+  'permissions',
+  'owner_id',
+  'tenant_id',
+  'principal_id',
+  'model',
+  'token',
+  source,
+];
+
 function headers(token = primaryServiceAccountToken, key?: string) {
   return {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
     ...(key ? { 'idempotency-key': key } : {}),
   };
+}
+
+function headersWithRequestId(
+  token = primaryServiceAccountToken,
+  key?: string,
+  requestId = 'req-agent',
+) {
+  return { ...headers(token, key), 'x-request-id': requestId };
+}
+
+function packageWith(overrides: string): string {
+  return source.replace(
+    '  description: description',
+    `  description: ${overrides}`,
+  );
+}
+
+function expectSafe(value: unknown, forbidden: string[]): void {
+  const serialized = JSON.stringify(value);
+  for (const field of forbidden) expect(serialized).not.toContain(field);
 }
 
 async function importedApp() {
@@ -103,11 +137,13 @@ describe('managed agent HTTP contracts', () => {
     });
     const valid = await app.request('/api/v1/agent-packages:validate', {
       method: 'POST',
-      headers: headers(),
+      headers: headersWithRequestId(),
       body: JSON.stringify({ source }),
     });
     expect(valid.status).toBe(200);
+    expect(valid.headers.get('x-request-id')).toBe('req-agent');
     const body = ValidateAgentPackageResponseSchema.parse(await valid.json());
+    expectSafe(body, forbiddenResponseFields);
     expect(body).toEqual({
       valid: true,
       fingerprint: expect.stringMatching(/^sha256:/),
@@ -140,9 +176,10 @@ describe('managed agent HTTP contracts', () => {
     });
     const first = await app.request('/api/v1/agents:import', {
       method: 'POST',
-      headers: headers(primaryServiceAccountToken, 'same'),
+      headers: headersWithRequestId(primaryServiceAccountToken, 'same'),
       body: JSON.stringify({ source }),
     });
+    expect(first.headers.get('x-request-id')).toBe('req-agent');
     const replay = await app.request('/api/v1/agents:import', {
       method: 'POST',
       headers: headers(primaryServiceAccountToken, 'same'),
@@ -159,11 +196,10 @@ describe('managed agent HTTP contracts', () => {
     expect(replay.status).toBe(201);
     expect(conflict.status).toBe(409);
     const firstBody = ImportAgentResponseSchema.parse(await first.json());
-    expect(ImportAgentResponseSchema.parse(await replay.json()).result).toBe(
-      'replayed',
-    );
-    expect(firstBody.agent).not.toHaveProperty('owner_id');
-    expect(firstBody.version).not.toHaveProperty('package');
+    const replayBody = ImportAgentResponseSchema.parse(await replay.json());
+    expect(replayBody.result).toBe('replayed');
+    expectSafe(firstBody, forbiddenResponseFields);
+    expectSafe(replayBody, forbiddenResponseFields);
     expect(ErrorResponseSchema.parse(await conflict.json()).error.code).toBe(
       'idempotency_conflict',
     );
@@ -179,6 +215,7 @@ describe('managed agent HTTP contracts', () => {
       ).json(),
     );
     expect(definition.id).toBe(body.agent.id);
+    expectSafe(definition, forbiddenResponseFields);
     const version = AgentVersionResponseSchema.parse(
       await (
         await app.request(`/api/v1/agent-versions/${body.version.id}`, {
@@ -187,6 +224,7 @@ describe('managed agent HTTP contracts', () => {
       ).json(),
     );
     expect(version.id).toBe(body.version.id);
+    expectSafe(version, forbiddenResponseFields);
     const list = AgentVersionListResponseSchema.parse(
       await (
         await app.request(`/api/v1/agents/${body.agent.id}/versions?limit=1`, {
@@ -195,6 +233,7 @@ describe('managed agent HTTP contracts', () => {
       ).json(),
     );
     expect(list.items.map((item) => item.id)).toEqual([body.version.id]);
+    expectSafe(list, forbiddenResponseFields);
     const published = await app.request(
       `/api/v1/agent-versions/${body.version.id}:publish`,
       {
@@ -204,9 +243,11 @@ describe('managed agent HTTP contracts', () => {
       },
     );
     expect(published.status).toBe(200);
-    expect(
-      AgentVersionResponseSchema.parse(await published.json()).status,
-    ).toBe('published');
+    const publishedBody = AgentVersionResponseSchema.parse(
+      await published.json(),
+    );
+    expect(publishedBody.status).toBe('published');
+    expectSafe(publishedBody, forbiddenResponseFields);
     const foreign = await app.request(`/api/v1/agents/${body.agent.id}`, {
       headers: headers(secondaryServiceAccountToken),
     });
@@ -229,5 +270,352 @@ describe('managed agent HTTP contracts', () => {
     expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
       'invalid_idempotency_key',
     );
+  });
+
+  it('exposes exactly the managed Agent route inventory in its namespace', async () => {
+    const { app, body } = await importedApp();
+    const routes = [
+      ['POST', '/api/v1/agent-packages:validate', 200, { source }],
+      ['POST', '/api/v1/agents:import', 201, { source }],
+      ['GET', `/api/v1/agents/${body.agent.id}`, 200],
+      ['GET', `/api/v1/agents/${body.agent.id}/versions`, 200],
+      ['GET', `/api/v1/agent-versions/${body.version.id}`, 200],
+      ['POST', `/api/v1/agent-versions/${body.version.id}:publish`, 200, {}],
+    ] as const;
+    for (const [method, path, expected, requestBody] of routes) {
+      const response = await app.request(path, {
+        method,
+        headers: headers(
+          'token-enabled',
+          method === 'POST' && path.includes('import')
+            ? 'inventory'
+            : 'inventory-publish',
+        ),
+        ...(requestBody === undefined
+          ? {}
+          : { body: JSON.stringify(requestBody) }),
+      });
+      expect(response.status).toBe(expected);
+      if (path === '/api/v1/agent-packages:validate')
+        expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
+    }
+    const variants = [
+      ['GET', '/api/v1/agent-package:validate'],
+      ['POST', '/api/v1/agents/'],
+      ['GET', `/api/v1/agent/${body.agent.id}`],
+      ['POST', `/api/v1/agents/${body.agent.id}`],
+      ['GET', `/api/v1/agents/${body.agent.id}/version`],
+      ['POST', `/api/v1/agent-versions/${body.version.id}/publish`],
+    ] as const;
+    for (const [method, path] of variants) {
+      const response = await app.request(path, { method, headers: headers() });
+      expect([404, 405]).toContain(response.status);
+    }
+  });
+
+  it('enforces the UTF-8 body boundary independently of Content-Length', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const accepted = JSON.stringify({ source: 'x'.repeat(65_000) });
+    const oversized = JSON.stringify({ source: 'x'.repeat(70_000) });
+    const cases = [
+      { body: accepted, length: undefined, status: 400 },
+      { body: oversized, length: '1', status: 413 },
+      {
+        body: oversized,
+        length: String(Buffer.byteLength(oversized)),
+        status: 413,
+      },
+    ] as const;
+    for (const path of [
+      '/api/v1/agent-packages:validate',
+      '/api/v1/agents:import',
+    ]) {
+      for (const item of cases) {
+        const response = await app.request(path, {
+          method: 'POST',
+          headers: {
+            ...headers(
+              primaryServiceAccountToken,
+              path.endsWith(':import') ? 'boundary-import' : undefined,
+            ),
+            ...(item.length ? { 'content-length': item.length } : {}),
+          },
+          body: item.body,
+        });
+        expect(response.status).toBe(item.status);
+        expect(
+          ErrorResponseSchema.parse(await response.json()).error.code,
+        ).toBe(
+          item.status === 413 ? 'request_too_large' : 'invalid_agent_package',
+        );
+      }
+    }
+    const validBoundary =
+      JSON.stringify({ source }) +
+      ' '.repeat(64 * 1024 - Buffer.byteLength(JSON.stringify({ source })));
+    for (const path of [
+      '/api/v1/agent-packages:validate',
+      '/api/v1/agents:import',
+    ]) {
+      const boundaryResponse = await app.request(path, {
+        method: 'POST',
+        headers: headers(
+          primaryServiceAccountToken,
+          path.endsWith(':import') ? 'boundary-import-2' : undefined,
+        ),
+        body: validBoundary,
+      });
+      expect(boundaryResponse.status).toBe(
+        path.endsWith(':import') ? 201 : 200,
+      );
+      const boundaryBody = await boundaryResponse.json();
+      if (path.endsWith(':import'))
+        ImportAgentResponseSchema.parse(boundaryBody);
+      else ValidateAgentPackageResponseSchema.parse(boundaryBody);
+    }
+  });
+
+  it('applies mutation key validation and publish replay/conflict semantics', async () => {
+    const { app, body } = await importedApp();
+    for (const key of ['', ' '.repeat(2), 'x'.repeat(256)]) {
+      const response = await app.request('/api/v1/agents:import', {
+        method: 'POST',
+        headers: { ...headers(), 'idempotency-key': key },
+        body: JSON.stringify({ source }),
+      });
+      expect(response.status).toBe(400);
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_idempotency_key',
+      );
+    }
+    for (const key of ['', ' '.repeat(2), 'x'.repeat(256)]) {
+      const response = await app.request(
+        `/api/v1/agent-versions/${body.version.id}:publish`,
+        {
+          method: 'POST',
+          headers: { ...headers(), 'idempotency-key': key },
+          body: '{}',
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_idempotency_key',
+      );
+    }
+    const first = await app.request(
+      `/api/v1/agent-versions/${body.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'publish-replay'),
+        body: '{}',
+      },
+    );
+    const replay = await app.request(
+      `/api/v1/agent-versions/${body.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'publish-replay'),
+        body: '{}',
+      },
+    );
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(await first.clone().json()).toEqual(await replay.json());
+    const second = await app.request('/api/v1/agents:import', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'second-import'),
+      body: JSON.stringify({ source: packageWith('second') }),
+    });
+    const secondBody = ImportAgentResponseSchema.parse(await second.json());
+    const conflict = await app.request(
+      `/api/v1/agent-versions/${secondBody.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'publish-replay'),
+        body: '{}',
+      },
+    );
+    expect(conflict.status).toBe(409);
+    expect(ErrorResponseSchema.parse(await conflict.json()).error.code).toBe(
+      'idempotency_conflict',
+    );
+  });
+
+  it('hides every foreign Agent resource with the same safe 404 envelope', async () => {
+    const { app, body } = await importedApp();
+    const requests = [
+      app.request(`/api/v1/agents/${body.agent.id}`, {
+        headers: headersWithRequestId(
+          secondaryServiceAccountToken,
+          undefined,
+          'foreign',
+        ),
+      }),
+      app.request(`/api/v1/agent-versions/${body.version.id}`, {
+        headers: headersWithRequestId(
+          secondaryServiceAccountToken,
+          undefined,
+          'foreign',
+        ),
+      }),
+      app.request(`/api/v1/agents/${body.agent.id}/versions`, {
+        headers: headersWithRequestId(
+          secondaryServiceAccountToken,
+          undefined,
+          'foreign',
+        ),
+      }),
+      app.request(`/api/v1/agent-versions/${body.version.id}:publish`, {
+        method: 'POST',
+        headers: headersWithRequestId(
+          secondaryServiceAccountToken,
+          'foreign-publish',
+          'foreign',
+        ),
+        body: '{}',
+      }),
+    ];
+    const responses = await Promise.all(requests);
+    const envelopes = await Promise.all(
+      responses.map(async (response) => {
+        expect(response.status).toBe(404);
+        return ErrorResponseSchema.parse(await response.json());
+      }),
+    );
+    expect(new Set(envelopes.map((value) => JSON.stringify(value))).size).toBe(
+      1,
+    );
+    expect(envelopes[0]?.error.code).toBe('agent_not_found');
+  });
+
+  it('paginates Agent versions in repository order without duplicates', async () => {
+    const { app, body } = await importedApp();
+    const ids = [body.version.id];
+    for (let index = 1; index < 5; index += 1) {
+      const response = await app.request('/api/v1/agents:import', {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, `page-${index}`),
+        body: JSON.stringify({ source: packageWith(`description-${index}`) }),
+      });
+      ids.push(
+        ImportAgentResponseSchema.parse(await response.json()).version.id,
+      );
+    }
+    const allVersions = AgentVersionListResponseSchema.parse(
+      await (
+        await app.request(
+          `/api/v1/agents/${body.agent.id}/versions?limit=100`,
+          { headers: headers() },
+        )
+      ).json(),
+    );
+    expectSafe(allVersions, forbiddenResponseFields);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const response = await app.request(
+        `/api/v1/agents/${body.agent.id}/versions?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        { headers: headers() },
+      );
+      const page = AgentVersionListResponseSchema.parse(await response.json());
+      seen.push(...page.items.map((item) => item.id));
+      cursor = page.next_cursor;
+      if (!cursor) break;
+    }
+    expect(seen).toEqual(allVersions.items.map((item) => item.id));
+    expect(new Set(seen).size).toBe(ids.length);
+    for (const query of ['0', '-1', '101', 'nope']) {
+      const response = await app.request(
+        `/api/v1/agents/${body.agent.id}/versions?limit=${query}`,
+        { headers: headers() },
+      );
+      expect(response.status).toBe(400);
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_limit',
+      );
+    }
+    const malformedCursor = await app.request(
+      `/api/v1/agents/${body.agent.id}/versions?cursor=bad`,
+      { headers: headers() },
+    );
+    expect(malformedCursor.status).toBe(400);
+    expect(
+      ErrorResponseSchema.parse(await malformedCursor.json()).error.code,
+    ).toBe('invalid_cursor');
+  });
+
+  it('rejects caller ownership fields and concrete model injection, and propagates request IDs', async () => {
+    const app = await createTestApp(new FakeAgentRuntime(), {
+      startDispatcher: false,
+    });
+    const forbidden = ['tenant', 'principal', 'workspace', 'owner', 'model'];
+    for (const route of [
+      '/api/v1/agent-packages:validate',
+      '/api/v1/agents:import',
+    ]) {
+      const response = await app.request(route, {
+        method: 'POST',
+        headers: headersWithRequestId(
+          primaryServiceAccountToken,
+          route.includes('import') ? 'strict-key' : undefined,
+          'strict-id',
+        ),
+        body: JSON.stringify({
+          source,
+          tenant_id: 'other',
+          principal_id: 'other',
+          workspace_id: 'other',
+          owner: 'other',
+          model: 'paid/model',
+        }),
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers.get('x-request-id')).toBe('strict-id');
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_request',
+      );
+    }
+    const modelInjected = source.replace(
+      'modelPolicyRef: free-only',
+      'modelPolicyRef: paid/model',
+    );
+    const response = await app.request('/api/v1/agent-packages:validate', {
+      method: 'POST',
+      headers: headersWithRequestId(),
+      body: JSON.stringify({ source: modelInjected }),
+    });
+    expect(response.status).toBe(400);
+    const error = ErrorResponseSchema.parse(await response.json());
+    expect(error.error.code).toBe('invalid_agent_package');
+    expectSafe(error, forbidden);
+    const imported = await importedApp();
+    for (const request of [
+      imported.app.request(`/api/v1/agents/${imported.body.agent.id}`, {
+        headers: headersWithRequestId(),
+      }),
+      imported.app.request(
+        `/api/v1/agents/${imported.body.agent.id}/versions`,
+        { headers: headersWithRequestId() },
+      ),
+      imported.app.request(
+        `/api/v1/agent-versions/${imported.body.version.id}`,
+        { headers: headersWithRequestId() },
+      ),
+    ])
+      expect((await request).headers.get('x-request-id')).toBe('req-agent');
+    const publish = await imported.app.request(
+      `/api/v1/agent-versions/${imported.body.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headersWithRequestId(
+          primaryServiceAccountToken,
+          'request-publish',
+        ),
+        body: '{}',
+      },
+    );
+    expect(publish.headers.get('x-request-id')).toBe('req-agent');
   });
 });

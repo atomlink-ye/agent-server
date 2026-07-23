@@ -202,13 +202,30 @@ async function readJson(request: Request): Promise<unknown> {
       'request_too_large',
       'The request body exceeds 64 KiB.',
     );
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > MAX_AGENT_REQUEST_BYTES)
-    throw new HttpError(
-      413,
-      'request_too_large',
-      'The request body exceeds 64 KiB.',
-    );
+  const reader = request.body?.getReader();
+  if (!reader) return {};
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    size += chunk.value.byteLength;
+    if (size > MAX_AGENT_REQUEST_BYTES) {
+      await reader.cancel();
+      throw new HttpError(
+        413,
+        'request_too_large',
+        'The request body exceeds 64 KiB.',
+      );
+    }
+    chunks.push(chunk.value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   if (bytes.byteLength === 0) return {};
   try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown;

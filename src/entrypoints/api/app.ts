@@ -4,6 +4,10 @@ import { performance } from 'node:perf_hooks';
 import { Hono } from 'hono';
 
 import type { ReadinessProbe } from '../../application/health/readiness.js';
+import type { CreateMemoryProposal } from '../../application/memory/create-memory-proposal.js';
+import type { ListMemoryEntries } from '../../application/memory/list-memory-entries.js';
+import type { ListMemoryProposals } from '../../application/memory/list-memory-proposals.js';
+import type { ReviewMemoryProposal } from '../../application/memory/review-memory-proposal.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
@@ -17,6 +21,7 @@ import type { ApiEnvironment } from './http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';
+import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -28,6 +33,10 @@ export interface AppDependencies {
   readonly invokeTask: InvokeTask;
   readonly getTask: GetTask;
   readonly getTaskTree: GetTaskTree;
+  readonly createMemoryProposal: CreateMemoryProposal;
+  readonly listMemoryProposals: ListMemoryProposals;
+  readonly reviewMemoryProposal: ReviewMemoryProposal;
+  readonly listMemoryEntries: ListMemoryEntries;
   readonly version?: string;
 }
 
@@ -60,6 +69,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
+  registerWorkspaceMemoryRoutes(app, dependencies);
 
   app.notFound((context) => {
     return context.json(

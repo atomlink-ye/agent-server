@@ -21,6 +21,7 @@ flowchart TD
     L --> D
     M["GET /api/v1/tasks/:id[/tree]"] --> D
     N["GET /api/v1/runs/:id"] --> D
+    O["/api/v1/workspace-memory proposals/review/entries"] --> D
 ```
 
 ## Baseline status
@@ -41,6 +42,7 @@ flowchart TD
 | Paseo WebSocket adapter                        | Implemented                            |
 | OpenCode free-model discovery                  | Implemented                            |
 | Explicit reusable Paseo Workspace              | Implemented                            |
+| Workspace memory proposals/review/entries      | Implemented; governance-only baseline  |
 | Deterministic CI                               | Implemented; no model network calls    |
 | Zero-model-credential external smoke           | Implemented; optional/manual/scheduled |
 | OIDC users, shared ACLs, credentials, approval | Planned V1                             |
@@ -90,6 +92,15 @@ The canonical public Task surface is:
 
 These routes invoke a published `agent` or `team` version and return Task identity plus owner-scoped read links. There are still no public `/api/v1/agents` or `/api/v1/teams` write/read endpoints in this phase; durable Agent/Team versions exist in PostgreSQL and are consumed by the control plane.
 
+The workspace-memory governance surface is:
+
+- `POST /api/v1/workspace-memory/proposals`
+- `GET /api/v1/workspace-memory/proposals`
+- `POST /api/v1/workspace-memory/proposals/{proposal_id}/review`
+- `GET /api/v1/workspace-memory/entries`
+
+These routes let the authenticated owner scope create memory proposals, review them by accepting, editing-and-accepting, or rejecting, and list accepted entries with source provenance. This is not agent memory or retrieval: this phase does not add embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation.
+
 ## Canonical commands
 
 | Command            | Purpose                                                             |
@@ -130,5 +141,6 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 - Durable Agent/Team definitions and published versions exist, but public `/api/v1/agents` and `/api/v1/teams` management routes are not implemented yet.
 - Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
 - The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.
+- Workspace memory is governance-only in this phase. Accepted entries are persisted and listable, but agents do not read them automatically and no retrieval, embedding/vector search, or runtime context assembly is implemented.
 
 See [Security](SECURITY.md) before deploying or connecting real credentials. This baseline is for local development and architecture validation only.

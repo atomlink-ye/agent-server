@@ -2,16 +2,16 @@
 
 This is the authoritative capability ledger. Status values are `implemented`, `baseline`, `planned`, and `reserved`. `baseline` is a proven seam with known temporary limitations; it is not production completion.
 
-| Feature area                     | Current status | Baseline evidence                                                          | V1 destination                                                      |
-| -------------------------------- | -------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                 | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts     |
-| Agents and Teams                 | Baseline       | Durable Agent/Team versions and sequential-only compiled Team plans        | Immutable Agent/Team versions and bounded graphs                    |
-| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is explicitly reused                          | Product Workspace, snapshots, proposals, memory policy              |
-| Sessions, Tasks and Runs         | Baseline       | PostgreSQL-backed Task admission, Task tree reads, Run polling, dispatcher | Product Session, cancel/retry, reconcile, recovery                  |
-| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                        | Execution cells, tool gateway, credential broker, approvals         |
-| Artifacts and Evidence           | Planned        | Result text only                                                           | Immutable Artifact versions, evidence, source and child lineage     |
-| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes                                       | SSE, Web console, Lark adapter                                      |
-| Schedules, Triggers and Delivery | Planned        | None                                                                       | Idempotent admission, controlled schedules/events, durable delivery |
+| Feature area                     | Current status | Baseline evidence                                                                                           | V1 destination                                                           |
+| -------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Identity and Access              | Baseline       | Service-account bearer auth and server-derived owner scope                                                  | Tenant, canonical user, OIDC/Lark, ACL, richer service accounts          |
+| Agents and Teams                 | Baseline       | Durable Agent/Team versions and sequential-only compiled Team plans                                         | Immutable Agent/Team versions and bounded graphs                         |
+| Workspace and Memory             | Baseline       | One isolated Paseo Workspace is reused; owner-scoped memory proposals can be reviewed into accepted entries | Product Workspace, snapshots, retrieval, context assembly, memory policy |
+| Sessions, Tasks and Runs         | Baseline       | PostgreSQL-backed Task admission, Task tree reads, Run polling, dispatcher                                  | Product Session, cancel/retry, reconcile, recovery                       |
+| Runtime, Tools and Credentials   | Baseline       | Paseo/OpenCode adapter and zero-key model selection                                                         | Execution cells, tool gateway, credential broker, approvals              |
+| Artifacts and Evidence           | Planned        | Result text only                                                                                            | Immutable Artifact versions, evidence, source and child lineage          |
+| Channels, API and Console        | Baseline       | Authenticated Run + Task HTTP routes                                                                        | SSE, Web console, Lark adapter                                           |
+| Schedules, Triggers and Delivery | Planned        | None                                                                                                        | Idempotent admission, controlled schedules/events, durable delivery      |
 
 ## Identity and Access
 
@@ -31,9 +31,11 @@ This is the authoritative capability ledger. Status values are `implemented`, `b
 
 ## Workspace and Memory
 
-**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git.
+**Baseline:** the adapter opens one dedicated filesystem directory, assigns an explicit title, and reuses its Paseo Workspace ID. The smoke workspace is isolated and ignored by Git. This phase also adds workspace-memory governance routes for authenticated service-account owner scopes: callers can create proposals with optional Task/session provenance, list proposals, review pending proposals as `accept`, `edit_and_accept`, or `reject`, and list accepted entries.
 
-**V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
+This baseline intentionally stops at governance and provenance. It does not add agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation. Accepted entries are durable records, not content that leaf agents read automatically.
+
+**V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 
 ## Sessions, Tasks and Runs
 

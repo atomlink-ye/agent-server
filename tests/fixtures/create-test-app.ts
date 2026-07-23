@@ -92,6 +92,9 @@ export interface CreateTestAppOptions {
   readonly projectionFailures?: number;
   readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
   readonly databaseControl?: { database?: PGlite };
+  readonly sessionRepositoryControl?: {
+    repository?: PostgresSessionRepository;
+  };
 }
 
 export async function createTestApp(
@@ -130,6 +133,8 @@ export async function createTestApp(
   }
   const agentRegistry = new PostgresAgentRegistry(database);
   const sessions = new PostgresSessionRepository(database);
+  if (options.sessionRepositoryControl)
+    options.sessionRepositoryControl.repository = sessions;
   const events = new PostgresRunEventRepository(database);
 
   const runRepository = new PostgresRunRepository(database);

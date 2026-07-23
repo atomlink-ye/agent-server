@@ -46,7 +46,10 @@ describe('managed single-agent memory recall', () => {
       responseText: 'FRESH_SESSION_OK',
       delayMs: 500,
       memoryCandidates: [
-        { content: 'CANARY_CONSTRAINT_UNIQUE_7F31', category: 'constraint' },
+        {
+          content: 'CANARY_CONSTRAINT_UNIQUE_7F31',
+          category: 'project_constraint',
+        },
       ],
     });
     const app = await createTestApp(runtime, {
@@ -372,12 +375,28 @@ describe('managed single-agent memory recall', () => {
         proposal_id: string;
         content: string;
         source_task_id: string | null;
+        source_session_id: string | null;
+        source_message_id: string | null;
+        source_run_id: string | null;
+        source_agent_version_id: string | null;
+        source_candidate_index: number | null;
       }>;
     };
     const candidate = proposals.proposals.find(
       (proposal) => proposal.content === 'CANARY_CONSTRAINT_UNIQUE_7F31',
     );
-    expect(candidate).toMatchObject({ source_task_id: messageBody.task_id });
+    expect(candidate).toBeDefined();
+    if (!candidate)
+      throw new Error('runtime candidate proposal was not persisted');
+    expect(candidate).toMatchObject({
+      source_task_id: messageBody.task_id,
+      source_session_id: sessionId,
+      source_message_id: expect.any(String),
+      source_run_id: messageBody.run_id,
+      source_agent_version_id: importedBody.version.id,
+      source_candidate_index: 0,
+      status: 'pending',
+    });
     const sourceTask = (await (
       await fetch(`${baseUrl}/api/v1/tasks/${messageBody.task_id}`, {
         headers: auth,
@@ -390,12 +409,20 @@ describe('managed single-agent memory recall', () => {
       })
     ).json()) as {
       messages: Array<{
+        id?: string;
         taskId?: string;
         task_id?: string;
         runId?: string;
+        messageId?: string;
+        message_id?: string;
         run_id?: string;
       }>;
     };
+    const sourceMessage = sourceMessages.messages.find(
+      (item) =>
+        (item.taskId ?? item.task_id) === messageBody.task_id &&
+        (item.runId ?? item.run_id) === messageBody.run_id,
+    );
     expect(
       sourceMessages.messages.some(
         (item) =>
@@ -403,6 +430,11 @@ describe('managed single-agent memory recall', () => {
           (item.runId ?? item.run_id) === messageBody.run_id,
       ),
     ).toBe(true);
+    expect(candidate.source_message_id).toBe(
+      sourceMessage?.id ??
+        sourceMessage?.messageId ??
+        sourceMessage?.message_id,
+    );
     const eventPage = (await (
       await fetch(
         `${baseUrl}/api/v1/runs/${messageBody.run_id}/events?after=0`,

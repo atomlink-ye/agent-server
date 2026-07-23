@@ -64,6 +64,10 @@ describe('Phase C session lanes on PostgreSQL', () => {
         crypto.randomUUID(),
         owner,
       );
+      const reloadedFirst = await new PostgresTaskRepository(pool).findById(
+        first.taskId,
+      );
+      expect(reloadedFirst?.sourceMessageId).toBe(first.id);
       const followUps = await Promise.all(
         ['second', 'third', 'fourth'].map((text) =>
           repository.postMessage(session.id, text, crypto.randomUUID(), owner),

@@ -679,6 +679,94 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
       Date.parse(row.rows[0]!.created_at),
     );
   });
+
+  it('publishes stale managed entities on database time without changing content snapshots', async () => {
+    const db = await database();
+    const registry = new PostgresAgentRegistry(db);
+    const parsed = parseManagedAgentPackage(source);
+    const stale = () => new Date('2000-01-01T00:00:00.000Z');
+    const definition = createManagedAgentDefinition({
+      ...owner,
+      normalizedName: 'stale-publish-agent',
+      displayName: 'Stale Publish Agent',
+      id: '00000000-0000-4000-8000-0000000c0003',
+      now: stale,
+    });
+    const version = createManagedAgentDraft({
+      definition,
+      parsed,
+      id: '00000000-0000-4000-8000-0000000c0103',
+      now: stale,
+    });
+    await registry.importAgent({
+      owner,
+      compatibilityWorkspaceId: 'workspace-stale-publish',
+      idempotencyKey: 'stale-publish-import',
+      requestFingerprint: 'stale-publish-import-fp',
+      normalizedName: 'stale-publish-agent',
+      definition,
+      version,
+    });
+    const before = await registry.findVersion(owner, version.id);
+    expect(before?.status).toBe('draft');
+    const published = await registry.publishAgentVersion({
+      owner,
+      idempotencyKey: 'stale-publish',
+      requestFingerprint: 'stale-publish-fp',
+      versionId: version.id,
+    });
+    expect(published.status).toBe('published');
+    expect(Date.parse(published.publishedAt!)).toBeGreaterThan(
+      Date.parse(version.createdAt),
+    );
+    expect(Date.parse(published.updatedAt)).toBeGreaterThanOrEqual(
+      Date.parse(published.publishedAt!),
+    );
+    const after = await registry.findVersion(owner, version.id);
+    expect(after).toMatchObject({
+      id: version.id,
+      createdAt: version.createdAt,
+      package: version.package,
+      canonicalJson: version.canonicalJson,
+      fingerprint: version.fingerprint,
+      compiler: version.compiler,
+      policySnapshot: version.policySnapshot,
+      referenceSnapshot: version.referenceSnapshot,
+      validationSnapshot: version.validationSnapshot,
+    });
+    expect(after?.status).toBe('published');
+    expect(after?.publishedAt).toBe(published.publishedAt);
+    expect(after?.updatedAt).toBe(published.updatedAt);
+    expect(await registry.findDefinition(owner, definition.id)).toEqual(
+      definition,
+    );
+    const idempotency = await db.query<{
+      created_at: string;
+      updated_at: string;
+    }>(
+      `SELECT created_at::text, updated_at::text FROM agent_registry_idempotency
+        WHERE tenant_id=$1 AND idempotency_key IN ('stale-publish-import','stale-publish')
+        ORDER BY idempotency_key`,
+      [owner.tenantId],
+    );
+    expect(idempotency.rows).toHaveLength(2);
+    for (const row of idempotency.rows) {
+      expect(Date.parse(row.created_at)).toBeGreaterThan(
+        Date.parse('2000-01-01T00:00:00.000Z'),
+      );
+      expect(Date.parse(row.updated_at)).toBeGreaterThanOrEqual(
+        Date.parse(row.created_at),
+      );
+    }
+    expect(
+      await registry.publishAgentVersion({
+        owner,
+        idempotencyKey: 'stale-publish',
+        requestFingerprint: 'stale-publish-fp',
+        versionId: version.id,
+      }),
+    ).toEqual(published);
+  });
 });
 
 const describeRealPostgres = connectionString ? describe : describe.skip;
@@ -831,6 +919,114 @@ describeRealPostgres(
       expect(Date.parse(row.rows[0]!.updated_at)).toBeGreaterThanOrEqual(
         Date.parse(row.rows[0]!.created_at),
       );
+    });
+
+    it('publishes stale managed entities on database time and keeps immutable snapshots', async () => {
+      if (!pool) return;
+      const tenant = 'real_registry_stale_publish';
+      await reset(tenant);
+      const registry = new PostgresAgentRegistry(pool);
+      const command = commandFor(
+        tenant,
+        'principal',
+        '00000000-0000-4000-8000-0000000d00e1',
+        '00000000-0000-4000-8000-0000000d01e1',
+        'stale-publish-import',
+        'stale-publish-import-fp',
+      );
+      const staleDefinition = createManagedAgentDefinition({
+        ...command.owner,
+        normalizedName: command.normalizedName,
+        displayName: command.definition.displayName,
+        id: command.definition.id,
+        now: () => new Date('2000-01-01T00:00:00.000Z'),
+      });
+      const staleVersion = createManagedAgentDraft({
+        definition: staleDefinition,
+        parsed: parseManagedAgentPackage(source),
+        id: command.version.id,
+        now: () => new Date('2000-01-01T00:00:00.000Z'),
+      });
+      await registry.importAgent({
+        ...command,
+        definition: staleDefinition,
+        version: staleVersion,
+      });
+      const before = await pool.query<Record<string, unknown>>(
+        `SELECT created_at, status, canonical_package, fingerprint, pattern_metadata,
+                compiler_metadata, policy_snapshot, reference_snapshot, tool_skill_snapshot,
+                validation_report, compiled_package, execution_snapshot, published_at, updated_at
+           FROM agent_versions WHERE id=$1`,
+        [staleVersion.id],
+      );
+      expect(before.rows[0]?.status).toBe('draft');
+      const definitionBefore = await registry.findDefinition(
+        command.owner,
+        staleDefinition.id,
+      );
+      const published = await registry.publishAgentVersion({
+        owner: command.owner,
+        idempotencyKey: 'stale-publish',
+        requestFingerprint: 'stale-publish-fp',
+        versionId: staleVersion.id,
+      });
+      expect(published.status).toBe('published');
+      expect(Date.parse(published.publishedAt!)).toBeGreaterThan(
+        Date.parse(staleVersion.createdAt),
+      );
+      expect(Date.parse(published.updatedAt)).toBeGreaterThanOrEqual(
+        Date.parse(published.publishedAt!),
+      );
+      const after = await pool.query<Record<string, unknown>>(
+        `SELECT created_at, status, canonical_package, fingerprint, pattern_metadata,
+                compiler_metadata, policy_snapshot, reference_snapshot, tool_skill_snapshot,
+                validation_report, compiled_package, execution_snapshot, published_at, updated_at
+           FROM agent_versions WHERE id=$1`,
+        [staleVersion.id],
+      );
+      expect(after.rows[0]).toMatchObject({
+        created_at: before.rows[0]!.created_at,
+        canonical_package: before.rows[0]!.canonical_package,
+        fingerprint: before.rows[0]!.fingerprint,
+        pattern_metadata: before.rows[0]!.pattern_metadata,
+        compiler_metadata: before.rows[0]!.compiler_metadata,
+        policy_snapshot: before.rows[0]!.policy_snapshot,
+        reference_snapshot: before.rows[0]!.reference_snapshot,
+        tool_skill_snapshot: before.rows[0]!.tool_skill_snapshot,
+        validation_report: before.rows[0]!.validation_report,
+        compiled_package: before.rows[0]!.compiled_package,
+        execution_snapshot: before.rows[0]!.execution_snapshot,
+        status: 'published',
+      });
+      expect(definitionBefore).toEqual(
+        await registry.findDefinition(command.owner, staleDefinition.id),
+      );
+      const idempotency = await pool.query<{
+        created_at: string;
+        updated_at: string;
+      }>(
+        `SELECT created_at::text, updated_at::text FROM agent_registry_idempotency
+          WHERE tenant_id=$1 AND idempotency_key IN ('stale-publish-import','stale-publish')
+          ORDER BY idempotency_key`,
+        [tenant],
+      );
+      expect(idempotency.rows).toHaveLength(2);
+      for (const row of idempotency.rows) {
+        expect(Date.parse(row.created_at)).toBeGreaterThan(
+          Date.parse('2000-01-01T00:00:00.000Z'),
+        );
+        expect(Date.parse(row.updated_at)).toBeGreaterThanOrEqual(
+          Date.parse(row.created_at),
+        );
+      }
+      expect(
+        await registry.publishAgentVersion({
+          owner: command.owner,
+          idempotencyKey: 'stale-publish',
+          requestFingerprint: 'stale-publish-fp',
+          versionId: staleVersion.id,
+        }),
+      ).toEqual(published);
     });
 
     it('converges concurrent different-key equal-canonical imports to one definition and version', async () => {

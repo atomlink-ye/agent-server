@@ -15,7 +15,7 @@ The current walking skeleton contains:
 - an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary;
 - the unchanged public `/api/v1/runs` compatibility surface.
 
-Admission first creates or replays through a transaction-scoped repository. The real PostgreSQL 16 `pg.Pool` lane uses two connections and a forced same-key race to prove committed visibility, replay, owner isolation, and unique-key convergence. This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
+Admission first creates or replays through a transaction-scoped repository. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 plus a separate reader pool with max 2, and a forced same-key race to prove committed visibility, replay, owner isolation, and unique-key convergence. This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
 
 When runtime work succeeds but terminal persistence fails, the kernel preserves the distinction with `RunCompletionPersistenceError` and a safe `RuntimeExecutionReceipt`; it does not relabel the outcome as `runtime_execution_failed`. Receipt durability and reconciliation are intentionally deferred to Phase D migration 0007 and Phase H recovery.
 

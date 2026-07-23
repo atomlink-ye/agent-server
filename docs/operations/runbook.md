@@ -37,10 +37,10 @@ Stop the isolated processes, preserve a sanitized path/timestamp, revoke any rea
 
 ## CI and external verification
 
-`make ci` is the deterministic Node 24 gate and does not require an external model or database service. The explicit PostgreSQL 16 required lane runs separately with a real `pg.Pool`; a missing database URL is a failure in that lane, not a substitute with an embedded database. External free-model/provider availability is non-deterministic and is verified only by the authenticated smoke.
+`make ci` is the deterministic Node 24 gate and does not require an external model or database service. The explicit PostgreSQL 16 required lane runs separately with a real `pg.Pool`; a missing database URL is a failure in that lane, not a substitute with an embedded database. The admission pool is max 2 and the separate reader pool is max 2. External free-model/provider availability is non-deterministic and is verified only by the authenticated smoke.
 
 The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
 
 ## Recovery boundary
 
-The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, retain the typed `RunCompletionPersistenceError` and safe receipt for the owning recovery path; do not relabel it as `runtime_execution_failed` or claim that it has been reconciled. Durable receipt storage belongs to Phase D migration 0007, with broader recovery in Phase H. Multi-node workers/reconcilers are not a Phase A goal.
+The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, the typed `RunCompletionPersistenceError` produces only an ephemeral receipt and sanitized structured log; the Run may remain `running` until later recovery. Stop automated retry for the affected work, preserve only sanitized logs and relevant IDs, and escalate to the owning orchestration operator. Do not claim receipt retrieval, reconciliation, or `runtime_execution_failed`. Durable receipt storage belongs to Phase D migration 0007, with broader recovery in Phase H. Multi-node workers/reconcilers are not a Phase A goal.

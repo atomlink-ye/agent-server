@@ -18,9 +18,9 @@ interface AgentRuntimePort {
 }
 ```
 
-The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, or execution failure. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` carrying only a safe `RuntimeExecutionReceipt`; it is distinct from runtime execution failure.
+The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, or execution failure. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` with an ephemeral safe `RuntimeExecutionReceipt` emitted only through sanitized structured logging; it is distinct from runtime execution failure. No durable receipt or reconciliation exists in this baseline.
 
-The current adapter caches the selected Workspace and free model across reconnects. Initialization and close are guarded by attempt generation and connection ownership, so stale initialize/close work cannot replace or close a newer connection. Health exposes only safe readiness details.
+The current adapter caches the selected Workspace and free model across reconnects. Attempt generation and connection ownership protect stale initialize/reconnect work from replacing a newer connection. The tests do not establish that a pending `close()` is safe against a newer initialization; close ownership remains a follow-up. Health exposes only safe readiness details.
 
 ## V1 leaf-runtime port
 

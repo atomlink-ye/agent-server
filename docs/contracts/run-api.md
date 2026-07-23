@@ -27,7 +27,7 @@ HTTP/1.1 202 Accepted
 }
 ```
 
-Admission first creates or replays through the transaction-scoped PostgreSQL repository. If the same `Idempotency-Key` is replayed by the same authenticated owner scope with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same owner scope and key with a different body returns `409 idempotency_conflict`. The same key used by a different authenticated owner scope is independent work, not a conflict. The real PostgreSQL 16 `pg.Pool` lane (maximum two connections) proves committed visibility, replay, owner isolation, and the forced same-key unique race.
+Admission first creates or replays through the transaction-scoped PostgreSQL repository. If the same `Idempotency-Key` is replayed by the same authenticated owner scope with the same body after acceptance, the route returns `202` with the original `run_id`, even if runtime readiness later turns false. The same owner scope and key with a different body returns `409 idempotency_conflict`. The same key used by a different authenticated owner scope is independent work, not a conflict. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 and a separate reader pool with max 2; it proves committed visibility, replay, owner isolation, and the forced same-key unique race.
 
 ## Get
 
@@ -54,7 +54,7 @@ Authorization: Bearer configured-token
 
 Status is `queued|running|succeeded|failed|timed_out`. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
 
-If runtime execution succeeds but terminal persistence fails, the application raises the typed `RunCompletionPersistenceError` and preserves a safe `RuntimeExecutionReceipt`. This is not reported as `runtime_execution_failed`; the receipt is a reconciliation handoff. Durable receipt storage and a reconciler are deferred to the Phase D migration 0007 and the Phase H recovery work.
+If runtime execution succeeds but terminal persistence fails, the application raises the typed `RunCompletionPersistenceError` and creates a safe `RuntimeExecutionReceipt` only in memory. The dispatcher catches the exception and emits a sanitized structured log; there is no durable receipt, operator retrieval, or reconciliation, and the Run may remain `running` until later recovery. This is not reported as `runtime_execution_failed`. Durable receipt storage and a reconciler are deferred to the Phase D migration 0007 and the Phase H recovery work.
 
 ## Errors
 

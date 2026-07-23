@@ -18,7 +18,7 @@ The adapter is the only place where control-plane code knows Paseo SDK and OpenC
 
 ## Initialization
 
-The adapter connects once, opens a configured filesystem directory, assigns an explicit Workspace title, reads the live OpenCode model catalog, and caches one selected model. Reconnect reuses the cached Workspace and model. Concurrent calls share initialization state; attempt generation and connection ownership prevent a stale initialize or close from replacing or closing a newer connection. A failed initialization can be retried; readiness exposes only safe WebSocket, Workspace, and model checks.
+The adapter connects once, opens a configured filesystem directory, assigns an explicit Workspace title, reads the live OpenCode model catalog, and caches one selected model. Reconnect reuses the cached Workspace and model. Concurrent calls share initialization state; attempt generation and connection ownership prevent stale initialize/reconnect work from replacing a newer connection. The tests do not establish that a pending `close()` is safe against a newer initialization; close ownership remains a follow-up. A failed initialization can be retried; readiness exposes only safe WebSocket, Workspace, and model checks.
 
 Automatic selection prefers known free model IDs and may fall back only to another catalog entry explicitly marked free in its ID, label, or description. `PASEO_MODEL` is an operator override and must exist in the catalog. HTTP callers cannot set it.
 

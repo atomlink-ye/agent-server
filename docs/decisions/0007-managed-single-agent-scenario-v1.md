@@ -1,6 +1,6 @@
 # ADR 0007: Managed Single-Agent Scenario V1 narrow release boundary
 
-Status: **DRAFT — pending H-6 final review**
+Status: **APPROVED for minimum scenario; production hardening deferred**
 
 ## Decision
 
@@ -35,9 +35,9 @@ model-based gardening, auto-safe rollout, UI, or distributed operations.
 
 ## Evidence and release status
 
-The draft evidence packet records fresh Node24 deterministic, PostgreSQL16,
+The evidence packet records fresh Node24 deterministic, PostgreSQL16,
 separate real-ephemeral-socket E2E, Paseo/OpenCode, evaluation, and dry-run
 inspection results. The in-process transcript contract is not socket evidence.
 Final
-release status remains **PENDING** until H-6 blocker-only Oracle review and
-archive steps are complete.
+release status is **APPROVED for the minimum scenario evidence boundary**;
+production hardening and rollout readiness remain deferred.

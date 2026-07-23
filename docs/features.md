@@ -44,10 +44,9 @@ allowlist (`terminology`, `output_preference`, `project_constraint`,
 sources. Decisions expose only safe reason-code traces. The gardener is
 proposal-only; the existing manual proposal/review HTTP path is unchanged.
 
-Phase H release evidence is currently a draft: the minimum managed
-single-agent transcript, fault lane, recovery inspection, and operations packet
-are recorded, while final review/archive and production readiness remain
-pending.
+Phase H minimum release evidence is approved: the managed single-agent
+transcript, fault lane, recovery inspection, and operations packet are recorded.
+Production hardening and rollout readiness remain deferred.
 
 **V1 acceptance:** Product Workspace owns members, source snapshots, context, files, artifacts, accepted memory, retrieval policy, and memory proposals. Leaf runs write only to their scoped scratch/candidate paths. Memory changes are proposals with source and authority, not silent prompt mutation.
 

@@ -1,6 +1,6 @@
-# Managed Single-Agent V1 Draft Runbook
+# Managed Single-Agent V1 Runbook
 
-Status: **DRAFT — pending H-6 blocker-only Oracle and archive**
+Status: **FINAL MINIMUM-SCENARIO RUNBOOK — production hardening deferred**
 
 This runbook describes the narrow A–H managed single-agent evidence boundary.
 It is not a production-readiness approval. Public responses and evidence must
@@ -72,8 +72,8 @@ the owning orchestration/data operator.
 
 ## Limitations
 
-This draft does not claim production fsync, crash recovery, receipt
+This runbook does not claim production fsync, crash recovery, receipt
 reconciliation, backup/restore, multi-node locking, object storage/KMS,
 sandboxing, advanced context assembly, model-based gardening, auto-safe
-enablement, or rollout readiness. H-6 remains pending final blocker-only review
-and archive decision.
+enablement, or rollout readiness. The minimum scenario is approved; deferred
+hardening remains in the Follow-up Ledger.

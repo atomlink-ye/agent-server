@@ -26,28 +26,28 @@ flowchart TD
 
 ## Baseline status
 
-| Capability                                     | Current state                          |
-| ---------------------------------------------- | -------------------------------------- |
-| HTTP liveness/readiness                        | Implemented                            |
-| Asynchronous Run API                           | Implemented                            |
-| Authenticated service-account Run ingress      | Implemented                            |
-| Canonical Task invoke/read/tree API            | Implemented                            |
-| Owner-scoped Run reads                         | Implemented                            |
-| PostgreSQL-backed Task/Run admission           | Implemented                            |
-| Durable Agent/Team definitions and versions    | Implemented                            |
-| Sequential Team graph compilation              | Implemented; sequential-only subset    |
-| Sequential Team child Task/Run execution       | Implemented; inline control-plane path |
-| Owner-scoped idempotent replay                 | Implemented                            |
-| In-process durable dispatcher/claim/fence      | Implemented; single process            |
-| Paseo WebSocket adapter                        | Implemented                            |
-| OpenCode free-model discovery                  | Implemented                            |
-| Explicit reusable Paseo Workspace              | Implemented                            |
-| Workspace memory proposals/review/entries      | Implemented; governance-only baseline  |
-| Deterministic CI                               | Implemented; no model network calls    |
-| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled |
-| Managed Single-Agent V1 evidence               | Draft; H-6 final review pending        |
-| OIDC users, shared ACLs, credentials, approval | Planned V1                             |
-| Artifacts, evidence, Lark, Web console         | Planned V1                             |
+| Capability                                     | Current state                                 |
+| ---------------------------------------------- | --------------------------------------------- |
+| HTTP liveness/readiness                        | Implemented                                   |
+| Asynchronous Run API                           | Implemented                                   |
+| Authenticated service-account Run ingress      | Implemented                                   |
+| Canonical Task invoke/read/tree API            | Implemented                                   |
+| Owner-scoped Run reads                         | Implemented                                   |
+| PostgreSQL-backed Task/Run admission           | Implemented                                   |
+| Durable Agent/Team definitions and versions    | Implemented                                   |
+| Sequential Team graph compilation              | Implemented; sequential-only subset           |
+| Sequential Team child Task/Run execution       | Implemented; inline control-plane path        |
+| Owner-scoped idempotent replay                 | Implemented                                   |
+| In-process durable dispatcher/claim/fence      | Implemented; single process                   |
+| Paseo WebSocket adapter                        | Implemented                                   |
+| OpenCode free-model discovery                  | Implemented                                   |
+| Explicit reusable Paseo Workspace              | Implemented                                   |
+| Workspace memory proposals/review/entries      | Implemented; governance-only baseline         |
+| Deterministic CI                               | Implemented; no model network calls           |
+| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled        |
+| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred |
+| OIDC users, shared ACLs, credentials, approval | Planned V1                                    |
+| Artifacts, evidence, Lark, Web console         | Planned V1                                    |
 
 ## Quick start
 
@@ -126,7 +126,7 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
-- [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): draft command and fault evidence; final status pending.
+- [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): approved minimum-scenario evidence; production hardening deferred.
 - [Decisions](docs/decisions.md): accepted architectural decisions.
 - [Agent handbook](docs/agents.md): mandatory workflow for coding agents.
 - [Exec Plans](docs/exec-plans.md): active-to-completed work protocol.

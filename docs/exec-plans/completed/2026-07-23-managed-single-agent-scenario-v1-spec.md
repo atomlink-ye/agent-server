@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: platform-engineering
 created_at: 2026-07-23
 updated_at: 2026-07-23
@@ -12,8 +12,9 @@ source_revision: 3e5e61d4af9798e83bee2160725f40ac9d39cb96
 # Managed Single-Agent Scenario V1
 
 This document is the approved repository-native design specification for the
-Managed Single-Agent Scenario V1. It is a design reference, not the Active Exec
-Plan and does not claim that the described capability is implemented.
+Managed Single-Agent Scenario V1. The minimum scenario described here is
+implemented and evidenced; this document does not claim production readiness or
+unrelated repository-wide completion.
 
 ## 1. Outcome and release boundary
 
@@ -393,8 +394,9 @@ cancellation, and service restart.
 Deliver runbook and forward-recovery procedures, rollback controls, known
 limitations, follow-up ledger, migration list, test transcript, real
 PostgreSQL evidence, Paseo smoke evidence, fault evidence, memory evaluation,
-and reviewer decision. H is complete only when this roadmap/spec DoD is
-evidenced; it does not claim unrelated repository-wide milestones or products.
+and reviewer decision. H is complete for this minimum scenario because the
+roadmap/spec DoD is evidenced; it does not claim unrelated repository-wide
+milestones or products.
 
 ## 6. Core object and data model
 

@@ -1,12 +1,12 @@
 ---
-status: active
+status: completed
 owner: platform-engineering
 created_at: 2026-07-23
 updated_at: 2026-07-23
 authority: execution-plan
 ---
 
-# Managed Single-Agent Scenario V1 — Active Exec Plan
+# Managed Single-Agent Scenario V1 — Completed Exec Plan
 
 > API/SSE-only delivery for the approved spec. Execute P0, then A through H. Every
 > item has a stable label, keeps checkbox syntax, and ends in a phase gate commit
@@ -24,7 +24,7 @@ embedding/RAG, global memory, schedule/trigger, multi-node worker, Redis/event
 bus/object storage, or direct runtime write to formal memory.
 
 Authority is the explicit approved decision, then
-`docs/exec-plans/active/2026-07-23-managed-single-agent-scenario-v1-spec.md`,
+`docs/exec-plans/completed/2026-07-23-managed-single-agent-scenario-v1-spec.md`,
 then repository contracts/components/operations docs, then code and tests as
 evidence. Baseline commit is `3e5e61d`; Paseo is `0.1.110`; authentication is
 the existing service-account bearer contract.
@@ -182,15 +182,15 @@ enablement or model-based gardening claim is made.
 
 - [x] **H-1 (RED):** Focused H fault evidence is 3/3 passed, covering the minimum deterministic failure and fail-closed boundary. This is not exhaustive crash or receipt recovery.
 - [x] **H-2 (interface/recovery):** Recorded bounded dry-run recovery inspection without mutation: mode DRY_RUN, 46 nonterminal runs, 81 queued dispatches, 0 pending memory projections, 4 failed memory projections, 0 snapshots lacking ready projection, and runtime receipt reconciliation unavailable.
-- [x] **H-3 (migration/recovery/docs):** Added the draft managed single-agent runbook, ADR, evidence packet, rollback/limitations/escalation boundary, and migration list without secrets, paths, prompts, or raw provider errors.
+- [x] **H-3 (migration/recovery/docs):** Added the managed single-agent runbook, ADR, evidence packet, rollback/limitations/escalation boundary, and migration list without secrets, paths, prompts, or raw provider errors.
 - [x] **H-4 (route/application wiring/GREEN):** Fresh evidence records transcript 1/1, `make ci` (unit 133, contract 68, deterministic integration 75 with 16 expected real-PG skips, E2E 2, checks/build green), PostgreSQL16 `make test-real-pg` 59/59, `make e2e-smoke` 2/2, `make paseo-smoke` succeeded with the exact marker, and `make eval-smoke` 13 cases with all four zero-tolerance counters at 0.
-- [x] **H-5 (docs/evidence):** Updated README, features, components, contracts, quality, operations, ADR, evidence packet, and ledger for truthful current status. Draft release status remains PENDING; no production readiness claim is made.
-- [ ] **H-6 (final gate/cleanup):** Review full fault matrix, final real-PG lane, Paseo canary, Node24 gate, docs, and Evidence Packet; make explicit recovery, behavior, and docs/gate commits and final release commit/review. At H completion set both spec and plan `status: completed`, move both to `docs/exec-plans/completed/`, update links, run `pnpm check:exec-plans` and `pnpm check:docs`, and ensure no unchecked boxes remain.
+- [x] **H-5 (docs/evidence):** Updated README, features, components, contracts, quality, operations, ADR, evidence packet, and ledger for truthful current status. Minimum-scenario evidence is approved; no production readiness claim is made.
+- [x] **H-6 (final gate/cleanup):** Final blocker-only Oracle approved the corrected transcript provenance/cancellation evidence. The final evidence packet, runbook, ADR, rollback boundary, migration list, and checks are recorded; the plan/spec are completed and moved to `docs/exec-plans/completed/`. H-ARCHIVE records the archive closeout. This remains a minimum scenario evidence package, not production readiness.
 
-**H draft closeout:** Evidence IDs are `H-FAULTS`, `H-RECOVERY`,
-`H-TRANSCRIPT`, `H-OPS`, and `H-PACKET`. H-6 remains unchecked pending the
-final blocker-only Oracle, release decision, and archive; the Active Plan and
-spec remain active.
+**H final closeout:** Evidence IDs are `H-FAULTS`, `H-RECOVERY`,
+`H-TRANSCRIPT`, `H-OPS`, `H-PACKET`, and `H-ARCHIVE`. Final blocker-only Oracle
+status is APPROVED. The minimum scenario is complete; consolidated deferred
+hardening remains for post-E2E triage.
 
 ## Coverage matrix
 
@@ -291,21 +291,19 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
 
 ## Current blocker
 
-H-6 final review found transcript provenance and cancellation-evidence blockers
-that are currently being fixed. H-6 remains unchecked; the spec and plan stay
-active until the focused transcript contract test passes, blocker-only Oracle
-re-review completes, and archive is explicitly approved. Earlier phase gates
-remain recorded; no Phase D/Phase E next-phase wording applies here.
+None. The minimum managed single-agent scenario and H-6 archive closeout are
+complete. Consolidated post-E2E deferred hardening remains in the Follow-up
+Ledger.
 
 ## Next exact command
 
 ```bash
-pnpm exec vitest run --config vitest.contract.config.ts tests/contract/managed-single-agent-transcript.contract.test.ts
+Post-E2E deferred-hardening triage from `docs/operations/follow-up-ledger.md`.
 ```
 
 ## Completion checklist
 
 - [x] **DOD-1:** P0 commit and baseline evidence are recorded.
-- [ ] **DOD-2:** A–H gates, Oracle reviews, focused RED/GREEN evidence, and phase commits are recorded.
+- [x] **DOD-2:** A–H gates, Oracle reviews, focused RED/GREEN evidence, and phase commits are recorded.
 - [x] **DOD-3:** Every §4–§14 requirement has a labeled task and evidence ID.
-- [ ] **DOD-4:** Final spec and plan are completed/moved with updated links and no unchecked boxes.
+- [x] **DOD-4:** Final spec and plan are completed/moved with updated links and no unchecked boxes.

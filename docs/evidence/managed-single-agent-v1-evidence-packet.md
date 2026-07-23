@@ -1,14 +1,14 @@
 # Managed Single-Agent V1 Evidence Packet
 
-Status: **DRAFT / PENDING final reviewer status**
+Status: **FINAL MINIMUM-SCENARIO EVIDENCE / APPROVED**
 
 ## Scope and source
 
 - Source baseline: `3e5e61d`.
-- Current pre-documentation HEAD: `cfc630de79f09b867e75d3639e7e6b4acf0fa3bf`.
+- Current pre-archive HEAD: `ffdda20c81394c4bed915bc2d744423a0e3efe8f`.
 - Evidence runtime: Node 24.
 - Migration sequence: `0001` through `0008`, including `0005b`.
-- Final reviewer status: **PENDING**.
+- Final blocker-only Oracle reviewer status: **APPROVED**.
 
 This packet records milestone evidence, not production readiness. It contains
 no raw prompts, YAML, content, credentials, local filesystem paths, provider
@@ -34,17 +34,18 @@ raw logs and evidence paths are intentionally omitted.
 ### H-FAULTS
 
 Focused fault matrix: 3/3 passed. The lane covers the minimum bounded fault
-and fail-closed behavior required for this draft; it is not exhaustive crash
+and fail-closed behavior required for this scenario; it is not exhaustive crash
 recovery or receipt reconciliation evidence.
 
 ### H-TRANSCRIPT
 
-Managed single-agent transcript contract: 1/1 passed as an in-process
-authenticated Hono `app.request` contract test, including governed memory,
-Fresh Session pin/recall, and final assistant Message persistence. This is not
-real-socket evidence. Separate Vitest E2E tests provide the real ephemeral HTTP
-socket evidence; the packet records that lane separately as `make e2e-smoke`
-2/2.
+Managed single-agent transcript contract: focused Node24 1/1 passed as an
+in-process authenticated Hono `app.request` contract test. It verified a
+source-task-scoped unique recall marker, owned cancellation, governed memory,
+Fresh Session pin/recall, and final assistant Message persistence. The marker
+itself is intentionally not reproduced here. This is not real-socket evidence.
+Separate Vitest E2E tests provide the real ephemeral HTTP socket evidence; the
+packet records that lane separately as `make e2e-smoke` 2/2.
 
 ### H-RECOVERY
 
@@ -69,13 +70,21 @@ mutation.
 ### H-OPS
 
 Runbook, rollback, escalation, limitation, and no-secret/no-path boundaries
-are documented in the draft managed single-agent runbook. Rollback retains
+are documented in the managed single-agent runbook. Rollback retains
 additive data and does not rewrite immutable history.
 
 ### H-PACKET
 
-This packet, the draft ADR, and the Active Exec Plan record the evidence source,
-commands, limitations, and pending final review. The packet is not an approval.
+This packet, the ADR, and the completed Exec Plan record the evidence source,
+commands, limitations, and final reviewer decision. It approves only the
+minimum scenario evidence boundary.
+
+### H-ARCHIVE
+
+Final blocker-only Oracle review approved the corrected transcript provenance
+and cancellation evidence. The plan and spec are now completed documents,
+their internal links point to `docs/exec-plans/completed/`, and H-6 archive
+closeout is complete. Deferred hardening remains active in the ledger.
 
 ## Known limitations and deferred hardening
 
@@ -89,5 +98,5 @@ model-based gardening is not implemented.
 
 ## Release decision
 
-**PENDING.** H-6 blocker-only Oracle review, final release decision, and archive
-are still required. This draft must not be read as a production readiness claim.
+**APPROVED for the minimum scenario evidence package.** This is not a
+production readiness claim; post-E2E deferred-hardening triage remains required.

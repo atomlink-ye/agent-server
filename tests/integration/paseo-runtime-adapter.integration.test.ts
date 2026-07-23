@@ -122,6 +122,31 @@ describe('PaseoRuntimeAdapter', () => {
     ).toMatchObject({ ready: false });
   });
 
+  it('does not let a stale reconnect close a newer completed connection', async () => {
+    const client = new FakePaseoClient();
+    const adapter = createAdapter(client);
+    const staleReconnect = deferred<void>();
+    client.connectHook = async (call) => {
+      if (call === 2) await staleReconnect.promise;
+    };
+
+    await adapter.initialize();
+    client.status = 'disconnected';
+    const staleAttempt = adapter.initialize();
+    await vi.waitFor(() => expect(client.connectCalls).toBe(2));
+    await adapter.close();
+    await adapter.initialize();
+    expect(client.connectCalls).toBe(3);
+    expect((await adapter.health()).ready).toBe(true);
+
+    staleReconnect.resolve();
+    await staleAttempt;
+
+    expect(client.closeCalls).toBe(1);
+    expect(client.status).toBe('connected');
+    expect((await adapter.health()).ready).toBe(true);
+  });
+
   it('fails readiness when no explicitly free model exists', async () => {
     const client = new FakePaseoClient();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];

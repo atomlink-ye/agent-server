@@ -34,6 +34,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   #model: PaseoModelDescriptor | null = null;
   #lastError: string | null = null;
   #generation = 0;
+  #connectedGeneration: number | null = null;
 
   public constructor(
     options: PaseoRuntimeOptions,
@@ -135,9 +136,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   async #discardStaleConnection(generation: number): Promise<boolean> {
     if (this.#generation === generation) {
+      this.#connectedGeneration = generation;
       return false;
     }
-    if (this.#initialization === null) {
+    if (this.#initialization === null && this.#connectedGeneration === null) {
       await this.#client.close();
     }
     return true;
@@ -219,6 +221,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   public async close(): Promise<void> {
     this.#generation += 1;
+    this.#connectedGeneration = null;
     this.#workspaceId = null;
     this.#model = null;
     this.#initialization = null;

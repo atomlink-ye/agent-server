@@ -456,6 +456,91 @@ describe('ExecuteRun', () => {
     );
     expect(batch.mock.calls[0]?.[0]).toHaveLength(1);
   });
+
+  it('keeps proposal limits execution-local across concurrent managed and compatibility runs', async () => {
+    const lowTask = createTask('agent', 'managed-low', 'task-low');
+    const highTask = createTask('agent', 'managed-high', 'task-high');
+    const compatibilityTask = createTask(
+      'agent',
+      RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+      'task-compat',
+    );
+    const tasksById = new Map([
+      ['task-low', lowTask],
+      ['task-high', highTask],
+      ['task-compat', compatibilityTask],
+    ]);
+    const claims = [
+      createClaimWithIds('run-low', 'task-low'),
+      createClaimWithIds('run-high', 'task-high'),
+      createClaimWithIds('run-compat', 'task-compat'),
+    ];
+    const runtime = {
+      ...createRuntime(),
+      execute: vi.fn(async ({ runId }: { runId: string }) => {
+        await new Promise((resolve) =>
+          setTimeout(resolve, runId === 'run-low' ? 10 : 0),
+        );
+        return {
+          provider: 'test-provider',
+          model: 'test-model',
+          text: runId,
+          memoryCandidates: [
+            { category: 'project_constraint', content: 'one' },
+            { category: 'project_constraint', content: 'two' },
+            { category: 'project_constraint', content: 'three' },
+          ],
+        };
+      }),
+    } as AgentRuntimePort;
+    const batch = vi.fn(
+      async (inputs: readonly { content: string }[]) => inputs as never,
+    );
+    const resolver = new ResolveAgentVersion(
+      {
+        findVersion: vi.fn(async (_scope, id: string) => ({
+          id,
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'instructions',
+              memory: { proposalLimit: id === 'managed-low' ? 1 : 3 },
+            },
+          },
+        })) as never,
+      },
+      { findPublishedAgentVersionById: vi.fn(async () => null) },
+    );
+    const executeRun = new ExecuteRun(
+      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
+      {
+        findById: vi.fn(async (id: string) => tasksById.get(id) ?? null),
+        save: vi.fn(),
+      } as never,
+      {} as never,
+      {} as never,
+      runtime,
+      { log: vi.fn() },
+      () => new Date(),
+      resolver,
+      undefined,
+      undefined,
+      { executeBatch: batch } as never,
+    );
+
+    await Promise.all([
+      executeRun.execute(claims[0]!),
+      executeRun.execute(claims[1]!),
+    ]);
+    expect(runtime.execute).toHaveBeenCalledTimes(2);
+    expect(batch).toHaveBeenCalledTimes(2);
+    expect(batch.mock.calls.map(([inputs]) => inputs.length).sort()).toEqual([
+      1, 3,
+    ]);
+
+    await executeRun.execute(claims[2]!);
+    expect(batch).toHaveBeenCalledTimes(2);
+  });
 });
 
 function createExecuteRun(input: {
@@ -562,12 +647,34 @@ function createClaim(): ClaimedRun {
   };
 }
 
+function createClaimWithIds(runId: string, taskId: string): ClaimedRun {
+  const queuedRun = createRun('private prompt', {
+    id: runId,
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
+  return {
+    run: transitionRun(
+      queuedRun,
+      'running',
+      {},
+      () => new Date('2026-07-23T00:00:00.000Z'),
+    ),
+    taskId,
+    attempt: 1,
+    workerId: 'worker-1',
+    activationId: `activation-${runId}`,
+    fencingToken: 1,
+    leaseExpiresAt: '2026-07-23T01:00:00.000Z',
+  };
+}
+
 function createTask(
   invokableKind: 'agent' | 'team' = 'agent',
   invokableVersionId = RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+  id = 'task-1',
 ): Task {
   return createRootTask({
-    id: 'task-1',
+    id,
     tenantId: 'tenant-1',
     workspaceId: 'workspace-1',
     principalType: 'user',

@@ -13,6 +13,10 @@ const entry = {
   category: 'rule',
   sourceTaskId: '00000000-0000-4000-8000-000000000003',
   sourceSessionId: 's',
+  sourceMessageId: '00000000-0000-4000-8000-000000000004',
+  sourceRunId: '00000000-0000-4000-8000-000000000005',
+  sourceAgentVersionId: '00000000-0000-4000-8000-000000000006',
+  sourceCandidateIndex: 2,
   proposerSnapshot: {
     principalType: 'service_account',
     principalId: 'a',
@@ -44,6 +48,10 @@ describe('ManagedMemory', () => {
             accepted_at: entry.acceptedAt,
             source_task_id: entry.sourceTaskId,
             source_session_id: entry.sourceSessionId,
+            source_message_id: entry.sourceMessageId,
+            source_run_id: entry.sourceRunId,
+            source_agent_version_id: entry.sourceAgentVersionId,
+            source_candidate_index: entry.sourceCandidateIndex,
           });
         if (sql.includes('SELECT entry_id, proposal_id')) return { rows };
         return { rows: [] };
@@ -59,5 +67,16 @@ describe('ManagedMemory', () => {
     expect(snapshot.projectionStatus).toBe('ready');
     expect(published[0]?.memory).toContain('Use UTC.');
     expect(published[0]?.manifest).toContain(entry.id);
+    expect(published[0]?.manifest).toContain(entry.sourceRunId);
+    expect(snapshot.entries).toMatchObject([
+      {
+        entryId: entry.id,
+        proposalId: entry.proposalId,
+        sourceMessageId: entry.sourceMessageId,
+        sourceRunId: entry.sourceRunId,
+        sourceAgentVersionId: entry.sourceAgentVersionId,
+        sourceCandidateIndex: entry.sourceCandidateIndex,
+      },
+    ]);
   });
 });

@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
-import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import {
+  applyDurableKernelMigrations,
+  resolveDurableKernelMigrationFilePath,
+} from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
@@ -40,11 +43,21 @@ const waitFor = async (check: () => Promise<boolean>) => {
   throw new Error('timed out');
 };
 
+async function applyCurrentProvenanceMigration(pool: Pool): Promise<void> {
+  await applyDurableKernelMigrations(pool);
+  await pool.query(
+    `DELETE FROM durable_kernel_schema_migrations WHERE version = '0010_runtime_memory_provenance'`,
+  );
+  await applyDurableKernelMigrations(pool, [
+    resolveDurableKernelMigrationFilePath('0010_runtime_memory_provenance.sql'),
+  ]);
+}
+
 describe('managed single-agent minimum fault evidence', () => {
   it('restarts dispatcher discovery without duplicating execution', async () => {
     const pool = new Pool({ connectionString: url, max: 4 });
     try {
-      await applyDurableKernelMigrations(pool);
+      await applyCurrentProvenanceMigration(pool);
       const runs = new PostgresRunRepository(pool);
       const tasks = new PostgresTaskRepository(pool);
       const admissions = new PostgresAdmissionRepository(pool);
@@ -126,7 +139,7 @@ describe('managed single-agent minimum fault evidence', () => {
         projected.get(input.snapshotId)!,
     };
     try {
-      await applyDurableKernelMigrations(pool);
+      await applyCurrentProvenanceMigration(pool);
       const memory = new ManagedMemory(pool, store);
       const scope = {
         tenantId: `h_memory_${crypto.randomUUID()}`,

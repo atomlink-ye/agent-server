@@ -5,6 +5,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { WorkspaceMemoryRepository } from '../ports/workspace-memory-repository.js';
 import {
   CreateMemoryProposal,
+  InvalidMemoryProvenanceError,
   SourceTaskNotFoundError,
 } from './create-memory-proposal.js';
 
@@ -65,6 +66,29 @@ describe('CreateMemoryProposal', () => {
         accessContext,
       }),
     ).rejects.toBeInstanceOf(SourceTaskNotFoundError);
+  });
+
+  it('rejects every partial runtime provenance shape before persistence', async () => {
+    const service = new CreateMemoryProposal(
+      new FakeWorkspaceMemoryRepository(),
+      new FakeTaskRepository(),
+    );
+    const partials = [
+      { sourceRunId: 'run' },
+      { sourceTaskId: 'task', sourceRunId: 'run' },
+      { sourceRunId: 'run', sourceAgentVersionId: 'version' },
+      { sourceRunId: 'run', sourceCandidateIndex: 0 },
+    ];
+    for (const provenance of partials) {
+      await expect(
+        service.execute({
+          content: 'runtime memory',
+          category: 'project_constraint',
+          accessContext,
+          ...provenance,
+        }),
+      ).rejects.toBeInstanceOf(InvalidMemoryProvenanceError);
+    }
   });
 });
 

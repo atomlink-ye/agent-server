@@ -37,7 +37,7 @@ Stop the isolated processes, preserve a sanitized path/timestamp, revoke any rea
 
 ## CI and external verification
 
-`make ci` is the deterministic Node 24 gate and does not require an external model or database service. The explicit PostgreSQL 16 required lane runs separately with a real `pg.Pool`; a missing database URL is a failure in that lane, not a substitute with an embedded database. The admission pool is max 2 and the separate reader pool is max 2. External free-model/provider availability is non-deterministic and is verified only by the authenticated smoke.
+`make ci` is the deterministic Node 24 gate and does not require an external model or database service. The explicit PostgreSQL 16 required lane runs separately with a real `pg.Pool`; a missing database URL is a failure in that lane, not a substitute with an embedded database. Production assembles one default `pg.Pool` with its configured max of 10. The real-PG tests lease separate clients to prove connection visibility and concurrency; that test arrangement does not describe production pool partitioning. External free-model/provider availability is non-deterministic and is verified only by the authenticated smoke.
 
 The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
 
@@ -48,9 +48,10 @@ migration set in order; reruns must not rewrite published versions or reset
 idempotency state. If a migration stops part-way, preserve only the sanitized
 migration error and database identifier, verify the schema version, and rerun
 the normal migration command after the database issue is fixed. Do not manually
-delete rows or edit published data. Rollback means disabling managed routes and
-the managed-first resolver while retaining schema and data for forward recovery;
-there is no destructive down migration.
+delete rows or edit published data. Rollback means deploying the prior
+application revision while retaining the additive `0005` schema and data for
+forward recovery. There is no runtime route/resolver feature flag and no
+destructive down migration.
 
 The deterministic lane uses PGlite for fast single-process behavior. Independent
 required PostgreSQL 16 jobs use real `pg.Pool` connections for concurrency,

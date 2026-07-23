@@ -33,10 +33,11 @@ duplicates.
 `make e2e-smoke` binds Hono to a real ephemeral TCP port and follows `POST → poll → succeeded` through the real route, durable admission/dispatch path, and fake Runtime Port.
 
 HTTP contract security tests cover managed import/publish owner hiding,
-published-only canonical Task admission, explicit version pinning, legacy
-fallback compatibility, secondary-owner rejection, idempotency, safe errors,
-and absence of package/model/template fields from public responses and runtime
-input.
+published-only canonical Task admission, explicit version pinning,
+secondary-owner rejection, idempotency, safe errors, and absence of
+package/model/template fields from public responses. Managed runtime-input
+execution and legacy fallback/Team preservation are proven by focused
+application/unit evidence, not by HTTP contract tests.
 
 ### External Paseo/OpenCode smoke
 

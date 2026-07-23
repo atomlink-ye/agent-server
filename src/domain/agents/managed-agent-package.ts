@@ -68,9 +68,6 @@ export interface CompiledPrompt {
     { readonly field: string } | { readonly text: string }
   )[];
 }
-export interface ParseOptions {
-  readonly allowedModelPolicyRefs?: readonly string[];
-}
 export class ManagedAgentPackageError extends Error {
   constructor(
     readonly code: string,
@@ -97,7 +94,7 @@ const keys = (
   path: string,
 ) => {
   for (const k of Object.keys(x))
-    if (!allowed.includes(k)) fail('unknown_field', `${path}.${k}`);
+    if (!allowed.includes(k)) fail('unknown_field', `${path}.__unknown__`);
 };
 const nonEmpty = (x: unknown, path: string): string =>
   typeof x === 'string' && x.trim() ? x : fail('invalid_string', path);
@@ -139,11 +136,12 @@ function plain(node: unknown, path = '$'): any {
     )
       return n.items.map((v: any, i: number) => plain(v, `${path}[${i}]`));
     const out: Record<string, unknown> = {};
-    for (const pair of n.items as any[]) {
-      const key = plain(pair.key, path);
+    for (const [index, pair] of (n.items as any[]).entries()) {
+      const pairPath = `${path}[${index}]`;
+      const key = plain(pair.key, pairPath);
       if (typeof key !== 'string') fail('invalid_key', path);
-      if (key in out) fail('duplicate_key', `${path}.${key}`);
-      out[key] = plain(pair.value, `${path}.${key}`);
+      if (key in out) fail('duplicate_key', `${path}.__duplicate__`);
+      out[key] = plain(pair.value, pairPath);
     }
     return out;
   }
@@ -284,7 +282,6 @@ function scanSecrets(value: unknown, path = '$'): void {
 
 export function parseManagedAgentPackage(
   source: string,
-  options: ParseOptions = {},
 ): ParsedManagedAgentPackage {
   if (
     typeof source !== 'string' ||
@@ -340,10 +337,11 @@ export function parseManagedAgentPackage(
   if (!isObject(runtime)) fail('invalid_runtime', '$.spec.runtime');
   keys(runtime, ['provider', 'modelPolicyRef', 'mode'], '$.spec.runtime');
   if (runtime.provider !== 'paseo') fail('invalid_provider');
-  const allowed = options.allowedModelPolicyRefs ?? BUILT_IN_MODEL_POLICY_REFS;
   if (
     typeof runtime.modelPolicyRef !== 'string' ||
-    !allowed.includes(runtime.modelPolicyRef)
+    !BUILT_IN_MODEL_POLICY_REFS.includes(
+      runtime.modelPolicyRef as (typeof BUILT_IN_MODEL_POLICY_REFS)[number],
+    )
   )
     fail('model_policy_not_allowed', '$.spec.runtime.modelPolicyRef');
   if (!['isolated', 'shared'].includes(String(runtime.mode)))

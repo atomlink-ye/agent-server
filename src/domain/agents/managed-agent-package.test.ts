@@ -45,12 +45,9 @@ spec:
     command: "return result"
 ${extra}`;
 
-function errorCode(
-  source: string,
-  options?: Parameters<typeof parseManagedAgentPackage>[1],
-) {
+function errorCode(source: string) {
   try {
-    parseManagedAgentPackage(source, options);
+    parseManagedAgentPackage(source);
     throw new Error('expected rejection');
   } catch (error) {
     return error as { code?: string; path?: string };
@@ -125,7 +122,56 @@ describe('managed agent package', () => {
         yaml().replace(BUILT_IN_MODEL_POLICY_REFS[0], 'paid'),
       ),
     ).toThrow();
+    expect(() =>
+      parseManagedAgentPackage(
+        yaml().replace(BUILT_IN_MODEL_POLICY_REFS[0], 'gpt-5'),
+      ),
+    ).toThrow();
+    const parser = parseManagedAgentPackage as unknown as (
+      source: string,
+      options: { allowedModelPolicyRefs: string[] },
+    ) => unknown;
+    expect(() =>
+      parser(yaml().replace(BUILT_IN_MODEL_POLICY_REFS[0], 'gpt-5'), {
+        allowedModelPolicyRefs: ['gpt-5'],
+      }),
+    ).toThrow();
     expect(() => parseManagedAgentPackage(yaml('  model: gpt-5'))).toThrow();
+  });
+
+  it('does not expose unknown or duplicate attacker-controlled keys or values', () => {
+    const unknownKey = 'passwordToken';
+    const unknownValue = 'unknown-secret-value';
+    const duplicateKey = 'credentialToken';
+    const duplicateValue = 'duplicate-secret-value';
+    for (const source of [
+      yaml().replace(
+        '  description:',
+        `  ${unknownKey}: ${unknownValue}\n  description:`,
+      ),
+      yaml().replace(
+        '  description: Researches a topic',
+        `  ${duplicateKey}: first\n  ${duplicateKey}: ${duplicateValue}\n  description: Researches a topic`,
+      ),
+    ]) {
+      const error = errorCode(source);
+      expect(
+        JSON.stringify({
+          code: error.code,
+          path: error.path,
+          message: (error as Error).message,
+        }),
+      ).not.toContain(unknownKey);
+      expect(
+        JSON.stringify({
+          code: error.code,
+          path: error.path,
+          message: (error as Error).message,
+        }),
+      ).not.toContain(duplicateKey);
+      expect(JSON.stringify(error)).not.toContain(unknownValue);
+      expect(JSON.stringify(error)).not.toContain(duplicateValue);
+    }
   });
 
   it('accepts only the constrained template grammar', () => {

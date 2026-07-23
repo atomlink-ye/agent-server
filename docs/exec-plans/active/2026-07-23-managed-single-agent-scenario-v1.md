@@ -72,12 +72,12 @@ the phase owner to preserve earlier gates.
 
 ### A — Stabilization and real PostgreSQL lane
 
-- [ ] **A-1 (RED):** Add regressions for transaction-bound admission visibility, runtime success followed by terminal persistence failure, and Paseo reconnect. Run focused unit/adapter commands and record the three defects; absence of a real PostgreSQL URL is not an expected RED result.
-- [ ] **A-2 (domain/interface):** Add typed application-level `RuntimeExecutionReceipt` plus repository failure classification and an observable reconciliation record compatible with the existing schema. Do not add a schema migration in A; durable receipt columns/table belong to D migration `0007`.
-- [ ] **A-3 (migration/repository):** Fix transaction-scoped Task reload/return, terminal outcome classification, and disconnected adapter initialization. Add the real dual-connection test using `pg.Pool` and migration set 0001–0004.
-- [ ] **A-4 (real-PG lane):** Run the environment-gated command `test -n "${DATABASE_URL:-}" && pnpm exec vitest run --config vitest.integration.config.ts tests/integration/real-pg-pool.integration.test.ts`. It must use a real `DATABASE_URL`; CI provisions PostgreSQL and runs it as a required lane. A missing URL is SKIP only in the ordinary local deterministic suite, but FAIL in the real-PG required lane. Never substitute PGlite.
-- [ ] **A-5 (wiring/CI):** Add the Node 24 PostgreSQL CI workflow at `.github/workflows/ci.yml`, preserve Node 22 compatibility, and record Paseo capability/smoke and residual follow-up evidence without secrets, paths, or raw provider errors.
-- [ ] **A-6 (GREEN/docs/gate):** Rerun focused tests, `make test-unit`, `make test-integration`, `make paseo-smoke`, `pnpm check`, and docs checks; update contracts/components/features/runbook and the ledger; make a migration, behavior, and docs/gate commit as needed; finish with `fix: stabilize managed single-agent admission and runtime lane` and `A-ORACLE` review.
+- [x] **A-1 (RED):** Add regressions for transaction-bound admission visibility, runtime success followed by terminal persistence failure, and Paseo reconnect. Run focused unit/adapter commands and record the three defects; absence of a real PostgreSQL URL is not an expected RED result.
+- [x] **A-2 (domain/interface):** Add typed application-level `RuntimeExecutionReceipt` plus repository failure classification and an observable reconciliation record compatible with the existing schema. Do not add a schema migration in A; durable receipt columns/table belong to D migration `0007`.
+- [x] **A-3 (migration/repository):** Fix transaction-scoped Task reload/return, terminal outcome classification, and disconnected adapter initialization. Add the real dual-connection test using `pg.Pool` and migration set 0001–0004.
+- [x] **A-4 (real-PG lane):** Run the environment-gated command `test -n "${DATABASE_URL:-}" && pnpm exec vitest run --config vitest.integration.config.ts tests/integration/real-pg-pool.integration.test.ts`. It must use a real `DATABASE_URL`; CI provisions PostgreSQL and runs it as a required lane. A missing URL is SKIP only in the ordinary local deterministic suite, but FAIL in the real-PG required lane. Never substitute PGlite.
+- [x] **A-5 (wiring/CI):** Add the Node 24 PostgreSQL CI workflow at `.github/workflows/ci.yml`, preserve Node 22 compatibility, and record Paseo capability/smoke and residual follow-up evidence without secrets, paths, or raw provider errors.
+- [x] **A-6 (GREEN/docs/gate):** Rerun focused tests, `make test-unit`, `make test-integration`, `make paseo-smoke`, `pnpm check`, and docs checks; update contracts/components/features/runbook and the ledger; make a migration, behavior, and docs/gate commit as needed; finish with `fix: stabilize managed single-agent admission and runtime lane` and `A-ORACLE` review.
 
 ### B — Managed Agent YAML and registry API
 
@@ -186,20 +186,40 @@ deterministic gate. `make eval-smoke` is the existing evaluation target.
   with 59 unit, 42 contract, 23 integration, and 1 E2E test plus docs, types,
   format, and build. A fresh Node 24 `make check` also passed after plan review.
 - **P0-COMMIT:** `dfc9a82` `docs: control managed single-agent v1 plan`.
+- **A-DEFECTS / A-RECEIPT:** Transaction-scoped Task replay, typed runtime
+  receipts, and persistence-failure outcome/logging boundaries are covered by 10
+  passing focused unit tests on Node 24.
+- **A-PGPOOL:** PostgreSQL 16 with a real `pg.Pool` passed all 4 required tests,
+  including the forced same-idempotency-key concurrent admission race. The
+  environment-free deterministic integration suite skipped those 4 tests by
+  design.
+- **A-RUNTIME:** Paseo adapter reconnect and pinned-capability integration passed
+  9/9 tests. The authenticated external smoke completed through
+  `opencode/mimo-v2.5-free` with exact marker `PASEO_OPENCODE_BASELINE_OK` and
+  terminal status `succeeded`.
+- **A-CI / A-LEDGER:** Node 24 `make ci` passed with 66 unit, 42 contract, 28
+  deterministic integration, and 1 E2E test plus types, format, docs, exec-plan,
+  and build checks. The required real-PG lane is isolated in CI; deferred work
+  has an owner and target in `docs/operations/follow-up-ledger.md`.
+- **A-COMMITS:** Phase A is recorded by the behavior/test/CI series from
+  `51b440c` through `baf8be5` and documentation commits `7a1f60b`, `c65086e`,
+  and `f0d5f94`.
+- **A-ORACLE:** Final cumulative Phase A review returned `APPROVED` after the
+  focused, real-PG, deterministic CI, external Paseo, and documentation gates.
 
 ## Current blocker
 
-None. P0 is complete; Phase A regression tests are the next action.
+None. P0 and Phase A are complete; Phase B managed-package RED tests are next.
 
 ## Next exact command
 
 ```bash
-pnpm exec vitest run --config vitest.unit.config.ts src/application/tasks/invoke-task.test.ts src/application/runs/execute-run.test.ts
+pnpm exec vitest run --config vitest.unit.config.ts src/domain/agents/managed-agent-package.test.ts src/application/agents/import-agent.test.ts
 ```
 
 ## Completion checklist
 
-- [ ] **DOD-1:** P0 commit and baseline evidence are recorded.
+- [x] **DOD-1:** P0 commit and baseline evidence are recorded.
 - [ ] **DOD-2:** A–H gates, Oracle reviews, focused RED/GREEN evidence, and phase commits are recorded.
-- [ ] **DOD-3:** Every §4–§14 requirement has a labeled task and evidence ID.
+- [x] **DOD-3:** Every §4–§14 requirement has a labeled task and evidence ID.
 - [ ] **DOD-4:** Final spec and plan are completed/moved with updated links and no unchecked boxes.

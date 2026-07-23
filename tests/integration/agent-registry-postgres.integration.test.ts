@@ -228,6 +228,145 @@ describe('managed agent registry migration', () => {
     );
   });
 
+  it('enforces owner-aware idempotency result definition/version links', async () => {
+    const db = await database();
+    const secondDefinitionId = '00000000-0000-4000-8000-0000000b0006';
+    const secondVersionId = '00000000-0000-4000-8000-0000000b0106';
+    await insertManagedDefinition(db);
+    await insertManagedVersion(db);
+    await insertManagedDefinition(
+      db,
+      secondDefinitionId,
+      'workspace_one',
+      'second-agent',
+    );
+    await insertVersionWithOptions(db, {
+      id: secondVersionId,
+      definitionId: secondDefinitionId,
+      fingerprint:
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    });
+    await db.query(
+      `INSERT INTO agent_registry_idempotency
+       (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+       VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'valid-result', 'fp-valid', $1, $2, $3, $3)`,
+      [definitionId, versionId, now],
+    );
+    await expect(
+      db.query(
+        `INSERT INTO agent_registry_idempotency
+         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_two', 'service_account', 'principal_one', 'cross-owner', 'fp-cross', $1, $2, $3, $3)`,
+        [definitionId, versionId, now],
+      ),
+    ).rejects.toThrow(/foreign|owner|key/i);
+    await expect(
+      db.query(
+        `INSERT INTO agent_registry_idempotency
+         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'service_account', 'principal_two', 'cross-principal', 'fp-cross-principal', $1, $2, $3, $3)`,
+        [definitionId, versionId, now],
+      ),
+    ).rejects.toThrow(/foreign|owner|key/i);
+    await expect(
+      db.query(
+        `INSERT INTO agent_registry_idempotency
+         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('publish', 'tenant_one', 'service_account', 'principal_one', 'mismatched-pair', 'fp-pair', $1, $2, $3, $3)`,
+        [definitionId, secondVersionId, now],
+      ),
+    ).rejects.toThrow(/foreign|definition|owner/i);
+    await expect(
+      db.query(
+        `INSERT INTO agent_registry_idempotency
+         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'half-null', 'fp-half', $1, NULL, $2, $2)`,
+        [definitionId, now],
+      ),
+    ).rejects.toThrow(/check|result/i);
+    await expect(
+      db.query(
+        `INSERT INTO agent_registry_idempotency
+         (operation, tenant_id, principal_type, principal_id, idempotency_key, request_fingerprint, definition_id, version_id, created_at, updated_at)
+         VALUES ('import', 'tenant_one', 'service_account', 'principal_one', 'other-half-null', 'fp-half-2', NULL, $1, $2, $2)`,
+        [versionId, now],
+      ),
+    ).rejects.toThrow(/check|result/i);
+  });
+
+  it('reruns migration 0005 after its registry row is deleted without changing schema objects', async () => {
+    const db = await database();
+    const before = await db.query(
+      `SELECT conname, contype, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conname IN (
+         'agent_definitions_managed_shape_check', 'agent_versions_managed_shape_check',
+         'agent_versions_managed_definition_fk', 'agent_registry_idempotency_definition_id_fkey',
+         'agent_registry_idempotency_version_id_fkey', 'agent_registry_idempotency_pkey',
+         'agent_registry_idempotency_operation_check', 'agent_registry_idempotency_key_check',
+         'agent_registry_idempotency_fingerprint_check', 'agent_registry_idempotency_owner_check',
+         'agent_registry_idempotency_timestamp_check', 'agent_registry_idempotency_result_check',
+         'agent_registry_idempotency_owner_definition_fk', 'agent_registry_idempotency_owner_version_fk'
+       ) ORDER BY conname`,
+    );
+    const beforeIndexes = await db.query(
+      `SELECT indexname, indexdef FROM pg_indexes
+       WHERE indexname IN ('agent_definitions_id_discriminator_uq', 'agent_definitions_owner_identity_uq',
+         'agent_definitions_managed_owner_name_uq', 'agent_definitions_managed_owner_hidden_idx',
+         'agent_versions_managed_definition_fingerprint_uq', 'agent_versions_owner_identity_uq',
+         'agent_versions_managed_owner_hidden_idx', 'agent_versions_definition_created_cursor_idx')
+       ORDER BY indexname`,
+    );
+    const beforeTriggers = await db.query(
+      `SELECT tgname, pg_get_triggerdef(oid) AS definition
+       FROM pg_trigger WHERE tgname = 'agent_versions_managed_immutable_before_update'`,
+    );
+    await db.query(
+      `DELETE FROM durable_kernel_schema_migrations WHERE version = '0005_managed_agent_registry_b'`,
+    );
+    await expect(applyDurableKernelMigrations(db)).resolves.toBeUndefined();
+    const after = await db.query(
+      `SELECT conname, contype, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint
+       WHERE conname IN (
+         'agent_definitions_managed_shape_check', 'agent_versions_managed_shape_check',
+         'agent_versions_managed_definition_fk', 'agent_registry_idempotency_definition_id_fkey',
+         'agent_registry_idempotency_version_id_fkey', 'agent_registry_idempotency_pkey',
+         'agent_registry_idempotency_operation_check', 'agent_registry_idempotency_key_check',
+         'agent_registry_idempotency_fingerprint_check', 'agent_registry_idempotency_owner_check',
+         'agent_registry_idempotency_timestamp_check', 'agent_registry_idempotency_result_check',
+         'agent_registry_idempotency_owner_definition_fk', 'agent_registry_idempotency_owner_version_fk'
+       ) ORDER BY conname`,
+    );
+    const afterIndexes = await db.query(
+      `SELECT indexname, indexdef FROM pg_indexes
+       WHERE indexname IN ('agent_definitions_id_discriminator_uq', 'agent_definitions_owner_identity_uq',
+         'agent_definitions_managed_owner_name_uq', 'agent_definitions_managed_owner_hidden_idx',
+         'agent_versions_managed_definition_fingerprint_uq', 'agent_versions_owner_identity_uq',
+         'agent_versions_managed_owner_hidden_idx', 'agent_versions_definition_created_cursor_idx')
+       ORDER BY indexname`,
+    );
+    const afterTriggers = await db.query(
+      `SELECT tgname, pg_get_triggerdef(oid) AS definition
+       FROM pg_trigger WHERE tgname = 'agent_versions_managed_immutable_before_update'`,
+    );
+    expect(after.rows).toEqual(before.rows);
+    expect(afterIndexes.rows).toEqual(beforeIndexes.rows);
+    expect(afterTriggers.rows).toEqual(beforeTriggers.rows);
+    const migrationRows = await db.query(
+      `SELECT version FROM durable_kernel_schema_migrations
+       WHERE version = '0005_managed_agent_registry_b'`,
+    );
+    expect(migrationRows.rows).toEqual([
+      { version: '0005_managed_agent_registry_b' },
+    ]);
+    await insertManagedDefinition(db);
+    await insertManagedVersion(db);
+    await expect(
+      insertManagedVersion(db, '00000000-0000-4000-8000-0000000b0110'),
+    ).rejects.toThrow(/unique/i);
+  });
+
   it('enforces managed immutable content and allows exactly one draft-to-published transition', async () => {
     const db = await database();
     await insertManagedDefinition(db);

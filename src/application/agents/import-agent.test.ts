@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import { importAgent } from './import-agent.js';
 import type { AgentRegistry } from '../ports/agent-registry.js';
+import type {
+  ImportAgentAtomicCommand,
+  ImportAgentAtomicResult,
+  PublishAgentAtomicCommand,
+} from '../ports/agent-registry.js';
+import type { AgentDefinition } from '../../domain/agents/managed-agent-definition.js';
+import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
+import type { ManagedAgentVersion } from '../../domain/agents/managed-agent-version.js';
+import { publishAgentVersion } from './publish-agent-version.js';
+import {
+  readAgentDefinition,
+  readAgentVersion,
+  listAgentVersions,
+} from './read-agent.js';
+import { AgentNotFoundError, IdempotencyConflictError } from './errors.js';
 
 describe('ImportAgent', () => {
   it('derives an owner without workspace and normalizes the package name', async () => {
@@ -44,7 +59,328 @@ describe('ImportAgent', () => {
       owner: { workspaceId: expect.anything() },
     });
   });
+
+  it('derives identical owner identity when only workspace changes', async () => {
+    const fake = new AtomicFake();
+    await importAgent(fake, {
+      accessContext: context('one'),
+      idempotencyKey: 'a',
+      source: validPackage('A Name'),
+    });
+    await importAgent(fake, {
+      accessContext: context('two'),
+      idempotencyKey: 'b',
+      source: validPackage('A Name'),
+    });
+    expect(fake.calls[0]?.owner).toEqual(fake.calls[1]?.owner);
+    expect(fake.calls[0]?.normalizedName).toBe('a-name');
+  });
+
+  it('replays the same exact request through one atomic port call', async () => {
+    const fake = new AtomicFake();
+    const input = {
+      accessContext: context('w'),
+      idempotencyKey: 'same',
+      source: validPackage('Replay'),
+    };
+    const first = await importAgent(fake, input);
+    const second = await importAgent(fake, input);
+    expect(second).toEqual(first);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.atomicCalls).toBe(2);
+  });
+
+  it('conflicts on same key and different body despite equal package fingerprint', async () => {
+    const fake = new AtomicFake();
+    await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'same',
+      source: validPackage('Replay'),
+    });
+    await expect(
+      importAgent(fake, {
+        accessContext: context('w'),
+        idempotencyKey: 'same',
+        source: reorderedPackage('Replay'),
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it('converges semantically equal YAML under a different key', async () => {
+    const fake = new AtomicFake();
+    const first = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'one',
+      source: validPackage('Converge'),
+    });
+    const second = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'two',
+      source: reorderedPackage('Converge'),
+    });
+    expect(fake.calls[0]?.version.fingerprint).toBe(
+      fake.calls[1]?.version.fingerprint,
+    );
+    expect(second.version.id).toBe(first.version.id);
+  });
+
+  it('creates a distinct draft when the package fingerprint changes', async () => {
+    const fake = new AtomicFake();
+    const first = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'one',
+      source: validPackage('Versions'),
+    });
+    const second = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'two',
+      source: validPackage('Versions').replace(
+        'instructions: instructions',
+        'instructions: changed',
+      ),
+    });
+    expect(second.version.id).not.toBe(first.version.id);
+    expect(second.version.status).toBe('draft');
+  });
+
+  it('carries compiler metadata unchanged into the atomic request', async () => {
+    const fake = new AtomicFake();
+    const result = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'compiler',
+      source: validPackage('Compiler'),
+    });
+    expect(result.version.compiler).toEqual({
+      patternDialect: 're2',
+      patternCompilerVersion: 're2js-2.8.6',
+    });
+    expect(fake.calls[0]?.version.compiler).toEqual(result.version.compiler);
+  });
+
+  it('publishes an immutable snapshot and replays publication', async () => {
+    const fake = new AtomicFake();
+    const imported = await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'import',
+      source: validPackage('Publish'),
+    });
+    const published = await publishAgentVersion(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'publish',
+      versionId: imported.version.id,
+    });
+    const replay = await publishAgentVersion(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'publish',
+      versionId: imported.version.id,
+    });
+    expect(published).toEqual(replay);
+    expect(published.status).toBe('published');
+    expect(published.package).toBe(imported.version.package);
+    expect(published.compiler).toBe(imported.version.compiler);
+  });
+
+  it('hides foreign and absent reads and publication as not-found', async () => {
+    const fake = new AtomicFake();
+    const imported = await importAgent(fake, {
+      accessContext: context('owner'),
+      idempotencyKey: 'import',
+      source: validPackage('Hidden'),
+    });
+    await expect(
+      readAgentDefinition(
+        fake,
+        context('foreign', 'other-tenant'),
+        imported.definition.id,
+      ),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
+    await expect(
+      readAgentVersion(
+        fake,
+        context('foreign', 'other-tenant'),
+        imported.version.id,
+      ),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
+    await expect(
+      publishAgentVersion(fake, {
+        accessContext: context('foreign', 'other-tenant'),
+        idempotencyKey: 'publish',
+        versionId: imported.version.id,
+      }),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
+    await expect(
+      publishAgentVersion(fake, {
+        accessContext: context('owner'),
+        idempotencyKey: 'missing',
+        versionId: 'foreign-id',
+      }),
+    ).rejects.toBeInstanceOf(AgentNotFoundError);
+  });
+
+  it('returns versions in deterministic createdAt then id order', async () => {
+    const fake = new AtomicFake();
+    await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'one',
+      source: validPackage('List'),
+    });
+    await importAgent(fake, {
+      accessContext: context('w'),
+      idempotencyKey: 'two',
+      source: validPackage('List').replace(
+        'instructions: instructions',
+        'instructions: later',
+      ),
+    });
+    const listed = await listAgentVersions(
+      fake,
+      context('w'),
+      fake.definitions[0]!.id,
+    );
+    expect(listed.map((v) => v.fingerprint)).toEqual(
+      [...listed]
+        .sort(
+          (a, b) =>
+            a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+        )
+        .map((v) => v.fingerprint),
+    );
+  });
+
+  it('does not echo invalid body or idempotency material in safe errors', async () => {
+    const secret = 'token: super-secret-value';
+    await expect(
+      importAgent(new AtomicFake(), {
+        accessContext: context('w'),
+        idempotencyKey: '',
+        source: secret,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_idempotency_key' });
+    await expect(
+      importAgent(new AtomicFake(), {
+        accessContext: context('w'),
+        idempotencyKey: 'valid',
+        source: secret,
+      }),
+    ).rejects.toSatisfy(
+      (error: Error) =>
+        !error.message.includes(secret) &&
+        !error.message.includes('super-secret') &&
+        !error.message.includes('token'),
+    );
+  });
 });
+
+function context(workspaceId: string, tenantId = 'tenant') {
+  return {
+    tenantId,
+    workspaceId,
+    principalType: 'service_account' as const,
+    principalId: 'principal',
+    policySnapshotVersion: 'p1',
+  };
+}
+
+function reorderedPackage(name: string): string {
+  return validPackage(name).replace(
+    'apiVersion: agent-server/v1alpha1\nkind: ManagedAgent',
+    'kind: ManagedAgent\napiVersion: agent-server/v1alpha1',
+  );
+}
+
+class AtomicFake implements AgentRegistry {
+  readonly calls: ImportAgentAtomicCommand[] = [];
+  readonly definitions: AgentDefinition[] = [];
+  readonly versions: ManagedAgentVersion[] = [];
+  private readonly keys = new Map<
+    string,
+    { fingerprint: string; result: ImportAgentAtomicResult }
+  >();
+  private readonly ownerKey = (o: ManagedAgentOwner) =>
+    `${o.tenantId}/${o.principalType}/${o.principalId}`;
+  atomicCalls = 0;
+  async importAgent(
+    command: ImportAgentAtomicCommand,
+  ): Promise<ImportAgentAtomicResult> {
+    this.atomicCalls++;
+    this.calls.push(command);
+    const key = `${this.ownerKey(command.owner)}/${command.idempotencyKey}`;
+    const previous = this.keys.get(key);
+    if (previous) {
+      if (previous.fingerprint !== command.requestFingerprint)
+        throw new IdempotencyConflictError();
+      return previous.result;
+    }
+    const existing = this.versions.find(
+      (v) =>
+        this.ownerKey(v) === this.ownerKey(command.owner) &&
+        v.definitionId ===
+          this.definitions.find(
+            (d) =>
+              d.normalizedName === command.normalizedName &&
+              this.ownerKey(d) === this.ownerKey(command.owner),
+          )?.id &&
+        v.fingerprint === command.version.fingerprint,
+    );
+    const result = existing
+      ? {
+          kind: 'converged' as const,
+          definition: this.definitions.find(
+            (d) => d.id === existing.definitionId,
+          )!,
+          version: existing,
+        }
+      : this.create(command);
+    this.keys.set(key, { fingerprint: command.requestFingerprint, result });
+    return result;
+  }
+  private create(command: ImportAgentAtomicCommand): ImportAgentAtomicResult {
+    this.definitions.push(command.definition);
+    this.versions.push(command.version);
+    return {
+      kind: 'created',
+      definition: command.definition,
+      version: command.version,
+    };
+  }
+  async publishAgentVersion(
+    command: PublishAgentAtomicCommand,
+  ): Promise<ManagedAgentVersion> {
+    const version = await this.findVersion(command.owner, command.versionId);
+    if (!version) throw new AgentNotFoundError();
+    const published =
+      version.status === 'published'
+        ? version
+        : {
+            ...version,
+            status: 'published' as const,
+            publishedAt: version.updatedAt,
+          };
+    this.versions.splice(this.versions.indexOf(version), 1, published);
+    return published;
+  }
+  async findDefinition(owner: ManagedAgentOwner, id: string) {
+    return (
+      this.definitions.find(
+        (d) => d.id === id && this.ownerKey(d) === this.ownerKey(owner),
+      ) ?? null
+    );
+  }
+  async findVersion(owner: ManagedAgentOwner, id: string) {
+    return (
+      this.versions.find(
+        (v) => v.id === id && this.ownerKey(v) === this.ownerKey(owner),
+      ) ?? null
+    );
+  }
+  async listVersions(owner: ManagedAgentOwner, definitionId: string) {
+    return this.versions.filter(
+      (v) =>
+        v.definitionId === definitionId &&
+        this.ownerKey(v) === this.ownerKey(owner),
+    );
+  }
+}
 
 function validPackage(name: string): string {
   return `apiVersion: agent-server/v1alpha1

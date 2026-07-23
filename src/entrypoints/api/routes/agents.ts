@@ -131,16 +131,15 @@ export function registerAgentRoutes(
   });
   app.get('/api/v1/agents/:agentId/versions', async (c) => {
     assertUuidPath(c.req.param('agentId'));
-    const limit =
-      c.req.query('limit') === undefined ? 20 : Number(c.req.query('limit'));
+    const query = parseVersionListQuery(c.req.url);
     try {
       const page = await listAgentVersions(
         dependencies.agentRegistry,
         getAuthenticatedAccessContext(c),
         {
           definitionId: c.req.param('agentId'),
-          cursor: c.req.query('cursor') ?? null,
-          limit,
+          cursor: query.cursor,
+          limit: query.limit,
         },
       );
       return c.json(
@@ -201,6 +200,49 @@ export function registerAgentRoutes(
 
 function assertUuidPath(value: string | undefined): asserts value is string {
   if (!AgentIdSchema.safeParse(value).success) throw invalidRequest();
+}
+function parseVersionListQuery(url: string): {
+  cursor: string | null;
+  limit: number;
+} {
+  const params = new URL(url).searchParams;
+  for (const key of params.keys()) {
+    if (key !== 'cursor' && key !== 'limit') throw invalidQueryRequest();
+  }
+
+  const cursorValues = params.getAll('cursor');
+  if (cursorValues.length > 1) throw invalidQueryRequest();
+  const cursor = cursorValues.length === 0 ? null : cursorValues[0]!;
+  if (cursor === '')
+    throw new HttpError(
+      400,
+      'invalid_cursor',
+      'The requested list cursor is invalid.',
+    );
+
+  const limitValues = params.getAll('limit');
+  if (limitValues.length > 1) throw invalidQueryRequest();
+  if (limitValues.length === 0) return { cursor, limit: 20 };
+  const rawLimit = limitValues[0]!;
+  if (!/^(?:0|[1-9][0-9]*)$/.test(rawLimit)) throw invalidLimit();
+  const limit = Number(rawLimit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw invalidLimit();
+  return { cursor, limit };
+}
+function invalidQueryRequest(): HttpError {
+  return new HttpError(
+    400,
+    'invalid_request',
+    'The query parameters are invalid.',
+  );
+}
+function invalidLimit(): HttpError {
+  return new HttpError(
+    400,
+    'invalid_limit',
+    'The requested list limit is invalid.',
+  );
 }
 function invalidRequest(): HttpError {
   return new HttpError(

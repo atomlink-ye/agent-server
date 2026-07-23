@@ -707,6 +707,81 @@ describe('managed agent HTTP contracts', () => {
     ).toBe('invalid_cursor');
   });
 
+  it('parses version-list queries strictly and rejects ambiguity before lookup', async () => {
+    const { app, body } = await importedApp();
+    const second = await app.request('/api/v1/agents:import', {
+      method: 'POST',
+      headers: headers(primaryServiceAccountToken, 'query-second'),
+      body: JSON.stringify({ source: packageWith('query-second') }),
+    });
+    expect(second.status).toBe(201);
+    const validCursorPage = AgentVersionListResponseSchema.parse(
+      await (
+        await app.request(`/api/v1/agents/${body.agent.id}/versions?limit=1`, {
+          headers: headers(),
+        })
+      ).json(),
+    );
+    expect(validCursorPage.next_cursor).toEqual(expect.any(String));
+    const missingAgentId = '00000000-0000-4000-8000-00000000ffff';
+
+    for (const query of [
+      'unknown=value',
+      'limit=1&limit=2',
+      'cursor=bad&cursor=also-bad',
+    ]) {
+      const response = await app.request(
+        `/api/v1/agents/${missingAgentId}/versions?${query}`,
+        { headers: headers() },
+      );
+      expect(response.status).toBe(400);
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_request',
+      );
+    }
+
+    for (const value of [
+      '01',
+      '1e1',
+      '+1',
+      '1.0',
+      ' 1',
+      '1 ',
+      '',
+      '0',
+      '-1',
+      '101',
+      'Infinity',
+      'NaN',
+      '0x10',
+    ]) {
+      const response = await app.request(
+        `/api/v1/agents/${missingAgentId}/versions?limit=${encodeURIComponent(value)}`,
+        { headers: headers() },
+      );
+      expect(response.status).toBe(400);
+      expect(ErrorResponseSchema.parse(await response.json()).error.code).toBe(
+        'invalid_limit',
+      );
+    }
+
+    const emptyCursor = await app.request(
+      `/api/v1/agents/${missingAgentId}/versions?cursor=`,
+      { headers: headers() },
+    );
+    expect(emptyCursor.status).toBe(400);
+    expect(ErrorResponseSchema.parse(await emptyCursor.json()).error.code).toBe(
+      'invalid_cursor',
+    );
+
+    const valid = await app.request(
+      `/api/v1/agents/${body.agent.id}/versions?limit=1&cursor=${encodeURIComponent(validCursorPage.next_cursor!)}`,
+      { headers: headers() },
+    );
+    expect(valid.status).toBe(200);
+    AgentVersionListResponseSchema.parse(await valid.json());
+  });
+
   it('rejects caller ownership fields and concrete model injection, and propagates request IDs', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,

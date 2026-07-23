@@ -78,7 +78,12 @@ describe('ExecuteRun', () => {
         findVersion: vi.fn(async () => ({
           id: 'managed-version-1',
           status: 'published',
-          package: { spec: { instructions: 'managed instructions' } },
+          package: {
+            spec: {
+              instructions: 'managed instructions',
+              memory: { proposalLimit: 1 },
+            },
+          },
         })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },

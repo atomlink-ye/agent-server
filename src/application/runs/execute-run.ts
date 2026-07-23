@@ -130,27 +130,29 @@ export class ExecuteRun {
     claim: ClaimedRun,
     run: Awaited<ReturnType<ExecuteRun['executeAgentRun']>>,
   ) {
+    let completed: Awaited<ReturnType<CompleteRun['execute']>>;
     try {
-      const completed = await this.completeRun.execute({ claim, run });
-      this.logger.log(
-        completed.status === 'succeeded' ? 'info' : 'error',
-        completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
-        {
-          run_id: claim.run.id,
-          ...(completed.runtime
-            ? {
-                provider: completed.runtime.provider,
-                model: completed.runtime.model,
-              }
-            : {}),
-          ...(completed.error ? { failure_code: completed.error.code } : {}),
-        },
-      );
-      return completed;
+      completed = await this.completeRun.execute({ claim, run });
     } catch (error) {
       const receipt = createRuntimeExecutionReceipt(run, claim.taskId);
       throw new RunCompletionPersistenceError(receipt);
     }
+
+    this.logger.log(
+      completed.status === 'succeeded' ? 'info' : 'error',
+      completed.status === 'succeeded' ? 'run.succeeded' : 'run.failed',
+      {
+        run_id: claim.run.id,
+        ...(completed.runtime
+          ? {
+              provider: completed.runtime.provider,
+              model: completed.runtime.model,
+            }
+          : {}),
+        ...(completed.error ? { failure_code: completed.error.code } : {}),
+      },
+    );
+    return completed;
   }
 
   private reportCompletionPersistenceFailure(

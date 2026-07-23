@@ -8,9 +8,12 @@ import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import type { Logger } from '../../shared/observability/logger.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
+import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import { createRuntimeExecutionReceipt } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
   it('reports persistence failure with a receipt after runtime success', async () => {
@@ -76,6 +79,59 @@ describe('ExecuteRun', () => {
       status: 'failed',
       error: { code: 'runtime_execution_failed' },
     });
+  });
+
+  it('does not classify a logger failure after persistence as persistence failure', async () => {
+    const claim = createClaim();
+    const task = createTask();
+    const succeededRun = transitionRun(
+      claim.run,
+      'succeeded',
+      {
+        runtime: { provider: 'test-provider', model: 'test-model' },
+        result: { text: 'safe result' },
+      },
+      () => new Date('2026-07-23T00:00:00.000Z'),
+    );
+    const failedRun = transitionRun(
+      claim.run,
+      'failed',
+      {
+        error: {
+          code: 'runtime_execution_failed',
+          message: 'The runtime could not complete the run.',
+        },
+      },
+      () => new Date('2026-07-23T00:00:00.000Z'),
+    );
+    const completeRun = {
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce(succeededRun)
+        .mockResolvedValueOnce(failedRun),
+    } as unknown as CompleteRun;
+    const loggerFailure = new Error('logger unavailable');
+    const logger = {
+      log: vi.fn((_level: string, event: string) => {
+        if (event === 'run.succeeded') throw loggerFailure;
+      }),
+    };
+    const executeRun = createExecuteRun({
+      completeRun,
+      runtime: createRuntime(),
+      task,
+      logger,
+    });
+
+    await expect(executeRun.execute(claim)).resolves.toMatchObject({
+      status: 'failed',
+    });
+    expect(completeRun.execute).toHaveBeenCalledTimes(2);
+    expect(logger.log).not.toHaveBeenCalledWith(
+      'error',
+      'run.completion_persistence_failed',
+      expect.anything(),
+    );
   });
 
   it('preserves a failed child outcome when child completion persistence throws', async () => {
@@ -162,14 +218,20 @@ describe('ExecuteRun', () => {
       }
     ).mock.calls[0];
     expect(error.receipt.runId).toBe(childCall?.[0]?.run.id);
+    expect(error.receipt.runId).not.toBe(claim.run.id);
     expect(error.receipt.taskId).toEqual(expect.any(String));
+    expect(error.receipt.taskId).not.toBe(claim.taskId);
+    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runtime.execute).mock.calls[0]?.[0]?.runId).not.toBe(
+      claim.run.id,
+    );
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
     expect(completeRun.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         run: expect.objectContaining({ status: 'failed' }),
       }),
     );
-    expect(logger.log).toHaveBeenCalledTimes(3);
+    expect(logger.log).toHaveBeenCalledTimes(2);
     expect(
       logger.log.mock.calls.filter(
         (call: unknown[]) => call[1] === 'run.completion_persistence_failed',
@@ -181,12 +243,21 @@ describe('ExecuteRun', () => {
       expect.objectContaining({ terminal_status: 'failed' }),
     );
   });
+
+  it('rejects a receipt for a nonterminal run status', () => {
+    const claim = createClaim();
+
+    expect(() => createRuntimeExecutionReceipt(claim.run)).toThrow(
+      'Cannot create runtime execution receipt for running run',
+    );
+  });
 });
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
   readonly runtime: AgentRuntimePort;
   readonly task: Task;
+  readonly logger?: Logger;
 }): ExecuteRun {
   const tasks = {
     findById: vi.fn(async () => input.task),
@@ -198,7 +269,7 @@ function createExecuteRun(input: {
     {} as InvokableRepository,
     {} as never,
     input.runtime,
-    { log: vi.fn() },
+    input.logger ?? { log: vi.fn() },
     () => new Date('2026-07-23T00:00:00.000Z'),
   );
 }
@@ -257,7 +328,9 @@ function createTask(invokableKind: 'agent' | 'team' = 'agent'): Task {
     ingress: 'api',
     invokableKind,
     invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-    inputSnapshotRef: 'snapshot-1',
+    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
+      prompt: 'private prompt',
+    }),
     inputFingerprint: 'fingerprint-1',
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });

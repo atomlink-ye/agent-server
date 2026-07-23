@@ -30,10 +30,12 @@ export function createRuntimeExecutionReceipt(
   run: Run,
   taskId?: string,
 ): RuntimeExecutionReceipt {
+  const terminalStatus = toTerminalStatus(run.status);
+
   return Object.freeze({
     runId: run.id,
     ...(taskId ? { taskId } : {}),
-    terminalStatus: run.status as RuntimeExecutionReceipt['terminalStatus'],
+    terminalStatus,
     ...(run.runtime
       ? { provider: run.runtime.provider, model: run.runtime.model }
       : {}),
@@ -47,4 +49,16 @@ export function createRuntimeExecutionReceipt(
       : {}),
     completedAt: run.updatedAt,
   });
+}
+
+function toTerminalStatus(
+  status: RunStatus,
+): RuntimeExecutionReceipt['terminalStatus'] {
+  if (status !== 'succeeded' && status !== 'failed' && status !== 'timed_out') {
+    throw new Error(
+      `Cannot create runtime execution receipt for ${status} run`,
+    );
+  }
+
+  return status;
 }

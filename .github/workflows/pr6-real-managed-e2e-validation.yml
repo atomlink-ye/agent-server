@@ -39,22 +39,24 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p .local/managed-real-e2e
-          printf '%s\n' '{"status":"runner_started"}' > .local/managed-real-e2e/evidence.json
-          node --check scripts/smoke/managed-paseo-e2e.mjs
-          node scripts/smoke/managed-paseo-e2e.mjs 2>&1 | tee .local/managed-real-e2e-runner.log
+          mkdir -p .local/managed-real-e2e-v2
+          printf '%s\n' '{"status":"runner_started"}' > .local/managed-real-e2e-v2/evidence.json
+          node --check scripts/smoke/managed-paseo-e2e-v2.mjs
+          node scripts/smoke/managed-paseo-e2e-v2.mjs 2>&1 | tee .local/managed-real-e2e-v2-runner.log
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
           POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
           PGSSLMODE: disable
           PASEO_SMOKE_MODEL: opencode/mimo-v2.5-free
-      - name: Upload sanitized validation evidence
+      - name: Upload sanitized validation evidence and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pr6-real-managed-e2e-evidence
           path: |
-            .local/managed-real-e2e/evidence.json
-            .local/managed-real-e2e-runner.log
-          if-no-files-found: error
+            .local/managed-real-e2e-v2/evidence.json
+            .local/managed-real-e2e-v2-runner.log
+            .local/managed-real-e2e-v2/agent-server.log
+            .local/managed-real-e2e-v2/paseo-daemon.log
+          if-no-files-found: warn
           retention-days: 7

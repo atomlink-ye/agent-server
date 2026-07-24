@@ -36,7 +36,13 @@ jobs:
       - run: node scripts/dev/resolve-opencode.mjs --check
       - run: pnpm build
       - name: Run full real Managed Agent flow through Paseo and OpenCode
-        run: node scripts/smoke/managed-paseo-e2e.mjs
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .local/managed-real-e2e
+          printf '%s\n' '{"status":"runner_started"}' > .local/managed-real-e2e/evidence.json
+          node --check scripts/smoke/managed-paseo-e2e.mjs
+          node scripts/smoke/managed-paseo-e2e.mjs 2>&1 | tee .local/managed-real-e2e-runner.log
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
           POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
@@ -47,6 +53,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pr6-real-managed-e2e-evidence
-          path: .local/managed-real-e2e/evidence.json
+          path: |
+            .local/managed-real-e2e/evidence.json
+            .local/managed-real-e2e-runner.log
           if-no-files-found: error
           retention-days: 7

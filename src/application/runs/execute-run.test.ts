@@ -772,6 +772,7 @@ function createTask(
     principalId: 'user-1',
     policySnapshotVersion: 'policy-1',
     ingress: 'api',
+    originRef: null,
     invokableKind,
     invokableVersionId,
     inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({

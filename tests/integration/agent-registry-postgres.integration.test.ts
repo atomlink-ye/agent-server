@@ -223,6 +223,7 @@ describe('managed agent registry migration', () => {
       '0009_session_reset_idempotency_hardening',
       '0010_runtime_memory_provenance',
       '0011_runtime_memory_provenance_integrity',
+      '0012_session_turn_origin',
     ]);
   });
 

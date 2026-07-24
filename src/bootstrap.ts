@@ -38,6 +38,7 @@ import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
 import { LocalFileStore } from './infrastructure/files/local-file-store.js';
+import { SubmitSessionTurn } from './application/sessions/submit-session-turn.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -69,6 +70,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
+  const submitSessionTurn = new SubmitSessionTurn(sessions);
   const events = new PostgresRunEventRepository(pool);
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
@@ -168,6 +170,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     managedMemory,
     agentRegistry,
     sessions,
+    submitSessionTurn,
     events,
     cancelTask,
   });

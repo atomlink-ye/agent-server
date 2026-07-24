@@ -41,6 +41,7 @@ export class PostgresTaskRepository implements TaskRepository {
           node_path,
           status,
           ingress,
+          origin_ref,
           invokable_kind,
           invokable_version_id,
           input_snapshot_ref,
@@ -50,7 +51,7 @@ export class PostgresTaskRepository implements TaskRepository {
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -66,6 +67,7 @@ export class PostgresTaskRepository implements TaskRepository {
           node_path = EXCLUDED.node_path,
           status = EXCLUDED.status,
           ingress = EXCLUDED.ingress,
+          origin_ref = EXCLUDED.origin_ref,
           invokable_kind = EXCLUDED.invokable_kind,
           invokable_version_id = EXCLUDED.invokable_version_id,
           input_snapshot_ref = EXCLUDED.input_snapshot_ref,
@@ -90,6 +92,7 @@ export class PostgresTaskRepository implements TaskRepository {
         task.nodePath,
         task.status,
         task.ingress,
+        task.originRef,
         task.invokableKind,
         task.invokableVersionId,
         task.inputSnapshotRef,
@@ -212,6 +215,7 @@ interface TaskRow {
   readonly node_path: string | null;
   readonly status: Task['status'];
   readonly ingress: Task['ingress'];
+  readonly origin_ref: string | null;
   readonly invokable_kind: Task['invokableKind'];
   readonly invokable_version_id: string;
   readonly input_snapshot_ref: string;
@@ -250,6 +254,7 @@ const TASK_SELECT_SQL = `
     tasks.node_path,
     tasks.status,
     tasks.ingress,
+    tasks.origin_ref,
     tasks.invokable_kind,
     tasks.invokable_version_id,
     tasks.input_snapshot_ref,
@@ -311,6 +316,7 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     nodePath: row.node_path,
     status: row.status,
     ingress: row.ingress,
+    originRef: row.origin_ref,
     invokableKind: row.invokable_kind,
     invokableVersionId: row.invokable_version_id,
     inputSnapshotRef: row.input_snapshot_ref,

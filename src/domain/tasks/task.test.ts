@@ -24,6 +24,7 @@ describe('task', () => {
       id: 'bf3d2bc7-2db0-4c80-9790-42e388bf0b63',
       ...authoritativeScope,
       ingress: 'api',
+      originRef: null,
       invokableKind: 'agent',
       invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       inputSnapshotRef: 'inline:prompt',
@@ -47,12 +48,48 @@ describe('task', () => {
     expect(task.updatedAt).toBe(now.toISOString());
   });
 
+  it('rejects unsupported or incomplete trusted task origins', () => {
+    const task = createRootTask({
+      id: 'bf3d2bc7-2db0-4c80-9790-42e388bf0b63',
+      ...authoritativeScope,
+      ingress: 'api',
+      originRef: null,
+      invokableKind: 'agent',
+      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+      inputSnapshotRef: 'inline:prompt',
+      inputFingerprint: 'sha256:origin',
+    });
+
+    expect(() =>
+      rehydrateTask({
+        ...task,
+        ingress: 'api',
+        originRef: 'unexpected',
+      }),
+    ).toThrow(/origin/i);
+    expect(() =>
+      rehydrateTask({
+        ...task,
+        ingress: 'lark',
+        originRef: '',
+      }),
+    ).toThrow(/origin/i);
+    expect(() =>
+      rehydrateTask({
+        ...task,
+        ingress: 'email',
+        originRef: 'event-1',
+      } as unknown as Parameters<typeof rehydrateTask>[0]),
+    ).toThrow(/ingress/i);
+  });
+
   it('rejects a root task when authoritative scope values are blank', () => {
     expect(() =>
       createRootTask({
         ...authoritativeScope,
         principalId: '   ',
         ingress: 'api',
+        originRef: null,
         invokableKind: 'agent',
         invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
         inputSnapshotRef: 'inline:prompt',
@@ -66,6 +103,7 @@ describe('task', () => {
       createRootTask({
         ...authoritativeScope,
         ingress: 'api',
+        originRef: null,
         invokableKind: 'agent',
         invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
         inputSnapshotRef: 'inline:prompt',
@@ -87,6 +125,7 @@ describe('task', () => {
       nodePath: null,
       status: 'queued',
       ingress: 'api',
+      originRef: null,
       invokableKind: 'agent',
       invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       inputSnapshotRef: 'inline:prompt',
@@ -131,6 +170,7 @@ describe('task', () => {
       id: 'bf3d2bc7-2db0-4c80-9790-42e388bf0b63',
       ...authoritativeScope,
       ingress: 'api',
+      originRef: null,
       invokableKind: 'agent',
       invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       inputSnapshotRef: 'inline:prompt',
@@ -168,6 +208,7 @@ describe('task', () => {
         nodePath: null,
         status: 'queued',
         ingress: 'api',
+        originRef: null,
         invokableKind: 'agent',
         invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
         inputSnapshotRef: 'inline:prompt',

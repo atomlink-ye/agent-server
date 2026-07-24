@@ -6,6 +6,7 @@ import {
   WorkspaceCreateSchema,
 } from '../../../contracts/sessions.js';
 import type { SessionRepository } from '../../../application/ports/session-repository.js';
+import type { SubmitSessionTurn } from '../../../application/sessions/submit-session-turn.js';
 import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
@@ -26,7 +27,11 @@ const json = async (c: any) => {
 };
 export function registerSessionRoutes(
   app: Hono<ApiEnvironment>,
-  d: { config: AppConfig; sessions: SessionRepository },
+  d: {
+    config: AppConfig;
+    sessions: SessionRepository;
+    submitSessionTurn: SubmitSessionTurn;
+  },
 ) {
   const auth = requireServiceAccountAccess(
     new ServiceAccountAuthenticator(d.config.serviceAccounts ?? []),
@@ -155,13 +160,18 @@ export function registerSessionRoutes(
     const p = MessageCreateSchema.safeParse(await json(c));
     if (!p.success)
       throw new HttpError(400, 'invalid_request', 'Message text is required.');
-    const m = await d.sessions.postMessage(
-      String(c.req.param('id')),
-      p.data.text,
-      c.req.header('idempotency-key') ??
+    const m = await d.submitSessionTurn.execute({
+      sessionId: String(c.req.param('id')),
+      text: p.data.text,
+      idempotencyKey:
+        c.req.header('idempotency-key') ??
         `request:${String(c.get('requestId'))}`,
-      getAuthenticatedAccessContext(c),
-    );
+      owner: getAuthenticatedAccessContext(c),
+      origin: {
+        channel: 'api',
+        requestId: String(c.get('requestId')),
+      },
+    });
     return c.json(
       {
         message_id: m.id,

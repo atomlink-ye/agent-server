@@ -141,6 +141,7 @@ describe('AdmitRootTask', () => {
     const existingTask = createRootTask({
       ...primaryAccessContext,
       ingress: 'api',
+      originRef: null,
       invokableKind: 'agent',
       invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalizedRequest),
@@ -190,6 +191,7 @@ class RaceAdmissionRepository implements AdmissionRepository {
   public constructor(task: Task, run: Run, fingerprint: string) {
     this.#record = {
       ingress: 'api',
+      originRef: null,
       idempotencyKey: 'same-key',
       requestFingerprint: fingerprint,
       taskId: task.id,

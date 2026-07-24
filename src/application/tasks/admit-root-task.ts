@@ -79,6 +79,7 @@ export class AdmitRootTask {
           principalId: request.accessContext.principalId,
           policySnapshotVersion: request.accessContext.policySnapshotVersion,
           ingress: 'api',
+          originRef: null,
           invokableKind: 'agent',
           invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
           inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef(normalized),
@@ -91,6 +92,7 @@ export class AdmitRootTask {
         await transaction.runs.save(run, { taskId: task.id, attempt: 1 });
         await transaction.save({
           ingress: 'api',
+          originRef: null,
           idempotencyKey: request.idempotencyKey,
           requestFingerprint: fingerprint,
           taskId: task.id,

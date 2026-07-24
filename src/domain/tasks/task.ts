@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { assertTaskTransition, type TaskStatus } from './task-status.js';
 
-export interface Task {
+export type TaskOrigin =
+  | { readonly ingress: 'api'; readonly originRef: null }
+  | { readonly ingress: 'lark'; readonly originRef: string };
+
+interface TaskFields {
   readonly id: string;
   readonly tenantId: string;
   readonly workspaceId: string;
@@ -16,7 +20,6 @@ export interface Task {
   readonly logicalStepKey: string | null;
   readonly nodePath: string | null;
   readonly status: TaskStatus;
-  readonly ingress: 'api';
   readonly invokableKind: 'agent' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
@@ -32,9 +35,14 @@ export interface Task {
   readonly memorySnapshotHash?: string | null;
 }
 
-export type TaskSnapshot = Task;
+export type Task = TaskFields & TaskOrigin;
 
-export interface CreateRootTaskOptions {
+export type TaskSnapshot = TaskFields & {
+  readonly ingress: unknown;
+  readonly originRef: unknown;
+};
+
+interface CreateRootTaskFields {
   readonly id?: string;
   readonly depth?: number;
   readonly tenantId: string;
@@ -42,7 +50,6 @@ export interface CreateRootTaskOptions {
   readonly principalType: string;
   readonly principalId: string;
   readonly policySnapshotVersion: string;
-  readonly ingress: 'api';
   readonly invokableKind: 'agent' | 'team';
   readonly invokableVersionId: string;
   readonly inputSnapshotRef: string;
@@ -50,6 +57,8 @@ export interface CreateRootTaskOptions {
   readonly now?: () => Date;
   readonly sourceMessageId?: string | null;
 }
+
+export type CreateRootTaskOptions = CreateRootTaskFields & TaskOrigin;
 
 export interface CreateChildTaskOptions {
   readonly id?: string;
@@ -98,6 +107,7 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     nodePath: null,
     status: 'queued',
     ingress: options.ingress,
+    originRef: options.originRef,
     invokableKind: options.invokableKind,
     invokableVersionId: options.invokableVersionId,
     inputSnapshotRef: options.inputSnapshotRef,
@@ -126,6 +136,7 @@ export function createChildTask(options: CreateChildTaskOptions): Task {
     nodePath: options.nodePath,
     status: 'queued',
     ingress: 'api',
+    originRef: null,
     invokableKind: options.invokableKind,
     invokableVersionId: options.invokableVersionId,
     inputSnapshotRef: options.inputSnapshotRef,
@@ -156,8 +167,21 @@ export function transitionTask(
   });
 }
 
-function assertTaskShape(task: TaskSnapshot): void {
+function assertTaskShape(task: TaskSnapshot): asserts task is Task {
   assertAuthoritativeScope(task);
+
+  if (task.ingress !== 'api' && task.ingress !== 'lark') {
+    throw new Error('Task snapshots require a supported ingress');
+  }
+  if (task.ingress === 'api' && task.originRef !== null) {
+    throw new Error('API task snapshots require originRef to be null');
+  }
+  if (
+    task.ingress === 'lark' &&
+    (typeof task.originRef !== 'string' || task.originRef.trim().length === 0)
+  ) {
+    throw new Error('Lark task snapshots require a non-empty originRef');
+  }
 
   if (task.depth < ROOT_TASK_DEPTH) {
     throw new Error('Task depth must be zero or greater');

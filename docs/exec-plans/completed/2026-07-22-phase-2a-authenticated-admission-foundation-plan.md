@@ -1,8 +1,8 @@
 ---
-status: active
+status: completed
 owner: gpt-5.4
 created_at: 2026-07-22
-updated_at: 2026-07-22
+updated_at: 2026-07-24
 authority: implementation-plan
 ---
 
@@ -114,6 +114,11 @@ Run the three commands above again.
 
 Expected: PASS.
 
+> Historical reconciliation (2026-07-24): Tasks 3 and 4 were completed in the
+> implementation recorded by the canonical completed Exec Plan. The checkboxes
+> below are reconciled against its contract, E2E, documentation, and full-gate
+> validation evidence; they do not represent work rerun on this date.
+
 ### Task 3: Authenticated create/get and owner-scoped Run reads
 
 **Files:**
@@ -128,7 +133,7 @@ Expected: PASS.
 - Modify: `tests/contract/runs.contract.test.ts`
 - Modify: `e2e/run.e2e.test.ts`
 
-- [ ] **Step 1: Write the failing contract/e2e tests**
+- [x] **Step 1: Write the failing contract/e2e tests**
 
 Add tests that prove:
 
@@ -139,7 +144,7 @@ Add tests that prove:
 - authenticated GET returns `404 run_not_found` for mismatched owner scope even when the run exists;
 - replay still works after readiness turns false when the caller owner scope is the same.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -148,7 +153,7 @@ Run:
 
 Expected: FAIL because routes do not authenticate or scope reads yet.
 
-- [ ] **Step 3: Implement authenticated create/get**
+- [x] **Step 3: Implement authenticated create/get**
 
 Implement:
 
@@ -157,7 +162,7 @@ Implement:
 - get path that performs owner-scoped lookup;
 - bootstrap wiring so tests and production config share the same auth seam.
 
-- [ ] **Step 4: Re-run the focused tests and verify GREEN**
+- [x] **Step 4: Re-run the focused tests and verify GREEN**
 
 Run the two commands above again.
 
@@ -173,13 +178,13 @@ Expected: PASS.
 - Modify: `docs/components/control-plane.md`
 - Modify: `docs/architecture/tenancy-and-security.md`
 - Modify: `docs/decisions.md`
-- Modify: `docs/exec-plans/active/2026-07-22-phase-2a-authenticated-admission-foundation.md`
+- Modify: `docs/exec-plans/completed/2026-07-22-phase-2a-authenticated-admission-foundation.md`
 
-- [ ] **Step 1: Write the doc updates**
+- [x] **Step 1: Write the doc updates**
 
 Update the docs to describe the authenticated service-account baseline truth, the new API behavior, and the remaining Phase 2 gaps without implying credential/isolation completion.
 
-- [ ] **Step 2: Run documentation and plan checks**
+- [x] **Step 2: Run documentation and plan checks**
 
 Run:
 
@@ -188,7 +193,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the deterministic verification gate**
+- [x] **Step 3: Run the deterministic verification gate**
 
 Run:
 

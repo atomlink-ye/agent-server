@@ -16,7 +16,7 @@
     "check:types": "tsc -p tsconfig.json --noEmit",
     "check:format": "prettier --check .",
     "check:docs": "node scripts/ci/check-docs.mjs",
-    "check:exec-plans": "node scripts/ci/check-exec-plans.mjs",
+    "check:exec-plans": "node --test scripts/ci/check-exec-plans.test.mjs && node scripts/ci/check-exec-plans.mjs",
     "check": "pnpm check:types && pnpm check:format && pnpm check:docs && pnpm check:exec-plans",
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",

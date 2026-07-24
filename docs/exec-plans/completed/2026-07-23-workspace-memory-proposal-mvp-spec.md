@@ -1,8 +1,8 @@
 ---
-status: active
+status: completed
 owner: gpt-5.4
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 authority: design-spec
 ---
 

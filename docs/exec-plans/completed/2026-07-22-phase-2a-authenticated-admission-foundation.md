@@ -15,8 +15,8 @@ Require authenticated service-account access for the Run compatibility API, pers
 ## Context and authority
 
 - Authority order: explicit user direction and accepted ADRs, then Product/Feature/Component/Contract docs, then this Active Exec Plan, then current code/tests.
-- Accepted design spec: `docs/exec-plans/active/2026-07-22-phase-2a-authenticated-admission-foundation-spec.md`.
-- Detailed implementation plan: `docs/exec-plans/active/2026-07-22-phase-2a-authenticated-admission-foundation-plan.md`.
+- Accepted design spec: `docs/exec-plans/completed/2026-07-22-phase-2a-authenticated-admission-foundation-spec.md`.
+- Detailed implementation plan: `docs/exec-plans/completed/2026-07-22-phase-2a-authenticated-admission-foundation-plan.md`.
 - ADR: `docs/decisions/0004-authenticated-service-account-admission.md`.
 - Repo boundaries that must remain true: Task remains canonical; Run stays the compatibility HTTP representation; callers cannot supply authoritative tenant or effective principal; prompts/tokens/raw provider errors/local paths must not leak through normal responses or logs.
 - User explicitly chose to jump to a narrow Phase 2 slice rather than finishing Durable Kernel B first, and requested autonomous completion.

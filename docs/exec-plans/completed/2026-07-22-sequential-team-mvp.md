@@ -14,8 +14,8 @@ Add durable Agent/Team definitions, immutable published versions, a canonical pu
 
 ## Context and authority
 
-- Accepted design spec: `docs/exec-plans/active/2026-07-22-sequential-team-mvp-spec.md`.
-- Detailed implementation plan: `docs/exec-plans/active/2026-07-22-sequential-team-mvp-plan.md`.
+- Accepted design spec: `docs/exec-plans/completed/2026-07-22-sequential-team-mvp-spec.md`.
+- Detailed implementation plan: `docs/exec-plans/completed/2026-07-22-sequential-team-mvp-plan.md`.
 - Repo authority order: explicit user direction, then Product/Features/Contracts/Components, then this Active Exec Plan, then code/tests.
 - External requirement anchor: `/Volumes/AgentsWorkspace/orgs/0xdtech/docs/agent-server/项目文档/enterprise-research-agent-platform-v1-spec`.
 - User explicitly approved the Sequential Team MVP direction, requested autonomous completion, and required execution inside a fresh worktree.

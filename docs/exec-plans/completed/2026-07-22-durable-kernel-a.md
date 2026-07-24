@@ -15,7 +15,7 @@ Ship the first durable control-plane slice by making Task the canonical persiste
 ## Context and authority
 
 - Authority order: user decision and accepted plan, repo Product/Feature/Component/Contract docs, this Active Exec Plan, then current implementation evidence.
-- Accepted source plan: `/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/2026-07-22-durable-kernel-a-plan.md`.
+- Accepted source plan: `/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/history/2026-07-22-durable-kernel-a-plan.md`.
 - Handoff confirms the isolated execution lane already exists at `.worktrees/durable-kernel-a` on branch `agent/durable-kernel-a` and no Durable Kernel A code has started yet.
 - Repo rules that must remain true: `Task` is canonical and `Run` is an attempt; domain/application code must not import Paseo directly; deterministic gates cannot depend on live model availability; prompts/credentials/raw provider errors/local paths must not leak through normal API/log paths.
 - User additionally requested autonomous completion of this phase and corresponding verification using the OpenCode free provider path already proven in prior notes.

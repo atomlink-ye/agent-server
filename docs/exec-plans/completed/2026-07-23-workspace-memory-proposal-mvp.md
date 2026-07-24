@@ -14,8 +14,9 @@ Add a governance-only Workspace Memory slice: authenticated owner-scoped proposa
 
 ## Context and authority
 
-- Accepted design spec: `docs/exec-plans/active/2026-07-23-workspace-memory-proposal-mvp-spec.md`.
-- Initial implementation plan: `docs/exec-plans/active/2026-07-23-workspace-memory-proposal-mvp-plan.md`.
+- Accepted design spec: `docs/exec-plans/completed/2026-07-23-workspace-memory-proposal-mvp-spec.md`.
+- No separate implementation-plan artifact was retained; this canonical
+  completed Exec Plan is the execution record.
 - Repo authority order: explicit user direction, then Product/Features/Contracts/Components, then this exec plan, then code/tests.
 - External requirement anchor: `/Volumes/AgentsWorkspace/orgs/0xdtech/docs/agent-server/项目文档/enterprise-research-agent-platform-v1-spec`.
 - The user explicitly chose Workspace Memory Proposal MVP, explicitly required a public create-proposal API in this slice, and explicitly asked for autonomous completion followed by push + PR to `master`.

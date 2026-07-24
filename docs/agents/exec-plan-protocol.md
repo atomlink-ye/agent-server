@@ -72,3 +72,12 @@ authority: execution-plan
 ## Archival
 
 Before moving to `completed/`, all work, verification, documentation, cleanup, and completion checkboxes must be checked. Set `status: completed`, update evidence and remaining risks, move the file, and run `make check`. Completed plans cannot contain `- [ ]` anywhere.
+
+### Related Spec and Plan artifacts
+
+When both `<slug>-spec.md` and `<slug>-plan.md` exist, they form one archival
+unit while remaining separate documents. Completion moves both to `completed/`,
+sets completed status, resolves or explicitly transfers every unchecked item,
+and rewrites links away from `active/`. A standalone active Spec is allowed
+during design. A missing counterpart is allowed only when the canonical Plan
+states that no separate artifact was retained.

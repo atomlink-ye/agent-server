@@ -1,0 +1,52 @@
+name: PR6 real managed Agent E2E validation
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  managed-paseo-real-e2e:
+    if: github.head_ref == 'validation/pr6-real-managed-e2e-20260724'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_server_managed_real_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_server_managed_real_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/dev/resolve-opencode.mjs --check
+      - run: pnpm build
+      - name: Run full real Managed Agent flow through Paseo and OpenCode
+        run: node scripts/smoke/managed-paseo-e2e.mjs
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
+          POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/agent_server_managed_real_e2e
+          PGSSLMODE: disable
+          PASEO_SMOKE_MODEL: opencode/mimo-v2.5-free
+      - name: Upload sanitized validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr6-real-managed-e2e-evidence
+          path: .local/managed-real-e2e/evidence.json
+          if-no-files-found: error
+          retention-days: 7

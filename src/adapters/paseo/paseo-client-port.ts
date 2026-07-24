@@ -104,6 +104,7 @@ export class PaseoSdkClient implements PaseoClientPort {
       provider: 'opencode',
       model: input.model,
       modeId: 'build',
+      featureValues: { auto_accept: true },
       cwd: input.cwd,
       workspaceId: input.workspaceId,
       initialPrompt: input.prompt,

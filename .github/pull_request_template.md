@@ -11,8 +11,8 @@ Describe the user or developer outcome and the boundary that changed.
 
 ## Verification
 
-- [ ] `make ci`
-- [ ] Relevant focused tests
+- [ ] Real main-flow E2E run as early as prerequisites allowed; record the exact flow and result. For documentation-only diffs that change no product behavior, mark not applicable and state why.
+- [ ] Supporting checks actually run (existing CI is allowed but not required by default).
 - [ ] `make paseo-smoke` when the Paseo/OpenCode boundary changed
 
-Record actual commands and results in the Exec Plan. Never mark an unchecked item as implicitly complete.
+Do not add or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work unless the user explicitly requested it. Record actual commands and results in the Exec Plan. Never mark an unchecked item as implicitly complete. Preserve all security, tenant, credential, public API, migration, durable-state, and core-dependency Human Gates.

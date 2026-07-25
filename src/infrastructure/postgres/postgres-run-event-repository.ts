@@ -36,6 +36,29 @@ export class PostgresRunEventRepository implements RunEventRepository {
         }
       : null;
   }
+  async findLatestProviderAgentBySessionId(sessionId: string) {
+    const r = await this.db.query<{ provider_agent_id: string }>(
+      `SELECT b.provider_agent_id
+       FROM runtime_session_bindings b
+       JOIN runs r ON r.id = b.run_id
+       JOIN tasks t ON t.id = r.task_id
+       WHERE t.session_id = $1 AND b.provider_agent_id IS NOT NULL
+       ORDER BY b.created_at DESC, b.run_id DESC
+       LIMIT 1`,
+      [sessionId],
+    );
+    return r.rows?.[0]?.provider_agent_id ?? null;
+  }
+  async getProviderBindingForRunInSession(runId: string, sessionId: string) {
+    const r = await this.db.query<{ provider_agent_id: string }>(
+      `SELECT b.provider_agent_id FROM runtime_session_bindings b
+       JOIN runs r ON r.id = b.run_id JOIN tasks t ON t.id = r.task_id
+       WHERE b.run_id = $1 AND t.session_id = $2 AND b.provider_agent_id IS NOT NULL LIMIT 1`,
+      [runId, sessionId],
+    );
+    const providerAgentId = r.rows?.[0]?.provider_agent_id;
+    return providerAgentId ? { runId, sessionId, providerAgentId } : null;
+  }
   async append(
     runId: string,
     type: RunEventType,

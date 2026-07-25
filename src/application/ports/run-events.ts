@@ -18,12 +18,22 @@ export interface RunEvent {
 }
 export interface RuntimeSessionBinding {
   readonly runId: string;
+  readonly sessionId?: string | null;
   readonly providerAgentId?: string;
   readonly createdAt: string;
 }
 export interface RunEventRepository {
   bind(input: RuntimeSessionBinding): Promise<void>;
   getBinding(runId: string): Promise<RuntimeSessionBinding | null>;
+  findLatestProviderAgentBySessionId(sessionId: string): Promise<string | null>;
+  getProviderBindingForRunInSession(
+    runId: string,
+    sessionId: string,
+  ): Promise<{
+    readonly runId: string;
+    readonly sessionId: string;
+    readonly providerAgentId: string;
+  } | null>;
   append(
     runId: string,
     type: RunEventType,

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { assertCardActionToken } from '../../domain/channels/card-action.js';
 
 export type MemoryCardAction =
@@ -107,41 +106,12 @@ export function renderCardWithDocControls(input: DocControlsInput): MemoryCard {
   validateToken(input.token);
   const category = safeText(input.category, 120);
   const excerpt = boundedSafeText(
-    input.previewed ? (input.previewExcerpt ?? input.excerpt) : input.excerpt,
+    input.excerpt,
     MAX_EXCERPT_CHARS,
     MAX_EXCERPT_LINES,
   );
   const docStatus = safeText(input.docStatus, 80);
   const docUrl = safeDocUrl(input.docUrl);
-
-  if (input.previewed) {
-    const fingerprint = safeFingerprint(input.previewFingerprint);
-    return card('green', 'Workspace memory preview', [
-      markdown(`**Category**\n${category}`),
-      markdown(`**Preview**\n${excerpt}`),
-      markdown(`**Preview fingerprint**\n${fingerprint}`),
-      markdown(
-        'This preview is immutable. Later edits to the Doc will not change this preview.',
-      ),
-      actionRow([
-        callbackButton(
-          'Accept Preview',
-          'primary_filled',
-          'accept_preview',
-          input.token,
-        ),
-        callbackButton(
-          'Preview Again / Open Doc',
-          'default',
-          'preview_doc',
-          input.token,
-          false,
-          docUrl,
-        ),
-        callbackButton('Reject', 'danger', 'reject', input.token, true),
-      ]),
-    ]);
-  }
 
   return card('blue', 'Workspace memory review', [
     markdown(`**Category**\n${category}`),
@@ -149,12 +119,7 @@ export function renderCardWithDocControls(input: DocControlsInput): MemoryCard {
     markdown(`**Doc excerpt**\n${excerpt}`),
     actionRow([
       openButton('Open Doc', docUrl),
-      callbackButton(
-        'Read Changes and Generate Preview',
-        'default',
-        'preview_doc',
-        input.token,
-      ),
+      callbackButton('Accept', 'primary_filled', 'accept', input.token),
       callbackButton('Reject', 'danger', 'reject', input.token, true),
     ]),
   ]);
@@ -277,14 +242,6 @@ function escapeMarkdown(value: string): string {
 
 function safeDocUrl(value: string): string {
   return /^https?:\/\/[^\s]+$/i.test(value) ? value : 'about:blank';
-}
-
-function safeFingerprint(value: string | undefined): string {
-  if (value && /^[a-f0-9]{8,64}$/i.test(value)) return value.slice(0, 64);
-  return createHash('sha256')
-    .update(value ?? '')
-    .digest('hex')
-    .slice(0, 16);
 }
 
 function validateShortProposal(value: string): void {

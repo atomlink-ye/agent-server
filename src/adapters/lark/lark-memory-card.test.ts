@@ -124,7 +124,7 @@ describe('Lark memory Card 2.0 renderers', () => {
     ).toThrow(/token/);
   });
 
-  it('renders the doc control before preview with an open link and callback controls', () => {
+  it('renders direct doc acceptance without preview controls', () => {
     const card = renderCardWithDocControls({
       category: 'Project context',
       excerpt: 'A readable excerpt from the memory document.',
@@ -142,16 +142,16 @@ describe('Lark memory Card 2.0 renderers', () => {
       buttons(card).map(
         (button) => (button.text as { content: string }).content,
       ),
-    ).toEqual(['Open Doc', 'Read Changes and Generate Preview', 'Reject']);
+    ).toEqual(['Open Doc', 'Accept', 'Reject']);
     expect(buttons(card)[0]!.behaviors).toEqual([
       { type: 'open_url', default_url: 'https://docs.example.test/memory' },
     ]);
     expect(buttons(card)[1]!.behaviors).toEqual([
-      { type: 'callback', value: { action: 'preview_doc', token } },
+      { type: 'callback', value: { action: 'accept', token } },
     ]);
   });
 
-  it('renders immutable preview state with fingerprint and accept-preview action', () => {
+  it('never renders preview UI for legacy previewed input', () => {
     const card = renderCardWithDocControls({
       category: 'Project context',
       excerpt: 'Previewed content.',
@@ -163,28 +163,15 @@ describe('Lark memory Card 2.0 renderers', () => {
       previewFingerprint: '0123456789abcdef',
     });
     const output = json(card);
-    expect(output).toContain('This is the immutable preview.');
-    expect(output).toContain('**Preview fingerprint**\\n0123456789abcdef');
-    expect(output).toContain(
-      'Later edits to the Doc will not change this preview.',
-    );
+    expect(output).not.toContain('Preview fingerprint');
+    expect(output).not.toContain('Accept Preview');
     expect(
       buttons(card).map(
         (button) => (button.text as { content: string }).content,
       ),
-    ).toEqual(['Accept Preview', 'Preview Again / Open Doc', 'Reject']);
-    expect(buttons(card)[0]!.behaviors).toEqual([
-      {
-        type: 'callback',
-        value: {
-          action: 'accept_preview',
-          token,
-        },
-      },
-    ]);
+    ).toEqual(['Open Doc', 'Accept', 'Reject']);
     expect(buttons(card)[1]!.behaviors).toEqual([
-      { type: 'callback', value: { action: 'preview_doc', token } },
-      { type: 'open_url', default_url: 'https://docs.example.test/memory' },
+      { type: 'callback', value: { action: 'accept', token } },
     ]);
   });
 

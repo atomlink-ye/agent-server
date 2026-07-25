@@ -168,14 +168,18 @@ export class PostgresLarkReviewSurfaceRepository implements LarkReviewSurfaceRep
       const resumable =
         (p.status === 'accepted' || p.status === 'rejected') &&
         p.review_controller_ingress_id === input.ingressId &&
-        p.review_decision_sha256 === expectedFingerprint &&
+        (p.review_decision_sha256 === expectedFingerprint ||
+          (input.action === 'accept' &&
+            p.status === 'accepted' &&
+            p.reviewed_content !== null)) &&
         ((p.status === 'accepted' && input.action === 'accept') ||
           (p.status === 'rejected' && input.action === 'reject'));
       const replayOutcome =
         resumable &&
         (current?.status === 'resolved'
           ? current.resolving_ingress_id === input.ingressId
-          : current?.status === 'active_card')
+          : current?.status === 'active_card' ||
+            current?.status === 'active_card_with_doc')
           ? p.status
           : undefined;
       const actionMatches =
@@ -280,6 +284,9 @@ export class PostgresLarkReviewSurfaceRepository implements LarkReviewSurfaceRep
           originalContent: p.original_content,
           status: p.status,
           sourceSessionId: p.source_session_id,
+          sourceRunId: p.source_run_id,
+          reviewedContent: p.reviewed_content,
+          reviewControllerIngressId: p.review_controller_ingress_id,
           tenantId: p.tenant_id,
           workspaceId: p.workspace_id,
           principalType: p.principal_type,
@@ -377,7 +384,7 @@ export class PostgresLarkReviewSurfaceRepository implements LarkReviewSurfaceRep
         i.attempt_count !== input.attemptNumber ||
         cr.connection_key !== b.connection_key ||
         cr.chat_id !== b.chat_id ||
-        (isEditedAccept
+        (cr.kind === 'card_action'
           ? cr.external_message_id !== s.card_message_id
           : (cr.root_message_id ?? cr.external_message_id) !==
             b.root_message_id) ||

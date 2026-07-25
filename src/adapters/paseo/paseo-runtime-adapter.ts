@@ -161,6 +161,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   public async execute(input: {
     readonly runId: string;
     readonly prompt: string;
+    readonly providerAgentId?: string;
     readonly memoryCandidates?: {
       readonly maxCandidates?: number;
       readonly proposalLimit?: number;
@@ -184,16 +185,25 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       ? await this.#prepareArtifactPath(artifactRelativePath)
       : null;
     if (artifact) await this.#clearArtifact(artifact);
-    const agent = await this.#client.createOpenCodeAgent({
-      cwd: this.#options.cwd,
-      workspaceId: this.#workspaceId,
-      model: this.#model.id,
-      prompt: artifact
-        ? `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`
-        : input.prompt,
-      runId: input.runId,
-    });
+    const prompt = artifact
+      ? `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`
+      : input.prompt;
+    const agent = input.providerAgentId
+      ? {
+          id: input.providerAgentId,
+          provider: 'opencode',
+          model: this.#model.id,
+        }
+      : await this.#client.createOpenCodeAgent({
+          cwd: this.#options.cwd,
+          workspaceId: this.#workspaceId,
+          model: this.#model.id,
+          prompt,
+          runId: input.runId,
+        });
     this.#agents.set(input.runId, agent.id);
+    if (input.providerAgentId)
+      await this.#client.sendAgentMessage(agent.id, prompt);
     const finished = await this.#client.waitForFinish(
       agent.id,
       this.#options.executionTimeoutMs,
@@ -219,6 +229,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       provider: agent.provider || 'opencode',
       model: agent.model ?? this.#model.id,
       text: finished.lastMessage,
+      providerAgentId: agent.id,
       ...(finished.usage ? { usage: finished.usage } : {}),
       ...(memory.memoryCandidates
         ? { memoryCandidates: memory.memoryCandidates }

@@ -80,9 +80,13 @@ export class PublishMemoryReviewSurface {
     }
 
     for (const proposal of proposals) {
-      const selection = selectMemoryReviewSurface({
+      const selected = selectMemoryReviewSurface({
         content: proposal.originalContent,
       });
+      const selection =
+        selected.mode === 'command_only'
+          ? selected
+          : { ...selected, mode: 'card_with_doc' as const };
       if (
         this.surfaces &&
         (await this.surfaces.getActiveSurface({

@@ -8,6 +8,9 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
+import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
+import type { PaseoClientPort } from '../../src/adapters/paseo/paseo-client-port.js';
 
 const owner = {
   tenantId: 'tenant-1',
@@ -24,6 +27,8 @@ const runtimeAgentVersionId = '00000000-0000-4000-8000-000000000904';
 const runtimeTaskId = '00000000-0000-4000-8000-000000000101';
 const runtimeMessageId = '00000000-0000-4000-8000-000000000903';
 const runtimeRunId = '00000000-0000-4000-8000-000000000201';
+const continuationTaskId = '00000000-0000-4000-8000-000000000202';
+const continuationRunId = '00000000-0000-4000-8000-000000000203';
 
 function proposal(
   id: string,
@@ -74,6 +79,83 @@ async function database() {
 }
 
 describe('runtime memory PostgreSQL materialization', () => {
+  it('persists the first Agent and reuses it for the next Run in the same Product Session', async () => {
+    const db = await database();
+    let creates = 0;
+    const sends: string[] = [];
+    const client: PaseoClientPort = {
+      connect: async () => undefined,
+      connectionStatus: () => 'connected',
+      openWorkspace: async () => 'workspace-1',
+      setWorkspaceTitle: async () => undefined,
+      listOpenCodeModels: async () => [{ id: 'free/model', label: 'free' }],
+      createOpenCodeAgent: async () => {
+        creates += 1;
+        return {
+          id: 'agent-session-1',
+          provider: 'opencode',
+          model: 'free/model',
+        };
+      },
+      sendAgentMessage: async (agentId, text) => {
+        sends.push(`${agentId}:${text}`);
+      },
+      waitForFinish: async () => ({
+        status: 'idle',
+        error: null,
+        lastMessage: 'done',
+      }),
+      close: async () => undefined,
+    };
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://test',
+        cwd: '/tmp/runtime-memory-pglite',
+        workspaceTitle: 'test',
+        connectTimeoutMs: 1,
+        executionTimeoutMs: 1,
+      },
+      { log: () => undefined },
+      client,
+    );
+    const bindings = new PostgresRunEventRepository(db);
+    const first = await runtime.execute({
+      runId: runtimeRunId,
+      prompt: 'first',
+    });
+    await bindings.bind({
+      runId: runtimeRunId,
+      providerAgentId: first.providerAgentId,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await db.query(
+      `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,session_id,created_at,updated_at) VALUES ($1,'tenant-1',$2,'service_account','svc-1','policy-1',$1,0,'active','api','agent',$3,'ref','fingerprint-2',$4,now(),now())`,
+      [
+        continuationTaskId,
+        owner.workspaceId,
+        runtimeAgentVersionId,
+        '00000000-0000-4000-8000-000000000902',
+      ],
+    );
+    await db.query(
+      `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker','00000000-0000-4000-8000-000000000302',now()+interval '1 hour',1,now(),now())`,
+      [continuationRunId, continuationTaskId],
+    );
+    const prior = await bindings.findLatestProviderAgentBySessionId(
+      '00000000-0000-4000-8000-000000000902',
+    );
+    const second = await runtime.execute({
+      runId: continuationRunId,
+      prompt: 'second',
+      ...(prior ? { providerAgentId: prior } : {}),
+    });
+
+    expect(first.providerAgentId).toBe('agent-session-1');
+    expect(prior).toBe('agent-session-1');
+    expect(second.providerAgentId).toBe('agent-session-1');
+    expect(creates).toBe(1);
+    expect(sends).toEqual(['agent-session-1:second']);
+  });
   it('lists only pending proposals for the exact successful source run and owner', async () => {
     const db = await database();
     await db.query(

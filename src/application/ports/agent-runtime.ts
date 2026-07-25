@@ -17,6 +17,7 @@ export interface AgentRuntimeExecution {
   readonly provider: string;
   readonly model: string;
   readonly text: string;
+  readonly providerAgentId: string;
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly {
     readonly content: string;
@@ -29,6 +30,7 @@ export interface AgentRuntimePort {
   execute(input: {
     readonly runId: string;
     readonly prompt: string;
+    readonly providerAgentId?: string;
     readonly memoryCandidates?: {
       readonly maxCandidates?: number;
       readonly proposalLimit?: number;

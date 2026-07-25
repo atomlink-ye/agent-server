@@ -31,6 +31,9 @@ export interface LarkReviewSurfaceRepository {
       readonly originalContent: string;
       readonly status: string;
       readonly sourceSessionId: string | null;
+      readonly sourceRunId: string | null;
+      readonly reviewedContent: string | null;
+      readonly reviewControllerIngressId: string | null;
       readonly tenantId: string;
       readonly workspaceId: string;
       readonly principalType: string;

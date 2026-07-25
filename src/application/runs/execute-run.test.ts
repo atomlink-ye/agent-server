@@ -18,6 +18,42 @@ import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import { createRuntimeExecutionReceipt } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
+  it('passes the prior session provider Agent and persists the returned Agent id', async () => {
+    const claim = createClaim();
+    const task = { ...createTask(), sessionId: 'session-1' } as Task;
+    const events = {
+      bind: vi.fn(async () => undefined),
+      append: vi.fn(async () => undefined),
+      findLatestProviderAgentBySessionId: vi.fn(async () => 'agent-prior'),
+    };
+    const runtime = createRuntime();
+    vi.mocked(runtime.execute).mockResolvedValue({
+      provider: 'test-provider',
+      model: 'test-model',
+      text: 'safe result',
+      providerAgentId: 'agent-prior',
+    });
+    const executeRun = new ExecuteRun(
+      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      {} as never,
+      {} as never,
+      runtime,
+      { log: vi.fn() },
+      () => new Date(),
+      undefined,
+      events as never,
+    );
+
+    await executeRun.execute(claim);
+
+    expect(runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ providerAgentId: 'agent-prior' }),
+    );
+    expect(events.bind).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providerAgentId: 'agent-prior' }),
+    );
+  });
   it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
     const claim = createClaim();
     const task = createTask('agent', 'managed-version-1');
@@ -449,6 +485,7 @@ describe('ExecuteRun', () => {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
+        providerAgentId: 'agent-test',
         memoryCandidates: [
           { category: 'project_constraint', content: 'api_key=secret' },
           { category: 'project_constraint', content: 'safe constraint' },
@@ -530,6 +567,7 @@ describe('ExecuteRun', () => {
           provider: 'test-provider',
           model: 'test-model',
           text: runId,
+          providerAgentId: 'agent-test',
           memoryCandidates: [
             { category: 'project_constraint', content: 'one' },
             { category: 'project_constraint', content: 'two' },
@@ -687,6 +725,7 @@ function createRuntimeWithCandidates(): AgentRuntimePort {
       provider: 'test-provider',
       model: 'test-model',
       text: 'safe result',
+      providerAgentId: 'agent-test',
       memoryCandidates: [
         { category: 'project_constraint', content: 'keep logs' },
       ],
@@ -709,6 +748,7 @@ function createRuntime(error?: Error): AgentRuntimePort {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
+        providerAgentId: 'agent-test',
       };
     }),
     close: vi.fn(async () => undefined),

@@ -9,10 +9,36 @@ export class InMemoryRunEventRepository implements RunEventRepository {
   readonly #events = new Map<string, RunEvent[]>();
   readonly #bindings = new Map<string, RuntimeSessionBinding>();
   async bind(input: RuntimeSessionBinding) {
-    this.#bindings.set(input.runId, input);
+    const current = this.#bindings.get(input.runId);
+    const providerAgentId =
+      input.providerAgentId !== undefined
+        ? input.providerAgentId
+        : current?.providerAgentId;
+    this.#bindings.set(input.runId, {
+      ...current,
+      ...input,
+      ...(providerAgentId !== undefined ? { providerAgentId } : {}),
+    });
+  }
+  async findLatestProviderAgentBySessionId(sessionId: string) {
+    return (
+      [...this.#bindings.values()]
+        .filter(
+          (binding) =>
+            binding.sessionId === sessionId && binding.providerAgentId,
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+        ?.providerAgentId ?? null
+    );
   }
   async getBinding(runId: string) {
     return this.#bindings.get(runId) ?? null;
+  }
+  async getProviderBindingForRunInSession(runId: string, sessionId: string) {
+    const binding = this.#bindings.get(runId);
+    return binding?.sessionId === sessionId && binding.providerAgentId
+      ? { runId, sessionId, providerAgentId: binding.providerAgentId }
+      : null;
   }
   async append(
     runId: string,

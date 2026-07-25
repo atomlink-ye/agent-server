@@ -19,14 +19,18 @@ The fixed command-only Lark compatibility adapter is disabled by default. When
 enabled, it fixes one App/domain, allowlisted chat and external user, bot mention
 identity, and service-account Tenant/Workspace/published AgentVersion tuple. The
 WebSocket receiver derives verified mentions and commits bounded ingress before
-acknowledgement. Eligible roots use the shared Session turn admission; a
-successful source Run creates one safe Thread review instruction, and
-`/memory edit-and-accept` converges on the canonical Memory review and
-ready-snapshot flow. Card and Bot Doc are projection/control surfaces over the
-same state: long proposals use editable body plus unresolved comments/replies,
-`Read Changes and Generate Preview`, immutable Preview, and separate `Accept
-Preview`; Thread command remains fallback. This is a compatibility seam, not a
-canonical User/Membership or production channel platform.
+acknowledgement. Replies in an existing Lark thread use the root binding and its
+Product Session. Unrelated roots/threads in the same chat retain separate
+bindings and Sessions. Successive Agent Runs in one Product Session reuse the
+bound idle provider Agent when continuation is available; Thread command remains
+fallback. This is a compatibility seam, not a canonical User/Membership or
+production channel platform.
+
+Every Card-eligible Memory proposal immediately creates a Bot-owned editable Doc
+before the initial `card_with_doc` surface. New Cards show only `Open Doc`,
+`Accept`, and `Reject`; legacy edit/Preview actions remain inbound-only. Direct
+Accept resumes the exact source Agent and terminal provenance distinguishes the
+source-message root from legacy Card-action Preview successors.
 
 ## V1 responsibilities
 

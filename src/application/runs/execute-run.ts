@@ -78,10 +78,6 @@ export class ExecuteRun {
     let completed: Run;
 
     try {
-      await this.events?.bind({
-        runId: claim.run.id,
-        createdAt: claim.run.updatedAt,
-      });
       await this.events?.append(claim.run.id, 'started', {});
       const task = await this.tasks.findById(claim.taskId);
       if (!task) {
@@ -89,6 +85,12 @@ export class ExecuteRun {
           `Task ${claim.taskId} could not be loaded for execution`,
         );
       }
+
+      await this.events?.bind({
+        runId: claim.run.id,
+        ...(task.sessionId ? { sessionId: task.sessionId } : {}),
+        createdAt: claim.run.updatedAt,
+      });
 
       if (task.status === 'queued') {
         await this.tasks.save(
@@ -216,12 +218,25 @@ export class ExecuteRun {
       invokableVersionId,
       task,
     );
+    const priorProviderAgentId =
+      task.sessionId && this.events?.findLatestProviderAgentBySessionId
+        ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+        : null;
     const execution = await this.runtime.execute({
       runId: claim.run.id,
       prompt: resolved.prompt,
+      ...(priorProviderAgentId
+        ? { providerAgentId: priorProviderAgentId }
+        : {}),
       ...(resolved.proposalLimit > 0
         ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
         : {}),
+    });
+    await this.events?.bind({
+      runId: claim.run.id,
+      ...(task.sessionId ? { sessionId: task.sessionId } : {}),
+      providerAgentId: execution.providerAgentId,
+      createdAt: claim.run.updatedAt,
     });
     const candidateInputs = (
       task.sourceMessageId ? (execution.memoryCandidates ?? []) : []

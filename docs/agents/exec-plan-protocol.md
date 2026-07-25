@@ -2,7 +2,7 @@
 
 ## When required
 
-Create an Exec Plan for every Feature, bug fix, refactor, dependency upgrade, public API/event/schema change, migration, security/reliability change, cross-component documentation change, multi-step investigation/implementation, or work likely to span sessions. A read-only investigation or semantics-free typo may be exempt.
+Create an Exec Plan for every Feature, bug fix, refactor, dependency upgrade, public API/event/schema change, migration, security/reliability change, cross-component documentation change, multi-step investigation/implementation, or work likely to span sessions. During product implementation stage, keep the plan to the minimum truthful handoff needed for safe continuation; plan ceremony must not delay the real main-flow E2E. A read-only investigation or semantics-free typo may be exempt.
 
 Active path:
 
@@ -62,7 +62,7 @@ authority: execution-plan
 
 ## Maintenance rules
 
-- Check an item when evidence exists, not when work merely started.
+- Check an item when evidence exists, not when work merely started. The real main-flow E2E is the primary implementation-stage acceptance evidence.
 - Add discovered work rather than hiding it in prose.
 - Record a meaningful failed approach and why it changed the plan.
 - Never delete unfinished scope. Mark it deferred with reason and link to a new plan or issue.
@@ -71,7 +71,7 @@ authority: execution-plan
 
 ## Archival
 
-Before moving to `completed/`, all work, verification, documentation, cleanup, and completion checkboxes must be checked. Set `status: completed`, update evidence and remaining risks, move the file, and run `make check`. Completed plans cannot contain `- [ ]` anywhere.
+Before moving to `completed/`, all work, verification, documentation, cleanup, and completion checkboxes must be checked. Set `status: completed`, update evidence and remaining risks, move the file, and run the applicable checks. Completed plans cannot contain `- [ ]` anywhere. Do not add deterministic tests, eval datasets, or fixtures to satisfy ceremony unless the user explicitly requests that work.
 
 ### Related Spec and Plan artifacts
 

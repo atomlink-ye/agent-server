@@ -16,7 +16,7 @@ Do not copy the legacy `backup` implementation into this branch. Treat it as beh
 4. Existing plans in `docs/exec-plans/active/`.
 5. [Agent handbook](docs/agents.md) before implementation.
 
-Never infer that a documented V1 target is implemented. `docs/features.md` is the status ledger; code and tests are the implementation evidence.
+Never infer that a documented V1 target is implemented. `docs/features.md` is the status ledger; observed real flows and current code are primary implementation evidence, with existing tests as supporting evidence.
 
 ## Non-negotiable boundaries
 
@@ -45,11 +45,16 @@ docs/                   product and engineering authority
 
 ## Work protocol
 
-Create or take ownership of an Active Exec Plan before any substantive change. Update its checkboxes, decisions, discoveries, validation commands, and recovery notes while working. Do not delete deferred work: record why it moved and point to its new plan or issue.
+The repository is in product implementation stage until the user explicitly changes the phase. Create or take ownership of an Active Exec Plan before substantive work, but keep the minimum truthful plan and handoff needed for safe continuation. Documentation ceremony must not delay the real main-flow E2E.
 
-Use the smallest relevant loop first, then run the full gate:
+Default every slice to the smallest complete user-visible/main-flow real E2E and run that flow as early as prerequisites allow; it is the primary phase acceptance target. Fix only issues that block that flow or make the minimum path invalid, unsafe, or unverifiable. Record and defer non-blocking hardening, uncommon recovery, concurrency, generalized abstractions, performance, polish, and review findings rather than expanding the slice.
+
+Do not proactively author or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work. Test authoring happens only when the user explicitly requests it. Existing CI/checks may run and must be reported truthfully, but they are supporting merge signals and must not delay the first real E2E unless the user asks or the requested GitHub operation requires them. Preserve security, tenant, credential, public API, migration, durable-state, and core-dependency Human Gates.
+
+Use the smallest relevant loop first. Existing test, smoke, and CI commands are optional supporting checks: run them only when already applicable to the changed behavior or when the user explicitly requests them, and report the exact result. They are not a default implementation-stage requirement and must not delay the first real main-flow E2E.
 
 ```bash
+# Optional supporting checks, only when applicable or explicitly requested:
 make test-unit
 make test-contract
 make test-integration
@@ -64,8 +69,8 @@ Run `make paseo-smoke` when changing Paseo, OpenCode resolution, process isolati
 A task is complete only when:
 
 - implementation and documented scope agree;
-- focused tests and `make ci` actually ran;
-- external smoke ran when the runtime boundary changed, or the reason it could not run is recorded;
+- the primary real main-flow E2E ran, and any supporting checks are reported truthfully; for a documentation-only diff that changes no product behavior, record why the E2E is not applicable;
+- external smoke ran when product runtime behavior changed, or the reason it could not run is recorded;
 - Feature, Component, Contract, ADR, and Runbook impact is resolved;
 - no unexplained TODO, skipped test, debug output, credential, or generated evidence remains;
 - every Exec Plan item is checked or explicitly transferred;

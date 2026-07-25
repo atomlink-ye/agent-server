@@ -14,11 +14,12 @@ authority: execution-plan
 - Direct Accept resumes the exact source Run+Session Agent and uses Bot identity
   for the validated `lark-cli` Doc fetch.
 - Preserve legacy inbound actions and terminal provenance for Preview successors.
-- Keep Task 14 untouched; E2E remains follow-up work.
+- Keep Task 14 untouched. Do not author a new deterministic E2E by default; the real direct-Accept main flow is the primary implementation-stage acceptance target, with deterministic E2E follow-up only on explicit user request.
 
 ## Evidence
 
-- Focused direct-accept/Card/publisher tests pass under Node 24.
+- The real direct-Accept main flow is the primary evidence for this product implementation-stage slice.
+- Existing focused direct-accept/Card/publisher tests pass under Node 24 and remain supporting evidence; no new tests are implied by this plan.
 - Same-session provider continuation tests remain in the current thread plan.
 - Real Gate facts were sanitized into the evidence packet: same Session/Agent,
   Bot Doc read, changed marker, one Entry, ready Snapshot v6, followed by a
@@ -39,6 +40,7 @@ None.
 
 ## Next exact command
 
-Open the PR with this plan still active. Schedule the deferred deterministic
-direct-Accept E2E and Task 14 hardening as follow-up work rather than expanding
-the current PR.
+Run or record the real direct-Accept main flow as early as prerequisites allow,
+then open the PR with this plan still active. Schedule deterministic direct-Accept
+E2E authoring and Task 14 hardening as follow-up work; do not expand the current
+slice without an explicit user request.

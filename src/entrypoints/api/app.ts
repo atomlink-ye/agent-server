@@ -25,6 +25,7 @@ import { registerWorkspaceMemoryRoutes } from './routes/workspace-memory.js';
 import { registerAgentRoutes } from './routes/agents.js';
 import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 import type { SessionRepository } from '../../application/ports/session-repository.js';
+import { SubmitSessionTurn } from '../../application/sessions/submit-session-turn.js';
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
 import type { ManagedMemory } from '../../application/memory/managed-memory.js';
@@ -46,6 +47,7 @@ export interface AppDependencies {
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
   readonly sessions?: SessionRepository;
+  readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
   readonly managedMemory?: ManagedMemory;
@@ -87,6 +89,9 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     registerSessionRoutes(app, {
       ...dependencies,
       sessions: dependencies.sessions,
+      submitSessionTurn:
+        dependencies.submitSessionTurn ??
+        new SubmitSessionTurn(dependencies.sessions),
     });
 
   app.notFound((context) => {

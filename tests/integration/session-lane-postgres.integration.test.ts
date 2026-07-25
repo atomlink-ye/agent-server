@@ -70,19 +70,26 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         agentVersionId: versionId,
         owner,
       });
-      const first = await repository.postMessage(
-        session.id,
-        'first',
-        crypto.randomUUID(),
+      const first = await repository.postMessage({
+        sessionId: session.id,
+        text: 'first',
+        idempotencyKey: crypto.randomUUID(),
         owner,
-      );
+        origin: { channel: 'api', requestId: crypto.randomUUID() },
+      });
       const reloadedFirst = await new PostgresTaskRepository(pool).findById(
         first.taskId,
       );
       expect(reloadedFirst?.sourceMessageId).toBe(first.id);
       const followUps = await Promise.all(
         ['second', 'third', 'fourth'].map((text) =>
-          repository.postMessage(session.id, text, crypto.randomUUID(), owner),
+          repository.postMessage({
+            sessionId: session.id,
+            text,
+            idempotencyKey: crypto.randomUUID(),
+            owner,
+            origin: { channel: 'api', requestId: crypto.randomUUID() },
+          }),
         ),
       );
       const messages = await repository.listMessages(session.id, owner);
@@ -248,12 +255,13 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         failure_detail: null,
       });
 
-      const newGeneration = await repository.postMessage(
-        session.id,
-        'new generation',
-        crypto.randomUUID(),
+      const newGeneration = await repository.postMessage({
+        sessionId: session.id,
+        text: 'new generation',
+        idempotencyKey: crypto.randomUUID(),
         owner,
-      );
+        origin: { channel: 'api', requestId: crypto.randomUUID() },
+      });
       const blocked = await pool.query(
         'SELECT active_task_id FROM session_lanes WHERE session_id = $1',
         [session.id],
@@ -324,18 +332,20 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         agentVersionId: versionId,
         owner,
       });
-      const first = await repository.postMessage(
-        session.id,
-        'first',
-        crypto.randomUUID(),
+      const first = await repository.postMessage({
+        sessionId: session.id,
+        text: 'first',
+        idempotencyKey: crypto.randomUUID(),
         owner,
-      );
-      const second = await repository.postMessage(
-        session.id,
-        'second',
-        crypto.randomUUID(),
+        origin: { channel: 'api', requestId: crypto.randomUUID() },
+      });
+      const second = await repository.postMessage({
+        sessionId: session.id,
+        text: 'second',
+        idempotencyKey: crypto.randomUUID(),
         owner,
-      );
+        origin: { channel: 'api', requestId: crypto.randomUUID() },
+      });
       const runs = new PostgresRunRepository(pool);
       const tasks = new PostgresTaskRepository(pool);
       const claim = await runs.claimQueuedById({

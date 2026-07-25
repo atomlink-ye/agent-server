@@ -1,14 +1,15 @@
 import type { AccessContext } from '../control-plane/access-context.js';
 import type { RunRepository } from './run-repository.js';
 import type { TaskRepository } from './task-repository.js';
+import type { AdmissionIngress } from '../sessions/session-turn-origin.js';
 
 export type AdmissionOwnerScope = Pick<
   AccessContext,
   'tenantId' | 'workspaceId' | 'principalType' | 'principalId'
 >;
 
-export interface AdmissionRecord {
-  readonly ingress: 'api';
+interface AdmissionRecordFields {
+  readonly sessionId?: string | null;
   readonly idempotencyKey: string;
   readonly requestFingerprint: string;
   readonly taskId: string;
@@ -20,11 +21,23 @@ export interface AdmissionRecord {
   readonly createdAt: string;
 }
 
+export type AdmissionRecord = AdmissionRecordFields &
+  (
+    | {
+        readonly ingress: Extract<AdmissionIngress, 'api'>;
+        readonly originRef: null;
+      }
+    | {
+        readonly ingress: Extract<AdmissionIngress, 'lark'>;
+        readonly originRef: string;
+      }
+  );
+
 export interface AdmissionTransaction {
   readonly tasks: TaskRepository;
   readonly runs: RunRepository;
   findByIngressAndIdempotencyKey(
-    ingress: 'api',
+    ingress: AdmissionIngress,
     idempotencyKey: string,
     scope: AdmissionOwnerScope,
   ): Promise<AdmissionRecord | null>;

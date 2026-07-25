@@ -102,6 +102,7 @@ export class InvokeTask {
           principalId: request.accessContext.principalId,
           policySnapshotVersion: request.accessContext.policySnapshotVersion,
           ingress: 'api',
+          originRef: null,
           invokableKind: request.invokable.kind,
           invokableVersionId: request.invokable.versionId,
           inputSnapshotRef:
@@ -115,6 +116,7 @@ export class InvokeTask {
         await transaction.runs.save(run, { taskId: task.id, attempt: 1 });
         await transaction.save({
           ingress: 'api',
+          originRef: null,
           idempotencyKey,
           requestFingerprint: fingerprint,
           taskId: task.id,

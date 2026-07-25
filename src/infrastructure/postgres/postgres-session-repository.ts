@@ -8,6 +8,8 @@ import type {
 } from '../../application/ports/session-repository.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
+import { originReference } from '../../application/sessions/session-turn-origin.js';
+import type { SubmitSessionTurnInput } from '../../application/ports/session-repository.js';
 
 interface Q {
   query<R = Record<string, unknown>>(
@@ -108,12 +110,8 @@ export class PostgresSessionRepository implements SessionRepository {
     );
     return (r.rows ?? []).map(mapMessage);
   }
-  async postMessage(
-    id: string,
-    text: string,
-    key: string,
-    o: AccessContext,
-  ): Promise<UserMessage> {
+  async postMessage(i: SubmitSessionTurnInput): Promise<UserMessage> {
+    const { sessionId: id, text, idempotencyKey: key, owner: o, origin } = i;
     const c = await this.acquire();
     await c.query('BEGIN');
     try {
@@ -124,8 +122,16 @@ export class PostgresSessionRepository implements SessionRepository {
       const row = s.rows?.[0];
       if (!row) throw new Error('not_found');
       const existing = await c.query(
-        `SELECT m.*,t.status,r.id run_id FROM admissions a JOIN messages m ON m.task_id=a.task_id JOIN tasks t ON t.id=m.task_id LEFT JOIN runs r ON r.task_id=t.id WHERE a.ingress='api' AND a.idempotency_key=$1 AND a.tenant_id=$2 AND a.workspace_id=$3 AND a.principal_type=$4 AND a.principal_id=$5`,
-        [key, o.tenantId, row.workspace_id, o.principalType, o.principalId],
+        `SELECT m.*,t.status,r.id run_id FROM admissions a JOIN messages m ON m.task_id=a.task_id JOIN tasks t ON t.id=m.task_id LEFT JOIN runs r ON r.task_id=t.id WHERE m.session_id=$1 AND a.ingress=$2 AND a.idempotency_key=$3 AND a.tenant_id=$4 AND a.workspace_id=$5 AND a.principal_type=$6 AND a.principal_id=$7`,
+        [
+          id,
+          origin.channel,
+          key,
+          o.tenantId,
+          row.workspace_id,
+          o.principalType,
+          o.principalId,
+        ],
       );
       if (existing.rows?.[0]) {
         await c.query('COMMIT');
@@ -145,7 +151,7 @@ export class PostgresSessionRepository implements SessionRepository {
       const memorySnapshotId = pinned.rows?.[0]?.snapshot_id ?? null;
       const memorySnapshotHash = pinned.rows?.[0]?.content_hash ?? null;
       await c.query(
-        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,parent_task_id,parent_run_id,depth,logical_step_key,node_path,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,memory_snapshot_id,memory_snapshot_hash,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,NULL,NULL,0,NULL,NULL,'queued','api','agent',$6,$7,$8,$9,$10,$11,$11,$12,$13,$14)`,
+        `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,parent_task_id,parent_run_id,depth,logical_step_key,node_path,status,ingress,origin_ref,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,memory_snapshot_id,memory_snapshot_hash,created_at,updated_at,session_id,generation,lane_sequence) VALUES($1,$2,$3,$4,$5,'product_session',$1,NULL,NULL,0,NULL,NULL,'queued',$15,$16,'agent',$6,$7,$8,$9,$10,$11,$11,$12,$13,$14)`,
         [
           taskId,
           o.tenantId,
@@ -161,6 +167,8 @@ export class PostgresSessionRepository implements SessionRepository {
           id,
           row.generation,
           seq,
+          origin.channel,
+          originReference(origin),
         ],
       );
       await c.query(
@@ -172,11 +180,14 @@ export class PostgresSessionRepository implements SessionRepository {
         [msgId, id, row.generation, seq, text, taskId, now],
       );
       await c.query(
-        `INSERT INTO admissions(ingress,idempotency_key,request_fingerprint,task_id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,created_at) VALUES('api',$1,$2,$3,$4,$5,$6,$7,'product_session',$8) ON CONFLICT DO NOTHING`,
+        `INSERT INTO admissions(ingress,origin_ref,idempotency_key,request_fingerprint,task_id,session_id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'product_session',$11)`,
         [
+          origin.channel,
+          originReference(origin),
           key,
           fp,
           taskId,
+          id,
           o.tenantId,
           row.workspace_id,
           o.principalType,

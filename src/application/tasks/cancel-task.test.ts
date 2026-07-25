@@ -124,6 +124,7 @@ function fixtureTask(): Task {
     principalId: owner.principalId,
     policySnapshotVersion: owner.policySnapshotVersion,
     ingress: 'api',
+    originRef: null,
     invokableKind: 'agent',
     invokableVersionId: '00000000-0000-4000-8000-000000000002',
     inputSnapshotRef: 'snapshot',

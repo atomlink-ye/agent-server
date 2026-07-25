@@ -21,6 +21,14 @@ export interface PostgresMigrationExecutor {
   exec?(sql: string): Promise<unknown>;
 }
 
+interface ConnectableMigrationExecutor extends PostgresMigrationExecutor {
+  connect(): Promise<PostgresMigrationClient>;
+}
+
+interface PostgresMigrationClient extends PostgresMigrationExecutor {
+  release(): void;
+}
+
 const durableKernelMigrationFileNames = [
   '0001_durable_kernel_a.sql',
   '0002_phase_2a_authenticated_admission.sql',
@@ -34,8 +42,16 @@ const durableKernelMigrationFileNames = [
   '0009_session_reset_idempotency_hardening.sql',
   '0010_runtime_memory_provenance.sql',
   '0011_runtime_memory_provenance_integrity.sql',
+  '0012_session_turn_origin.sql',
+  '0013_channel_core.sql',
+  '0014_lark_memory_review_surfaces.sql',
+  '0015_card_action_ingress_dedup.sql',
+  '0016_memory_integrity_receipts.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
+const durableKernelMigrationAdvisoryLock = [
+  1_284_765_321, 987_654_123,
+] as const;
 
 export function resolveDurableKernelRepoRoot(
   moduleUrl: string = import.meta.url,
@@ -109,6 +125,54 @@ export async function readDurableKernelMigration(
 export async function applyDurableKernelMigrations(
   executor: PostgresMigrationExecutor,
   migrationFilePaths: readonly string[] = durableKernelMigrationFilePaths,
+): Promise<void> {
+  if (isConnectableMigrationExecutor(executor)) {
+    const client = await executor.connect();
+    let locked = false;
+    let workError: unknown;
+    let unlockError: unknown;
+    try {
+      await client.query(
+        'SELECT pg_advisory_lock($1, $2)',
+        durableKernelMigrationAdvisoryLock,
+      );
+      locked = true;
+      await applyDurableKernelMigrationsOnExecutor(client, migrationFilePaths);
+    } catch (error) {
+      workError = error;
+    } finally {
+      if (locked) {
+        try {
+          await client.query(
+            'SELECT pg_advisory_unlock($1, $2)',
+            durableKernelMigrationAdvisoryLock,
+          );
+        } catch (error) {
+          unlockError = error;
+        }
+      }
+      client.release();
+    }
+    if (workError !== undefined) throw workError;
+    if (unlockError !== undefined) throw unlockError;
+    return;
+  }
+
+  await applyDurableKernelMigrationsOnExecutor(executor, migrationFilePaths);
+}
+
+function isConnectableMigrationExecutor(
+  executor: PostgresMigrationExecutor,
+): executor is ConnectableMigrationExecutor {
+  return (
+    'connect' in executor &&
+    typeof (executor as { connect?: unknown }).connect === 'function'
+  );
+}
+
+async function applyDurableKernelMigrationsOnExecutor(
+  executor: PostgresMigrationExecutor,
+  migrationFilePaths: readonly string[],
 ): Promise<void> {
   await executor.query(`
     CREATE TABLE IF NOT EXISTS ${durableKernelMigrationRegistryTable} (

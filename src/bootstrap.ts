@@ -35,22 +35,162 @@ import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
-import type { AppConfig } from './shared/config.js';
+import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
 import { LocalFileStore } from './infrastructure/files/local-file-store.js';
+import { SubmitSessionTurn } from './application/sessions/submit-session-turn.js';
+import { ResolveLarkBinding } from './application/channels/resolve-lark-binding.js';
+import { ProcessChannelIngress } from './application/channels/process-channel-ingress.js';
+import { LarkIngressWorker } from './entrypoints/lark/worker.js';
+import { LarkOutboxWorker } from './entrypoints/lark/outbox-worker.js';
+import { createLarkWebsocketReceiver } from './adapters/lark/lark-websocket-receiver.js';
+import { createLarkDeliveryAdapter } from './adapters/lark/lark-delivery-adapter.js';
+import { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
+import { PublishMemoryReviewSurface } from './application/channels/publish-memory-review-surface.js';
+import { SynthesizeMemoryDocument } from './application/channels/synthesize-memory-document.js';
+import { createLarkMemoryDocumentAdapter } from './adapters/lark/lark-memory-document.js';
+import { PostgresLarkReviewSurfaceRepository } from './infrastructure/postgres/postgres-lark-review-surface-repository.js';
+import { createMemoryReviewActionTokenDeriver } from './application/channels/memory-review-action-token.js';
+import { DeliverChannelOutbox } from './application/channels/deliver-channel-outbox.js';
+import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
+import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
+import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
+  readonly larkWorker?: Pick<LarkIngressWorker, 'stop'>;
+  readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'stop'>;
+  readonly larkReceiver?: Pick<
+    ReturnType<typeof createLarkWebsocketReceiver>,
+    'stop'
+  >;
   readonly runtime: Pick<AgentRuntimePort, 'close'>;
   readonly pool: { end(): Promise<void> };
 }
 
+type StartableServiceResources = ServiceResources & {
+  readonly dispatcher: Pick<RunDispatcher, 'start' | 'stop'>;
+  readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
+  readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
+  readonly larkReceiver?: Pick<
+    ReturnType<typeof createLarkWebsocketReceiver>,
+    'start' | 'stop'
+  >;
+};
+
 export async function closeServiceResources(
   resources: ServiceResources,
 ): Promise<void> {
-  await resources.dispatcher.stop();
-  await resources.runtime.close();
-  await resources.pool.end();
+  const failures: Error[] = [];
+  await cleanup(
+    'lark receiver',
+    resources.larkReceiver ? () => resources.larkReceiver!.stop() : undefined,
+    failures,
+  );
+  await cleanup(
+    'lark worker',
+    resources.larkWorker ? () => resources.larkWorker!.stop() : undefined,
+    failures,
+  );
+  await cleanup(
+    'lark outbox worker',
+    resources.larkOutboxWorker
+      ? () => resources.larkOutboxWorker!.stop()
+      : undefined,
+    failures,
+  );
+  await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
+  await cleanup('runtime', () => resources.runtime.close(), failures);
+  await cleanup('pool', () => resources.pool.end(), failures);
+  throwFailures(failures, 'service shutdown failed');
+}
+
+export async function startServiceResources(
+  resources: StartableServiceResources,
+): Promise<void> {
+  try {
+    resources.dispatcher.start();
+    await resources.larkReceiver?.start();
+    resources.larkWorker?.start();
+    resources.larkOutboxWorker?.start();
+  } catch (error: unknown) {
+    const startupFailure = safeLifecycleError('service startup', error);
+    try {
+      await closeServiceResources(resources);
+    } catch (cleanupError: unknown) {
+      throw new AggregateError(
+        [startupFailure, cleanupError],
+        'service startup failed',
+      );
+    }
+    throw startupFailure;
+  }
+}
+
+async function cleanup(
+  label: string,
+  operation: (() => Promise<void>) | undefined,
+  failures: Error[],
+): Promise<void> {
+  if (!operation) return;
+  try {
+    await operation();
+  } catch (error: unknown) {
+    failures.push(safeLifecycleError(label, error));
+  }
+}
+
+function throwFailures(failures: readonly Error[], message: string): void {
+  if (failures.length === 0) return;
+  if (failures.length === 1) throw failures[0];
+  throw new AggregateError(failures, message);
+}
+
+function safeLifecycleError(label: string, error: unknown): Error {
+  const safe = new Error(`${label} failed`);
+  safe.name = 'ServiceLifecycleError';
+  return safe;
+}
+
+export function createLarkIngressWorker(
+  repository: Pick<
+    PostgresChannelRepository,
+    'claimIngress' | 'completeIngress'
+  >,
+  processor: {
+    execute: (
+      ingress: import('./domain/channels/channel-event.js').ChannelIngress,
+    ) => Promise<unknown>;
+  },
+  config: LarkCanaryEnabledConfig,
+  logger: Logger,
+  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
+): LarkIngressWorker {
+  return new LarkIngressWorker(repository, processor, {
+    workerId: options.workerId ?? `agent-server:${process.pid}:lark`,
+    leaseMs: options.leaseMs ?? 30_000,
+    onError: ({ phase, errorName }) => {
+      logger.log('error', 'lark.ingress_worker.failed', {
+        phase,
+        errorName,
+      });
+    },
+  });
+}
+
+export function createLarkOutboxWorker(
+  repository: Pick<PostgresChannelRepository, 'claimOutbox'>,
+  delivery: Pick<DeliverChannelOutbox, 'execute'>,
+  logger: Logger,
+  options: { readonly workerId?: string; readonly leaseMs?: number } = {},
+): LarkOutboxWorker {
+  return new LarkOutboxWorker(repository, delivery, {
+    workerId: options.workerId ?? `agent-server:${process.pid}:lark-outbox`,
+    leaseMs: options.leaseMs ?? 30_000,
+    onError: ({ phase, errorName }) => {
+      logger.log('error', 'lark.outbox_worker.failed', { phase, errorName });
+    },
+  });
 }
 
 export async function createService(config: AppConfig, logger: Logger) {
@@ -69,6 +209,27 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
+  const submitSessionTurn = new SubmitSessionTurn(sessions);
+  const channelRepository = new PostgresChannelRepository(pool);
+  const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
+  const reviewTokenDeriver = config.larkCanary?.enabled
+    ? createMemoryReviewActionTokenDeriver(config.larkCanary.appSecret)
+    : undefined;
+  const memoryDocument = config.larkCanary?.enabled
+    ? createLarkMemoryDocumentAdapter(config.larkCanary)
+    : undefined;
+  const memoryReviewSurface = config.larkCanary?.enabled
+    ? new PublishMemoryReviewSurface(
+        workspaceMemoryRepository,
+        channelRepository,
+        channelRepository,
+        config.larkCanary.connectionKey,
+        reviewSurfaceRepository,
+        reviewTokenDeriver,
+        memoryDocument,
+        config.larkCanary.allowedOpenId,
+      )
+    : undefined;
   const events = new PostgresRunEventRepository(pool);
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
@@ -85,6 +246,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     },
     logger,
   );
+  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
   const cancelTask = new CancelTask(
     taskRepository,
     runRepository,
@@ -121,6 +283,9 @@ export async function createService(config: AppConfig, logger: Logger) {
     taskRepository,
     events,
     sessions,
+    memoryReviewSurface
+      ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
+      : undefined,
   );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
@@ -150,6 +315,72 @@ export async function createService(config: AppConfig, logger: Logger) {
     executeRun,
     logger,
   );
+  let larkWorker: LarkIngressWorker | undefined;
+  let larkOutboxWorker: LarkOutboxWorker | undefined;
+  let larkReceiver: ReturnType<typeof createLarkWebsocketReceiver> | undefined;
+  if (config.larkCanary?.enabled) {
+    const larkConfig = config.larkCanary;
+    const processMessages = new ProcessChannelIngress(
+      new ResolveLarkBinding(channelRepository, larkConfig),
+      submitSessionTurn,
+      channelRepository,
+      larkConfig,
+    );
+    const processIngress = new ProcessLarkIngress(
+      processMessages,
+      new ApplyMemoryReviewCommand(
+        channelRepository,
+        reviewMemoryProposal,
+        managedMemory,
+        larkConfig,
+      ),
+      new ApplyMemoryReviewControl(
+        channelRepository,
+        reviewSurfaceRepository!,
+        reviewMemoryProposal,
+        managedMemory,
+        larkConfig,
+        memoryDocument,
+        synthesizeMemoryDocument,
+      ),
+    );
+    larkWorker = createLarkIngressWorker(
+      channelRepository,
+      processIngress,
+      larkConfig,
+      logger,
+      {
+        workerId: `${workerId}:lark`,
+        leaseMs: Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+      },
+    );
+    larkOutboxWorker = createLarkOutboxWorker(
+      channelRepository,
+      new DeliverChannelOutbox(
+        createLarkDeliveryAdapter(larkConfig),
+        channelRepository,
+        {
+          tokenDeriver: reviewTokenDeriver!,
+          validateCardPublication: (input) =>
+            reviewSurfaceRepository.validateCardPublication(input),
+          finalizeCardDelivery: (input) =>
+            reviewSurfaceRepository.finalizeCardDelivery(input),
+          ...(larkConfig.docWebBaseUrl
+            ? { docWebBaseUrl: larkConfig.docWebBaseUrl }
+            : {}),
+        },
+      ),
+      logger,
+      {
+        workerId: `${workerId}:lark-outbox`,
+        leaseMs: Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+      },
+    );
+    larkReceiver = createLarkWebsocketReceiver({
+      config: larkConfig,
+      repository: channelRepository,
+    });
+  }
   const readiness = new RuntimeReadinessProbe(runtime);
   const app = createApp({
     config,
@@ -168,16 +399,31 @@ export async function createService(config: AppConfig, logger: Logger) {
     managedMemory,
     agentRegistry,
     sessions,
+    submitSessionTurn,
     events,
     cancelTask,
   });
-  dispatcher.start();
+  await startServiceResources({
+    dispatcher,
+    ...(larkWorker ? { larkWorker } : {}),
+    ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+    ...(larkReceiver ? { larkReceiver } : {}),
+    runtime,
+    pool,
+  });
 
   return {
     app,
     runtime,
     close: async () => {
-      await closeServiceResources({ dispatcher, runtime, pool });
+      await closeServiceResources({
+        dispatcher,
+        ...(larkWorker ? { larkWorker } : {}),
+        ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+        ...(larkReceiver ? { larkReceiver } : {}),
+        runtime,
+        pool,
+      });
     },
   };
 }

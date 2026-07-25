@@ -4,6 +4,7 @@ import type {
   AdmissionRepository,
   AdmissionTransaction,
 } from '../../application/ports/admission-repository.js';
+import type { AdmissionIngress } from '../../application/sessions/session-turn-origin.js';
 import { AdmissionAlreadyExistsError as AdmissionAlreadyExists } from '../../application/ports/admission-repository.js';
 import { PostgresRunRepository } from './postgres-run-repository.js';
 import { PostgresTaskRepository } from './postgres-task-repository.js';
@@ -30,7 +31,9 @@ interface PostgresTransactionalClient extends PostgresQueryable {
 }
 
 interface AdmissionRow {
-  readonly ingress: 'api';
+  readonly session_id: string | null;
+  readonly ingress: 'api' | 'lark';
+  readonly origin_ref: string | null;
   readonly idempotency_key: string;
   readonly request_fingerprint: string;
   readonly task_id: string;
@@ -86,7 +89,7 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
   }
 
   public async findByIngressAndIdempotencyKey(
-    ingress: 'api',
+    ingress: AdmissionIngress,
     idempotencyKey: string,
     scope: AdmissionOwnerScope,
   ): Promise<AdmissionRecord | null> {
@@ -94,9 +97,11 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
       `
         SELECT
           ingress,
+          origin_ref,
           idempotency_key,
           request_fingerprint,
           task_id,
+          session_id,
           tenant_id,
           workspace_id,
           principal_type,
@@ -110,6 +115,7 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
           AND workspace_id = $4
           AND principal_type = $5
           AND principal_id = $6
+          AND session_id IS NULL
       `,
       [
         ingress,
@@ -126,11 +132,11 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
       return null;
     }
 
-    return {
-      ingress: row.ingress,
+    const fields = {
       idempotencyKey: row.idempotency_key,
       requestFingerprint: row.request_fingerprint,
       taskId: row.task_id,
+      sessionId: row.session_id,
       tenantId: row.tenant_id,
       workspaceId: row.workspace_id,
       principalType: row.principal_type,
@@ -138,6 +144,10 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
       policySnapshotVersion: row.policy_snapshot_version,
       createdAt: row.created_at,
     };
+
+    return row.ingress === 'api'
+      ? { ...fields, ingress: 'api', originRef: null }
+      : { ...fields, ingress: 'lark', originRef: row.origin_ref ?? '' };
   }
 
   public async save(record: AdmissionRecord): Promise<void> {
@@ -146,22 +156,26 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
         `
           INSERT INTO admissions (
             ingress,
+            origin_ref,
             idempotency_key,
             request_fingerprint,
             task_id,
+            session_id,
             tenant_id,
             workspace_id,
             principal_type,
             principal_id,
             policy_snapshot_version,
             created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `,
         [
           record.ingress,
+          record.originRef,
           record.idempotencyKey,
           record.requestFingerprint,
           record.taskId,
+          record.sessionId ?? null,
           record.tenantId,
           record.workspaceId,
           record.principalType,

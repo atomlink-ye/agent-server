@@ -61,3 +61,18 @@ The proposal-only gardener suggests exact normalized duplicates,
 same-category supersession candidates, and explicit expiry metadata. It never
 mutates durable memory or snapshot history. Auto-safe is not enabled by this
 minimum and no model-based gardening is provided.
+
+## Lark command/Card/Doc review compatibility boundary
+
+The fixed Lark canary is an adapter over this canonical state machine, not a
+second Memory store. A successful source Run may produce one review notification.
+Verified Card callbacks, Bot-owned Doc controls, and Thread commands authorize
+the existing proposal review. For long proposals, the Doc body is the editable
+draft; unresolved comments/replies are read, synthesized into one immutable
+Preview/hash, and a separate `Accept Preview` accepts exactly that persisted
+content. Resolved comments are not active instructions, incomplete reads fail
+closed, and raw comments/replies are not durably retained. Thread command remains
+the fallback, and success is reported only after the ready snapshot is
+hash-verified. The fixed compatibility tuple is not canonical Lark identity or
+production readiness. Preview successor lease fencing, retry/fencing races,
+multi-node, crash recovery, and performance hardening remain deferred to Task 14.

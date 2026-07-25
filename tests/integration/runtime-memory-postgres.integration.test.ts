@@ -74,6 +74,39 @@ async function database() {
 }
 
 describe('runtime memory PostgreSQL materialization', () => {
+  it('lists only pending proposals for the exact successful source run and owner', async () => {
+    const db = await database();
+    await db.query(
+      `UPDATE runs SET status='succeeded', lease_owner=NULL, activation_id=NULL, lease_expires_at=NULL, result='{"text":"done"}' WHERE id='${runtimeRunId}'`,
+    );
+    const repository = new PostgresWorkspaceMemoryRepository(db);
+    await repository.createProposal(
+      proposal('00000000-0000-4000-8000-000000000601', runtimeRunId, 0),
+    );
+    const rejected = await repository.createProposal(
+      proposal('00000000-0000-4000-8000-000000000602', runtimeRunId, 1),
+    );
+    await repository.reviewProposal({
+      proposalId: rejected.id,
+      ownerScope: owner,
+      outcome: 'reject',
+      reviewerSnapshot: actor,
+    });
+    const pending = await repository.listPendingProposalsBySourceRunForOwner(
+      runtimeRunId,
+      owner,
+    );
+    expect(pending.map(({ id }) => id)).toEqual([
+      '00000000-0000-4000-8000-000000000601',
+    ]);
+    expect(
+      await repository.listPendingProposalsBySourceRunForOwner(runtimeRunId, {
+        ...owner,
+        principalId: 'foreign-owner',
+      }),
+    ).toEqual([]);
+  });
+
   it('derives exact input Message provenance after durable Task reload', async () => {
     const db = await database();
     const task = await new PostgresTaskRepository(db).findById(

@@ -38,6 +38,13 @@ import { PostgresAgentRegistry } from '../../src/infrastructure/postgres/postgre
 import { PostgresSessionRepository } from '../../src/infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
+import type { PublishMemoryReviewSurface } from '../../src/application/channels/publish-memory-review-surface.js';
+import { createManagedAgentDefinition } from '../../src/domain/agents/managed-agent-definition.js';
+import { parseManagedAgentPackage } from '../../src/domain/agents/managed-agent-package.js';
+import {
+  createManagedAgentDraft,
+  publishManagedAgentVersion,
+} from '../../src/domain/agents/managed-agent-version.js';
 
 export const primaryServiceAccountToken = 'token-enabled';
 export const secondaryServiceAccountToken = 'token-other-owner';
@@ -88,10 +95,13 @@ export const testConfig = {
 
 export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
+  readonly seedManagedAgent?: boolean;
   readonly workspaceId?: string;
   readonly projectionFailures?: number;
   readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
-  readonly databaseControl?: { database?: PGlite };
+  readonly databaseControl?: { database?: TestDatabase };
+  readonly database?: TestDatabase;
+  readonly publishedAgentVersionId?: string;
   readonly sessionRepositoryControl?: {
     repository?: PostgresSessionRepository;
   };
@@ -106,15 +116,29 @@ export interface CreateTestAppOptions {
       contentHash: string;
     }>;
   };
+  readonly memoryReviewControl?: {
+    review?: ReviewMemoryProposal;
+    managedMemory?: ManagedMemory;
+  };
+  readonly memoryReviewNotifier?: Pick<PublishMemoryReviewSurface, 'execute'>;
 }
+
+export type TestDatabase = {
+  query<Row = Record<string, unknown>>(
+    ...args: readonly unknown[]
+  ): Promise<{ rows: readonly Row[]; [key: string]: unknown }>;
+  connect?(): Promise<any>;
+  close?(): Promise<void>;
+  end?(): Promise<void>;
+};
 
 export async function createTestApp(
   runtime: AgentRuntimePort,
   options: CreateTestAppOptions = {},
 ) {
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
-  const database = new PGlite();
-  await applyDurableKernelMigrations(database);
+  const database = (options.database ?? new PGlite()) as TestDatabase;
+  await applyDurableKernelMigrations(database as any);
   if (options.databaseControl) options.databaseControl.database = database;
   const effectiveConfig = options.workspaceId
     ? {
@@ -130,7 +154,7 @@ export async function createTestApp(
     : testConfig;
   if (options.workspaceId) {
     const now = new Date().toISOString();
-    await database.query(
+    await (database as any).query(
       `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)`,
       [
         options.workspaceId,
@@ -142,22 +166,30 @@ export async function createTestApp(
       ],
     );
   }
-  const agentRegistry = new PostgresAgentRegistry(database);
-  const sessions = new PostgresSessionRepository(database);
+  // The repository implementations intentionally accept the common query/
+  // connect shape shared by PGlite and pg.Pool. Keep the fixture seam broad so
+  // callers can inject a real pool without changing production repositories.
+  const repositoryDatabase = database as any;
+  const agentRegistry = new PostgresAgentRegistry(repositoryDatabase);
+  const sessions = new PostgresSessionRepository(repositoryDatabase);
   if (options.sessionRepositoryControl)
     options.sessionRepositoryControl.repository = sessions;
-  const events = new PostgresRunEventRepository(database);
+  const events = new PostgresRunEventRepository(repositoryDatabase);
 
-  const runRepository = new PostgresRunRepository(database);
-  const taskRepository = new PostgresTaskRepository(database);
-  const admissionRepository = new PostgresAdmissionRepository(database);
-  const invokableRepository = new PostgresInvokableRepository(database);
+  const runRepository = new PostgresRunRepository(repositoryDatabase);
+  const taskRepository = new PostgresTaskRepository(repositoryDatabase);
+  const admissionRepository = new PostgresAdmissionRepository(
+    repositoryDatabase,
+  );
+  const invokableRepository = new PostgresInvokableRepository(
+    repositoryDatabase,
+  );
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
   );
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
-    database,
+    repositoryDatabase,
   );
   const projectedMemory = new Map<string, string>();
   let projectionFailures = options.projectionFailures ?? 0;
@@ -176,11 +208,22 @@ export async function createTestApp(
       return content;
     },
   };
-  const managedMemory = new ManagedMemory(database, fileStore);
-  await seedDefaultPublishedAgent(
-    invokableRepository,
-    options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
-  );
+  const managedMemory = new ManagedMemory(database as any, fileStore);
+  if (options.memoryReviewControl) {
+    options.memoryReviewControl.managedMemory = managedMemory;
+  }
+  if (options.seedManagedAgent)
+    await seedDefaultManagedPublishedAgent(
+      agentRegistry,
+      options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+      options.publishedAgentVersionId,
+    );
+  else
+    await seedDefaultPublishedAgent(
+      invokableRepository,
+      options.workspaceId ?? testConfig.serviceAccounts[0].workspaceId,
+      options.publishedAgentVersionId,
+    );
   const logger = createLogger({
     service: testConfig.serviceName,
     minimumLevel: 'error',
@@ -210,12 +253,21 @@ export async function createTestApp(
   const reviewMemoryProposal = new ReviewMemoryProposal(
     workspaceMemoryRepository,
   );
+  if (options.memoryReviewControl) {
+    options.memoryReviewControl.review = reviewMemoryProposal;
+  }
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
   const completeRun = new CompleteRun(
     runRepository,
     taskRepository,
     events,
     sessions,
+    options.memoryReviewNotifier
+      ? {
+          notifySucceeded: (input) =>
+            options.memoryReviewNotifier!.execute(input),
+        }
+      : undefined,
   );
   const cancelTask = new CancelTask(
     taskRepository,
@@ -243,19 +295,19 @@ export async function createTestApp(
     fileStore,
     createMemoryProposal,
   );
+  const dispatcher = new PostgresRunDispatcher(
+    new ClaimNextRun(runRepository, {
+      workerId,
+      leaseDurationMs: 30_000,
+    }),
+    executeRun,
+    logger,
+    { pollIntervalMs: 1 },
+  );
+  if (options.dispatcherControl)
+    options.dispatcherControl.dispatcher = dispatcher;
   if (options.startDispatcher ?? true) {
-    const dispatcher = new PostgresRunDispatcher(
-      new ClaimNextRun(runRepository, {
-        workerId,
-        leaseDurationMs: 30_000,
-      }),
-      executeRun,
-      logger,
-      { pollIntervalMs: 1 },
-    );
     dispatcher.start();
-    if (options.dispatcherControl)
-      options.dispatcherControl.dispatcher = dispatcher;
   }
 
   if (options.workspaceMemoryFixtureControl) {
@@ -317,11 +369,15 @@ export async function createTestApp(
 async function seedDefaultPublishedAgent(
   invokables: PostgresInvokableRepository,
   workspaceId: string,
+  versionId = defaultPublishedAgentVersionId,
 ): Promise<void> {
   const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
   const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
   const definition = createAgentDefinition({
-    id: '00000000-0000-4000-8000-0000000a0001',
+    id:
+      versionId === defaultPublishedAgentVersionId
+        ? '00000000-0000-4000-8000-0000000a0001'
+        : randomUUID(),
     tenantId: 'tenant_alpha',
     workspaceId,
     principalType: 'service_account',
@@ -332,7 +388,7 @@ async function seedDefaultPublishedAgent(
   });
   const version = publishAgentVersion(
     createDraftAgentVersion({
-      id: defaultPublishedAgentVersionId,
+      id: versionId,
       definitionId: definition.id,
       tenantId: definition.tenantId,
       workspaceId: definition.workspaceId,
@@ -348,4 +404,72 @@ async function seedDefaultPublishedAgent(
 
   await invokables.saveAgentDefinition(definition);
   await invokables.saveAgentVersion(version);
+}
+
+async function seedDefaultManagedPublishedAgent(
+  registry: PostgresAgentRegistry,
+  workspaceId: string,
+  versionId = defaultPublishedAgentVersionId,
+): Promise<void> {
+  const now = () => new Date('2026-07-22T12:00:00.000Z');
+  const owner = {
+    tenantId: 'tenant_alpha',
+    principalType: 'service_account' as const,
+    principalId: 'svc_enabled',
+  };
+  const definition = createManagedAgentDefinition({
+    ...owner,
+    id:
+      versionId === defaultPublishedAgentVersionId
+        ? '00000000-0000-4000-8000-0000000a0001'
+        : randomUUID(),
+    normalizedName: 'default-task-agent',
+    displayName: 'Default Task Agent',
+    now,
+  });
+  const parsed = parseManagedAgentPackage(`apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: Default Task Agent
+spec:
+  description: Seeded managed test invokable
+  instructions: Do the task.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools: []
+  skills: []
+  input:
+    schema: { type: object, additionalProperties: false, properties: {} }
+    prompt: input
+  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }
+  memory: { policy: workspace_snapshot, proposalLimit: 2 }
+  permissions: { network: none, filesystem: none }
+  completion: { type: executable, command: done }
+`);
+  const version = publishManagedAgentVersion(
+    createManagedAgentDraft({
+      definition,
+      parsed,
+      id: versionId,
+      now,
+    }),
+    now,
+  );
+  await registry.importAgent({
+    owner,
+    compatibilityWorkspaceId: workspaceId,
+    idempotencyKey: 'seed-default-managed-agent',
+    requestFingerprint: parsed.fingerprint,
+    normalizedName: definition.normalizedName,
+    definition,
+    version,
+  });
+  await registry.publishAgentVersion({
+    owner,
+    idempotencyKey: 'publish-default-managed-agent',
+    requestFingerprint: version.fingerprint,
+    versionId: version.id,
+  });
 }

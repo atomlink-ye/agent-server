@@ -13,11 +13,16 @@ export interface ReviewMemoryProposalInput {
   readonly content?: string | null;
   readonly accessContext: ServiceAccountAccessContext;
   readonly now?: () => Date;
+  readonly controller?: {
+    readonly kind: 'channel_ingress';
+    readonly ingressId: string;
+  };
 }
 
 export interface ReviewMemoryProposalResult {
   readonly proposal: MemoryProposal;
   readonly entry: WorkspaceMemoryEntry | null;
+  readonly replayed?: boolean;
 }
 
 export class MemoryProposalNotFoundError extends Error {
@@ -47,6 +52,22 @@ export class ReviewMemoryProposal {
     input: ReviewMemoryProposalInput,
   ): Promise<ReviewMemoryProposalResult> {
     const ownerScope = ownerScopeFromAccessContext(input.accessContext);
+    if (input.controller) {
+      const result = await this.memoryRepository.reviewProposal({
+        proposalId: input.proposalId,
+        ownerScope,
+        outcome: input.action,
+        reviewedContent: input.content ?? null,
+        reviewerSnapshot: {
+          principalType: input.accessContext.principalType,
+          principalId: input.accessContext.principalId,
+          policySnapshotVersion: input.accessContext.policySnapshotVersion,
+        },
+        controller: input.controller,
+        ...(input.now ? { now: input.now } : {}),
+      });
+      return result;
+    }
     const existing = this.memoryRepository.findProposalByIdForActor
       ? await this.memoryRepository.findProposalByIdForActor(input.proposalId, {
           tenantId: input.accessContext.tenantId,

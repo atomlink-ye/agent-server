@@ -8,11 +8,16 @@ import { GetTask } from '../../src/application/tasks/get-task.js';
 import { GetTaskTree } from '../../src/application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import {
+  originReference,
+  type SessionTurnOrigin,
+} from '../../src/application/sessions/session-turn-origin.js';
+import {
   AdmitRootTask,
   IdempotencyConflictError,
 } from '../../src/application/tasks/admit-root-task.js';
 import { InvokeTask } from '../../src/application/tasks/invoke-task.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
+import { createRootTask } from '../../src/domain/tasks/task.js';
 import { createMemoryProposal } from '../../src/domain/workspace-memory/memory-proposal.js';
 import { createAgentDefinition } from '../../src/domain/invokables/agent-definition.js';
 import {
@@ -27,6 +32,7 @@ import {
 } from '../../src/domain/invokables/team-version.js';
 import {
   applyDurableKernelMigrations,
+  durableKernelMigrationFilePaths,
   readDurableKernelMigration,
   resolveDurableKernelMigrationFilePath,
 } from '../../src/infrastructure/postgres/postgres.js';
@@ -116,6 +122,11 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0009_session_reset_idempotency_hardening' },
       { version: '0010_runtime_memory_provenance' },
       { version: '0011_runtime_memory_provenance_integrity' },
+      { version: '0012_session_turn_origin' },
+      { version: '0013_channel_core' },
+      { version: '0014_lark_memory_review_surfaces' },
+      { version: '0015_card_action_ingress_dedup' },
+      { version: '0016_memory_integrity_receipts' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -152,7 +163,114 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0009_session_reset_idempotency_hardening' },
       { version: '0010_runtime_memory_provenance' },
       { version: '0011_runtime_memory_provenance_integrity' },
+      { version: '0012_session_turn_origin' },
+      { version: '0013_channel_core' },
+      { version: '0014_lark_memory_review_surfaces' },
+      { version: '0015_card_action_ingress_dedup' },
+      { version: '0016_memory_integrity_receipts' },
     ]);
+  });
+
+  it('recovers when only the 0012 registry row is missing', async () => {
+    const database = await createDatabase();
+
+    await applyDurableKernelMigrations(database);
+    await database.query(
+      `DELETE FROM durable_kernel_schema_migrations WHERE version = '0012_session_turn_origin'`,
+    );
+
+    await applyDurableKernelMigrations(database);
+
+    const migrationRows = await database.query(
+      `SELECT version FROM durable_kernel_schema_migrations WHERE version = '0012_session_turn_origin'`,
+    );
+    expect(migrationRows.rows).toEqual([
+      { version: '0012_session_turn_origin' },
+    ]);
+  });
+
+  it('backfills session admission ownership before creating session uniqueness indexes', async () => {
+    const database = await createDatabase();
+    const sessionId = '00000000-0000-0000-0000-000000001201';
+    const taskId = '00000000-0000-0000-0000-000000001202';
+    const now = '2026-07-24T12:00:00.000Z';
+
+    await applyDurableKernelMigrations(
+      database,
+      durableKernelMigrationFilePaths.slice(
+        0,
+        durableKernelMigrationFilePaths.findIndex((filePath) =>
+          filePath.endsWith('/0012_session_turn_origin.sql'),
+        ),
+      ),
+    );
+    await database.query(
+      `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at)
+       VALUES('00000000-0000-0000-0000-000000001200',$1,$2,$3,'upgrade',$4,$4)`,
+      [
+        primaryAccessContext.tenantId,
+        primaryAccessContext.principalType,
+        primaryAccessContext.principalId,
+        now,
+      ],
+    );
+    await database.query(
+      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,created_at,updated_at)
+       VALUES($1,'00000000-0000-0000-0000-000000001200',$2,$3,$4,'upgrade-agent',$5,$5)`,
+      [
+        sessionId,
+        primaryAccessContext.tenantId,
+        primaryAccessContext.principalType,
+        primaryAccessContext.principalId,
+        now,
+      ],
+    );
+    await database.query(
+      'INSERT INTO session_lanes(session_id,generation) VALUES($1,0)',
+      [sessionId],
+    );
+    await database.query(
+      `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,session_id,generation,lane_sequence,created_at,updated_at)
+       VALUES($1,$2,'00000000-0000-0000-0000-000000001200',$3,$4,'upgrade-policy',$1,0,'queued','api','agent','upgrade-agent','inline:upgrade','sha256:upgrade',$5,0,1,$6,$6)`,
+      [
+        taskId,
+        primaryAccessContext.tenantId,
+        primaryAccessContext.principalType,
+        primaryAccessContext.principalId,
+        sessionId,
+        now,
+      ],
+    );
+    await database.query(
+      `INSERT INTO admissions(ingress,idempotency_key,request_fingerprint,task_id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,created_at)
+       VALUES('api','upgrade-session-key','sha256:upgrade',$1,$2,'00000000-0000-0000-0000-000000001200',$3,$4,'upgrade-policy',$5)`,
+      [
+        taskId,
+        primaryAccessContext.tenantId,
+        primaryAccessContext.principalType,
+        primaryAccessContext.principalId,
+        now,
+      ],
+    );
+
+    await expect(
+      database.query(
+        'SELECT tasks.session_id FROM admissions JOIN tasks ON tasks.id = admissions.task_id WHERE admissions.task_id = $1',
+        [taskId],
+      ),
+    ).resolves.toMatchObject({ rows: [{ session_id: sessionId }] });
+
+    await applyDurableKernelMigrations(database, [
+      durableKernelMigrationFilePaths.find((filePath) =>
+        filePath.endsWith('/0012_session_turn_origin.sql'),
+      )!,
+    ]);
+
+    await expect(
+      database.query('SELECT session_id FROM admissions WHERE task_id = $1', [
+        taskId,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ session_id: sessionId }] });
   });
 
   it('persists owner-scoped workspace memory proposals and transactionally creates accepted entries', async () => {
@@ -885,6 +1003,183 @@ describe('durable kernel postgres bootstrap', () => {
       },
     ]);
   });
+
+  it('enforces trusted session turn origins for tasks and admissions', async () => {
+    const database = await createDatabase();
+    await applyDurableKernelMigrations(database);
+
+    const taskRepository = new PostgresTaskRepository(database);
+    const admissionRepository = new PostgresAdmissionRepository(database);
+    const larkTask = createRootTask({
+      id: '00000000-0000-4000-8000-000000090012',
+      ...primaryAccessContext,
+      ingress: 'lark',
+      originRef: 'feishu:event-1',
+      invokableKind: 'agent',
+      invokableVersionId: 'lark-origin-agent',
+      inputSnapshotRef: 'inline:lark-origin',
+      inputFingerprint: 'sha256:lark-origin',
+      now: () => new Date('2026-07-24T12:00:00.000Z'),
+    });
+    await taskRepository.save(larkTask);
+    await expect(taskRepository.findById(larkTask.id)).resolves.toMatchObject({
+      ingress: 'lark',
+      originRef: 'feishu:event-1',
+    });
+
+    const admitted = await new AdmitRootTask(
+      taskRepository,
+      new PostgresRunRepository(database),
+      admissionRepository,
+    ).execute({
+      prompt: 'origin contract',
+      idempotencyKey: 'origin-contract-key',
+      accessContext: primaryAccessContext,
+    });
+
+    await expect(
+      database.query('SELECT ingress, origin_ref FROM tasks WHERE id = $1', [
+        admitted.taskId,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ ingress: 'api', origin_ref: null }] });
+    await expect(
+      taskRepository.findById(admitted.taskId),
+    ).resolves.toMatchObject({
+      ingress: 'api',
+      originRef: null,
+    });
+
+    await admissionRepository.withTransaction(async (transaction) => {
+      await expect(
+        transaction.findByIngressAndIdempotencyKey(
+          'api',
+          'origin-contract-key',
+          primaryAccessContext,
+        ),
+      ).resolves.toMatchObject({ ingress: 'api', originRef: null });
+
+      await transaction.save({
+        ingress: 'lark',
+        originRef: 'feishu:event-1',
+        idempotencyKey: 'lark-origin-key',
+        requestFingerprint: 'sha256:lark-origin',
+        taskId: larkTask.id,
+        ...primaryAccessContext,
+        createdAt: larkTask.createdAt,
+      });
+
+      await expect(
+        transaction.findByIngressAndIdempotencyKey(
+          'lark',
+          'lark-origin-key',
+          primaryAccessContext,
+        ),
+      ).resolves.toMatchObject({
+        ingress: 'lark',
+        originRef: 'feishu:event-1',
+      });
+    });
+    await expect(
+      database.query(
+        'SELECT ingress, origin_ref FROM admissions WHERE task_id = $1',
+        [admitted.taskId],
+      ),
+    ).resolves.toMatchObject({ rows: [{ ingress: 'api', origin_ref: null }] });
+
+    const insertAdmission = (ingress: string, originRef: string | null) =>
+      database.query(
+        `
+          INSERT INTO admissions (
+            ingress, origin_ref, idempotency_key, request_fingerprint, task_id,
+            tenant_id, workspace_id, principal_type, principal_id,
+            policy_snapshot_version, created_at
+          ) VALUES ($1, $2, $3, 'sha256:origin', $4, $5, $6, $7, $8, $9, $10)
+        `,
+        [
+          ingress,
+          originRef,
+          `${ingress}-origin-key`,
+          admitted.taskId,
+          primaryAccessContext.tenantId,
+          primaryAccessContext.workspaceId,
+          primaryAccessContext.principalType,
+          primaryAccessContext.principalId,
+          primaryAccessContext.policySnapshotVersion,
+          '2026-07-24T12:00:00.000Z',
+        ],
+      );
+
+    await expect(insertAdmission('lark', null)).rejects.toThrow();
+    await expect(insertAdmission('email', 'event-1')).rejects.toThrow();
+
+    const apiOrigin: SessionTurnOrigin = {
+      channel: 'api',
+      requestId: 'request-1',
+    };
+    const larkOrigin: SessionTurnOrigin = {
+      channel: 'lark',
+      ingressEventId: 'event-1',
+    };
+    expect(originReference(apiOrigin)).toBeNull();
+    expect(originReference(larkOrigin)).toBe('event-1');
+  });
+
+  it.each([
+    ['api', 'unexpected'],
+    ['lark', null],
+    ['lark', ''],
+    ['lark', '   '],
+    ['email', 'event-1'],
+  ])(
+    'rejects invalid task and admission origin pair %s/%s in SQL',
+    async (ingress, originRef) => {
+      const database = await createDatabase();
+      await applyDurableKernelMigrations(database);
+      const taskRepository = new PostgresTaskRepository(database);
+      const apiTask = createRootTask({
+        id: '00000000-0000-4000-8000-000000090013',
+        ...primaryAccessContext,
+        ingress: 'api',
+        originRef: null,
+        invokableKind: 'agent',
+        invokableVersionId: 'origin-matrix-agent',
+        inputSnapshotRef: 'inline:origin-matrix',
+        inputFingerprint: 'sha256:origin-matrix',
+        now: () => new Date('2026-07-24T12:00:00.000Z'),
+      });
+      await taskRepository.save(apiTask);
+
+      await expect(
+        database.query(
+          'UPDATE tasks SET ingress = $1, origin_ref = $2 WHERE id = $3',
+          [ingress, originRef, apiTask.id],
+        ),
+      ).rejects.toThrow();
+      await expect(
+        database.query(
+          `
+            INSERT INTO admissions (
+              ingress, origin_ref, idempotency_key, request_fingerprint, task_id,
+              tenant_id, workspace_id, principal_type, principal_id,
+              policy_snapshot_version, created_at
+            ) VALUES ($1, $2, $3, 'sha256:invalid-origin', $4, $5, $6, $7, $8, $9, $10)
+          `,
+          [
+            ingress,
+            originRef,
+            `invalid-${String(ingress)}-${String(originRef)}`,
+            apiTask.id,
+            primaryAccessContext.tenantId,
+            primaryAccessContext.workspaceId,
+            primaryAccessContext.principalType,
+            primaryAccessContext.principalId,
+            primaryAccessContext.policySnapshotVersion,
+            apiTask.createdAt,
+          ],
+        ),
+      ).rejects.toThrow();
+    },
+  );
 
   it('admits canonical task invoke state and reads it back through owner-scoped task queries', async () => {
     const database = await createDatabase();

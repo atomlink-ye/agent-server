@@ -134,6 +134,7 @@ function activeTask() {
       principalId: 'principal',
       policySnapshotVersion: 'policy',
       ingress: 'api',
+      originRef: null,
       invokableKind: 'agent',
       invokableVersionId: '00000000-0000-4000-8000-000000000012',
       inputSnapshotRef: 'snapshot',

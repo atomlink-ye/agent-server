@@ -26,28 +26,29 @@ flowchart TD
 
 ## Baseline status
 
-| Capability                                     | Current state                                 |
-| ---------------------------------------------- | --------------------------------------------- |
-| HTTP liveness/readiness                        | Implemented                                   |
-| Asynchronous Run API                           | Implemented                                   |
-| Authenticated service-account Run ingress      | Implemented                                   |
-| Canonical Task invoke/read/tree API            | Implemented                                   |
-| Owner-scoped Run reads                         | Implemented                                   |
-| PostgreSQL-backed Task/Run admission           | Implemented                                   |
-| Durable Agent/Team definitions and versions    | Implemented                                   |
-| Sequential Team graph compilation              | Implemented; sequential-only subset           |
-| Sequential Team child Task/Run execution       | Implemented; inline control-plane path        |
-| Owner-scoped idempotent replay                 | Implemented                                   |
-| In-process durable dispatcher/claim/fence      | Implemented; single process                   |
-| Paseo WebSocket adapter                        | Implemented                                   |
-| OpenCode free-model discovery                  | Implemented                                   |
-| Explicit reusable Paseo Workspace              | Implemented                                   |
-| Workspace memory proposals/review/entries      | Implemented; governance-only baseline         |
-| Deterministic CI                               | Implemented; no model network calls           |
-| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled        |
-| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred |
-| OIDC users, shared ACLs, credentials, approval | Planned V1                                    |
-| Artifacts, evidence, Lark, Web console         | Planned V1                                    |
+| Capability                                     | Current state                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| HTTP liveness/readiness                        | Implemented                                                        |
+| Asynchronous Run API                           | Implemented                                                        |
+| Authenticated service-account Run ingress      | Implemented                                                        |
+| Canonical Task invoke/read/tree API            | Implemented                                                        |
+| Owner-scoped Run reads                         | Implemented                                                        |
+| PostgreSQL-backed Task/Run admission           | Implemented                                                        |
+| Durable Agent/Team definitions and versions    | Implemented                                                        |
+| Sequential Team graph compilation              | Implemented; sequential-only subset                                |
+| Sequential Team child Task/Run execution       | Implemented; inline control-plane path                             |
+| Owner-scoped idempotent replay                 | Implemented                                                        |
+| In-process durable dispatcher/claim/fence      | Implemented; single process                                        |
+| Paseo WebSocket adapter                        | Implemented                                                        |
+| OpenCode free-model discovery                  | Implemented                                                        |
+| Explicit reusable Paseo Workspace              | Implemented                                                        |
+| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                              |
+| Deterministic CI                               | Implemented; no model network calls                                |
+| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                             |
+| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                      |
+| OIDC users, shared ACLs, credentials, approval | Planned V1                                                         |
+| Artifacts, evidence, Web console               | Planned V1                                                         |
+| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production |
 
 ## Quick start
 
@@ -127,6 +128,9 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
 - [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): approved minimum-scenario evidence; production hardening deferred.
+- [Lark Managed Memory command canary evidence](docs/evidence/lark-managed-memory-command-canary-evidence-packet.md): sanitized fixed-configuration command-path evidence.
+- [Lark Managed Memory Card/Doc evidence](docs/evidence/lark-managed-memory-card-doc-canary-evidence-packet.md): sanitized normal-path provider evidence and boundaries.
+- [Lark Managed Memory command canary runbook](docs/operations/lark-memory-command-canary-runbook.md): safe readiness, one-consumer operation, command/Card/Doc verification, and shutdown.
 - [Decisions](docs/decisions.md): accepted architectural decisions.
 - [Agent handbook](docs/agents.md): mandatory workflow for coding agents.
 - [Exec Plans](docs/exec-plans.md): active-to-completed work protocol.
@@ -145,5 +149,9 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 - Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
 - The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.
 - Workspace memory is governance-only in this phase. Accepted entries are persisted and listable, but agents do not read them automatically and no retrieval, embedding/vector search, or runtime context assembly is implemented.
+- The Lark baseline is a fixed compatibility canary only: one App/group/user
+  and service-account tuple, command/Card/Doc projection surfaces, no canonical
+  Lark identity, and no production delivery, physical exactly-once, multi-node,
+  or full crash-recovery claim. Thread command remains the fallback surface.
 
 See [Security](SECURITY.md) before deploying or connecting real credentials. This baseline is for local development and architecture validation only.

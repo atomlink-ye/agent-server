@@ -100,7 +100,7 @@ describe('PublishMemoryReviewSurface', () => {
     });
   });
 
-  it('creates a planned short Card surface and Card outbox with only a token hash durable', async () => {
+  it('immediately creates a Doc and publishes a card_with_doc surface', async () => {
     const proposal = createMemoryProposal({
       id: '00000000-0000-4000-8000-000000000003',
       tenantId: 'tenant',
@@ -135,12 +135,23 @@ describe('PublishMemoryReviewSurface', () => {
         getActiveSurface: vi.fn(async () => null),
       } as never,
       createMemoryReviewActionTokenDeriver('secret'),
+      {
+        create: vi.fn().mockResolvedValue({
+          token: 'doc-short',
+          revision: '1',
+          url: 'https://lark.test/docx/doc-short',
+        }),
+        readDraft: vi.fn(),
+      },
+      'user',
     ).execute({ run: succeededRun(), task: task() as never });
 
     expect(createSurface).toHaveBeenCalledTimes(1);
     const surface = createSurface.mock.calls[0]![0];
     expect(surface).toMatchObject({
-      mode: 'card',
+      mode: 'card_with_doc',
+      docToken: 'doc-short',
+      docRevision: '1',
       status: 'planned',
       proposalId: proposal.id,
     });
@@ -157,7 +168,7 @@ describe('PublishMemoryReviewSurface', () => {
     expect(outbox.payload).not.toContain(surface.actionTokenHash);
     expect(outbox.payload).not.toContain('token');
     expect(JSON.parse(outbox.payload)).toMatchObject({
-      type: 'lark_memory_review_card_v1',
+      type: 'lark_memory_doc_card_v1',
       surfaceId: surface.id,
       version: 1,
       proposalId: proposal.id,
@@ -169,6 +180,7 @@ describe('PublishMemoryReviewSurface', () => {
       },
       category: 'constraint',
       content: 'Keep deployments reversible.',
+      docToken: 'doc-short',
     });
   });
 

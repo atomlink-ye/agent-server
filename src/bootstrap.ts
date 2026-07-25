@@ -55,6 +55,7 @@ import { DeliverChannelOutbox } from './application/channels/deliver-channel-out
 import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
+import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -277,6 +278,13 @@ export async function createService(config: AppConfig, logger: Logger) {
   const reviewMemoryProposal = new ReviewMemoryProposal(
     workspaceMemoryRepository,
   );
+  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
+    runtime,
+    events,
+    reviewMemoryProposal,
+    managedMemory,
+    process.env.LARK_CLI_PROFILE ?? 'agent-test',
+  );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
   const completeRun = new CompleteRun(
     runRepository,
@@ -342,6 +350,7 @@ export async function createService(config: AppConfig, logger: Logger) {
         larkConfig,
         memoryDocument,
         synthesizeMemoryDocument,
+        acceptMemoryFromDocument,
       ),
     );
     larkWorker = createLarkIngressWorker(

@@ -5,6 +5,7 @@ import { PostgresLarkReviewSurfaceRepository } from '../../src/infrastructure/po
 import { PostgresChannelRepository } from '../../src/infrastructure/postgres/postgres-channel-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { sha256Preview } from '../../src/domain/channels/lark-memory-review-surface.js';
+import { memoryReviewDecisionFingerprint } from '../../src/domain/workspace-memory/memory-review-fingerprint.js';
 import type { LarkMemoryReviewSurface } from '../../src/domain/channels/lark-memory-review-surface.js';
 
 const owner = {
@@ -40,6 +41,84 @@ function surface(
 }
 
 describe('Lark memory review surfaces (PGlite)', () => {
+  it('resolves and replays an immediate source-message Doc direct Accept', async () => {
+    const database = new PGlite();
+    await applyDurableKernelMigrations(database);
+    const proposalId = '00000000-0000-0000-0000-000000001001';
+    const sessionId = '00000000-0000-0000-0000-000000001002';
+    const digest = 'a'.repeat(64);
+    await database.query(
+      `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES ('00000000-0000-0000-0000-000000001003',$1,'service_account','svc_review','Review',now(),now())`,
+      [owner.tenantId],
+    );
+    await database.query(
+      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,created_at,updated_at) VALUES ($1,'00000000-0000-0000-0000-000000001003',$2,'service_account','svc_review','agent',now(),now())`,
+      [sessionId, owner.tenantId],
+    );
+    await database.query(
+      `INSERT INTO channel_ingress_events(id,connection_key,kind,external_key,external_message_id,chat_id,root_message_id,external_actor_id,action,normalization_version,status,attempt_count,lease_owner,lease_expires_at) VALUES ('source-direct','lark-canary','message','source-direct','root-direct','chat-direct',NULL,'actor-direct','{}','v1','processed',1,NULL,NULL), ('accept-direct','lark-canary','card_action','accept-direct','card-direct','chat-direct',NULL,'actor-direct',$1,'v1','processing',1,'worker-direct',now()+interval '1 minute')`,
+      [JSON.stringify({ action: 'accept', digest })],
+    );
+    await database.query(
+      `INSERT INTO channel_conversation_bindings(id,connection_key,chat_id,root_message_id,session_id,creating_ingress_id) VALUES ('binding-direct','lark-canary','chat-direct','root-direct',$1,'source-direct')`,
+      [sessionId],
+    );
+    await database.query(
+      `INSERT INTO workspace_memory_proposals(id,tenant_id,workspace_id,principal_type,principal_id,original_content,original_category,source_session_id,proposer_snapshot,status,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,'original','terminology',$6,'{}','pending',now(),now())`,
+      [proposalId, ...Object.values(owner), sessionId],
+    );
+    const repository = new PostgresLarkReviewSurfaceRepository(database);
+    const created = await repository.createSurface(
+      surface({
+        id: 'surface-direct',
+        proposalId,
+        bindingId: 'binding-direct',
+        creatingIngressId: 'source-direct',
+        cardMessageId: 'card-direct',
+        actionTokenHash: digest,
+      }),
+    );
+    await database.query(
+      `UPDATE workspace_memory_proposals SET status='accepted',review_outcome='edit_and_accept',reviewed_content='changed marker',reviewer_snapshot='{}',reviewed_at=now(),review_controller_ingress_id='accept-direct',review_decision_sha256=$1 WHERE id=$2`,
+      [
+        memoryReviewDecisionFingerprint({
+          action: 'edit_and_accept',
+          content: 'changed marker',
+        }),
+        proposalId,
+      ],
+    );
+    const input = {
+      surface: created,
+      owner,
+      ingressId: 'accept-direct',
+      leaseOwner: 'worker-direct',
+      attemptNumber: 1,
+      actionDigest: digest,
+      actorId: 'actor-direct',
+      connectionKey: 'lark-canary',
+      chatId: 'chat-direct',
+      outcome: 'accepted' as const,
+      category: 'terminology',
+      content: 'changed marker',
+      card: { schema: '2.0' },
+      threadText: 'Memory accepted: terminology.',
+    };
+    await expect(
+      repository.resolveSurfaceAndCreateTerminalOutboxes(input),
+    ).resolves.toBeUndefined();
+    await expect(
+      database.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM channel_outbox WHERE aggregate_id=$1`,
+        [proposalId],
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 2 }] });
+    await expect(
+      repository.resolveSurfaceAndCreateTerminalOutboxes(input),
+    ).resolves.toBeUndefined();
+    await database.close();
+  });
+
   it('Task11 validates a real card_action preview successor and same-ingress replay', async () => {
     const database = new PGlite();
     await applyDurableKernelMigrations(database);

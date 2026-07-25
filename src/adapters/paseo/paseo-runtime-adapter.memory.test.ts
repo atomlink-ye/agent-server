@@ -5,6 +5,10 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { PaseoRuntimeAdapter } from './paseo-runtime-adapter.js';
 import type { PaseoClientPort } from './paseo-client-port.js';
+import {
+  RuntimeExecutionError,
+  RuntimeTimedOutError,
+} from '../../application/ports/agent-runtime.js';
 
 function client(onFinish?: () => Promise<void>): PaseoClientPort {
   return {
@@ -18,6 +22,7 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
       provider: 'opencode',
       model: 'free/model',
     }),
+    sendAgentMessage: async () => undefined,
     waitForFinish: async () => {
       await onFinish?.();
       return { status: 'idle', error: null, lastMessage: 'done' };
@@ -25,6 +30,149 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
     close: async () => undefined,
   };
 }
+
+describe('Paseo runtime same-agent continuation', () => {
+  it('sends a follow-up to the supplied provider Agent and returns its id', async () => {
+    const sent: string[] = [];
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://test',
+        cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+        workspaceTitle: 'test',
+        connectTimeoutMs: 1,
+        executionTimeoutMs: 1,
+      },
+      logger,
+      {
+        ...client(),
+        sendAgentMessage: async (agentId, text) => {
+          sent.push(`${agentId}:${text}`);
+        },
+        waitForFinish: async (agentId) => ({
+          status: 'idle',
+          error: null,
+          lastMessage: `continued:${agentId}`,
+        }),
+      },
+    );
+
+    const result = await runtime.execute({
+      runId: 'run-follow-up',
+      prompt: 'continue',
+      providerAgentId: 'agent-existing',
+    });
+
+    expect(sent).toEqual(['agent-existing:continue']);
+    expect(result.providerAgentId).toBe('agent-existing');
+  });
+
+  it('does not create a replacement Agent when continuation fails', async () => {
+    const create = async () => ({
+      id: 'replacement',
+      provider: 'opencode',
+      model: 'free/model',
+    });
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://test',
+        cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+        workspaceTitle: 'test',
+        connectTimeoutMs: 1,
+        executionTimeoutMs: 1,
+      },
+      logger,
+      {
+        ...client(),
+        createOpenCodeAgent: create,
+        sendAgentMessage: async () => {
+          throw new Error('closed');
+        },
+      },
+    );
+    await expect(
+      runtime.execute({
+        runId: 'run-follow-up',
+        prompt: 'continue',
+        providerAgentId: 'agent-closed',
+      }),
+    ).rejects.toThrow('closed');
+  });
+
+  it.each([
+    [
+      'send rejection',
+      async (client: PaseoClientPort) => {
+        client.sendAgentMessage = async () => {
+          throw new Error('send failed');
+        };
+      },
+    ],
+    [
+      'wait rejection',
+      async (client: PaseoClientPort) => {
+        client.waitForFinish = async () => {
+          throw new Error('wait failed');
+        };
+      },
+    ],
+    [
+      'wait error status',
+      async (client: PaseoClientPort) => {
+        client.waitForFinish = async () => ({
+          status: 'error',
+          error: 'provider failed',
+          lastMessage: null,
+        });
+      },
+    ],
+    [
+      'wait timeout status',
+      async (client: PaseoClientPort) => {
+        client.waitForFinish = async () => ({
+          status: 'timeout',
+          error: null,
+          lastMessage: null,
+        });
+      },
+    ],
+  ])(
+    'fails closed on continuation %s without creating a replacement Agent',
+    async (_label, configure) => {
+      let creates = 0;
+      const continuationClient = client();
+      continuationClient.createOpenCodeAgent = async () => {
+        creates += 1;
+        return { id: 'replacement', provider: 'opencode', model: 'free/model' };
+      };
+      await configure(continuationClient);
+      const runtime = new PaseoRuntimeAdapter(
+        {
+          wsUrl: 'ws://test',
+          cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+          workspaceTitle: 'test',
+          connectTimeoutMs: 1,
+          executionTimeoutMs: 1,
+        },
+        logger,
+        continuationClient,
+      );
+
+      const failure = runtime.execute({
+        runId: 'run-failure',
+        prompt: 'continue',
+        providerAgentId: 'agent-existing',
+      });
+      if (_label === 'wait timeout status') {
+        await expect(failure).rejects.toBeInstanceOf(RuntimeTimedOutError);
+      } else if (_label === 'wait error status') {
+        await expect(failure).rejects.toBeInstanceOf(RuntimeExecutionError);
+      } else {
+        await expect(failure).rejects.toThrow();
+      }
+      expect(creates).toBe(0);
+    },
+  );
+});
 
 const logger = { log: () => undefined };
 

@@ -15,10 +15,11 @@ production deployment, identity, or recovery runbook.
 - Agent Server must be the sole App WebSocket consumer. Do not run a competing
   `lark-cli event consume` or a second worker.
 - The supported review surfaces are Thread `/memory edit-and-accept` fallback,
-  Card controls, and Bot-owned Doc controls. For long proposals, edit the Doc
-  body and/or add unresolved comments/replies, choose `Read Changes and Generate
-Preview`, then use separate `Accept Preview` for the persisted immutable
-  preview/hash.
+  Card controls, and Bot-owned Doc controls. Agent Server creates the editable
+  Bot-owned Doc before the initial Card. Open/edit the Doc if desired, then use
+  direct `Accept`; the resumed Agent fetches it with `lark-cli docs +fetch
+--profile "$LARK_CLI_PROFILE" --as bot --doc <token>`. New Cards do not render
+  Edit/Preview controls; legacy actions remain inbound-only.
 
 ## Readiness and runtime
 

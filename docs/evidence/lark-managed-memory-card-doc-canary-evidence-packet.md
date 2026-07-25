@@ -7,6 +7,14 @@ compatibility canary. It does not claim canonical Lark identity, production
 readiness, physical exactly-once delivery, multi-node leadership, or complete
 crash recovery. Deferred hardening remains in the active Task 14 plan.
 
+## Current implementation evidence boundary
+
+The current same-session direct-Accept implementation creates the Bot-owned Doc
+before the initial Card and uses `Open Doc`/`Accept`/`Reject`. The resumed Agent
+fetch command uses the validated profile and `--as bot`; legacy edit/Preview
+actions remain inbound-only. New deterministic E2E evidence is intentionally
+pending and must not be inferred from the historical Preview flow below.
+
 ## Verified flow
 
 - Source root: `om_x100b6977602948a8ddea65909e57918`

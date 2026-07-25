@@ -67,6 +67,8 @@ export class FakePaseoClient implements PaseoClientPort {
     return this.finished;
   }
 
+  public async sendAgentMessage(): Promise<void> {}
+
   public async close(): Promise<void> {
     this.closeCalls += 1;
     this.status = 'disposed';

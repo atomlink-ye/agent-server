@@ -30,6 +30,7 @@ export interface PaseoClientPort {
     readonly prompt: string;
     readonly runId: string;
   }): Promise<PaseoCreatedAgent>;
+  sendAgentMessage(agentId: string, text: string): Promise<void>;
   waitForFinish(
     agentId: string,
     timeoutMs: number,
@@ -130,6 +131,10 @@ export class PaseoSdkClient implements PaseoClientPort {
       lastMessage: result.lastMessage,
       ...(result.final?.lastUsage ? { usage: result.final.lastUsage } : {}),
     };
+  }
+
+  public async sendAgentMessage(agentId: string, text: string): Promise<void> {
+    await this.#client.sendAgentMessage(agentId, text);
   }
 
   public async cancelAgent(agentId: string): Promise<void> {

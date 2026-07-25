@@ -11,6 +11,7 @@ import { renderResolvedMemoryCard } from '../../adapters/lark/lark-memory-card.j
 import type { MemoryDocumentPort } from '../ports/lark-memory-document.js';
 import type { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
 import { createMemoryReviewActionTokenDeriver } from './memory-review-action-token.js';
+import type { AcceptMemoryFromBoundDocument } from './accept-memory-from-bound-document.js';
 
 const SAFE_FAILURE = 'memory_review_control_failed';
 
@@ -32,6 +33,10 @@ export class ApplyMemoryReviewControl {
     private readonly config: LarkCanaryEnabledConfig,
     private readonly documents?: MemoryDocumentPort,
     private readonly synthesize?: Pick<SynthesizeMemoryDocument, 'execute'>,
+    private readonly acceptFromDocument?: Pick<
+      AcceptMemoryFromBoundDocument,
+      'execute'
+    >,
   ) {}
 
   public async execute(ingress: ChannelIngress): Promise<{
@@ -222,6 +227,48 @@ export class ApplyMemoryReviewControl {
           ...ingressFence(ingress),
         });
         return { accepted: true, outcome: 'previewed' };
+      }
+      if (
+        action.action === 'accept' &&
+        authorized.surface.mode === 'card_with_doc'
+      ) {
+        stage = 'projection';
+        if (!this.acceptFromDocument)
+          throw new Error('document_accept_unavailable');
+        const accepted = await this.acceptFromDocument.execute({
+          ingressId: ingress.id,
+          proposal: authorized.proposal,
+          surface: authorized.surface,
+          owner,
+        });
+        const card = renderResolvedMemoryCard({
+          status: 'accepted',
+          category: authorized.proposal.originalCategory,
+          content: accepted.content,
+        });
+        stage = 'ui';
+        await this.surfaces.resolveSurfaceAndCreateTerminalOutboxes({
+          surface: authorized.surface,
+          owner,
+          ingressId: ingress.id,
+          outcome: 'accepted',
+          leaseOwner: ingress.leaseOwner!,
+          attemptNumber: ingress.attemptCount,
+          actionDigest: digest,
+          actorId: ingress.externalActorId!,
+          connectionKey: ingress.connectionKey,
+          chatId: ingress.chatId,
+          category: authorized.proposal.originalCategory,
+          content: accepted.content,
+          card,
+          threadText: `Memory accepted: ${authorized.proposal.originalCategory}.`,
+        });
+        await this.channels.completeIngress({
+          ingressId: ingress.id,
+          status: 'processed',
+          ...ingressFence(ingress),
+        });
+        return { accepted: true, outcome: 'accepted' };
       }
       const persistedPreview =
         action.action === 'accept_preview'

@@ -94,6 +94,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
       return {
         provider: 'opencode',
         model: 'opencode/fake-free',
+        providerAgentId: 'fake-agent-1',
         text: isCanary
           ? (this.#options.canaryResponseText ?? 'FAKE_RUNTIME_OK')
           : this.#options.deriveMemoryResponse &&

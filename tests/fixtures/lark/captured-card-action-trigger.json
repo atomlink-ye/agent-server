@@ -1,0 +1,16 @@
+{
+  "schema": "2.0",
+  "event_id": "evt_card_placeholder",
+  "event_type": "card.action.trigger",
+  "create_time": "1735689600000000",
+  "operator": { "open_id": "ou_operator_placeholder" },
+  "action": {
+    "action_tag": "button",
+    "value": "{\"action\":\"accept\",\"token\":\"opaque-token-placeholder\"}"
+  },
+  "context": {
+    "open_chat_id": "oc_chat_placeholder",
+    "open_message_id": "om_card_placeholder"
+  },
+  "card": { "type": "template" }
+}

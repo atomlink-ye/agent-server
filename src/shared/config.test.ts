@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       logLevel: 'info',
       serviceName: 'agent-server',
       serviceAccounts: [],
+      larkCanary: { enabled: false },
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         agentCwd: '/repo/.local/agent-workspace',
@@ -132,4 +133,83 @@ describe('loadConfig', () => {
       }),
     ).toThrow(/conflicting service-account id binding/i);
   });
+
+  it('loads a disabled-by-default fixed Lark canary without requiring secrets', () => {
+    const config = loadConfig({});
+    expect(config.larkCanary).toEqual({ enabled: false });
+    expect(JSON.stringify(config)).not.toContain('LARK_CANARY_APP_SECRET');
+  });
+
+  it('loads the enabled canary and keeps the app secret runtime-only', () => {
+    const config = loadConfig(validLarkEnvironment());
+    expect(config.larkCanary).toMatchObject({
+      enabled: true,
+      connectionKey: 'canary-connection',
+      appId: 'cli_app',
+      domain: 'feishu',
+      botOpenId: 'ou_bot',
+      allowedChatId: 'oc_chat',
+      allowedOpenId: 'ou_user',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      serviceAccountId: 'svc-1',
+      publishedAgentVersionId: 'agent-version-1',
+      policyVersion: 'policy-1',
+    });
+    expect(config.larkCanary).toHaveProperty(
+      'appSecret',
+      'secret-runtime-only',
+    );
+  });
+
+  it.each([
+    ['missing secret', { LARK_CANARY_APP_SECRET: '' }],
+    ['missing domain', { LARK_CANARY_DOMAIN: '' }],
+    ['unknown domain', { LARK_CANARY_DOMAIN: 'other' }],
+    ['missing service account', { LARK_CANARY_SERVICE_ACCOUNT_ID: 'unknown' }],
+    [
+      'disabled service account',
+      {
+        SERVICE_ACCOUNTS_JSON: JSON.stringify([
+          { ...account(), disabled: true },
+        ]),
+      },
+    ],
+    ['mismatched tenant', { LARK_CANARY_TENANT_ID: 'tenant-other' }],
+    ['mismatched workspace', { LARK_CANARY_WORKSPACE_ID: 'workspace-other' }],
+    ['mismatched policy', { LARK_CANARY_POLICY_VERSION: 'policy-other' }],
+  ])('rejects enabled canary with %s', (_label, override) => {
+    expect(() =>
+      loadConfig({ ...validLarkEnvironment(), ...override }),
+    ).toThrow(ConfigurationError);
+  });
 });
+
+function account() {
+  return {
+    serviceAccountId: 'svc-1',
+    token: 'token-1',
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+    policyVersion: 'policy-1',
+  };
+}
+
+function validLarkEnvironment(): NodeJS.ProcessEnv {
+  return {
+    LARK_CANARY_ENABLED: 'true',
+    LARK_CANARY_CONNECTION_KEY: 'canary-connection',
+    LARK_CANARY_APP_ID: 'cli_app',
+    LARK_CANARY_DOMAIN: 'feishu',
+    LARK_CANARY_APP_SECRET: 'secret-runtime-only',
+    LARK_CANARY_BOT_OPEN_ID: 'ou_bot',
+    LARK_CANARY_ALLOWED_CHAT_ID: 'oc_chat',
+    LARK_CANARY_ALLOWED_OPEN_ID: 'ou_user',
+    LARK_CANARY_TENANT_ID: 'tenant-1',
+    LARK_CANARY_WORKSPACE_ID: 'workspace-1',
+    LARK_CANARY_SERVICE_ACCOUNT_ID: 'svc-1',
+    LARK_CANARY_PUBLISHED_AGENT_VERSION_ID: 'agent-version-1',
+    LARK_CANARY_POLICY_VERSION: 'policy-1',
+    SERVICE_ACCOUNTS_JSON: JSON.stringify([account()]),
+  };
+}

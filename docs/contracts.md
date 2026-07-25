@@ -10,8 +10,40 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.
 - [Managed Single-Agent V1 evidence packet](evidence/managed-single-agent-v1-evidence-packet.md) records approved minimum-scenario evidence; production hardening remains deferred.
+- [Lark Managed Memory command canary](evidence/lark-managed-memory-command-canary-evidence-packet.md) records the fixed compatibility boundary and sanitized command-only evidence; it is not a production identity or delivery guarantee.
+- [Lark Managed Memory Card/Doc canary](evidence/lark-managed-memory-card-doc-canary-evidence-packet.md) records sanitized normal-path deterministic/provider evidence; it is not production identity, physical exactly-once, multi-node, or crash-recovery evidence.
 
 Changing a public field, status meaning, model-selection authority, or runtime responsibility is a Human Gate and requires contract tests plus documentation updates.
+
+## Fixed Lark command-only compatibility contract
+
+The implemented Lark seam is intentionally narrower than a general channel
+contract. Configuration is disabled by default and fixes one App/domain, one
+allowlisted chat, one allowlisted external user, one bot mention identity, and
+one service-account Tenant/Workspace/published AgentVersion/policy tuple. The
+tuple is checked at binding and command review; callers cannot supply an owner,
+Workspace, AgentVersion, or canonical identity.
+
+New roots require a verified mention and create the normal Product Session,
+Task, and Run through trusted `lark` origin admission. Thread commands reuse the
+root binding. The supported control command is `/memory
+edit-and-accept <proposal_id> <bounded content>` (with corresponding bounded
+accept/reject forms). Card and Bot Doc controls use the same canonical review
+state; Doc body plus unresolved comments/replies are read for immutable Preview,
+and `Accept Preview` accepts exactly the persisted Preview/hash. Thread command
+remains fallback. All controls are kept out of Agent prompts and are authorized
+by the configured chat, user, bot mention evidence, source Session, and owner
+tuple.
+Successful review materializes one accepted Entry and publishes a ready
+immutable snapshot before the result is reported. A later new root creates a
+Fresh Session that pins the exact snapshot ID/hash at admission.
+
+Only bounded normalized fields and provider IDs are retained. Raw provider
+events, callback tokens, secrets, raw provider errors, prompts, and local paths
+are not retained or exposed. Outbound text uses durable outbox attempts and
+provider UUID replay while safe; an ambiguous send may become
+`delivery_unknown`. This is not physical exactly-once delivery. The fixed tuple
+is not canonical Lark identity or production authorization.
 
 ## Managed Agent package and registry API
 

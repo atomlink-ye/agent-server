@@ -224,6 +224,10 @@ describe('managed agent registry migration', () => {
       '0010_runtime_memory_provenance',
       '0011_runtime_memory_provenance_integrity',
       '0012_session_turn_origin',
+      '0013_channel_core',
+      '0014_lark_memory_review_surfaces',
+      '0015_card_action_ingress_dedup',
+      '0016_memory_integrity_receipts',
     ]);
   });
 

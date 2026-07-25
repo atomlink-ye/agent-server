@@ -15,6 +15,7 @@ import {
   type WorkspaceMemoryEntry,
   type WorkspaceMemoryEntrySnapshot,
 } from '../../domain/workspace-memory/memory-proposal.js';
+import { memoryReviewDecisionFingerprint } from '../../domain/workspace-memory/memory-review-fingerprint.js';
 
 interface PostgresQueryResult<Row> {
   readonly rows?: readonly Row[];
@@ -58,6 +59,8 @@ interface MemoryProposalRow {
   readonly reviewed_at: string | Date | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
+  readonly review_controller_ingress_id?: string | null;
+  readonly review_decision_sha256?: string | null;
 }
 
 interface WorkspaceMemoryEntryRow {
@@ -235,6 +238,32 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
     return (result.rows ?? []).map(mapProposalRow);
   }
 
+  public async listPendingProposalsBySourceRunForOwner(
+    sourceRunId: string,
+    ownerScope: WorkspaceMemoryRepositoryOwnerScope,
+  ): Promise<readonly MemoryProposal[]> {
+    const result = await this.queryable.query<MemoryProposalRow>(
+      `${MEMORY_PROPOSAL_SELECT_SQL}
+        WHERE source_run_id = $1
+          AND status = 'pending'
+          AND tenant_id = $2
+          AND workspace_id = $3
+          AND principal_type = $4
+          AND principal_id = $5
+          AND EXISTS (SELECT 1 FROM runs r WHERE r.id = source_run_id AND r.status = 'succeeded')
+        ORDER BY created_at, internal_order
+      `,
+      [
+        sourceRunId,
+        ownerScope.tenantId,
+        ownerScope.workspaceId,
+        ownerScope.principalType,
+        ownerScope.principalId,
+      ],
+    );
+    return (result.rows ?? []).map(mapProposalRow);
+  }
+
   public async reviewProposal(
     input: ReviewMemoryProposalRepositoryInput,
   ): Promise<ReviewMemoryProposalRepositoryResult> {
@@ -253,6 +282,57 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
         throw new Error('Workspace memory proposal not found for owner scope');
       }
 
+      let controllerId: string | null = null;
+      let decisionFingerprint: string | null = null;
+      if (input.controller) {
+        const controller = await client.query<{ kind: string }>(
+          'SELECT kind FROM channel_ingress_events WHERE id = $1 FOR UPDATE',
+          [input.controller.ingressId],
+        );
+        if (
+          !controller.rows?.[0] ||
+          !['card_action', 'command'].includes(controller.rows[0].kind)
+        )
+          throw new Error('review_controller_not_found');
+        controllerId = input.controller.ingressId;
+        decisionFingerprint = memoryReviewDecisionFingerprint({
+          action: input.outcome,
+          content: input.reviewedContent ?? null,
+        });
+        const controllerState = await client.query<{
+          review_controller_ingress_id: string | null;
+          review_decision_sha256: string | null;
+        }>(
+          'SELECT review_controller_ingress_id, review_decision_sha256 FROM workspace_memory_proposals WHERE id = $1 FOR UPDATE',
+          [input.proposalId],
+        );
+        const state = controllerState.rows?.[0];
+        if (proposal.status !== 'pending') {
+          const exact =
+            state?.review_controller_ingress_id === controllerId &&
+            state.review_decision_sha256 === decisionFingerprint &&
+            proposal.reviewOutcome === input.outcome &&
+            proposal.reviewedContent === (input.reviewedContent ?? null);
+          if (!exact) throw new Error('review_controller_conflict');
+          if (proposal.status === 'rejected') {
+            await client.query('COMMIT');
+            return { proposal, entry: null, replayed: true };
+          }
+          const existingEntry = await client.query<WorkspaceMemoryEntryRow>(
+            `${WORKSPACE_MEMORY_ENTRY_SELECT_SQL} WHERE proposal_id = $1 FOR SHARE`,
+            [input.proposalId],
+          );
+          if (!existingEntry.rows?.[0])
+            throw new Error('review_replay_missing_entry');
+          await client.query('COMMIT');
+          return {
+            proposal,
+            entry: mapEntryRow(existingEntry.rows[0]),
+            replayed: true,
+          };
+        }
+      }
+
       const reviewedProposal = reviewMemoryProposal(proposal, {
         outcome: input.outcome,
         reviewedContent: input.reviewedContent ?? null,
@@ -260,7 +340,12 @@ export class PostgresWorkspaceMemoryRepository implements WorkspaceMemoryReposit
         ...(input.now ? { now: input.now } : {}),
       });
 
-      await updateReviewedProposal(client, reviewedProposal);
+      await updateReviewedProposal(
+        client,
+        reviewedProposal,
+        controllerId,
+        decisionFingerprint,
+      );
 
       const entry =
         reviewedProposal.status === 'accepted'
@@ -438,6 +523,8 @@ async function selectProposalByReplayKey(
 async function updateReviewedProposal(
   database: PostgresQueryable,
   proposal: MemoryProposal,
+  controllerId: string | null = null,
+  decisionFingerprint: string | null = null,
 ): Promise<void> {
   await database.query(
     `
@@ -448,7 +535,9 @@ async function updateReviewedProposal(
         reviewed_content = $4,
         reviewer_snapshot = $5,
         reviewed_at = $6,
-        updated_at = $7
+        updated_at = $7,
+        review_controller_ingress_id = $8,
+        review_decision_sha256 = $9
       WHERE id = $1
     `,
     [
@@ -459,6 +548,8 @@ async function updateReviewedProposal(
       JSON.stringify(proposal.reviewerSnapshot),
       proposal.reviewedAt,
       proposal.updatedAt,
+      controllerId,
+      decisionFingerprint,
     ],
   );
 }

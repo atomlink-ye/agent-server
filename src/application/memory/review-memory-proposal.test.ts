@@ -92,6 +92,21 @@ describe('ReviewMemoryProposal', () => {
       }),
     ).rejects.toBeInstanceOf(MemoryProposalAlreadyReviewedError);
   });
+
+  it('passes a channel controller into the repository transaction for keyed replay', async () => {
+    const proposal = makeProposal('proposal-controller');
+    const repository = new FakeWorkspaceMemoryRepository([proposal]);
+    await new ReviewMemoryProposal(repository).execute({
+      proposalId: proposal.id,
+      action: 'reject',
+      accessContext,
+      controller: { kind: 'channel_ingress', ingressId: 'ingress-1' },
+    });
+    expect(repository.lastReviewInput?.controller).toEqual({
+      kind: 'channel_ingress',
+      ingressId: 'ingress-1',
+    });
+  });
 });
 
 function makeProposal(id: string): MemoryProposal {

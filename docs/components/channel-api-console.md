@@ -15,6 +15,19 @@ The Hono entrypoint exposes:
 
 Request IDs are returned and logged. Bodies are limited to 64 KiB. Zod rejects unknown fields and caller model selection. Runtime readiness is checked before accepting a Run. Responses never include the stored prompt or raw provider errors.
 
+The fixed command-only Lark compatibility adapter is disabled by default. When
+enabled, it fixes one App/domain, allowlisted chat and external user, bot mention
+identity, and service-account Tenant/Workspace/published AgentVersion tuple. The
+WebSocket receiver derives verified mentions and commits bounded ingress before
+acknowledgement. Eligible roots use the shared Session turn admission; a
+successful source Run creates one safe Thread review instruction, and
+`/memory edit-and-accept` converges on the canonical Memory review and
+ready-snapshot flow. Card and Bot Doc are projection/control surfaces over the
+same state: long proposals use editable body plus unresolved comments/replies,
+`Read Changes and Generate Preview`, immutable Preview, and separate `Accept
+Preview`; Thread command remains fallback. This is a compatibility seam, not a
+canonical User/Membership or production channel platform.
+
 ## V1 responsibilities
 
 - Web/API/Lark identity adaptation and Task proposal normalization.
@@ -22,5 +35,14 @@ Request IDs are returned and logged. Bodies are limited to 64 KiB. Zod rejects u
 - Task tree, current Run, queue position, completion criteria, approval, Artifact, and error views.
 - Cursor-based control-plane events; clients do not subscribe directly to Paseo.
 - Durable idempotent delivery back to Lark/Web/API consumers.
+- Fixed Lark command-path ownership: four channel tables, safe provider IDs only,
+  no raw event retention, and bounded outbox attempts with explicit
+  `delivery_unknown` when provider execution cannot be reconciled.
 
 The baseline Run API is intentionally temporary. The V1 public contract is Task invocation described in [Run API contract](../contracts/run-api.md).
+
+Preview successor lease fencing, post-canonical retry/fencing, manual rebuild
+races, rolling allocator races, generalized synthesis retry/audit, multi-node
+leadership, crash recovery, broad redrive/fault injection, and performance
+hardening are deferred to the Task 14 follow-up. The command/Card/Doc canary
+must not be read as V1 or production readiness.

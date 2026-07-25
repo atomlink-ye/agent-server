@@ -1,0 +1,36 @@
+{
+  "schema": "2.0",
+  "header": {
+    "event_id": "evt_message_001",
+    "event_type": "im.message.receive_v1",
+    "create_time": "1735689600000"
+  },
+  "event": {
+    "sender": {
+      "sender_id": { "open_id": "ou_sender_001", "user_id": "user_sender_001" },
+      "sender_type": "user"
+    },
+    "message": {
+      "message_id": "om_message_001",
+      "root_id": "om_root_001",
+      "parent_id": "om_parent_001",
+      "create_time": "1735689600000",
+      "chat_id": "oc_chat_001",
+      "chat_type": "group",
+      "message_type": "text",
+      "content": "{\"text\":\"hello <at user_id=\\\"ou_bot_001\\\">bot</at>\"}",
+      "mentions": [
+        {
+          "key": "@_user_1",
+          "id": { "open_id": "ou_bot_001", "user_id": "user_bot_001" },
+          "name": "bot"
+        }
+      ],
+      "thread_id": "omt_thread_001",
+      "upper_message_id": "om_parent_001",
+      "unknown_provider_field": "ignored"
+    },
+    "unknown_event_field": { "ignored": true }
+  },
+  "unknown_top_level": "ignored"
+}

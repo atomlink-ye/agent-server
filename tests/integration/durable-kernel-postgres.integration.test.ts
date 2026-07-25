@@ -123,6 +123,10 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0010_runtime_memory_provenance' },
       { version: '0011_runtime_memory_provenance_integrity' },
       { version: '0012_session_turn_origin' },
+      { version: '0013_channel_core' },
+      { version: '0014_lark_memory_review_surfaces' },
+      { version: '0015_card_action_ingress_dedup' },
+      { version: '0016_memory_integrity_receipts' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -160,6 +164,10 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0010_runtime_memory_provenance' },
       { version: '0011_runtime_memory_provenance_integrity' },
       { version: '0012_session_turn_origin' },
+      { version: '0013_channel_core' },
+      { version: '0014_lark_memory_review_surfaces' },
+      { version: '0015_card_action_ingress_dedup' },
+      { version: '0016_memory_integrity_receipts' },
     ]);
   });
 
@@ -189,7 +197,12 @@ describe('durable kernel postgres bootstrap', () => {
 
     await applyDurableKernelMigrations(
       database,
-      durableKernelMigrationFilePaths.slice(0, -1),
+      durableKernelMigrationFilePaths.slice(
+        0,
+        durableKernelMigrationFilePaths.findIndex((filePath) =>
+          filePath.endsWith('/0012_session_turn_origin.sql'),
+        ),
+      ),
     );
     await database.query(
       `INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at)
@@ -248,7 +261,9 @@ describe('durable kernel postgres bootstrap', () => {
     ).resolves.toMatchObject({ rows: [{ session_id: sessionId }] });
 
     await applyDurableKernelMigrations(database, [
-      durableKernelMigrationFilePaths.at(-1)!,
+      durableKernelMigrationFilePaths.find((filePath) =>
+        filePath.endsWith('/0012_session_turn_origin.sql'),
+      )!,
     ]);
 
     await expect(

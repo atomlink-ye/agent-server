@@ -37,12 +37,68 @@ describe('ManagedMemory', () => {
     const published: FileStoreSnapshot[] = [];
     const db = {
       query: async (sql: string, values?: readonly unknown[]) => {
+        if (sql.includes('FROM workspace_memory_entries'))
+          return {
+            rows: [
+              {
+                id: entry.id,
+                proposal_id: entry.proposalId,
+                tenant_id: entry.tenantId,
+                workspace_id: entry.workspaceId,
+                principal_type: entry.principalType,
+                principal_id: entry.principalId,
+                content: entry.content,
+                category: entry.category,
+                accepted_at: entry.acceptedAt,
+                source_task_id: entry.sourceTaskId,
+                source_session_id: entry.sourceSessionId,
+                source_message_id: entry.sourceMessageId,
+                source_run_id: entry.sourceRunId,
+                source_agent_version_id: entry.sourceAgentVersionId,
+                source_candidate_index: entry.sourceCandidateIndex,
+                proposer_snapshot: entry.proposerSnapshot,
+                reviewer_snapshot: entry.reviewerSnapshot,
+                review_outcome: entry.reviewOutcome,
+              },
+            ],
+          };
+        if (sql.includes('FROM workspace_memory_proposals'))
+          return { rows: [{ status: 'accepted' }] };
+        if (sql.includes('WHERE entry_id=$1 AND proposal_id'))
+          return {
+            rows: [
+              {
+                entry_id: entry.id,
+                proposal_id: entry.proposalId,
+                tenant_id: entry.tenantId,
+                workspace_id: entry.workspaceId,
+                principal_type: entry.principalType,
+                principal_id: entry.principalId,
+                content: entry.content,
+                category: entry.category,
+                accepted_at: entry.acceptedAt,
+                source_task_id: entry.sourceTaskId,
+                source_session_id: entry.sourceSessionId,
+                source_message_id: entry.sourceMessageId,
+                source_run_id: entry.sourceRunId,
+                source_agent_version_id: entry.sourceAgentVersionId,
+                source_candidate_index: entry.sourceCandidateIndex,
+                proposer_snapshot: entry.proposerSnapshot,
+                reviewer_snapshot: entry.reviewerSnapshot,
+                review_outcome: entry.reviewOutcome,
+              },
+            ],
+          };
         if (sql.includes('SELECT entry_id FROM')) return { rows: [] };
         if (sql.includes('SELECT COALESCE')) return { rows: [{ version: 1 }] };
         if (sql.includes('INSERT INTO workspace_memory_owned_entries'))
           rows.push({
             entry_id: entry.id,
             proposal_id: entry.proposalId,
+            tenant_id: entry.tenantId,
+            workspace_id: entry.workspaceId,
+            principal_type: entry.principalType,
+            principal_id: entry.principalId,
             content: entry.content,
             category: entry.category,
             accepted_at: entry.acceptedAt,
@@ -52,8 +108,13 @@ describe('ManagedMemory', () => {
             source_run_id: entry.sourceRunId,
             source_agent_version_id: entry.sourceAgentVersionId,
             source_candidate_index: entry.sourceCandidateIndex,
+            proposer_snapshot: entry.proposerSnapshot,
+            reviewer_snapshot: entry.reviewerSnapshot,
+            review_outcome: entry.reviewOutcome,
           });
         if (sql.includes('SELECT entry_id, proposal_id')) return { rows };
+        if (sql.includes('UPDATE workspace_memory_projection_receipts'))
+          return { rows: [{ snapshot_id: 'snapshot' }] };
         return { rows: [] };
       },
     };

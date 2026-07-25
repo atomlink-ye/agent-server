@@ -150,7 +150,15 @@ describeRealPostgres('managed single-agent minimum fault evidence', () => {
         workspaceId: `h_workspace_${crypto.randomUUID()}`,
       };
       await pool.query(
-        `INSERT INTO workspace_memory_owned_entries(entry_id,proposal_id,tenant_id,workspace_id,content,content_hash,category,proposer_snapshot,reviewer_snapshot,accepted_at) VALUES(gen_random_uuid(),gen_random_uuid(),$1,$2,'v1','hash','fact','{}','{}',now())`,
+        `WITH proposal AS (
+           INSERT INTO workspace_memory_proposals(id,tenant_id,workspace_id,principal_type,principal_id,original_content,original_category,proposer_snapshot,status,review_outcome,reviewer_snapshot,reviewed_at,created_at,updated_at)
+           VALUES(gen_random_uuid(),$1,$2,'service_account','h_worker','v1','fact','{}','accepted','accept','{}',now(),now(),now()) RETURNING id
+         ), entry AS (
+           INSERT INTO workspace_memory_entries(id,proposal_id,tenant_id,workspace_id,principal_type,principal_id,content,category,proposer_snapshot,reviewer_snapshot,review_outcome,accepted_at)
+           SELECT gen_random_uuid(),id,$1,$2,'service_account','h_worker','v1','fact','{}','{}','accept',now() FROM proposal RETURNING id,proposal_id
+         )
+         INSERT INTO workspace_memory_owned_entries(entry_id,proposal_id,tenant_id,workspace_id,principal_type,principal_id,content,content_hash,category,proposer_snapshot,reviewer_snapshot,accepted_at)
+         SELECT id,proposal_id,$1,$2,'service_account','h_worker','v1','hash','fact','{}','{}',now() FROM entry`,
         [scope.tenantId, scope.workspaceId],
       );
       const first = await memory.rebuild(scope);

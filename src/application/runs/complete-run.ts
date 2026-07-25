@@ -6,6 +6,7 @@ import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { SessionRepository } from '../ports/session-repository.js';
+import type { Task } from '../../domain/tasks/task.js';
 
 export interface CompleteRunInput {
   readonly claim: ClaimedRun;
@@ -18,6 +19,12 @@ export class CompleteRun {
     private readonly tasks: TaskRepository,
     private readonly events?: RunEventRepository,
     private readonly sessions?: SessionRepository,
+    private readonly completionNotifier?: {
+      notifySucceeded(input: {
+        readonly run: Run;
+        readonly task: Task;
+      }): Promise<void>;
+    },
   ) {}
 
   public async execute(input: CompleteRunInput): Promise<Run> {
@@ -30,6 +37,13 @@ export class CompleteRun {
 
     if (!task) {
       throw new Error('Completed run task could not be reloaded');
+    }
+
+    if (completedRun.status === 'succeeded') {
+      await this.completionNotifier?.notifySucceeded({
+        run: completedRun,
+        task,
+      });
     }
 
     if (!terminalTaskStatuses.has(task.status)) {

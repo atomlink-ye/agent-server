@@ -21,11 +21,16 @@ export interface ReviewMemoryProposalRepositoryInput {
   readonly reviewerSnapshot: WorkspaceMemoryActorSnapshot;
   readonly now?: () => Date;
   readonly entryIdFactory?: () => string;
+  readonly controller?: {
+    readonly kind: 'channel_ingress';
+    readonly ingressId: string;
+  };
 }
 
 export interface ReviewMemoryProposalRepositoryResult {
   readonly proposal: MemoryProposal;
   readonly entry: WorkspaceMemoryEntry | null;
+  readonly replayed?: boolean;
 }
 
 export interface WorkspaceMemoryRepository {
@@ -46,6 +51,10 @@ export interface WorkspaceMemoryRepository {
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<WorkspaceMemoryEntry | null>;
   listProposalsByOwnerScope(
+    ownerScope: WorkspaceMemoryRepositoryOwnerScope,
+  ): Promise<readonly MemoryProposal[]>;
+  listPendingProposalsBySourceRunForOwner?(
+    sourceRunId: string,
     ownerScope: WorkspaceMemoryRepositoryOwnerScope,
   ): Promise<readonly MemoryProposal[]>;
   reviewProposal(

@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
   node-pty: true
+  protobufjs: false
 minimumReleaseAgeExclude:
   - prettier@3.9.6

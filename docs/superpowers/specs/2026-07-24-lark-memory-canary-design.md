@@ -1,7 +1,8 @@
 # Lark Managed Memory Canary Design
 
 **Date:** 2026-07-24
-**Status:** execution approved — implementation pending
+**Status:** verified fixed compatibility normal path; deferred hardening remains
+in the active Task 14 follow-up plan
 **Risk tier:** R3 — external channel, durable state, identity compatibility,
 core dependency, and external writes
 
@@ -23,8 +24,8 @@ Workspace Memory flow:
    on the first Thread transcript.
 
 The canary is explicitly non-production service-account compatibility mode. It
-does not claim canonical Lark user identity, enterprise multitenancy, or
-physical exactly-once provider delivery.
+does not claim canonical Lark user identity, enterprise multitenancy, physical
+exactly-once provider delivery, multi-node leadership, or full crash recovery.
 
 ## Authority and fixed decisions
 
@@ -46,8 +47,9 @@ Fixed decisions:
 - support one allowlisted external user, one group, one Tenant, one Workspace,
   one service account, and one published AgentVersion;
 - require `@Bot` for new group root messages;
-- use Card as the default interaction, Bot Doc as a long-context auxiliary,
-  and Thread commands as fallback and automation;
+- use a meaningful-content Card for short proposals, a Bot-owned Doc plus
+  control Card for long proposals, and Thread commands as fallback and
+  automation;
 - preserve Proposal, Memory Entry, and Memory Snapshot as the only canonical
   review facts;
 - keep the current load-bearing PostgreSQL Session turn transaction intact;
@@ -114,6 +116,10 @@ Second new @Bot root
 
 Lark is an adapter. It does not own a second Session, Task queue, Runtime,
 Memory store, authorization model, or approval truth.
+
+Proposal → accepted Entry → ready snapshot remains the only canonical Memory
+authority. Cards and Docs are projection/control surfaces only: they may display,
+collect, preview, or resolve a decision, but they never become Memory truth.
 
 ## Shared Session turn admission
 
@@ -208,14 +214,17 @@ version. Failed or non-terminal source Runs do not publish review surfaces.
 
 ## Card-first interaction policy
 
-Card, Doc, and command are input modalities into one canonical review command,
-not independent workflows.
+Card and Doc are projection/control surfaces, and command is the fallback input
+surface, all converging on one canonical review command rather than independent
+workflows.
 
 ### Selection rules
 
-- Proposal content up to 1,500 characters and at most 20 lines: Card.
-- Longer content, more than 20 lines, or structured context that cannot be
-  rendered safely in the Card: Card summary plus one Bot Doc.
+- Short means **both** no more than 1,500 characters and no more than 20 lines.
+  Short content uses a meaningful-content Card titled as pending Workspace
+  Memory.
+- Any proposal over either threshold uses one Bot-owned Doc immediately and a
+  control Card. The full text and edit area live in the Doc.
 - Card delivery or Doc creation failure: one bounded Thread fallback message
   with command syntax.
 - Automated E2E and operator recovery: Thread command.
@@ -223,9 +232,16 @@ not independent workflows.
 
 ### Card
 
-The Card contains proposal summary, source Task reference, current state, and
-actions for accept, reject, edit-and-accept, and opening the auxiliary Doc when
-present.
+The short Card is titled as pending Workspace Memory and contains the category,
+full proposal text, and a safe source explanation. It has exactly the meaningful
+actions Accept, Edit in Doc, and Reject. It does not use the proposal UUID as
+user-facing primary text. `Edit in Doc` creates or opens the Bot-owned Doc and
+changes the Card to control mode.
+
+The long-proposal control Card contains a readable excerpt, Doc URL/status, and
+the controls Open Doc, Read Changes and Generate Preview, Accept Preview, and
+Reject. Full proposal text and the collaborative editing area remain in the
+Doc; the Card is not an inline text-input surface.
 
 `card.action.trigger` is consumed by the same local WebSocket dispatcher. The
 handler:
@@ -235,34 +251,72 @@ handler:
 3. returns quickly; and
 4. lets a worker perform canonical review and update the Card.
 
-If compatibility evidence proves a committed insert can be followed by an
-inline `Processing` Card response within the callback contract, use it.
-Otherwise return the minimum acknowledgement and update the Card asynchronously
-by provider message ID. Correctness never depends on process-memory Card state
-or the short-lived callback token.
+Card JSON uses version 2.0. Each active surface has one opaque random surface
+token; only its SHA-256 hash is persisted. Every button callback value is the
+bounded JSON shape `{ action: <enum>, token: <opaque random token> }`. The enum
+is client-visible and untrusted, and must be valid for the current surface mode
+and status. The token is client-visible and tamperable and is never an
+authority-bearing credential. The server uses token-hash lookup plus Card
+message ID, chat, operator, action, surface version, source Session, and exact
+owner-tuple checks before acting. No proposal ID, accepted content, owner
+identifier, or provider callback update token enters the action value.
+Correctness never depends on process-memory Card state.
+
+The bot replies in the source Thread with a stable provider UUID. Delayed Card
+changes use the provider `message.patch`/`update_multi` operations by message
+ID. If a Card update fails after the canonical decision commits, the decision is
+not rolled back; the worker records the safe failure and preserves command
+fallback.
 
 ### Bot Doc
 
-The Bot creates one proposal review document and grants access only to the
-allowlisted test user. The document contains:
+For a long proposal, the Bot immediately creates one Bot-owned review document
+and grants edit access only to the configured allowlisted user. Its body is the
+proposal itself as one normal collaborative draft that the user may edit
+directly. Source explanation, review instructions, and Card/command fallback
+remain on the control Card rather than being mixed into the draft. The Card
+explains that unresolved comments and replies are revision requests, not literal
+Memory content. Therefore the latest bounded Doc body is the complete draft;
+there is no magic section or fragile metadata-block parser.
 
-- immutable proposal/source metadata;
-- human-readable context;
-- one clearly delimited editable `Accepted Content` section; and
-- instructions to return to the Card or command fallback.
+The Doc is bounded at 200 blocks. Accepted content is limited to 4,096 UTF-8
+bytes. No magic heading or specially delimited `Final Accepted Content` section
+is required. The Bot-owned Doc is a collaboration surface, not canonical Memory.
 
-Doc edits never directly mutate Memory. To avoid relying on unproven historical
-revision reads, Doc acceptance uses a two-step immutable preview:
+Doc edits and comments never directly mutate Memory. The explicit Card action
+`Read Changes and Generate Preview` is the synchronization boundary; document
+change events are not a correctness dependency. On that action, Agent Server:
 
-1. `Preview Doc Version` fetches the current document, parses only the bounded
-   `Accepted Content` section, stores that content and its hash on a new review
-   surface version, and updates the Card with a safe excerpt/hash;
-2. `Accept Previewed Version` accepts exactly the stored content/hash after
-   revalidating actor, chat, proposal, and surface version.
+1. revalidates the Card actor, chat, proposal, source Session, owner tuple, and
+   active surface version;
+2. fetches the latest bounded document blocks/body and provider revision when
+   available;
+3. completely paginates unresolved document comments and their replies. Body
+   text is the draft; comments/replies are instructions for revising it, not
+   text to append mechanically;
+4. asks the managed Agent to synthesize one bounded candidate Memory from that
+   body and feedback;
+5. stores the candidate content, SHA-256 hash, and source document revision when
+   available on a new immutable review surface version, then updates the Card
+   with a safe excerpt/hash; and
+6. `Accept Preview` accepts exactly the persisted content/hash after
+   revalidating actor, chat, proposal, source Session, owner tuple, Card action,
+   and surface version.
 
 Later Doc edits do not change the previewed content or accepted Memory Entry.
-Provider revision metadata is recorded when available but is not the sole race
-control.
+The user must invoke `Read Changes and Generate Preview` again to include later
+changes. Provider revision metadata is supporting evidence, not the race
+control; the persisted candidate and hash define what can be accepted. Raw
+comments and replies are not retained.
+
+Comment retrieval uses the Drive file-comment APIs for the Docx file token and
+must paginate both comments and replies. The implementation does not silently
+ignore comments. If the body is readable but comment authorization, pagination,
+or reply retrieval is incomplete, it may show a diagnostic body-only excerpt
+but must mark comments unavailable and must not create an accept-enabled
+preview. Resolved comments are not active revision instructions. Event
+subscriptions may later provide hints, but the Card action always performs a
+fresh authoritative pull.
 
 ### Thread commands
 
@@ -277,8 +331,11 @@ prompts:
 /memory accept-preview <proposal-id> <surface-version>
 ```
 
-Commands revalidate the same identity and surface rules as Card actions.
-Already-resolved or cross-modality replay returns a stable safe result.
+Commands remain the fallback and automation surface. They revalidate the same
+identity and surface rules as Card actions and converge on the same
+`ReviewMemoryProposal`/`ManagedMemory` canonical operations. The proposal UUID
+is a bounded command argument, not the primary Card/Doc UX text. Already-resolved
+or cross-modality replay returns a stable safe result.
 
 ## Review-to-ready orchestration
 
@@ -321,10 +378,12 @@ Stores normalized message and control facts:
 
 Unique keys:
 
-- message/command: connection + kind + external message ID;
+- message/command: connection + external message ID, regardless of normalized
+  kind, so replay or reclassification cannot create a second ingress;
 - Card action: connection + kind + provider event ID.
 
-Raw provider payload and callback token are not retained.
+Raw provider payload and provider callback update token are not retained. The
+opaque surface action token is represented only by its persisted SHA-256 hash.
 
 ### `channel_conversation_bindings`
 
@@ -350,7 +409,10 @@ table is added.
 Stores proposal and binding IDs, mode (`card | card_with_doc | command_only`),
 Card message ID, Doc token, optional provider revision, immutable preview
 content/hash, surface version/status, creating/resolving ingress IDs, and
-timestamps.
+timestamps. It permits exactly one active surface version per proposal/binding
+review and uses compare-and-set transitions plus idempotency keys for creation,
+preview, resolution, and replay. A stale or duplicate transition cannot replace
+the active version or reopen canonical Memory.
 
 Not added in this canary:
 
@@ -401,7 +463,8 @@ proves:
 - committed control ingress plus Card callback response behavior;
 - shutdown, reconnect, and single-consumer behavior;
 - deterministic fixture normalization;
-- send/reply/update UUID and safe error/rate-limit shapes; and
+- send/reply/update UUID, `message.patch`/`update_multi`, and safe
+  error/rate-limit shapes; and
 - Bot Doc creation, permission grant, content fetch, and block parsing.
 
 Prefer low-level `WSClient`/`EventDispatcher` for inbound correctness because
@@ -419,16 +482,29 @@ singleton claim.
 - normalized inbound text: 8,192 characters maximum;
 - command payload: 8,192 characters maximum;
 - accepted Memory content from Card, command, or Doc: 4,096 characters maximum;
-- Card proposal body: 1,500 characters maximum;
+- short-card full proposal body: 1,500 characters maximum and 20 lines maximum;
+- long-card readable excerpt: bounded and never the editable full content;
 - parsed Bot Doc: 200 blocks maximum;
+- fetched unresolved Doc comments: 100 maximum; replies: 200 total maximum;
+  combined comment/reply text: 32,768 UTF-8 bytes maximum. Complete pagination
+  within those bounds is required before an accept-enabled preview;
+- accepted content: 4,096 UTF-8 bytes maximum;
 - stored safe error text: 512 characters maximum;
 - raw event retention: none; and
-- callback/update tokens: memory-only for immediate response and never evidence.
+- provider callback update tokens: memory-only for immediate response and never
+  evidence; surface action tokens are persisted only as SHA-256 hashes.
 
 Unknown fields are ignored after preserving the safe normalized schema version.
 Secrets, access tokens, raw provider errors, raw events, local paths, and full
 configuration files cannot enter database content, Agent prompts, ordinary
 logs, user messages, or evidence packets.
+
+Oversized Doc content or feedback, Doc create/grant/read/update/permission
+failures, incomplete comment/reply pagination, stale or duplicate Card actions,
+cross-user actions, and mismatched Card message/chat/operator/surface/source-
+session/owner checks fail safely. An unpreviewed or comments-incomplete Doc is
+never accepted. If a canonical decision has committed, a later Card or Doc
+update failure cannot roll it back.
 
 ## Outbound retry and unknown results
 
@@ -458,8 +534,13 @@ exactly-once and not guaranteed logical convergence.
 - Binding race: reuse the unique winning binding/session.
 - Card callback expiry: update by message ID or send one command fallback.
 - Card delivery failure: send one bounded command fallback.
-- Doc creation/grant/fetch/parse failure: retain Card/command path and do not
-  accept unverified content.
+- Doc creation/grant/body fetch failure: retain Card/command path and do not
+  create a preview.
+- Comment or reply authorization/pagination failure: expose
+  `comments_unavailable`, retain Card/command recovery, and do not enable
+  acceptance of a body-only preview.
+- Agent synthesis failure: preserve the active Doc surface and allow a bounded
+  retry; do not mutate canonical Memory or reuse a partial candidate.
 - Snapshot publication failure: keep canonical accepted Entry, mark publication
   failure, retry publication, and do not claim ready.
 - Outbound ambiguous result: mark `delivery_unknown`; do not blind-retry after
@@ -473,7 +554,10 @@ exactly-once and not guaranteed logical convergence.
 
 - fixture normalization for messages, mentions, root/thread/reply IDs, and Card
   actions;
-- Card/Doc/command policy and renderer/parser bounds;
+- short-card Accept, long-flow body-plus-unresolved-comment pull/synthesis,
+  Accept Preview, command fallback, renderer/fetch bounds, complete pagination,
+  comments-unavailable fail-closed behavior, and post-preview Doc-edit
+  immutability;
 - identity, ownership, surface-version, and stale-action authorization;
 - shared HTTP/fake-Lark `SubmitSessionTurn` parity;
 - real PostgreSQL duplicate, concurrent first-root, restart, lease, and crash
@@ -492,17 +576,63 @@ Use the existing `agent-test` profile and test group. The Agent Server Lark
 worker is the sole event/Card consumer; do not run a competing `lark-cli event
 consume` process.
 
+The orchestrator owns one consumer, the real Agent process, unique messages,
+Doc API edits, database checks, and sanitized runtime-log checks. The already
+captured real Card 2.0 click proves callback subscription, WebSocket delivery,
+and provider envelope shape. Deterministic and business-handler tests may replay
+that sanitized envelope with action-specific opaque values. The final provider
+QA still sends, renders, reads, and patches actual business Cards and creates,
+grants, edits, and reads actual Docs; canonical database, Memory, snapshot, and
+Fresh Session recall evidence proves the business effects. No repeated user
+click is required unless live provider behavior materially differs.
+
+This is compositional real-boundary evidence: it combines the captured callback
+transport proof, deterministic handler replay, and final real provider surface
+checks. It does not claim that one later uninterrupted live click drove the
+entire business workflow.
+
 Evidence includes:
 
 1. automated Thread-command source → review → ready snapshot → new-root recall;
-2. manual Card edit/accept and reject behavior;
-3. manual long-content Bot Doc edit → preview hash → accept behavior;
+2. the captured real callback transport shape and deterministic/business-handler
+   replays for short-card Accept and long-flow Read Changes and Generate
+   Preview/Accept Preview;
+3. final real provider Card rendering/patching and Doc
+   create/grant/edit/comment/read checks, including comment replies and
+   comments-unavailable behavior, plus post-preview Doc edit immutability;
 4. duplicate/replay and process-restart evidence;
 5. sanitized ingress, binding, Session, Task, Run, proposal, review ingress,
    outbox/attempt, entry, snapshot ID/hash, and second recall Task correlation;
 6. exact new-root Product Session difference and ownership tuple match; and
 7. real Agent output containing the accepted marker but not rejected, late, or
    first-Thread-only content.
+
+### Captured Card callback transport evidence
+
+One real Card 2.0 button click has now been captured through the `agent-test`
+profile. The callback subscription was explicitly enabled and published in the
+developer console; the listener reported ready and connected. `lark-cli event
+consume card.action.trigger` received exactly one event and exited at its event
+limit after the bounded observation window.
+
+The sanitized shape matched the configured operator, sent Card message, and test
+chat: `operator_id`, `message_id`, and `chat_id` were present; `host` was
+`im_message`; `action_tag` was `button`; and the action value was the JSON string
+`{ "action": "probe_card_callback", "probe_id": "agent-server-20260725-0128" }`.
+An event ID was present and globally unique. The callback update token is
+intentionally excluded from documentation. The captured probe used an action
+enum plus opaque probe value; business Card buttons use the same two-field
+protocol with action-specific enum values and the active surface token.
+
+The fetched `card_content` was present as Card 2.0 userDSL but did not contain
+callback behavior or the action value. Authorization must therefore use the
+validated callback envelope and server-side surface state, never `card_content`.
+The observed provider timestamp was a 16-digit opaque scalar despite the CLI
+schema name `timestamp_ms`; normalization must be deliberate rather than
+assuming its unit. This transport capture is enough for deterministic fixtures
+to replay the sanitized shape; repeated manual probe clicks are not required.
+It does not prove business Card/Doc review, snapshot publication, or the full
+real Card/Doc E2E.
 
 External Lark/model availability is QA evidence, not a deterministic pull
 request gate.
@@ -536,13 +666,15 @@ full canary evidence are complete.
 
 - add the review-surface table;
 - implement Card render/update/callback;
-- implement Bot Doc creation/grant, immutable preview hash, and acceptance;
+- implement Bot Doc creation/grant, latest body plus unresolved comment/reply
+  reading, Agent synthesis, immutable preview hash, and acceptance;
 - route Card/Doc/command through canonical review and ready publication;
 - complete deterministic, real-Lark, and real-Agent evidence; and
 - update Product/Feature/Component/Contract/ADR/Runbook/Evidence authority.
 
 Each phase must satisfy its independent acceptance boundary before the next
-phase starts. The full feature remains incomplete until Phase 3 is verified.
+phase starts. Phase 3 normal-path command/Card/Doc implementation and evidence
+are verified; deferred hardening is not falsely marked complete.
 
 ## Documentation impact
 
@@ -576,6 +708,36 @@ The 2026-07-24 user execution approval resolves and accepts all gates:
 The approval authorizes dependency addition, migrations, safe identifiers,
 fixed service-account compatibility, the Bot Doc grant, bounded retry and
 `delivery_unknown`, real Lark writes, and manual Card/Doc QA.
+
+On 2026-07-25 the user additionally approved the collaborative Doc semantics:
+the Bot creates the Doc in Bot-owned space, shares an editable link, the user
+edits the body and/or leaves comments, and a Card button explicitly triggers a
+fresh read and Memory preview. Accept Preview remains a separate explicit action.
+
+The user also approved one narrow orchestration exception for this flow. Doc
+revision synthesis is an intermediate operation of the proposal's existing
+Product Task, so it may invoke the managed Agent again through a dedicated
+application service backed by `AgentRuntimePort`; it does not create a second
+Product Task or canonical Run. The call uses the controlling ingress ID as its
+runtime request ID, disables Memory candidate generation, returns one bounded
+plain-text candidate, and never imports Paseo outside the runtime adapter. This
+exception does not authorize arbitrary direct model calls elsewhere. Durable
+preview content/hash and the controlling ingress provide the MVP replay and
+acceptance boundary; generalized synthesis retry/audit state remains post-E2E
+hardening.
+
+Task 13 real-provider normal-path evidence was verified on 2026-07-25. Sanitized
+source/Run/Card/proposal/Entry/snapshot/fresh-recall identifiers and markers are
+recorded in `docs/evidence/lark-managed-memory-card-doc-canary-evidence-packet.md`.
+The source marker first appearing in ready snapshot version 5 proves fresh-root
+pin/recall; production `readDraft` verified edited body plus unresolved comment
+and reply before Preview. This is normal-path compatibility evidence only.
+
+The user explicitly cancelled Task 14 implementation for this PR. The deferred
+follow-up owns exact Preview successor lease/attempt fencing, post-canonical
+retry/fencing, manual rebuild versus concurrent Accept, rolling allocator races,
+generalized synthesis retry/audit, crash/restart/fault injection, multi-node
+leadership, and performance hardening.
 
 ## Non-goals
 

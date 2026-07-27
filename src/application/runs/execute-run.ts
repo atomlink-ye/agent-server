@@ -20,11 +20,11 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
-import { assembleContext } from '../context/assemble-context.js';
 import {
-  buildPublishedAgentPrompt,
-  ExecuteTeamTask,
-} from '../tasks/execute-team-task.js';
+  buildBootstrapPrompt,
+  buildTurnPrompt,
+} from '../context/runtime-prompts.js';
+import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { CompleteRun } from './complete-run.js';
 import {
   createRuntimeExecutionReceipt,
@@ -222,16 +222,27 @@ export class ExecuteRun {
       task.sessionId && this.events?.findLatestProviderAgentBySessionId
         ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
         : null;
-    const execution = await this.runtime.execute({
-      runId: claim.run.id,
-      prompt: resolved.prompt,
-      ...(priorProviderAgentId
-        ? { providerAgentId: priorProviderAgentId }
-        : {}),
-      ...(resolved.proposalLimit > 0
-        ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
-        : {}),
-    });
+    const execution = await this.runtime.execute(
+      priorProviderAgentId
+        ? {
+            operation: 'continue',
+            runId: claim.run.id,
+            prompt: resolved.turnPrompt,
+            providerAgentId: priorProviderAgentId,
+            ...(resolved.proposalLimit > 0
+              ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
+              : {}),
+          }
+        : {
+            operation: 'create',
+            runId: claim.run.id,
+            prompt: resolved.turnPrompt,
+            systemPrompt: resolved.systemPrompt,
+            ...(resolved.proposalLimit > 0
+              ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
+              : {}),
+          },
+    );
     await this.events?.bind({
       runId: claim.run.id,
       ...(task.sessionId ? { sessionId: task.sessionId } : {}),
@@ -318,12 +329,18 @@ export class ExecuteRun {
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
   ): Promise<{
-    readonly prompt: string;
+    readonly systemPrompt: string;
+    readonly turnPrompt: string;
     readonly proposalLimit: number;
     readonly agentVersionId: string;
   }> {
     if (invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID) {
-      return { prompt, proposalLimit: 0, agentVersionId: invokableVersionId };
+      return {
+        systemPrompt: buildBootstrapPrompt(),
+        turnPrompt: prompt,
+        proposalLimit: 0,
+        agentVersionId: invokableVersionId,
+      };
     }
 
     const agentVersion = await this.resolver.resolvePublished(
@@ -348,11 +365,8 @@ export class ExecuteRun {
       });
     }
     return {
-      prompt: assembleContext({
-        instructions: agentVersion.instructions,
-        taskInput: prompt,
-        memory,
-      }),
+      systemPrompt: buildBootstrapPrompt(agentVersion.instructions),
+      turnPrompt: buildTurnPrompt({ taskInput: prompt, memory }),
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: invokableVersionId,
     };

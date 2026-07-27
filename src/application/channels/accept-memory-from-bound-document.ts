@@ -71,6 +71,7 @@ export class AcceptMemoryFromBoundDocument {
           );
           if (!binding) throw new Error('source_binding_missing');
           return this.runtime.execute({
+            operation: 'continue',
             runId: input.ingressId,
             providerAgentId: binding.providerAgentId,
             memoryCandidates: { maxCandidates: 1, proposalLimit: 1 },

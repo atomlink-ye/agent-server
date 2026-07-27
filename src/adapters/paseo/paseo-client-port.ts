@@ -27,7 +27,8 @@ export interface PaseoClientPort {
     readonly cwd: string;
     readonly workspaceId: string;
     readonly model: string;
-    readonly prompt: string;
+    readonly systemPrompt: string;
+    readonly initialPrompt: string;
     readonly runId: string;
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
@@ -98,7 +99,8 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly cwd: string;
     readonly workspaceId: string;
     readonly model: string;
-    readonly prompt: string;
+    readonly systemPrompt: string;
+    readonly initialPrompt: string;
     readonly runId: string;
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
@@ -107,7 +109,8 @@ export class PaseoSdkClient implements PaseoClientPort {
       modeId: 'build',
       cwd: input.cwd,
       workspaceId: input.workspaceId,
-      initialPrompt: input.prompt,
+      systemPrompt: input.systemPrompt,
+      initialPrompt: input.initialPrompt,
       labels: {
         source: 'agent-server-baseline',
         run_id: input.runId,

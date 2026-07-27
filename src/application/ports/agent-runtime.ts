@@ -25,17 +25,31 @@ export interface AgentRuntimeExecution {
   }[];
 }
 
+export type AgentRuntimeExecuteInput =
+  | {
+      readonly operation: 'create';
+      readonly runId: string;
+      readonly prompt: string;
+      readonly systemPrompt: string;
+      readonly memoryCandidates?: {
+        readonly maxCandidates?: number;
+        readonly proposalLimit?: number;
+      };
+    }
+  | {
+      readonly operation: 'continue';
+      readonly runId: string;
+      readonly prompt: string;
+      readonly providerAgentId: string;
+      readonly memoryCandidates?: {
+        readonly maxCandidates?: number;
+        readonly proposalLimit?: number;
+      };
+    };
+
 export interface AgentRuntimePort {
   initialize(): Promise<void>;
-  execute(input: {
-    readonly runId: string;
-    readonly prompt: string;
-    readonly providerAgentId?: string;
-    readonly memoryCandidates?: {
-      readonly maxCandidates?: number;
-      readonly proposalLimit?: number;
-    };
-  }): Promise<AgentRuntimeExecution>;
+  execute(input: AgentRuntimeExecuteInput): Promise<AgentRuntimeExecution>;
   cancel?(input: {
     readonly runId: string;
     readonly providerAgentId?: string;

@@ -48,7 +48,11 @@ describe('ExecuteRun', () => {
     await executeRun.execute(claim);
 
     expect(runtime.execute).toHaveBeenCalledWith(
-      expect.objectContaining({ providerAgentId: 'agent-prior' }),
+      expect.objectContaining({
+        operation: 'continue',
+        providerAgentId: 'agent-prior',
+        prompt: 'private prompt',
+      }),
     );
     expect(events.bind).toHaveBeenLastCalledWith(
       expect.objectContaining({ providerAgentId: 'agent-prior' }),
@@ -91,9 +95,11 @@ describe('ExecuteRun', () => {
     expect(findLegacy).not.toHaveBeenCalled();
     expect(runtime.execute).toHaveBeenCalledTimes(1);
     expect(runtime.execute).toHaveBeenCalledWith({
+      operation: 'create',
       runId: claim.run.id,
-      prompt:
-        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions\n\nCurrent Task input:\nprivate prompt',
+      prompt: 'private prompt',
+      systemPrompt:
+        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
     });
     expect(
       JSON.stringify(vi.mocked(runtime.execute).mock.calls[0]?.[0]),
@@ -208,9 +214,11 @@ describe('ExecuteRun', () => {
     await executeRun.execute(claim);
 
     expect(runtime.execute).toHaveBeenCalledWith({
+      operation: 'create',
       runId: claim.run.id,
-      prompt:
-        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions\n\nCurrent Task input:\nprivate prompt',
+      prompt: 'private prompt',
+      systemPrompt:
+        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions',
     });
   });
 

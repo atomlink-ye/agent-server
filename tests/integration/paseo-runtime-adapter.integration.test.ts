@@ -35,8 +35,18 @@ describe('PaseoRuntimeAdapter', () => {
     const adapter = createAdapter(client);
 
     await Promise.all([adapter.initialize(), adapter.initialize()]);
-    const first = await adapter.execute({ runId: 'run-1', prompt: 'first' });
-    const second = await adapter.execute({ runId: 'run-2', prompt: 'second' });
+    const first = await adapter.execute({
+      operation: 'create',
+      runId: 'run-1',
+      prompt: 'first',
+      systemPrompt: '',
+    });
+    const second = await adapter.execute({
+      operation: 'create',
+      runId: 'run-2',
+      prompt: 'second',
+      systemPrompt: '',
+    });
 
     expect(first.text).toBe('PASEO_FAKE_OK');
     expect(second.model).toBe('opencode/mimo-v2.5-free');
@@ -54,8 +64,10 @@ describe('PaseoRuntimeAdapter', () => {
     await adapter.initialize();
     client.status = 'disconnected';
     const result = await adapter.execute({
+      operation: 'create',
       runId: 'run-after-disconnect',
       prompt: 'continue',
+      systemPrompt: '',
     });
 
     expect(result.text).toBe('PASEO_FAKE_OK');
@@ -190,7 +202,12 @@ describe('PaseoRuntimeAdapter', () => {
       lastMessage: null,
     };
     await expect(
-      createAdapter(timeoutClient).execute({ runId: 'run-1', prompt: 'test' }),
+      createAdapter(timeoutClient).execute({
+        operation: 'create',
+        runId: 'run-1',
+        prompt: 'test',
+        systemPrompt: '',
+      }),
     ).rejects.toThrow(RuntimeTimedOutError);
 
     const errorClient = new FakePaseoClient();
@@ -200,7 +217,12 @@ describe('PaseoRuntimeAdapter', () => {
       lastMessage: null,
     };
     await expect(
-      createAdapter(errorClient).execute({ runId: 'run-2', prompt: 'test' }),
+      createAdapter(errorClient).execute({
+        operation: 'create',
+        runId: 'run-2',
+        prompt: 'test',
+        systemPrompt: '',
+      }),
     ).rejects.toThrow(RuntimeExecutionError);
   });
 });

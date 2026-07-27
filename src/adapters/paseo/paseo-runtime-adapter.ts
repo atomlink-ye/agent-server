@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 
 import {
   type AgentRuntimeExecution,
+  type AgentRuntimeExecuteInput,
   type AgentRuntimeHealth,
   type AgentRuntimePort,
   RuntimeExecutionError,
@@ -158,15 +159,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     return true;
   }
 
-  public async execute(input: {
-    readonly runId: string;
-    readonly prompt: string;
-    readonly providerAgentId?: string;
-    readonly memoryCandidates?: {
-      readonly maxCandidates?: number;
-      readonly proposalLimit?: number;
-    };
-  }): Promise<AgentRuntimeExecution> {
+  public async execute(
+    input: AgentRuntimeExecuteInput,
+  ): Promise<AgentRuntimeExecution> {
     await this.initialize();
     if (!this.#workspaceId || !this.#model) {
       throw new RuntimeExecutionError('Paseo runtime is not initialized.');
@@ -188,21 +183,23 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     const prompt = artifact
       ? `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`
       : input.prompt;
-    const agent = input.providerAgentId
-      ? {
-          id: input.providerAgentId,
-          provider: 'opencode',
-          model: this.#model.id,
-        }
-      : await this.#client.createOpenCodeAgent({
-          cwd: this.#options.cwd,
-          workspaceId: this.#workspaceId,
-          model: this.#model.id,
-          prompt,
-          runId: input.runId,
-        });
+    const agent =
+      input.operation === 'continue'
+        ? {
+            id: input.providerAgentId,
+            provider: 'opencode',
+            model: this.#model.id,
+          }
+        : await this.#client.createOpenCodeAgent({
+            cwd: this.#options.cwd,
+            workspaceId: this.#workspaceId,
+            model: this.#model.id,
+            systemPrompt: input.systemPrompt,
+            initialPrompt: prompt,
+            runId: input.runId,
+          });
     this.#agents.set(input.runId, agent.id);
-    if (input.providerAgentId)
+    if (input.operation === 'continue')
       await this.#client.sendAgentMessage(agent.id, prompt);
     const finished = await this.#client.waitForFinish(
       agent.id,

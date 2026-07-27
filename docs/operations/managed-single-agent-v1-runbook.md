@@ -14,14 +14,17 @@ and raw owner/resource identifiers.
    explicitly published AgentVersion.
 3. Admit a user Message into a durable Task/Run lane.
 4. Select and pin the ready Memory Snapshot ID/hash at admission.
-5. Verify the exact local FileStore projection and assemble the minimum context.
+5. Verify the exact local FileStore projection and resolve the Session Bootstrap
+   and current Run Turn.
 6. Execute through `AgentRuntimePort`, persist normalized events and the final
    assistant Message, and read the owner-scoped result.
 
-The minimum context order is fixed runtime contract header, published
-AgentVersion instructions, current Task input, then pinned verified
-`MEMORY.md`. No previous session history, full Workspace scan, provider-native
-mount, or retrieval system is implied.
+The Session Bootstrap is the stable Platform Runtime Kernel plus the pinned
+published role instructions. Each Run then supplies a per-turn input: the
+current Task input, plus optional pinned verified Memory context. The role/System
+bootstrap is sent only when the provider Agent is created; later turns use
+continuation and send the current turn only. No previous session history, full
+Workspace scan, provider-native mount, or retrieval system is implied.
 
 ## Queue, cancel, reset, and cursor/SSE
 

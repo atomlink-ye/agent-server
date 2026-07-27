@@ -355,8 +355,13 @@ describe('managed single-agent memory recall', () => {
     await waitForTask(oldTaskId, 'completed');
     expect(runtime.prompts.some((prompt) => prompt.includes('v2'))).toBe(false);
     expect(
-      runtime.prompts.some((prompt) => prompt.includes('concise competitor')),
+      runtime.systemPrompts.some((prompt) =>
+        prompt.includes('concise competitor'),
+      ),
     ).toBe(true);
+    expect(
+      runtime.prompts.some((prompt) => prompt.includes('concise competitor')),
+    ).toBe(false);
     const sessionResponse = await fetch(`${baseUrl}/api/v1/sessions`, {
       method: 'POST',
       headers: jsonAuth,
@@ -1034,7 +1039,10 @@ ${acceptedCanary}
 ## fact
 
 ${lateCanary}
-`,
+
+
+Current Task input:
+new generation`,
       }),
     ]);
     expect(b.run_id).not.toBe(c.run_id);

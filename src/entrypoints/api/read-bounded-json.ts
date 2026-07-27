@@ -75,7 +75,7 @@ function tooLarge(): HttpError {
   return new HttpError(
     413,
     'request_too_large',
-    'The request body exceeds 64 KiB.',
+    'The request body exceeds the configured limit.',
   );
 }
 

@@ -30,6 +30,10 @@ import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
 import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
+import {
+  registerMemoryApiRoutes,
+  type MemoryApiRouteDependencies,
+} from './routes/memory-api.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -51,6 +55,7 @@ export interface AppDependencies {
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
   readonly managedMemory?: ManagedMemory;
+  readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
 }
 
@@ -84,6 +89,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   registerWorkspaceMemoryRoutes(app, dependencies);
+  if (dependencies.memoryApi) {
+    registerMemoryApiRoutes(app, {
+      config: dependencies.config,
+      ...dependencies.memoryApi,
+    });
+  }
   registerAgentRoutes(app, dependencies);
   if (dependencies.sessions)
     registerSessionRoutes(app, {

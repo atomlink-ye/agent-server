@@ -4,6 +4,10 @@ import type {
   InvokableRepository,
 } from '../ports/invokable-repository.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
+import {
+  loadBuiltInSkills,
+  type ResolvedBuiltInSkill,
+} from './built-in-skills.js';
 
 export type AgentVersionResolutionScope = InvokableOwnerScope;
 export type ResolvedAgentVersion = Readonly<{
@@ -11,6 +15,7 @@ export type ResolvedAgentVersion = Readonly<{
   id: string;
   instructions: string;
   proposalLimit?: number;
+  skills: readonly ResolvedBuiltInSkill[];
 }>;
 
 export class ResolveAgentVersion {
@@ -37,6 +42,9 @@ export class ResolveAgentVersion {
         id: managedVersion.id,
         instructions: managedVersion.package.spec.instructions,
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
+        skills: await loadBuiltInSkills(
+          managedVersion.package.spec.skills.map((skill) => skill.ref),
+        ),
       };
     }
     const legacyVersion = await this.legacy.findPublishedAgentVersionById(
@@ -49,6 +57,7 @@ export class ResolveAgentVersion {
           id: legacyVersion.id,
           instructions: legacyVersion.instructions,
           proposalLimit: 0,
+          skills: [],
         }
       : null;
   }

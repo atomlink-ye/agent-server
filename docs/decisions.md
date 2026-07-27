@@ -12,5 +12,6 @@ Accepted decisions are recorded as ADRs. A superseding ADR points to the prior r
 | [0006](decisions/0006-workspace-memory-proposal-mvp.md)           | Workspace Memory Proposal MVP separates governance from retrieval       | Accepted |
 | [0008](decisions/0008-lark-memory-command-canary.md)              | Fixed Lark command-only Memory compatibility canary and ownership seam  | Accepted |
 | [0009](decisions/0009-lark-memory-card-doc-surfaces.md)           | Card/Doc projection surfaces over canonical Memory review state         | Accepted |
+| [0011](decisions/0011-claude-memory-api-skill-mve.md)             | API-first Store/Memory/immutable Version model and built-in API Skill   | Accepted |
 
 New ADRs are required for public contract ownership, database/queue selection, tenant/isolation model, credential architecture, Team graph semantics, or a second runtime.

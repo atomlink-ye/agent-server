@@ -127,6 +127,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0014_lark_memory_review_surfaces' },
       { version: '0015_card_action_ingress_dedup' },
       { version: '0016_memory_integrity_receipts' },
+      { version: '0017_claude_memory_api_skill_mve' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -168,6 +169,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0014_lark_memory_review_surfaces' },
       { version: '0015_card_action_ingress_dedup' },
       { version: '0016_memory_integrity_receipts' },
+      { version: '0017_claude_memory_api_skill_mve' },
     ]);
   });
 
@@ -1722,7 +1724,9 @@ describe('durable kernel postgres bootstrap', () => {
   it('executes a canonical agent task through the published agent version path', async () => {
     const database = await createDatabase();
     const clock = new TestClock('2026-07-22T12:00:00.000Z');
-    const runtime = new FakeAgentRuntime({ responseText: 'AGENT_TASK_OK' });
+    const runtime = new FakeAgentRuntime({
+      responseText: 'AGENT_TASK_OK',
+    });
     const logger = createLogger({
       service: 'agent-server-test',
       minimumLevel: 'error',
@@ -1811,10 +1815,14 @@ describe('durable kernel postgres bootstrap', () => {
       },
     });
     expect(runtime.prompts).toHaveLength(1);
-    expect(runtime.prompts[0]).toContain(
+    expect(runtime.systemPrompts).toHaveLength(1);
+    expect(runtime.systemPrompts[0]).toContain(
       'Reply with the analyzed result only.',
     );
     expect(runtime.prompts[0]).toContain('Summarize this incident.');
+    expect(runtime.prompts[0]).not.toContain(
+      'Reply with the analyzed result only.',
+    );
   });
 
   it('executes a sequential team task inline and exposes child genealogy in the task tree', async () => {
@@ -2054,12 +2062,19 @@ describe('durable kernel postgres bootstrap', () => {
     });
     expect(childRunRows.rows).toHaveLength(2);
     expect(runtime.prompts).toHaveLength(2);
-    expect(runtime.prompts[0]).toContain('Collect the relevant evidence.');
+    expect(runtime.systemPrompts).toHaveLength(2);
+    expect(runtime.systemPrompts[0]).toContain(
+      'Collect the relevant evidence.',
+    );
     expect(runtime.prompts[0]).toContain('Investigate the outage.');
-    expect(runtime.prompts[1]).toContain(
+    expect(runtime.systemPrompts[1]).toContain(
       'Write the final answer from the prior step only.',
     );
     expect(runtime.prompts[1]).toContain('FIRST_STEP_OK');
+    expect(runtime.prompts[0]).not.toContain('Collect the relevant evidence.');
+    expect(runtime.prompts[1]).not.toContain(
+      'Write the final answer from the prior step only.',
+    );
   });
 });
 

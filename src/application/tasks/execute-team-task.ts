@@ -14,6 +14,7 @@ import {
 import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import { RuntimeTimedOutError } from '../ports/agent-runtime.js';
 import { buildBootstrapPrompt } from '../context/runtime-prompts.js';
+import type { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import type {
   InvokableOwnerScope,
   InvokableRepository,
@@ -35,6 +36,7 @@ import {
 export interface ExecuteTeamTaskInput {
   readonly claim: ClaimedRun;
   readonly task: Task;
+  readonly resolver?: ResolveAgentVersion;
 }
 
 export class ExecuteTeamTask {
@@ -66,16 +68,29 @@ export class ExecuteTeamTask {
     let finalChildRun: Run | null = null;
 
     for (const step of teamVersion.compiledPlan.steps) {
-      const agentVersion = await this.invokables.findPublishedAgentVersionById(
-        step.agentVersionId,
-        ownerScope,
-      );
+      const resolvedAgentVersion = input.resolver
+        ? await input.resolver.resolvePublished(step.agentVersionId, ownerScope)
+        : null;
+      const loadedAgentVersion = resolvedAgentVersion
+        ? resolvedAgentVersion
+        : await this.invokables.findPublishedAgentVersionById(
+            step.agentVersionId,
+            ownerScope,
+          );
 
-      if (!agentVersion) {
+      if (!loadedAgentVersion) {
         throw new Error(
           `Published agent version ${step.agentVersionId} could not be loaded for team execution`,
         );
       }
+      const agentVersion = resolvedAgentVersion ?? {
+        ...loadedAgentVersion,
+        skills:
+          'skills' in loadedAgentVersion &&
+          Array.isArray(loadedAgentVersion.skills)
+            ? loadedAgentVersion.skills
+            : [],
+      };
 
       const normalizedInput = normalizeRootTaskRunRequest({
         prompt: stepInput,
@@ -125,7 +140,10 @@ export class ExecuteTeamTask {
       );
 
       finalChildRun = await this.executeChildAgentRun(childClaim, {
-        systemPrompt: buildBootstrapPrompt(agentVersion.instructions),
+        systemPrompt: buildBootstrapPrompt(
+          agentVersion.instructions,
+          agentVersion.skills,
+        ),
         turnPrompt: normalizedInput.prompt,
       });
 

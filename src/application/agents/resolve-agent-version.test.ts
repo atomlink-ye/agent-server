@@ -19,7 +19,7 @@ function managed(
     principalType: scope.principalType,
     principalId: scope.principalId,
     status,
-    package: { spec: { instructions } },
+    package: { spec: { instructions, skills: [] } },
   } as never;
 }
 
@@ -59,6 +59,7 @@ describe('ResolveAgentVersion', () => {
       id: 'version-1',
       instructions: 'managed',
       proposalLimit: 0,
+      skills: [],
     });
   });
 
@@ -80,6 +81,7 @@ describe('ResolveAgentVersion', () => {
       id: 'version-1',
       instructions: 'legacy',
       proposalLimit: 0,
+      skills: [],
     });
     expect(findLegacy).toHaveBeenCalledWith('version-1', scope);
   });

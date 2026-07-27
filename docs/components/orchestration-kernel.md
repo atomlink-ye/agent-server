@@ -14,6 +14,9 @@ The current walking skeleton contains:
 - PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
 - an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary;
 - the unchanged public `/api/v1/runs` compatibility surface.
+- the authenticated API-first Memory Store/Memory routes composed beside the
+  existing Task/Run kernel; Memory Version append and current-pointer CAS are
+  owned by the Memory API repository rather than Task admission.
 - the minimum Phase D `RuntimeSessionBinding`/`RunEvent` repository, lifecycle event persistence, final assistant Message write, replay/poll SSE routes, and owner-scoped Task cancellation.
 
 Admission first creates or replays through a transaction-scoped repository. The real PostgreSQL 16 lane uses an admission `pg.Pool` with max 2 plus a separate reader pool with max 2, and a forced same-key race to prove committed visibility, replay, owner isolation, and unique-key convergence. This proves durable admission, owner-scoped Task reads, idempotent replay, fenced in-process execution, and sequential Team child genealogy while preserving `/api/v1/runs` as a compatibility API.
@@ -37,6 +40,11 @@ current Turn. Existing ProductSession binding selects whether the runtime
 operation creates an Agent or continues the bound Agent. Durable Task/Run
 admission, completion, assistant Message, and result outbox behavior is
 unchanged.
+
+Published managed Agent resolution may load the server-owned
+`agent-server/memory-api` Skill into create-time native Runtime Bootstrap. The
+kernel records the resulting Agent/Run work normally; it does not grant the
+Agent a Memory HTTP capability. Continuation sends only the current turn.
 
 ## V1 responsibilities
 

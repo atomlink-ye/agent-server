@@ -100,7 +100,11 @@ export class ExecuteRun {
 
       const terminalRun =
         task.invokableKind === 'team'
-          ? await this.executeTeamTask.execute({ claim, task })
+          ? await this.executeTeamTask.execute({
+              claim,
+              task,
+              resolver: this.resolver,
+            })
           : await this.executeAgentRun(
               claim,
               {
@@ -365,7 +369,10 @@ export class ExecuteRun {
       });
     }
     return {
-      systemPrompt: buildBootstrapPrompt(agentVersion.instructions),
+      systemPrompt: buildBootstrapPrompt(
+        agentVersion.instructions,
+        agentVersion.skills,
+      ),
       turnPrompt: buildTurnPrompt({ taskInput: prompt, memory }),
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: invokableVersionId,

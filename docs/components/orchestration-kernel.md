@@ -32,6 +32,12 @@ through Task/Run ownership. Cancellation persists the request before forwarding
 runtime cancellation; queued work terminalizes locally. This is not a claim of
 crash-atomic recovery or a complete provider session API.
 
+`ExecuteRun` resolves a stable Session Bootstrap separately from each Run's
+current Turn. Existing ProductSession binding selects whether the runtime
+operation creates an Agent or continues the bound Agent. Durable Task/Run
+admission, completion, assistant Message, and result outbox behavior is
+unchanged.
+
 ## V1 responsibilities
 
 - Materialize root and child Tasks before execution and enforce idempotency.

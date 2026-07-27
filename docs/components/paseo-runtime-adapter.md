@@ -25,16 +25,21 @@ Automatic selection prefers known free model IDs and may fall back only to anoth
 ## Execution
 
 For the first Run in a Product Session the adapter creates a Paseo Agent with
-provider `opencode`, mode `build`, selected model, explicit Workspace, prompt,
-and non-secret labels. Later Runs in that Product Session resume the bound idle
-Agent with `sendAgentMessage`, then wait with `waitForFinish`; failures do not
-silently create a replacement. `idle` maps to success, `timeout` to a stable
-timeout error, and `error|permission` to a stable execution failure. The API
-stores a safe error envelope rather than the provider exception.
+provider `opencode`, mode `build`, selected model, explicit Workspace, native
+`systemPrompt`, initial turn, and non-secret labels. Later Runs in that Product
+Session resume the same bound idle Agent with `sendAgentMessage`, sending only
+the current turn; failures do not silently create a replacement. Paseo persists
+and reapplies the native system prompt, while User entries in the Paseo
+Timeline contain only the turns, not System/Role text. `idle` maps to success,
+`timeout` to a stable timeout error, and `error|permission` to a stable
+execution failure. The API stores a safe error envelope rather than the
+provider exception.
 
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`
 already provides this continuation seam; no dependency upgrade is required.
+The implementation does not claim full Runtime Session V2 or restart/rebind
+hardening.
 
 ## Process boundary
 

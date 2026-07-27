@@ -7,17 +7,40 @@
 ```ts
 interface AgentRuntimePort {
   initialize(): Promise<void>;
-  execute(input: { runId: string; prompt: string }): Promise<{
-    provider: string;
-    model: string;
-    text: string;
-    usage?: RunUsage;
-  }>;
+  execute(input: AgentRuntimeExecuteInput): Promise<AgentRuntimeExecution>;
   health(): Promise<AgentRuntimeHealth>;
-  cancel(input: { runId: string; providerAgentId?: string }): Promise<void>;
+  cancel?(input: { runId: string; providerAgentId?: string }): Promise<void>;
   close(): Promise<void>;
 }
+
+type AgentRuntimeExecuteInput =
+  | {
+      operation: 'create';
+      runId: string;
+      systemPrompt: string;
+      prompt: string;
+      memoryCandidates?: {
+        maxCandidates?: number;
+        proposalLimit?: number;
+      };
+    }
+  | {
+      operation: 'continue';
+      runId: string;
+      providerAgentId: string;
+      prompt: string;
+      memoryCandidates?: {
+        maxCandidates?: number;
+        proposalLimit?: number;
+      };
+    };
 ```
+
+`create` sends the native `systemPrompt` plus the initial/current turn.
+`continue` requires the bound `providerAgentId` and sends only the current turn;
+`systemPrompt` is forbidden on continuation. When memory proposals are enabled,
+the proposal-artifact instruction is appended to that turn and remains
+turn-scoped.
 
 The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, execution failure, or cancellation. The minimum Phase D application lane persists `started`, final `output`, and one terminal normalized event, plus one final assistant Message for a successful ProductSession Run. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` with an ephemeral safe `RuntimeExecutionReceipt` emitted only through sanitized structured logging; it is distinct from runtime execution failure. No durable receipt or reconciliation exists in this baseline.
 

@@ -120,8 +120,10 @@ describe('runtime memory PostgreSQL materialization', () => {
     );
     const bindings = new PostgresRunEventRepository(db);
     const first = await runtime.execute({
+      operation: 'create',
       runId: runtimeRunId,
       prompt: 'first',
+      systemPrompt: '',
     });
     await bindings.bind({
       runId: runtimeRunId,
@@ -145,9 +147,10 @@ describe('runtime memory PostgreSQL materialization', () => {
       '00000000-0000-4000-8000-000000000902',
     );
     const second = await runtime.execute({
+      operation: 'continue',
       runId: continuationRunId,
       prompt: 'second',
-      ...(prior ? { providerAgentId: prior } : {}),
+      providerAgentId: prior!,
     });
 
     expect(first.providerAgentId).toBe('agent-session-1');

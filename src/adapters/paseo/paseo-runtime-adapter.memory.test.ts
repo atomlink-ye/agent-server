@@ -57,6 +57,7 @@ describe('Paseo runtime same-agent continuation', () => {
     );
 
     const result = await runtime.execute({
+      operation: 'continue',
       runId: 'run-follow-up',
       prompt: 'continue',
       providerAgentId: 'agent-existing',
@@ -91,6 +92,7 @@ describe('Paseo runtime same-agent continuation', () => {
     );
     await expect(
       runtime.execute({
+        operation: 'continue',
         runId: 'run-follow-up',
         prompt: 'continue',
         providerAgentId: 'agent-closed',
@@ -158,6 +160,7 @@ describe('Paseo runtime same-agent continuation', () => {
       );
 
       const failure = runtime.execute({
+        operation: 'continue',
         runId: 'run-failure',
         prompt: 'continue',
         providerAgentId: 'agent-existing',
@@ -209,7 +212,7 @@ describe('Paseo runtime memory proposal artifact', () => {
         {
           ...client(),
           createOpenCodeAgent: async (input) => {
-            requestPrompt = input.prompt;
+            requestPrompt = input.initialPrompt;
             return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
           },
         },
@@ -218,13 +221,17 @@ describe('Paseo runtime memory proposal artifact', () => {
       const prompt =
         'Return exactly: memory artifact instructions are not part of this prompt.';
       await runtime.execute({
+        operation: 'create',
         runId: 'run-disabled',
         prompt,
+        systemPrompt: '',
         ...(memoryCandidates ? { memoryCandidates } : {}),
       });
       await runtime.execute({
+        operation: 'create',
         runId: 'run-fresh',
         prompt,
+        systemPrompt: '',
         ...(memoryCandidates ? { memoryCandidates } : {}),
       });
 
@@ -251,14 +258,16 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         ...client(),
         createOpenCodeAgent: async (input) => {
-          requestPrompt = input.prompt;
+          requestPrompt = input.initialPrompt;
           return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
         },
       },
     );
     await runtime.execute({
+      operation: 'create',
       runId: 'run-contract',
       prompt: 'test',
+      systemPrompt: '',
       memoryCandidates: { proposalLimit: 1 },
     });
     expect(requestPrompt).toContain(
@@ -302,8 +311,10 @@ describe('Paseo runtime memory proposal artifact', () => {
       ),
     );
     const result = await runtime.execute({
+      operation: 'create',
       runId,
       prompt: 'test',
+      systemPrompt: '',
       memoryCandidates: { maxCandidates: 1 },
     });
 
@@ -330,8 +341,10 @@ describe('Paseo runtime memory proposal artifact', () => {
     );
     await expect(
       runtime.execute({
+        operation: 'create',
         runId: 'run-1',
         prompt: 'test',
+        systemPrompt: '',
         memoryCandidates: { proposalLimit: 1 },
       }),
     ).rejects.toThrow('memory proposal artifact');
@@ -358,8 +371,10 @@ describe('Paseo runtime memory proposal artifact', () => {
     );
     await expect(
       symlinkRuntime.execute({
+        operation: 'create',
         runId: 'run-3',
         prompt: 'test',
+        systemPrompt: '',
         memoryCandidates: { proposalLimit: 1 },
       }),
     ).rejects.toThrow('memory proposal artifact');
@@ -379,8 +394,10 @@ describe('Paseo runtime memory proposal artifact', () => {
         logger,
         client(),
       ).execute({
+        operation: 'create',
         runId: 'run-parent',
         prompt: 'test',
+        systemPrompt: '',
         memoryCandidates: { proposalLimit: 1 },
       }),
     ).rejects.toThrow('symbolic-link ancestor');
@@ -424,8 +441,10 @@ describe('Paseo runtime memory proposal artifact', () => {
       );
       await expect(
         runtime.execute({
+          operation: 'create',
           runId: 'run-1',
           prompt: 'test',
+          systemPrompt: '',
           memoryCandidates: { proposalLimit: 1 },
         }),
       ).rejects.toThrow('memory proposal artifact');
@@ -450,8 +469,10 @@ describe('Paseo runtime memory proposal artifact', () => {
     );
     await expect(
       runtime.execute({
+        operation: 'create',
         runId: 'run-1',
         prompt: 'test',
+        systemPrompt: '',
         memoryCandidates: { proposalLimit: 1 },
       }),
     ).rejects.toThrow('symbolic link');

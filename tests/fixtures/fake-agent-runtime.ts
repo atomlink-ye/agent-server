@@ -1,5 +1,6 @@
 import type {
   AgentRuntimeExecution,
+  AgentRuntimeExecuteInput,
   AgentRuntimeHealth,
   AgentRuntimePort,
 } from '../../src/application/ports/agent-runtime.js';
@@ -64,10 +65,9 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     }
   }
 
-  public async execute(input: {
-    readonly runId: string;
-    readonly prompt: string;
-  }): Promise<AgentRuntimeExecution> {
+  public async execute(
+    input: AgentRuntimeExecuteInput,
+  ): Promise<AgentRuntimeExecution> {
     this.executeCalls += 1;
     this.executionRunIds.push(input.runId);
     this.prompts.push(input.prompt);

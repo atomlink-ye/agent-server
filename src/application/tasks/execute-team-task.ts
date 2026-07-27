@@ -13,6 +13,7 @@ import {
 } from '../../domain/tasks/task.js';
 import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import { RuntimeTimedOutError } from '../ports/agent-runtime.js';
+import { buildBootstrapPrompt } from '../context/runtime-prompts.js';
 import type {
   InvokableOwnerScope,
   InvokableRepository,
@@ -123,13 +124,10 @@ export class ExecuteTeamTask {
         ),
       );
 
-      finalChildRun = await this.executeChildAgentRun(
-        childClaim,
-        buildPublishedAgentPrompt(
-          agentVersion.instructions,
-          normalizedInput.prompt,
-        ),
-      );
+      finalChildRun = await this.executeChildAgentRun(childClaim, {
+        systemPrompt: buildBootstrapPrompt(agentVersion.instructions),
+        turnPrompt: normalizedInput.prompt,
+      });
 
       if (finalChildRun.status !== 'succeeded') {
         return transitionRun(
@@ -163,12 +161,14 @@ export class ExecuteTeamTask {
 
   private async executeChildAgentRun(
     claim: ClaimedRun,
-    prompt: string,
+    input: { readonly systemPrompt: string; readonly turnPrompt: string },
   ): Promise<Run> {
     try {
       const execution = await this.runtime.execute({
+        operation: 'create',
         runId: claim.run.id,
-        prompt,
+        prompt: input.turnPrompt,
+        systemPrompt: input.systemPrompt,
       });
       const succeeded = transitionRun(
         claim.run,
@@ -221,13 +221,6 @@ export class ExecuteTeamTask {
       }
     }
   }
-}
-
-export function buildPublishedAgentPrompt(
-  instructions: string,
-  inputText: string,
-): string {
-  return `${instructions.trim()}\n\nTask input:\n${inputText.trim()}`;
 }
 
 function toInvokableOwnerScope(task: Task): InvokableOwnerScope {

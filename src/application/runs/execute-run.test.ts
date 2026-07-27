@@ -64,7 +64,7 @@ describe('ExecuteRun', () => {
     const findVersion = vi.fn(async () => ({
       id: 'managed-version-1',
       status: 'published',
-      package: { spec: { instructions: 'managed instructions' } },
+      package: { spec: { instructions: 'managed instructions', skills: [] } },
     })) as never;
     const findLegacy = vi.fn(async () => null);
     const resolver = new ResolveAgentVersion(
@@ -123,6 +123,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'managed instructions',
+              skills: [],
               memory: { proposalLimit: 1 },
             },
           },
@@ -158,7 +159,7 @@ describe('ExecuteRun', () => {
     const findVersion = vi.fn(async () => ({
       id: 'draft-or-foreign-version',
       status: 'draft',
-      package: { spec: { instructions: 'not executable' } },
+      package: { spec: { instructions: 'not executable', skills: [] } },
     })) as never;
     const findLegacy = vi.fn(async () => ({
       id: 'draft-or-foreign-version',
@@ -386,6 +387,12 @@ describe('ExecuteRun', () => {
       runtime,
       logger,
       () => new Date('2026-07-23T00:00:00.000Z'),
+      new ResolveAgentVersion({ findVersion: vi.fn(async () => null) }, {
+        findPublishedAgentVersionById: vi.fn(async () => ({
+          id: 'agent-version-1',
+          instructions: 'Be safe.',
+        })),
+      } as never),
     );
 
     const rejection = executeRun
@@ -457,6 +464,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              skills: [],
               memory: { proposalLimit: 1 },
             },
           },
@@ -519,6 +527,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              skills: [],
               memory: { proposalLimit: 2 },
             },
           },
@@ -595,6 +604,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              skills: [],
               memory: { proposalLimit: id === 'managed-low' ? 1 : 3 },
             },
           },

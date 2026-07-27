@@ -38,6 +38,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
   public cancelCalls = 0;
   public readonly cancelledRunIds: string[] = [];
   public readonly prompts: string[] = [];
+  public readonly systemPrompts: string[] = [];
   public readonly executionRunIds: string[] = [];
   public readonly executions: FakeRuntimeExecutionRecord[] = [];
   public readonly activeRunIds = new Set<string>();
@@ -71,6 +72,9 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     this.executeCalls += 1;
     this.executionRunIds.push(input.runId);
     this.prompts.push(input.prompt);
+    if (input.operation === 'create') {
+      this.systemPrompts.push(input.systemPrompt);
+    }
     this.activeRunIds.add(input.runId);
     const startedAt = Date.now();
     const gate = this.#executionGate;

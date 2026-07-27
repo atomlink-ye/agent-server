@@ -16,6 +16,21 @@ This phase adds a narrow durable workspace-memory governance baseline in Postgre
 - materialize accepted proposals into accepted memory entries;
 - list accepted entries for the authenticated owner scope.
 
+## API-first Memory resource MVE
+
+The canonical future Memory direction is now the PostgreSQL-backed
+`Product Workspace → Memory Store → stable Memory → immutable Memory Version`
+model. The authenticated Store/Memory API verifies exact tenant/principal
+ownership, supports normalized relative paths, UTF-8 content up to 65,536 bytes,
+and uses atomic SHA-256 compare-and-swap updates. Identical content is a no-op;
+reverts append a new immutable Version. PostgreSQL enforces the current pointer,
+Version predecessor/operation shape, byte size, and Version immutability.
+
+The built-in `agent-server/memory-api` Skill is API guidance loaded into native
+create-time Runtime Bootstrap. It does not provide an Agent HTTP client or
+credentials. CLI, MCP/native HTTP, Session resource attachment, public Version
+history, and filesystem projection remain deferred.
+
 Phase E extends the Product Workspace path with one workspace-owned immutable
 entry per accepted proposal, monotonic immutable snapshots, deterministic
 `MEMORY.md` rendering, a manifest and SHA-256 content hash, and authenticated
@@ -23,6 +38,10 @@ entry/snapshot/detail/rebuild routes. Local projection verifies both files befor
 atomic publication; public responses never expose the configured local path.
 Legacy principal-private entries remain on the prior routes and are excluded
 from Product Workspace snapshots.
+
+The proposal/review, accepted-entry snapshot, and Lark paths remain implemented
+legacy compatibility. They are not authority for the new Store/Memory/Version
+API and are not physically removed in this MVE.
 
 Phase F consumes only a pinned ready snapshot. A Fresh ProductSession uses an
 explicit published AgentVersion; its first admitted Task stores the selected

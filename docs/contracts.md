@@ -5,6 +5,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Run compatibility API](contracts/run-api.md) documents the implemented compatibility routes and their canonical Task relationship.
 - [Task API](contracts/task-api.md) documents the implemented canonical invoke/read/tree routes.
 - [Workspace memory API](contracts/workspace-memory-api.md) documents the implemented proposal, review, and accepted-entry governance routes.
+- [Memory Store / Memory API](contracts/memory-api.md) documents the canonical API-first Store, stable Memory, immutable Version, and built-in Skill boundary.
 - [Managed Workspace memory snapshots](contracts/managed-workspace-memory-api.md) documents Product Workspace-owned immutable entries, verified local projections, snapshot reads, and rebuild behavior.
 - [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public Phase B registry surface.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.

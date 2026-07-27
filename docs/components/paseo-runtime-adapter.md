@@ -35,6 +35,13 @@ Timeline contain only the turns, not System/Role text. `idle` maps to success,
 execution failure. The API stores a safe error envelope rather than the
 provider exception.
 
+For a published managed Agent referencing `agent-server/memory-api`, server-owned
+Skill text is resolved before create-time Bootstrap and included with the
+platform contract and published instructions. It is not resent on continuation.
+The verified MVE proves the Skill marker and exact API guidance in one real free
+model run. This is guidance-only: the adapter does not expose an HTTP Memory
+client, MCP/native tool, Runtime credential, or capability to the Agent.
+
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`
 already provides this continuation seam; no dependency upgrade is required.

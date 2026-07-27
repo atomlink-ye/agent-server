@@ -161,6 +161,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
                 package: {
                   spec: {
                     instructions: 'instructions',
+                    skills: [],
                     memory: { proposalLimit: 1 },
                   },
                 },

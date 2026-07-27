@@ -56,6 +56,16 @@ import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-re
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
+import {
+  CreateMemory,
+  CreateMemoryStore,
+  GetMemory,
+  GetMemoryStore,
+  ListMemories,
+  ListMemoryStores,
+  UpdateMemory,
+} from './application/memory-api/memory-api.js';
+import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-memory-api-repository.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -204,6 +214,14 @@ export async function createService(config: AppConfig, logger: Logger) {
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
+  const memoryApiRepository = new PostgresMemoryApiRepository(pool);
+  const createMemoryStore = new CreateMemoryStore(memoryApiRepository);
+  const listMemoryStores = new ListMemoryStores(memoryApiRepository);
+  const getMemoryStore = new GetMemoryStore(memoryApiRepository);
+  const createMemory = new CreateMemory(memoryApiRepository);
+  const listMemories = new ListMemories(memoryApiRepository);
+  const getMemory = new GetMemory(memoryApiRepository);
+  const updateMemory = new UpdateMemory(memoryApiRepository);
   const managedMemory = new ManagedMemory(
     pool,
     new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
@@ -411,6 +429,15 @@ export async function createService(config: AppConfig, logger: Logger) {
     submitSessionTurn,
     events,
     cancelTask,
+    memoryApi: {
+      createMemoryStore,
+      listMemoryStores,
+      getMemoryStore,
+      createMemory,
+      listMemories,
+      getMemory,
+      updateMemory,
+    },
   });
   await startServiceResources({
     dispatcher,

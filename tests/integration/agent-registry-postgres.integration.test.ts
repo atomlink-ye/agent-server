@@ -228,6 +228,7 @@ describe('managed agent registry migration', () => {
       '0014_lark_memory_review_surfaces',
       '0015_card_action_ingress_dedup',
       '0016_memory_integrity_receipts',
+      '0017_claude_memory_api_skill_mve',
     ]);
   });
 

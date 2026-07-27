@@ -1,5 +1,9 @@
 # Workspace memory API contract
 
+> **Legacy compatibility:** This route family remains implemented for proposal,
+> review, accepted-entry, and Lark compatibility. It is not authority for the
+> new canonical Store/Memory/Version API; see [Memory API](memory-api.md).
+
 `/api/v1/workspace-memory/*` is the implemented governance-only memory surface. All routes require `Authorization: Bearer <token>` and are scoped to the authenticated service-account owner scope. Cross-owner reads or reviews are hidden as not found. Accepted reviews also create the separate Product Workspace projection described in [managed-workspace-memory-api](managed-workspace-memory-api.md).
 
 This API persists proposals, review decisions, accepted entries, and source provenance. It does **not** provide agent memory, retrieval, embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation.

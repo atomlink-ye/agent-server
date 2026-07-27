@@ -7,6 +7,11 @@ It is not a production-readiness approval. Public responses and evidence must
 remain free of prompts, YAML, credentials, local paths, raw provider errors,
 and raw owner/resource identifiers.
 
+The API-first Memory Store/Memory/Version and built-in Skill MVE is additionally
+verified by the [Memory API evidence packet](../evidence/claude-memory-api-skill-mve-evidence-packet.md).
+It is a completed implementation/evidence slice, not a production-readiness
+approval.
+
 ## Minimum happy path
 
 1. Validate and publish an immutable Managed Agent version.
@@ -45,6 +50,22 @@ entry. Local projection verifies the rendered-content hash and manifest before
 publishing ready/latest. A pinned snapshot mismatch or missing projection fails
 closed: never substitute latest, expose a local path, or disclose hash/path
 details in a public error.
+
+## API-first Memory management
+
+The authenticated Memory API creates and lists owner-scoped Stores by requested
+Product Workspace UUID, then creates/reads stable Memories under a Store. Each
+changed content update uses the current lowercase SHA-256 as a precondition and
+appends an immutable Version. Same-content updates are no-ops; reverts append a
+new Version. Foreign resources return hidden `404`; duplicate paths return
+`409 memory_path_conflict`; stale hashes return `409
+memory_precondition_failed`. The management API does not expose public Version
+history or Agent-side execution.
+
+The built-in `agent-server/memory-api` Skill is loaded into native create-time
+Bootstrap for published managed Agents. It teaches exact methods, paths, and
+preconditions, while credentials and an authorized HTTP tool/client remain
+external requirements.
 
 ## Fresh Session recall
 

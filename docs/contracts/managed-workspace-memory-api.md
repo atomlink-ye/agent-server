@@ -1,5 +1,10 @@
 # Managed Workspace Memory Phase E/F minimum
 
+> **Legacy compatibility:** This snapshot/projection route family remains
+> implemented and supported for the existing Product Workspace path. It is not
+> authority for the new canonical Store/Memory/Version API; see
+> [Memory API](memory-api.md).
+
 Accepted proposals create one immutable workspace-owned entry. Entries render in
 `accepted_at ASC, entry_id ASC` order into canonical `MEMORY.md`; snapshot
 versions are monotonic per tenant/workspace. Each snapshot also stores a stable

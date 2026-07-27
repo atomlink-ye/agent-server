@@ -47,6 +47,7 @@ const durableKernelMigrationFileNames = [
   '0014_lark_memory_review_surfaces.sql',
   '0015_card_action_ingress_dedup.sql',
   '0016_memory_integrity_receipts.sql',
+  '0017_claude_memory_api_skill_mve.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

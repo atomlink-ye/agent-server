@@ -3,6 +3,7 @@ import { DaemonClient } from '@getpaseo/client';
 import type { RunUsage } from '../../domain/runs/run.js';
 import type { PaseoFinishStatus } from './status-mapper.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
+import type { RuntimeMcpServerConfig } from '../../application/ports/agent-runtime.js';
 
 export interface PaseoCreatedAgent {
   readonly id: string;
@@ -30,6 +31,7 @@ export interface PaseoClientPort {
     readonly systemPrompt: string;
     readonly initialPrompt: string;
     readonly runId: string;
+    readonly mcpServers?: readonly RuntimeMcpServerConfig[];
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
   waitForFinish(
@@ -102,6 +104,7 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly systemPrompt: string;
     readonly initialPrompt: string;
     readonly runId: string;
+    readonly mcpServers?: readonly RuntimeMcpServerConfig[];
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
       provider: 'opencode',
@@ -111,6 +114,20 @@ export class PaseoSdkClient implements PaseoClientPort {
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,
       initialPrompt: input.initialPrompt,
+      ...(input.mcpServers
+        ? {
+            mcpServers: Object.fromEntries(
+              input.mcpServers.map((server) => [
+                server.name,
+                {
+                  type: 'http',
+                  url: server.url,
+                  headers: server.headers,
+                },
+              ]),
+            ),
+          }
+        : {}),
       labels: {
         source: 'agent-server-baseline',
         run_id: input.runId,

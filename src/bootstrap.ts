@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
 import { ResolveAgentVersion } from './application/agents/resolve-agent-version.js';
@@ -66,6 +67,14 @@ import {
   UpdateMemory,
 } from './application/memory-api/memory-api.js';
 import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-memory-api-repository.js';
+import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
+import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
+import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
+import { registerSkill } from './application/extensions/skill-registry.js';
+import {
+  AGENT_SERVER_MEMORY_API_SKILL_REF,
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+} from './application/agents/built-in-skills.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -76,6 +85,7 @@ export interface ServiceResources {
     'stop'
   >;
   readonly runtime: Pick<AgentRuntimePort, 'close'>;
+  readonly runtimeMcpServer?: Pick<RuntimeMcpServer, 'stop'>;
   readonly pool: { end(): Promise<void> };
 }
 
@@ -112,6 +122,13 @@ export async function closeServiceResources(
   );
   await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
   await cleanup('runtime', () => resources.runtime.close(), failures);
+  await cleanup(
+    'runtime MCP server',
+    resources.runtimeMcpServer
+      ? () => resources.runtimeMcpServer!.stop()
+      : undefined,
+    failures,
+  );
   await cleanup('pool', () => resources.pool.end(), failures);
   throwFailures(failures, 'service shutdown failed');
 }
@@ -206,6 +223,16 @@ export function createLarkOutboxWorker(
 
 export async function createService(config: AppConfig, logger: Logger) {
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
+  await registerSkill({
+    registryRoot: config.skillRegistryRoot,
+    ref: AGENT_SERVER_MEMORY_API_SKILL_REF,
+    name: AGENT_SERVER_MEMORY_API_SKILL_REF,
+    sourceRoot: fileURLToPath(
+      new URL('../skills/agent-server-memory-api', import.meta.url),
+    ),
+    requiredToolRefs: [AGENT_SERVER_MEMORY_READ_TOOL_REF],
+  });
+  const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
   await applyDurableKernelMigrations(pool);
 
@@ -215,6 +242,12 @@ export async function createService(config: AppConfig, logger: Logger) {
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const memoryApiRepository = new PostgresMemoryApiRepository(pool);
+  const runtimeMcpServer = new RuntimeMcpServer(memoryApiRepository);
+  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
+    config.paseo.agentCwd,
+    config.skillRegistryRoot,
+    runtimeMcpServer,
+  );
   const createMemoryStore = new CreateMemoryStore(memoryApiRepository);
   const listMemoryStores = new ListMemoryStores(memoryApiRepository);
   const getMemoryStore = new GetMemoryStore(memoryApiRepository);
@@ -253,6 +286,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
+    skillCatalog,
   );
   const runtime = new PaseoRuntimeAdapter(
     {
@@ -332,6 +366,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     events,
     new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
     createMemoryProposal,
+    runtimeExtensionBinder,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -445,6 +480,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
     ...(larkReceiver ? { larkReceiver } : {}),
     runtime,
+    runtimeMcpServer,
     pool,
   });
 
@@ -458,6 +494,7 @@ export async function createService(config: AppConfig, logger: Logger) {
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
         ...(larkReceiver ? { larkReceiver } : {}),
         runtime,
+        runtimeMcpServer,
         pool,
       });
     },

@@ -3,7 +3,11 @@ export const PLATFORM_RUNTIME_KERNEL =
 
 export function buildBootstrapPrompt(
   instructions?: string,
-  skills: readonly { readonly ref: string; readonly body: string }[] = [],
+  skills: readonly {
+    readonly ref: string;
+    readonly body?: string;
+    readonly delivery?: 'native_project';
+  }[] = [],
 ): string {
   return [
     PLATFORM_RUNTIME_KERNEL,
@@ -13,7 +17,11 @@ export function buildBootstrapPrompt(
     ...(skills.length
       ? [
           `Resolved Skills:\n${skills
-            .map((skill) => `Skill ${skill.ref}:\n${skill.body}`)
+            .map((skill) =>
+              skill.delivery === 'native_project'
+                ? `Native Skill available: ${skill.ref}.`
+                : `Skill ${skill.ref}:\n${skill.body ?? ''}`,
+            )
             .join('\n\n')}`,
         ]
       : []),

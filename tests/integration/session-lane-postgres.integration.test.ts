@@ -161,6 +161,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
                 package: {
                   spec: {
                     instructions: 'instructions',
+                    tools: [],
                     skills: [],
                     memory: { proposalLimit: 1 },
                   },
@@ -168,6 +169,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
               }) as never,
           },
           invokables,
+          { resolve: async () => null },
         ),
         undefined,
         undefined,

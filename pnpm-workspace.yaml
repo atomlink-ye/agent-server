@@ -4,3 +4,4 @@ allowBuilds:
   protobufjs: false
 minimumReleaseAgeExclude:
   - prettier@3.9.6
+  - '@modelcontextprotocol/sdk@1.30.0'

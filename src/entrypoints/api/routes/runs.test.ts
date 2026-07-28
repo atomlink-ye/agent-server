@@ -35,6 +35,7 @@ describe('run routes', () => {
         port: 3_000,
         logLevel: 'error',
         serviceName: 'agent-server-test',
+        skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
         serviceAccounts: [
           {
             serviceAccountId: 'svc_enabled',

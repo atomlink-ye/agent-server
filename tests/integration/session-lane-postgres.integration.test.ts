@@ -168,6 +168,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
               }) as never,
           },
           invokables,
+          { resolve: async () => null },
         ),
         undefined,
         undefined,

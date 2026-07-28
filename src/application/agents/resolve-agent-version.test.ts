@@ -19,7 +19,7 @@ function managed(
     principalType: scope.principalType,
     principalId: scope.principalId,
     status,
-    package: { spec: { instructions, skills: [] } },
+    package: { spec: { instructions, tools: [], skills: [] } },
   } as never;
 }
 
@@ -30,6 +30,7 @@ describe('ResolveAgentVersion', () => {
     const resolver = new ResolveAgentVersion(
       { findVersion },
       { findPublishedAgentVersionById: findLegacy },
+      { resolve: vi.fn(async () => null) },
     );
 
     await expect(
@@ -50,6 +51,7 @@ describe('ResolveAgentVersion', () => {
     const resolver = new ResolveAgentVersion(
       { findVersion: vi.fn(async () => managed('published', 'managed')) },
       { findPublishedAgentVersionById: vi.fn() },
+      { resolve: vi.fn(async () => null) },
     );
 
     await expect(
@@ -60,6 +62,7 @@ describe('ResolveAgentVersion', () => {
       instructions: 'managed',
       proposalLimit: 0,
       skills: [],
+      toolRefs: [],
     });
   });
 
@@ -72,6 +75,7 @@ describe('ResolveAgentVersion', () => {
     const resolver = new ResolveAgentVersion(
       { findVersion: vi.fn(async () => null) },
       { findPublishedAgentVersionById: findLegacy },
+      { resolve: vi.fn(async () => null) },
     );
 
     await expect(
@@ -82,6 +86,7 @@ describe('ResolveAgentVersion', () => {
       instructions: 'legacy',
       proposalLimit: 0,
       skills: [],
+      toolRefs: [],
     });
     expect(findLegacy).toHaveBeenCalledWith('version-1', scope);
   });

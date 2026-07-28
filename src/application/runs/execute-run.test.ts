@@ -20,19 +20,39 @@ import { createRuntimeExecutionReceipt } from './runtime-execution-receipt.js';
 describe('ExecuteRun', () => {
   it('passes the prior session provider Agent and persists the returned Agent id', async () => {
     const claim = createClaim();
-    const task = { ...createTask(), sessionId: 'session-1' } as Task;
+    const task = {
+      ...createTask('agent', 'managed-version-1'),
+      sessionId: 'session-1',
+      memorySnapshotId: 'snapshot-1',
+      memorySnapshotHash: 'hash-1',
+    } as Task;
+    const catalogResolve = vi.fn(async () => null);
+    const resolver = new ResolveAgentVersion(
+      {
+        findVersion: vi.fn(async () => ({
+          id: 'managed-version-1',
+          status: 'published',
+          package: {
+            spec: {
+              instructions: 'managed instructions',
+              tools: [],
+              skills: [{ ref: 'custom/skill' }],
+              memory: { proposalLimit: 1 },
+            },
+          },
+        })) as never,
+      },
+      { findPublishedAgentVersionById: vi.fn(async () => null) },
+      { resolve: catalogResolve },
+    );
     const events = {
       bind: vi.fn(async () => undefined),
       append: vi.fn(async () => undefined),
       findLatestProviderAgentBySessionId: vi.fn(async () => 'agent-prior'),
     };
-    const runtime = createRuntime();
-    vi.mocked(runtime.execute).mockResolvedValue({
-      provider: 'test-provider',
-      model: 'test-model',
-      text: 'safe result',
-      providerAgentId: 'agent-prior',
-    });
+    const runtime = createRuntimeWithCandidates('agent-prior');
+    const binder = vi.fn(async () => undefined);
+    const batch = vi.fn(async () => undefined);
     const executeRun = new ExecuteRun(
       { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
       { findById: vi.fn(async () => task), save: vi.fn() } as never,
@@ -41,8 +61,11 @@ describe('ExecuteRun', () => {
       runtime,
       { log: vi.fn() },
       () => new Date(),
-      undefined,
+      resolver,
       events as never,
+      { readVerified: vi.fn(async () => 'pinned memory') } as never,
+      { executeBatch: batch } as never,
+      { bind: binder } as never,
     );
 
     await executeRun.execute(claim);
@@ -51,9 +74,15 @@ describe('ExecuteRun', () => {
       expect.objectContaining({
         operation: 'continue',
         providerAgentId: 'agent-prior',
-        prompt: 'private prompt',
+        prompt:
+          'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
+        memoryCandidates: { proposalLimit: 1 },
       }),
     );
+    expect(catalogResolve).not.toHaveBeenCalled();
+    expect(binder).not.toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(events.findLatestProviderAgentBySessionId).toHaveBeenCalledTimes(1);
     expect(events.bind).toHaveBeenLastCalledWith(
       expect.objectContaining({ providerAgentId: 'agent-prior' }),
     );
@@ -64,12 +93,15 @@ describe('ExecuteRun', () => {
     const findVersion = vi.fn(async () => ({
       id: 'managed-version-1',
       status: 'published',
-      package: { spec: { instructions: 'managed instructions', skills: [] } },
+      package: {
+        spec: { instructions: 'managed instructions', tools: [], skills: [] },
+      },
     })) as never;
     const findLegacy = vi.fn(async () => null);
     const resolver = new ResolveAgentVersion(
       { findVersion },
       { findPublishedAgentVersionById: findLegacy },
+      { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntime();
     const completeRun = {
@@ -123,6 +155,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'managed instructions',
+              tools: [],
               skills: [],
               memory: { proposalLimit: 1 },
             },
@@ -130,6 +163,7 @@ describe('ExecuteRun', () => {
         })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntimeWithCandidates();
     const completeRun = {
@@ -159,7 +193,9 @@ describe('ExecuteRun', () => {
     const findVersion = vi.fn(async () => ({
       id: 'draft-or-foreign-version',
       status: 'draft',
-      package: { spec: { instructions: 'not executable', skills: [] } },
+      package: {
+        spec: { instructions: 'not executable', tools: [], skills: [] },
+      },
     })) as never;
     const findLegacy = vi.fn(async () => ({
       id: 'draft-or-foreign-version',
@@ -168,6 +204,7 @@ describe('ExecuteRun', () => {
     const resolver = new ResolveAgentVersion(
       { findVersion },
       { findPublishedAgentVersionById: findLegacy },
+      { resolve: vi.fn(async () => null) },
     );
     const runtime = createRuntime();
     const completeRun = {
@@ -204,6 +241,7 @@ describe('ExecuteRun', () => {
           instructions: 'legacy instructions',
         })) as never,
       },
+      { resolve: vi.fn(async () => null) },
     );
     const executeRun = createDirectExecuteRun({
       completeRun,
@@ -387,12 +425,16 @@ describe('ExecuteRun', () => {
       runtime,
       logger,
       () => new Date('2026-07-23T00:00:00.000Z'),
-      new ResolveAgentVersion({ findVersion: vi.fn(async () => null) }, {
-        findPublishedAgentVersionById: vi.fn(async () => ({
-          id: 'agent-version-1',
-          instructions: 'Be safe.',
-        })),
-      } as never),
+      new ResolveAgentVersion(
+        { findVersion: vi.fn(async () => null) },
+        {
+          findPublishedAgentVersionById: vi.fn(async () => ({
+            id: 'agent-version-1',
+            instructions: 'Be safe.',
+          })),
+        } as never,
+        { resolve: vi.fn(async () => null) },
+      ),
     );
 
     const rejection = executeRun
@@ -464,6 +506,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              tools: [],
               skills: [],
               memory: { proposalLimit: 1 },
             },
@@ -471,6 +514,7 @@ describe('ExecuteRun', () => {
         })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null) },
     );
     const createMemoryProposal = {
       execute: vi.fn(async () => {
@@ -527,6 +571,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              tools: [],
               skills: [],
               memory: { proposalLimit: 2 },
             },
@@ -534,6 +579,7 @@ describe('ExecuteRun', () => {
         })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null) },
     );
     await new ExecuteRun(
       completeRun,
@@ -604,6 +650,7 @@ describe('ExecuteRun', () => {
           package: {
             spec: {
               instructions: 'instructions',
+              tools: [],
               skills: [],
               memory: { proposalLimit: id === 'managed-low' ? 1 : 3 },
             },
@@ -611,6 +658,7 @@ describe('ExecuteRun', () => {
         })) as never,
       },
       { findPublishedAgentVersionById: vi.fn(async () => null) },
+      { resolve: vi.fn(async () => null) },
     );
     const executeRun = new ExecuteRun(
       { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
@@ -676,6 +724,7 @@ describe('ExecuteRun', () => {
         new ResolveAgentVersion(
           { findVersion: vi.fn(async () => null) } as never,
           {} as never,
+          { resolve: vi.fn(async () => null) },
         ),
         events as never,
       );
@@ -736,14 +785,16 @@ function createDirectExecuteRun(input: {
   );
 }
 
-function createRuntimeWithCandidates(): AgentRuntimePort {
+function createRuntimeWithCandidates(
+  providerAgentId = 'agent-test',
+): AgentRuntimePort {
   return {
     ...createRuntime(),
     execute: vi.fn(async () => ({
       provider: 'test-provider',
       model: 'test-model',
       text: 'safe result',
-      providerAgentId: 'agent-test',
+      providerAgentId,
       memoryCandidates: [
         { category: 'project_constraint', content: 'keep logs' },
       ],

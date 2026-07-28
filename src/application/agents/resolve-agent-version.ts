@@ -4,10 +4,11 @@ import type {
   InvokableRepository,
 } from '../ports/invokable-repository.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
-import {
-  loadBuiltInSkills,
-  type ResolvedBuiltInSkill,
-} from './built-in-skills.js';
+import { AGENT_SERVER_MEMORY_READ_TOOL_REF } from './built-in-skills.js';
+import type {
+  ResolvedSkillPackage,
+  SkillCatalogPort,
+} from '../extensions/skill-catalog.js';
 
 export type AgentVersionResolutionScope = InvokableOwnerScope;
 export type ResolvedAgentVersion = Readonly<{
@@ -15,8 +16,10 @@ export type ResolvedAgentVersion = Readonly<{
   id: string;
   instructions: string;
   proposalLimit?: number;
-  skills: readonly ResolvedBuiltInSkill[];
+  skills: readonly ResolvedSkillPackage[];
+  toolRefs: readonly string[];
 }>;
+const SUPPORTED_TOOL_REFS = new Set([AGENT_SERVER_MEMORY_READ_TOOL_REF]);
 
 export class ResolveAgentVersion {
   public constructor(
@@ -25,11 +28,13 @@ export class ResolveAgentVersion {
       InvokableRepository,
       'findPublishedAgentVersionById'
     >,
+    private readonly skillCatalog: SkillCatalogPort,
   ) {}
 
   public async resolvePublished(
     versionId: string,
     scope: AgentVersionResolutionScope,
+    options: { readonly resolveExtensions?: boolean } = {},
   ): Promise<ResolvedAgentVersion | null> {
     const managedVersion = await this.managed.findVersion(
       managedOwner(scope),
@@ -37,14 +42,49 @@ export class ResolveAgentVersion {
     );
     if (managedVersion) {
       if (managedVersion.status !== 'published') return null;
+      if (options.resolveExtensions === false) {
+        return {
+          source: 'managed',
+          id: managedVersion.id,
+          instructions: managedVersion.package.spec.instructions,
+          proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
+          skills: [],
+          toolRefs: [],
+        };
+      }
+      const toolRefs = managedVersion.package.spec.tools.map(
+        (tool) => tool.ref,
+      );
+      validateToolRefs(toolRefs);
+      const skillRefs = managedVersion.package.spec.skills.map(
+        (skill) => skill.ref,
+      );
+      const seenSkills = new Set<string>();
+      const skills: ResolvedSkillPackage[] = [];
+      for (const ref of skillRefs) {
+        if (seenSkills.has(ref))
+          throw new Error(
+            'The managed Agent references a Skill more than once.',
+          );
+        seenSkills.add(ref);
+        const resolved = await this.skillCatalog.resolve(ref);
+        if (!resolved)
+          throw new Error('The managed Agent references an unsupported Skill.');
+        skills.push(resolved);
+      }
+      for (const skill of skills) {
+        for (const required of skill.requiredToolRefs) {
+          if (!toolRefs.includes(required))
+            throw new Error('A Skill required Tool is not granted.');
+        }
+      }
       return {
         source: 'managed',
         id: managedVersion.id,
         instructions: managedVersion.package.spec.instructions,
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
-        skills: await loadBuiltInSkills(
-          managedVersion.package.spec.skills.map((skill) => skill.ref),
-        ),
+        skills: Object.freeze(skills),
+        toolRefs: Object.freeze([...toolRefs]),
       };
     }
     const legacyVersion = await this.legacy.findPublishedAgentVersionById(
@@ -58,8 +98,18 @@ export class ResolveAgentVersion {
           instructions: legacyVersion.instructions,
           proposalLimit: 0,
           skills: [],
+          toolRefs: [],
         }
       : null;
+  }
+}
+
+function validateToolRefs(refs: readonly string[]): void {
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    if (seen.has(ref) || !SUPPORTED_TOOL_REFS.has(ref))
+      throw new Error('The managed Agent references an unsupported Tool.');
+    seen.add(ref);
   }
 }
 

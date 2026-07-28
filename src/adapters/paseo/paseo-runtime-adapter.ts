@@ -197,6 +197,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             systemPrompt: input.systemPrompt,
             initialPrompt: prompt,
             runId: input.runId,
+            ...(input.extensions?.mcpServers
+              ? { mcpServers: input.extensions.mcpServers }
+              : {}),
           });
     this.#agents.set(input.runId, agent.id);
     if (input.operation === 'continue')

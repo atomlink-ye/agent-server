@@ -12,6 +12,7 @@ describe('loadConfig', () => {
       serviceName: 'agent-server',
       serviceAccounts: [],
       larkCanary: { enabled: false },
+      skillRegistryRoot: '/repo/.local/skill-registry',
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         agentCwd: '/repo/.local/agent-workspace',

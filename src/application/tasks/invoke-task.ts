@@ -49,12 +49,17 @@ export class InvokeTask {
     resolverOrNow: ResolveAgentVersion | (() => Date) = new ResolveAgentVersion(
       { findVersion: async () => null },
       invokables,
+      { resolve: async () => null },
     ),
     now: () => Date = () => new Date(),
   ) {
     this.resolver =
       typeof resolverOrNow === 'function'
-        ? new ResolveAgentVersion({ findVersion: async () => null }, invokables)
+        ? new ResolveAgentVersion(
+            { findVersion: async () => null },
+            invokables,
+            { resolve: async () => null },
+          )
         : resolverOrNow;
     this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
   }

@@ -124,6 +124,10 @@ const ConfigSchema = z
     SERVICE_NAME: z.string().min(1).default('agent-server'),
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
+    AGENT_SERVER_SKILL_REGISTRY_ROOT: z
+      .string()
+      .min(1)
+      .default('.local/skill-registry'),
     PASEO_WORKSPACE_TITLE: z.string().min(1).default('Agent Server Baseline'),
     PASEO_MODEL: z.string().trim().min(1).optional(),
     PASEO_CONNECT_TIMEOUT_MS: z.coerce
@@ -234,6 +238,7 @@ export type AppConfig = Readonly<{
   serviceName: string;
   serviceAccounts?: readonly ServiceAccountRecord[];
   larkCanary?: LarkCanaryConfig;
+  skillRegistryRoot: string;
   paseo: {
     wsUrl: string;
     agentCwd: string;
@@ -243,7 +248,6 @@ export type AppConfig = Readonly<{
     executionTimeoutMs: number;
   };
 }>;
-
 export class ConfigurationError extends Error {
   public constructor(issues: readonly z.core.$ZodIssue[]) {
     const details = issues
@@ -307,6 +311,10 @@ export function loadConfig(
             : {}),
         })
       : Object.freeze({ enabled: false as const }),
+    skillRegistryRoot: resolve(
+      workingDirectory,
+      parsed.data.AGENT_SERVER_SKILL_REGISTRY_ROOT,
+    ),
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),

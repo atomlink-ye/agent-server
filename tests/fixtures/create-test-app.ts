@@ -58,6 +58,7 @@ export const testConfig = {
   port: 3_000,
   logLevel: 'error',
   serviceName: 'agent-server-test',
+  skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
   serviceAccounts: [
     {
       serviceAccountId: 'svc_enabled',
@@ -187,6 +188,7 @@ export async function createTestApp(
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
+    { resolve: async () => null },
   );
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(
     repositoryDatabase,

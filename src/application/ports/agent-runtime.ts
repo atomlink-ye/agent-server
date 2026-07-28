@@ -13,6 +13,16 @@ export interface AgentRuntimeHealth {
   readonly checks: readonly RuntimeHealthCheck[];
 }
 
+export interface RuntimeMcpServerConfig {
+  readonly name: string;
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
+export interface RuntimeExtensionBinding {
+  readonly mcpServers?: readonly RuntimeMcpServerConfig[];
+}
+
 export interface AgentRuntimeExecution {
   readonly provider: string;
   readonly model: string;
@@ -31,6 +41,7 @@ export type AgentRuntimeExecuteInput =
       readonly runId: string;
       readonly prompt: string;
       readonly systemPrompt: string;
+      readonly extensions?: RuntimeExtensionBinding;
       readonly memoryCandidates?: {
         readonly maxCandidates?: number;
         readonly proposalLimit?: number;

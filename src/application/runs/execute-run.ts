@@ -25,6 +25,8 @@ import {
   buildTurnPrompt,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
+import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
+import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import { CompleteRun } from './complete-run.js';
 import {
   createRuntimeExecutionReceipt,
@@ -44,10 +46,12 @@ export class ExecuteRun {
     private readonly resolver: ResolveAgentVersion = new ResolveAgentVersion(
       { findVersion: async () => null },
       invokables,
+      { resolve: async () => null },
     ),
     private readonly events?: RunEventRepository,
     private readonly fileStore?: FileStore,
     private readonly createMemoryProposal?: CreateMemoryProposal,
+    private readonly runtimeExtensionBinder?: RuntimeExtensionBinder,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -216,16 +220,40 @@ export class ExecuteRun {
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
   ) {
-    const resolved = await this.resolveAgentPrompt(
-      claim.run.prompt,
-      ownerScope,
-      invokableVersionId,
-      task,
-    );
     const priorProviderAgentId =
       task.sessionId && this.events?.findLatestProviderAgentBySessionId
         ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
         : null;
+    const resolved = priorProviderAgentId
+      ? await this.resolveContinuationPrompt(
+          claim.run.prompt,
+          ownerScope,
+          invokableVersionId,
+          task,
+        )
+      : await this.resolveAgentPrompt(
+          claim.run.prompt,
+          ownerScope,
+          invokableVersionId,
+          task,
+        );
+    let extensions;
+    if (
+      !priorProviderAgentId &&
+      (resolved.skills.length > 0 || resolved.toolRefs.length > 0)
+    ) {
+      if (!this.runtimeExtensionBinder)
+        throw new Error('Runtime extension binding is unavailable.');
+      extensions = await this.runtimeExtensionBinder.bind({
+        tenantId: task.tenantId,
+        principalType: task.principalType,
+        principalId: task.principalId,
+        workspaceId: task.workspaceId,
+        ...(task.sessionId ? { productSessionId: task.sessionId } : {}),
+        skills: resolved.skills,
+        toolRefs: resolved.toolRefs,
+      });
+    }
     const execution = await this.runtime.execute(
       priorProviderAgentId
         ? {
@@ -242,6 +270,7 @@ export class ExecuteRun {
             runId: claim.run.id,
             prompt: resolved.turnPrompt,
             systemPrompt: resolved.systemPrompt,
+            ...(extensions ? { extensions } : {}),
             ...(resolved.proposalLimit > 0
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
               : {}),
@@ -337,6 +366,8 @@ export class ExecuteRun {
     readonly turnPrompt: string;
     readonly proposalLimit: number;
     readonly agentVersionId: string;
+    readonly skills: readonly ResolvedSkillPackage[];
+    readonly toolRefs: readonly string[];
   }> {
     if (invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID) {
       return {
@@ -344,6 +375,8 @@ export class ExecuteRun {
         turnPrompt: prompt,
         proposalLimit: 0,
         agentVersionId: invokableVersionId,
+        skills: [],
+        toolRefs: [],
       };
     }
 
@@ -357,17 +390,7 @@ export class ExecuteRun {
         `Published agent version ${invokableVersionId} could not be loaded for execution`,
       );
     }
-    let memory: string | null = null;
-    if (task.memorySnapshotId && task.memorySnapshotHash) {
-      if (!this.fileStore)
-        throw new Error('Pinned memory projection is unavailable');
-      memory = await this.fileStore.readVerified({
-        tenantId: task.tenantId,
-        workspaceId: task.workspaceId,
-        snapshotId: task.memorySnapshotId,
-        expectedContentHash: task.memorySnapshotHash,
-      });
-    }
+    const memory = await this.loadPinnedMemory(task);
     return {
       systemPrompt: buildBootstrapPrompt(
         agentVersion.instructions,
@@ -376,7 +399,59 @@ export class ExecuteRun {
       turnPrompt: buildTurnPrompt({ taskInput: prompt, memory }),
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: invokableVersionId,
+      skills: agentVersion.skills,
+      toolRefs: agentVersion.toolRefs,
     };
+  }
+
+  private async resolveContinuationPrompt(
+    prompt: string,
+    ownerScope: InvokableOwnerScope,
+    invokableVersionId: string,
+    task: import('../../domain/tasks/task.js').Task,
+  ): Promise<{
+    readonly systemPrompt: string;
+    readonly turnPrompt: string;
+    readonly proposalLimit: number;
+    readonly agentVersionId: string;
+    readonly skills: readonly ResolvedSkillPackage[];
+    readonly toolRefs: readonly string[];
+  }> {
+    const metadata =
+      invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
+        ? { proposalLimit: 0 }
+        : await this.resolver.resolvePublished(invokableVersionId, ownerScope, {
+            resolveExtensions: false,
+          });
+    if (!metadata)
+      throw new Error(
+        `Published agent version ${invokableVersionId} could not be loaded for execution`,
+      );
+    return {
+      systemPrompt: '',
+      turnPrompt: buildTurnPrompt({
+        taskInput: prompt,
+        memory: await this.loadPinnedMemory(task),
+      }),
+      proposalLimit: metadata.proposalLimit ?? 0,
+      agentVersionId: invokableVersionId,
+      skills: [],
+      toolRefs: [],
+    };
+  }
+
+  private async loadPinnedMemory(
+    task: import('../../domain/tasks/task.js').Task,
+  ): Promise<string | null> {
+    if (!task.memorySnapshotId || !task.memorySnapshotHash) return null;
+    if (!this.fileStore)
+      throw new Error('Pinned memory projection is unavailable');
+    return this.fileStore.readVerified({
+      tenantId: task.tenantId,
+      workspaceId: task.workspaceId,
+      snapshotId: task.memorySnapshotId,
+      expectedContentHash: task.memorySnapshotHash,
+    });
   }
 }
 

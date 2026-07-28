@@ -91,6 +91,12 @@ export class ExecuteTeamTask {
             ? loadedAgentVersion.skills
             : [],
       };
+      const toolRefs =
+        'toolRefs' in agentVersion && Array.isArray(agentVersion.toolRefs)
+          ? agentVersion.toolRefs
+          : [];
+      if (agentVersion.skills.length > 0 || toolRefs.length > 0)
+        throw new Error('Team child runtime extensions are unsupported.');
 
       const normalizedInput = normalizeRootTaskRunRequest({
         prompt: stepInput,

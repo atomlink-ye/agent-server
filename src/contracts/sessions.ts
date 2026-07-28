@@ -6,6 +6,7 @@ export const SessionCreateSchema = z
   .object({
     workspace_id: z.string().uuid(),
     agent_version_id: z.string().trim().min(1),
+    environment_version_id: z.string().uuid().optional(),
   })
   .strict();
 export const MessageCreateSchema = z

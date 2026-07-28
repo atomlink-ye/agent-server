@@ -124,6 +124,7 @@ const ConfigSchema = z
     SERVICE_NAME: z.string().min(1).default('agent-server'),
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
+    PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
       .string()
       .min(1)
@@ -242,6 +243,7 @@ export type AppConfig = Readonly<{
   paseo: {
     wsUrl: string;
     agentCwd: string;
+    runtimeCellRoot?: string;
     workspaceTitle: string;
     model?: string;
     connectTimeoutMs: number;
@@ -318,6 +320,10 @@ export function loadConfig(
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),
+      runtimeCellRoot: resolve(
+        workingDirectory,
+        parsed.data.PASEO_RUNTIME_CELL_ROOT,
+      ),
       workspaceTitle: parsed.data.PASEO_WORKSPACE_TITLE,
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,

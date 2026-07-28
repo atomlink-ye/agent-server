@@ -16,6 +16,7 @@
     "start:lark": "node dist/entrypoints/lark/worker.js",
     "skill:register": "node --import tsx src/entrypoints/cli/skill-register.ts",
     "smoke:user-skill": "node scripts/smoke/user-authored-skill-main-flow.mjs",
+    "smoke:managed-environment": "node scripts/smoke/managed-environment-main-flow.mjs",
     "build": "tsc -p tsconfig.build.json",
     "check:types": "tsc -p tsconfig.json --noEmit",
     "check:format": "prettier --check .",

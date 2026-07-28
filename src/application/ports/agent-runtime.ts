@@ -28,6 +28,7 @@ export interface AgentRuntimeExecution {
   readonly model: string;
   readonly text: string;
   readonly providerAgentId: string;
+  readonly paseoWorkspaceId?: string;
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly {
     readonly content: string;
@@ -39,6 +40,8 @@ export type AgentRuntimeExecuteInput =
   | {
       readonly operation: 'create';
       readonly runId: string;
+      readonly runtimeSessionId?: string;
+      readonly cellCwd?: string;
       readonly prompt: string;
       readonly systemPrompt: string;
       readonly extensions?: RuntimeExtensionBinding;
@@ -52,6 +55,9 @@ export type AgentRuntimeExecuteInput =
       readonly runId: string;
       readonly prompt: string;
       readonly providerAgentId: string;
+      readonly paseoWorkspaceId?: string;
+      readonly runtimeSessionId?: string;
+      readonly cellCwd?: string;
       readonly memoryCandidates?: {
         readonly maxCandidates?: number;
         readonly proposalLimit?: number;

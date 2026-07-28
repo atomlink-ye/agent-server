@@ -41,6 +41,14 @@ operation creates an Agent or continues the bound Agent. Durable Task/Run
 admission, completion, assistant Message, and result outbox behavior is
 unchanged.
 
+The Managed Environment baseline pins a published EnvironmentVersion at
+ProductSession creation. First execution creates one immutable launch snapshot
+and internal RuntimeSession; the RuntimeSession ID selects the Cell used by
+Skill/Grant projection and Paseo Workspace binding. A second Run in the same
+ProductSession reuses that RuntimeSession/provider binding, while another
+ProductSession gets distinct runtime state. This remains a baseline seam, not
+full Runtime Session V2 or crash recovery.
+
 Published managed Agent resolution may load the server-owned
 `agent-server/memory-api` Skill into create-time native Runtime Bootstrap. The
 kernel records the resulting Agent/Run work normally; it does not grant the

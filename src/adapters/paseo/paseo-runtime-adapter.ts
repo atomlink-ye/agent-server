@@ -49,6 +49,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   #generation = 0;
   #connectedGeneration: number | null = null;
   readonly #agents = new Map<string, string>();
+  readonly #sessionWorkspaces = new Map<string, string>();
 
   public constructor(
     options: PaseoRuntimeOptions,
@@ -64,7 +65,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   }
 
   public async initialize(): Promise<void> {
-    const initialized = this.#workspaceId !== null && this.#model !== null;
+    const initialized = this.#model !== null;
     if (initialized && this.#client.connectionStatus() === 'connected') {
       return;
     }
@@ -126,25 +127,24 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       return;
     }
 
+    const models = await this.#client.listOpenCodeModels(this.#options.cwd);
+    const model = selectOpenCodeModel(models, this.#options.requestedModel);
     const workspaceId = await this.#client.openWorkspace(this.#options.cwd);
     await this.#client.setWorkspaceTitle(
       workspaceId,
       this.#options.workspaceTitle,
     );
-    const models = await this.#client.listOpenCodeModels(this.#options.cwd);
-    const model = selectOpenCodeModel(models, this.#options.requestedModel);
 
     if (this.#generation !== generation) {
       return;
     }
 
-    this.#workspaceId = workspaceId;
     this.#model = model;
+    this.#workspaceId = workspaceId;
     this.#lastError = null;
     this.#logger.log('info', 'runtime.initialized', {
       provider: 'opencode',
       model: model.id,
-      workspace_id: workspaceId,
     });
   }
 
@@ -163,7 +163,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     input: AgentRuntimeExecuteInput,
   ): Promise<AgentRuntimeExecution> {
     await this.initialize();
-    if (!this.#workspaceId || !this.#model) {
+    if (!this.#model) {
       throw new RuntimeExecutionError('Paseo runtime is not initialized.');
     }
 
@@ -176,13 +176,43 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     const memoryEnabled =
       (input.memoryCandidates?.maxCandidates ?? 0) > 0 ||
       (input.memoryCandidates?.proposalLimit ?? 0) > 0;
+    const executionCwd = input.cellCwd ?? this.#options.cwd;
     const artifact = memoryEnabled
-      ? await this.#prepareArtifactPath(artifactRelativePath)
+      ? await this.#prepareArtifactPath(artifactRelativePath, executionCwd)
       : null;
-    if (artifact) await this.#clearArtifact(artifact);
+    if (artifact) await this.#clearArtifact(artifact, executionCwd);
     const prompt = artifact
       ? `${input.prompt}\n\n${memoryArtifactInstruction(artifactRelativePath)}`
       : input.prompt;
+    const runtimeSessionId = input.runtimeSessionId;
+    const managedCellExecution =
+      Boolean(runtimeSessionId) ||
+      Boolean(input.cellCwd) ||
+      (input.operation === 'continue' && Boolean(input.paseoWorkspaceId));
+    let workspaceId =
+      (input.operation === 'continue' ? input.paseoWorkspaceId : undefined) ??
+      (runtimeSessionId
+        ? this.#sessionWorkspaces.get(runtimeSessionId)
+        : undefined);
+    if (input.operation === 'create' && managedCellExecution) {
+      const cwd = input.cellCwd ?? this.#options.cwd;
+      await mkdir(cwd, { recursive: true });
+      if (!this.#client.createIndependentWorkspace)
+        throw new RuntimeExecutionError(
+          'Paseo independent workspace creation is unavailable.',
+        );
+      workspaceId = await this.#client.createIndependentWorkspace(cwd);
+      await this.#client.setWorkspaceTitle(
+        workspaceId,
+        this.#options.workspaceTitle,
+      );
+      if (runtimeSessionId)
+        this.#sessionWorkspaces.set(runtimeSessionId, workspaceId);
+    }
+    if (!workspaceId && !managedCellExecution)
+      workspaceId = this.#workspaceId ?? undefined;
+    if (!workspaceId)
+      throw new RuntimeExecutionError('Paseo workspace is not bound.');
     const agent =
       input.operation === 'continue'
         ? {
@@ -191,8 +221,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             model: this.#model.id,
           }
         : await this.#client.createOpenCodeAgent({
-            cwd: this.#options.cwd,
-            workspaceId: this.#workspaceId,
+            cwd: input.cellCwd ?? this.#options.cwd,
+            workspaceId,
             model: this.#model.id,
             systemPrompt: input.systemPrompt,
             initialPrompt: prompt,
@@ -224,12 +254,15 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       );
     }
 
-    const memory = artifact ? await this.#readMemoryCandidates(artifact) : {};
+    const memory = artifact
+      ? await this.#readMemoryCandidates(artifact, executionCwd)
+      : {};
     return {
       provider: agent.provider || 'opencode',
       model: agent.model ?? this.#model.id,
       text: finished.lastMessage,
       providerAgentId: agent.id,
+      paseoWorkspaceId: workspaceId,
       ...(finished.usage ? { usage: finished.usage } : {}),
       ...(memory.memoryCandidates
         ? { memoryCandidates: memory.memoryCandidates }
@@ -237,8 +270,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     };
   }
 
-  async #clearArtifact(path: string): Promise<void> {
-    await this.#assertSafePath(path);
+  async #clearArtifact(path: string, cwd: string): Promise<void> {
+    await this.#assertSafePath(path, resolve(cwd, 'scratchpad'));
     try {
       await unlink(path);
     } catch (error) {
@@ -246,10 +279,13 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     }
   }
 
-  async #readMemoryCandidates(path: string): Promise<{
+  async #readMemoryCandidates(
+    path: string,
+    cwd: string,
+  ): Promise<{
     readonly memoryCandidates?: AgentRuntimeExecution['memoryCandidates'];
   }> {
-    await this.#assertSafePath(path);
+    await this.#assertSafePath(path, resolve(cwd, 'scratchpad'));
     let handle;
     try {
       handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
@@ -317,14 +353,17 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     }
   }
 
-  async #prepareArtifactPath(relativePath: string): Promise<string> {
-    const scratchRoot = resolve(this.#options.cwd, 'scratchpad');
+  async #prepareArtifactPath(
+    relativePath: string,
+    cwd: string,
+  ): Promise<string> {
+    const scratchRoot = resolve(cwd, 'scratchpad');
     await this.#assertSafePath(scratchRoot, scratchRoot);
     await mkdir(scratchRoot, { recursive: true });
-    const runDirectory = dirname(resolve(this.#options.cwd, relativePath));
+    const runDirectory = dirname(resolve(cwd, relativePath));
     await this.#assertSafePath(runDirectory, scratchRoot);
     await mkdir(runDirectory, { recursive: true });
-    const absolute = resolve(this.#options.cwd, relativePath);
+    const absolute = resolve(cwd, relativePath);
     await this.#assertSafePath(absolute, scratchRoot);
     return absolute;
   }
@@ -373,7 +412,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   public async health(): Promise<AgentRuntimeHealth> {
     const connected = this.#client.connectionStatus() === 'connected';
-    const workspaceReady = this.#workspaceId !== null;
+    const workspaceReady = true;
     const modelReady = this.#model !== null;
     const errorDetail = this.#lastError ?? undefined;
 
@@ -407,6 +446,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#workspaceId = null;
     this.#model = null;
     this.#agents.clear();
+    this.#sessionWorkspaces.clear();
     this.#initialization = null;
     await this.#client.close();
   }

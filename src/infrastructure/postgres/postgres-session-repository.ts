@@ -10,6 +10,7 @@ import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/c
 import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/root-task-input.js';
 import { originReference } from '../../application/sessions/session-turn-origin.js';
 import type { SubmitSessionTurnInput } from '../../application/ports/session-repository.js';
+import { SessionCreationError } from '../../application/sessions/session-errors.js';
 
 interface Q {
   query<R = Record<string, unknown>>(
@@ -50,9 +51,10 @@ export class PostgresSessionRepository implements SessionRepository {
     workspaceId: string;
     agentVersionId: string;
     owner: AccessContext;
+    environmentVersionId?: string;
   }) {
     const w = await this.getWorkspace(i.workspaceId, i.owner);
-    if (!w) return Promise.reject(new Error('not_found'));
+    if (!w) throw new SessionCreationError('workspace_not_found');
     const published = await this.db.query(
       `SELECT id FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND status='published'`,
       [
@@ -62,11 +64,31 @@ export class PostgresSessionRepository implements SessionRepository {
         i.owner.principalId,
       ],
     );
-    if (!published.rows?.[0]) return Promise.reject(new Error('not_found'));
+    if (!published.rows?.[0])
+      throw new SessionCreationError('agent_version_not_found');
+    const env = i.environmentVersionId
+      ? await this.db.query(
+          `SELECT id FROM environment_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND status='published'`,
+          [
+            i.environmentVersionId,
+            i.owner.tenantId,
+            i.owner.principalType,
+            i.owner.principalId,
+          ],
+        )
+      : await this.db.query(
+          `SELECT id FROM environment_versions WHERE tenant_id=$1 AND principal_type=$2 AND principal_id=$3 AND status='published'`,
+          [i.owner.tenantId, i.owner.principalType, i.owner.principalId],
+        );
+    if (i.environmentVersionId && !env.rows?.[0])
+      throw new SessionCreationError('environment_version_not_found');
+    if (!i.environmentVersionId && env.rows?.length !== 1)
+      throw new SessionCreationError('environment_required');
+    const environmentVersionId = env.rows[0].id;
     const now = iso(),
       id = randomUUID();
     await this.db.query(
-      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,generation,status,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,0,'active',$7,$7)`,
+      `INSERT INTO product_sessions(id,workspace_id,tenant_id,principal_type,principal_id,published_agent_version_id,published_environment_version_id,generation,status,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,0,'active',$8,$8)`,
       [
         id,
         w.id,
@@ -74,6 +96,7 @@ export class PostgresSessionRepository implements SessionRepository {
         w.principalType,
         w.principalId,
         i.agentVersionId,
+        environmentVersionId,
         now,
       ],
     );
@@ -88,6 +111,7 @@ export class PostgresSessionRepository implements SessionRepository {
       principalType: w.principalType,
       principalId: w.principalId,
       publishedAgentVersionId: i.agentVersionId,
+      environmentVersionId,
       generation: 0,
       status: 'active',
       createdAt: now,
@@ -348,6 +372,7 @@ function mapSession(r: any): ProductSession {
     principalType: r.principal_type,
     principalId: r.principal_id,
     publishedAgentVersionId: r.published_agent_version_id,
+    environmentVersionId: r.published_environment_version_id,
     generation: Number(r.generation),
     status: r.status,
     createdAt: new Date(r.created_at).toISOString(),

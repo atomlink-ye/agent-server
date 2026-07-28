@@ -16,6 +16,7 @@ export interface ProductSession {
   readonly principalType: string;
   readonly principalId: string;
   readonly publishedAgentVersionId: string;
+  readonly environmentVersionId: string;
   readonly generation: number;
   readonly status: 'active' | 'resetting';
   readonly createdAt: string;
@@ -46,6 +47,7 @@ export interface SessionRepository {
   createSession(input: {
     workspaceId: string;
     agentVersionId: string;
+    environmentVersionId?: string;
     owner: AccessContext;
   }): Promise<ProductSession>;
   getSession(id: string, owner: AccessContext): Promise<ProductSession | null>;

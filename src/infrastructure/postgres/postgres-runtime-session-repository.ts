@@ -1,0 +1,131 @@
+import type {
+  RuntimeSession,
+  RuntimeSessionRepository,
+} from '../../application/ports/runtime-session-repository.js';
+import { randomUUID } from 'node:crypto';
+
+export class PostgresRuntimeSessionRepository implements RuntimeSessionRepository {
+  public constructor(
+    private readonly db: {
+      query(
+        sql: string,
+        values?: readonly unknown[],
+      ): Promise<{ rows?: readonly any[] }>;
+    },
+  ) {}
+
+  public async createOrGetForProductSession(
+    input: Parameters<
+      RuntimeSessionRepository['createOrGetForProductSession']
+    >[0],
+  ): Promise<RuntimeSession> {
+    const now = new Date().toISOString();
+    const existing = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      [
+        input.productSessionId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+      ],
+    );
+    if (existing.rows?.[0]) return map(existing.rows[0]);
+    const snapshotId = randomUUID();
+    const runtimeId = randomUUID();
+    await this.db.query(
+      `INSERT INTO session_launch_snapshots(id,tenant_id,workspace_id,principal_type,principal_id,agent_version_id,environment_version_id,resolved_skills,tool_refs,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
+      [
+        snapshotId,
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+        input.agentVersionId,
+        input.environmentVersionId,
+        JSON.stringify(
+          input.resolvedSkills.map(({ ref, digest }) => ({ ref, digest })),
+        ),
+        JSON.stringify(input.toolRefs),
+        now,
+      ],
+    );
+    await this.db.query(
+      `INSERT INTO runtime_sessions(id,tenant_id,principal_type,principal_id,scope_kind,scope_id,launch_snapshot_id,created_at,updated_at) VALUES($1,$2,$3,$4,'product_session',$5,$6,$7,$7) ON CONFLICT(scope_kind,scope_id) DO NOTHING`,
+      [
+        runtimeId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+        input.productSessionId,
+        snapshotId,
+        now,
+      ],
+    );
+    const result = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      [
+        input.productSessionId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+      ],
+    );
+    if (!result.rows?.[0])
+      throw new Error('Runtime session could not be created.');
+    return map(result.rows[0]);
+  }
+
+  public async findByProductSession(
+    input: Parameters<RuntimeSessionRepository['findByProductSession']>[0],
+  ) {
+    const result = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      [
+        input.productSessionId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+      ],
+    );
+    return result.rows?.[0] ? map(result.rows[0]) : null;
+  }
+
+  public async bindProvider(
+    input: Parameters<RuntimeSessionRepository['bindProvider']>[0],
+  ) {
+    const result = await this.db.query(
+      `UPDATE runtime_sessions SET paseo_workspace_id=$2, provider_agent_id=$3, updated_at=$4 WHERE id=$1 RETURNING *`,
+      [
+        input.id,
+        input.paseoWorkspaceId,
+        input.providerAgentId,
+        new Date().toISOString(),
+      ],
+    );
+    if (!result.rows?.[0])
+      throw new Error('Runtime session could not be bound.');
+    const joined = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.id=$1`,
+      [input.id],
+    );
+    if (!joined.rows?.[0])
+      throw new Error('Runtime session snapshot could not be loaded.');
+    return map(joined.rows[0]);
+  }
+}
+
+function map(row: any): RuntimeSession {
+  return {
+    id: row.id,
+    productSessionId: row.scope_id,
+    launchSnapshotId: row.launch_snapshot_id,
+    agentVersionId: row.agent_version_id,
+    environmentVersionId: row.environment_version_id,
+    resolvedSkills: row.resolved_skills ?? [],
+    toolRefs: row.tool_refs ?? [],
+    paseoWorkspaceId: row.paseo_workspace_id ?? null,
+    providerAgentId: row.provider_agent_id ?? null,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}

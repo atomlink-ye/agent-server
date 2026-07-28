@@ -34,6 +34,7 @@ import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-
 import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
+import { PostgresEnvironmentRegistry } from './infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
@@ -69,6 +70,7 @@ import {
 import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-memory-api-repository.js';
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
+import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
@@ -261,6 +263,8 @@ export async function createService(config: AppConfig, logger: Logger) {
   );
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
+  const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
+  const environmentRegistry = new PostgresEnvironmentRegistry(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
@@ -367,6 +371,10 @@ export async function createService(config: AppConfig, logger: Logger) {
     new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
     createMemoryProposal,
     runtimeExtensionBinder,
+    runtimeSessions,
+    sessions,
+    environmentRegistry,
+    config.paseo.runtimeCellRoot,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -460,6 +468,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     listMemoryEntries,
     managedMemory,
     agentRegistry,
+    environmentRegistry,
     sessions,
     submitSessionTurn,
     events,

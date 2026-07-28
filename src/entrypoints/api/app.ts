@@ -30,6 +30,8 @@ import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
 import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
+import { registerEnvironmentRoutes } from './routes/environments.js';
+import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
 import {
   registerMemoryApiRoutes,
   type MemoryApiRouteDependencies,
@@ -50,6 +52,7 @@ export interface AppDependencies {
   readonly reviewMemoryProposal: ReviewMemoryProposal;
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
+  readonly environmentRegistry?: EnvironmentRegistry;
   readonly sessions?: SessionRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
@@ -96,6 +99,11 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     });
   }
   registerAgentRoutes(app, dependencies);
+  if (dependencies.environmentRegistry)
+    registerEnvironmentRoutes(app, {
+      ...dependencies,
+      environmentRegistry: dependencies.environmentRegistry,
+    });
   if (dependencies.sessions)
     registerSessionRoutes(app, {
       ...dependencies,

@@ -52,6 +52,7 @@ export class PostgresSessionRepository implements SessionRepository {
     agentVersionId: string;
     owner: AccessContext;
     environmentVersionId?: string;
+    requireEnvironment?: boolean;
   }) {
     const w = await this.getWorkspace(i.workspaceId, i.owner);
     if (!w) throw new SessionCreationError('workspace_not_found');
@@ -82,9 +83,13 @@ export class PostgresSessionRepository implements SessionRepository {
         );
     if (i.environmentVersionId && !env.rows?.[0])
       throw new SessionCreationError('environment_version_not_found');
-    if (!i.environmentVersionId && env.rows?.length !== 1)
+    if (
+      !i.environmentVersionId &&
+      ((env.rows?.length ?? 0) > 1 ||
+        (i.requireEnvironment && env.rows?.length !== 1))
+    )
       throw new SessionCreationError('environment_required');
-    const environmentVersionId = env.rows[0].id;
+    const environmentVersionId = env.rows?.[0]?.id ?? null;
     const now = iso(),
       id = randomUUID();
     await this.db.query(

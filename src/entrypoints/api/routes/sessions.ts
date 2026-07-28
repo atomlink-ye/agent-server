@@ -99,6 +99,7 @@ export function registerSessionRoutes(
         ...(p.data.environment_version_id
           ? { environmentVersionId: p.data.environment_version_id }
           : {}),
+        requireEnvironment: true,
       });
       return c.json(
         {

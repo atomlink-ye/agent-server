@@ -412,7 +412,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   public async health(): Promise<AgentRuntimeHealth> {
     const connected = this.#client.connectionStatus() === 'connected';
-    const workspaceReady = true;
+    const workspaceReady = this.#workspaceId !== null;
     const modelReady = this.#model !== null;
     const errorDetail = this.#lastError ?? undefined;
 

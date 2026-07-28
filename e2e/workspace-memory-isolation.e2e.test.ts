@@ -60,6 +60,7 @@ describe('bidirectional Product Workspace memory isolation', () => {
     const app = await createTestApp(runtime, {
       dispatcherControl,
       databaseControl,
+      seedPublishedEnvironment: true,
       workspaceMemoryFixtureControl: fixtureControl,
     });
     database = databaseControl.database!;

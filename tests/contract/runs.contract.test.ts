@@ -23,6 +23,7 @@ describe('run HTTP contracts', () => {
   it('authorizes event reads for a product-session run by principal ownership', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
+      seedPublishedEnvironment: true,
     });
     const workspace = await app.request('/api/v1/workspaces', {
       method: 'POST',

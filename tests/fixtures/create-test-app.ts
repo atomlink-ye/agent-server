@@ -97,6 +97,7 @@ export const testConfig = {
 export interface CreateTestAppOptions {
   readonly startDispatcher?: boolean;
   readonly seedManagedAgent?: boolean;
+  readonly seedPublishedEnvironment?: boolean;
   readonly workspaceId?: string;
   readonly projectionFailures?: number;
   readonly dispatcherControl?: { dispatcher?: PostgresRunDispatcher };
@@ -140,6 +141,47 @@ export async function createTestApp(
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
   const database = (options.database ?? new PGlite()) as TestDatabase;
   await applyDurableKernelMigrations(database as any);
+  if (options.seedPublishedEnvironment) {
+    const now = new Date().toISOString();
+    const definitionId = '00000000-0000-4000-8000-0000000e0101';
+    const versionId = '00000000-0000-4000-8000-0000000e0102';
+    await (database as any).query(
+      `INSERT INTO environment_definitions(id,tenant_id,principal_type,principal_id,normalized_name,display_name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$7)`,
+      [
+        definitionId,
+        'tenant_alpha',
+        'service_account',
+        'svc_enabled',
+        'test-environment',
+        'Test Environment',
+        now,
+      ],
+    );
+    await (database as any).query(
+      `INSERT INTO environment_versions(id,definition_id,tenant_id,principal_type,principal_id,status,display_name,canonical_package,fingerprint,created_at,updated_at,published_at) VALUES($1,$2,$3,$4,$5,'published',$6,$7,$8,$9,$9,$9)`,
+      [
+        versionId,
+        definitionId,
+        'tenant_alpha',
+        'service_account',
+        'svc_enabled',
+        'Test Environment',
+        {
+          apiVersion: 'agent-server/v1alpha1',
+          kind: 'ManagedEnvironment',
+          metadata: { name: 'test-environment' },
+          spec: {
+            adapter: 'paseo',
+            provider: 'opencode',
+            modelPolicyRef: 'free-only',
+            runtimeCellPolicy: 'per_runtime_session',
+          },
+        },
+        'sha256:test-environment-fixture',
+        now,
+      ],
+    );
+  }
   if (options.databaseControl) options.databaseControl.database = database;
   const effectiveConfig = options.workspaceId
     ? {

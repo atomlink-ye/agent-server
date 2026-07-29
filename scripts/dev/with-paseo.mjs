@@ -19,6 +19,9 @@ const applicationEnvironmentNames = [
   'PASEO_MODEL',
   'PASEO_CONNECT_TIMEOUT_MS',
   'PASEO_EXECUTION_TIMEOUT_MS',
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'SERVICE_ACCOUNTS_JSON',
 ];
 
 const repositoryRoot = resolve(

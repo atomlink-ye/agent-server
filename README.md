@@ -54,15 +54,23 @@ flowchart TD
 
 ## Quick start
 
-Requirements: Node.js 22–24, Corepack, Linux or macOS on x64/arm64, PostgreSQL reachable via `DATABASE_URL` or `POSTGRES_URL` for API startup, configured `SERVICE_ACCOUNTS_JSON` bindings for authenticated API use, and network access for the real OpenCode smoke.
+Supported local development is Docker-first. Requirements are Docker Compose
+with a running daemon, network access for image/package installation and the
+real OpenCode smoke, and Linux or macOS on x64/arm64. The image supplies Node
+`24.18.0`, pnpm `11.7.0`, Paseo `0.1.110`, and OpenCode `1.18.4`.
 
 ```bash
 make setup
 make ci
 make paseo-smoke
+make managed-environment-smoke
 ```
 
-`make ci` is deterministic and does not call an external model. `make paseo-smoke` starts isolated Paseo, a local PGlite-backed PostgreSQL socket, and Agent Server processes, allowlists only non-secret runtime/network environment variables, dynamically selects an explicitly free OpenCode model, and expects the exact marker `PASEO_OPENCODE_BASELINE_OK`.
+All commands above run in one-shot Docker runner containers; `make ci` is
+deterministic and does not call an external model. `make paseo-smoke` runs the
+baseline external smoke inside the image and expects
+`PASEO_OPENCODE_BASELINE_OK`. The Managed Environment smoke uses the ephemeral
+`postgres-test` Compose profile and expects `MANAGED_ENVIRONMENT_MVE_OK`.
 
 Start the local stack:
 
@@ -70,7 +78,11 @@ Start the local stack:
 make dev
 ```
 
-`make dev`, `make dev-api`, and `pnpm start` require `DATABASE_URL` or `POSTGRES_URL`.
+`make dev` starts the persistent PostgreSQL service and the complete isolated
+Agent Server container. `make dev-api` is a compatibility alias for the same
+stack. Only `127.0.0.1:3000:3000` is published on the host; PostgreSQL, Paseo,
+OpenCode, and Runtime MCP have no host-published ports. Native diagnostics are
+explicitly named `*-native` and are not the supported default.
 
 Submit and poll a run:
 
@@ -113,17 +125,18 @@ These routes let the authenticated owner scope create memory proposals, review t
 
 ## Canonical commands
 
-| Command            | Purpose                                                             |
-| ------------------ | ------------------------------------------------------------------- |
-| `make setup`       | Install locked dependencies and verify the platform OpenCode binary |
-| `make dev`         | Start isolated Paseo plus the API                                   |
-| `make dev-api`     | Start only the API; Paseo must already be available                 |
-| `make check`       | Types, formatting, documentation, and Exec Plan checks              |
-| `make test`        | Unit, contract, and component-integration tests                     |
-| `make e2e-smoke`   | Real HTTP socket with a deterministic fake runtime                  |
-| `make paseo-smoke` | Real Paseo/OpenCode/free-model external smoke                       |
-| `make ci`          | All deterministic pull-request gates                                |
-| `make clean`       | Remove generated and isolated local output                          |
+| Command                          | Purpose                                                        |
+| -------------------------------- | -------------------------------------------------------------- |
+| `make setup`                     | Build the image and verify the Linux OpenCode binary           |
+| `make dev`                       | Start PostgreSQL plus the complete isolated Agent Server stack |
+| `make dev-api`                   | Compatibility alias for `make dev`                             |
+| `make check`                     | Types, formatting, documentation, and Exec Plan checks         |
+| `make test`                      | Unit, contract, and component-integration tests                |
+| `make e2e-smoke`                 | Real HTTP socket with a deterministic fake runtime             |
+| `make paseo-smoke`               | Real Paseo/OpenCode/free-model external smoke                  |
+| `make managed-environment-smoke` | Three-turn Managed Environment smoke in Docker                 |
+| `make ci`                        | All deterministic pull-request gates                           |
+| `make clean`                     | Stop Compose services without deleting named volumes           |
 
 ## Documentation map
 

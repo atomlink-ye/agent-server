@@ -61,7 +61,14 @@ hardening.
 
 ## Process boundary
 
-The API does not spawn Paseo. Local scripts own daemon start, health wait, signal forwarding, and cleanup. The runner disables relay, web UI, MCP injection, dictation, and voice; it prepends the platform-specific pinned OpenCode binary to `PATH` and uses isolated runtime homes.
+The API does not spawn Paseo. Local scripts own daemon start, health wait, signal
+forwarding, and cleanup. The supported local path is Docker-first: PostgreSQL
+and one co-process Agent Server container run under Compose, with Paseo,
+OpenCode, and Runtime MCP inside that container. Only the API is published to
+host loopback at `127.0.0.1:3000`; the runtime and database publish no host
+ports. The runner disables relay, web UI, MCP injection, dictation, and voice;
+it uses the pinned Linux OpenCode binary and isolated runtime homes. This proves
+local development process isolation only and is not production sandboxing.
 
 ## Capability characterization and baseline gaps
 

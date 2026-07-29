@@ -71,6 +71,12 @@ The observed `dag-mve-v1` flow is an opt-in exception to the sequential compatib
 
 **Baseline:** Paseo SDK calls are behind `AgentRuntimePort`; OpenCode models are discovered at startup; automatic selection is free-only; provider errors are normalized; caller model selection is forbidden. Native Bootstrap/per-turn execution sends the stable system prompt and resolved server-owned Memory API Skill only at Agent creation and continues later turns on the same Agent. The Skill teaches the API but does not provide Agent-side HTTP execution or credentials.
 
+Local development is Docker-first and has an observed process-isolation baseline:
+the long-lived PostgreSQL and co-process Agent Server services run in Compose,
+while Paseo, OpenCode, and Runtime MCP remain inside the Agent Server container.
+Only the loopback API port is host-published. This is not production sandboxing,
+tenant isolation, or a placement guarantee.
+
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 
 ## Artifacts and Evidence

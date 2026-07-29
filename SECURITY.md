@@ -1,10 +1,18 @@
 # Security
 
-The current walking skeleton is not production-ready. It has no authentication, tenant isolation, credential broker, durable audit log, rate limit, or sandbox policy. Bind it to loopback only and use synthetic prompts and isolated workspaces.
+The current walking skeleton is not production-ready. It has no authentication,
+tenant isolation, credential broker, durable audit log, rate limit, or sandbox
+policy. Local development is Docker-first and provides process isolation from
+the host's Paseo/OpenCode installation; it is not production sandboxing or
+tenant execution isolation.
 
 ## Baseline controls
 
-- Default HTTP and Paseo listeners use `127.0.0.1`.
+- The only host-published local port is the API at `127.0.0.1:3000`.
+- PostgreSQL, Paseo, OpenCode, and Runtime MCP are not host-published; runtime
+  listeners remain container-local.
+- The Compose runtime does not mount host `node_modules`, Paseo homes, OpenCode
+  homes/configuration, or host credentials.
 - The external smoke creates isolated `HOME`, `XDG_*`, `PASEO_HOME`, and agent workspace directories.
 - Common model API-key variables are removed from smoke child processes.
 - Paseo relay, MCP injection, web UI, dictation, and voice mode are disabled in the baseline runner.

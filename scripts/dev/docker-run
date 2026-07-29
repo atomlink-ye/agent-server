@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+postgres=0
+pass_env=()
+
+while (($#)); do
+  case "$1" in
+    --postgres)
+      postgres=1
+      shift
+      ;;
+    --pass-env)
+      (($# >= 2)) || { printf '%s\n' 'docker-run: --pass-env requires a variable name' >&2; exit 2; }
+      [[ "$2" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { printf 'docker-run: invalid environment variable name: %s\n' "$2" >&2; exit 2; }
+      pass_env+=("$2")
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      printf '%s\n' 'docker-run: expected --postgres, --pass-env NAME, or --' >&2
+      exit 2
+      ;;
+  esac
+done
+
+(($#)) || { printf '%s\n' 'docker-run: a command is required after --' >&2; exit 2; }
+
+compose=(docker compose)
+existing_postgres_test_id=''
+started_postgres_test=0
+if ((postgres)); then
+  existing_postgres_test_id="$("${compose[@]}" --profile postgres-test ps -aq postgres-test 2>/dev/null || true)"
+fi
+cleanup() {
+  if ((postgres && started_postgres_test)) && [[ -z "$existing_postgres_test_id" ]]; then
+    "${compose[@]}" --profile postgres-test rm -sf postgres-test >/dev/null 2>&1 || true
+  fi
+}
+forward_signal() {
+  local signal="$1"
+  local signal_status=143
+  if [[ "$signal" == INT ]]; then
+    signal_status=130
+  fi
+  if [[ -n "${child_pid:-}" ]]; then
+    kill -"$signal" "$child_pid" 2>/dev/null || true
+    if wait "$child_pid"; then
+      :
+    else
+      :
+    fi
+  fi
+  exit "$signal_status"
+}
+trap cleanup EXIT
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+if ((postgres)); then
+  if [[ -z "$existing_postgres_test_id" ]]; then
+    started_postgres_test=1
+  fi
+  "${compose[@]}" --profile postgres-test up -d --wait postgres-test
+fi
+
+env_args=()
+if ((postgres)); then
+  env_args+=(
+    -e DATABASE_URL=postgresql://agent:agent@postgres-test:5432/agent_server
+    -e POSTGRES_URL=postgresql://agent:agent@postgres-test:5432/agent_server
+    -e POSTGRES_ADMIN_URL=postgresql://agent:agent@postgres-test:5432/agent_server
+  )
+fi
+if ((${#pass_env[@]})); then
+  for name in "${pass_env[@]}"; do
+    if [[ -n ${!name+x} ]]; then
+      env_args+=(-e "$name")
+    fi
+  done
+fi
+
+if ((${#env_args[@]})); then
+  "${compose[@]}" run --rm --no-deps "${env_args[@]}" runner "$@" &
+else
+  "${compose[@]}" run --rm --no-deps runner "$@" &
+fi
+child_pid=$!
+if wait "$child_pid"; then
+  child_status=$?
+else
+  child_status=$?
+fi
+exit "$child_status"

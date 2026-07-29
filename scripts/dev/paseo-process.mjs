@@ -5,7 +5,10 @@ import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 
 import { resolveOpenCodeBinary } from './resolve-opencode.mjs';
-import { createSafeRuntimeEnvironment } from './safe-environment.mjs';
+import {
+  copyNamedEnvironment,
+  createSafeRuntimeEnvironment,
+} from './safe-environment.mjs';
 
 export async function getAvailablePort() {
   const server = createServer();
@@ -51,12 +54,21 @@ export async function createIsolatedRuntimeEnvironment(runtimeRoot) {
   return { environment, home, paseoHome, openCodeBinary };
 }
 
-export async function startPaseo({ repositoryRoot, runtimeRoot, port }) {
+export async function startPaseo({
+  repositoryRoot,
+  runtimeRoot,
+  port,
+  environmentVariableNames = [],
+}) {
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
   const log = openSync(logPath, 'a');
-  const environment = { ...isolated.environment, PWD: repositoryRoot };
+  const environment = {
+    ...isolated.environment,
+    ...copyNamedEnvironment(process.env, environmentVariableNames),
+    PWD: repositoryRoot,
+  };
 
   let child;
   try {

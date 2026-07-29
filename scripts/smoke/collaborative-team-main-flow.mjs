@@ -35,12 +35,33 @@ let paseo;
 let api;
 let service;
 let apiUrl;
+const useOpenCodeGo = Boolean(process.env.OPENCODE_GO_API_KEY);
+if (useOpenCodeGo) {
+  process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    provider: {
+      'opencode-go': {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'OpenCode Go',
+        options: {
+          baseURL: 'https://opencode.ai/zen/go/v1',
+          apiKey: '{env:OPENCODE_GO_API_KEY}',
+        },
+        models: {
+          'deepseek-v4-flash': { name: 'deepseek-v4-flash' },
+        },
+      },
+    },
+  });
+}
 
 try {
   if (!adminUrl) throw new Error('missing_POSTGRES_ADMIN_URL');
   const adminParsed = new URL(adminUrl);
-  if (adminParsed.hostname !== '127.0.0.1' || adminParsed.port !== '55433')
-    throw new Error('unexpected_postgres_endpoint');
+  if (!['postgres:', 'postgresql:'].includes(adminParsed.protocol))
+    throw new Error('admin_url_protocol');
+  if (!adminParsed.pathname || adminParsed.pathname === '/')
+    throw new Error('admin_database_missing');
   admin = new Client({ connectionString: adminUrl });
   await admin.connect();
   await admin.query(`CREATE DATABASE "${dbName.replaceAll('"', '""')}"`);
@@ -53,6 +74,9 @@ try {
     repositoryRoot: root,
     runtimeRoot,
     port: paseoPort,
+    environmentVariableNames: useOpenCodeGo
+      ? ['OPENCODE_GO_API_KEY', 'OPENCODE_CONFIG_CONTENT']
+      : [],
   });
   const apiPort = await getAvailablePort();
   process.env.NODE_ENV = 'test';
@@ -213,11 +237,7 @@ try {
   console.log('root_task: completed');
 
   // ---- Verify task tree ----
-  const tree = await request(`/api/v1/tasks/${rootTaskId}/tree`, {
-    method: 'GET',
-    status: 200,
-  });
-  const children = tree.tasks.filter((t) => t.task_id !== rootTaskId);
+  const children = await pollCollaborativeChildren(rootTaskId);
   console.log(`child_tasks_in_tree: ${children.length}`);
 
   // ---- Verify TeamRun ----
@@ -242,11 +262,15 @@ try {
     },
   );
   const roles = members.map((m) => m.role);
+  const leadMembers = members.filter((m) => m.role === 'lead');
   console.log(`members: ${JSON.stringify(roles)}`);
   if (!roles.includes('lead')) throw new Error('no_lead_member');
   if (!roles.includes('member')) throw new Error('no_member_member');
   if (members.length !== 3)
     throw new Error(`expected_3_members: ${members.length}`);
+  if (leadMembers.length !== 1)
+    throw new Error(`expected_single_lead_member: ${leadMembers.length}`);
+  const [leadMember] = leadMembers;
 
   // ---- Verify WorkItems ----
   const workItems = await request(
@@ -255,10 +279,17 @@ try {
   );
   console.log(`work_items: ${workItems.length}`);
   const completedItems = workItems.filter((wi) => wi.status === 'completed');
+  const leadWorkItems = workItems.filter(
+    (wi) => wi.created_by_member_id === leadMember.id,
+  );
   console.log(`completed_work_items: ${completedItems.length}`);
-  if (workItems.length !== 2 || completedItems.length !== workItems.length)
+  if (
+    workItems.length !== 2 ||
+    leadWorkItems.length !== 2 ||
+    completedItems.length !== workItems.length
+  )
     throw new Error(
-      `work_items_not_completed: total=${workItems.length} completed=${completedItems.length}`,
+      `work_items_not_completed: total=${workItems.length} lead=${leadWorkItems.length} completed=${completedItems.length}`,
     );
 
   // ---- Verify runtime sessions (via DB inspection) ----
@@ -281,7 +312,7 @@ try {
     linkedMembers.some(
       (r) =>
         r.scope_kind !== 'team_member' ||
-        !['idle', 'stopped', 'failed'].includes(r.status),
+        !['idle', 'stopped'].includes(r.status),
     )
   )
     throw new Error(
@@ -364,16 +395,9 @@ try {
     JSON.stringify({
       status: 'passed',
       root_task: 'completed',
-      child_tasks: children.filter(
-        (t) =>
-          t.status === 'completed' ||
-          t.status === 'failed' ||
-          t.status === 'cancelled',
-      ).length,
-      lead_work_items: workItems.filter(
-        (wi) => wi.created_by_member_id !== null,
-      ).length,
-      dynamic_work_items: true,
+      child_tasks: children.length,
+      lead_work_items: leadWorkItems.length,
+      dynamic_work_items: leadWorkItems.length === 2,
       member_runtime_sessions: teamMemberSessions.length,
       phases: 'lead_kickoff -> member_work -> lead_finalize -> done',
       team_run_status: teamRunResult.status,
@@ -427,15 +451,63 @@ async function request(path, options) {
 async function poll(taskId) {
   const deadline =
     Date.now() + Number(process.env.COLLAB_SMOKE_POLL_MS ?? 600_000);
+  const startedAt = Date.now();
+  let lastStatus;
+  let lastLoggedAt = 0;
   while (Date.now() < deadline) {
     const task = await request(`/api/v1/tasks/${taskId}`, {
       method: 'GET',
       status: 200,
     });
+    const now = Date.now();
+    if (task.status !== lastStatus || now - lastLoggedAt >= 10_000) {
+      console.log(
+        `root_task_status: ${task.status} elapsed_seconds: ${Math.floor((now - startedAt) / 1000)}`,
+      );
+      lastStatus = task.status;
+      lastLoggedAt = now;
+    }
     if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error('root_timeout');
+}
+
+async function pollCollaborativeChildren(rootTaskId) {
+  const deadline = Date.now() + 15_000;
+  const startedAt = Date.now();
+  let lastSignature;
+  while (Date.now() < deadline) {
+    const tree = await request(`/api/v1/tasks/${rootTaskId}/tree`, {
+      method: 'GET',
+      status: 200,
+    });
+    const children = tree.tasks.filter((t) => t.task_id !== rootTaskId);
+    const signature = children
+      .map(({ task_id, status }) => `${task_id}:${status}`)
+      .join(',');
+    if (signature !== lastSignature) {
+      console.log(
+        `child_task_status: ${signature || 'none'} elapsed_seconds: ${Math.floor((Date.now() - startedAt) / 1000)}`,
+      );
+      lastSignature = signature;
+    }
+    if (
+      children.length > 0 &&
+      children.every((task) => task.status === 'completed')
+    ) {
+      return children;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  const tree = await request(`/api/v1/tasks/${rootTaskId}/tree`, {
+    method: 'GET',
+    status: 200,
+  });
+  const children = tree.tasks.filter((t) => t.task_id !== rootTaskId);
+  throw new Error(
+    `child_tasks_not_completed: ${JSON.stringify(children.map(({ task_id, status }) => ({ task_id, status })))}`,
+  );
 }
 
 function agentYaml(name) {

@@ -59,10 +59,10 @@ Worktree: `.worktrees/collaborative-team-mve` on `agent/collaborative-team-mve` 
   → changed to `includes(':member_work')`
 - Lead child task prompts didn't include `team_run_id`; injected inline in
   `collaborative-team-executor.ts`
-- `advanceAfterMemberCompletion` waited for all work items to be completed; relaxed to
-  allow advancement when all member runtime tasks are terminal
-- `team_complete` tool blocked when any work item was pending; relaxed: allows completion
-  when all member runtime tasks have reached terminal status
+- `advanceAfterMemberCompletion` advances only after all required work items complete;
+  failed member turns do not convert unfinished work into a successful team result
+- `team_complete` requires `lead_finalize`, completed required work items, and atomically
+  persists TeamRun `succeeded/done` with the root Run, Task, and events
 
 ## Verification
 
@@ -73,3 +73,9 @@ Worktree: `.worktrees/collaborative-team-mve` on `agent/collaborative-team-mve` 
 - `pnpm check`, `pnpm build`, and `git diff --check` passed.
 - Re-review blockers resolved: per-tool MCP registration/session-lifetime grants, transactional member-to-lead CAS/enqueue, partial unique member claim index, atomic registry reservation/mutation with 201 import replay and 409 conflicts, and smoke evidence for overlapping lifecycles, lead binding reuse, root events, and foreign-owner 404.
 - Final verification ran under Node 24.18.0 with the exact PostgreSQL/Paseo smoke command.
+- Docker verification passed through the generic `scripts/dev/docker-run` path with
+  `opencode-go/deepseek-v4-flash`: root completed in 40 seconds, all four child tasks
+  converged to completed, the TeamRun reached `succeeded/done`, two lead-created work
+  items completed, and three member RuntimeSessions were linked.
+- Docker `make test-real-pg` passed 74/74 after serializing files that intentionally share
+  and mutate one PostgreSQL public schema; `make check` and `make build` also passed.

@@ -72,8 +72,12 @@ import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
-import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
+import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
+import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
+import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
+import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
+import { TeamToolHandler } from './application/teams/team-tools.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -246,12 +250,6 @@ export async function createService(config: AppConfig, logger: Logger) {
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const memoryApiRepository = new PostgresMemoryApiRepository(pool);
-  const runtimeMcpServer = new RuntimeMcpServer(memoryApiRepository);
-  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
-    config.paseo.agentCwd,
-    config.skillRegistryRoot,
-    runtimeMcpServer,
-  );
   const createMemoryStore = new CreateMemoryStore(memoryApiRepository);
   const listMemoryStores = new ListMemoryStores(memoryApiRepository);
   const getMemoryStore = new GetMemoryStore(memoryApiRepository);
@@ -266,7 +264,8 @@ export async function createService(config: AppConfig, logger: Logger) {
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
-  const teamExecutions = new PostgresTeamExecutionRepository(pool);
+  const teamExecutions = new PostgresDagTeamExecutionRepository(pool);
+  const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
   const environmentRegistry = new PostgresEnvironmentRegistry(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
@@ -290,6 +289,24 @@ export async function createService(config: AppConfig, logger: Logger) {
       )
     : undefined;
   const events = new PostgresRunEventRepository(pool);
+  const teamToolHandler = new TeamToolHandler(
+    collaborativeTeamExecutions,
+    runRepository,
+    taskRepository,
+    events,
+  );
+  const runtimeMcpServer = new RuntimeMcpServer(
+    memoryApiRepository,
+    undefined,
+    {
+      handler: teamToolHandler,
+    },
+  );
+  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
+    config.paseo.agentCwd,
+    config.skillRegistryRoot,
+    runtimeMcpServer,
+  );
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
@@ -345,6 +362,16 @@ export async function createService(config: AppConfig, logger: Logger) {
     process.env.LARK_CLI_PROFILE ?? 'agent-test',
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
+  const collaborativeExecutor = new CollaborativeTeamExecutor(
+    collaborativeTeamExecutions,
+  );
+  const teamPhaseCoordinator = new TeamPhaseCoordinator(
+    collaborativeTeamExecutions,
+    collaborativeExecutor,
+    taskRepository,
+    runRepository,
+    admissionRepository,
+  );
   const advanceTeamExecution = new AdvanceTeamExecution(
     teamExecutions,
     taskRepository,
@@ -361,6 +388,7 @@ export async function createService(config: AppConfig, logger: Logger) {
       ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
       : undefined,
     advanceTeamExecution,
+    teamPhaseCoordinator,
   );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
@@ -371,6 +399,9 @@ export async function createService(config: AppConfig, logger: Logger) {
     undefined,
     admissionRepository,
     teamExecutions,
+    collaborativeExecutor,
+    collaborativeTeamExecutions,
+    runtimeSessions,
   );
   const executeRun = new ExecuteRun(
     completeRun,
@@ -390,6 +421,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     environmentRegistry,
     config.paseo.runtimeCellRoot,
     teamExecutions,
+    collaborativeTeamExecutions,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -484,6 +516,8 @@ export async function createService(config: AppConfig, logger: Logger) {
     listMemoryEntries,
     managedMemory,
     agentRegistry,
+    invokableRepository,
+    teamExecutions: collaborativeTeamExecutions,
     environmentRegistry,
     sessions,
     submitSessionTurn,

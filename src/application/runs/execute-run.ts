@@ -30,6 +30,7 @@ import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
+import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -62,7 +63,8 @@ export class ExecuteRun {
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: Pick<EnvironmentRegistry, 'findVersion'>,
     private readonly runtimeCellRoot?: string,
-    private readonly teamExecutions?: TeamExecutionRepository,
+    private readonly teamExecutions?: DagTeamExecutionRepository,
+    private readonly collaborativeExecutions?: TeamExecutionRepository,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -91,6 +93,8 @@ export class ExecuteRun {
     });
 
     let completed: Run;
+    let memberRunId: string | null = null;
+    let memberOwner: InvokableOwnerScope | null = null;
 
     try {
       await this.events?.append(claim.run.id, 'started', {});
@@ -99,6 +103,34 @@ export class ExecuteRun {
         throw new Error(
           `Task ${claim.taskId} could not be loaded for execution`,
         );
+      }
+
+      if (this.collaborativeExecutions && task.logicalStepKey) {
+        const memberId = task.logicalStepKey.match(
+          /^(?:member|lead):[^:]+:([^:]+)/,
+        )?.[1];
+        if (memberId) {
+          const owner = {
+            tenantId: task.tenantId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+          };
+          const member = await this.collaborativeExecutions.findMemberRunById(
+            memberId,
+            owner,
+          );
+          if (member) {
+            memberRunId = member.id;
+            memberOwner = owner;
+            await this.collaborativeExecutions.updateMemberRunStatus(
+              member.id,
+              'active',
+              undefined,
+              owner,
+            );
+          }
+        }
       }
 
       await this.events?.bind({
@@ -136,7 +168,21 @@ export class ExecuteRun {
         terminalRun.status === 'waiting_children'
           ? terminalRun
           : await this.completeTerminalRun(claim, terminalRun);
+      if (memberRunId && memberOwner)
+        await this.collaborativeExecutions!.updateMemberRunStatus(
+          memberRunId,
+          'idle',
+          undefined,
+          memberOwner,
+        );
     } catch (error) {
+      if (memberRunId && memberOwner)
+        await this.collaborativeExecutions!.updateMemberRunStatus(
+          memberRunId,
+          'failed',
+          undefined,
+          memberOwner,
+        ).catch(() => undefined);
       if (error instanceof RunCompletionPersistenceError) {
         this.reportCompletionPersistenceFailure(error.receipt);
         throw error;
@@ -243,6 +289,34 @@ export class ExecuteRun {
             principalId: task.principalId,
           })
         : null;
+    const collaborativeTeam = this.collaborativeExecutions
+      ? await this.collaborativeExecutions.findTeamRunByRootTaskId(
+          task.rootTaskId,
+          {
+            tenantId: task.tenantId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+          },
+        )
+      : null;
+    const memberId = task.logicalStepKey?.match(
+      /^(?:member|lead):[^:]+:([^:]+)/,
+    )?.[1];
+    const member =
+      collaborativeTeam && memberId && this.collaborativeExecutions
+        ? (
+            await this.collaborativeExecutions.findMembersByTeamRunId(
+              collaborativeTeam.id,
+              {
+                tenantId: task.tenantId,
+                workspaceId: task.workspaceId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+              },
+            )
+          ).find((candidate) => candidate.id === memberId)
+        : null;
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -263,14 +337,21 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : teamExecution && this.runtimeSessions
-          ? await this.runtimeSessions.findByTask({
-              taskId: task.id,
+        : member && this.runtimeSessions?.findByTeamMember
+          ? await this.runtimeSessions.findByTeamMember({
+              teamMemberRunId: member.id,
               tenantId: task.tenantId,
               principalType: task.principalType,
               principalId: task.principalId,
             })
-          : null;
+          : teamExecution && this.runtimeSessions
+            ? await this.runtimeSessions.findByTask({
+                taskId: task.id,
+                tenantId: task.tenantId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+              })
+            : null;
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -305,7 +386,8 @@ export class ExecuteRun {
       this.runtimeSessions &&
       !sessionRuntime &&
       ((task.sessionId && productSession?.environmentVersionId != null) ||
-        (teamExecution != null && teamExecution.environmentVersionId != null))
+        (teamExecution != null && teamExecution.environmentVersionId != null) ||
+        (member != null && collaborativeTeam != null))
     ) {
       if (!this.environments)
         throw new Error(
@@ -313,7 +395,8 @@ export class ExecuteRun {
         );
       const environmentVersionId =
         productSession?.environmentVersionId ??
-        teamExecution?.environmentVersionId;
+        teamExecution?.environmentVersionId ??
+        collaborativeTeam?.environmentVersionId;
       const environment = await this.environments.findVersion(
         {
           tenantId: task.tenantId,
@@ -344,18 +427,42 @@ export class ExecuteRun {
             resolvedSkills: resolved.skills,
             toolRefs: resolved.toolRefs,
           })
-        : await this.runtimeSessions.createOrGetForTask({
-            taskId: task.id,
-            tenantId: task.tenantId,
-            principalType: task.principalType,
-            principalId: task.principalId,
-            workspaceId: task.workspaceId,
-            agentVersionId: resolved.agentVersionId,
-            environmentVersionId: environmentVersionId!,
-            resolvedSkills: resolved.skills,
-            toolRefs: resolved.toolRefs,
-          });
+        : member && this.runtimeSessions.createOrGetForTeamMember
+          ? await this.runtimeSessions.createOrGetForTeamMember({
+              teamMemberRunId: member.id,
+              taskId: task.id,
+              tenantId: task.tenantId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+              workspaceId: task.workspaceId,
+              agentVersionId: resolved.agentVersionId,
+              environmentVersionId: environmentVersionId!,
+              resolvedSkills: resolved.skills,
+              toolRefs: resolved.toolRefs,
+            })
+          : await this.runtimeSessions.createOrGetForTask({
+              taskId: task.id,
+              tenantId: task.tenantId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+              workspaceId: task.workspaceId,
+              agentVersionId: resolved.agentVersionId,
+              environmentVersionId: environmentVersionId!,
+              resolvedSkills: resolved.skills,
+              toolRefs: resolved.toolRefs,
+            });
     }
+    if (member && sessionRuntime && this.collaborativeExecutions)
+      await this.collaborativeExecutions.updateMemberRuntimeSession(
+        member.id,
+        sessionRuntime.id,
+        {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        },
+      );
     const cellCwd =
       sessionRuntime && this.runtimeCellRoot
         ? join(this.runtimeCellRoot, sessionRuntime.id)
@@ -374,12 +481,31 @@ export class ExecuteRun {
         principalId: task.principalId,
         workspaceId: task.workspaceId,
         ...(task.sessionId ? { productSessionId: task.sessionId } : {}),
-        ...(!task.sessionId ? { scopeId: task.id } : {}),
+        ...(!task.sessionId ? { scopeId: member?.id ?? task.id } : {}),
         skills: resolved.skills,
         toolRefs: resolved.toolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
     }
+    const refreshableBinder = this.runtimeExtensionBinder as
+      | (RuntimeExtensionBinder & {
+          refreshForSession?: (
+            productSessionId: string,
+            allowedTools: readonly string[],
+            ttlMs?: number,
+          ) => void;
+        })
+      | undefined;
+    if (
+      priorProviderAgentId &&
+      sessionRuntime &&
+      sessionRuntime.toolRefs.length > 0 &&
+      refreshableBinder?.refreshForSession
+    )
+      refreshableBinder.refreshForSession(
+        task.sessionId ?? member?.id ?? task.id,
+        sessionRuntime.toolRefs,
+      );
     const execution = await this.runtime.execute(
       priorProviderAgentId
         ? {

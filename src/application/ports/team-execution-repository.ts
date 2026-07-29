@@ -1,50 +1,124 @@
+import type { TeamRun } from '../../domain/teams/team-run.js';
+import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
+import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type {
   TeamExecution,
   TeamNodeExecution,
-  TeamNodeExecutionStatus,
-  TeamExecutionStatus,
 } from '../../domain/invokables/team-execution.js';
 
-export interface TeamExecutionRepository {
-  create(execution: TeamExecution): Promise<void>;
-  findById(
-    id: string,
-    owner: TeamExecutionOwner,
-  ): Promise<TeamExecution | null>;
-  findByRootRunId(
-    rootRunId: string,
-    owner: TeamExecutionOwner,
-  ): Promise<TeamExecution | null>;
-  findByChildTaskId(
-    childTaskId: string,
-    owner: TeamExecutionOwner,
-  ): Promise<TeamExecution | null>;
-  recordNodeResult(input: RecordNodeResultInput): Promise<TeamExecution>;
-  setStatus(
-    id: string,
-    owner: TeamExecutionOwner,
-    status: TeamExecutionStatus,
-    result?: string | null,
-    failureDetail?: string | null,
-  ): Promise<void>;
-  environmentVersionForChild(
-    id: string,
-    owner: TeamExecutionOwner,
-  ): Promise<string | null>;
-}
-export interface TeamExecutionOwner {
+export interface OwnerScope {
   readonly tenantId: string;
   readonly workspaceId: string;
   readonly principalType: string;
   readonly principalId: string;
 }
-export interface RecordNodeResultInput extends TeamExecutionOwner {
+
+// -- DAG execution repository (legacy) --
+export interface DagTeamExecutionRepository {
+  create(execution: TeamExecution): Promise<void>;
+  findByChildTaskId(
+    childTaskId: string,
+    owner: OwnerScope,
+  ): Promise<TeamExecution | null>;
+  recordNodeResult(input: RecordNodeResultInput): Promise<TeamExecution>;
+  setStatus(
+    id: string,
+    owner: OwnerScope,
+    status: TeamExecution['status'],
+    result: string | null,
+    failureDetail?: string | null,
+  ): Promise<void>;
+}
+
+export interface RecordNodeResultInput {
   readonly teamExecutionId: string;
   readonly nodeId: string;
-  readonly status: TeamNodeExecutionStatus;
+  readonly status: TeamNodeExecution['status'];
   readonly childTaskId?: string | null;
   readonly childRunId?: string | null;
   readonly result?: string | null;
   readonly failureDetail?: string | null;
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
 }
-export type { TeamNodeExecution };
+
+// -- Collaborative team execution repository (new) --
+export interface TeamExecutionRepository {
+  createTeamRun(run: TeamRun): Promise<void>;
+  findTeamRunById(id: string, owner: OwnerScope): Promise<TeamRun | null>;
+  findTeamRunByRootTaskId(
+    rootTaskId: string,
+    owner: OwnerScope,
+  ): Promise<TeamRun | null>;
+  updateTeamRunPhase(
+    id: string,
+    phase: TeamRun['phase'],
+    owner: OwnerScope,
+    expectedPhase?: TeamRun['phase'],
+  ): Promise<TeamRun>;
+  updateTeamRunPhaseIfCurrent(
+    id: string,
+    phase: TeamRun['phase'],
+    owner: OwnerScope,
+    expectedPhase: TeamRun['phase'],
+  ): Promise<TeamRun | null>;
+  updateTeamRunStatus(
+    id: string,
+    status: TeamRun['status'],
+    finalText: string | null,
+    owner: OwnerScope,
+  ): Promise<TeamRun>;
+  completeTeamRunAtomically(input: {
+    readonly teamRunId: string;
+    readonly rootRunId: string;
+    readonly rootTaskId: string;
+    readonly finalText: string;
+    readonly owner: OwnerScope;
+    readonly updatedAt: string;
+  }): Promise<TeamRun>;
+
+  createMemberRun(member: TeamMemberRun): Promise<void>;
+  findMembersByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamMemberRun[]>;
+  findMemberRunById(
+    id: string,
+    owner: OwnerScope,
+  ): Promise<TeamMemberRun | null>;
+  updateMemberRunStatus(
+    id: string,
+    status: TeamMemberRun['status'],
+    runtimeSessionId?: string | null,
+    owner?: OwnerScope,
+  ): Promise<TeamMemberRun>;
+  updateMemberRuntimeSession(
+    id: string,
+    runtimeSessionId: string,
+    owner: OwnerScope,
+  ): Promise<TeamMemberRun>;
+
+  createWorkItem(item: TeamWorkItem): Promise<void>;
+  findWorkItemsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItem[]>;
+  findWorkItemById(id: string, owner: OwnerScope): Promise<TeamWorkItem | null>;
+  atomicClaimWorkItem(
+    id: string,
+    ownerMemberId: string,
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItem>;
+  updateWorkItemStatus(
+    id: string,
+    status: TeamWorkItem['status'],
+    completionSummary: string | null,
+    owner: OwnerScope & {
+      readonly memberId?: string;
+      readonly role?: 'lead' | 'member';
+    },
+  ): Promise<TeamWorkItem>;
+}

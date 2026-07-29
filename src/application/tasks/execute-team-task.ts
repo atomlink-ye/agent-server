@@ -22,7 +22,10 @@ import type {
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { AdmissionRepository } from '../ports/admission-repository.js';
+import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
+import { CollaborativeTeamExecutor } from '../teams/collaborative-team-executor.js';
 import type {
   TeamExecution,
   TeamNodeExecution,
@@ -55,7 +58,10 @@ export class ExecuteTeamTask {
     private readonly completeRun: CompleteRun,
     private readonly now: () => Date = () => new Date(),
     private readonly admission?: AdmissionRepository,
-    private readonly teamExecutions?: TeamExecutionRepository,
+    private readonly teamExecutions?: DagTeamExecutionRepository,
+    private readonly collaborativeExecutor?: CollaborativeTeamExecutor,
+    private readonly collaborativeExecutions?: TeamExecutionRepository,
+    private readonly runtimeSessions?: RuntimeSessionRepository,
   ) {}
 
   public async execute(input: ExecuteTeamTaskInput): Promise<Run> {
@@ -64,6 +70,27 @@ export class ExecuteTeamTask {
       input.task.invokableVersionId,
       ownerScope,
     );
+
+    if (teamVersion?.executionMode === 'collaborative_mve') {
+      if (
+        !this.collaborativeExecutor ||
+        !this.collaborativeExecutions ||
+        !this.admission
+      )
+        throw new Error(
+          'Collaborative team execution dependencies are unavailable.',
+        );
+      return this.collaborativeExecutor.activateTeamRun(
+        teamVersion,
+        input.claim,
+        input.task,
+        this.invokables,
+        this.runs,
+        this.runtimeSessions,
+        this.tasks,
+        this.admission,
+      );
+    }
 
     if (!teamVersion?.compiledPlan) {
       throw new Error(

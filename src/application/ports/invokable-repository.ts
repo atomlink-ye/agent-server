@@ -18,12 +18,47 @@ export interface InvokableRepository {
   ): Promise<AgentVersion | null>;
   saveTeamDefinition(definition: TeamDefinition): Promise<void>;
   findTeamDefinitionById(id: string): Promise<TeamDefinition | null>;
+  listTeamVersionsByDefinitionId?(
+    id: string,
+    ownerScope: InvokableOwnerScope,
+    limit: number,
+    cursor?: string | null,
+  ): Promise<{ items: TeamVersion[]; nextCursor: string | null }>;
   saveTeamVersion(version: TeamVersion): Promise<void>;
   findTeamVersionById(id: string): Promise<TeamVersion | null>;
   findPublishedTeamVersionById(
     id: string,
     ownerScope: InvokableOwnerScope,
   ): Promise<TeamVersion | null>;
+  findTeamRegistryIdempotency?(input: {
+    operation: 'import' | 'publish';
+    idempotencyKey: string;
+    requestFingerprint: string;
+    ownerScope: InvokableOwnerScope;
+  }): Promise<{ definitionId: string | null; versionId: string | null }>;
+  recordTeamRegistryIdempotency?(input: {
+    operation: 'import' | 'publish';
+    idempotencyKey: string;
+    requestFingerprint: string;
+    definitionId?: string | null;
+    versionId?: string | null;
+    ownerScope: InvokableOwnerScope;
+  }): Promise<{ definitionId: string | null; versionId: string | null }>;
+  importTeamVersionAtomically?(input: {
+    definition: TeamDefinition;
+    version: TeamVersion;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  }): Promise<{
+    kind: 'created' | 'replayed';
+    definition: TeamDefinition;
+    version: TeamVersion;
+  }>;
+  publishTeamVersionAtomically?(input: {
+    version: TeamVersion;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  }): Promise<TeamVersion>;
   saveCompiledTeamPlan(plan: CompiledTeamPlan): Promise<void>;
   findCompiledTeamPlanByVersionId(
     teamVersionId: string,

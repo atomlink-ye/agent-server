@@ -32,6 +32,10 @@ import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
+import type { InvokableRepository } from '../../application/ports/invokable-repository.js';
+import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
+import { registerTeamRoutes } from './routes/teams.js';
+import { registerTeamRunRoutes } from './routes/team-runs.js';
 import {
   registerMemoryApiRoutes,
   type MemoryApiRouteDependencies,
@@ -53,6 +57,8 @@ export interface AppDependencies {
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
   readonly environmentRegistry?: EnvironmentRegistry;
+  readonly invokableRepository?: InvokableRepository;
+  readonly teamExecutions?: TeamExecutionRepository;
   readonly sessions?: SessionRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
@@ -99,6 +105,17 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     });
   }
   registerAgentRoutes(app, dependencies);
+  if (dependencies.invokableRepository && dependencies.environmentRegistry)
+    registerTeamRoutes(app, {
+      config: dependencies.config,
+      invokableRepository: dependencies.invokableRepository,
+      environmentRegistry: dependencies.environmentRegistry,
+    });
+  if (dependencies.teamExecutions)
+    registerTeamRunRoutes(app, {
+      config: dependencies.config,
+      teamExecutions: dependencies.teamExecutions,
+    });
   if (dependencies.environmentRegistry)
     registerEnvironmentRoutes(app, {
       ...dependencies,

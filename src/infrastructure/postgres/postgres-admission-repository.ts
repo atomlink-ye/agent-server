@@ -8,6 +8,7 @@ import type { AdmissionIngress } from '../../application/sessions/session-turn-o
 import { AdmissionAlreadyExistsError as AdmissionAlreadyExists } from '../../application/ports/admission-repository.js';
 import { PostgresRunRepository } from './postgres-run-repository.js';
 import { PostgresTaskRepository } from './postgres-task-repository.js';
+import { PostgresTeamExecutionRepository } from './postgres-collaborative-team-repository.js';
 
 interface PostgresQueryResult<Row> {
   readonly rows?: readonly Row[];
@@ -82,10 +83,14 @@ export class PostgresAdmissionRepository implements AdmissionRepository {
 class PostgresAdmissionTransaction implements AdmissionTransaction {
   public readonly tasks: PostgresTaskRepository;
   public readonly runs: PostgresRunRepository;
+  public readonly teamExecutions: PostgresTeamExecutionRepository;
 
   public constructor(private readonly database: PostgresTransactionalClient) {
     this.tasks = new PostgresTaskRepository(database);
     this.runs = new PostgresRunRepository(database);
+    this.teamExecutions = new PostgresTeamExecutionRepository(
+      database as never,
+    );
   }
 
   public async findByIngressAndIdempotencyKey(

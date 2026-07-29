@@ -14,6 +14,70 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     },
   ) {}
 
+  public async createOrGetForTeamMember(
+    input: Parameters<
+      NonNullable<RuntimeSessionRepository['createOrGetForTeamMember']>
+    >[0],
+  ): Promise<RuntimeSession> {
+    const existing = await this.findByTeamMember(input);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const snapshotId = randomUUID();
+    const runtimeId = randomUUID();
+    await this.db.query(
+      `INSERT INTO session_launch_snapshots(id,tenant_id,workspace_id,principal_type,principal_id,agent_version_id,environment_version_id,resolved_skills,tool_refs,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        snapshotId,
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+        input.agentVersionId,
+        input.environmentVersionId,
+        JSON.stringify(input.resolvedSkills),
+        JSON.stringify(input.toolRefs),
+        now,
+      ],
+    );
+    await this.db.query(
+      `INSERT INTO runtime_sessions(id,tenant_id,principal_type,principal_id,scope_kind,scope_id,task_id,launch_snapshot_id,created_at,updated_at) VALUES($1,$2,$3,$4,'team_member',$5,$6,$7,$8,$8)`,
+      [
+        runtimeId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+        input.teamMemberRunId,
+        input.taskId,
+        snapshotId,
+        now,
+      ],
+    );
+    const result = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2`,
+      [input.teamMemberRunId, input.tenantId],
+    );
+    if (!result.rows?.[0])
+      throw new Error('Team member runtime session could not be created.');
+    return map(result.rows[0]);
+  }
+
+  public async findByTeamMember(
+    input: Parameters<
+      NonNullable<RuntimeSessionRepository['findByTeamMember']>
+    >[0],
+  ): Promise<RuntimeSession | null> {
+    const result = await this.db.query(
+      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      [
+        input.teamMemberRunId,
+        input.tenantId,
+        input.principalType,
+        input.principalId,
+      ],
+    );
+    return result.rows?.[0] ? map(result.rows[0]) : null;
+  }
+
   public async createOrGetForProductSession(
     input: Parameters<
       RuntimeSessionRepository['createOrGetForProductSession']
@@ -186,7 +250,12 @@ function map(row: any): RuntimeSession {
   return {
     id: row.id,
     scopeKind: row.scope_kind,
-    scopeId: row.scope_kind === 'task' ? row.task_id : row.product_session_id,
+    scopeId:
+      row.scope_kind === 'task'
+        ? row.task_id
+        : row.scope_kind === 'team_member'
+          ? row.scope_id
+          : row.product_session_id,
     productSessionId: row.product_session_id ?? null,
     taskId: row.task_id ?? null,
     launchSnapshotId: row.launch_snapshot_id,

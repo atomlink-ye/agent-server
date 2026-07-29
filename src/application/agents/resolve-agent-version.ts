@@ -4,7 +4,10 @@ import type {
   InvokableRepository,
 } from '../ports/invokable-repository.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
-import { AGENT_SERVER_MEMORY_READ_TOOL_REF } from './built-in-skills.js';
+import {
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  AGENT_SERVER_TEAM_TOOL_REFS,
+} from './built-in-skills.js';
 import type {
   ResolvedSkillPackage,
   SkillCatalogPort,
@@ -19,7 +22,10 @@ export type ResolvedAgentVersion = Readonly<{
   skills: readonly ResolvedSkillPackage[];
   toolRefs: readonly string[];
 }>;
-const SUPPORTED_TOOL_REFS = new Set([AGENT_SERVER_MEMORY_READ_TOOL_REF]);
+const SUPPORTED_TOOL_REFS = new Set([
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  ...AGENT_SERVER_TEAM_TOOL_REFS,
+]);
 
 export class ResolveAgentVersion {
   public constructor(

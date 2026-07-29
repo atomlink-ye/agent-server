@@ -1,7 +1,7 @@
 import type {
+  DagTeamExecutionRepository,
+  OwnerScope,
   RecordNodeResultInput,
-  TeamExecutionOwner,
-  TeamExecutionRepository,
 } from '../../application/ports/team-execution-repository.js';
 import type {
   TeamExecution,
@@ -58,7 +58,7 @@ interface JoinedExecutionRow extends TeamExecutionRow {
   readonly node_updated_at: string | Date | null;
 }
 
-export class PostgresTeamExecutionRepository implements TeamExecutionRepository {
+export class PostgresDagTeamExecutionRepository implements DagTeamExecutionRepository {
   public constructor(private readonly database: Connectable) {}
 
   public async create(execution: TeamExecution): Promise<void> {
@@ -128,7 +128,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
 
   public async findById(
     id: string,
-    owner: TeamExecutionOwner,
+    owner: OwnerScope,
   ): Promise<TeamExecution | null> {
     return this.load(
       'te.id = $1 AND te.tenant_id = $2 AND te.workspace_id = $3 AND te.principal_type = $4 AND te.principal_id = $5',
@@ -138,7 +138,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
 
   public async findByRootRunId(
     id: string,
-    owner: TeamExecutionOwner,
+    owner: OwnerScope,
   ): Promise<TeamExecution | null> {
     return this.load(
       'te.root_run_id = $1 AND te.tenant_id = $2 AND te.workspace_id = $3 AND te.principal_type = $4 AND te.principal_id = $5',
@@ -148,7 +148,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
 
   public async findByChildTaskId(
     id: string,
-    owner: TeamExecutionOwner,
+    owner: OwnerScope,
   ): Promise<TeamExecution | null> {
     return this.load(
       `
@@ -236,7 +236,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
 
   public async setStatus(
     id: string,
-    owner: TeamExecutionOwner,
+    owner: OwnerScope,
     status: TeamExecution['status'],
     result: string | null = null,
     failureDetail: string | null = null,
@@ -257,7 +257,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
 
   public async environmentVersionForChild(
     id: string,
-    owner: TeamExecutionOwner,
+    owner: OwnerScope,
   ): Promise<string | null> {
     const result = await this.database.query<{
       environment_version_id: string;
@@ -385,7 +385,7 @@ function toIsoInstant(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-function ownerValues(owner: TeamExecutionOwner): readonly string[] {
+function ownerValues(owner: OwnerScope): readonly string[] {
   return [
     owner.tenantId,
     owner.workspaceId,

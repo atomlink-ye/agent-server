@@ -7,7 +7,7 @@ import type {
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import type { AdmissionRepository } from '../ports/admission-repository.js';
-import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import { buildTeamHandoff, MAX_CHILD_RESULT_BYTES } from './team-handoff.js';
 import {
   decodeRootTaskRunRequestSnapshotRef,
@@ -18,7 +18,7 @@ import {
 
 export class AdvanceTeamExecution {
   public constructor(
-    private readonly executions: TeamExecutionRepository,
+    private readonly executions: DagTeamExecutionRepository,
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly invokables: InvokableRepository,
@@ -27,7 +27,9 @@ export class AdvanceTeamExecution {
   ) {}
 
   private async finalizeFailure(
-    execution: Awaited<ReturnType<TeamExecutionRepository['recordNodeResult']>>,
+    execution: Awaited<
+      ReturnType<DagTeamExecutionRepository['recordNodeResult']>
+    >,
     owner: {
       tenantId: string;
       workspaceId: string;

@@ -2,11 +2,13 @@
 
 ## Requirements
 
-- Node.js `>=22 <25` and Corepack.
+- Docker Compose with a running Docker/OrbStack daemon.
 - Linux or macOS, x64 or arm64.
-- Network access only for package installation and live OpenCode smoke.
+- Network access for image/package installation and live OpenCode smoke.
 
-Dependencies pin Paseo client/CLI `0.1.110` and OpenCode platform packages `1.18.4`. The platform packages are optional dependencies; the resolver chooses exactly one and prepends its `bin` directory for local processes. The generic OpenCode installer is not used because its platform postinstall was unreliable in the validation environment.
+The image pins Node `24.18.0`, pnpm `11.7.0`, Paseo client/CLI `0.1.110`, and
+OpenCode `1.18.4`. The current-architecture OpenCode package is explicitly
+installed and verified in the image; host optional binaries are never used.
 
 ## Setup and checks
 
@@ -15,13 +17,23 @@ make setup
 make ci
 ```
 
-If a managed environment prevents pnpm from writing its normal user store, set `PNPM_HOME`, `XDG_DATA_HOME`, and `--store-dir` to writable ignored paths. This is an environment concern, not an Agent Server runtime variable.
+`make setup` builds the image and runs the OpenCode platform check in the
+one-shot runner. It does not install dependencies into the host worktree.
 
 ## Start modes
 
-`make dev` allocates or uses `PASEO_PORT`, creates isolated `.local/dev-runtime`, starts Paseo in foreground, waits for health, then starts the API. Signals are forwarded and both process groups are stopped.
+`make dev` starts persistent Compose PostgreSQL and the complete Agent Server
+container. `make dev-api` is a compatibility alias for the same stack. Compose
+publishes only `127.0.0.1:3000:3000`; PostgreSQL, Paseo, OpenCode, and Runtime
+MCP have no host ports. Compose `init: true` and the existing launcher handle
+child reaping, signal forwarding, Paseo startup, and cleanup.
 
-`make dev-api` starts only the API. Configure an existing daemon through `.env` or environment variables:
+The container supplies isolated HOME/XDG/PASEO_HOME and `.local` state. The
+worktree is the only source bind mount; Linux dependencies are held in Docker
+volumes and are never taken from host `node_modules` or host runtime homes.
+
+For deliberate host diagnostics, use an explicit `*-native` target. Configure
+an existing native daemon through `.env` or environment variables:
 
 | Variable                     | Default                       |
 | ---------------------------- | ----------------------------- |
@@ -37,20 +49,17 @@ If a managed environment prevents pnpm from writing its normal user store, set `
 
 Never put provider or business credentials in `.env` for the baseline smoke. The external smoke is explicitly zero-model-credential.
 
-The canonical Managed Environment smoke uses a fresh PostgreSQL database and
-disposable Registry/Runtime/Cell roots. Run it only when external verification
-is requested:
+The canonical Managed Environment smoke uses the ephemeral `postgres-test`
+Compose profile and disposable Registry/Runtime/Cell roots:
 
 ```bash
-POSTGRES_ADMIN_URL=<local retained PostgreSQL admin URL> \
-PASEO_MODEL=opencode/deepseek-v4-flash-free \
-pnpm smoke:managed-environment
+make managed-environment-smoke
 ```
 
-The command prints sanitized facts only, stops task-specific processes, and
-removes disposable runtime state. A retained acceptance database is reported by
-name only. Paseo MCP Authorization persistence remains a known PR #14
-deviation; it is not evidence of a production credential lifecycle.
+The command prints sanitized facts only and removes the ephemeral test
+container. It does not delete the persistent PostgreSQL volume. Paseo MCP
+Authorization persistence remains a known PR #14 deviation; it is not evidence
+of a production credential lifecycle.
 The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
 root beneath its runtime root.
 
@@ -83,4 +92,7 @@ remove its database/runtime directory manually only after inspection.
 
 ## Generated state
 
-`node_modules`, `dist`, coverage, Vitest output, `.local`, logs, runtime homes, workspaces, and evidence are ignored. `make clean` removes generated build/test output and `.local`; do not run it while an intentional local daemon or unsaved runtime artifact is needed.
+`node_modules`, `dist`, coverage, Vitest output, `.local`, logs, runtime homes,
+workspaces, and evidence are ignored or stored in Docker volumes. `make clean`
+stops Compose services and removes orphaned/profile task containers without
+using `-v`; named dependency, runtime, and PostgreSQL volumes are preserved.

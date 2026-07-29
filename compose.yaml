@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_server
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agent -d agent_server']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  agent-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: agent-server
+      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
+      POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
+      HOME: /workspace/.local/home
+      PASEO_HOME: /workspace/.local/paseo-home
+      XDG_CONFIG_HOME: /workspace/.local/xdg-config
+      XDG_DATA_HOME: /workspace/.local/xdg-data
+      XDG_CACHE_HOME: /workspace/.local/xdg-cache
+      PASEO_RELAY_ENABLED: 'false'
+      PASEO_DICTATION_ENABLED: 'false'
+      PASEO_VOICE_MODE_ENABLED: 'false'
+      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"workspace_main","policyVersion":"policy-local"}]'
+    volumes:
+      - .:/workspace
+      - node-modules:/workspace/node_modules
+      - local-state:/workspace/.local
+    working_dir: /workspace
+    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    command: ['node', 'scripts/dev/with-paseo.mjs', '--', 'pnpm', 'dev:api']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    environment:
+      NODE_ENV: test
+      HOME: /workspace/.local/home
+      PASEO_HOME: /workspace/.local/paseo-home
+      XDG_CONFIG_HOME: /workspace/.local/xdg-config
+      XDG_DATA_HOME: /workspace/.local/xdg-data
+      XDG_CACHE_HOME: /workspace/.local/xdg-cache
+      PASEO_RELAY_ENABLED: 'false'
+      PASEO_DICTATION_ENABLED: 'false'
+      PASEO_VOICE_MODE_ENABLED: 'false'
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+      - /workspace/.local
+    working_dir: /workspace
+
+  postgres-test:
+    image: postgres:16
+    profiles: [postgres-test]
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_server
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agent -d agent_server']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  node-modules:
+  local-state:
+  postgres-data:

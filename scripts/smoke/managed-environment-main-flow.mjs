@@ -385,7 +385,7 @@ try {
   )
     throw new Error('product_session_environment_pin_mismatch');
   const runtimeSessions = await evidence.query(
-    'SELECT rs.id,rs.scope_id,rs.launch_snapshot_id,rs.paseo_workspace_id,rs.provider_agent_id,sls.environment_version_id FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_id = ANY($1::uuid[])',
+    "SELECT rs.id,rs.product_session_id AS scope_id,rs.launch_snapshot_id,rs.paseo_workspace_id,rs.provider_agent_id,sls.environment_version_id FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id = ANY($1::uuid[])",
     [[session.session_id, sessionB.session_id]],
   );
   if (runtimeSessions.rows.length !== 2)

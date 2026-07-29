@@ -52,6 +52,13 @@ The V1 port accepts only an already persisted, claimed, fenced leaf Agent Run. T
 
 Full Runtime Session V2 create/resume/status APIs are not exposed by the current baseline. The pinned SDK 0.1.110 capability characterization is evidence for a later phase, not a claim of implementation; incremental provider deltas and rich usage remain deferred.
 
+The Managed Environment MVE adds an internal RuntimeSession and derived Runtime
+Cell per ProductSession. The Cell supplies the native Skill projection and
+scoped receipts; the adapter opens a Paseo Workspace there and reuses the bound
+provider Agent for later Runs. These are internal baseline semantics, not
+public Runtime Session V2, production isolation, restart reconstruction, or
+crash-recovery guarantees.
+
 ## Compatibility requirements
 
 Each adapter version must pass:

@@ -66,6 +66,7 @@ describe('managed single-agent memory recall', () => {
       workspaceId,
       dispatcherControl,
       databaseControl,
+      seedPublishedEnvironment: true,
     });
     server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
     if (!server.listening)

@@ -42,6 +42,12 @@ The verified MVE proves the Skill marker and exact API guidance in one real free
 model run. This is guidance-only: the adapter does not expose an HTTP Memory
 client, MCP/native tool, Runtime credential, or capability to the Agent.
 
+For a pinned Managed Environment, the application supplies a RuntimeSession
+Cell CWD. Paseo `openProject` deduplicates an existing Workspace, while the
+managed Cell path uses `createWorkspace`; this yields Workspace reuse for
+Session A continuation and a distinct Workspace for Session B. This observed
+MVE behavior is not a production placement or isolation guarantee.
+
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`
 already provides this continuation seam; no dependency upgrade is required.
@@ -58,6 +64,8 @@ The pinned SDK `0.1.110` capability characterization confirms the underlying sea
 
 - No stream cursor, cancel, resume, timeline fetch, runtime receipt, or compatibility version negotiation.
 - No execution cell, tenant placement, workload identity, fence, or capability token.
+- No production Cell placement, Host lifecycle, GC, or second adapter; the MVE
+  Cell is a local derived directory only.
 - A Paseo Agent is not archived automatically after success.
 - Provider availability and free-model catalog are external and unstable.
 

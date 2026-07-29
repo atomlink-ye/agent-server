@@ -26,29 +26,30 @@ flowchart TD
 
 ## Baseline status
 
-| Capability                                     | Current state                                                      |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| HTTP liveness/readiness                        | Implemented                                                        |
-| Asynchronous Run API                           | Implemented                                                        |
-| Authenticated service-account Run ingress      | Implemented                                                        |
-| Canonical Task invoke/read/tree API            | Implemented                                                        |
-| Owner-scoped Run reads                         | Implemented                                                        |
-| PostgreSQL-backed Task/Run admission           | Implemented                                                        |
-| Durable Agent/Team definitions and versions    | Implemented                                                        |
-| Sequential Team graph compilation              | Implemented; sequential-only subset                                |
-| Sequential Team child Task/Run execution       | Implemented; inline control-plane path                             |
-| Owner-scoped idempotent replay                 | Implemented                                                        |
-| In-process durable dispatcher/claim/fence      | Implemented; single process                                        |
-| Paseo WebSocket adapter                        | Implemented                                                        |
-| OpenCode free-model discovery                  | Implemented                                                        |
-| Explicit reusable Paseo Workspace              | Implemented                                                        |
-| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                              |
-| Deterministic CI                               | Implemented; no model network calls                                |
-| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                             |
-| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                      |
-| OIDC users, shared ACLs, credentials, approval | Planned V1                                                         |
-| Artifacts, evidence, Web console               | Planned V1                                                         |
-| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production |
+| Capability                                     | Current state                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| HTTP liveness/readiness                        | Implemented                                                              |
+| Asynchronous Run API                           | Implemented                                                              |
+| Authenticated service-account Run ingress      | Implemented                                                              |
+| Canonical Task invoke/read/tree API            | Implemented                                                              |
+| Owner-scoped Run reads                         | Implemented                                                              |
+| PostgreSQL-backed Task/Run admission           | Implemented                                                              |
+| Durable Agent/Team definitions and versions    | Implemented                                                              |
+| Sequential Team graph compilation              | Implemented; sequential-only subset                                      |
+| Sequential Team child Task/Run execution       | Implemented; inline control-plane path                                   |
+| Owner-scoped idempotent replay                 | Implemented                                                              |
+| In-process durable dispatcher/claim/fence      | Implemented; single process                                              |
+| Paseo WebSocket adapter                        | Implemented                                                              |
+| OpenCode free-model discovery                  | Implemented                                                              |
+| Explicit reusable Paseo Workspace              | Implemented                                                              |
+| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                                    |
+| Deterministic CI                               | Implemented; no model network calls                                      |
+| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                                   |
+| Managed Environment API + ProductSession pin   | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE |
+| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                            |
+| OIDC users, shared ACLs, credentials, approval | Planned V1                                                               |
+| Artifacts, evidence, Web console               | Planned V1                                                               |
+| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production       |
 
 ## Quick start
 
@@ -92,6 +93,12 @@ The canonical public Task surface is:
 - `GET /api/v1/tasks/{id}`
 - `GET /api/v1/tasks/{id}/tree`
 
+The Managed Environment baseline adds authenticated validate/import/read/publish
+routes for one fixed Paseo/OpenCode/free-only package. ProductSession creation
+pins its published EnvironmentVersion; first use creates one internal
+RuntimeSession, launch snapshot, and derived Runtime Cell. This is not a
+production isolation or full Runtime Session V2 claim.
+
 These routes invoke a published `agent` or `team` version and return Task identity plus owner-scoped read links. There are still no public `/api/v1/agents` or `/api/v1/teams` write/read endpoints in this phase; durable Agent/Team versions exist in PostgreSQL and are consumed by the control plane.
 
 The workspace-memory governance surface is:
@@ -124,6 +131,7 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Components](docs/components.md): ownership and implementation boundaries.
 - [Architecture](docs/architecture.md): domain, execution, recovery, and security direction.
 - [Contracts](docs/contracts.md): Run compatibility, Task, health, runtime, and invokable registry interfaces.
+- [Managed Environment API](docs/contracts/managed-environment-api.md): fixed Environment package, Session pin, RuntimeSession/Cell semantics, and non-goals.
 - [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
@@ -142,6 +150,7 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 
 - Baseline authentication is limited to configured service-account bearer tokens on the public Run and Task APIs.
 - The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, execution-cell isolation, cancel, retry, streaming, and artifact services.
+- Managed Runtime Cells are an implemented MVE placement seam, not production isolation; transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host placement/GC, and a second adapter remain deferred.
 - Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
 - `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.
 - Team execution is intentionally sequential-only. This phase does not implement join, approval, retry, reconcile, shared Team runtime sessions, or artifact lineage.

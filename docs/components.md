@@ -40,6 +40,22 @@ This boundary does not provide latest-version lookup, shared ACLs, arbitrary
 caller-selected models, package/policy/template/schema/completion data to the
 runtime, or provider cancellation forwarding.
 
+## Managed Environment and RuntimeSession boundary
+
+The Environment registry owns strict fixed-package validation, authenticated
+import/read/publish, and immutable published versions. ProductSession admission
+pins one published EnvironmentVersion, while ExecuteRun creates one internal
+RuntimeSession and immutable launch snapshot for that ProductSession. The
+RuntimeSession ID deterministically selects a Runtime Cell; native Skill and
+Grant receipts are materialized inside that Cell, and the Paseo adapter opens a
+Workspace there. A later Run reuses the same provider binding; another
+ProductSession receives a distinct Cell and provider Workspace. This is an
+implemented baseline, not production isolation or Runtime Session V2.
+
+Per-Run bindings/events remain durable evidence. Transaction concurrency, crash
+recovery, legacy nullable Sessions, Grant renewal/header persistence, Host
+placement/GC, a second adapter, and production lifecycle hardening are deferred.
+
 ## Phase C Session lane boundary
 
 The Session lane owns one ProductSession generation and its durable user Message

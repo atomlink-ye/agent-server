@@ -14,6 +14,7 @@ import {
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
+import { SessionCreationError } from '../../../application/sessions/session-errors.js';
 const json = async (c: any) => {
   try {
     return await c.req.json();
@@ -95,6 +96,10 @@ export function registerSessionRoutes(
         workspaceId: p.data.workspace_id,
         agentVersionId: p.data.agent_version_id,
         owner: getAuthenticatedAccessContext(c),
+        ...(p.data.environment_version_id
+          ? { environmentVersionId: p.data.environment_version_id }
+          : {}),
+        requireEnvironment: true,
       });
       return c.json(
         {
@@ -102,6 +107,7 @@ export function registerSessionRoutes(
           workspace_id: s.workspaceId,
           generation: s.generation,
           status: s.status,
+          environment_version_id: s.environmentVersionId,
           created_at: s.createdAt,
           updated_at: s.updatedAt,
           links: {
@@ -111,12 +117,44 @@ export function registerSessionRoutes(
         },
         201,
       );
-    } catch {
-      throw new HttpError(
-        404,
-        'workspace_not_found',
-        'The requested workspace does not exist.',
-      );
+    } catch (error) {
+      if (
+        error instanceof SessionCreationError &&
+        error.code === 'environment_required'
+      )
+        throw new HttpError(
+          409,
+          'environment_required',
+          'A published environment version is required.',
+        );
+      if (
+        error instanceof SessionCreationError &&
+        error.code === 'environment_version_not_found'
+      )
+        throw new HttpError(
+          404,
+          'environment_version_not_found',
+          'The requested environment version does not exist.',
+        );
+      if (
+        error instanceof SessionCreationError &&
+        error.code === 'agent_version_not_found'
+      )
+        throw new HttpError(
+          404,
+          'agent_version_not_found',
+          'The requested agent version does not exist.',
+        );
+      if (
+        error instanceof SessionCreationError &&
+        error.code === 'workspace_not_found'
+      )
+        throw new HttpError(
+          404,
+          'workspace_not_found',
+          'The requested workspace does not exist.',
+        );
+      throw error;
     }
   });
   const get = async (c: any) => {
@@ -139,6 +177,7 @@ export function registerSessionRoutes(
       workspace_id: s.workspaceId,
       generation: s.generation,
       status: s.status,
+      environment_version_id: s.environmentVersionId,
       created_at: s.createdAt,
       updated_at: s.updatedAt,
       links: {

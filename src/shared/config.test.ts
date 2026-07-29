@@ -16,6 +16,7 @@ describe('loadConfig', () => {
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         agentCwd: '/repo/.local/agent-workspace',
+        runtimeCellRoot: '/repo/.local/runtime-cells',
         workspaceTitle: 'Agent Server Baseline',
         connectTimeoutMs: 10_000,
         executionTimeoutMs: 120_000,

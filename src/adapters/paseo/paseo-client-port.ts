@@ -22,6 +22,7 @@ export interface PaseoClientPort {
   connect(): Promise<void>;
   connectionStatus(): string;
   openWorkspace(cwd: string): Promise<string>;
+  createIndependentWorkspace?(cwd: string): Promise<string>;
   setWorkspaceTitle(workspaceId: string, title: string): Promise<void>;
   listOpenCodeModels(cwd: string): Promise<readonly PaseoModelDescriptor[]>;
   createOpenCodeAgent(input: {
@@ -72,6 +73,16 @@ export class PaseoSdkClient implements PaseoClientPort {
     const result = await this.#client.openProject(cwd);
     if (!result.workspace) {
       throw new Error(result.error ?? `Paseo could not open workspace: ${cwd}`);
+    }
+    return result.workspace.id;
+  }
+
+  public async createIndependentWorkspace(cwd: string): Promise<string> {
+    const result = await this.#client.createWorkspace({
+      source: { kind: 'directory', path: cwd },
+    });
+    if (!result.workspace) {
+      throw new Error('Paseo could not create an independent workspace.');
     }
     return result.workspace.id;
   }

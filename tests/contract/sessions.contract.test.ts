@@ -17,6 +17,7 @@ describe('Phase C session contracts', () => {
   it('creates and reads a private workspace/session and admits durable messages', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {
       startDispatcher: false,
+      seedPublishedEnvironment: true,
     });
     const workspaceResponse = await app.request('/api/v1/workspaces', {
       method: 'POST',

@@ -32,10 +32,13 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<RuntimeExtensionBinding | undefined> {
     if (!input.skills.length && !input.toolRefs.length) return undefined;
-    const runtimeRoot = resolve(dirname(this.#agentCwd));
+    const projectCwd = resolve(input.cellCwd ?? this.#agentCwd);
+    const runtimeRoot = input.cellCwd
+      ? projectCwd
+      : resolve(dirname(projectCwd));
     for (const skill of input.skills)
       await materializeOpenCodeSkill({
-        projectCwd: this.#agentCwd,
+        projectCwd,
         runtimeRoot,
         registryRoot: this.#registryRoot,
         skill,

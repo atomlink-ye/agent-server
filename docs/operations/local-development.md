@@ -33,8 +33,26 @@ If a managed environment prevents pnpm from writing its normal user store, set `
 | `PASEO_MODEL`                | unset; free catalog selection |
 | `PASEO_CONNECT_TIMEOUT_MS`   | `10000`                       |
 | `PASEO_EXECUTION_TIMEOUT_MS` | `120000`                      |
+| `PASEO_RUNTIME_CELL_ROOT`    | `.local/runtime-cells`        |
 
 Never put provider or business credentials in `.env` for the baseline smoke. The external smoke is explicitly zero-model-credential.
+
+The canonical Managed Environment smoke uses a fresh PostgreSQL database and
+disposable Registry/Runtime/Cell roots. Run it only when external verification
+is requested:
+
+```bash
+POSTGRES_ADMIN_URL=<local retained PostgreSQL admin URL> \
+PASEO_MODEL=opencode/north-mini-code-free \
+pnpm smoke:managed-environment
+```
+
+The command prints sanitized facts only, stops task-specific processes, and
+removes disposable runtime state. A retained acceptance database is reported by
+name only. Paseo MCP Authorization persistence remains a known PR #14
+deviation; it is not evidence of a production credential lifecycle.
+The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
+root beneath its runtime root.
 
 ## Generated state
 

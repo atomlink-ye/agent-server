@@ -8,6 +8,7 @@ export interface RuntimeExtensionBinder {
     readonly principalId: string;
     readonly workspaceId: string;
     readonly productSessionId?: string;
+    readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];
   }): Promise<RuntimeExtensionBinding | undefined>;

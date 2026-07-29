@@ -66,6 +66,7 @@ describe('managed single-agent minimum transcript', () => {
     const app = await createTestApp(runtime, {
       startDispatcher: true,
       workspaceId: productWorkspaceId,
+      seedPublishedEnvironment: true,
     });
     const validate = await app.request('/api/v1/agent-packages:validate', {
       method: 'POST',

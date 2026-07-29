@@ -3,6 +3,7 @@ import type {
   ClaimQueuedRunByIdOptions,
   ClaimNextQueuedRunOptions,
   CompleteClaimedRunOptions,
+  FinalizeWaitingOptions,
   RunOwnerScope,
   RunRepository,
   SaveRunOptions,
@@ -286,6 +287,69 @@ export class PostgresRunRepository implements RunRepository {
       throw new Error('Completed run could not be reloaded');
     }
 
+    return persisted;
+  }
+
+  public async releaseClaimedToWaiting(claim: ClaimedRun): Promise<Run> {
+    const result = await this.database.query(
+      `
+        UPDATE runs
+        SET status = 'waiting_children',
+            lease_owner = NULL,
+            activation_id = NULL,
+            lease_expires_at = NULL,
+            updated_at = $2
+        WHERE id = $1
+          AND status = 'running'
+          AND lease_owner = $3
+          AND activation_id = $4
+          AND fencing_token = $5
+        RETURNING id
+      `,
+      [
+        claim.run.id,
+        claim.run.updatedAt,
+        claim.workerId,
+        claim.activationId,
+        claim.fencingToken,
+      ],
+    );
+
+    if ((result.rows?.length ?? result.rowCount ?? 0) < 1) {
+      throw new RunCompletionConflict();
+    }
+
+    const persisted = await this.findById(claim.run.id);
+    if (!persisted) throw new Error('Waiting run could not be reloaded');
+    return persisted;
+  }
+
+  public async finalizeWaiting(options: FinalizeWaitingOptions): Promise<Run> {
+    const result = await this.database.query(
+      `
+        UPDATE runs
+        SET status = $2,
+            result = $3::jsonb,
+            error = $4::jsonb,
+            updated_at = $5
+        WHERE id = $1 AND status = 'waiting_children'
+        RETURNING id
+      `,
+      [
+        options.runId,
+        options.status,
+        toJsonValue(options.result),
+        toJsonValue(options.error),
+        options.updatedAt,
+      ],
+    );
+
+    if ((result.rows?.length ?? result.rowCount ?? 0) < 1) {
+      throw new RunCompletionConflict();
+    }
+
+    const persisted = await this.findById(options.runId);
+    if (!persisted) throw new Error('Finalized run could not be reloaded');
     return persisted;
   }
 

@@ -17,7 +17,7 @@ export class FakePaseoClient implements PaseoClientPort {
   public connectHook: ((call: number) => Promise<void>) | null = null;
   public listModelsError: Error | null = null;
   public models: readonly PaseoModelDescriptor[] = [
-    { id: 'opencode/mimo-v2.5-free', label: 'MiMo Free' },
+    { id: 'opencode/deepseek-v4-flash-free', label: 'DeepSeek V4 Flash Free' },
   ];
   public finished: PaseoFinishedAgent = {
     status: 'idle',
@@ -58,7 +58,7 @@ export class FakePaseoClient implements PaseoClientPort {
     return {
       id: 'agent-1',
       provider: 'opencode',
-      model: 'opencode/mimo-v2.5-free',
+      model: 'opencode/deepseek-v4-flash-free',
     };
   }
 

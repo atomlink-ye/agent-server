@@ -48,6 +48,11 @@ managed Cell path uses `createWorkspace`; this yields Workspace reuse for
 Session A continuation and a distinct Workspace for Session B. This observed
 MVE behavior is not a production placement or isolation guarantee.
 
+In the observed opt-in `dag-mve-v1` Team flow, each leaf and the synthesizer
+receive task-scoped RuntimeSession/RuntimeCell state. The Team shares one
+EnvironmentVersion for immutable configuration only; it does not share a
+Paseo Agent, Workspace, or runtime session across child Tasks.
+
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`
 already provides this continuation seam; no dependency upgrade is required.

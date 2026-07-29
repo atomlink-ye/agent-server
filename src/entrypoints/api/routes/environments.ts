@@ -5,6 +5,7 @@ import {
   EnvironmentPackageRequestSchema,
   EnvironmentPublishRequestSchema,
   EnvironmentVersionResponseSchema,
+  MAX_ENVIRONMENT_REQUEST_BYTES,
 } from '../../../contracts/environments.js';
 import {
   importEnvironment,
@@ -20,6 +21,7 @@ import {
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../http-types.js';
+import { readBoundedJson } from '../read-bounded-json.js';
 export function registerEnvironmentRoutes(
   app: Hono<ApiEnvironment>,
   d: { config: AppConfig; environmentRegistry: EnvironmentRegistry },
@@ -32,13 +34,19 @@ export function registerEnvironmentRoutes(
   app.use('/api/v1/environment-versions/*', auth);
   const body = async (c: any) => {
     try {
-      return await c.req.json();
-    } catch {
-      throw new HttpError(
-        400,
-        'invalid_request',
-        'The request body is invalid.',
-      );
+      return await readBoundedJson(c.req.raw, MAX_ENVIRONMENT_REQUEST_BYTES);
+    } catch (e) {
+      if (
+        e instanceof HttpError &&
+        (e.code === 'invalid_json' || e.code === 'request_too_large')
+      ) {
+        throw new HttpError(
+          400,
+          'invalid_request',
+          'The request body is invalid.',
+        );
+      }
+      throw e;
     }
   };
   app.post('/api/v1/environment-packages:validate', async (c) => {

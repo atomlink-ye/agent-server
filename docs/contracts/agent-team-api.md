@@ -9,6 +9,7 @@ This phase implements durable Agent and Team registry records in PostgreSQL, but
 - `TeamDefinition`: stable owner-scoped metadata for a Team
 - `TeamVersion`: immutable Team graph version for one Team definition (`draft|published`, `graph`, timestamps, optional `publishedAt`)
 - `CompiledSequentialTeamPlan`: immutable publish-time IR attached to a published Team version
+- `CompiledDagTeamPlan`: immutable publish-time IR for the opt-in `dag-mve-v1` subset
 
 All resources are owner-scoped by `(tenantId, workspaceId, principalType, principalId)`. Published-version lookups used by Task invoke and Team execution stay inside that authenticated owner scope because this phase has no shared ACLs.
 
@@ -46,13 +47,20 @@ Task invoke accepts an invokable reference:
 
 Published Agent versions execute as one leaf runtime call. Published Team versions execute in the control plane by materializing child Tasks and child Runs one sequential step at a time. Each child step executes a published Agent version through the same leaf runtime port. The next step input is derived from the previous child result text.
 
+The opt-in `dag-mve-v1` version materializes two independent leaf child
+Tasks/Runs in parallel. The root Run enters `waiting_children`; a durable join
+waits for both successes, then materializes a synthesizer child and completes
+the root. Child execution uses task-scoped RuntimeSessions/RuntimeCells and one
+shared EnvironmentVersion. Failure is fail-fast/deferred.
+
 ## Explicit non-goals
 
 This contract does not claim:
 
 - public Agent/Team CRUD APIs
-- Team V1 parallel/join behavior
+- generalized Team V1 parallel/join behavior beyond the observed `dag-mve-v1` subset
 - approvals, retry, reconcile, cancel propagation, or budget semantics
+- crash recovery, restart/resume, and production readiness
 - artifact lineage completion
 - OIDC users or shared Workspace ACL completion
 

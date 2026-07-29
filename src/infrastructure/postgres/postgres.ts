@@ -49,6 +49,7 @@ const durableKernelMigrationFileNames = [
   '0016_memory_integrity_receipts.sql',
   '0017_claude_memory_api_skill_mve.sql',
   '0018_managed_environment_runtime_session_mve.sql',
+  '0019_team_dag_mve.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

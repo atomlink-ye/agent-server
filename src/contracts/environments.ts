@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export const MAX_ENVIRONMENT_REQUEST_BYTES = 64 * 1024;
 export const EnvironmentIdSchema = z.string().uuid();
 export const EnvironmentPackageRequestSchema = z
   .object({ source: z.string() })

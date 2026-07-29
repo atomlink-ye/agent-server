@@ -21,7 +21,7 @@ export class SequentialTeamCompiler {
   public async compile(
     teamVersion: TeamVersion,
   ): Promise<CompiledSequentialTeamPlan> {
-    const graph = teamVersion.graph;
+    const graph = teamVersion.graph as SequentialTeamGraph;
 
     if (graph.nodes.length < 1) {
       throw new InvalidTeamGraphError(

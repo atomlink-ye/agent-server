@@ -59,6 +59,24 @@ Stop the isolated processes, preserve a sanitized path/timestamp, revoke any rea
 
 The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
 
+## Team DAG MVE smoke
+
+The observed opt-in `dag-mve-v1` main flow is verified with a fresh isolated
+database and real free-only Paseo/OpenCode execution:
+
+```bash
+POSTGRES_ADMIN_URL=<retained-local-admin-url> \
+PASEO_MODEL=opencode/deepseek-v4-flash-free \
+pnpm smoke:team-dag
+```
+
+The passing sanitized result reported `root_task: sanitized`, three child
+Tasks, `environment_version: shared`, and task-scoped runtime sessions. The
+flow proves two parallel leaves, root `waiting_children`, a durable join,
+synthesizer execution after both successes, and root completion. Failure is
+fail-fast/deferred; do not infer crash recovery, restart/resume, retries, or
+cancellation propagation from this smoke.
+
 ## Managed Agent registry operations
 
 ## Product Workspace memory projection

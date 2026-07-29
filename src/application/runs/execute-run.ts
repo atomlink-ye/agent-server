@@ -30,6 +30,7 @@ import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
+import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CompleteRun } from './complete-run.js';
@@ -61,6 +62,7 @@ export class ExecuteRun {
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: Pick<EnvironmentRegistry, 'findVersion'>,
     private readonly runtimeCellRoot?: string,
+    private readonly teamExecutions?: TeamExecutionRepository,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -130,7 +132,10 @@ export class ExecuteRun {
               task,
             );
 
-      completed = await this.completeTerminalRun(claim, terminalRun);
+      completed =
+        terminalRun.status === 'waiting_children'
+          ? terminalRun
+          : await this.completeTerminalRun(claim, terminalRun);
     } catch (error) {
       if (error instanceof RunCompletionPersistenceError) {
         this.reportCompletionPersistenceFailure(error.receipt);
@@ -229,6 +234,15 @@ export class ExecuteRun {
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
   ) {
+    const teamExecution =
+      !task.sessionId && this.teamExecutions
+        ? await this.teamExecutions.findByChildTaskId(claim.taskId, {
+            tenantId: task.tenantId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+          })
+        : null;
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -249,7 +263,14 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : null;
+        : teamExecution && this.runtimeSessions
+          ? await this.runtimeSessions.findByTask({
+              taskId: task.id,
+              tenantId: task.tenantId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+            })
+          : null;
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -281,22 +302,25 @@ export class ExecuteRun {
         );
     let sessionRuntime = runtimeSession;
     if (
-      task.sessionId &&
       this.runtimeSessions &&
       !sessionRuntime &&
-      productSession?.environmentVersionId != null
+      ((task.sessionId && productSession?.environmentVersionId != null) ||
+        (teamExecution != null && teamExecution.environmentVersionId != null))
     ) {
       if (!this.environments)
         throw new Error(
           'Product Session runtime dependencies are unavailable.',
         );
+      const environmentVersionId =
+        productSession?.environmentVersionId ??
+        teamExecution?.environmentVersionId;
       const environment = await this.environments.findVersion(
         {
           tenantId: task.tenantId,
           principalType: task.principalType,
           principalId: task.principalId,
         },
-        productSession.environmentVersionId,
+        environmentVersionId!,
       );
       const spec = environment?.package.spec;
       if (
@@ -308,17 +332,29 @@ export class ExecuteRun {
         spec.runtimeCellPolicy !== 'per_runtime_session'
       )
         throw new Error('Product Session environment is not supported.');
-      sessionRuntime = await this.runtimeSessions.createOrGetForProductSession({
-        productSessionId: task.sessionId,
-        tenantId: task.tenantId,
-        principalType: task.principalType,
-        principalId: task.principalId,
-        workspaceId: task.workspaceId,
-        agentVersionId: resolved.agentVersionId,
-        environmentVersionId: productSession.environmentVersionId,
-        resolvedSkills: resolved.skills,
-        toolRefs: resolved.toolRefs,
-      });
+      sessionRuntime = task.sessionId
+        ? await this.runtimeSessions.createOrGetForProductSession({
+            productSessionId: task.sessionId,
+            tenantId: task.tenantId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+            workspaceId: task.workspaceId,
+            agentVersionId: resolved.agentVersionId,
+            environmentVersionId: environmentVersionId!,
+            resolvedSkills: resolved.skills,
+            toolRefs: resolved.toolRefs,
+          })
+        : await this.runtimeSessions.createOrGetForTask({
+            taskId: task.id,
+            tenantId: task.tenantId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+            workspaceId: task.workspaceId,
+            agentVersionId: resolved.agentVersionId,
+            environmentVersionId: environmentVersionId!,
+            resolvedSkills: resolved.skills,
+            toolRefs: resolved.toolRefs,
+          });
     }
     const cellCwd =
       sessionRuntime && this.runtimeCellRoot
@@ -338,6 +374,7 @@ export class ExecuteRun {
         principalId: task.principalId,
         workspaceId: task.workspaceId,
         ...(task.sessionId ? { productSessionId: task.sessionId } : {}),
+        ...(!task.sessionId ? { scopeId: task.id } : {}),
         skills: resolved.skills,
         toolRefs: resolved.toolRefs,
         ...(cellCwd ? { cellCwd } : {}),

@@ -12,7 +12,7 @@ The current walking skeleton contains:
 - compatibility Run submit/get/claim/complete use cases under [`src/application/runs`](../../src/application/runs/);
 - public `POST /api/v1/tasks:invoke`, `GET /api/v1/tasks/{id}`, and `GET /api/v1/tasks/{id}/tree` routes under [`src/entrypoints/api/routes/tasks.ts`](../../src/entrypoints/api/routes/tasks.ts);
 - PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
-- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary;
+- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary; the opt-in `dag-mve-v1` path also durably advances child/join state;
 - the unchanged public `/api/v1/runs` compatibility surface.
 - the authenticated API-first Memory Store/Memory routes composed beside the
   existing Task/Run kernel; Memory Version append and current-pointer CAS are
@@ -23,7 +23,7 @@ Admission first creates or replays through a transaction-scoped repository. The 
 
 When runtime work succeeds but terminal persistence fails, the kernel preserves the distinction with `RunCompletionPersistenceError` and a safe `RuntimeExecutionReceipt`; it does not relabel the outcome as `runtime_execution_failed`. Receipt durability and reconciliation remain deferred to later recovery work.
 
-Still out of scope: full Runtime Session V2 create/resume/status, incremental deltas, rich usage, retry/reconcile/receipts, multi-worker recovery, parallel/join semantics, approvals, budget propagation, and artifact/evidence orchestration.
+The observed `dag-mve-v1` path starts two parallel leaf child Tasks/Runs, transitions the root Run to `waiting_children` without retaining its lease, durably joins both successes, then starts a synthesizer child and completes the root. Each child gets task-scoped RuntimeSession/RuntimeCell state while the Team uses one shared EnvironmentVersion. `sequential-mvp-v1` remains unchanged. Crash recovery, restart/resume, retries, cancellation propagation, generalized reconciliation, approvals, budget propagation, and artifact/evidence orchestration remain out of scope.
 
 ## Minimum Phase D interaction
 
@@ -66,7 +66,7 @@ Agent a Memory HTTP capability. Continuation sends only the current turn.
 
 ## Team boundary
 
-Agent and Team are both Invokable versions. In this MVP, a Team activation executes compiled sequential control-plane IR and creates sibling child Tasks beneath the root Task with stable `logicalStepKey` and `nodePath` ordering; it never creates a Paseo session for the whole graph. Leaf Agent Runs alone cross the Runtime Port.
+Agent and Team are both Invokable versions. `sequential-mvp-v1` executes compiled sequential control-plane IR. Opt-in `dag-mve-v1` creates two parallel leaf child Tasks/Runs, waits for their durable join, then creates a synthesizer child; it never creates a Paseo session for the whole graph. Leaf Agent Runs alone cross the Runtime Port. Public callers continue to use Task invoke/read/tree routes; no Team CRUD/API was added.
 
 ## Completion evidence
 

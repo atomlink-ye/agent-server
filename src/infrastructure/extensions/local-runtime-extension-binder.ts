@@ -44,14 +44,15 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         skill,
       });
     if (!input.toolRefs.length) return {};
-    if (!input.productSessionId)
-      throw new Error('Runtime extensions require a Product Session.');
+    const grantScopeId = input.productSessionId ?? input.scopeId;
+    if (!grantScopeId)
+      throw new Error('Runtime extension scope is unavailable.');
     const receipt = this.#mcp.grants.issue({
       tenantId: input.tenantId,
       principalType: input.principalType,
       principalId: input.principalId,
       workspaceId: input.workspaceId,
-      productSessionId: input.productSessionId,
+      productSessionId: grantScopeId,
       allowedTools: input.toolRefs,
     });
     let ownedReceipt = false;

@@ -36,13 +36,13 @@ describe('loadConfig', () => {
     expect(
       loadConfig(
         {
-          PASEO_MODEL: 'opencode/mimo-v2.5-free',
+          PASEO_MODEL: 'opencode/deepseek-v4-flash-free',
           PASEO_AGENT_CWD: 'runtime-workspace',
         },
         '/repo',
       ).paseo,
     ).toMatchObject({
-      model: 'opencode/mimo-v2.5-free',
+      model: 'opencode/deepseek-v4-flash-free',
       agentCwd: '/repo/runtime-workspace',
     });
   });

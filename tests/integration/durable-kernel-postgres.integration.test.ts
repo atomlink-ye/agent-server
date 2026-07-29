@@ -129,6 +129,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0016_memory_integrity_receipts' },
       { version: '0017_claude_memory_api_skill_mve' },
       { version: '0018_managed_environment_runtime_session_mve' },
+      { version: '0019_team_dag_mve' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -172,6 +173,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0016_memory_integrity_receipts' },
       { version: '0017_claude_memory_api_skill_mve' },
       { version: '0018_managed_environment_runtime_session_mve' },
+      { version: '0019_team_dag_mve' },
     ]);
   });
 

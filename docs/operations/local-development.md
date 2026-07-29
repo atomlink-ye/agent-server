@@ -43,7 +43,7 @@ is requested:
 
 ```bash
 POSTGRES_ADMIN_URL=<local retained PostgreSQL admin URL> \
-PASEO_MODEL=opencode/north-mini-code-free \
+PASEO_MODEL=opencode/deepseek-v4-flash-free \
 pnpm smoke:managed-environment
 ```
 
@@ -53,6 +53,33 @@ name only. Paseo MCP Authorization persistence remains a known PR #14
 deviation; it is not evidence of a production credential lifecycle.
 The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
 root beneath its runtime root.
+
+The Team DAG MVE smoke uses the same disposable setup and the opt-in
+`dag-mve-v1` Team path:
+
+```bash
+POSTGRES_ADMIN_URL=<retained-local-admin-url> \
+PASEO_MODEL=opencode/deepseek-v4-flash-free \
+pnpm smoke:team-dag
+```
+
+It is evidence for the observed two-leaf join/synthesizer flow only, not a
+claim of production recovery or restart/resume.
+
+For operator inspection, run the retained variant:
+
+```bash
+POSTGRES_ADMIN_URL=<retained-local-admin-url> \
+PASEO_MODEL=opencode/deepseek-v4-flash-free \
+pnpm smoke:team-dag:inspect
+```
+
+Unlike the canonical smoke, this command intentionally keeps its unique
+database, Agent Server API, Paseo daemon, task-scoped RuntimeCells, Workspaces,
+logs, manifest, and milestone snapshots available. Its bearer token and database
+URL are written only to a mode-`0600` `inspect.env` under the ignored
+`.local/team-dag-inspect/<run-id>/` directory. Stop the retained process and
+remove its database/runtime directory manually only after inspection.
 
 ## Generated state
 

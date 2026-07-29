@@ -5,17 +5,19 @@ import type { Logger } from '../../shared/observability/logger.js';
 
 export interface PostgresRunDispatcherOptions {
   readonly pollIntervalMs?: number;
+  readonly concurrency?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 50;
 
 export class PostgresRunDispatcher implements RunDispatcher {
   readonly #pollIntervalMs: number;
-  #timer: ReturnType<typeof setTimeout> | null = null;
-  #resolveDelay: (() => void) | null = null;
+  readonly #concurrency: number;
+  readonly #timers = new Set<ReturnType<typeof setTimeout>>();
+  readonly #resolveDelays = new Set<() => void>();
   #running = false;
   #stopping = false;
-  #loop: Promise<void> | null = null;
+  #loops: Promise<void>[] = [];
 
   public constructor(
     private readonly claimNextRun: ClaimNextRun,
@@ -24,6 +26,10 @@ export class PostgresRunDispatcher implements RunDispatcher {
     options: PostgresRunDispatcherOptions = {},
   ) {
     this.#pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.#concurrency = options.concurrency ?? 1;
+    if (!Number.isInteger(this.#concurrency) || this.#concurrency < 1) {
+      throw new Error('Dispatcher concurrency must be a positive integer');
+    }
   }
 
   public start(): void {
@@ -33,21 +39,21 @@ export class PostgresRunDispatcher implements RunDispatcher {
 
     this.#running = true;
     this.#stopping = false;
-    this.#loop = this.runLoop();
+    this.#loops = Array.from({ length: this.#concurrency }, () =>
+      this.runLoop(),
+    );
   }
 
   public async stop(): Promise<void> {
     this.#stopping = true;
     this.#running = false;
-    if (this.#timer) {
-      clearTimeout(this.#timer);
-      this.#timer = null;
-    }
-    this.#resolveDelay?.();
-    this.#resolveDelay = null;
+    for (const timer of this.#timers) clearTimeout(timer);
+    this.#timers.clear();
+    for (const resolve of this.#resolveDelays) resolve();
+    this.#resolveDelays.clear();
 
-    await this.#loop;
-    this.#loop = null;
+    await Promise.all(this.#loops);
+    this.#loops = [];
   }
 
   private async runLoop(): Promise<void> {
@@ -84,18 +90,17 @@ export class PostgresRunDispatcher implements RunDispatcher {
 
   private async delay(ms: number): Promise<void> {
     await new Promise<void>((resolve) => {
-      this.#resolveDelay = () => {
-        this.#resolveDelay = null;
+      const resolveDelay = () => {
+        this.#resolveDelays.delete(resolveDelay);
         resolve();
       };
+      this.#resolveDelays.add(resolveDelay);
       const timer = setTimeout(() => {
-        if (this.#timer === timer) {
-          this.#timer = null;
-        }
-        this.#resolveDelay?.();
+        this.#timers.delete(timer);
+        resolveDelay();
       }, ms);
       timer.unref?.();
-      this.#timer = timer;
+      this.#timers.add(timer);
     });
   }
 }

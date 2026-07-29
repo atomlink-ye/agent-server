@@ -9,12 +9,14 @@ import {
 const models = [
   { id: 'opencode/paid', label: 'Paid Model' },
   { id: 'opencode/north-mini-code-free', label: 'North Free' },
-  { id: 'opencode/mimo-v2.5-free', label: 'MiMo Free' },
+  { id: 'opencode/deepseek-v4-flash-free', label: 'DeepSeek V4 Flash Free' },
 ] as const;
 
 describe('selectOpenCodeModel', () => {
   it('selects the highest-priority currently available free model', () => {
-    expect(selectOpenCodeModel(models).id).toBe('opencode/mimo-v2.5-free');
+    expect(selectOpenCodeModel(models).id).toBe(
+      'opencode/deepseek-v4-flash-free',
+    );
   });
 
   it('allows an explicit operator model only when it exists', () => {

@@ -79,6 +79,7 @@ services:
       - .:/workspace
       - /workspace/node_modules
       - /workspace/.local
+      - /workspace/dist
     working_dir: /workspace
 
   postgres-test:

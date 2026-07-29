@@ -2,7 +2,10 @@ import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 
 export interface RuntimeSession {
   readonly id: string;
-  readonly productSessionId: string;
+  readonly scopeKind: 'product_session' | 'task';
+  readonly scopeId: string;
+  readonly productSessionId: string | null;
+  readonly taskId: string | null;
   readonly launchSnapshotId: string;
   readonly agentVersionId: string;
   readonly environmentVersionId: string;
@@ -29,8 +32,25 @@ export interface RuntimeSessionRepository {
     resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
     toolRefs: readonly string[];
   }): Promise<RuntimeSession>;
+  createOrGetForTask(input: {
+    taskId: string;
+    tenantId: string;
+    principalType: string;
+    principalId: string;
+    workspaceId: string;
+    agentVersionId: string;
+    environmentVersionId: string;
+    resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
+    toolRefs: readonly string[];
+  }): Promise<RuntimeSession>;
   findByProductSession(input: {
     productSessionId: string;
+    tenantId: string;
+    principalType: string;
+    principalId: string;
+  }): Promise<RuntimeSession | null>;
+  findByTask(input: {
+    taskId: string;
     tenantId: string;
     principalType: string;
     principalId: string;

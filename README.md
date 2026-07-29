@@ -2,7 +2,7 @@
 
 Agent Server is an enterprise control-plane project for long-lived agents and bounded agent teams. Paseo remains the leaf-agent runtime; this repository owns stable product identities, task/run semantics, policy, evidence, channels, and durable orchestration around it.
 
-The current repository is a **walking-skeleton baseline with the first durable kernel slice and a sequential Team MVP**, not the V1 platform. It proves one replaceable path end to end:
+The current repository is a **walking-skeleton baseline with the first durable kernel slice, a sequential Team MVP, and an observed opt-in Team DAG MVE**, not the V1 platform. It proves one replaceable path end to end:
 
 ```mermaid
 flowchart TD
@@ -13,7 +13,7 @@ flowchart TD
     D --> E["In-process dispatcher claim + fence"]
     E --> F{"Invokable kind"}
     F -->|agent| G["AgentRuntimePort"]
-    F -->|team| H["Sequential Team coordinator"]
+    F -->|team| H["Team coordinator (sequential or dag-mve-v1)"]
     H --> I["Child Tasks + child Runs"]
     I --> G
     G --> K["Paseo adapter"]
@@ -35,8 +35,9 @@ flowchart TD
 | Owner-scoped Run reads                         | Implemented                                                              |
 | PostgreSQL-backed Task/Run admission           | Implemented                                                              |
 | Durable Agent/Team definitions and versions    | Implemented                                                              |
-| Sequential Team graph compilation              | Implemented; sequential-only subset                                      |
-| Sequential Team child Task/Run execution       | Implemented; inline control-plane path                                   |
+| Sequential Team graph compilation              | Implemented; `sequential-mvp-v1` preserved                               |
+| Team DAG MVE compilation/execution             | Implemented; opt-in `dag-mve-v1`, observed smoke path                    |
+| Team child Task/Run execution                  | Implemented; durable join for two parallel leaves plus synthesizer       |
 | Owner-scoped idempotent replay                 | Implemented                                                              |
 | In-process durable dispatcher/claim/fence      | Implemented; single process                                              |
 | Paseo WebSocket adapter                        | Implemented                                                              |
@@ -153,7 +154,9 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 - Managed Runtime Cells are an implemented MVE placement seam, not production isolation; transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host placement/GC, and a second adapter remain deferred.
 - Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
 - `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.
-- Team execution is intentionally sequential-only. This phase does not implement join, approval, retry, reconcile, shared Team runtime sessions, or artifact lineage.
+- Public callers still invoke Teams through `/api/v1/tasks:invoke` and inspect the Task tree/status; no public Team CRUD/API was added.
+- The opt-in `dag-mve-v1` Team path starts two parallel leaf child Tasks/Runs, moves the root Run to `waiting_children`, durably joins successful children, then runs a synthesizer child and completes the root. Each child has task-scoped RuntimeSession/RuntimeCell state and the Team shares one EnvironmentVersion.
+- `sequential-mvp-v1` remains the sequential compatibility path. DAG recovery is fail-fast/deferred: crash recovery, restart/resume, retries, cancellation propagation, and production readiness are not claimed.
 - Durable Agent/Team definitions and published versions exist, but public `/api/v1/agents` and `/api/v1/teams` management routes are not implemented yet.
 - Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
 - The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.

@@ -21,6 +21,13 @@ import type {
 } from '../ports/invokable-repository.js';
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
+import type { AdmissionRepository } from '../ports/admission-repository.js';
+import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type {
+  TeamExecution,
+  TeamNodeExecution,
+} from '../../domain/invokables/team-execution.js';
+import type { CompiledDagTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
 import { CompleteRun } from '../runs/complete-run.js';
 import {
   createRuntimeExecutionReceipt,
@@ -47,6 +54,8 @@ export class ExecuteTeamTask {
     private readonly runtime: AgentRuntimePort,
     private readonly completeRun: CompleteRun,
     private readonly now: () => Date = () => new Date(),
+    private readonly admission?: AdmissionRepository,
+    private readonly teamExecutions?: TeamExecutionRepository,
   ) {}
 
   public async execute(input: ExecuteTeamTaskInput): Promise<Run> {
@@ -62,12 +71,18 @@ export class ExecuteTeamTask {
       );
     }
 
+    if (teamVersion.compiledPlan.compilerVersion === 'dag-mve-v1') {
+      return this.activateDag(input, teamVersion.compiledPlan);
+    }
+
     let stepInput = decodeRootTaskRunRequestSnapshotRef(
       input.task.inputSnapshotRef,
     ).prompt;
     let finalChildRun: Run | null = null;
 
-    for (const step of teamVersion.compiledPlan.steps) {
+    for (const step of 'steps' in teamVersion.compiledPlan
+      ? teamVersion.compiledPlan.steps
+      : []) {
       const resolvedAgentVersion = input.resolver
         ? await input.resolver.resolvePublished(step.agentVersionId, ownerScope)
         : null;
@@ -181,6 +196,100 @@ export class ExecuteTeamTask {
       },
       this.now,
     );
+  }
+
+  private async activateDag(
+    input: ExecuteTeamTaskInput,
+    plan: CompiledDagTeamPlan,
+  ): Promise<Run> {
+    if (!this.teamExecutions || !this.admission) {
+      throw new Error('DAG execution dependencies are unavailable.');
+    }
+    const owner = toInvokableOwnerScope(input.task);
+    const executionId = randomUUID();
+    const timestamp = this.now().toISOString();
+    const ready = plan.nodes.filter(
+      (node) => node.dependencyNodeIds.length === 0,
+    );
+    const childRecords = ready.map((node) => {
+      const childTask = createChildTask({
+        tenantId: input.task.tenantId,
+        workspaceId: input.task.workspaceId,
+        principalType: input.task.principalType,
+        principalId: input.task.principalId,
+        policySnapshotVersion: input.task.policySnapshotVersion,
+        rootTaskId: input.task.rootTaskId,
+        parentTaskId: input.task.id,
+        parentRunId: input.claim.run.id,
+        invokableKind: 'agent',
+        invokableVersionId: node.agentVersionId,
+        inputSnapshotRef: input.task.inputSnapshotRef,
+        inputFingerprint: input.task.inputFingerprint,
+        logicalStepKey: node.nodeId,
+        nodePath: node.nodePath,
+        now: () => new Date(timestamp),
+      });
+      return {
+        node,
+        childTask,
+        childRun: createRun(input.claim.run.prompt, {
+          now: () => new Date(timestamp),
+        }),
+      };
+    });
+    const childByNode = new Map(
+      childRecords.map((record) => [record.node.nodeId, record]),
+    );
+    const nodes: TeamNodeExecution[] = plan.nodes.map((node) => {
+      const child = childByNode.get(node.nodeId);
+      return {
+        id: randomUUID(),
+        teamExecutionId: executionId,
+        nodeId: node.nodeId,
+        dependencyNodeIds: node.dependencyNodeIds,
+        childTaskId: child?.childTask.id ?? null,
+        childRunId: child?.childRun.id ?? null,
+        status: child ? 'queued' : 'pending',
+        result: null,
+        failureDetail: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+    });
+    const execution: TeamExecution = {
+      id: executionId,
+      ...owner,
+      rootTaskId: input.task.rootTaskId,
+      rootRunId: input.claim.run.id,
+      teamVersionId: plan.teamVersionId,
+      environmentVersionId: plan.environmentVersionId,
+      status: 'waiting_children',
+      result: null,
+      failureDetail: null,
+      nodes,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await this.admission.withTransaction(async (transaction) => {
+      for (const child of childRecords) {
+        await transaction.tasks.save(child.childTask);
+        await transaction.runs.save(child.childRun, {
+          taskId: child.childTask.id,
+          attempt: 1,
+        });
+      }
+    });
+    await this.teamExecutions.create(execution);
+    if (!this.runs.releaseClaimedToWaiting) {
+      throw new Error('Waiting Run persistence is unavailable.');
+    }
+    const waiting = await this.runs.releaseClaimedToWaiting(input.claim);
+    await this.admission.withTransaction(async (transaction) => {
+      for (const child of childRecords) {
+        await transaction.enqueueRunDispatch(child.childRun.id, timestamp);
+      }
+    });
+    return waiting;
   }
 
   private async executeChildAgentRun(

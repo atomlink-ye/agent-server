@@ -1,6 +1,6 @@
 import type { AgentDefinition } from '../../domain/invokables/agent-definition.js';
 import type { AgentVersion } from '../../domain/invokables/agent-version.js';
-import type { CompiledSequentialTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
+import type { CompiledTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
 import type { InvokableOwnerScope } from '../../domain/invokables/invokable.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
@@ -24,10 +24,10 @@ export interface InvokableRepository {
     id: string,
     ownerScope: InvokableOwnerScope,
   ): Promise<TeamVersion | null>;
-  saveCompiledTeamPlan(plan: CompiledSequentialTeamPlan): Promise<void>;
+  saveCompiledTeamPlan(plan: CompiledTeamPlan): Promise<void>;
   findCompiledTeamPlanByVersionId(
     teamVersionId: string,
-  ): Promise<CompiledSequentialTeamPlan | null>;
+  ): Promise<CompiledTeamPlan | null>;
 }
 
 export class InvokableVersionImmutableError extends Error {

@@ -1,6 +1,7 @@
 export const runStatuses = [
   'queued',
   'running',
+  'waiting_children',
   'succeeded',
   'failed',
   'timed_out',
@@ -18,7 +19,14 @@ export const terminalRunStatuses: ReadonlySet<RunStatus> = new Set([
 
 const transitions: Readonly<Record<RunStatus, ReadonlySet<RunStatus>>> = {
   queued: new Set(['running', 'cancelled']),
-  running: new Set(['succeeded', 'failed', 'timed_out', 'cancelled']),
+  running: new Set([
+    'waiting_children',
+    'succeeded',
+    'failed',
+    'timed_out',
+    'cancelled',
+  ]),
+  waiting_children: new Set(['succeeded', 'failed', 'cancelled']),
   succeeded: new Set(),
   failed: new Set(),
   timed_out: new Set(),

@@ -31,6 +31,14 @@ export interface CompleteClaimedRunOptions {
   readonly run: Run;
 }
 
+export interface FinalizeWaitingOptions {
+  readonly runId: string;
+  readonly status: 'succeeded' | 'failed' | 'cancelled';
+  readonly result?: Run['result'];
+  readonly error?: Run['error'];
+  readonly updatedAt: string;
+}
+
 export type CancellationOutcome =
   | 'queued_cancelled'
   | 'running_requested'
@@ -65,6 +73,8 @@ export interface RunRepository {
     options: ClaimQueuedRunByIdOptions,
   ): Promise<ClaimedRun | null>;
   completeClaimed(options: CompleteClaimedRunOptions): Promise<Run>;
+  releaseClaimedToWaiting?(claim: ClaimedRun): Promise<Run>;
+  finalizeWaiting?(options: FinalizeWaitingOptions): Promise<Run>;
 }
 
 export class RunCompletionConflictError extends Error {

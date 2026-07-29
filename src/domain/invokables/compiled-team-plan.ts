@@ -2,6 +2,7 @@ import { assertIsoInstant, assertNonEmptyString } from './invokable.js';
 import { type TeamNodeOutput } from './team-graph.js';
 
 export const SEQUENTIAL_TEAM_COMPILER_VERSION = 'sequential-mvp-v1';
+export const DAG_TEAM_COMPILER_VERSION = 'dag-mve-v1';
 
 export interface CompiledSequentialTeamStep {
   readonly nodeId: string;
@@ -21,6 +22,26 @@ export interface CompiledSequentialTeamPlan {
 }
 
 export type CompiledSequentialTeamPlanSnapshot = CompiledSequentialTeamPlan;
+
+export interface CompiledDagTeamNode {
+  readonly nodeId: string;
+  readonly nodePath: string;
+  readonly agentVersionId: string;
+  readonly dependencyNodeIds: readonly string[];
+  readonly order: number;
+  readonly output: TeamNodeOutput;
+}
+
+export interface CompiledDagTeamPlan {
+  readonly compilerVersion: typeof DAG_TEAM_COMPILER_VERSION;
+  readonly teamVersionId: string;
+  readonly environmentVersionId: string;
+  readonly finalOutputNodeId: string;
+  readonly compiledAt: string;
+  readonly nodes: readonly CompiledDagTeamNode[];
+}
+
+export type CompiledTeamPlan = CompiledSequentialTeamPlan | CompiledDagTeamPlan;
 
 export interface CreateCompiledSequentialTeamPlanOptions {
   readonly compilerVersion?: typeof SEQUENTIAL_TEAM_COMPILER_VERSION;
@@ -121,4 +142,79 @@ export function rehydrateCompiledSequentialTeamPlan(
     ...snapshot,
     steps: Object.freeze(steps),
   });
+}
+
+export function createCompiledDagTeamPlan(
+  options: Omit<CompiledDagTeamPlan, 'compilerVersion'> &
+    Partial<Pick<CompiledDagTeamPlan, 'compilerVersion'>>,
+): CompiledDagTeamPlan {
+  return rehydrateCompiledDagTeamPlan({
+    ...options,
+    compilerVersion: options.compilerVersion ?? DAG_TEAM_COMPILER_VERSION,
+  });
+}
+
+export function rehydrateCompiledDagTeamPlan(
+  snapshot: CompiledDagTeamPlan,
+): CompiledDagTeamPlan {
+  if (snapshot.compilerVersion !== DAG_TEAM_COMPILER_VERSION) {
+    throw new Error(
+      `Unsupported DAG team compiler version ${snapshot.compilerVersion}`,
+    );
+  }
+  assertNonEmptyString(
+    'teamVersionId',
+    snapshot.teamVersionId,
+    'Compiled DAG team plan',
+  );
+  assertNonEmptyString(
+    'environmentVersionId',
+    snapshot.environmentVersionId,
+    'Compiled DAG team plan',
+  );
+  assertNonEmptyString(
+    'finalOutputNodeId',
+    snapshot.finalOutputNodeId,
+    'Compiled DAG team plan',
+  );
+  assertIsoInstant('compiledAt', snapshot.compiledAt, 'Compiled DAG team plan');
+  if (snapshot.nodes.length < 1)
+    throw new Error('Compiled DAG team plan requires at least one node');
+  const ids = new Set<string>();
+  const orders = new Set<number>();
+  const nodes = snapshot.nodes.map((node) => {
+    assertNonEmptyString('node.nodeId', node.nodeId, 'Compiled DAG team plan');
+    assertNonEmptyString(
+      'node.nodePath',
+      node.nodePath,
+      'Compiled DAG team plan',
+    );
+    assertNonEmptyString(
+      'node.agentVersionId',
+      node.agentVersionId,
+      'Compiled DAG team plan',
+    );
+    if (
+      !Number.isInteger(node.order) ||
+      node.order < 1 ||
+      orders.has(node.order)
+    )
+      throw new Error('Compiled DAG node order must be unique and positive');
+    if (ids.has(node.nodeId))
+      throw new Error(
+        `Compiled DAG team plan node ${node.nodeId} must be unique`,
+      );
+    ids.add(node.nodeId);
+    orders.add(node.order);
+    return Object.freeze({
+      ...node,
+      dependencyNodeIds: Object.freeze([...node.dependencyNodeIds]),
+    });
+  });
+  const final = nodes.find(
+    (node) => node.nodeId === snapshot.finalOutputNodeId,
+  );
+  if (!final || final.output !== 'final')
+    throw new Error('Compiled DAG final output node is invalid');
+  return Object.freeze({ ...snapshot, nodes: Object.freeze(nodes) });
 }

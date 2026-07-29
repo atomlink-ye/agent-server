@@ -7,7 +7,6 @@ export interface PaseoModelDescriptor {
 }
 
 export const preferredFreeOpenCodeModels = [
-  'opencode/mimo-v2.5-free',
   'opencode/deepseek-v4-flash-free',
   'opencode/north-mini-code-free',
   'opencode/nemotron-3-ultra-free',

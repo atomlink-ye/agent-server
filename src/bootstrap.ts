@@ -19,6 +19,7 @@ import { AdmitRootTask } from './application/tasks/admit-root-task.js';
 import { GetTask } from './application/tasks/get-task.js';
 import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
+import { AdvanceTeamExecution } from './application/tasks/advance-team-execution.js';
 import { InvokeTask } from './application/tasks/invoke-task.js';
 import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
 import { createApp } from './entrypoints/api/app.js';
@@ -71,6 +72,7 @@ import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
+import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
@@ -264,6 +266,7 @@ export async function createService(config: AppConfig, logger: Logger) {
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
+  const teamExecutions = new PostgresTeamExecutionRepository(pool);
   const environmentRegistry = new PostgresEnvironmentRegistry(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
@@ -342,6 +345,13 @@ export async function createService(config: AppConfig, logger: Logger) {
     process.env.LARK_CLI_PROFILE ?? 'agent-test',
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
+  const advanceTeamExecution = new AdvanceTeamExecution(
+    teamExecutions,
+    taskRepository,
+    runRepository,
+    invokableRepository,
+    admissionRepository,
+  );
   const completeRun = new CompleteRun(
     runRepository,
     taskRepository,
@@ -350,6 +360,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     memoryReviewSurface
       ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
       : undefined,
+    advanceTeamExecution,
   );
   const executeTeamTask = new ExecuteTeamTask(
     taskRepository,
@@ -357,6 +368,9 @@ export async function createService(config: AppConfig, logger: Logger) {
     invokableRepository,
     runtime,
     completeRun,
+    undefined,
+    admissionRepository,
+    teamExecutions,
   );
   const executeRun = new ExecuteRun(
     completeRun,
@@ -375,6 +389,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     sessions,
     environmentRegistry,
     config.paseo.runtimeCellRoot,
+    teamExecutions,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -383,6 +398,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     }),
     executeRun,
     logger,
+    { concurrency: 2 },
   );
   let larkWorker: LarkIngressWorker | undefined;
   let larkOutboxWorker: LarkOutboxWorker | undefined;

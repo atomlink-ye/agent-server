@@ -113,12 +113,12 @@ Authorization: Bearer configured-token
 }
 ```
 
-The response contains the root Task plus all descendants visible to the authenticated owner. Results are ordered root first, then descendants by stored `nodePath` and creation order. In the sequential Team MVP, child Tasks are read-only lineage records created by the control-plane coordinator.
+The response contains the root Task plus all descendants visible to the authenticated owner. Results are ordered root first, then descendants by stored `nodePath` and creation order. In both Team paths, child Tasks are read-only lineage records created by the control-plane coordinator. The observed `dag-mve-v1` tree includes two parallel leaf children and, after both succeed, a synthesizer child.
 
 ## Errors
 
 Relevant codes are `unauthorized`, `invalid_json`, `invalid_request`, `request_too_large`, `workspace_scope_mismatch`, `invokable_not_found`, `idempotency_conflict`, `task_not_found`, `route_not_found`, and `internal_error`.
 
-## Sequential Team MVP boundary
+## Team execution boundary
 
-Task invoke can target either a published `agent` version or a published `team` version. Team execution is intentionally sequential-only in this phase: invoke nodes only, one linear success chain, one final-output node, no join, no approval, no retry, no reconcile, and no shared Team-wide runtime session.
+Task invoke can target either a published `agent` version or a published `team` version. `sequential-mvp-v1` remains invoke-only, linear, and sequential. The opt-in `dag-mve-v1` subset adds two parallel leaf children, root Run status `waiting_children`, a durable join, and a synthesizer child after both leaves succeed. Public callers still use this Task route and Task reads; no public Team CRUD/API was added. No generalized recovery, restart/resume, retry, or cancellation-propagation contract is claimed.

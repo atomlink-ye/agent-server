@@ -49,7 +49,7 @@ describe('PaseoRuntimeAdapter', () => {
     });
 
     expect(first.text).toBe('PASEO_FAKE_OK');
-    expect(second.model).toBe('opencode/mimo-v2.5-free');
+    expect(second.model).toBe('opencode/deepseek-v4-flash-free');
     expect(client.connectCalls).toBe(1);
     expect(client.openWorkspaceCalls).toBe(1);
     expect(client.titleCalls).toBe(1);

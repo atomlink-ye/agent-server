@@ -7,6 +7,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { Task } from '../../domain/tasks/task.js';
+import type { AdvanceTeamExecution } from '../tasks/advance-team-execution.js';
 
 export interface CompleteRunInput {
   readonly claim: ClaimedRun;
@@ -25,6 +26,7 @@ export class CompleteRun {
         readonly task: Task;
       }): Promise<void>;
     },
+    private readonly advanceTeamExecution?: AdvanceTeamExecution,
   ) {}
 
   public async execute(input: CompleteRunInput): Promise<Run> {
@@ -63,6 +65,8 @@ export class CompleteRun {
         transitionTask(activeTask, terminalStatus, () => timestamp),
       );
     }
+
+    await this.advanceTeamExecution?.execute(input);
 
     if (
       completedRun.status === 'succeeded' &&

@@ -12,9 +12,11 @@ import {
   type AgentVersion,
 } from '../../domain/invokables/agent-version.js';
 import {
+  createCompiledDagTeamPlan,
   createCompiledSequentialTeamPlan,
   type CompiledSequentialTeamPlan,
   type CompiledSequentialTeamStep,
+  type CompiledTeamPlan,
 } from '../../domain/invokables/compiled-team-plan.js';
 import {
   rehydrateTeamDefinition,
@@ -24,7 +26,7 @@ import {
   rehydrateTeamVersion,
   type TeamVersion,
 } from '../../domain/invokables/team-version.js';
-import { type SequentialTeamGraph } from '../../domain/invokables/team-graph.js';
+import { type TeamGraph } from '../../domain/invokables/team-graph.js';
 
 interface PostgresQueryable {
   query<Row = Record<string, unknown>>(
@@ -58,8 +60,9 @@ interface AgentVersionRow extends DefinitionRow {
 interface TeamVersionRow extends DefinitionRow {
   readonly definition_id: string;
   readonly status: TeamVersion['status'];
-  readonly graph: SequentialTeamGraph;
+  readonly graph: TeamGraph;
   readonly published_at: string | Date | null;
+  readonly environment_version_id: string | null;
 }
 
 interface CompiledPlanRow {
@@ -68,7 +71,8 @@ interface CompiledPlanRow {
   readonly entry_node_id: string;
   readonly final_output_node_id: string;
   readonly compiled_at: string | Date;
-  readonly steps: CompiledSequentialTeamStep[];
+  readonly steps: CompiledSequentialTeamStep[] | unknown[];
+  readonly environment_version_id: string | null;
 }
 
 export class PostgresInvokableRepository implements InvokableRepository {
@@ -224,7 +228,6 @@ export class PostgresInvokableRepository implements InvokableRepository {
           published_at
         FROM agent_versions
         WHERE id = $1
-          AND managed_discriminator IS NULL
           AND tenant_id = $2
           AND workspace_id = $3
           AND principal_type = $4
@@ -324,9 +327,10 @@ export class PostgresInvokableRepository implements InvokableRepository {
               graph,
               created_at,
               updated_at,
-              published_at
+              published_at,
+               environment_version_id
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14
             )
             ON CONFLICT (id) DO UPDATE SET
               definition_id = EXCLUDED.definition_id,
@@ -340,7 +344,8 @@ export class PostgresInvokableRepository implements InvokableRepository {
               graph = EXCLUDED.graph,
               created_at = EXCLUDED.created_at,
               updated_at = EXCLUDED.updated_at,
-              published_at = EXCLUDED.published_at
+              published_at = EXCLUDED.published_at,
+               environment_version_id = EXCLUDED.environment_version_id
             RETURNING id
           )
           INSERT INTO compiled_team_plans (
@@ -349,30 +354,40 @@ export class PostgresInvokableRepository implements InvokableRepository {
             entry_node_id,
             final_output_node_id,
             compiled_at,
-            steps
+            steps,
+             environment_version_id
           )
           SELECT
             upserted_team_version.id,
-            $14,
-            $15,
-            $16,
-            $17,
-            $18::jsonb
+             $15,
+             $16,
+             $17,
+             $18,
+             $19::jsonb,
+             $20
           FROM upserted_team_version
           ON CONFLICT (team_version_id) DO UPDATE SET
             compiler_version = EXCLUDED.compiler_version,
             entry_node_id = EXCLUDED.entry_node_id,
             final_output_node_id = EXCLUDED.final_output_node_id,
             compiled_at = EXCLUDED.compiled_at,
-            steps = EXCLUDED.steps
+            steps = EXCLUDED.steps,
+             environment_version_id = EXCLUDED.environment_version_id
         `,
         [
           ...teamVersionValues(version),
           compiledPlan.compilerVersion,
-          compiledPlan.entryNodeId,
+          'entryNodeId' in compiledPlan
+            ? compiledPlan.entryNodeId
+            : compiledPlan.nodes[0]!.nodeId,
           compiledPlan.finalOutputNodeId,
           compiledPlan.compiledAt,
-          JSON.stringify(compiledPlan.steps),
+          JSON.stringify(
+            'steps' in compiledPlan ? compiledPlan.steps : compiledPlan.nodes,
+          ),
+          'environmentVersionId' in compiledPlan
+            ? compiledPlan.environmentVersionId
+            : null,
         ],
       );
       return;
@@ -393,9 +408,10 @@ export class PostgresInvokableRepository implements InvokableRepository {
           graph,
           created_at,
           updated_at,
-          published_at
+          published_at,
+               environment_version_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14
         )
         ON CONFLICT (id) DO UPDATE SET
           definition_id = EXCLUDED.definition_id,
@@ -409,7 +425,8 @@ export class PostgresInvokableRepository implements InvokableRepository {
           graph = EXCLUDED.graph,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at,
-          published_at = EXCLUDED.published_at
+          published_at = EXCLUDED.published_at,
+               environment_version_id = EXCLUDED.environment_version_id
       `,
       teamVersionValues(version),
     );
@@ -471,9 +488,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
     );
   }
 
-  public async saveCompiledTeamPlan(
-    plan: CompiledSequentialTeamPlan,
-  ): Promise<void> {
+  public async saveCompiledTeamPlan(plan: CompiledTeamPlan): Promise<void> {
     const existing = await this.findCompiledTeamPlanByVersionId(
       plan.teamVersionId,
     );
@@ -498,31 +513,34 @@ export class PostgresInvokableRepository implements InvokableRepository {
           entry_node_id,
           final_output_node_id,
           compiled_at,
-          steps
+          steps,
+           environment_version_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6::jsonb
+          $1, $2, $3, $4, $5, $6::jsonb, $7
         )
         ON CONFLICT (team_version_id) DO UPDATE SET
           compiler_version = EXCLUDED.compiler_version,
           entry_node_id = EXCLUDED.entry_node_id,
           final_output_node_id = EXCLUDED.final_output_node_id,
           compiled_at = EXCLUDED.compiled_at,
-          steps = EXCLUDED.steps
+          steps = EXCLUDED.steps,
+           environment_version_id = EXCLUDED.environment_version_id
       `,
       [
         plan.teamVersionId,
         plan.compilerVersion,
-        plan.entryNodeId,
+        'entryNodeId' in plan ? plan.entryNodeId : plan.nodes[0]!.nodeId,
         plan.finalOutputNodeId,
         plan.compiledAt,
-        JSON.stringify(plan.steps),
+        JSON.stringify('steps' in plan ? plan.steps : plan.nodes),
+        'environmentVersionId' in plan ? plan.environmentVersionId : null,
       ],
     );
   }
 
   public async findCompiledTeamPlanByVersionId(
     teamVersionId: string,
-  ): Promise<CompiledSequentialTeamPlan | null> {
+  ): Promise<CompiledTeamPlan | null> {
     const result = await this.database.query<CompiledPlanRow>(
       `
         SELECT
@@ -531,7 +549,8 @@ export class PostgresInvokableRepository implements InvokableRepository {
           entry_node_id,
           final_output_node_id,
           compiled_at,
-          steps
+          steps,
+           environment_version_id
         FROM compiled_team_plans
         WHERE team_version_id = $1
       `,
@@ -539,7 +558,18 @@ export class PostgresInvokableRepository implements InvokableRepository {
     );
 
     const row = result.rows?.[0];
-    return row ? mapCompiledPlanRow(row) : null;
+    if (!row) return null;
+    const environment = await this.database.query<{
+      environment_version_id: string | null;
+    }>(
+      'SELECT environment_version_id FROM compiled_team_plans WHERE team_version_id = $1',
+      [teamVersionId],
+    );
+    return mapCompiledPlanRow({
+      ...row,
+      environment_version_id:
+        environment.rows?.[0]?.environment_version_id ?? null,
+    });
   }
 
   private async findTeamVersionBySql(
@@ -552,8 +582,20 @@ export class PostgresInvokableRepository implements InvokableRepository {
       return null;
     }
 
+    const environment = await this.database.query<{
+      environment_version_id: string | null;
+    }>('SELECT environment_version_id FROM team_versions WHERE id = $1', [
+      row.id,
+    ]);
     const compiledPlan = await this.findCompiledTeamPlanByVersionId(row.id);
-    return mapTeamVersionRow(row, compiledPlan);
+    return mapTeamVersionRow(
+      {
+        ...row,
+        environment_version_id:
+          environment.rows?.[0]?.environment_version_id ?? null,
+      },
+      compiledPlan,
+    );
   }
 
   private async loadTeamVersionStatus(
@@ -621,6 +663,7 @@ function teamVersionValues(version: TeamVersion): readonly unknown[] {
     version.createdAt,
     version.updatedAt,
     version.publishedAt,
+    version.environmentVersionId,
   ];
 }
 
@@ -674,7 +717,7 @@ function mapAgentVersionRow(row: AgentVersionRow): AgentVersion {
 
 function mapTeamVersionRow(
   row: TeamVersionRow,
-  compiledPlan: CompiledSequentialTeamPlan | null,
+  compiledPlan: CompiledTeamPlan | null,
 ): TeamVersion {
   return rehydrateTeamVersion({
     id: row.id,
@@ -687,6 +730,7 @@ function mapTeamVersionRow(
     name: row.name,
     description: row.description,
     graph: row.graph,
+    environmentVersionId: row.environment_version_id ?? null,
     compiledPlan,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
@@ -694,7 +738,17 @@ function mapTeamVersionRow(
   });
 }
 
-function mapCompiledPlanRow(row: CompiledPlanRow): CompiledSequentialTeamPlan {
+function mapCompiledPlanRow(row: CompiledPlanRow): CompiledTeamPlan {
+  if (row.compiler_version === 'dag-mve-v1') {
+    return createCompiledDagTeamPlan({
+      compilerVersion: 'dag-mve-v1',
+      teamVersionId: row.team_version_id,
+      environmentVersionId: row.environment_version_id ?? '',
+      finalOutputNodeId: row.final_output_node_id,
+      compiledAt: toIsoInstant(row.compiled_at),
+      nodes: row.steps as never,
+    });
+  }
   return createCompiledSequentialTeamPlan({
     compilerVersion:
       row.compiler_version as CompiledSequentialTeamPlan['compilerVersion'],
@@ -702,7 +756,7 @@ function mapCompiledPlanRow(row: CompiledPlanRow): CompiledSequentialTeamPlan {
     entryNodeId: row.entry_node_id,
     finalOutputNodeId: row.final_output_node_id,
     compiledAt: toIsoInstant(row.compiled_at),
-    steps: row.steps,
+    steps: row.steps as CompiledSequentialTeamStep[],
   });
 }
 

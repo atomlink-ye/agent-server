@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  rehydrateCompiledDagTeamPlan,
   rehydrateCompiledSequentialTeamPlan,
-  type CompiledSequentialTeamPlan,
+  type CompiledTeamPlan,
 } from './compiled-team-plan.js';
 import {
   cloneSequentialTeamGraph,
+  cloneDagTeamGraph,
+  type TeamGraph,
   type SequentialTeamGraph,
 } from './team-graph.js';
 import {
@@ -24,8 +27,9 @@ export interface TeamVersion extends InvokableOwnerScope {
   readonly status: InvokableVersionStatus;
   readonly name: string;
   readonly description: string | null;
-  readonly graph: SequentialTeamGraph;
-  readonly compiledPlan: CompiledSequentialTeamPlan | null;
+  readonly graph: TeamGraph;
+  readonly environmentVersionId: string | null;
+  readonly compiledPlan: CompiledTeamPlan | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly publishedAt: string | null;
@@ -38,14 +42,16 @@ export interface CreateDraftTeamVersionOptions extends InvokableOwnerScope {
   readonly definitionId: string;
   readonly name: string;
   readonly description?: string | null;
-  readonly graph: SequentialTeamGraph;
+  readonly graph: TeamGraph;
+  readonly environmentVersionId?: string | null;
   readonly now?: () => Date;
 }
 
 export interface ReviseDraftTeamVersionPatch {
   readonly name?: string;
   readonly description?: string | null;
-  readonly graph?: SequentialTeamGraph;
+  readonly graph?: TeamGraph;
+  readonly environmentVersionId?: string | null;
 }
 
 export function createDraftTeamVersion(
@@ -64,6 +70,7 @@ export function createDraftTeamVersion(
     name: options.name,
     description: normalizeOptionalText(options.description),
     graph: options.graph,
+    environmentVersionId: options.environmentVersionId ?? null,
     compiledPlan: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -85,13 +92,16 @@ export function reviseDraftTeamVersion(
       ? { description: normalizeOptionalText(patch.description) }
       : {}),
     ...(patch.graph !== undefined ? { graph: patch.graph } : {}),
+    ...(patch.environmentVersionId !== undefined
+      ? { environmentVersionId: patch.environmentVersionId }
+      : {}),
     updatedAt: now().toISOString(),
   });
 }
 
 export function publishTeamVersion(
   version: TeamVersion,
-  compiledPlan: CompiledSequentialTeamPlan,
+  compiledPlan: CompiledTeamPlan,
   now: () => Date = () => new Date(),
 ): TeamVersion {
   assertDraft(version, 'Team version');
@@ -120,7 +130,9 @@ export function rehydrateTeamVersion(
   );
 
   const compiledPlan = snapshot.compiledPlan
-    ? rehydrateCompiledSequentialTeamPlan(snapshot.compiledPlan)
+    ? snapshot.compiledPlan.compilerVersion === 'dag-mve-v1'
+      ? rehydrateCompiledDagTeamPlan(snapshot.compiledPlan)
+      : rehydrateCompiledSequentialTeamPlan(snapshot.compiledPlan)
     : null;
 
   if (snapshot.status === 'draft') {
@@ -148,6 +160,16 @@ export function rehydrateTeamVersion(
         'Compiled team plan must belong to the published team version',
       );
     }
+    if (compiledPlan.compilerVersion === 'dag-mve-v1') {
+      if (
+        !snapshot.environmentVersionId ||
+        compiledPlan.environmentVersionId !== snapshot.environmentVersionId
+      ) {
+        throw new Error(
+          'DAG compiled plan must use the Team EnvironmentVersion pin',
+        );
+      }
+    }
   } else {
     throw new Error(
       `Unsupported team version status ${String(snapshot.status)}`,
@@ -157,7 +179,11 @@ export function rehydrateTeamVersion(
   return Object.freeze({
     ...snapshot,
     description: normalizeOptionalText(snapshot.description),
-    graph: cloneSequentialTeamGraph(snapshot.graph),
+    graph:
+      'mode' in snapshot.graph && snapshot.graph.mode === 'dag-mve-v1'
+        ? cloneDagTeamGraph(snapshot.graph)
+        : cloneSequentialTeamGraph(snapshot.graph as SequentialTeamGraph),
+    environmentVersionId: snapshot.environmentVersionId ?? null,
     compiledPlan,
   });
 }

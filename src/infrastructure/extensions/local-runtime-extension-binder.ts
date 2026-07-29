@@ -113,6 +113,14 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       throw error;
     }
   }
+
+  public refreshForSession(
+    productSessionId: string,
+    allowedTools: readonly string[],
+    ttlMs?: number,
+  ): void {
+    this.#mcp.grants.refreshForSession(productSessionId, allowedTools, ttlMs);
+  }
 }
 
 async function ensureSafeDirectoryPath(path: string): Promise<void> {

@@ -2,11 +2,11 @@
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
-	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native
+	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native collaborative-team-smoke
 
 setup:
 	docker compose build agent-server runner
-	docker compose run --rm --no-deps runner node scripts/dev/resolve-opencode.mjs --check
+	./scripts/dev/docker-run -- node scripts/dev/resolve-opencode.mjs --check
 
 dev:
 	docker compose up --build postgres agent-server
@@ -15,40 +15,43 @@ dev-api:
 	docker compose up --build postgres agent-server
 
 build:
-	docker compose run --rm --no-deps runner pnpm build
+	./scripts/dev/docker-run -- pnpm build
 
 check:
-	docker compose run --rm --no-deps runner pnpm check
+	./scripts/dev/docker-run -- pnpm check
 
 test:
-	docker compose run --rm --no-deps runner pnpm test
+	./scripts/dev/docker-run -- pnpm test
 
 test-unit:
-	docker compose run --rm --no-deps runner pnpm test:unit
+	./scripts/dev/docker-run -- pnpm test:unit
 
 test-integration:
-	docker compose run --rm --no-deps runner pnpm test:integration
+	./scripts/dev/docker-run -- pnpm test:integration
 
 test-real-pg:
-	set -eu; trap 'docker compose --profile postgres-test rm -sf postgres-test >/dev/null 2>&1 || true' EXIT; trap 'exit 130' INT TERM; docker compose --profile postgres-test up -d --wait postgres-test; docker compose run --rm --no-deps -e DATABASE_URL=postgresql://agent:agent@postgres-test:5432/agent_server -e POSTGRES_URL=postgresql://agent:agent@postgres-test:5432/agent_server runner pnpm test:real-pg
+	./scripts/dev/docker-run --postgres -- pnpm test:real-pg
 
 test-contract:
-	docker compose run --rm --no-deps runner pnpm test:contract
+	./scripts/dev/docker-run -- pnpm test:contract
 
 e2e-smoke:
-	docker compose run --rm --no-deps runner pnpm test:e2e
+	./scripts/dev/docker-run -- pnpm test:e2e
 
 paseo-smoke:
-	docker compose run --rm --no-deps runner pnpm test:paseo-smoke
+	./scripts/dev/docker-run -- pnpm test:paseo-smoke
 
 eval-smoke:
-	docker compose run --rm --no-deps runner pnpm eval:smoke
+	./scripts/dev/docker-run -- pnpm eval:smoke
 
 ci:
-	docker compose run --rm --no-deps runner pnpm run ci
+	./scripts/dev/docker-run -- pnpm run ci
 
 managed-environment-smoke:
-	set -eu; trap 'docker compose --profile postgres-test rm -sf postgres-test >/dev/null 2>&1 || true' EXIT; trap 'exit 130' INT TERM; docker compose --profile postgres-test up -d --wait postgres-test; docker compose run --rm --no-deps -e POSTGRES_ADMIN_URL=postgresql://agent:agent@postgres-test:5432/agent_server runner pnpm smoke:managed-environment
+	./scripts/dev/docker-run --postgres -- pnpm smoke:managed-environment
+
+collaborative-team-smoke:
+	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env COLLAB_SMOKE_POLL_MS -- pnpm smoke:collaborative-team
 
 clean:
 	docker compose down --remove-orphans

@@ -1,6 +1,7 @@
 import type { AccessContext } from '../control-plane/access-context.js';
 import type { RunRepository } from './run-repository.js';
 import type { TaskRepository } from './task-repository.js';
+import type { TeamExecutionRepository } from './team-execution-repository.js';
 import type { AdmissionIngress } from '../sessions/session-turn-origin.js';
 
 export type AdmissionOwnerScope = Pick<
@@ -36,6 +37,7 @@ export type AdmissionRecord = AdmissionRecordFields &
 export interface AdmissionTransaction {
   readonly tasks: TaskRepository;
   readonly runs: RunRepository;
+  readonly teamExecutions?: TeamExecutionRepository;
   findByIngressAndIdempotencyKey(
     ingress: AdmissionIngress,
     idempotencyKey: string,

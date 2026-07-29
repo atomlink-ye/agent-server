@@ -23,7 +23,7 @@ export class DagTeamCompiler {
 
   public async compile(teamVersion: TeamVersion): Promise<CompiledDagTeamPlan> {
     const graph = teamVersion.graph;
-    if (!('mode' in graph) || graph.mode !== 'dag-mve-v1') {
+    if (!graph || !('mode' in graph) || graph.mode !== 'dag-mve-v1') {
       throw new InvalidTeamGraphError(
         'DAG compiler requires graph mode dag-mve-v1',
       );

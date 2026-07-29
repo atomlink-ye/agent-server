@@ -7,6 +7,18 @@ import {
 
 export const AGENT_SERVER_MEMORY_READ_TOOL_REF = 'agent-server/memory-read';
 export const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
+export const AGENT_SERVER_TEAM_TOOL_REFS = Object.freeze([
+  'agent-server/team-members-list',
+  'agent-server/team-task-create',
+  'agent-server/team-task-list',
+  'agent-server/team-task-claim',
+  'agent-server/team-task-update',
+  'agent-server/team-complete',
+]);
+const SUPPORTED_TOOL_REFS = new Set([
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  ...AGENT_SERVER_TEAM_TOOL_REFS,
+]);
 
 export type RuntimeToolGrant = Readonly<{
   readonly grantId: string;
@@ -52,12 +64,12 @@ export class RuntimeToolGrantService {
     ];
     if (
       new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some((tool) => tool !== AGENT_SERVER_MEMORY_READ_TOOL_REF)
+      allowedTools.some((tool) => !SUPPORTED_TOOL_REFS.has(tool))
     )
       throw new Error('Unsupported or duplicate runtime tool ref.');
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(
-      Date.now() + Math.max(1, input.ttlMs ?? 5 * 60 * 1000),
+      Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
     ).toISOString();
     const grant: StoredGrant = {
       grantId: randomUUID(),
@@ -92,6 +104,7 @@ export class RuntimeToolGrantService {
         !timingSafeEqual(grant.tokenHash, hash)
       )
         continue;
+      if (Date.parse(grant.expiresAt) <= Date.now()) return null;
       const { tokenHash: _tokenHash, ...publicGrant } = grant;
       return publicGrant;
     }
@@ -102,11 +115,31 @@ export class RuntimeToolGrantService {
     this.#grants.delete(grantId);
   }
 
-  private pruneExpired(): void {
-    const now = Date.now();
+  public refreshForSession(
+    productSessionId: string,
+    allowedTools: readonly string[],
+    ttlMs = 15 * 60 * 1000,
+  ): void {
+    if (
+      new Set(allowedTools).size !== allowedTools.length ||
+      allowedTools.some((tool) => !SUPPORTED_TOOL_REFS.has(tool))
+    )
+      throw new Error('Unsupported or duplicate runtime tool ref.');
+    const expiresAt = new Date(Date.now() + Math.max(1, ttlMs)).toISOString();
     for (const [grantId, grant] of this.#grants) {
-      if (Date.parse(grant.expiresAt) <= now) this.#grants.delete(grantId);
+      if (
+        grant.productSessionId !== productSessionId ||
+        grant.allowedTools.length !== allowedTools.length ||
+        grant.allowedTools.some((tool, index) => tool !== allowedTools[index])
+      )
+        continue;
+      this.#grants.set(grantId, { ...grant, expiresAt });
     }
+  }
+
+  private pruneExpired(): void {
+    // Expired grants remain as non-authorizing records so a still-live
+    // RuntimeSession can refresh the same bearer token before continuation.
   }
 }
 

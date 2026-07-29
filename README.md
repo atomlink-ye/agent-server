@@ -64,6 +64,7 @@ make setup
 make ci
 make paseo-smoke
 make managed-environment-smoke
+make collaborative-team-smoke
 ```
 
 All commands above run in one-shot Docker runner containers; `make ci` is
@@ -71,6 +72,22 @@ deterministic and does not call an external model. `make paseo-smoke` runs the
 baseline external smoke inside the image and expects
 `PASEO_OPENCODE_BASELINE_OK`. The Managed Environment smoke uses the ephemeral
 `postgres-test` Compose profile and expects `MANAGED_ENVIRONMENT_MVE_OK`.
+
+Docker-first one-shot commands use `scripts/dev/docker-run [--postgres]
+[--pass-env NAME ...] -- COMMAND [ARG...]`. It forwards no host environment by
+default; each `--pass-env` name is validated and forwarded explicitly. With
+`--postgres`, it starts and waits for the private `postgres-test` service,
+injects in-network `DATABASE_URL`, `POSTGRES_URL`, and `POSTGRES_ADMIN_URL`,
+then removes only the service it started. It does not mount host `HOME`, expose
+database ports, or use the Docker socket. The wrapper is for isolated commands;
+`make dev` remains the persistent-stack capability boundary.
+
+For an authenticated external Collaborative Team diagnostic, set
+`PASEO_MODEL=opencode-go/deepseek-v4-flash` and export `OPENCODE_GO_API_KEY`
+from a local mode-0600 environment file. The Docker target allowlists only
+`PASEO_MODEL`, `OPENCODE_GO_API_KEY`, and `COLLAB_SMOKE_POLL_MS`; the key is
+never logged. Without the key, the target uses the zero-credential free-model
+default. Short diagnostics may set `COLLAB_SMOKE_POLL_MS=120000`.
 
 Start the local stack:
 
@@ -135,6 +152,7 @@ These routes let the authenticated owner scope create memory proposals, review t
 | `make e2e-smoke`                 | Real HTTP socket with a deterministic fake runtime             |
 | `make paseo-smoke`               | Real Paseo/OpenCode/free-model external smoke                  |
 | `make managed-environment-smoke` | Three-turn Managed Environment smoke in Docker                 |
+| `make collaborative-team-smoke`  | Collaborative Team main-flow smoke in Docker                   |
 | `make ci`                        | All deterministic pull-request gates                           |
 | `make clean`                     | Stop Compose services without deleting named volumes           |
 

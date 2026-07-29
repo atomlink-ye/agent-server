@@ -20,6 +20,20 @@ make ci
 `make setup` builds the image and runs the OpenCode platform check in the
 one-shot runner. It does not install dependencies into the host worktree.
 
+One-shot Docker commands use:
+
+```bash
+scripts/dev/docker-run [--postgres] [--pass-env NAME ...] -- COMMAND [ARG...]
+```
+
+The wrapper forwards no host environment unless a variable is named with
+`--pass-env`. `--postgres` starts and waits for the private `postgres-test`
+service, injects the in-network `DATABASE_URL`, `POSTGRES_URL`, and
+`POSTGRES_ADMIN_URL`, and removes the service it started on exit. It preserves
+the command status and does not mount host `HOME`, expose database ports, or
+use the Docker socket. It is intended for one-shot checks and smokes; the
+persistent `make dev` stack is outside that capability boundary.
+
 ## Start modes
 
 `make dev` starts persistent Compose PostgreSQL and the complete Agent Server
@@ -62,6 +76,27 @@ Authorization persistence remains a known PR #14 deviation; it is not evidence
 of a production credential lifecycle.
 The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
 root beneath its runtime root.
+
+The Collaborative Team smoke uses the same disposable PostgreSQL setup:
+
+```bash
+make collaborative-team-smoke
+```
+
+The target forwards only `PASEO_MODEL`, `OPENCODE_GO_API_KEY`, and
+`COLLAB_SMOKE_POLL_MS`. It uses a zero-credential free-model default when no
+key is present. For an authenticated diagnostic, load the key from a local
+mode-0600 environment file, then use the Go model ID and optional short poll:
+
+```bash
+PASEO_MODEL=opencode-go/deepseek-v4-flash \
+COLLAB_SMOKE_POLL_MS=120000 \
+make collaborative-team-smoke
+```
+
+The key is copied only into the isolated Paseo process and is never logged.
+The smoke removes its temporary database and runtime root unless explicitly
+run in a retained diagnostic mode.
 
 The Team DAG MVE smoke uses the same disposable setup and the opt-in
 `dag-mve-v1` Team path:

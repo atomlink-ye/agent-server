@@ -4,10 +4,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
+import type { TeamToolHandler } from '../../application/teams/team-tools.js';
+import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  AGENT_SERVER_TEAM_TOOL_REFS,
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
@@ -28,6 +31,7 @@ type McpSession = Readonly<{
 export function createDirectMemoryMcpHandler(input: {
   readonly repository: MemoryApiRepository;
   readonly grants: RuntimeToolGrantService;
+  readonly teamTools?: { handler: TeamToolHandler };
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
@@ -85,7 +89,32 @@ export function createDirectMemoryMcpHandler(input: {
           sessions.set(id, { server, transport, grantId: grant.grantId });
         },
       });
-    if (!existing) registerTools(server, grant, input.repository);
+    if (!existing) {
+      registerTools(server, grant, input.repository);
+      if (
+        input.teamTools &&
+        grant.allowedTools.some((tool) =>
+          AGENT_SERVER_TEAM_TOOL_REFS.includes(tool),
+        )
+      ) {
+        const actor = await input.teamTools.handler.actorForMemberRun(
+          grant.productSessionId,
+          {
+            tenantId: grant.tenantId,
+            workspaceId: grant.workspaceId,
+            principalType: grant.principalType,
+            principalId: grant.principalId,
+          },
+        );
+        if (actor)
+          registerTeamMcpTools(
+            server,
+            input.teamTools.handler,
+            actor,
+            grant.allowedTools,
+          );
+      }
+    }
     const newSession = !existing;
     if (newSession) {
       transport.onclose = () => {

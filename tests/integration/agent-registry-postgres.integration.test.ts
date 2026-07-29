@@ -231,6 +231,7 @@ describe('managed agent registry migration', () => {
       '0017_claude_memory_api_skill_mve',
       '0018_managed_environment_runtime_session_mve',
       '0019_team_dag_mve',
+      '0020_collaborative_team_mve',
     ]);
   });
 

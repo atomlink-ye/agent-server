@@ -11,7 +11,7 @@ WORKDIR /workspace
 
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /home/node/image-node_modules /opt/opencode/bin \
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/dist /home/node/image-node_modules /opt/opencode/bin \
     && chown -R node:node /pnpm /workspace /home/node/image-node_modules /opt/opencode
 
 USER node

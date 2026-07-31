@@ -64,21 +64,25 @@ hardening, reconnect recovery, multi-writer ordering, retention, or production
 backpressure from this path. Stop only verified child processes during cleanup;
 do not delete retained database volumes.
 
-Docker builds and repository runner containers default both pnpm and npm to the
-mainland-China mirror declared by the Dockerfile's `NPM_REGISTRY` build arg:
+The Dockerfile defaults `NPM_REGISTRY` to the official npm registry so GitHub
+and other unconfigured environments do not depend on a regional mirror. For
+mainland-China local development, set the ignored Compose `.env` value:
 
 ```bash
+printf '%s\n' 'NPM_REGISTRY=https://registry.npmmirror.com' >> .env
 docker compose build
 
-# Override only when another environment requires a different registry.
+# Explicit override remains available when needed.
 docker compose build --build-arg NPM_REGISTRY=https://registry.npmjs.org
 ```
 
-The image persists `PNPM_CONFIG_REGISTRY` and `NPM_CONFIG_REGISTRY`, so both
-Docker build-time installs and container-side dependency verification use the
-same default. Do not rebuild the lockfile or weaken lockfile, integrity, age, or
-other supply-chain policy to bypass a metadata problem. Record any package
-metadata caveat separately from code or policy failures.
+Compose forwards `.env`'s `NPM_REGISTRY` as a build arg. The image persists it
+as `PNPM_CONFIG_REGISTRY` and `NPM_CONFIG_REGISTRY`, so local Docker build-time
+installs and container-side dependency verification use the same mirror while
+GitHub retains the official default. Do not rebuild the lockfile or weaken
+lockfile, integrity, age, or other supply-chain policy to bypass a metadata
+problem. Record any package metadata caveat separately from code or policy
+failures.
 
 ## Task cancellation
 

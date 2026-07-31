@@ -1,7 +1,7 @@
 FROM node:24.18.0-bookworm-slim AS dependencies
 
 ARG TARGETARCH
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
 
 ENV COREPACK_HOME=/tmp/corepack \
     PNPM_HOME=/pnpm \

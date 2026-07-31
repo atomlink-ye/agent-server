@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AccessContext } from '../../application/control-plane/access-context.js';
 import type {
   ProductSession,
+  ProductSessionListPage,
   SessionRepository,
   UserMessage,
   Workspace,
@@ -11,6 +12,7 @@ import { encodeRootTaskRunRequestSnapshotRef } from '../../application/tasks/roo
 import { originReference } from '../../application/sessions/session-turn-origin.js';
 import type { SubmitSessionTurnInput } from '../../application/ports/session-repository.js';
 import { SessionCreationError } from '../../application/sessions/session-errors.js';
+import { SessionListQueryError } from '../../application/sessions/session-errors.js';
 
 interface Q {
   query<R = Record<string, unknown>>(
@@ -129,6 +131,73 @@ export class PostgresSessionRepository implements SessionRepository {
       [id, o.tenantId, o.principalType, o.principalId],
     );
     return r.rows?.[0] ? mapSession(r.rows[0]) : null;
+  }
+  async listSessions(
+    o: AccessContext,
+    input: {
+      readonly workspaceId: string;
+      readonly limit: number;
+      readonly cursor: string | null;
+    },
+  ): Promise<ProductSessionListPage> {
+    if (
+      !Number.isSafeInteger(input.limit) ||
+      input.limit < 1 ||
+      input.limit > 50
+    )
+      throw new SessionListQueryError('invalid_limit');
+    const cursor = input.cursor ? decodeSessionCursor(input.cursor) : null;
+    const values: unknown[] = [
+      o.tenantId,
+      input.workspaceId,
+      o.principalType,
+      o.principalId,
+      input.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ` AND (COALESCE(latest.created_at, s.created_at), s.id) < ($6::timestamptz, $7::uuid)`
+      : '';
+    if (cursor) values.push(cursor.sortAt, cursor.sessionId);
+    const result = await this.db.query(
+      `SELECT s.id, s.created_at,
+              latest.created_at AS last_message_at,
+              latest.role AS preview_role,
+              latest.text AS preview_text,
+              first_user.text AS title_text
+         FROM product_sessions s
+         LEFT JOIN LATERAL (
+           SELECT m.created_at, m.role, m.text
+             FROM messages m
+            WHERE m.session_id=s.id AND m.role IN ('user','assistant')
+            ORDER BY m.generation DESC, m.sequence DESC
+            LIMIT 1
+         ) latest ON true
+         LEFT JOIN LATERAL (
+           SELECT m.text
+             FROM messages m
+            WHERE m.session_id=s.id AND m.role='user'
+            ORDER BY m.generation ASC, m.sequence ASC
+            LIMIT 1
+         ) first_user ON true
+        WHERE s.tenant_id=$1 AND s.workspace_id=$2 AND s.principal_type=$3 AND s.principal_id=$4${cursorSql}
+        ORDER BY COALESCE(latest.created_at, s.created_at) DESC, s.id DESC
+        LIMIT $5`,
+      values,
+    );
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > input.limit;
+    const items = rows.slice(0, input.limit).map(mapSessionListItem);
+    const last = rows[input.limit - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last
+          ? encodeSessionCursor(
+              new Date(last.last_message_at ?? last.created_at).toISOString(),
+              String(last.id),
+            )
+          : null,
+    };
   }
   async listMessages(id: string, o: AccessContext) {
     const s = await this.getSession(id, o);
@@ -397,4 +466,81 @@ function mapMessage(r: any): UserMessage {
     status: r.status,
     createdAt: new Date(r.created_at).toISOString(),
   };
+}
+
+function mapSessionListItem(r: any) {
+  const preview = sanitizeExcerpt(r.preview_text, 120);
+  return {
+    sessionId: String(r.id),
+    title: sanitizeExcerpt(r.title_text, 60) ?? 'New chat',
+    preview,
+    previewRole:
+      preview !== null &&
+      (r.preview_role === 'user' || r.preview_role === 'assistant')
+        ? r.preview_role
+        : null,
+    lastMessageAt: r.last_message_at
+      ? new Date(r.last_message_at).toISOString()
+      : null,
+    createdAt: new Date(r.created_at).toISOString(),
+  } as const;
+}
+
+function sanitizeExcerpt(value: unknown, maxCodePoints: number): string | null {
+  if (typeof value !== 'string') return null;
+  const plain = value
+    .replace(/\s/gu, ' ')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .replace(/<[^>]*>/gu, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+    .replace(/(^|\s)#{1,6}\s+/gu, '$1')
+    .replace(/(^|\s)[>*-]\s+/gu, '$1')
+    .replace(/[*~`]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return Array.from(plain).slice(0, maxCodePoints).join('') || null;
+}
+
+function encodeSessionCursor(sortAt: string, sessionId: string): string {
+  return Buffer.from(JSON.stringify([sortAt, sessionId]), 'utf8').toString(
+    'base64url',
+  );
+}
+
+function decodeSessionCursor(value: string): {
+  readonly sortAt: string;
+  readonly sessionId: string;
+} {
+  try {
+    if (
+      value.length > 256 ||
+      value.length === 0 ||
+      !/^[A-Za-z0-9_-]+$/.test(value)
+    )
+      throw new Error();
+    const decoded = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    );
+    if (
+      !Array.isArray(decoded) ||
+      decoded.length !== 2 ||
+      typeof decoded[0] !== 'string' ||
+      decoded[0] !== new Date(decoded[0]).toISOString() ||
+      typeof decoded[1] !== 'string' ||
+      !isCanonicalUuid(decoded[1])
+    )
+      throw new Error();
+    const sortAt = decoded[0];
+    const sessionId = decoded[1];
+    if (encodeSessionCursor(sortAt, sessionId) !== value) throw new Error();
+    return { sortAt, sessionId };
+  } catch {
+    throw new SessionListQueryError('invalid_cursor');
+  }
+}
+
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

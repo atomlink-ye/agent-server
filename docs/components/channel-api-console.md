@@ -25,13 +25,15 @@ It forwards `after` and `Last-Event-ID`, and the browser uses native
 `EventSource`. Only the HttpOnly `product_session_id` reaches the browser; the
 Agent Server bearer is read and used server-side.
 
-The first stream contract is only complete assistant-text snapshots. The Web
-reducer replaces transient text by event sequence, ignores compatibility final
-text and unknown runtime events, and then refetches the formal Assistant
-Message. SSE closes on a persisted terminal Event. Pre-terminal disconnects
-fall back to polling, and stale SSE/poll callbacks are identity-guarded. This
-is one fresh-ProductSession local MVE, not a production console or security
-boundary.
+The rich-events stream contract carries complete assistant-text snapshots plus
+flat scalar reasoning progress, Tool status, final usage, and read-only
+permission activity. The reducer replaces transient text by event sequence,
+ignores compatibility final text and unknown runtime events, and then refetches
+the formal Assistant Message. Runtime activity is compact and secondary to the
+conversation. SSE closes on a persisted terminal Event. Pre-terminal
+disconnects fall back to polling, and stale SSE/poll callbacks are
+identity-guarded. This is one fresh-ProductSession local MVE, not a production
+console or security boundary.
 
 The fixed command-only Lark compatibility adapter is disabled by default. When
 enabled, it fixes one App/domain, allowlisted chat and external user, bot mention

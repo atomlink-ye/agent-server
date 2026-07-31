@@ -10,3 +10,10 @@ export class SessionCreationError extends Error {
     this.name = 'SessionCreationError';
   }
 }
+
+export class SessionListQueryError extends Error {
+  constructor(readonly code: 'invalid_limit' | 'invalid_cursor') {
+    super(code);
+    this.name = 'SessionListQueryError';
+  }
+}

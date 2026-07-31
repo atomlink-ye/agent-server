@@ -22,6 +22,18 @@ export interface ProductSession {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+export interface ProductSessionListItem {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly preview: string | null;
+  readonly previewRole: 'user' | 'assistant' | null;
+  readonly lastMessageAt: string | null;
+  readonly createdAt: string;
+}
+export interface ProductSessionListPage {
+  readonly items: readonly ProductSessionListItem[];
+  readonly nextCursor: string | null;
+}
 export interface UserMessage {
   readonly id: string;
   readonly sessionId: string;
@@ -52,6 +64,14 @@ export interface SessionRepository {
     owner: AccessContext;
   }): Promise<ProductSession>;
   getSession(id: string, owner: AccessContext): Promise<ProductSession | null>;
+  listSessions(
+    owner: AccessContext,
+    input: {
+      readonly workspaceId: string;
+      readonly limit: number;
+      readonly cursor: string | null;
+    },
+  ): Promise<ProductSessionListPage>;
   listMessages(
     sessionId: string,
     owner: AccessContext,

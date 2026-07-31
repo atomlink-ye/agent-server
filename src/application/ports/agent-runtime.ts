@@ -36,10 +36,64 @@ export interface AgentRuntimeExecution {
   }[];
 }
 
-export interface RuntimeEvent {
-  readonly kind: 'assistant_text';
-  readonly text: string;
-}
+export type RuntimeEvent =
+  | { readonly kind: 'assistant_text'; readonly text: string }
+  | {
+      readonly kind: 'reasoning_progress';
+      readonly status: 'started' | 'completed';
+      readonly text?: string;
+    }
+  | {
+      readonly kind: 'tool_status';
+      readonly activityId: string;
+      readonly category:
+        | 'shell'
+        | 'read'
+        | 'edit'
+        | 'write'
+        | 'search'
+        | 'fetch'
+        | 'subagent'
+        | 'other';
+      readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+      readonly label: string;
+      readonly summary: string;
+      readonly parentActivityId?: string;
+      readonly detailKind?:
+        'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
+      readonly detailText?: string;
+      readonly exitCode?: number;
+    }
+  | {
+      readonly kind: 'child_timeline_item';
+      readonly parentActivityId: string;
+      readonly activityId: string;
+      readonly itemKind: 'assistant' | 'reasoning' | 'tool';
+      readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+      readonly label: string;
+      readonly summary: string;
+      readonly detailKind?:
+        'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
+      readonly detailText?: string;
+      readonly exitCode?: number;
+    }
+  | {
+      readonly kind: 'usage';
+      readonly totalCostUsd?: number;
+      readonly inputTokens?: number;
+      readonly cachedInputTokens?: number;
+      readonly outputTokens?: number;
+      readonly contextWindowMaxTokens?: number;
+      readonly contextWindowUsedTokens?: number;
+    }
+  | {
+      readonly kind: 'permission';
+      readonly activityId: string;
+      readonly category: 'tool' | 'plan' | 'question' | 'mode' | 'other';
+      readonly status: 'requested' | 'resolved';
+      readonly decision?: 'allowed' | 'denied';
+      readonly summary: string;
+    };
 
 export interface RuntimeEventSink {
   emit(event: RuntimeEvent): Promise<void> | void;

@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   AgentServerError,
   createSession,
-  createWorkspace,
   getConfiguredWorkspaceId,
   getMessages,
   getSession,
+  listSessions,
 } from '@/lib/agent-server-client';
 import {
   readProductSessionId,
@@ -16,24 +16,44 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const configuredWorkspaceId = getConfiguredWorkspaceId();
+    if (!configuredWorkspaceId)
+      return NextResponse.json(
+        { error: 'The Web Workspace is not configured.' },
+        { status: 503 },
+      );
     const existingId = await readProductSessionId();
     if (existingId) {
       try {
-        return NextResponse.json({
-          session: await getSession(existingId),
-          messages: await getMessages(existingId),
-        });
+        const session = await getSession(existingId);
+        if (session.workspace_id === configuredWorkspaceId)
+          return NextResponse.json({
+            session,
+            messages: await getMessages(existingId),
+          });
       } catch (error) {
-        if (
-          !(error instanceof AgentServerError) ||
-          ![400, 404].includes(error.status)
-        )
+        if (!(error instanceof AgentServerError) || error.status !== 404)
           throw error;
       }
     }
-    const workspaceId =
-      getConfiguredWorkspaceId() ?? (await createWorkspace()).workspace_id;
-    const session = await createSession(workspaceId);
+    const listed = await listSessions(configuredWorkspaceId);
+    for (const item of listed.sessions) {
+      try {
+        const session = await getSession(item.session_id);
+        if (session.workspace_id !== configuredWorkspaceId) continue;
+        await writeProductSessionId(session.session_id);
+        return NextResponse.json({
+          session,
+          messages: await getMessages(session.session_id),
+        });
+      } catch (error) {
+        if (error instanceof AgentServerError && error.status === 404) continue;
+        throw error;
+      }
+    }
+    if (listed.sessions.length > 0)
+      throw new AgentServerError(503, 'web_session_unavailable');
+    const session = await createSession(configuredWorkspaceId);
     await writeProductSessionId(session.session_id);
     return NextResponse.json({
       session,
@@ -41,7 +61,10 @@ export async function GET() {
     });
   } catch (error) {
     const status =
-      error instanceof AgentServerError && error.status === 503 ? 503 : 500;
+      error instanceof AgentServerError &&
+      [400, 404, 409, 503].includes(error.status)
+        ? error.status
+        : 500;
     return NextResponse.json({ error: 'The chat is not ready.' }, { status });
   }
 }

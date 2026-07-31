@@ -49,6 +49,9 @@ export async function createIsolatedRuntimeEnvironment(runtimeRoot) {
     PASEO_RELAY_ENABLED: 'false',
     PASEO_DICTATION_ENABLED: 'false',
     PASEO_VOICE_MODE_ENABLED: 'false',
+    ...(process.env.PASEO_CORS_ORIGINS
+      ? { PASEO_CORS_ORIGINS: process.env.PASEO_CORS_ORIGINS }
+      : {}),
     PATH: `${dirname(openCodeBinary)}:${process.env.PATH ?? ''}`,
   };
   return { environment, home, paseoHome, openCodeBinary };
@@ -58,12 +61,15 @@ export async function startPaseo({
   repositoryRoot,
   runtimeRoot,
   port,
+  listenHost = '127.0.0.1',
   environmentVariableNames = [],
 }) {
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
   const log = openSync(logPath, 'a');
+  const hostnames = process.env.PASEO_HOSTNAMES;
+  const hostnameArguments = hostnames ? ['--hostnames', hostnames] : [];
   const environment = {
     ...isolated.environment,
     ...copyNamedEnvironment(process.env, environmentVariableNames),
@@ -78,13 +84,14 @@ export async function startPaseo({
         'start',
         '--foreground',
         '--listen',
-        `127.0.0.1:${port}`,
+        `${listenHost}:${port}`,
         '--home',
         isolated.paseoHome,
         '--no-relay',
         '--no-mcp',
         '--no-inject-mcp',
         '--no-web-ui',
+        ...hostnameArguments,
       ],
       {
         cwd: repositoryRoot,

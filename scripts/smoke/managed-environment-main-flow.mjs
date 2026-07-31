@@ -23,6 +23,10 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
+import {
+  managedAgentYaml,
+  managedEnvironmentYaml,
+} from '../dev/web-bootstrap-fixtures.mjs';
 
 const repositoryRoot = resolve(
   fileURLToPath(new URL('../..', import.meta.url)),
@@ -574,23 +578,6 @@ function replaceDatabase(value, database) {
 
 function quoteIdentifier(value) {
   return `"${value.replaceAll('"', '""')}"`;
-}
-
-function managedAgentYaml() {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: managed-environment-smoke\nspec:\n  description: Platform Extension Smoke\n  instructions: When asked to read Memory, use the authorized platform Tool and return only the Tool content with no label, explanation, quotes, markdown, or punctuation.\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n    - ref: agent-server/memory-read\n      kind: tool\n  skills:\n    - ref: agent-server/memory-api\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Use the authorized memory extension."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
-}
-
-function managedEnvironmentYaml() {
-  return `apiVersion: agent-server/v1alpha1
-kind: ManagedEnvironment
-metadata:
-  name: managed-environment-smoke
-spec:
-  adapter: paseo
-  provider: opencode
-  modelPolicyRef: free-only
-  runtimeCellPolicy: per_runtime_session
-`;
 }
 
 async function request(baseUrl, path, bearer, options) {

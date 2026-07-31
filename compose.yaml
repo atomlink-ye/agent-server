@@ -25,6 +25,7 @@ services:
       - '127.0.0.1:3000:3000'
     environment:
       NODE_ENV: development
+      CI: 'true'
       HOST: 0.0.0.0
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -59,6 +60,32 @@ services:
       timeout: 3s
       retries: 30
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    depends_on:
+      agent-server:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3001:3001'
+    env_file:
+      - path: .local/web-bootstrap.env
+        required: false
+    environment:
+      NODE_ENV: development
+      CI: 'true'
+      AGENT_SERVER_BASE_URL: http://agent-server:3000
+      AGENT_SERVER_SERVICE_TOKEN: ${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}
+    volumes:
+      - .:/workspace
+      - node-modules:/workspace/node_modules
+      - local-state:/workspace/.local
+    working_dir: /workspace
+    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    command: ['pnpm', 'web:dev']
+
   runner:
     build:
       context: .
@@ -67,6 +94,7 @@ services:
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
     environment:
       NODE_ENV: test
+      CI: 'true'
       HOME: /workspace/.local/home
       PASEO_HOME: /workspace/.local/paseo-home
       XDG_CONFIG_HOME: /workspace/.local/xdg-config

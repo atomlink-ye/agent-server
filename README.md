@@ -48,8 +48,9 @@ flowchart TD
 | Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                                   |
 | Managed Environment API + ProductSession pin   | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE |
 | Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                            |
+| Web Chat + Paseo assistant-text streaming MVE  | Implemented MVE; fresh-session browser path verified; hardening deferred |
 | OIDC users, shared ACLs, credentials, approval | Planned V1                                                               |
-| Artifacts, evidence, Web console               | Planned V1                                                               |
+| Artifacts, evidence, broader Web console       | Planned V1                                                               |
 | Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production       |
 
 ## Quick start
@@ -100,6 +101,13 @@ Agent Server container. `make dev-api` is a compatibility alias for the same
 stack. Only `127.0.0.1:3000:3000` is published on the host; PostgreSQL, Paseo,
 OpenCode, and Runtime MCP have no host-published ports. Native diagnostics are
 explicitly named `*-native` and are not the supported default.
+
+The local Web Chat MVE uses a separate Next.js service and same-origin BFF. Run
+`make web-bootstrap` to validate/import/publish the fixed local Agent and
+Environment inputs through authenticated APIs, then `make web-dev` to build and
+start the Web service with the local stack. The browser receives only the
+HttpOnly `product_session_id`; the Agent Server bearer remains server-side.
+This is a fresh-ProductSession local MVE path, not a production Web console.
 
 Submit and poll a run:
 
@@ -168,6 +176,7 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
 - [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): approved minimum-scenario evidence; production hardening deferred.
+- [Web Chat + Paseo Streaming MVE evidence packet](docs/evidence/web-chat-paseo-streaming-mve-evidence-packet.md): sanitized fresh-session browser evidence; production hardening deferred.
 - [Lark Managed Memory command canary evidence](docs/evidence/lark-managed-memory-command-canary-evidence-packet.md): sanitized fixed-configuration command-path evidence.
 - [Lark Managed Memory Card/Doc evidence](docs/evidence/lark-managed-memory-card-doc-canary-evidence-packet.md): sanitized normal-path provider evidence and boundaries.
 - [Lark Managed Memory command canary runbook](docs/operations/lark-memory-command-canary-runbook.md): safe readiness, one-consumer operation, command/Card/Doc verification, and shutdown.
@@ -181,7 +190,7 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 ## Baseline limitations
 
 - Baseline authentication is limited to configured service-account bearer tokens on the public Run and Task APIs.
-- The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, execution-cell isolation, cancel, retry, streaming, and artifact services.
+- The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, production execution-cell isolation, cancel/retry UI, rich streaming events, and artifact services. The narrow fresh-session Web Chat assistant-text streaming MVE is implemented and verified locally.
 - Managed Runtime Cells are an implemented MVE placement seam, not production isolation; transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host placement/GC, and a second adapter remain deferred.
 - Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
 - `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.

@@ -11,6 +11,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public Phase B registry surface.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.
+- [Web Chat + Paseo Streaming MVE evidence](evidence/web-chat-paseo-streaming-mve-evidence-packet.md) records sanitized fresh-session browser, SSE, persistence, and token-boundary evidence; production hardening remains deferred.
 - [Managed Single-Agent V1 evidence packet](evidence/managed-single-agent-v1-evidence-packet.md) records approved minimum-scenario evidence; production hardening remains deferred.
 - [Lark Managed Memory command canary](evidence/lark-managed-memory-command-canary-evidence-packet.md) records the fixed compatibility boundary and sanitized command-only evidence; it is not a production identity or delivery guarantee.
 - [Lark Managed Memory Card/Doc canary](evidence/lark-managed-memory-card-doc-canary-evidence-packet.md) records sanitized normal-path deterministic/provider evidence; it is not production identity, physical exactly-once, multi-node, or crash-recovery evidence.
@@ -148,3 +149,19 @@ Full Runtime Session V2 create/resume/status remains outside this MVP contract.
 The minimum Phase D contract adds assistant/final Messages, replayable SSE/events,
 and owner-scoped provider cancellation; incremental deltas, rich usage, retries,
 and receipts remain deferred.
+
+## Web Chat streaming boundary
+
+The Web MVE uses a separate same-origin BFF. The browser may hold only the
+HttpOnly `product_session_id`; the Agent Server service bearer is a server-side
+dependency. The BFF owner-checks the requested Run through the ProductSession's
+durable Messages and forwards the upstream SSE body, `after`, and
+`Last-Event-ID` without parsing or buffering.
+
+The runtime event ABI is restricted to the output payload
+`{ "kind": "assistant_text", "text": "<complete snapshot>" }`. Run Events are
+append-only. The Web reducer replaces snapshots by sequence and ignores raw,
+unknown, and compatibility-final output. A persisted terminal Run Event closes
+SSE; UI convergence additionally requires the matching formal Assistant
+Message. This is an internal fresh-session MVE, not a production identity,
+recovery, retention, or backpressure contract.

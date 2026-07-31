@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
+.PHONY: setup dev dev-api web-bootstrap web-dev web-build web-check-types build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
@@ -13,6 +13,30 @@ dev:
 
 dev-api:
 	docker compose up --build postgres agent-server
+
+web-bootstrap:
+	mkdir -p .local
+	docker compose build runner
+	docker compose run --rm --no-deps \
+		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
+		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
+		-e WEB_AGENT_VERSION_ID="$${WEB_AGENT_VERSION_ID:-}" \
+		-e WEB_ENVIRONMENT_VERSION_ID="$${WEB_ENVIRONMENT_VERSION_ID:-}" \
+		-e WEB_WORKSPACE_NAME="$${WEB_WORKSPACE_NAME:-Web Chat MVE}" \
+		-v "$$(pwd)/.local:/workspace/.local" \
+		runner node scripts/dev/web-bootstrap.mjs
+
+web-dev:
+	docker compose up --build -d postgres agent-server
+	@until curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; do sleep 1; done
+	$(MAKE) web-bootstrap
+	docker compose up --build web
+
+web-build:
+	./scripts/dev/docker-run -- pnpm web:build
+
+web-check-types:
+	./scripts/dev/docker-run -- pnpm web:check:types
 
 build:
 	./scripts/dev/docker-run -- pnpm build

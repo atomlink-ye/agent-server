@@ -506,6 +506,19 @@ export class ExecuteRun {
         task.sessionId ?? member?.id ?? task.id,
         sessionRuntime.toolRefs,
       );
+    const runtimeEventSink = this.events
+      ? {
+          emit: async (event: {
+            readonly kind: 'assistant_text';
+            readonly text: string;
+          }) => {
+            await this.events!.append(claim.run.id, 'output', {
+              kind: event.kind,
+              text: event.text,
+            });
+          },
+        }
+      : undefined;
     const execution = await this.runtime.execute(
       priorProviderAgentId
         ? {
@@ -534,6 +547,7 @@ export class ExecuteRun {
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
               : {}),
           },
+      runtimeEventSink,
     );
     if (
       sessionRuntime &&

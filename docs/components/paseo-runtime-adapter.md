@@ -48,6 +48,23 @@ managed Cell path uses `createWorkspace`; this yields Workspace reuse for
 Session A continuation and a distinct Workspace for Session B. This observed
 MVE behavior is not a production placement or isolation guarantee.
 
+### Assistant-text streaming MVE
+
+The adapter accepts an optional runtime event sink whose sole event is
+`{ kind: 'assistant_text', text }`. It subscribes to the adapter-local Paseo
+stream before creating the Agent, filters by the bound Agent ID and the
+projected Timeline baseline, and accumulates increasing same-epoch assistant
+chunks into complete snapshots. Duplicate and out-of-order live sequences are
+ignored. After finish, projected Timeline entries are reconciled as complete
+authoritative snapshots rather than concatenated with live text; sink writes
+are serialized and drained before execution returns, and the listener is
+removed.
+
+The sink deliberately excludes reasoning, tools, permissions, usage, raw
+provider events, and other unknown payloads. This is a local streaming
+projection seam, not durable stream recovery, multi-writer ordering, or
+production backpressure.
+
 In the observed opt-in `dag-mve-v1` Team flow, each leaf and the synthesizer
 receive task-scoped RuntimeSession/RuntimeCell state. The Team shares one
 EnvironmentVersion for immutable configuration only; it does not share a

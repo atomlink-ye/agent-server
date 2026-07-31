@@ -18,6 +18,36 @@ export interface PaseoFinishedAgent {
   readonly usage?: RunUsage;
 }
 
+export interface PaseoAgentStreamEvent {
+  readonly agentId: string;
+  readonly eventType: string;
+  readonly timestamp: string;
+  readonly seq: number | null;
+  readonly epoch: string | null;
+  readonly timelineItemType: string | null;
+  readonly assistantText?: string;
+}
+
+export interface PaseoTimelineEntry {
+  readonly timelineItemType: string;
+  readonly assistantText?: string;
+  readonly timestamp: string;
+  readonly seqStart: number;
+  readonly seqEnd: number;
+}
+
+export interface PaseoTimelinePage {
+  readonly epoch: string;
+  readonly startCursor: { readonly epoch: string; readonly seq: number } | null;
+  readonly endCursor: { readonly epoch: string; readonly seq: number } | null;
+  readonly window: {
+    readonly minSeq: number;
+    readonly maxSeq: number;
+    readonly nextSeq: number;
+  };
+  readonly entries: readonly PaseoTimelineEntry[];
+}
+
 export interface PaseoClientPort {
   connect(): Promise<void>;
   connectionStatus(): string;
@@ -35,6 +65,17 @@ export interface PaseoClientPort {
     readonly mcpServers?: readonly RuntimeMcpServerConfig[];
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
+  subscribeAgentStream?(
+    listener: (event: PaseoAgentStreamEvent) => void,
+  ): () => void;
+  fetchAgentTimeline?(
+    agentId: string,
+    options: {
+      readonly direction: 'tail';
+      readonly limit: number;
+      readonly projection: 'projected';
+    },
+  ): Promise<PaseoTimelinePage>;
   waitForFinish(
     agentId: string,
     timeoutMs: number,
@@ -124,7 +165,6 @@ export class PaseoSdkClient implements PaseoClientPort {
       cwd: input.cwd,
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,
-      initialPrompt: input.initialPrompt,
       ...(input.mcpServers
         ? {
             mcpServers: Object.fromEntries(
@@ -166,6 +206,51 @@ export class PaseoSdkClient implements PaseoClientPort {
 
   public async sendAgentMessage(agentId: string, text: string): Promise<void> {
     await this.#client.sendAgentMessage(agentId, text);
+  }
+
+  public subscribeAgentStream(
+    listener: (event: PaseoAgentStreamEvent) => void,
+  ): () => void {
+    return this.#client.on('agent_stream', (message) => {
+      const event = message.payload.event;
+      listener({
+        agentId: message.payload.agentId,
+        eventType: event.type,
+        timestamp: message.payload.timestamp,
+        seq: message.payload.seq ?? null,
+        epoch: message.payload.epoch ?? null,
+        timelineItemType: event.type === 'timeline' ? event.item.type : null,
+        ...(event.type === 'timeline' && event.item.type === 'assistant_message'
+          ? { assistantText: event.item.text }
+          : {}),
+      });
+    });
+  }
+
+  public async fetchAgentTimeline(
+    agentId: string,
+    options: {
+      readonly direction: 'tail';
+      readonly limit: number;
+      readonly projection: 'projected';
+    },
+  ): Promise<PaseoTimelinePage> {
+    const page = await this.#client.fetchAgentTimeline(agentId, options);
+    return {
+      epoch: page.epoch,
+      startCursor: page.startCursor,
+      endCursor: page.endCursor,
+      window: page.window,
+      entries: page.entries.map((entry) => ({
+        timelineItemType: entry.item.type,
+        timestamp: entry.timestamp,
+        seqStart: entry.seqStart,
+        seqEnd: entry.seqEnd,
+        ...(entry.item.type === 'assistant_message'
+          ? { assistantText: entry.item.text }
+          : {}),
+      })),
+    };
   }
 
   public async cancelAgent(agentId: string): Promise<void> {

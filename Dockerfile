@@ -1,9 +1,12 @@
 FROM node:24.18.0-bookworm-slim AS dependencies
 
 ARG TARGETARCH
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 ENV COREPACK_HOME=/tmp/corepack \
     PNPM_HOME=/pnpm \
+    PNPM_CONFIG_REGISTRY=$NPM_REGISTRY \
+    NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     PATH=/pnpm:$PATH \
     OPENCODE_BIN=/opt/opencode/bin/opencode
 

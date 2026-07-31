@@ -7,6 +7,7 @@ import {
   type AgentRuntimeExecuteInput,
   type AgentRuntimeHealth,
   type AgentRuntimePort,
+  type RuntimeEventSink,
   RuntimeExecutionError,
   RuntimeTimedOutError,
 } from '../../application/ports/agent-runtime.js';
@@ -16,7 +17,12 @@ import {
   selectOpenCodeModel,
   type PaseoModelDescriptor,
 } from './model-selector.js';
-import { PaseoSdkClient, type PaseoClientPort } from './paseo-client-port.js';
+import {
+  PaseoSdkClient,
+  type PaseoAgentStreamEvent,
+  type PaseoClientPort,
+  type PaseoTimelinePage,
+} from './paseo-client-port.js';
 import { mapPaseoFinishStatus } from './status-mapper.js';
 
 export interface PaseoRuntimeOptions {
@@ -161,6 +167,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   public async execute(
     input: AgentRuntimeExecuteInput,
+    sink?: RuntimeEventSink,
   ): Promise<AgentRuntimeExecution> {
     await this.initialize();
     if (!this.#model) {
@@ -213,61 +220,161 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       workspaceId = this.#workspaceId ?? undefined;
     if (!workspaceId)
       throw new RuntimeExecutionError('Paseo workspace is not bound.');
-    const agent =
-      input.operation === 'continue'
-        ? {
-            id: input.providerAgentId,
-            provider: 'opencode',
-            model: this.#model.id,
-          }
-        : await this.#client.createOpenCodeAgent({
-            cwd: input.cellCwd ?? this.#options.cwd,
-            workspaceId,
-            model: this.#model.id,
-            systemPrompt: input.systemPrompt,
-            initialPrompt: prompt,
-            runId: input.runId,
-            ...(input.extensions?.mcpServers
-              ? { mcpServers: input.extensions.mcpServers }
-              : {}),
-          });
-    this.#agents.set(input.runId, agent.id);
-    if (input.operation === 'continue')
-      await this.#client.sendAgentMessage(agent.id, prompt);
-    const finished = await this.#client.waitForFinish(
-      agent.id,
-      this.#options.executionTimeoutMs,
-    );
-    const status = mapPaseoFinishStatus(finished.status);
-
-    if (status === 'timed_out') {
-      throw new RuntimeTimedOutError();
-    }
-    if (status === 'failed') {
-      throw new RuntimeExecutionError(
-        finished.error ?? `Paseo finished with status ${finished.status}`,
+    let activeAgentId: string | null = null;
+    let baseline: PaseoTimelinePage | null = null;
+    let streamReady = false;
+    const seenLiveSequences = new Set<string>();
+    const emittedSnapshots = new Map<string, string>();
+    let sinkQueue = Promise.resolve();
+    let liveAssistant: {
+      readonly epoch: string;
+      readonly seq: number;
+      readonly text: string;
+    } | null = null;
+    const emitSnapshot = (epoch: string, seq: number, text: string): void => {
+      if (!sink || !text) return;
+      if (
+        baseline?.epoch === epoch &&
+        baseline.endCursor &&
+        seq <= baseline.endCursor.seq
+      )
+        return;
+      const key = `${epoch}:${seq}`;
+      if (emittedSnapshots.get(key) === text) return;
+      emittedSnapshots.set(key, text);
+      sinkQueue = sinkQueue.then(() =>
+        sink.emit({ kind: 'assistant_text', text }),
       );
-    }
-    if (finished.lastMessage === null) {
-      throw new RuntimeExecutionError(
-        'Paseo completed without a final assistant message.',
-      );
-    }
-
-    const memory = artifact
-      ? await this.#readMemoryCandidates(artifact, executionCwd)
-      : {};
-    return {
-      provider: agent.provider || 'opencode',
-      model: agent.model ?? this.#model.id,
-      text: finished.lastMessage,
-      providerAgentId: agent.id,
-      paseoWorkspaceId: workspaceId,
-      ...(finished.usage ? { usage: finished.usage } : {}),
-      ...(memory.memoryCandidates
-        ? { memoryCandidates: memory.memoryCandidates }
-        : {}),
     };
+    const consumeStreamEvent = (event: PaseoAgentStreamEvent): void => {
+      if (
+        event.agentId !== activeAgentId ||
+        event.timelineItemType !== 'assistant_message' ||
+        event.assistantText === undefined ||
+        event.seq === null ||
+        event.epoch === null
+      )
+        return;
+      if (
+        baseline?.epoch === event.epoch &&
+        baseline.endCursor &&
+        event.seq <= baseline.endCursor.seq
+      )
+        return;
+      if (seenLiveSequences.has(`${event.epoch}:${event.seq}`)) return;
+      if (liveAssistant === null || liveAssistant.epoch !== event.epoch) {
+        liveAssistant = {
+          epoch: event.epoch,
+          seq: event.seq,
+          text: event.assistantText,
+        };
+        seenLiveSequences.add(`${event.epoch}:${event.seq}`);
+      } else if (event.seq > liveAssistant.seq) {
+        seenLiveSequences.add(`${event.epoch}:${event.seq}`);
+        liveAssistant = {
+          ...liveAssistant,
+          seq: event.seq,
+          text: liveAssistant.text + event.assistantText,
+        };
+      } else {
+        return;
+      }
+      emitSnapshot(liveAssistant.epoch, liveAssistant.seq, liveAssistant.text);
+    };
+    let unsubscribe = this.#client.subscribeAgentStream?.((event) => {
+      if (streamReady) consumeStreamEvent(event);
+    });
+
+    try {
+      const agent =
+        input.operation === 'continue'
+          ? {
+              id: input.providerAgentId,
+              provider: 'opencode',
+              model: this.#model.id,
+            }
+          : await this.#client.createOpenCodeAgent({
+              cwd: input.cellCwd ?? this.#options.cwd,
+              workspaceId,
+              model: this.#model.id,
+              systemPrompt: input.systemPrompt,
+              initialPrompt: prompt,
+              runId: input.runId,
+              ...(input.extensions?.mcpServers
+                ? { mcpServers: input.extensions.mcpServers }
+                : {}),
+            });
+      activeAgentId = agent.id;
+      this.#agents.set(input.runId, agent.id);
+
+      if (this.#client.fetchAgentTimeline) {
+        baseline = await this.#client.fetchAgentTimeline(agent.id, {
+          direction: 'tail',
+          limit: 100,
+          projection: 'projected',
+        });
+      }
+      streamReady = true;
+
+      await this.#client.sendAgentMessage(agent.id, prompt);
+      const finished = await this.#client.waitForFinish(
+        agent.id,
+        this.#options.executionTimeoutMs,
+      );
+      streamReady = false;
+      unsubscribe?.();
+      unsubscribe = undefined;
+      if (this.#client.fetchAgentTimeline) {
+        const page = await this.#client.fetchAgentTimeline(agent.id, {
+          direction: 'tail',
+          limit: 100,
+          projection: 'projected',
+        });
+        for (const entry of page.entries) {
+          if (
+            entry.timelineItemType !== 'assistant_message' ||
+            entry.assistantText === undefined ||
+            (baseline?.epoch === page.epoch &&
+              baseline.endCursor &&
+              entry.seqEnd <= baseline.endCursor.seq)
+          )
+            continue;
+          emitSnapshot(page.epoch, entry.seqEnd, entry.assistantText);
+        }
+      }
+      await sinkQueue;
+
+      const status = mapPaseoFinishStatus(finished.status);
+      if (status === 'timed_out') throw new RuntimeTimedOutError();
+      if (status === 'failed') {
+        throw new RuntimeExecutionError(
+          finished.error ?? `Paseo finished with status ${finished.status}`,
+        );
+      }
+      if (finished.lastMessage === null) {
+        throw new RuntimeExecutionError(
+          'Paseo completed without a final assistant message.',
+        );
+      }
+
+      const memory = artifact
+        ? await this.#readMemoryCandidates(artifact, executionCwd)
+        : {};
+      return {
+        provider: agent.provider || 'opencode',
+        model: agent.model ?? this.#model.id,
+        text: finished.lastMessage,
+        providerAgentId: agent.id,
+        paseoWorkspaceId: workspaceId,
+        ...(finished.usage ? { usage: finished.usage } : {}),
+        ...(memory.memoryCandidates
+          ? { memoryCandidates: memory.memoryCandidates }
+          : {}),
+      };
+    } finally {
+      unsubscribe?.();
+      unsubscribe = undefined;
+    }
   }
 
   async #clearArtifact(path: string, cwd: string): Promise<void> {

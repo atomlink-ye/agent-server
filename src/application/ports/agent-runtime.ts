@@ -36,6 +36,15 @@ export interface AgentRuntimeExecution {
   }[];
 }
 
+export interface RuntimeEvent {
+  readonly kind: 'assistant_text';
+  readonly text: string;
+}
+
+export interface RuntimeEventSink {
+  emit(event: RuntimeEvent): Promise<void> | void;
+}
+
 export type AgentRuntimeExecuteInput =
   | {
       readonly operation: 'create';
@@ -66,7 +75,10 @@ export type AgentRuntimeExecuteInput =
 
 export interface AgentRuntimePort {
   initialize(): Promise<void>;
-  execute(input: AgentRuntimeExecuteInput): Promise<AgentRuntimeExecution>;
+  execute(
+    input: AgentRuntimeExecuteInput,
+    sink?: RuntimeEventSink,
+  ): Promise<AgentRuntimeExecution>;
   cancel?(input: {
     readonly runId: string;
     readonly providerAgentId?: string;

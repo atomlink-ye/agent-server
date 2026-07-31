@@ -1,7 +1,11 @@
+packages:
+  - 'apps/*'
+
 allowBuilds:
   esbuild: true
   node-pty: true
   protobufjs: false
+  sharp: true
 minimumReleaseAgeExclude:
   - prettier@3.9.6
   - '@modelcontextprotocol/sdk@1.30.0'

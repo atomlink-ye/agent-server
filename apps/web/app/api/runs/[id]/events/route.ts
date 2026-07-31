@@ -4,6 +4,7 @@ import {
   getMessages,
   openRunEventStream,
 } from '@/lib/agent-server-client';
+import { requireSelectedWebSession } from '@/lib/selected-web-session';
 import { readProductSessionId } from '@/lib/session-cookie';
 
 export const dynamic = 'force-dynamic';
@@ -13,10 +14,11 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, context: Context) {
   try {
-    const sessionId = await readProductSessionId();
     const runId = (await context.params).id;
+    const sessionId = await readProductSessionId();
     if (!sessionId)
       return safeError(new AgentServerError(404, 'run_not_found'));
+    await requireSelectedWebSession(sessionId);
     const messages = await getMessages(sessionId);
     if (!messages.some((message) => message.run_id === runId))
       return safeError(new AgentServerError(404, 'run_not_found'));

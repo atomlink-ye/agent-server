@@ -28,6 +28,25 @@ export type ProductSession = {
   environment_version_id: string;
 };
 
+export type ProductSessionSummary = {
+  session_id: string;
+  title: string;
+  preview: string | null;
+  preview_role: 'user' | 'assistant' | null;
+  last_message_at: string | null;
+  created_at: string;
+  status?: 'Working' | 'Completed' | 'Failed' | 'Ready';
+};
+
+export type RunEvent = {
+  id: string;
+  run_id: string;
+  sequence: number;
+  type: string;
+  payload?: unknown;
+  created_at: string;
+};
+
 export type SubmittedMessage = ProductMessage & {
   task_id: string;
   run_id: string;
@@ -93,6 +112,16 @@ export async function getSession(sessionId: string): Promise<ProductSession> {
   return request<ProductSession>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}`,
   );
+}
+
+export async function listSessions(workspaceId: string): Promise<{
+  sessions: ProductSessionSummary[];
+  next_cursor: string | null;
+}> {
+  if (!isUuid(workspaceId))
+    throw new AgentServerError(500, 'web_configuration_missing');
+  const query = new URLSearchParams({ workspace_id: workspaceId, limit: '20' });
+  return request(`/api/v1/sessions?${query.toString()}`);
 }
 
 export async function getMessages(
@@ -180,8 +209,28 @@ export async function openRunEventStream(
   return response;
 }
 
+export async function getAllRunEvents(runId: string): Promise<RunEvent[]> {
+  const events: RunEvent[] = [];
+  let after = 0;
+  for (;;) {
+    const page = await request<{
+      events: RunEvent[];
+      next_cursor: number | null;
+    }>(`/api/v1/runs/${encodeURIComponent(runId)}/events?after=${after}`);
+    events.push(...page.events);
+    if (page.next_cursor === null || page.events.length === 0) return events;
+    after = page.next_cursor;
+  }
+}
+
 export function getConfiguredWorkspaceId(): string | undefined {
   return configuredWorkspaceId;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 function normalizeMessage(value: unknown): ProductMessage {

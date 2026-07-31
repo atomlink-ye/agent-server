@@ -45,10 +45,12 @@ if (command.length === 0) {
   const paseoPort = process.env.PASEO_PORT
     ? Number.parseInt(process.env.PASEO_PORT, 10)
     : await getAvailablePort();
+  const paseoListenHost = process.env.PASEO_LISTEN_HOST ?? '127.0.0.1';
   const paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot,
     port: paseoPort,
+    listenHost: paseoListenHost,
   });
 
   const child = spawn(command[0], command.slice(1), {

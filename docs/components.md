@@ -81,11 +81,24 @@ proxy, and owner-checked Run SSE proxy. The browser receives only an HttpOnly
 upstream browser requests. Persisted ProductSession Messages remain the
 conversation truth.
 
-The runtime-neutral event projection accepts only
-`{ kind: 'assistant_text', text: <complete snapshot> }`. The Paseo adapter
-accumulates live chunks at its boundary and reconciles projected Timeline
-snapshots authoritatively. Run Events remain append-only evidence, and the Web
-reducer replaces transient text by sequence. SSE closes only after the
-persisted terminal Run Event; a matching formal Assistant Message is required
-for healthy UI convergence. This is a local fresh-session MVE, not production
-identity, ACL, recovery, backpressure, or broader console functionality.
+The runtime-neutral event projection uses the existing `type=output` Run Event
+path and flat scalar payloads. It supports complete-so-far `assistant_text`
+snapshots; cumulative `reasoning_progress` text disclosures; allowlisted
+`tool_status` detail/result/error previews; direct-child assistant/reasoning
+timeline rows; one final normalized `usage` snapshot; and read-only
+`permission` activity. Every preview is bounded and sanitized. Raw provider
+payloads, credentials, provider IDs, unsafe paths, and unbounded detail remain
+outside the boundary. The Paseo adapter filters by the active epoch/sequence
+baseline, serializes sink writes, and reconciles root and direct-child Timeline
+entries.
+
+Run Events remain append-only evidence, and the Web reducer replaces transient
+assistant text by sequence while rendering compact conversation-first activity
+with keyboard-accessible disclosures. The same reducer handles live SSE and
+paged replay; completed root disclosures default closed and direct-child rows
+remain inline under their parent.
+SSE closes only after the persisted terminal Run Event; a matching formal
+Assistant Message remains transcript truth and is required for healthy UI
+convergence. This is a local fresh-session MVE, not production identity, ACL,
+cancel, old-session restart recovery, backpressure, or broader console
+functionality.

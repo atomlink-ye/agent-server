@@ -4,7 +4,7 @@ import {
   getMessages,
   postMessage,
 } from '@/lib/agent-server-client';
-import { readProductSessionId } from '@/lib/session-cookie';
+import { requireSelectedWebSession } from '@/lib/selected-web-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +13,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, context: Context) {
   try {
     const id = (await context.params).id;
-    if ((await readProductSessionId()) !== id)
-      return NextResponse.json(
-        { error: 'The session was not found.' },
-        { status: 404 },
-      );
+    await requireSelectedWebSession(id);
     return NextResponse.json({ messages: await getMessages(id) });
   } catch (error) {
     return safeError(error);
@@ -27,11 +23,7 @@ export async function GET(_request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   try {
     const id = (await context.params).id;
-    if ((await readProductSessionId()) !== id)
-      return NextResponse.json(
-        { error: 'The session was not found.' },
-        { status: 404 },
-      );
+    await requireSelectedWebSession(id);
     const idempotencyKey = request.headers.get('idempotency-key');
     if (
       idempotencyKey === null ||

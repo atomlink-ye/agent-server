@@ -26,32 +26,32 @@ flowchart TD
 
 ## Baseline status
 
-| Capability                                     | Current state                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------------ |
-| HTTP liveness/readiness                        | Implemented                                                              |
-| Asynchronous Run API                           | Implemented                                                              |
-| Authenticated service-account Run ingress      | Implemented                                                              |
-| Canonical Task invoke/read/tree API            | Implemented                                                              |
-| Owner-scoped Run reads                         | Implemented                                                              |
-| PostgreSQL-backed Task/Run admission           | Implemented                                                              |
-| Durable Agent/Team definitions and versions    | Implemented                                                              |
-| Sequential Team graph compilation              | Implemented; `sequential-mvp-v1` preserved                               |
-| Team DAG MVE compilation/execution             | Implemented; opt-in `dag-mve-v1`, observed smoke path                    |
-| Team child Task/Run execution                  | Implemented; durable join for two parallel leaves plus synthesizer       |
-| Owner-scoped idempotent replay                 | Implemented                                                              |
-| In-process durable dispatcher/claim/fence      | Implemented; single process                                              |
-| Paseo WebSocket adapter                        | Implemented                                                              |
-| OpenCode free-model discovery                  | Implemented                                                              |
-| Explicit reusable Paseo Workspace              | Implemented                                                              |
-| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                                    |
-| Deterministic CI                               | Implemented; no model network calls                                      |
-| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                                   |
-| Managed Environment API + ProductSession pin   | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE |
-| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                            |
-| Web Chat + Paseo assistant-text streaming MVE  | Implemented MVE; fresh-session browser path verified; hardening deferred |
-| OIDC users, shared ACLs, credentials, approval | Planned V1                                                               |
-| Artifacts, evidence, broader Web console       | Planned V1                                                               |
-| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production       |
+| Capability                                     | Current state                                                                                                          |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| HTTP liveness/readiness                        | Implemented                                                                                                            |
+| Asynchronous Run API                           | Implemented                                                                                                            |
+| Authenticated service-account Run ingress      | Implemented                                                                                                            |
+| Canonical Task invoke/read/tree API            | Implemented                                                                                                            |
+| Owner-scoped Run reads                         | Implemented                                                                                                            |
+| PostgreSQL-backed Task/Run admission           | Implemented                                                                                                            |
+| Durable Agent/Team definitions and versions    | Implemented                                                                                                            |
+| Sequential Team graph compilation              | Implemented; `sequential-mvp-v1` preserved                                                                             |
+| Team DAG MVE compilation/execution             | Implemented; opt-in `dag-mve-v1`, observed smoke path                                                                  |
+| Team child Task/Run execution                  | Implemented; durable join for two parallel leaves plus synthesizer                                                     |
+| Owner-scoped idempotent replay                 | Implemented                                                                                                            |
+| In-process durable dispatcher/claim/fence      | Implemented; single process                                                                                            |
+| Paseo WebSocket adapter                        | Implemented                                                                                                            |
+| OpenCode free-model discovery                  | Implemented                                                                                                            |
+| Explicit reusable Paseo Workspace              | Implemented                                                                                                            |
+| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                                                                                  |
+| Deterministic CI                               | Implemented; no model network calls                                                                                    |
+| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                                                                                 |
+| Managed Environment API + ProductSession pin   | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE                                               |
+| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                                                                          |
+| Web Chat + Paseo rich-events MVE               | Implemented MVE; sanitized direct timeline/disclosures and replay verified; Oracle merge-ready; PR integration pending |
+| OIDC users, shared ACLs, credentials, approval | Planned V1                                                                                                             |
+| Artifacts, evidence, broader Web console       | Planned V1                                                                                                             |
+| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production                                                     |
 
 ## Quick start
 
@@ -108,6 +108,10 @@ Environment inputs through authenticated APIs, then `make web-dev` to build and
 start the Web service with the local stack. The browser receives only the
 HttpOnly `product_session_id`; the Agent Server bearer remains server-side.
 This is a fresh-ProductSession local MVE path, not a production Web console.
+Activity is rendered as sanitized collapsible root and direct-child timeline
+disclosures for live and replayed Run Events; completed root rows default
+closed. Production identity, recovery, and broader console behavior remain
+deferred.
 
 Submit and poll a run:
 
@@ -177,6 +181,7 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
 - [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): approved minimum-scenario evidence; production hardening deferred.
 - [Web Chat + Paseo Streaming MVE evidence packet](docs/evidence/web-chat-paseo-streaming-mve-evidence-packet.md): sanitized fresh-session browser evidence; production hardening deferred.
+- [Web Chat rich-events MVE evidence packet](docs/evidence/web-chat-rich-events-mve-evidence-packet.md): sanitized real-session evidence for safe progress, Tool, usage, Markdown, and refresh recovery.
 - [Lark Managed Memory command canary evidence](docs/evidence/lark-managed-memory-command-canary-evidence-packet.md): sanitized fixed-configuration command-path evidence.
 - [Lark Managed Memory Card/Doc evidence](docs/evidence/lark-managed-memory-card-doc-canary-evidence-packet.md): sanitized normal-path provider evidence and boundaries.
 - [Lark Managed Memory command canary runbook](docs/operations/lark-memory-command-canary-runbook.md): safe readiness, one-consumer operation, command/Card/Doc verification, and shutdown.
@@ -190,7 +195,7 @@ The repository documentation is self-contained. The legacy `backup` branch and e
 ## Baseline limitations
 
 - Baseline authentication is limited to configured service-account bearer tokens on the public Run and Task APIs.
-- The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, production execution-cell isolation, cancel/retry UI, rich streaming events, and artifact services. The narrow fresh-session Web Chat assistant-text streaming MVE is implemented and verified locally.
+- The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, production execution-cell isolation, cancel/retry UI, and artifact services. The narrow fresh-session Web Chat rich-events MVE is implemented and verified locally; production recovery and broader console behavior remain deferred.
 - Managed Runtime Cells are an implemented MVE placement seam, not production isolation; transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host placement/GC, and a second adapter remain deferred.
 - Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
 - `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.

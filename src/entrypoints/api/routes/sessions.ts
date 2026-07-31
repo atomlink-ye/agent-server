@@ -14,7 +14,10 @@ import {
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import { SessionCreationError } from '../../../application/sessions/session-errors.js';
+import {
+  SessionCreationError,
+  SessionListQueryError,
+} from '../../../application/sessions/session-errors.js';
 const json = async (c: any) => {
   try {
     return await c.req.json();
@@ -41,6 +44,41 @@ export function registerSessionRoutes(
   app.use('/api/v1/workspaces/*', auth);
   app.use('/api/v1/sessions', auth);
   app.use('/api/v1/sessions/*', auth);
+  app.get('/api/v1/sessions', async (c) => {
+    const query = parseSessionListQuery(c.req.url);
+    const owner = getAuthenticatedAccessContext(c);
+    const workspace = await d.sessions.getWorkspace(query.workspaceId, owner);
+    if (!workspace)
+      throw new HttpError(
+        404,
+        'workspace_not_found',
+        'The requested workspace does not exist.',
+      );
+    try {
+      const page = await d.sessions.listSessions(owner, query);
+      return c.json({
+        sessions: page.items.map((item) => ({
+          session_id: item.sessionId,
+          title: item.title,
+          preview: item.preview,
+          preview_role: item.previewRole,
+          last_message_at: item.lastMessageAt,
+          created_at: item.createdAt,
+        })),
+        next_cursor: page.nextCursor,
+      });
+    } catch (error) {
+      if (error instanceof SessionListQueryError)
+        throw new HttpError(
+          400,
+          error.code,
+          error.code === 'invalid_limit'
+            ? 'The requested session list limit is invalid.'
+            : 'The requested session list cursor is invalid.',
+        );
+      throw error;
+    }
+  });
   app.post('/api/v1/workspaces', async (c) => {
     const p = WorkspaceCreateSchema.safeParse(await json(c));
     if (!p.success)
@@ -258,4 +296,77 @@ export function registerSessionRoutes(
       200,
     );
   });
+}
+
+function parseSessionListQuery(url: string): {
+  readonly workspaceId: string;
+  readonly limit: number;
+  readonly cursor: string | null;
+} {
+  const params = new URL(url).searchParams;
+  for (const key of params.keys())
+    if (key !== 'workspace_id' && key !== 'limit' && key !== 'cursor')
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The query parameters are invalid.',
+      );
+  const workspaceValues = params.getAll('workspace_id');
+  if (workspaceValues.length !== 1 || !isCanonicalUuid(workspaceValues[0]!))
+    throw new HttpError(
+      400,
+      'invalid_request',
+      'Exactly one valid workspace_id is required.',
+    );
+  const limitValues = params.getAll('limit');
+  if (limitValues.length > 1)
+    throw new HttpError(
+      400,
+      'invalid_request',
+      'The query parameters are invalid.',
+    );
+  const cursorValues = params.getAll('cursor');
+  if (cursorValues.length > 1)
+    throw new HttpError(
+      400,
+      'invalid_request',
+      'The query parameters are invalid.',
+    );
+  if (cursorValues[0] === '')
+    throw new HttpError(
+      400,
+      'invalid_cursor',
+      'The requested session list cursor is invalid.',
+    );
+  const rawLimit = limitValues[0];
+  if (rawLimit === undefined)
+    return {
+      workspaceId: workspaceValues[0]!,
+      limit: 20,
+      cursor: cursorValues[0] ?? null,
+    };
+  if (!/^(?:0|[1-9][0-9]*)$/.test(rawLimit))
+    throw new HttpError(
+      400,
+      'invalid_limit',
+      'The requested session list limit is invalid.',
+    );
+  const limit = Number(rawLimit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
+    throw new HttpError(
+      400,
+      'invalid_limit',
+      'The requested session list limit is invalid.',
+    );
+  return {
+    workspaceId: workspaceValues[0]!,
+    limit,
+    cursor: cursorValues[0] ?? null,
+  };
+}
+
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

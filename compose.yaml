@@ -25,6 +25,7 @@ services:
         condition: service_healthy
     ports:
       - '127.0.0.1:3000:3000'
+      - '127.0.0.1:16767:16767'
     environment:
       NODE_ENV: development
       CI: 'true'
@@ -32,6 +33,9 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
+      PASEO_PORT: '16767'
+      PASEO_LISTEN_HOST: '0.0.0.0'
+      PASEO_CORS_ORIGINS: 'http://localhost:18081,http://127.0.0.1:18081'
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
       HOME: /workspace/.local/home

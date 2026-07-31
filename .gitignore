@@ -16,3 +16,7 @@ pnpm-debug.log*
 .learnings/
 docs/generated/*
 !docs/generated/README.md
+
+# BEGIN oh-my-opencode-slim clonedeps
+.slim/clonedeps/repos/
+# END oh-my-opencode-slim clonedeps

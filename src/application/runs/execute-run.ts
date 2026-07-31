@@ -9,6 +9,7 @@ import type { Logger } from '../../shared/observability/logger.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import {
   type AgentRuntimePort,
+  type RuntimeEvent,
   RuntimeTimedOutError,
 } from '../ports/agent-runtime.js';
 import type {
@@ -508,13 +509,9 @@ export class ExecuteRun {
       );
     const runtimeEventSink = this.events
       ? {
-          emit: async (event: {
-            readonly kind: 'assistant_text';
-            readonly text: string;
-          }) => {
+          emit: async (event: RuntimeEvent) => {
             await this.events!.append(claim.run.id, 'output', {
-              kind: event.kind,
-              text: event.text,
+              ...runtimeEventPayload(event),
             });
           },
         }
@@ -754,4 +751,88 @@ function isSafeRuntimeCandidate(candidate: {
       candidate.content,
     )
   );
+}
+
+function runtimeEventPayload(
+  event: import('../ports/agent-runtime.js').RuntimeEvent,
+): Readonly<Record<string, string | number | boolean | null>> {
+  switch (event.kind) {
+    case 'assistant_text':
+      return { kind: event.kind, text: event.text };
+    case 'reasoning_progress':
+      return {
+        kind: event.kind,
+        status: event.status,
+        ...(event.text ? { text: event.text } : {}),
+      };
+    case 'tool_status':
+      return {
+        kind: event.kind,
+        activity_id: event.activityId,
+        category: event.category,
+        status: event.status,
+        label: event.label,
+        summary: event.summary,
+        ...(event.detailKind
+          ? { detail_kind: event.detailKind }
+          : ['shell', 'read', 'write', 'edit', 'search', 'fetch'].includes(
+                event.category,
+              )
+            ? { detail_kind: event.category }
+            : {}),
+        ...(event.detailText ? { detail_text: event.detailText } : {}),
+        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+        ...(event.parentActivityId
+          ? { parent_activity_id: event.parentActivityId }
+          : {}),
+      };
+    case 'child_timeline_item':
+      return {
+        kind: event.kind,
+        activity_id: event.activityId,
+        parent_activity_id: event.parentActivityId,
+        item_kind: event.itemKind,
+        status: event.status,
+        label: event.label,
+        summary: event.summary,
+        ...(event.detailKind ? { detail_kind: event.detailKind } : {}),
+        ...(event.detailText ? { detail_text: event.detailText } : {}),
+        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+      };
+    case 'permission':
+      return {
+        kind: event.kind,
+        activity_id: event.activityId,
+        category: event.category,
+        status: event.status,
+        ...(event.decision ? { decision: event.decision } : {}),
+        summary: event.summary,
+      };
+    case 'usage': {
+      const payload: Record<string, string | number | boolean | null> = {
+        kind: event.kind,
+      };
+      if (event.inputTokens !== undefined)
+        payload.input_tokens = event.inputTokens;
+      if (event.cachedInputTokens !== undefined)
+        payload.cached_input_tokens = event.cachedInputTokens;
+      if (event.outputTokens !== undefined)
+        payload.output_tokens = event.outputTokens;
+      if (event.totalCostUsd !== undefined)
+        payload.total_cost_usd = event.totalCostUsd;
+      if (event.contextWindowMaxTokens !== undefined)
+        payload.context_window_max_tokens = event.contextWindowMaxTokens;
+      if (event.contextWindowUsedTokens !== undefined)
+        payload.context_window_used_tokens = event.contextWindowUsedTokens;
+      return payload;
+    }
+    default:
+      return assertNeverRuntimeEvent(event);
+  }
+}
+
+function assertNeverRuntimeEvent(
+  event: never,
+): Readonly<Record<string, string | number | boolean | null>> {
+  throw new Error(`Unhandled runtime event kind: ${String(event)}`);
 }

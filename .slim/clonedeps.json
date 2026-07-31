@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-08-01T00:00:00.000Z",
+  "dependencies": [
+    {
+      "name": "@getpaseo/app",
+      "resolvedVersion": "0.1.110",
+      "repoUrl": "https://github.com/getpaseo/paseo.git",
+      "ref": "v0.1.110",
+      "path": ".slim/clonedeps/repos/getpaseo__paseo",
+      "packagePath": "packages/app",
+      "reason": "Reference Web UI for tool and provider-subagent timeline rendering"
+    },
+    {
+      "name": "@getpaseo/client",
+      "resolvedVersion": "0.1.110",
+      "repoUrl": "https://github.com/getpaseo/paseo.git",
+      "ref": "v0.1.110",
+      "path": ".slim/clonedeps/repos/getpaseo__paseo",
+      "packagePath": "packages/client",
+      "reason": "Client API source used by the Agent Server Paseo adapter"
+    },
+    {
+      "name": "@getpaseo/protocol",
+      "resolvedVersion": "0.1.110",
+      "repoUrl": "https://github.com/getpaseo/paseo.git",
+      "ref": "v0.1.110",
+      "path": ".slim/clonedeps/repos/getpaseo__paseo",
+      "packagePath": "packages/protocol",
+      "reason": "Canonical timeline and provider-subagent protocol types"
+    },
+    {
+      "name": "@getpaseo/server",
+      "resolvedVersion": "0.1.110",
+      "repoUrl": "https://github.com/getpaseo/paseo.git",
+      "ref": "v0.1.110",
+      "path": ".slim/clonedeps/repos/getpaseo__paseo",
+      "packagePath": "packages/server",
+      "reason": "Server/API implementation for provider-subagent list and timelines"
+    }
+  ]
+}

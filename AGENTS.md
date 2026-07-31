@@ -77,3 +77,10 @@ A task is complete only when:
 - the plan is moved to `completed/`, has `status: completed`, and contains no unchecked boxes.
 
 Human Gates, handoff format, failure recovery, and the full lifecycle are defined in [docs/agents](docs/agents.md).
+
+## Cloned Dependency Source
+
+Read-only dependency source repositories are available under
+`.slim/clonedeps/repos/` for inspection. Do not edit these clones.
+
+- `.slim/clonedeps/repos/getpaseo__paseo/` — `getpaseo/paseo` at `v0.1.110`; inspect the Web app, client, protocol, and server implementation for runtime integration work. An org-level reusable copy is also available at `/Volumes/AgentsWorkspace/orgs/0xdtech/tmp/paseo-v0.1.110`.

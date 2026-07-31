@@ -48,22 +48,30 @@ managed Cell path uses `createWorkspace`; this yields Workspace reuse for
 Session A continuation and a distinct Workspace for Session B. This observed
 MVE behavior is not a production placement or isolation guarantee.
 
-### Assistant-text streaming MVE
+### Rich-events streaming MVE
 
-The adapter accepts an optional runtime event sink whose sole event is
-`{ kind: 'assistant_text', text }`. It subscribes to the adapter-local Paseo
-stream before creating the Agent, filters by the bound Agent ID and the
-projected Timeline baseline, and accumulates increasing same-epoch assistant
-chunks into complete snapshots. Duplicate and out-of-order live sequences are
-ignored. After finish, projected Timeline entries are reconciled as complete
-authoritative snapshots rather than concatenated with live text; sink writes
-are serialized and drained before execution returns, and the listener is
-removed.
+The adapter accepts an optional runtime event sink for complete
+`assistant_text` snapshots, bounded cumulative reasoning text, typed Tool
+previews, direct-child assistant/Thinking/Tool timeline rows, final usage, and
+read-only permission activity. It subscribes to the adapter-local Paseo stream
+before creating the Agent, filters by the bound Agent ID and active epoch/seq
+Timeline baseline, and accumulates increasing same-epoch assistant chunks into
+complete snapshots. Duplicate and out-of-order live sequences are ignored.
+Final Timeline catch-up reconciles delayed assistant, reasoning, child, and
+Tool tails. Tool and permission state moves monotonically, and sink writes are
+serialized and drained before execution returns.
 
-The sink deliberately excludes reasoning, tools, permissions, usage, raw
-provider events, and other unknown payloads. This is a local streaming
-projection seam, not durable stream recovery, multi-writer ordering, or
-production backpressure.
+Only allowlisted scalar fields cross the boundary. Reasoning text is bounded and
+sanitized as cumulative display text; Tool detail is limited to safe kind/text
+and exit code; child rows are limited to assistant, Thinking, and Tool content.
+Tool summaries are fixed by category and activity IDs are opaque and run-local.
+Raw chain-of-thought, provider payloads, prompts, credentials, absolute paths,
+provider/call/child IDs, unbounded output, and unknown/malformed events are
+never projected. Credential/path screening and workspace-relative conversion
+run before emission. Delayed tails are merged monotonically; conflicting
+provider/parent correlations or unsafe detail are quarantined rather than
+forwarded. This is a local streaming projection seam, not durable stream
+recovery, multi-writer ordering, or production backpressure.
 
 In the observed opt-in `dag-mve-v1` Team flow, each leaf and the synthesizer
 receive task-scoped RuntimeSession/RuntimeCell state. The Team shares one

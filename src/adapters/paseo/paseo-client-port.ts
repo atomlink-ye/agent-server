@@ -26,11 +26,100 @@ export interface PaseoAgentStreamEvent {
   readonly epoch: string | null;
   readonly timelineItemType: string | null;
   readonly assistantText?: string;
+  readonly reasoning?: boolean;
+  readonly reasoningText?: string;
+  readonly toolCall?: PaseoToolCall;
+  readonly permission?: PaseoPermissionActivity;
+}
+
+export interface PaseoToolCall {
+  readonly callId: string;
+  readonly name: string;
+  readonly status: string;
+  readonly detailType?: string;
+  readonly detailText?: string;
+  readonly exitCode?: number;
+  readonly input?: PaseoToolInputCandidate;
+}
+
+export interface PaseoToolInputCandidate {
+  readonly command?: string;
+  readonly filePath?: string;
+  readonly query?: string;
+  readonly url?: string;
+  readonly subAgentType?: string;
+  readonly description?: string;
+  /** COMPAT: provider-private OpenCode child correlation only. */
+  readonly childSessionId?: string;
+}
+
+export interface PaseoProviderSubagentDescriptor {
+  readonly id: string;
+  readonly parentAgentId: string;
+  readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly title: string | null;
+  readonly description: string | null;
+  readonly toolCallId: string | null;
+}
+
+export interface PaseoProviderSubagentTimelineItem {
+  readonly timelineItemType: string;
+  /** Internal correlation only; never emitted downstream. */
+  readonly timelineKey?: string;
+  readonly reasoning?: boolean;
+  readonly reasoningText?: string;
+  readonly assistantText?: string;
+  readonly toolCall?: PaseoToolCall;
+}
+
+export interface PaseoProviderSubagentTimelineRow {
+  readonly item: PaseoProviderSubagentTimelineItem;
+  readonly timestamp: string;
+  readonly seq: number;
+}
+
+export interface PaseoProviderSubagentTimeline {
+  readonly parentAgentId: string;
+  readonly subagentId: string;
+  readonly epoch: string;
+  readonly direction: 'tail' | 'before' | 'after';
+  readonly rows: readonly PaseoProviderSubagentTimelineRow[];
+  readonly hasOlder: boolean;
+}
+
+export type PaseoProviderSubagentUpdate =
+  | {
+      readonly kind: 'upsert';
+      readonly subagent: PaseoProviderSubagentDescriptor;
+    }
+  | {
+      readonly kind: 'timeline';
+      readonly parentAgentId: string;
+      readonly subagentId: string;
+      readonly epoch: string;
+      readonly timestamp: string;
+      readonly seq: number;
+      readonly item: PaseoProviderSubagentTimelineItem;
+    }
+  | {
+      readonly kind: 'remove';
+      readonly parentAgentId: string;
+      readonly subagentId: string;
+    };
+
+export interface PaseoPermissionActivity {
+  readonly requestId: string;
+  readonly kind?: string;
+  readonly status: 'requested' | 'resolved';
+  readonly decision?: 'allowed' | 'denied';
 }
 
 export interface PaseoTimelineEntry {
   readonly timelineItemType: string;
   readonly assistantText?: string;
+  readonly reasoning?: boolean;
+  readonly reasoningText?: string;
+  readonly toolCall?: PaseoToolCall;
   readonly timestamp: string;
   readonly seqStart: number;
   readonly seqEnd: number;
@@ -68,6 +157,21 @@ export interface PaseoClientPort {
   subscribeAgentStream?(
     listener: (event: PaseoAgentStreamEvent) => void,
   ): () => void;
+  subscribeProviderSubagentUpdates?(
+    listener: (update: PaseoProviderSubagentUpdate) => void,
+  ): () => void;
+  listProviderSubagents?(
+    parentAgentId: string,
+  ): Promise<readonly PaseoProviderSubagentDescriptor[]>;
+  fetchProviderSubagentTimeline?(
+    parentAgentId: string,
+    subagentId: string,
+    options: {
+      readonly direction?: 'tail' | 'before' | 'after';
+      readonly cursor?: { readonly epoch: string; readonly seq: number };
+      readonly limit?: number;
+    },
+  ): Promise<PaseoProviderSubagentTimeline>;
   fetchAgentTimeline?(
     agentId: string,
     options: {
@@ -82,6 +186,13 @@ export interface PaseoClientPort {
   ): Promise<PaseoFinishedAgent>;
   cancelAgent?(agentId: string): Promise<void>;
   close(): Promise<void>;
+}
+
+export class PaseoClientProjectionError extends Error {
+  public constructor(message = 'Paseo returned an invalid projection.') {
+    super(message);
+    this.name = 'PaseoClientProjectionError';
+  }
 }
 
 export class PaseoSdkClient implements PaseoClientPort {
@@ -212,19 +323,97 @@ export class PaseoSdkClient implements PaseoClientPort {
     listener: (event: PaseoAgentStreamEvent) => void,
   ): () => void {
     return this.#client.on('agent_stream', (message) => {
-      const event = message.payload.event;
+      const payload =
+        isRecord(message) && isRecord(message.payload) ? message.payload : null;
+      const event = payload?.event;
+      if (
+        !payload ||
+        !isRecord(event) ||
+        typeof payload.agentId !== 'string' ||
+        typeof payload.timestamp !== 'string' ||
+        (payload.seq !== undefined &&
+          payload.seq !== null &&
+          typeof payload.seq !== 'number') ||
+        (payload.epoch !== undefined &&
+          payload.epoch !== null &&
+          typeof payload.epoch !== 'string') ||
+        typeof event.type !== 'string'
+      )
+        return;
+      const timelineItem = event.type === 'timeline' ? event.item : undefined;
+      if (event.type === 'timeline' && !isRecord(timelineItem)) return;
+      const projected = projectStreamEvent(event);
       listener({
-        agentId: message.payload.agentId,
+        agentId: payload.agentId,
         eventType: event.type,
-        timestamp: message.payload.timestamp,
-        seq: message.payload.seq ?? null,
-        epoch: message.payload.epoch ?? null,
-        timelineItemType: event.type === 'timeline' ? event.item.type : null,
-        ...(event.type === 'timeline' && event.item.type === 'assistant_message'
-          ? { assistantText: event.item.text }
+        timestamp: payload.timestamp,
+        seq: payload.seq ?? null,
+        epoch: payload.epoch ?? null,
+        timelineItemType:
+          event.type === 'timeline'
+            ? (stringValue(timelineItem?.type) ?? null)
+            : null,
+        ...(event.type === 'timeline' &&
+        timelineItem?.type === 'assistant_message' &&
+        typeof timelineItem.text === 'string'
+          ? { assistantText: timelineItem.text }
           : {}),
+        ...(projected.reasoning ? { reasoning: true } : {}),
+        ...(projected.reasoningText
+          ? { reasoningText: projected.reasoningText }
+          : {}),
+        ...(projected.toolCall ? { toolCall: projected.toolCall } : {}),
+        ...(projected.permission ? { permission: projected.permission } : {}),
       });
     });
+  }
+
+  public subscribeProviderSubagentUpdates(
+    listener: (update: PaseoProviderSubagentUpdate) => void,
+  ): () => void {
+    return this.#client.on('agent.provider_subagents.update', (message) => {
+      const update = projectProviderSubagentUpdate(message);
+      if (update) listener(update);
+    });
+  }
+
+  public async listProviderSubagents(
+    parentAgentId: string,
+  ): Promise<readonly PaseoProviderSubagentDescriptor[]> {
+    const payload = await this.#client.listProviderSubagents(parentAgentId);
+    if (
+      !isRecord(payload) ||
+      typeof payload.requestId !== 'string' ||
+      payload.parentAgentId !== parentAgentId ||
+      !Array.isArray(payload.subagents) ||
+      payload.error !== null
+    )
+      throw new PaseoClientProjectionError(
+        'Paseo returned an invalid provider-subagent list.',
+      );
+    return payload.subagents.flatMap((value) => {
+      const descriptor = projectProviderSubagentDescriptor(value);
+      return descriptor && descriptor.parentAgentId === parentAgentId
+        ? [descriptor]
+        : [];
+    });
+  }
+
+  public async fetchProviderSubagentTimeline(
+    parentAgentId: string,
+    subagentId: string,
+    options: {
+      readonly direction?: 'tail' | 'before' | 'after';
+      readonly cursor?: { readonly epoch: string; readonly seq: number };
+      readonly limit?: number;
+    },
+  ): Promise<PaseoProviderSubagentTimeline> {
+    const payload = await this.#client.fetchProviderSubagentTimeline(
+      parentAgentId,
+      subagentId,
+      options,
+    );
+    return projectProviderSubagentTimeline(payload, parentAgentId, subagentId);
   }
 
   public async fetchAgentTimeline(
@@ -241,15 +430,65 @@ export class PaseoSdkClient implements PaseoClientPort {
       startCursor: page.startCursor,
       endCursor: page.endCursor,
       window: page.window,
-      entries: page.entries.map((entry) => ({
-        timelineItemType: entry.item.type,
-        timestamp: entry.timestamp,
-        seqStart: entry.seqStart,
-        seqEnd: entry.seqEnd,
-        ...(entry.item.type === 'assistant_message'
-          ? { assistantText: entry.item.text }
-          : {}),
-      })),
+      entries: page.entries.flatMap(
+        (rawEntry): readonly PaseoTimelineEntry[] => {
+          if (!isRecord(rawEntry) || !isRecord(rawEntry.item)) return [];
+          const entry = rawEntry;
+          const item = entry.item;
+          const timelineItemType = stringValue(item.type);
+          if (
+            !timelineItemType ||
+            typeof entry.timestamp !== 'string' ||
+            typeof entry.seqStart !== 'number' ||
+            !Number.isFinite(entry.seqStart) ||
+            typeof entry.seqEnd !== 'number' ||
+            !Number.isFinite(entry.seqEnd)
+          )
+            return [];
+          const projected = projectTimelineItem(item);
+          if (timelineItemType === 'assistant_message') {
+            const assistantText =
+              'text' in item && typeof item.text === 'string'
+                ? (safePreview(item.text, 4000) ?? null)
+                : null;
+            return assistantText !== null
+              ? [
+                  {
+                    timelineItemType,
+                    timestamp: entry.timestamp,
+                    seqStart: entry.seqStart,
+                    seqEnd: entry.seqEnd,
+                    assistantText,
+                  },
+                ]
+              : [];
+          }
+          if (timelineItemType === 'reasoning' && projected.reasoning)
+            return [
+              {
+                timelineItemType,
+                timestamp: entry.timestamp,
+                seqStart: entry.seqStart,
+                seqEnd: entry.seqEnd,
+                reasoning: true,
+                ...(projected.reasoningText
+                  ? { reasoningText: projected.reasoningText }
+                  : {}),
+              },
+            ];
+          if (timelineItemType === 'tool_call' && projected.toolCall)
+            return [
+              {
+                timelineItemType,
+                timestamp: entry.timestamp,
+                seqStart: entry.seqStart,
+                seqEnd: entry.seqEnd,
+                toolCall: projected.toolCall,
+              },
+            ];
+          return [];
+        },
+      ),
     };
   }
 
@@ -260,4 +499,395 @@ export class PaseoSdkClient implements PaseoClientPort {
   public close(): Promise<void> {
     return this.#client.close();
   }
+}
+
+function projectStreamEvent(event: unknown): {
+  readonly reasoning?: boolean;
+  readonly reasoningText?: string;
+  readonly toolCall?: PaseoToolCall;
+  readonly permission?: PaseoPermissionActivity;
+} {
+  if (!isRecord(event)) return {};
+  const item = isRecord(event.item) ? event.item : null;
+  if (event.type === 'timeline' && item) return projectTimelineItem(item);
+  if (event.type === 'tool_call') return projectTimelineItem(event);
+  if (event.type === 'permission_requested' && isRecord(event.request)) {
+    const id = stringValue(event.request.id);
+    const kind = stringValue(event.request.kind);
+    return id
+      ? {
+          permission: {
+            requestId: id,
+            ...(kind ? { kind } : {}),
+            status: 'requested',
+          },
+        }
+      : {};
+  }
+  if (event.type === 'permission_resolved') {
+    const requestId = stringValue(event.requestId);
+    const behavior = stringValue(
+      event.resolution && isRecord(event.resolution)
+        ? event.resolution.behavior
+        : undefined,
+    );
+    return requestId
+      ? {
+          permission: {
+            requestId,
+            status: 'resolved',
+            ...(behavior === 'allow' ||
+            behavior === 'allowed' ||
+            behavior === 'allow_once'
+              ? { decision: 'allowed' }
+              : behavior === 'deny' ||
+                  behavior === 'denied' ||
+                  behavior === 'reject'
+                ? { decision: 'denied' }
+                : {}),
+          },
+        }
+      : {};
+  }
+  return {};
+}
+
+function projectTimelineItem(item: unknown): {
+  readonly reasoning?: boolean;
+  readonly reasoningText?: string;
+  readonly toolCall?: PaseoToolCall;
+} {
+  if (!isRecord(item)) return {};
+  if (item.type === 'reasoning' && typeof item.text === 'string') {
+    const text = safePreview(item.text, 4000);
+    return { reasoning: true, ...(text ? { reasoningText: text } : {}) };
+  }
+  if (item.type !== 'tool_call') return {};
+  const callId = stringValue(item.callId);
+  const name = stringValue(item.name);
+  const status = stringValue(item.status);
+  if (!callId || !name || !status) return {};
+  const detail = isRecord(item.detail)
+    ? stringValue(item.detail.type)
+    : undefined;
+  return {
+    toolCall: {
+      callId,
+      name,
+      status,
+      ...(detail ? { detailType: detail } : {}),
+      ...(detail ? projectToolInput(item.detail) : {}),
+      ...projectToolDetail(
+        item.detail,
+        status.toLowerCase() === 'failed' ? item.error : undefined,
+      ),
+    },
+  };
+}
+
+function projectToolInput(
+  value: unknown,
+): { readonly input: PaseoToolInputCandidate } | Record<string, never> {
+  if (!isRecord(value) || typeof value.type !== 'string') return {};
+  const input: {
+    command?: string;
+    filePath?: string;
+    query?: string;
+    url?: string;
+    subAgentType?: string;
+    description?: string;
+    childSessionId?: string;
+  } = {};
+  if (value.type === 'shell' && typeof value.command === 'string')
+    input.command = value.command;
+  if (
+    ['read', 'edit', 'write'].includes(value.type) &&
+    typeof value.filePath === 'string'
+  )
+    input.filePath = value.filePath;
+  if (value.type === 'search' && typeof value.query === 'string')
+    input.query = value.query;
+  if (value.type === 'fetch' && typeof value.url === 'string')
+    input.url = value.url;
+  if (value.type === 'sub_agent') {
+    if (typeof value.subAgentType === 'string')
+      input.subAgentType = value.subAgentType;
+    if (typeof value.description === 'string')
+      input.description = value.description;
+    if (typeof value.childSessionId === 'string')
+      input.childSessionId = value.childSessionId;
+  }
+  return Object.keys(input).length ? { input } : {};
+}
+
+function projectToolDetail(
+  value: unknown,
+  failedError?: unknown,
+): {
+  readonly detailText?: string;
+  readonly exitCode?: number;
+} {
+  if (!isRecord(value) && typeof failedError !== 'string') return {};
+  const candidates = [
+    ...(isRecord(value)
+      ? [value.output, value.result, value.content, value.unifiedDiff]
+      : []),
+    failedError,
+  ];
+  const detailText = candidates.find(
+    (candidate): candidate is string => typeof candidate === 'string',
+  );
+  const exitCode =
+    isRecord(value) &&
+    typeof value.exitCode === 'number' &&
+    Number.isSafeInteger(value.exitCode)
+      ? value.exitCode
+      : undefined;
+  const preview = detailText ? safePreview(detailText, 2000) : undefined;
+  return {
+    ...(preview ? { detailText: preview } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+  };
+}
+
+function safePreview(value: string, max: number): string | undefined {
+  const sanitized = value.replace(
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu,
+    '',
+  );
+  if (!sanitized.trim() || containsCredentialMarker(sanitized))
+    return undefined;
+  return Array.from(sanitized).slice(0, max).join('');
+}
+
+function containsCredentialMarker(value: string): boolean {
+  return (
+    /authorization|cookie|password|secret|token|credential|api[_-]?key|private[ _-]?key|bearer\s+/i.test(
+      value,
+    ) || /:\/\/[^/?#:@]+:[^@]+@/i.test(value)
+  );
+}
+
+function projectProviderSubagentDescriptor(
+  value: unknown,
+): PaseoProviderSubagentDescriptor | null {
+  if (!isRecord(value)) return null;
+  const id = stringValue(value.id);
+  const parentAgentId = stringValue(value.parentAgentId);
+  const status = normalizeSubagentStatus(value.status);
+  const provider = stringValue(value.provider);
+  const createdAt = stringValue(value.createdAt);
+  const updatedAt = stringValue(value.updatedAt);
+  const title = requiredNullableString(value.title);
+  const description = requiredNullableString(value.description);
+  const toolCallId = requiredNullableString(value.toolCallId);
+  if (
+    !id ||
+    !parentAgentId ||
+    !status ||
+    !provider ||
+    !createdAt ||
+    !updatedAt ||
+    !title.valid ||
+    !description.valid ||
+    !toolCallId.valid
+  )
+    return null;
+  return {
+    id,
+    parentAgentId,
+    status,
+    title: title.value,
+    description: description.value,
+    toolCallId: toolCallId.value,
+  };
+}
+
+function projectProviderSubagentTimeline(
+  value: unknown,
+  parentAgentId: string,
+  subagentId: string,
+): PaseoProviderSubagentTimeline {
+  if (
+    !isRecord(value) ||
+    value.parentAgentId !== parentAgentId ||
+    value.subagentId !== subagentId
+  )
+    throw new PaseoClientProjectionError(
+      'Paseo returned an invalid provider-subagent timeline identity.',
+    );
+  const epoch = stringValue(value.epoch);
+  const direction = directionValue(value.direction);
+  const rows = Array.isArray(value.rows)
+    ? value.rows.flatMap((row) => {
+        if (!isRecord(row)) return [];
+        const item = projectProviderSubagentTimelineItem(row.item);
+        const timestamp = stringValue(row.timestamp);
+        const seq = nonNegativeNumber(row.seq);
+        return item && timestamp && seq !== null
+          ? [{ item, timestamp, seq }]
+          : [];
+      })
+    : null;
+  if (
+    typeof value.requestId !== 'string' ||
+    epoch === undefined ||
+    direction === null ||
+    (typeof value.provider !== 'string' && value.provider !== null) ||
+    typeof value.reset !== 'boolean' ||
+    typeof value.staleCursor !== 'boolean' ||
+    typeof value.gap !== 'boolean' ||
+    !isTimelineWindow(value.window) ||
+    typeof value.hasOlder !== 'boolean' ||
+    typeof value.hasNewer !== 'boolean' ||
+    rows === null ||
+    value.error !== null
+  )
+    throw new PaseoClientProjectionError(
+      'Paseo returned an invalid provider-subagent timeline.',
+    );
+  return {
+    parentAgentId,
+    subagentId,
+    epoch,
+    direction,
+    rows,
+    hasOlder: value.hasOlder,
+  };
+}
+
+function projectProviderSubagentTimelineItem(
+  value: unknown,
+): PaseoProviderSubagentTimelineItem | null {
+  if (!isRecord(value)) return null;
+  const timelineItemType = stringValue(value.type);
+  if (!timelineItemType) return null;
+  // Paseo's assistant reducer treats messageId as a semantic boundary. Do not
+  // use the provider's per-token item id here: it would split one stream into
+  // one product row per token.
+  const timelineKey = stringValue(value.messageId);
+  const projected = projectTimelineItem(value);
+  if (timelineItemType === 'reasoning' && projected.reasoning)
+    return {
+      timelineItemType,
+      ...(timelineKey ? { timelineKey } : {}),
+      reasoning: true,
+      ...(projected.reasoningText
+        ? { reasoningText: projected.reasoningText }
+        : {}),
+    };
+  if (timelineItemType === 'tool_call' && projected.toolCall)
+    return {
+      timelineItemType,
+      ...(timelineKey ? { timelineKey } : {}),
+      toolCall: projected.toolCall,
+    };
+  if (
+    timelineItemType === 'assistant_message' &&
+    typeof value.text === 'string'
+  )
+    return {
+      timelineItemType,
+      ...(timelineKey ? { timelineKey } : {}),
+      ...(safePreview(value.text, 4000)
+        ? { assistantText: safePreview(value.text, 4000)! }
+        : {}),
+    };
+  return null;
+}
+
+function projectProviderSubagentUpdate(
+  value: unknown,
+): PaseoProviderSubagentUpdate | null {
+  if (!isRecord(value) || !isRecord(value.payload)) return null;
+  const payload = value.payload;
+  if (payload.kind === 'upsert') {
+    const subagent = projectProviderSubagentDescriptor(payload.subagent);
+    return subagent ? { kind: 'upsert', subagent } : null;
+  }
+  if (payload.kind === 'remove') {
+    const parentAgentId = stringValue(payload.parentAgentId);
+    const subagentId = stringValue(payload.subagentId);
+    return parentAgentId && subagentId
+      ? { kind: 'remove', parentAgentId, subagentId }
+      : null;
+  }
+  if (payload.kind !== 'timeline') return null;
+  const parentAgentId = stringValue(payload.parentAgentId);
+  const subagentId = stringValue(payload.subagentId);
+  const epoch = stringValue(payload.epoch);
+  const timestamp = stringValue(payload.timestamp);
+  const seq = nonNegativeNumber(payload.seq);
+  const item = projectProviderSubagentTimelineItem(payload.item);
+  return parentAgentId &&
+    subagentId &&
+    epoch &&
+    timestamp &&
+    typeof payload.provider === 'string' &&
+    seq !== null &&
+    item
+    ? {
+        kind: 'timeline',
+        parentAgentId,
+        subagentId,
+        epoch,
+        timestamp,
+        seq,
+        item,
+      }
+    : null;
+}
+
+function normalizeSubagentStatus(
+  value: unknown,
+): PaseoProviderSubagentDescriptor['status'] | null {
+  if (value === 'running') return 'running';
+  if (value === 'completed') return 'completed';
+  if (value === 'failed') return 'failed';
+  if (value === 'canceled' || value === 'cancelled') return 'cancelled';
+  return null;
+}
+
+function requiredNullableString(value: unknown): {
+  readonly valid: boolean;
+  readonly value: string | null;
+} {
+  return value === null
+    ? { valid: true, value: null }
+    : typeof value === 'string'
+      ? { valid: true, value }
+      : { valid: false, value: null };
+}
+
+function nonNegativeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+function directionValue(value: unknown): 'tail' | 'before' | 'after' | null {
+  return value === 'tail' || value === 'before' || value === 'after'
+    ? value
+    : null;
+}
+
+function isTimelineWindow(value: unknown): value is {
+  readonly minSeq: number;
+  readonly maxSeq: number;
+  readonly nextSeq: number;
+} {
+  return (
+    isRecord(value) &&
+    nonNegativeNumber(value.minSeq) !== null &&
+    nonNegativeNumber(value.maxSeq) !== null &&
+    nonNegativeNumber(value.nextSeq) !== null
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }

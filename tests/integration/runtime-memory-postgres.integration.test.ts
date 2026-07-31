@@ -157,7 +157,7 @@ describe('runtime memory PostgreSQL materialization', () => {
     expect(prior).toBe('agent-session-1');
     expect(second.providerAgentId).toBe('agent-session-1');
     expect(creates).toBe(1);
-    expect(sends).toEqual(['agent-session-1:second']);
+    expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);
   });
   it('lists only pending proposals for the exact successful source run and owner', async () => {
     const db = await database();

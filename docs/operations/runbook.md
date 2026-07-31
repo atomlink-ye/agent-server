@@ -37,6 +37,53 @@ production recovery guarantees are not part of this minimum behavior.
 
 Use `GET /api/v1/runs/{run_id}/events?after=0` to inspect the persisted timeline. Resume with `next_cursor`; do not reuse an event sequence already consumed. For live observation, use the authenticated `/events/stream` route with `after` or `Last-Event-ID`. The stream replays committed events, polls the database, and closes after `succeeded`, `failed`, or `cancelled`. This is a single-node MVP polling path, not a production pub/sub or long-disconnect recovery guarantee.
 
+## Local Web Chat MVE
+
+The Web path is a separate Next.js service with a same-origin BFF. From the
+repository root, bootstrap the fixed local Agent/Environment through the
+authenticated APIs, then start the Web service:
+
+```bash
+make web-bootstrap
+make web-dev
+```
+
+Use a fresh ProductSession/browser context for the acceptance path. Confirm a
+`202` message admission, at least one complete assistant-text snapshot before
+terminal, a persisted terminal event, replacement by one formal Assistant
+Message, and correct reload recovery. The browser should expose only the
+HttpOnly `product_session_id`; inspect requests, storage, HTML, and client
+bundles without recording token values. The BFF must remain owner-checking and
+must forward SSE bytes, `after`, and `Last-Event-ID` without buffering.
+
+The accepted MVE creates a new ProductSession after the local stack starts.
+Continuation of an old ProductSession after Agent Server/Paseo restart is
+deferred because persisted provider references may retain a stale Runtime MCP
+endpoint. Do not claim restart reconstruction, identity/ACL/CSRF/CSP/rate-limit
+hardening, reconnect recovery, multi-writer ordering, retention, or production
+backpressure from this path. Stop only verified child processes during cleanup;
+do not delete retained database volumes.
+
+The Dockerfile defaults `NPM_REGISTRY` to the official npm registry so GitHub
+and other unconfigured environments do not depend on a regional mirror. For
+mainland-China local development, set the ignored Compose `.env` value:
+
+```bash
+printf '%s\n' 'NPM_REGISTRY=https://registry.npmmirror.com' >> .env
+docker compose build
+
+# Explicit override remains available when needed.
+docker compose build --build-arg NPM_REGISTRY=https://registry.npmjs.org
+```
+
+Compose forwards `.env`'s `NPM_REGISTRY` as a build arg. The image persists it
+as `PNPM_CONFIG_REGISTRY` and `NPM_CONFIG_REGISTRY`, so local Docker build-time
+installs and container-side dependency verification use the same mirror while
+GitHub retains the official default. Do not rebuild the lockfile or weaken
+lockfile, integrity, age, or other supply-chain policy to bypass a metadata
+problem. Record any package metadata caveat separately from code or policy
+failures.
+
 ## Task cancellation
 
 Use `POST /api/v1/tasks/{task_id}:cancel`. A queued Task returns `cancelled` after local terminalization; active work returns `cancellation_requested` after the durable request is recorded and one runtime cancel is forwarded. A terminal Task returns `terminal` idempotently. Foreign or missing Tasks intentionally return `404`. Correlate only opaque Task/Run IDs and stable status codes; never copy prompts, provider errors, credentials, or local paths into tickets.

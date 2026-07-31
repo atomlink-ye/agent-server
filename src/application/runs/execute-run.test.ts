@@ -78,6 +78,7 @@ describe('ExecuteRun', () => {
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
         memoryCandidates: { proposalLimit: 1 },
       }),
+      expect.objectContaining({ emit: expect.any(Function) }),
     );
     expect(catalogResolve).not.toHaveBeenCalled();
     expect(binder).not.toHaveBeenCalled();
@@ -126,13 +127,16 @@ describe('ExecuteRun', () => {
     );
     expect(findLegacy).not.toHaveBeenCalled();
     expect(runtime.execute).toHaveBeenCalledTimes(1);
-    expect(runtime.execute).toHaveBeenCalledWith({
-      operation: 'create',
-      runId: claim.run.id,
-      prompt: 'private prompt',
-      systemPrompt:
-        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
-    });
+    expect(runtime.execute).toHaveBeenCalledWith(
+      {
+        operation: 'create',
+        runId: claim.run.id,
+        prompt: 'private prompt',
+        systemPrompt:
+          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
+      },
+      undefined,
+    );
     expect(
       JSON.stringify(vi.mocked(runtime.execute).mock.calls[0]?.[0]),
     ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
@@ -252,13 +256,16 @@ describe('ExecuteRun', () => {
 
     await executeRun.execute(claim);
 
-    expect(runtime.execute).toHaveBeenCalledWith({
-      operation: 'create',
-      runId: claim.run.id,
-      prompt: 'private prompt',
-      systemPrompt:
-        'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions',
-    });
+    expect(runtime.execute).toHaveBeenCalledWith(
+      {
+        operation: 'create',
+        runId: claim.run.id,
+        prompt: 'private prompt',
+        systemPrompt:
+          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions',
+      },
+      undefined,
+    );
   });
 
   it('reports persistence failure with a receipt after runtime success', async () => {

@@ -15,6 +15,24 @@ The Hono entrypoint exposes:
 
 Request IDs are returned and logged. Bodies are limited to 64 KiB. Zod rejects unknown fields and caller model selection. Runtime readiness is checked before accepting a Run. Responses never include the stored prompt or raw provider errors.
 
+### Web Chat MVE
+
+The Web implementation is a separate Next.js service rather than a browser
+connection to Paseo. Its same-origin BFF bootstraps or recovers the fixed
+ProductSession, proxies Messages, verifies Run ownership through the session's
+durable Messages, and forwards upstream SSE bytes without parsing or buffering.
+It forwards `after` and `Last-Event-ID`, and the browser uses native
+`EventSource`. Only the HttpOnly `product_session_id` reaches the browser; the
+Agent Server bearer is read and used server-side.
+
+The first stream contract is only complete assistant-text snapshots. The Web
+reducer replaces transient text by event sequence, ignores compatibility final
+text and unknown runtime events, and then refetches the formal Assistant
+Message. SSE closes on a persisted terminal Event. Pre-terminal disconnects
+fall back to polling, and stale SSE/poll callbacks are identity-guarded. This
+is one fresh-ProductSession local MVE, not a production console or security
+boundary.
+
 The fixed command-only Lark compatibility adapter is disabled by default. When
 enabled, it fixes one App/domain, allowlisted chat and external user, bot mention
 identity, and service-account Tenant/Workspace/published AgentVersion tuple. The

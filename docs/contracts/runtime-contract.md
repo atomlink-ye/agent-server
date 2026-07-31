@@ -7,10 +7,17 @@
 ```ts
 interface AgentRuntimePort {
   initialize(): Promise<void>;
-  execute(input: AgentRuntimeExecuteInput): Promise<AgentRuntimeExecution>;
+  execute(
+    input: AgentRuntimeExecuteInput,
+    sink?: RuntimeEventSink,
+  ): Promise<AgentRuntimeExecution>;
   health(): Promise<AgentRuntimeHealth>;
   cancel?(input: { runId: string; providerAgentId?: string }): Promise<void>;
   close(): Promise<void>;
+}
+
+interface RuntimeEventSink {
+  emit(event: { kind: 'assistant_text'; text: string }): Promise<void> | void;
 }
 
 type AgentRuntimeExecuteInput =
@@ -45,6 +52,14 @@ turn-scoped.
 The port owns no HTTP, Run repository, daemon process spawning, credential lookup, or retry policy. It normalizes provider-specific completion into success, timeout, execution failure, or cancellation. The minimum Phase D application lane persists `started`, final `output`, and one terminal normalized event, plus one final assistant Message for a successful ProductSession Run. A successful runtime followed by terminal persistence failure is an application-level `RunCompletionPersistenceError` with an ephemeral safe `RuntimeExecutionReceipt` emitted only through sanitized structured logging; it is distinct from runtime execution failure. No durable receipt or reconciliation exists in this baseline.
 
 The current adapter caches the selected Workspace and free model across reconnects. Attempt generation and connection ownership protect stale initialize/reconnect work from replacing a newer connection. The tests do not establish that a pending `close()` is safe against a newer initialization; close ownership remains a follow-up. Health exposes only safe readiness details.
+
+The optional sink is the narrow Web Chat MVE projection. It emits complete
+assistant-text snapshots only. The Paseo adapter accumulates live chunks per
+epoch, ignores baseline/duplicate/out-of-order live sequences, and reconciles
+projected Timeline entries as complete authoritative snapshots. Sink writes are
+ordered and drained before runtime execution returns. The application may
+append these snapshots as `output` Run Events; the sink does not change final
+runtime result authority or persist an Assistant Message.
 
 ## V1 leaf-runtime port
 

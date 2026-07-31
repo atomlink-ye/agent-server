@@ -13,7 +13,6 @@ import {
   MAX_RUN_REQUEST_BYTES,
 } from '../../../contracts/runs.js';
 import type { Run, RunUsage } from '../../../domain/runs/run.js';
-import { terminalRunStatuses } from '../../../domain/runs/run-status.js';
 import type { AppConfig } from '../../../shared/config.js';
 import {
   getAuthenticatedAccessContext,
@@ -171,6 +170,18 @@ export function registerRunRoutes(
         'invalid_cursor',
         'Cursor must be a nonnegative integer.',
       );
+    const cursorEvent =
+      cursor > 0
+        ? (await dependencies.events.list(runId, cursor - 1, 1)).events.find(
+            (event) => event.sequence === cursor,
+          )
+        : undefined;
+    const cursorIsTerminal = Boolean(
+      cursorEvent &&
+      ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(
+        cursorEvent.type,
+      ),
+    );
     let stopStream: () => void = () => undefined;
     return new Response(
       new ReadableStream({
@@ -188,6 +199,7 @@ export function registerRunRoutes(
             once: true,
           });
           try {
+            if (cursorIsTerminal) return;
             for (;;) {
               if (stopped) return;
               const page = await dependencies.events!.list(runId, cursor);
@@ -208,11 +220,6 @@ export function registerRunRoutes(
                 )
               )
                 break;
-              const run = await dependencies.getRun.execute(
-                runId,
-                accessContext,
-              );
-              if (run && terminalRunStatuses.has(run.status)) break;
               await waitForStreamPoll(context.req.raw.signal, stop);
             }
           } finally {

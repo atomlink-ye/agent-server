@@ -51,6 +51,7 @@ const durableKernelMigrationFileNames = [
   '0018_managed_environment_runtime_session_mve.sql',
   '0019_team_dag_mve.sql',
   '0020_collaborative_team_mve.sql',
+  '0021_web_chat_streaming_mve.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

@@ -65,7 +65,7 @@ export class PostgresRunEventRepository implements RunEventRepository {
     payload: RunEvent['payload'],
   ) {
     const r = await this.db.query<any>(
-      `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 ON CONFLICT(run_id,type) DO UPDATE SET type=EXCLUDED.type RETURNING id,run_id,sequence,type,payload,created_at`,
+      `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 RETURNING id,run_id,sequence,type,payload,created_at`,
       [
         randomUUID(),
         runId,

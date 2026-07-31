@@ -71,3 +71,21 @@ the lane owner until normal terminal completion. Completion then promotes the
 oldest eligible queued root, including a new-generation root, and clears the
 cancellation request. Product Workspace ownership is tenant plus principal;
 legacy Task/Run routes retain their compatibility workspace behavior.
+
+## Web Chat and streaming boundary
+
+The Web surface is a separate Next.js service. Its same-origin BFF owns the
+server-side Agent Server client, ProductSession bootstrap/recovery, message
+proxy, and owner-checked Run SSE proxy. The browser receives only an HttpOnly
+`product_session_id`; the service bearer is never sent to browser code or
+upstream browser requests. Persisted ProductSession Messages remain the
+conversation truth.
+
+The runtime-neutral event projection accepts only
+`{ kind: 'assistant_text', text: <complete snapshot> }`. The Paseo adapter
+accumulates live chunks at its boundary and reconciles projected Timeline
+snapshots authoritatively. Run Events remain append-only evidence, and the Web
+reducer replaces transient text by sequence. SSE closes only after the
+persisted terminal Run Event; a matching formal Assistant Message is required
+for healthy UI convergence. This is a local fresh-session MVE, not production
+identity, ACL, recovery, backpressure, or broader console functionality.

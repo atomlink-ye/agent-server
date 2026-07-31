@@ -17,6 +17,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
     depends_on:
       postgres:
@@ -25,6 +27,7 @@ services:
       - '127.0.0.1:3000:3000'
     environment:
       NODE_ENV: development
+      CI: 'true'
       HOST: 0.0.0.0
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -43,6 +46,7 @@ services:
     volumes:
       - .:/workspace
       - node-modules:/workspace/node_modules
+      - web-node-modules:/workspace/apps/web/node_modules
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -59,14 +63,46 @@ services:
       timeout: 3s
       retries: 30
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    init: true
+    depends_on:
+      agent-server:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3001:3001'
+    env_file:
+      - path: .local/web-bootstrap.env
+        required: false
+    environment:
+      NODE_ENV: development
+      CI: 'true'
+      AGENT_SERVER_BASE_URL: http://agent-server:3000
+      AGENT_SERVER_SERVICE_TOKEN: ${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}
+    volumes:
+      - .:/workspace
+      - node-modules:/workspace/node_modules
+      - web-node-modules:/workspace/apps/web/node_modules
+      - local-state:/workspace/.local
+    working_dir: /workspace
+    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    command: ['pnpm', 'web:dev']
+
   runner:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
     environment:
       NODE_ENV: test
+      CI: 'true'
       HOME: /workspace/.local/home
       PASEO_HOME: /workspace/.local/paseo-home
       XDG_CONFIG_HOME: /workspace/.local/xdg-config
@@ -78,6 +114,7 @@ services:
     volumes:
       - .:/workspace
       - /workspace/node_modules
+      - /workspace/apps/web/node_modules
       - /workspace/.local
       - /workspace/dist
     working_dir: /workspace
@@ -99,5 +136,6 @@ services:
 
 volumes:
   node-modules:
+  web-node-modules:
   local-state:
   postgres-data:

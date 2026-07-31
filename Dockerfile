@@ -6,6 +6,7 @@ ARG NPM_REGISTRY=https://registry.npmjs.org
 ENV COREPACK_HOME=/tmp/corepack \
     PNPM_HOME=/pnpm \
     PNPM_CONFIG_REGISTRY=$NPM_REGISTRY \
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false \
     NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     PATH=/pnpm:$PATH \
     OPENCODE_BIN=/opt/opencode/bin/opencode
@@ -14,12 +15,13 @@ WORKDIR /workspace
 
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/dist /home/node/image-node_modules /opt/opencode/bin \
-    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /opt/opencode
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin \
+    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode
 
 USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --chown=node:node apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 RUN set -eu; \
     case "$TARGETARCH" in \
@@ -32,9 +34,9 @@ RUN set -eu; \
     npm install --prefix /opt/opencode --no-save --ignore-scripts "$opencode_package@$opencode_version"; \
     ln -sfn "../node_modules/$opencode_package/bin/opencode" /opt/opencode/bin/opencode; \
     /opt/opencode/bin/opencode --version
-RUN mkdir -p /home/node/image-node_modules \
-    && cp -a /workspace/node_modules/. /home/node/image-node_modules/
-RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) hash.update(await readFile('/workspace/' + file)); await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', hash.digest('hex') + '\\n');"
+RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
+    && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
+RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"
 
 FROM dependencies AS development
 

@@ -46,6 +46,7 @@ services:
     volumes:
       - .:/workspace
       - node-modules:/workspace/node_modules
+      - web-node-modules:/workspace/apps/web/node_modules
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -85,6 +86,7 @@ services:
     volumes:
       - .:/workspace
       - node-modules:/workspace/node_modules
+      - web-node-modules:/workspace/apps/web/node_modules
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -112,6 +114,7 @@ services:
     volumes:
       - .:/workspace
       - /workspace/node_modules
+      - /workspace/apps/web/node_modules
       - /workspace/.local
       - /workspace/dist
     working_dir: /workspace
@@ -133,5 +136,6 @@ services:
 
 volumes:
   node-modules:
+  web-node-modules:
   local-state:
   postgres-data:

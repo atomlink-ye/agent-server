@@ -3,10 +3,32 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 const workspaceNodeModules = '/workspace/node_modules';
+const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
 const imageNodeModules = '/home/node/image-node_modules';
-const dependencyStamp = `${workspaceNodeModules}/.docker-dependencies-stamp`;
-const imageDependencyStamp = `${imageNodeModules}/.docker-dependencies-stamp`;
+const imageWebNodeModules = '/home/node/image-web-node_modules';
+const dependencyFiles = [
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'apps/web/package.json',
+];
 const command = process.argv.slice(2);
+
+const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
+
+const clearAndRestore = async (workspace, image) => {
+  await mkdir(workspace, { recursive: true });
+  for (const entry of await readdir(workspace)) {
+    await rm(`${workspace}/${entry}`, { recursive: true, force: true });
+  }
+  for (const entry of await readdir(image)) {
+    await cp(`${image}/${entry}`, `${workspace}/${entry}`, {
+      recursive: true,
+      force: true,
+      verbatimSymlinks: true,
+    });
+  }
+};
 
 if (command.length === 0) {
   process.stderr.write(
@@ -16,48 +38,45 @@ if (command.length === 0) {
 } else {
   try {
     const dependencyHash = createHash('sha256');
-    for (const file of [
-      'package.json',
-      'pnpm-lock.yaml',
-      'pnpm-workspace.yaml',
-    ]) {
+    for (const file of dependencyFiles) {
       dependencyHash.update(await readFile(`/workspace/${file}`));
     }
     const expectedStamp = `${dependencyHash.digest('hex')}\n`;
-    let imageStamp;
-    try {
-      imageStamp = await readFile(imageDependencyStamp, 'utf8');
-    } catch {
-      imageStamp = null;
-    }
-    if (imageStamp !== expectedStamp) {
+    const imageStamps = await Promise.all(
+      [imageNodeModules, imageWebNodeModules].map(async (nodeModules) => {
+        try {
+          return await readFile(stampPath(nodeModules), 'utf8');
+        } catch {
+          return null;
+        }
+      }),
+    );
+    if (imageStamps.some((stamp) => stamp !== expectedStamp)) {
       process.stderr.write(
         'Image dependencies are stale; run make setup or docker compose build.\n',
       );
       process.exitCode = 1;
     } else {
-      let currentStamp;
-      try {
-        currentStamp = await readFile(dependencyStamp, 'utf8');
-      } catch {
-        currentStamp = null;
-      }
-      if (currentStamp !== expectedStamp) {
-        await mkdir(workspaceNodeModules, { recursive: true });
-        for (const entry of await readdir(workspaceNodeModules)) {
-          await rm(`${workspaceNodeModules}/${entry}`, {
-            recursive: true,
-            force: true,
-          });
-        }
-        for (const entry of await readdir(imageNodeModules)) {
-          await cp(
-            `${imageNodeModules}/${entry}`,
-            `${workspaceNodeModules}/${entry}`,
-            { recursive: true, force: true },
-          );
-        }
-        await writeFile(dependencyStamp, expectedStamp, 'utf8');
+      const currentStamps = await Promise.all(
+        [workspaceNodeModules, workspaceWebNodeModules].map(
+          async (nodeModules) => {
+            try {
+              return await readFile(stampPath(nodeModules), 'utf8');
+            } catch {
+              return null;
+            }
+          },
+        ),
+      );
+      if (currentStamps.some((stamp) => stamp !== expectedStamp)) {
+        await clearAndRestore(workspaceNodeModules, imageNodeModules);
+        await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
+        await writeFile(stampPath(workspaceNodeModules), expectedStamp, 'utf8');
+        await writeFile(
+          stampPath(workspaceWebNodeModules),
+          expectedStamp,
+          'utf8',
+        );
       }
 
       const child = spawn(command[0], command.slice(1), {

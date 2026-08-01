@@ -75,16 +75,23 @@ export function transitionTeamRunPhase(
   });
 }
 
+export function normalizeTeamRunFinalText(finalText: string): string {
+  const normalized = finalText.trim();
+  if (!normalized) throw new Error('Team run final text must not be blank.');
+  return normalized;
+}
+
 export function succeedTeamRun(
   run: TeamRun,
   finalText: string,
   now: () => Date = () => new Date(),
 ): TeamRun {
+  const normalizedFinalText = normalizeTeamRunFinalText(finalText);
   return Object.freeze({
     ...run,
     status: 'succeeded' as const,
     phase: 'done' as const,
-    finalText,
+    finalText: normalizedFinalText,
     updatedAt: now().toISOString(),
   });
 }

@@ -58,6 +58,7 @@ export type RuntimeEvent =
       readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
       readonly label: string;
       readonly summary: string;
+      readonly toolName?: string | undefined;
       readonly parentActivityId?: string;
       readonly detailKind?:
         'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';

@@ -1,4 +1,5 @@
 import { createTeamWorkItem } from '../../domain/teams/team-work-item.js';
+import { normalizeTeamRunFinalText } from '../../domain/teams/team-run.js';
 import type {
   TeamExecutionRepository,
   OwnerScope,
@@ -109,11 +110,12 @@ export class TeamToolHandler {
     const items = await this.repo.findWorkItemsByTeamRunId(teamRunId, actor);
     if (items.some((item) => item.status !== 'completed'))
       throw new Error('Team has unfinished work items.');
+    const normalizedFinalText = normalizeTeamRunFinalText(finalText);
     return this.repo.completeTeamRunAtomically({
       teamRunId,
       rootRunId: team.rootRunId,
       rootTaskId: team.rootTaskId,
-      finalText,
+      finalText: normalizedFinalText,
       owner: actor,
       updatedAt: this.now().toISOString(),
     });

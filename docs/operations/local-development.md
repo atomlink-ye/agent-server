@@ -98,6 +98,28 @@ The key is copied only into the isolated Paseo process and is never logged.
 The smoke removes its temporary database and runtime root unless explicitly
 run in a retained diagnostic mode.
 
+The self-learning Project Lab Phase 3 smoke uses the same Docker/PostgreSQL
+prerequisites and pinned Node `24.18.0` / pnpm `11.7.0` toolchain:
+
+```bash
+make self-learning-team-phase3-smoke
+```
+
+An optional paid-model run uses a local mode-`0600` `OPENCODE_GO_API_KEY` and
+the explicitly selected model; never print or commit the key:
+
+```bash
+PASEO_MODEL=opencode-go/deepseek-v4-flash \
+make self-learning-team-phase3-smoke
+```
+
+Without the key, the target uses the explicitly free model default. The smoke
+is local/single-operator evidence only. Set `PHASE3_SMOKE_RETAIN_FILE` to keep
+the local API, Paseo, Web service, and database for visual evidence and reload
+inspection; retained mode is not production deployment or a persistence,
+multi-user, or authentication guarantee. Stop only verified child processes and
+remove ignored retained state after inspection.
+
 The Team DAG MVE smoke uses the same disposable setup and the opt-in
 `dag-mve-v1` Team path:
 

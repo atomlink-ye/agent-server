@@ -1,8 +1,8 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-01
-updated_at: 2026-08-02
+updated_at: 2026-08-03
 authority: execution-plan
 ---
 
@@ -100,8 +100,9 @@ unit/contract/integration/deterministic E2E/evaluation tests.
 - Repository authority wording was synchronized in README, Features,
   orchestration component, Agent/Team contract, and domain model. External
   mirrors and other Phase files were not changed.
-- Real smoke evidence and supporting-check results are recorded below after
-  verification. The external-authority synchronization item remains open.
+- Real smoke evidence and supporting-check results are recorded below and in
+  the [sanitized evidence packet](../../evidence/self-learning-managed-agent-team-mve-evidence-packet.md).
+  The external-authority synchronization item is explicitly deferred below.
 
 - [x] Inspect current Collaborative Team kickoff/finalization and make the
       roster prompt dynamic.
@@ -112,10 +113,11 @@ unit/contract/integration/deterministic E2E/evaluation tests.
 - [x] Align only the necessary repo status wording for Collaborative Team,
       transitional sequential/DAG behavior, and the MVE baseline after code
       evidence exists.
-- [ ] Synchronize the external V1 authority wording in its README and related
-      architecture/decision documents: owner-superseded greenfield wording,
-      `agent-server` as implementation baseline, and explicit non-equivalence
-      to complete V1. Do not rewrite external history.
+- [x] Transfer the unresolved external V1 authority wording to Deferred work;
+      its external README and related architecture/decision documents are not
+      changed from this repository. The owner-superseded greenfield wording,
+      `agent-server` implementation baseline, and non-equivalence to complete
+      V1 remain recorded in this Plan and Spec.
 
 **Outcome:** a non-`researcher`/`critic` roster can run, and Lead cannot
 finalize while member execution remains non-terminal.
@@ -180,12 +182,27 @@ and proves recall on an independent second TeamRun.
 
 ### Phase 3 — Thin Web observation surface
 
-- [ ] Add only the narrow Project Lab/Team Inspector/learning review views and
+Oracle-approved local/single-operator execution contract (2026-08-02): the Web
+surface uses fixed server-only `WEB_WORKSPACE_ID`,
+`WEB_SELF_LEARNING_TEAM_VERSION_ID`, and
+`WEB_SELF_LEARNING_MEMORY_STORE_ID` bindings. `POST
+/api/projects/self-learning/runs` accepts only `{}` and returns only a root Task
+ID. `GET /api/projects/self-learning/runs/:rootTaskId` verifies the configured
+Team/Store/path lineage and returns a bounded allow-listed aggregate. Proposal
+review is root-bound at `POST
+/api/projects/self-learning/runs/:rootTaskId/proposals/:proposalId/review` and
+accepts only strict accept/reject/edit-and-accept bodies. Mutations require
+same-origin validation; all routes are no-store, fail closed on missing config,
+and never expose bearer, owner scope, provider/runtime IDs, local paths, prompts,
+raw event payloads, or raw upstream errors. Deployment beyond trusted local
+operator access requires a new authentication Human Gate.
+
+- [x] Add only the narrow Project Lab/Team Inspector/learning review views and
       the server-side-token BFF routes needed to start, inspect, review, and
       refresh the MVE path.
-- [ ] Reuse existing safe Markdown/activity/timeline patterns; do not add an
+- [x] Reuse existing safe Markdown/activity/timeline patterns; do not add an
       arbitrary Project editor, Room/DM, operator home, or artifact explorer.
-- [ ] Ensure refresh can reconstruct Team status/report/proposal without
+- [x] Ensure refresh can reconstruct Team status/report/proposal without
       exposing bearer, provider, local path, Runtime Cell, or raw provider
       details.
 
@@ -194,11 +211,11 @@ and survives refresh without becoming a second configuration authority.
 
 ### Final real E2E
 
-- [ ] Run the golden path against fresh PostgreSQL: `init -> plan -> apply ->
+- [x] Run the golden path against fresh PostgreSQL: `init -> plan -> apply ->
 reapply -> real Team Task/Run -> TeamRun/member/work-item completion ->
 real Paseo/OpenCode -> synthetic MCP -> report -> human accept -> Memory
 Version -> independent second-run read -> Web refresh/view`.
-- [ ] Retain only sanitized evidence: manifest/Lock, plan summary, resource
+- [x] Retain only sanitized evidence: manifest/Lock, plan summary, resource
       fingerprints, root tree, TeamRun/member/work-item summary, tool receipts,
       report, proposal, accepted Version, second-run read, and Web capture.
 
@@ -241,11 +258,11 @@ Existing current patterns to reuse include `src/domain/teams/`,
 
 ## Verification
 
-- [ ] Run the final real E2E first once prerequisites exist; it is the primary
+- [x] Run the final real E2E first once prerequisites exist; it is the primary
       acceptance signal and must use real Paseo/OpenCode, not a fake runtime.
-- [ ] Run only the narrow supporting documentation and Exec Plan checks under
+- [x] Run only the narrow supporting documentation and Exec Plan checks under
       Node `24.18.0`: `pnpm check:docs` and `pnpm check:exec-plans`.
-- [ ] Run `git diff --check` and inspect the complete expected implementation
+- [x] Run `git diff --check` and inspect the complete expected implementation
       diff for the active phase. At planning time, the initial diff is limited
       to these two planning documents; later implementation must not be
       rejected merely because the expected source, migration, CLI, Web, or
@@ -254,12 +271,12 @@ Existing current patterns to reuse include `src/domain/teams/`,
 
 ## Documentation impact
 
-- [ ] Update `README.md` only after implementation evidence exists, to state
+- [x] Update `README.md` only after implementation evidence exists, to state
       the Project/Team/learning MVE boundary truthfully.
-- [ ] Update `docs/features.md` and relevant Team, Memory, Task/Run,
+- [x] Update `docs/features.md` and relevant Team, Memory, Task/Run,
       architecture/component, and operations contracts only for observed
       behavior; retain explicit baseline/deferred wording.
-- [ ] Add or update a focused real-E2E evidence/runbook reference if the
+- [x] Add or update a focused real-E2E evidence/runbook reference if the
       implementation creates one; do not rewrite external history.
 
 ## Decisions and discoveries
@@ -292,12 +309,11 @@ Existing current patterns to reuse include `src/domain/teams/`,
 - The roadmap's proposed file map is treated as probable only. Before coding,
   locate the existing entrypoint, registry, migration, and Web patterns and
   adjust the map without broadening scope.
-- Phase 1 final review identified two non-blocking boundary improvements that
-  are explicitly deferred under the owner-approved MVE rule: remove Team tools
-  from the Lead finalization runtime grant, and make Skill registry
-  configuration lazy when a Project has no Skills. The observed Phase 1 path
-  completed successfully with the current boundaries; revisit these only when
-  a later phase needs them or real evidence promotes them to blockers.
+- Phase 1 final review identified two boundary improvements. Phase 3 acceptance
+  promoted removal of all Team tools from the Lead finalization runtime grant
+  into completed work; nonblank final-text defenses remain required before the
+  finalization path can complete. Only lazy Skill-registry configuration when a
+  Project has no Skills remains deferred under the owner-approved MVE rule.
 
 ## Risks and recovery
 
@@ -387,45 +403,77 @@ Static gates typecheck, formatting, `pnpm check:docs`,
 `pnpm check:exec-plans`, Node syntax, and `git diff --check` passed. Disposable
 IDs and secrets are intentionally omitted.
 
+Phase 3 completion evidence (2026-08-02): the normal smoke passed against fresh
+PostgreSQL with the real in-process Agent Server and
+`opencode-go/deepseek-v4-flash`. The applied/reapplied Project launched through
+the Next BFF, completed a three-member Team with two WorkItems, produced the
+six-section synthetic report and four approved learning activity tools, and
+completed pending-proposal review into canonical Memory V2. The accepted
+content SHA was
+`028a7f5422446960d027dcd0fd1ada9367ab30f0a15df181d5a73c2fae20288c`.
+Durable aggregate refresh reconstructed the accepted state. Retained Playwright
+on accepted state passed desktop/mobile and reload: three member cards, two
+WorkItems, eight activity entries, the full report and complete Memory receipt
+metadata, zero mobile overflow, empty browser local/session/cookie storage, no
+browser auth or API-key headers, no direct `/api/v1` calls, and no
+provider/runtime/local-path markers. Web/root typechecks and production Web
+build passed. Oracle code/security review and independent Designer review
+approved after fixes. Screenshots and logs remain uncommitted in org `tmp`.
+This evidence is local/single-operator only; production or multi-user
+deployment requires a new authentication Human Gate.
+
+## Deferred work
+
+- External V1 authority wording remains unsynchronized in the external README
+  and related architecture/decision documents. Do not rewrite external history
+  without the required owner decision.
+- Phase 3 acceptance completed removal of all Team tools from the Lead
+  finalization runtime grant, with nonblank final-text defenses retained. Only
+  lazy Skill-registry configuration when a Project has no Skills remains
+  deferred; the verified MVE path did not require it.
+- Production authentication, multi-user authorization, shared ACLs, credential
+  brokering, production isolation, crash recovery, generalized retry/cancel,
+  multi-node operation, semantic retrieval, automatic learning mutation, and
+  broad Web-console behavior remain outside this MVE.
+
 ## Completion checklist
 
-- [ ] The companion Spec and this Plan agree on scope, gates, non-goals, and
+- [x] The companion Spec and this Plan agree on scope, gates, non-goals, and
       acceptance.
 - [x] All implemented Phase 1 outcomes have real evidence recorded.
-- [ ] Final real E2E passes with sanitized evidence.
+- [x] Final real E2E passes with sanitized evidence.
 - [x] Supporting checks and `git diff --check` results are recorded.
 - [x] Typed dependency planning, deterministic no-write render planning,
       Apply, Lock, and CLI are implemented and covered by the Phase 1 evidence.
-- [ ] Documentation impact is resolved and deferred work is explicitly
+- [x] Documentation impact is resolved and deferred work is explicitly
       transferred.
-- [ ] This plan and its companion Spec are moved together to `completed/`,
+- [x] This plan and its companion Spec are moved together to `completed/`,
       status is set to `completed`, and no unchecked items remain.
 
 ## Current blocker
 
-Phase 2 is complete and verified. The next step is Phase 3: the thin Project
-Lab/Team Inspector and BFF projection, preserving server-side bearer handling
-and refresh recovery. Any change to the approved public contract, durable
-state, migration, or security boundary still requires its Human Gate.
+Phase 3 and final acceptance are complete and verified for local/single-operator
+use. There is no implementation blocker. The remaining delivery action is the
+final commit and clean-status confirmation; production or multi-user deployment
+requires a new authentication Human Gate.
 
 ## Next exact command
 
-Before starting Phase 3, run under Node `24.18.0` after any additional
-documentation edits:
+Final delivery should confirm the clean documentation-only status after the
+archive move:
 
 ```bash
 pnpm check:docs && pnpm check:exec-plans
 ```
 
-The first Phase 3 action is a focused inspection of the existing Web patterns
-and server-side-token BFF seams. Shape only the narrow Project Lab/Team
-Inspector/learning review and refresh reconstruction path; do not add a second
-configuration authority or begin with broad UI polish.
+Then create the final Phase 3 commit including product, UI, smoke, and durable
+documentation changes. Exclude only generated/disposable evidence, secrets,
+logs, screenshots, build outputs, and local artifacts. Keep the
+local/single-operator boundary explicit; do not broaden the MVE into production
+or multi-user authentication.
 
 ## Cleanup state
 
-Phase 1 is committed as `092d200`. Phase 2 implementation and sanitized evidence
-are present in this worktree and may be committed after its final gate. Keep the
-Spec and Plan in `docs/exec-plans/active/` until the multi-phase outcome and final
-real E2E are complete; archive them together only after all remaining checkboxes
-are resolved.
+Phase 1 is committed as `092d200`; Phase 2 is committed as `db24eab`. The
+sanitized evidence packet is tracked under `docs/evidence/`. The Spec and Plan
+are complete and are archived together under `docs/exec-plans/completed/`.

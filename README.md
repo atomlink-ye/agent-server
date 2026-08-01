@@ -26,33 +26,34 @@ flowchart TD
 
 ## Baseline status
 
-| Capability                                        | Current state                                                                                                          |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| HTTP liveness/readiness                           | Implemented                                                                                                            |
-| Asynchronous Run API                              | Implemented                                                                                                            |
-| Authenticated service-account Run ingress         | Implemented                                                                                                            |
-| Canonical Task invoke/read/tree API               | Implemented                                                                                                            |
-| Owner-scoped Run reads                            | Implemented                                                                                                            |
-| PostgreSQL-backed Task/Run admission              | Implemented                                                                                                            |
-| Durable Agent/Team definitions and versions       | Implemented                                                                                                            |
-| Collaborative Team registry/API and TeamRun reads | Implemented; owner-scoped import/publish/read plus TeamRun, MemberRun, and WorkItem reads                              |
-| Sequential Team graph compilation                 | Implemented; `sequential-mvp-v1` preserved                                                                             |
-| Team DAG MVE compilation/execution                | Implemented; opt-in `dag-mve-v1`, observed smoke path                                                                  |
-| Team child Task/Run execution                     | Implemented; durable join for two parallel leaves plus synthesizer                                                     |
-| Owner-scoped idempotent replay                    | Implemented                                                                                                            |
-| In-process durable dispatcher/claim/fence         | Implemented; single process                                                                                            |
-| Paseo WebSocket adapter                           | Implemented                                                                                                            |
-| OpenCode free-model discovery                     | Implemented                                                                                                            |
-| Explicit reusable Paseo Workspace                 | Implemented                                                                                                            |
-| Workspace memory proposals/review/entries         | Implemented; governance-only baseline                                                                                  |
-| Deterministic CI                                  | Implemented; no model network calls                                                                                    |
-| Zero-model-credential external smoke              | Implemented; optional/manual/scheduled                                                                                 |
-| Managed Environment API + ProductSession pin      | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE                                               |
-| Managed Single-Agent V1 evidence                  | Minimum scenario approved; hardening deferred                                                                          |
-| Web Chat + Paseo rich-events MVE                  | Implemented MVE; sanitized direct timeline/disclosures and replay verified; Oracle merge-ready; PR integration pending |
-| OIDC users, shared ACLs, credentials, approval    | Planned V1                                                                                                             |
-| Artifacts, evidence, broader Web console          | Planned V1                                                                                                             |
-| Fixed Lark command + Card/Doc canary              | Implemented and verified; fixed compatibility-only, not production                                                     |
+| Capability                                        | Current state                                                                                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP liveness/readiness                           | Implemented                                                                                                                                             |
+| Asynchronous Run API                              | Implemented                                                                                                                                             |
+| Authenticated service-account Run ingress         | Implemented                                                                                                                                             |
+| Canonical Task invoke/read/tree API               | Implemented                                                                                                                                             |
+| Owner-scoped Run reads                            | Implemented                                                                                                                                             |
+| PostgreSQL-backed Task/Run admission              | Implemented                                                                                                                                             |
+| Durable Agent/Team definitions and versions       | Implemented                                                                                                                                             |
+| Collaborative Team registry/API and TeamRun reads | Implemented; owner-scoped import/publish/read plus TeamRun, MemberRun, and WorkItem reads                                                               |
+| Sequential Team graph compilation                 | Implemented; `sequential-mvp-v1` preserved                                                                                                              |
+| Team DAG MVE compilation/execution                | Implemented; opt-in `dag-mve-v1`, observed smoke path                                                                                                   |
+| Team child Task/Run execution                     | Implemented; durable join for two parallel leaves plus synthesizer                                                                                      |
+| Owner-scoped idempotent replay                    | Implemented                                                                                                                                             |
+| In-process durable dispatcher/claim/fence         | Implemented; single process                                                                                                                             |
+| Paseo WebSocket adapter                           | Implemented                                                                                                                                             |
+| OpenCode free-model discovery                     | Implemented                                                                                                                                             |
+| Explicit reusable Paseo Workspace                 | Implemented                                                                                                                                             |
+| Workspace memory proposals/review/entries         | Implemented; governance-only baseline                                                                                                                   |
+| Deterministic CI                                  | Implemented; no model network calls                                                                                                                     |
+| Zero-model-credential external smoke              | Implemented; optional/manual/scheduled                                                                                                                  |
+| Managed Environment API + ProductSession pin      | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE                                                                                |
+| Managed Single-Agent V1 evidence                  | Minimum scenario approved; hardening deferred                                                                                                           |
+| Web Chat + Paseo rich-events MVE                  | Implemented MVE; sanitized direct timeline/disclosures and replay verified; Oracle merge-ready; PR integration pending                                  |
+| Self-learning Project Lab MVE                     | Implemented local/single-operator MVE; fixed Project/Team, human-reviewed LearningProposal to canonical Memory CAS, and refreshable observation surface |
+| OIDC users, shared ACLs, credentials, approval    | Planned V1                                                                                                                                              |
+| Artifacts, evidence, broader Web console          | Planned V1                                                                                                                                              |
+| Fixed Lark command + Card/Doc canary              | Implemented and verified; fixed compatibility-only, not production                                                                                      |
 
 ## Quick start
 
@@ -113,6 +114,21 @@ Activity is rendered as sanitized collapsible root and direct-child timeline
 disclosures for live and replayed Run Events; completed root rows default
 closed. Production identity, recovery, and broader console behavior remain
 deferred.
+
+The self-learning Project Lab MVE is a fixed local/single-operator path. It
+launches the managed Project/Team through the same-origin BFF, observes the
+bounded Team/report/activity aggregate, and reviews the root-bound learning
+proposal into canonical Memory. Run the Phase 3 smoke with fresh PostgreSQL:
+
+```bash
+PASEO_MODEL=opencode-go/deepseek-v4-flash \
+make self-learning-team-phase3-smoke
+```
+
+The paid model environment is optional when an explicitly free model is
+available; see the local development and operations runbooks for prerequisites
+and retained visual-evidence mode. This MVE is not a production or multi-user
+authentication boundary.
 
 Submit and poll a run:
 
@@ -177,6 +193,8 @@ These routes let the authenticated owner scope create memory proposals, review t
 - [Architecture](docs/architecture.md): domain, execution, recovery, and security direction.
 - [Contracts](docs/contracts.md): Run compatibility, Task, health, runtime, and invokable registry interfaces.
 - [Managed Environment API](docs/contracts/managed-environment-api.md): fixed Environment package, Session pin, RuntimeSession/Cell semantics, and non-goals.
+- [Self-learning Web API](docs/contracts/self-learning-web-api.md): fixed Project Lab BFF launch, aggregate, review, safe errors, and local-only boundary.
+- [Self-learning managed agent team MVE evidence](docs/evidence/self-learning-managed-agent-team-mve-evidence-packet.md): sanitized Phase 1–3 and final acceptance evidence; production hardening deferred.
 - [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
 - [Operations](docs/operations.md): local development and incident runbook.
 - [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.

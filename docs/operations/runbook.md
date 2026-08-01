@@ -124,6 +124,38 @@ synthesizer execution after both successes, and root completion. Failure is
 fail-fast/deferred; do not infer crash recovery, restart/resume, retries, or
 cancellation propagation from this smoke.
 
+## Self-learning Project Lab MVE
+
+The Phase 3 smoke requires Node `24.18.0`, pnpm `11.7.0`, a running Docker/
+PostgreSQL environment, and network access for the real Paseo/OpenCode run. From
+the repository root, run the normal disposable smoke:
+
+```bash
+make self-learning-team-phase3-smoke
+```
+
+For the verified paid-model path, load a local mode-`0600` environment without
+printing its value and pass only the optional model configuration:
+
+```bash
+PASEO_MODEL=opencode-go/deepseek-v4-flash \
+make self-learning-team-phase3-smoke
+```
+
+The target uses an explicitly free model when no paid-model environment is
+available. It requires no secret for the free path; the paid path requires the
+local `OPENCODE_GO_API_KEY`. The smoke proves Project init/plan/apply/reapply,
+Next BFF launch, Team/report/proposal review, canonical Memory refresh, and the
+bounded Web contract. Do not record tokens, prompts, disposable IDs, raw logs,
+or local paths.
+
+Set `PHASE3_SMOKE_RETAIN_FILE` only when collecting local visual evidence. This
+retained mode intentionally keeps the local API/Paseo/Web processes and database
+available for inspection and Playwright reload checks; it is not a deployment
+mode, persistence guarantee, or multi-user test. Stop the verified child
+processes and remove the ignored retained state after inspection. Production or
+multi-user use requires a new authentication Human Gate.
+
 ## Managed Agent registry operations
 
 ## Product Workspace memory projection

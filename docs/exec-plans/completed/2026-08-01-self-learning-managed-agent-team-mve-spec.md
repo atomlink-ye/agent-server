@@ -1,8 +1,8 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-01
-updated_at: 2026-08-01
+updated_at: 2026-08-03
 authority: approved-design
 ---
 
@@ -333,6 +333,20 @@ The final real E2E must start from fresh PostgreSQL and demonstrate:
 Evidence is sanitized and includes the manifest/Lock, plan summary, resource
 fingerprint map, root Task tree, TeamRun/member/work-item summary, tool
 receipts, report, proposal, accepted Memory Version, and second-run read event.
+
+## Final evidence and boundary
+
+The verified Phase 1, Phase 2, and Phase 3 evidence is recorded in the
+[sanitized evidence packet](../../evidence/self-learning-managed-agent-team-mve-evidence-packet.md).
+Phase 1 is committed as `092d200`; Phase 2 is committed as `db24eab`; the final
+accepted Memory content SHA is
+`028a7f5422446960d027dcd0fd1ada9367ab30f0a15df181d5a73c2fae20288c`.
+
+The completed Web Project Lab is a fixed local/single-operator observation and
+review surface. It keeps the bearer server-side, reconstructs durable state on
+refresh, and does not establish production authentication, multi-user
+authorization, shared ACLs, or production hardening. Those changes require a
+new authentication Human Gate.
 
 ## Non-goals
 

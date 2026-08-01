@@ -94,7 +94,7 @@ export function registerTeamMcpTools(
       'team_complete',
       {
         description: 'Complete the collaborative team.',
-        inputSchema: { team_run_id: id, final_text: z.string() },
+        inputSchema: { team_run_id: id, final_text: z.string().trim().min(1) },
       },
       ({ team_run_id, final_text }) =>
         result(handler.team_complete(team_run_id, final_text, actor)),

@@ -9,3 +9,7 @@ export const AGENT_SERVER_TEAM_TOOL_REFS = Object.freeze([
   'agent-server/team-task-update',
   'agent-server/team-complete',
 ]);
+export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  ...AGENT_SERVER_TEAM_TOOL_REFS,
+]);

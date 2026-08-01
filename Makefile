@@ -2,7 +2,7 @@
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
-	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native collaborative-team-smoke
+	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native collaborative-team-smoke agent-project-phase1-smoke
 
 setup:
 	docker compose build agent-server runner
@@ -76,6 +76,9 @@ managed-environment-smoke:
 
 collaborative-team-smoke:
 	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env COLLAB_SMOKE_POLL_MS -- pnpm smoke:collaborative-team
+
+agent-project-phase1-smoke:
+	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env PHASE1_SMOKE_STAGE --pass-env PHASE1_SMOKE_POLL_MS --pass-env PHASE1_SMOKE_TIMEOUT_MS -- pnpm smoke:agent-project-phase1
 
 clean:
 	docker compose down --remove-orphans

@@ -318,6 +318,8 @@ export class ExecuteRun {
             )
           ).find((candidate) => candidate.id === memberId)
         : null;
+    const leadFinalization =
+      member?.role === 'lead' && task.logicalStepKey?.endsWith(':finalize');
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -338,7 +340,7 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : member && this.runtimeSessions?.findByTeamMember
+        : member && !leadFinalization && this.runtimeSessions?.findByTeamMember
           ? await this.runtimeSessions.findByTeamMember({
               teamMemberRunId: member.id,
               tenantId: task.tenantId,
@@ -428,7 +430,9 @@ export class ExecuteRun {
             resolvedSkills: resolved.skills,
             toolRefs: resolved.toolRefs,
           })
-        : member && this.runtimeSessions.createOrGetForTeamMember
+        : member &&
+            !leadFinalization &&
+            this.runtimeSessions.createOrGetForTeamMember
           ? await this.runtimeSessions.createOrGetForTeamMember({
               teamMemberRunId: member.id,
               taskId: task.id,
@@ -453,7 +457,12 @@ export class ExecuteRun {
               toolRefs: resolved.toolRefs,
             });
     }
-    if (member && sessionRuntime && this.collaborativeExecutions)
+    if (
+      member &&
+      !leadFinalization &&
+      sessionRuntime &&
+      this.collaborativeExecutions
+    )
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
         sessionRuntime.id,

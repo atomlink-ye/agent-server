@@ -194,7 +194,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         ['succeeded', {}],
       ] as const) {
         await client.query(
-          `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 ON CONFLICT(run_id,type) DO UPDATE SET payload=EXCLUDED.payload`,
+          `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2`,
           [
             randomUUID(),
             input.rootRunId,

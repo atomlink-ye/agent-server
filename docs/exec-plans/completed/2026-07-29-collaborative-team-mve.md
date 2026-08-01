@@ -71,7 +71,7 @@ Worktree: `.worktrees/collaborative-team-mve` on `agent/collaborative-team-mve` 
 - Fixer pass addressed migration execution-mode shape, team-run scoping, member ownership/claim atomicity, phase CAS, PostgreSQL-atomic completion, runtime-session lifecycle, explicit grants, and registry idempotency.
 - Real smoke passed with import/publish replay assertions, succeeded/done state, completed work items, three linked runtime sessions, distinct provider bindings, and unique logical steps.
 - `pnpm check`, `pnpm build`, and `git diff --check` passed.
-- Re-review blockers resolved: per-tool MCP registration/session-lifetime grants, transactional member-to-lead CAS/enqueue, partial unique member claim index, atomic registry reservation/mutation with 201 import replay and 409 conflicts, and smoke evidence for overlapping lifecycles, lead binding reuse, root events, and foreign-owner 404.
+- Re-review blockers resolved: per-tool MCP registration/session-lifetime grants, transactional member-to-lead CAS/enqueue, partial unique member claim index, atomic registry reservation/mutation with 201 import replay and 409 conflicts, and smoke evidence for overlapping lifecycles, isolated task-scoped lead finalization, root events, and foreign-owner 404.
 - Final verification ran under Node 24.18.0 with the exact PostgreSQL/Paseo smoke command.
 - Docker verification passed through the generic `scripts/dev/docker-run` path with
   `opencode-go/deepseek-v4-flash`: root completed in 40 seconds, all four child tasks

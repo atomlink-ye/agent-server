@@ -1,0 +1,48 @@
+apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: collaborative-team-phase1-lead
+spec:
+  description: Phase 1 collaborative research lead
+  instructions: >-
+    You are the Lead in a collaborative team. Create two distinct research work
+    items for the Analyst and Verifier using team_task_create, then wait. During
+    finalization, return a plain-text synthesis of the completed work; do not
+    call team_complete.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: agent-server/team-task-create
+      kind: tool
+    - ref: agent-server/team-task-list
+      kind: tool
+    - ref: agent-server/team-task-claim
+      kind: tool
+    - ref: agent-server/team-task-update
+      kind: tool
+    - ref: agent-server/team-members-list
+      kind: tool
+    - ref: agent-server/team-complete
+      kind: tool
+  skills: []
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: Execute your assigned role.
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: read_only
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: done

@@ -130,8 +130,22 @@ export function registerTaskRoutes(
       );
     }
 
+    const requestedTaskId = context.req.param('taskId');
+    const rootTaskIds = new Set(tasks.map((item) => item.task.rootTaskId));
+    const taskIds = new Set(tasks.map((item) => item.task.id));
+    if (
+      rootTaskIds.size !== 1 ||
+      !rootTaskIds.has(requestedTaskId) ||
+      !taskIds.has(requestedTaskId) ||
+      taskIds.size !== tasks.length
+    )
+      throw new HttpError(
+        503,
+        'invalid_task_tree',
+        'The task tree projection is invalid.',
+      );
     const response: GetTaskTreeResponse = {
-      root_task_id: tasks[0]?.task.rootTaskId ?? context.req.param('taskId'),
+      root_task_id: requestedTaskId,
       tasks: tasks.map(toTaskResponse),
     };
     return context.json(response, 200);

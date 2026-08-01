@@ -22,9 +22,9 @@ import type { ResolvedSkillPackage } from './skill-catalog.js';
 import { digestSkillFiles } from './skill-package-digest.js';
 import { validateSkillMetadata } from './skill-metadata.js';
 
-const MAX_FILES = 64;
-const MAX_TOTAL_BYTES = 1024 * 1024;
-const MAX_FILE_BYTES = 256 * 1024;
+export const MAX_SKILL_FILES = 64;
+export const MAX_SKILL_TOTAL_BYTES = 1024 * 1024;
+export const MAX_SKILL_FILE_BYTES = 256 * 1024;
 
 export type SkillPackage = ResolvedSkillPackage;
 
@@ -33,6 +33,7 @@ export async function registerSkill(input: {
   readonly ref: string;
   readonly name: string;
   readonly sourceRoot: string;
+  readonly expectedDigest?: string;
   readonly requiredToolRefs: readonly string[];
 }): Promise<Readonly<ResolvedSkillPackage & { changed: boolean }>> {
   try {
@@ -49,6 +50,8 @@ export async function registerSkill(input: {
     validateSkillFrontmatter(skillFile.bytes.toString('utf8'), input.name);
 
     const digest = digestSkillFiles(files);
+    if (input.expectedDigest !== undefined && digest !== input.expectedDigest)
+      throw new Error('Skill digest mismatch.');
     const registryRoot = resolve(input.registryRoot);
     const objectPath = join(registryRoot, 'objects', digest);
     const manifestPath =
@@ -156,7 +159,7 @@ async function enumerate(
         const path = relative(root, absolute).split(sep).join('/');
         if (path.startsWith('/') || path.split('/').includes('..'))
           throw new Error('Invalid Skill path.');
-        if (result.length >= MAX_FILES)
+        if (result.length >= MAX_SKILL_FILES)
           throw new Error('Skill package has too many files.');
         const parentRealPath = await realpath(dirname(absolute));
         if (!inside(rootRealPath, parentRealPath))
@@ -171,8 +174,8 @@ async function enumerate(
           if (!openedStat.isFile() || (openedStat.mode & 0o111) !== 0)
             throw new Error('Skill packages cannot contain executable files.');
           if (
-            openedStat.size > MAX_FILE_BYTES ||
-            total + openedStat.size > MAX_TOTAL_BYTES
+            openedStat.size > MAX_SKILL_FILE_BYTES ||
+            total + openedStat.size > MAX_SKILL_TOTAL_BYTES
           )
             throw new Error('Skill package exceeds size limits.');
           total += openedStat.size;
@@ -432,6 +435,7 @@ const STABLE_REGISTRATION_ERRORS = new Set([
   'Skill package exceeds size limits.',
   'Skill changed while being read.',
   'Skill source is outside the source root.',
+  'Skill digest mismatch.',
   'Skill frontmatter is invalid.',
   'Skill object is missing its published ref.',
   'Skill object mismatch.',

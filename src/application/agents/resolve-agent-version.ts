@@ -7,6 +7,7 @@ import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.
 import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   AGENT_SERVER_TEAM_TOOL_REFS,
+  SUPPORTED_MANAGED_AGENT_TOOL_REFS,
 } from './built-in-skills.js';
 import type {
   ResolvedSkillPackage,
@@ -22,10 +23,6 @@ export type ResolvedAgentVersion = Readonly<{
   skills: readonly ResolvedSkillPackage[];
   toolRefs: readonly string[];
 }>;
-const SUPPORTED_TOOL_REFS = new Set([
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  ...AGENT_SERVER_TEAM_TOOL_REFS,
-]);
 
 export class ResolveAgentVersion {
   public constructor(
@@ -113,7 +110,7 @@ export class ResolveAgentVersion {
 function validateToolRefs(refs: readonly string[]): void {
   const seen = new Set<string>();
   for (const ref of refs) {
-    if (seen.has(ref) || !SUPPORTED_TOOL_REFS.has(ref))
+    if (seen.has(ref) || !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(ref))
       throw new Error('The managed Agent references an unsupported Tool.');
     seen.add(ref);
   }

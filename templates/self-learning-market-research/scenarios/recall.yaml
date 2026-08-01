@@ -1,0 +1,12 @@
+scenario: self-learning-market-research-recall
+mode: recall
+fixture_ref: fixture://self-learning-market-research/acme-v1
+symbol: ACME
+data_as_of: '2026-07-31'
+synthetic: true
+prompt: >-
+  Decode memory_store_id and memory_path from the root input. Run an independent
+  synthetic demo only recall pass. First call agent_server_memory_read with
+  memory_store_id from the root input and path from memory_path, then report the
+  returned path, accepted version, content SHA, principle, and application. Do
+  not use shell, files, or a scratchpad to simulate the memory read.

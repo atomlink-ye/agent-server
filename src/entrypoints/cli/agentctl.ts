@@ -28,7 +28,9 @@ const MAX_TEMPLATE_FILE_BYTES = 1 * 1024 * 1024;
 const MAX_TEMPLATE_TOTAL_BYTES = 16 * 1024 * 1024;
 const MAX_TEMPLATE_DEPTH = 32;
 const MAX_WATCH_TASKS = 10_000;
-const HELP = 'agentctl init|validate|plan|apply|run|watch';
+const MAX_LEARNING_EDIT_BYTES = 16 * 1024;
+const HELP =
+  'agentctl init|validate|plan|apply|run|watch|learning list|read|accept|edit-and-accept|reject';
 
 type Parsed = {
   command: string;
@@ -44,6 +46,7 @@ async function main(): Promise<void> {
     return output({ usage: HELP });
   }
   if (parsed.command === 'init') return init(parsed);
+  if (parsed.command === 'learning') return learning(parsed);
   if (parsed.command === 'validate') {
     const manifestPath = manifestPathFor(parsed);
     requireNoPositionals(parsed, 'validate');
@@ -89,6 +92,83 @@ async function main(): Promise<void> {
   if (parsed.command === 'run') return run(parsed, controlPlane);
   if (parsed.command === 'watch') return watch(parsed, controlPlane);
   throw new CliError('CLI_INVALID_ARGUMENTS');
+}
+
+async function learning(parsed: Parsed): Promise<void> {
+  const subcommand = parsed.positional[0];
+  if (
+    subcommand !== 'list' &&
+    subcommand !== 'read' &&
+    subcommand !== 'accept' &&
+    subcommand !== 'edit-and-accept' &&
+    subcommand !== 'reject'
+  )
+    throw new CliError('CLI_INVALID_ARGUMENTS');
+  if (subcommand !== 'edit-and-accept' && parsed.flags.size)
+    throw new CliError('CLI_INVALID_ARGUMENTS');
+  const id = parsed.positional[1];
+  if (subcommand === 'list') {
+    if (parsed.positional.length !== 1)
+      throw new CliError('CLI_INVALID_ARGUMENTS');
+    return output(await learningRequest('GET', '/api/v1/learning-proposals'));
+  }
+  if (parsed.positional.length !== 2 || !UUID.test(id!))
+    throw new CliError('CLI_INVALID_ARGUMENTS');
+  if (subcommand === 'edit-and-accept') {
+    if (parsed.flags.size !== 1) throw new CliError('CLI_INVALID_ARGUMENTS');
+    const content = requiredFlag(parsed, '--content');
+    if (
+      !content.trim() ||
+      Buffer.byteLength(content, 'utf8') > MAX_LEARNING_EDIT_BYTES
+    )
+      throw new CliError('CLI_INVALID_INPUT');
+    return output(
+      await learningRequest(
+        'POST',
+        `/api/v1/learning-proposals/${id}/edit-and-accept`,
+        {
+          content,
+        },
+      ),
+    );
+  }
+  return output(
+    await learningRequest(
+      subcommand === 'read' ? 'GET' : 'POST',
+      `/api/v1/learning-proposals/${id}${subcommand === 'read' ? '' : `/${subcommand}`}`,
+      subcommand === 'read' ? undefined : {},
+    ),
+  );
+}
+
+async function learningRequest(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+): Promise<unknown> {
+  const env = connectionEnv(false);
+  const url = `${env.baseUrl.replace(/\/$/, '')}${path}${
+    path === '/api/v1/learning-proposals'
+      ? `?workspace_id=${encodeURIComponent(env.workspaceId)}`
+      : ''
+  }`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${env.token}`,
+      accept: 'application/json',
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }).catch(() => {
+    throw new CliError('CLI_CONNECTION_UNAVAILABLE');
+  });
+  if (!response.ok) throw new CliError(`CLI_HTTP_${response.status}`);
+  try {
+    return await response.json();
+  } catch {
+    throw new CliError('CLI_INVALID_RESPONSE');
+  }
 }
 
 async function run(
@@ -331,7 +411,9 @@ function parse(args: readonly string[]): Parsed {
           ? ['--manifest', '--input']
           : command === 'watch'
             ? ['--poll-ms', '--timeout-ms']
-            : [];
+            : command === 'learning'
+              ? ['--content']
+              : [];
   if (
     (!allowed.length && command !== 'help') ||
     [...flags.keys()].some((flag) => !allowed.includes(flag))

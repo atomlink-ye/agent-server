@@ -22,6 +22,7 @@
     "smoke:team-dag:inspect": "node scripts/smoke/team-dag-retained-inspect.mjs",
     "smoke:collaborative-team": "node scripts/smoke/collaborative-team-main-flow.mjs",
     "smoke:agent-project-phase1": "node scripts/smoke/agent-project-phase1-main-flow.mjs",
+    "smoke:self-learning-team-phase2": "node scripts/smoke/self-learning-team-phase2-main-flow.mjs",
     "probe:paseo-stream": "node scripts/probes/paseo-agent-stream.mjs",
     "web:dev": "pnpm --filter @atomlink-ye/agent-server-web dev",
     "web:build": "pnpm --filter @atomlink-ye/agent-server-web build",

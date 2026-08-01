@@ -9,6 +9,9 @@ export interface RuntimeExtensionBinder {
     readonly workspaceId: string;
     readonly productSessionId?: string;
     readonly scopeId?: string;
+    readonly taskId?: string;
+    readonly runId?: string;
+    readonly teamMemberRunId?: string;
     readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];

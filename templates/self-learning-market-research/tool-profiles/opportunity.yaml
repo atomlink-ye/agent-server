@@ -1,0 +1,16 @@
+apiVersion: agent-server/v1alpha1
+kind: LocalToolProfile
+metadata:
+  name: opportunity
+spec:
+  tools:
+    - ref: agent-server/team-task-list
+      kind: tool
+    - ref: agent-server/team-task-claim
+      kind: tool
+    - ref: agent-server/team-task-update
+      kind: tool
+    - ref: agent-server/synthetic-stock-snapshot
+      kind: tool
+    - ref: agent-server/synthetic-event-batch
+      kind: tool

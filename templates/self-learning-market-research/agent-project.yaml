@@ -1,0 +1,54 @@
+apiVersion: agent-server/v1alpha1
+kind: AgentProject
+metadata:
+  name: self-learning-market-research
+spec:
+  workspace:
+    name: Self-Learning Market Research
+  toolProfiles:
+    lead:
+      file: tool-profiles/lead.yaml
+    opportunity:
+      file: tool-profiles/opportunity.yaml
+    analog-risk:
+      file: tool-profiles/analog-risk.yaml
+  skills:
+    team-lead-report:
+      directory: skills/team-lead-report
+      requiredTools:
+        - tool-profile://lead
+    knowledge-opportunity:
+      directory: skills/knowledge-opportunity
+      requiredTools:
+        - tool-profile://opportunity
+    analog-risk-review:
+      directory: skills/analog-risk-review
+      requiredTools:
+        - tool-profile://analog-risk
+    human-learning-loop:
+      directory: skills/human-learning-loop
+      requiredTools:
+        - tool-profile://lead
+  environments:
+    synthetic-paseo:
+      file: environments/synthetic-paseo.yaml
+  agents:
+    lead:
+      file: agents/lead.yaml
+    opportunity-analyst:
+      file: agents/opportunity-analyst.yaml
+    analog-risk-reviewer:
+      file: agents/analog-risk-reviewer.yaml
+  teams:
+    market-research:
+      file: teams/market-research.yaml
+  memoryStores:
+    research:
+      name: Research principles
+      description: Human-reviewed principles for the synthetic research loop.
+      seeds:
+        - path: research/principles.md
+          file: memory/research-principles.md
+  entrypoints:
+    - team://market-research
+  defaultEntrypoint: team://market-research

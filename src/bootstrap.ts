@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
 import { ResolveAgentVersion } from './application/agents/resolve-agent-version.js';
 import { CreateMemoryProposal } from './application/memory/create-memory-proposal.js';
+import {
+  AcceptLearningProposal,
+  CreateLearningProposal,
+  GetLearningProposal,
+  ListLearningProposals,
+  RejectLearningProposal,
+} from './application/learning/learning-proposals.js';
 import { ListMemoryEntries } from './application/memory/list-memory-entries.js';
 import { ListMemoryProposals } from './application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from './application/memory/review-memory-proposal.js';
@@ -33,6 +40,7 @@ import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-di
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresLearningProposalRepository } from './infrastructure/postgres/postgres-learning-proposal-repository.js';
 import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresEnvironmentRegistry } from './infrastructure/postgres/postgres-environment-registry.js';
@@ -75,6 +83,7 @@ import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/post
 import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
+import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
 import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
 import { TeamToolHandler } from './application/teams/team-tools.js';
@@ -249,6 +258,24 @@ export async function createService(config: AppConfig, logger: Logger) {
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
+  const learningProposalRepository = new PostgresLearningProposalRepository(
+    pool,
+  );
+  const createLearningProposal = new CreateLearningProposal(
+    learningProposalRepository,
+  );
+  const listLearningProposals = new ListLearningProposals(
+    learningProposalRepository,
+  );
+  const getLearningProposal = new GetLearningProposal(
+    learningProposalRepository,
+  );
+  const acceptLearningProposal = new AcceptLearningProposal(
+    learningProposalRepository,
+  );
+  const rejectLearningProposal = new RejectLearningProposal(
+    learningProposalRepository,
+  );
   const memoryApiRepository = new PostgresMemoryApiRepository(pool);
   const createMemoryStore = new CreateMemoryStore(memoryApiRepository);
   const listMemoryStores = new ListMemoryStores(memoryApiRepository);
@@ -301,6 +328,8 @@ export async function createService(config: AppConfig, logger: Logger) {
     {
       handler: teamToolHandler,
     },
+    createLearningProposal,
+    new SyntheticMarketAdapter(),
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,
@@ -513,6 +542,10 @@ export async function createService(config: AppConfig, logger: Logger) {
     createMemoryProposal,
     listMemoryProposals,
     reviewMemoryProposal,
+    listLearningProposals,
+    getLearningProposal,
+    acceptLearningProposal,
+    rejectLearningProposal,
     listMemoryEntries,
     managedMemory,
     agentRegistry,

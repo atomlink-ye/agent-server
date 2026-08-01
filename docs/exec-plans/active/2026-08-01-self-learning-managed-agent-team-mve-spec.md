@@ -203,6 +203,60 @@ the execution plan before migration or public route work. It must preserve
 stable Memory IDs, immutable Versions, monotonic versioning, no-op semantics,
 and stale-hash conflict behavior from `docs/contracts/memory-api.md`.
 
+### Phase 2 Lane A — Oracle-approved LearningProposal contract
+
+The Phase 2 Lane A implementation records the following exact contract before
+its migration and public route work. `LearningProposal` is separate from the
+legacy `workspace_memory_proposals` tables and is never dual-written there.
+
+The durable record is owner-scoped by `(tenant_id, workspace_id,
+principal_type, principal_id)` and contains:
+
+```text
+id: UUID
+owner: { tenantId, workspaceId, principalType, principalId }
+sourceTeamRunId: UUID
+sourceTaskId: UUID
+sourceRunId: UUID
+targetMemoryStoreId: UUID
+targetMemoryId: UUID
+targetPath: normalized relative POSIX path, 1..512 characters
+baseContentSha256: lowercase SHA-256 of the target current Version
+proposedContent: non-empty UTF-8 text, 1..8192 bytes
+evidenceRefs: 1..8 non-empty bounded strings
+status: pending | accepted | rejected
+acceptedMemoryVersionId: UUID | null
+reviewedAt: ISO timestamp | null
+createdAt, updatedAt: ISO timestamps
+```
+
+There is no HTTP create route in this lane. Creation is an application/port
+surface for the runtime/MCP lane; HTTP exposes only owner-scoped list/read and
+human review actions:
+
+```text
+GET  /api/v1/learning-proposals?workspace_id=UUID (required; fixed limit 100)
+GET  /api/v1/learning-proposals/:proposalId
+POST /api/v1/learning-proposals/:proposalId/accept
+POST /api/v1/learning-proposals/:proposalId/edit-and-accept
+POST /api/v1/learning-proposals/:proposalId/reject
+```
+
+Accept and reject accept exactly `{}`; edit-and-accept accepts exactly
+`{ "content": string }`.
+Review action request bodies are bounded to 16 KiB. Foreign or missing
+resources return `404 not_found`; a non-pending proposal or stale base SHA
+returns `409` (`learning_proposal_not_pending` or
+`memory_precondition_failed`). Acceptance and rejection are repository
+transactions. Acceptance locks the proposal and canonical Memory/current
+Version in one PostgreSQL transaction, checks the recorded base SHA, and then
+creates or reuses the canonical immutable Memory Version using the existing
+Memory domain validation and Version shape before moving the current pointer
+and recording `acceptedMemoryVersionId` plus `reviewedAt` for accepted/rejected
+proposals. Edit-and-accept changes only the
+accepted canonical content; the proposal's original `proposedContent` remains
+unchanged.
+
 ## Errors and safety
 
 - Invalid YAML, unsupported apiVersion/kind, unknown fields, absolute paths,

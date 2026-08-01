@@ -22,6 +22,9 @@ export type RuntimeToolGrant = Readonly<{
   readonly principalId: string;
   readonly workspaceId: string;
   readonly productSessionId: string;
+  readonly taskId?: string;
+  readonly runId?: string;
+  readonly teamMemberRunId?: string;
   readonly allowedTools: readonly string[];
   readonly expiresAt: string;
 }>;
@@ -50,6 +53,9 @@ export class RuntimeToolGrantService {
     readonly principalId: string;
     readonly workspaceId: string;
     readonly productSessionId: string;
+    readonly taskId?: string;
+    readonly runId?: string;
+    readonly teamMemberRunId?: string;
     readonly allowedTools?: readonly string[];
     readonly ttlMs?: number;
   }): RuntimeToolGrantIssue {
@@ -73,6 +79,11 @@ export class RuntimeToolGrantService {
       principalId: input.principalId,
       workspaceId: input.workspaceId,
       productSessionId: input.productSessionId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.runId ? { runId: input.runId } : {}),
+      ...(input.teamMemberRunId
+        ? { teamMemberRunId: input.teamMemberRunId }
+        : {}),
       allowedTools: Object.freeze([...allowedTools]),
       expiresAt,
       tokenHash: hashToken(token),

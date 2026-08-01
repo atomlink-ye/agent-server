@@ -2,7 +2,7 @@
 status: active
 owner: orchestrator
 created_at: 2026-08-01
-updated_at: 2026-08-01
+updated_at: 2026-08-02
 authority: execution-plan
 ---
 
@@ -159,19 +159,19 @@ the owner-mandated Phase 1 MVE scope cut; their real consumers move to Phase 2.
 
 ### Phase 2 — Starter, synthetic tools, and learning loop
 
-- [ ] Add `templates/self-learning-market-research/` with manifest,
+- [x] Add `templates/self-learning-market-research/` with manifest,
       Environment, three Agents, Team, four Skills, seed Memory, and fixtures.
-- [ ] Add bounded synthetic market tool adapter/profile and real MCP/runtime
+- [x] Add bounded synthetic market tool adapter/profile and real MCP/runtime
       projection; include provenance and `synthetic` markers.
-- [ ] Correct/extend the existing Team starter prompts so Lead is dynamic and
+- [x] Correct/extend the existing Team starter prompts so Lead is dynamic and
       the two members cover knowledge/opportunity and analog/risk review.
-- [ ] Add the lightweight durable LearningProposal model/store/API and
+- [x] Add the lightweight durable LearningProposal model/store/API and
       `learning_proposal_create` tool. Preserve canonical Memory Store as the
       only content fact source; do not dual-write legacy Workspace Memory
       Proposals.
-- [ ] Add list/read/accept/edit-and-accept/reject with owner scope and Memory
+- [x] Add list/read/accept/edit-and-accept/reject with owner scope and Memory
       content-SHA CAS. Runtime has no direct Memory write capability.
-- [ ] Add a follow-up scenario in which a member explicitly reads the
+- [x] Add a follow-up scenario in which a member explicitly reads the
       accepted Memory path and the report identifies the applied principle.
 
 **Outcome:** the fixed starter completes a real synthetic report, produces a
@@ -370,6 +370,23 @@ completion summary blocked by the old 2,000-character limit and a SQL reference
 to the nonexistent `runtime.status` column; after those fixes, stepwise
 diagnosis preceded the successful overall smoke.
 
+Phase 2 completion evidence (2026-08-02): the staged manual path passed with a
+real learn TeamRun, exactly one pending LearningProposal created by MCP with
+Task/Run/TeamRun lineage, and human acceptance creating the canonical Memory
+V2. A controlled stale same-base accept returned `409` and remained pending;
+rejecting it created no Version. The legacy Workspace proposal count remained
+zero. An independent recall used distinct TeamRun/MemberRun/RuntimeSession and
+provider identities and returned the accepted path, Version, content SHA,
+principle, and application. No Memory-write grant was present. The isolated
+overall paid smoke also passed with `opencode-go/deepseek-v4-flash`. Sanitized
+acceptance results: accepted path `research/principles.md`; content SHA
+`028a7f5422446960d027dcd0fd1ada9367ab30f0a15df181d5a73c2fae20288c`; phases
+`init`, `validate`, `plan` (no-write), `apply`, `reapply` (lock-stable),
+`learn`, `proposal-review`, `stale-409-reject`, and `recall` all passed.
+Static gates typecheck, formatting, `pnpm check:docs`,
+`pnpm check:exec-plans`, Node syntax, and `git diff --check` passed. Disposable
+IDs and secrets are intentionally omitted.
+
 ## Completion checklist
 
 - [ ] The companion Spec and this Plan agree on scope, gates, non-goals, and
@@ -386,29 +403,29 @@ diagnosis preceded the successful overall smoke.
 
 ## Current blocker
 
-Phase 1 is complete and verified. The next step is Phase 2: the real
-Skill/ToolProfile/Memory Store starter and projection consumers, synthetic
-tools, and the learning loop. Any change to the approved public contract,
-durable state, migration, or security boundary still requires its Human Gate.
+Phase 2 is complete and verified. The next step is Phase 3: the thin Project
+Lab/Team Inspector and BFF projection, preserving server-side bearer handling
+and refresh recovery. Any change to the approved public contract, durable
+state, migration, or security boundary still requires its Human Gate.
 
 ## Next exact command
 
-Before starting Phase 2, run under Node `24.18.0` after any additional
+Before starting Phase 3, run under Node `24.18.0` after any additional
 documentation edits:
 
 ```bash
 pnpm check:docs && pnpm check:exec-plans
 ```
 
-The first Phase 2 action is a focused inspection of the existing Skill,
-ToolProfile, Memory Store, runtime MCP projection, and canonical Memory API
-seams. Shape only the smallest synthetic report -> proposal -> human accept ->
-independent recall path; do not begin with hardening or broad abstractions.
+The first Phase 3 action is a focused inspection of the existing Web patterns
+and server-side-token BFF seams. Shape only the narrow Project Lab/Team
+Inspector/learning review and refresh reconstruction path; do not add a second
+configuration authority or begin with broad UI polish.
 
 ## Cleanup state
 
-Phase 1 implementation and sanitized evidence are present in this worktree.
-Create the verified Phase 1 commit before Phase 2 begins. Keep the Spec and Plan
-in `docs/exec-plans/active/` until the multi-phase outcome and final real E2E are
-complete; archive them together only after all remaining checkboxes are
-resolved.
+Phase 1 is committed as `092d200`. Phase 2 implementation and sanitized evidence
+are present in this worktree and may be committed after its final gate. Keep the
+Spec and Plan in `docs/exec-plans/active/` until the multi-phase outcome and final
+real E2E are complete; archive them together only after all remaining checkboxes
+are resolved.

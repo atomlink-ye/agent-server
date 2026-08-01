@@ -5,6 +5,12 @@ import { Hono } from 'hono';
 
 import type { ReadinessProbe } from '../../application/health/readiness.js';
 import type { CreateMemoryProposal } from '../../application/memory/create-memory-proposal.js';
+import type {
+  AcceptLearningProposal,
+  GetLearningProposal,
+  ListLearningProposals,
+  RejectLearningProposal,
+} from '../../application/learning/learning-proposals.js';
 import type { ListMemoryEntries } from '../../application/memory/list-memory-entries.js';
 import type { ListMemoryProposals } from '../../application/memory/list-memory-proposals.js';
 import type { ReviewMemoryProposal } from '../../application/memory/review-memory-proposal.js';
@@ -40,6 +46,7 @@ import {
   registerMemoryApiRoutes,
   type MemoryApiRouteDependencies,
 } from './routes/memory-api.js';
+import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -54,6 +61,10 @@ export interface AppDependencies {
   readonly createMemoryProposal: CreateMemoryProposal;
   readonly listMemoryProposals: ListMemoryProposals;
   readonly reviewMemoryProposal: ReviewMemoryProposal;
+  readonly listLearningProposals?: ListLearningProposals;
+  readonly getLearningProposal?: GetLearningProposal;
+  readonly acceptLearningProposal?: AcceptLearningProposal;
+  readonly rejectLearningProposal?: RejectLearningProposal;
   readonly listMemoryEntries: ListMemoryEntries;
   readonly agentRegistry: AgentRegistry;
   readonly environmentRegistry?: EnvironmentRegistry;
@@ -104,6 +115,19 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       ...dependencies.memoryApi,
     });
   }
+  if (
+    dependencies.listLearningProposals &&
+    dependencies.getLearningProposal &&
+    dependencies.acceptLearningProposal &&
+    dependencies.rejectLearningProposal
+  )
+    registerLearningProposalRoutes(app, {
+      config: dependencies.config,
+      listLearningProposals: dependencies.listLearningProposals,
+      getLearningProposal: dependencies.getLearningProposal,
+      acceptLearningProposal: dependencies.acceptLearningProposal,
+      rejectLearningProposal: dependencies.rejectLearningProposal,
+    });
   registerAgentRoutes(app, dependencies);
   if (dependencies.invokableRepository && dependencies.environmentRegistry)
     registerTeamRoutes(app, {

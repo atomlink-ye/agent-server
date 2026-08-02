@@ -41,11 +41,15 @@ export interface CreateTeamRunOptions {
   readonly teamVersionId: string;
   readonly environmentVersionId: string;
   readonly executionMode?: TeamExecutionMode;
+  /** Set when activation admits the initial Agentic lead task in this path. */
+  readonly initialLeadTurn?: boolean;
   readonly now?: () => Date;
 }
 
 export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
   const timestamp = (options.now ?? (() => new Date()))().toISOString();
+  const initialAgenticLead =
+    options.executionMode === 'agentic_mve' && options.initialLeadTurn === true;
   return Object.freeze({
     id: options.id ?? randomUUID(),
     tenantId: options.tenantId,
@@ -58,9 +62,14 @@ export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
     environmentVersionId: options.environmentVersionId,
     status: 'active' as const,
     executionMode: options.executionMode ?? 'collaborative_mve',
-    controlState: options.executionMode === 'agentic_mve' ? 'lead_ready' : null,
-    revision: 0,
-    leadTurnCount: 0,
+    controlState:
+      options.executionMode === 'agentic_mve'
+        ? initialAgenticLead
+          ? 'lead_running'
+          : 'lead_ready'
+        : null,
+    revision: initialAgenticLead ? 1 : 0,
+    leadTurnCount: initialAgenticLead ? 1 : 0,
     stopReason: null,
     completionRequestedByRunId: null,
     phase: 'lead_kickoff' as const,

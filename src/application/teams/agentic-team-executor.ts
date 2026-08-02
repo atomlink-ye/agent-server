@@ -45,6 +45,7 @@ export class AgenticTeamExecutor {
       teamVersionId: version.id,
       environmentVersionId: spec.environmentVersionId,
       executionMode: 'agentic_mve',
+      initialLeadTurn: true,
       now: this.now,
     });
     const lead = activateMemberRun(

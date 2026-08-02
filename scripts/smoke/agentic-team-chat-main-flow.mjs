@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register as registerTsx } from 'tsx/esm/api';
@@ -29,6 +29,28 @@ const runtimeRoot = join(
 );
 const projectCwd = join(runtimeRoot, 'project');
 const cellRoot = join(runtimeRoot, 'cells');
+const STAGES = new Set([
+  'lead_command',
+  'attempt1_materialized',
+  'attempt1_terminal',
+  'rework_command',
+  'attempt2_terminal',
+  'completion',
+  'full',
+]);
+const stage = process.env.AGENTIC_TEAM_SMOKE_STAGE ?? 'full';
+if (!STAGES.has(stage))
+  throw new Error(`invalid_agentic_smoke_stage: ${stage}`);
+const stageTimeoutMs = Number(
+  process.env.AGENTIC_TEAM_SMOKE_STAGE_TIMEOUT_MS ?? 90_000,
+);
+class FocusedStageComplete extends Error {}
+const retainFile = process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE
+  ? resolve(process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE)
+  : null;
+const timeline = [];
+let rootTaskId;
+let retained = false;
 let admin;
 let db;
 let paseo;
@@ -226,8 +248,14 @@ try {
     idempotencyKey: randomUUID(),
     status: 202,
   });
-  const rootTaskId = invoked.task_id;
+  rootTaskId = invoked.task_id;
   console.log(`root_task_id: ${rootTaskId}`);
+
+  if (stage !== 'full') {
+    await pollFocusedStage(rootTaskId, stage);
+    console.log(JSON.stringify({ status: 'passed', stage }));
+    throw new FocusedStageComplete();
+  }
 
   // ---- Poll root task to terminal ----
   const rootResult = await poll(rootTaskId);
@@ -443,6 +471,35 @@ try {
     throw new Error('agentic_attempt_task_linkage_missing');
   console.log(`agentic_evidence: ${JSON.stringify(evidence)}`);
 
+  if (retainFile) {
+    const temp = `${retainFile}.tmp-${process.pid}`;
+    await mkdir(resolve(retainFile, '..'), { recursive: true });
+    await writeFile(
+      temp,
+      `${JSON.stringify({
+        status: 'retained-ready',
+        root_task_id: rootTaskId,
+        team_run_id: teamRunResult.id,
+        db_name: dbName,
+        api_url: apiUrl,
+        runtime_root: '<runtime-root>',
+        timeline,
+        evidence,
+      })}\n`,
+      { mode: 0o600 },
+    );
+    await rename(temp, retainFile);
+    retained = true;
+    console.log(
+      JSON.stringify({
+        status: 'retained-ready',
+        root_task_id: rootTaskId,
+        team_run_id: teamRunResult.id,
+      }),
+    );
+    await new Promise(() => {});
+  }
+
   // ---- Final output ----
   console.log(
     JSON.stringify({
@@ -456,8 +513,10 @@ try {
       team_run_status: teamRunResult.status,
     }),
   );
+} catch (error) {
+  if (!(error instanceof FocusedStageComplete)) throw error;
 } finally {
-  if (process.env.PRESERVE_COLLAB_SMOKE === '1') {
+  if (retained || process.env.PRESERVE_COLLAB_SMOKE === '1') {
     console.error(`preserved_db: ${dbName}`);
     console.error(`preserved_runtime_root: ${runtimeRoot}`);
     process.exitCode = 1;
@@ -519,11 +578,161 @@ async function poll(taskId) {
       );
       lastStatus = task.status;
       lastLoggedAt = now;
+      timeline.push({
+        at: new Date(now).toISOString(),
+        root_status: task.status,
+        latest_run_status: task.latest_run?.status ?? null,
+      });
     }
     if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error('root_timeout');
+}
+
+async function pollFocusedStage(taskId, requestedStage) {
+  const deadline = Date.now() + stageTimeoutMs;
+  let lastSnapshot;
+  while (Date.now() < deadline) {
+    lastSnapshot = await focusedSnapshot(taskId);
+    if (focusedStageSatisfied(requestedStage, lastSnapshot)) {
+      console.log(
+        JSON.stringify({
+          status: 'passed',
+          stage: requestedStage,
+          elapsed_ms: stageTimeoutMs - Math.max(0, deadline - Date.now()),
+          snapshot: lastSnapshot,
+        }),
+      );
+      return;
+    }
+    if (requestedStage === 'lead_command' && lastSnapshot.leadTerminal) {
+      console.log(
+        JSON.stringify({
+          status: 'failed',
+          stage: requestedStage,
+          reason: 'lead_terminal_before_command_receipt',
+          snapshot: lastSnapshot,
+        }),
+      );
+      throw new Error('lead_command_stage_failed');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  console.log(
+    JSON.stringify({
+      status: 'failed',
+      stage: requestedStage,
+      reason: 'stage_timeout',
+      snapshot: lastSnapshot ?? (await focusedSnapshot(taskId)),
+    }),
+  );
+  throw new Error(`agentic_stage_timeout: ${requestedStage}`);
+}
+
+async function focusedSnapshot(taskId) {
+  const team = await db.query(
+    `SELECT id,status,execution_mode,control_state,revision,lead_turn_count,phase
+       FROM team_runs WHERE root_task_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    [taskId],
+  );
+  const teamRun = team.rows[0] ?? null;
+  const tasks = await db.query(
+    `SELECT t.id,t.team_task_kind,t.logical_step_key,t.status AS task_status,
+            r.id AS run_id,r.status AS run_status,r.lease_expires_at
+       FROM tasks t LEFT JOIN runs r ON r.task_id=t.id
+      WHERE t.root_task_id=$1 ORDER BY t.created_at`,
+    [taskId],
+  );
+  const receipts = teamRun
+    ? await db.query(
+        `SELECT command_name FROM team_command_receipts
+          WHERE source_run_id IN (SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id
+                                   WHERE t.root_task_id=$1)
+          ORDER BY created_at`,
+        [taskId],
+      )
+    : { rows: [] };
+  const attempts = teamRun
+    ? await db.query(
+        `SELECT attempt_no,status,execution_task_id,result_summary
+           FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY attempt_no`,
+        [teamRun.id],
+      )
+    : { rows: [] };
+  const safeTasks = tasks.rows.map((row) => ({
+    task_id: row.id,
+    kind: row.team_task_kind,
+    logical_step: row.logical_step_key,
+    task_status: row.task_status,
+    run_id: row.run_id,
+    run_status: row.run_status,
+    lease_expired:
+      row.lease_expires_at !== null &&
+      Date.parse(row.lease_expires_at) < Date.now(),
+  }));
+  return {
+    team_run: teamRun
+      ? {
+          status: teamRun.status,
+          execution_mode: teamRun.execution_mode,
+          control_state: teamRun.control_state,
+          revision: Number(teamRun.revision),
+          lead_turns: Number(teamRun.lead_turn_count),
+          phase: teamRun.phase,
+        }
+      : null,
+    tasks_runs: safeTasks,
+    receipt_names: receipts.rows.map((row) => row.command_name),
+    attempts: attempts.rows.map((row) => ({
+      attempt_no: Number(row.attempt_no),
+      status: row.status,
+      materialized: row.execution_task_id !== null,
+      has_result: Boolean(row.result_summary),
+    })),
+    lease_expired: safeTasks.some((row) => row.lease_expired),
+    leadTerminal: safeTasks.some(
+      (row) =>
+        row.kind === 'lead_turn' &&
+        ['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
+          row.run_status,
+        ),
+    ),
+  };
+}
+
+function focusedStageSatisfied(requestedStage, snapshot) {
+  const receipts = new Set(snapshot.receipt_names);
+  const attempts = snapshot.attempts;
+  if (requestedStage === 'lead_command')
+    return Boolean(
+      snapshot.team_run?.execution_mode === 'agentic_mve' &&
+      snapshot.tasks_runs.some((row) => row.kind === 'lead_turn') &&
+      snapshot.tasks_runs.some(
+        (row) => row.kind === 'lead_turn' && row.run_id,
+      ) &&
+      [...receipts].some((name) => name.startsWith('team_')),
+    );
+  if (requestedStage === 'attempt1_materialized')
+    return attempts.some((row) => row.attempt_no === 1 && row.materialized);
+  if (requestedStage === 'attempt1_terminal')
+    return attempts.some(
+      (row) =>
+        row.attempt_no === 1 && ['completed', 'failed'].includes(row.status),
+    );
+  if (requestedStage === 'rework_command')
+    return receipts.has('team_work_request_rework');
+  if (requestedStage === 'attempt2_terminal')
+    return attempts.some(
+      (row) =>
+        row.attempt_no === 2 && ['completed', 'failed'].includes(row.status),
+    );
+  if (requestedStage === 'completion')
+    return (
+      receipts.has('team_completion_request') ||
+      snapshot.team_run?.status === 'succeeded'
+    );
+  return false;
 }
 
 async function pollCollaborativeChildren(rootTaskId) {
@@ -572,7 +781,7 @@ function agentYaml(name) {
       : name === 'analyst'
         ? 'Use the legacy work tools for the assigned item. On the first attempt, claim the item, call synthetic_stock_snapshot only, and complete it with a concise result that explicitly lacks event evidence. If the Lead requests rework, call synthetic_stock_snapshot and synthetic_event_batch, then complete the same item with both evidence categories. ONLY do ONE work item per attempt.'
         : 'When assigned a work item, claim it with team_task_claim, call synthetic_stock_snapshot and synthetic_event_batch, then complete it with a concise result containing both evidence categories. ONLY do ONE work item.'
-  }\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n    - ref: agent-server/team-task-create\n      kind: tool\n    - ref: agent-server/team-task-list\n      kind: tool\n    - ref: agent-server/team-task-claim\n      kind: tool\n    - ref: agent-server/team-task-update\n      kind: tool\n    - ref: agent-server/team-members-list\n      kind: tool\n    - ref: agent-server/team-complete\n      kind: tool\n    - ref: agent-server/synthetic-stock-snapshot\n      kind: tool\n    - ref: agent-server/synthetic-event-batch\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  }\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n    - ref: agent-server/team-work-create-and-assign\n      kind: tool\n    - ref: agent-server/team-work-accept\n      kind: tool\n    - ref: agent-server/team-work-request-rework\n      kind: tool\n    - ref: agent-server/team-completion-request\n      kind: tool\n    - ref: agent-server/team-task-create\n      kind: tool\n    - ref: agent-server/team-task-list\n      kind: tool\n    - ref: agent-server/team-task-claim\n      kind: tool\n    - ref: agent-server/team-task-update\n      kind: tool\n    - ref: agent-server/team-members-list\n      kind: tool\n    - ref: agent-server/team-complete\n      kind: tool\n    - ref: agent-server/synthetic-stock-snapshot\n      kind: tool\n    - ref: agent-server/synthetic-event-batch\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 function environmentYaml() {

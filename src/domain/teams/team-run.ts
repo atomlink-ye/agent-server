@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 export type TeamRunStatus = 'active' | 'waiting' | 'succeeded' | 'failed';
+export type TeamExecutionMode = 'collaborative_mve' | 'agentic_mve';
+export type AgenticTeamControlState =
+  'lead_ready' | 'lead_running' | 'member_work_running' | 'terminal';
 export type TeamRunPhase =
   'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
 
@@ -15,6 +18,12 @@ export interface TeamRun {
   readonly teamVersionId: string;
   readonly environmentVersionId: string;
   readonly status: TeamRunStatus;
+  readonly executionMode: TeamExecutionMode;
+  readonly controlState: AgenticTeamControlState | null;
+  readonly revision: number;
+  readonly leadTurnCount: number;
+  readonly stopReason: string | null;
+  readonly completionRequestedByRunId: string | null;
   readonly phase: TeamRunPhase;
   readonly finalText: string | null;
   readonly createdAt: string;
@@ -31,11 +40,16 @@ export interface CreateTeamRunOptions {
   readonly rootRunId: string;
   readonly teamVersionId: string;
   readonly environmentVersionId: string;
+  readonly executionMode?: TeamExecutionMode;
+  /** Set when activation admits the initial Agentic lead task in this path. */
+  readonly initialLeadTurn?: boolean;
   readonly now?: () => Date;
 }
 
 export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
   const timestamp = (options.now ?? (() => new Date()))().toISOString();
+  const initialAgenticLead =
+    options.executionMode === 'agentic_mve' && options.initialLeadTurn === true;
   return Object.freeze({
     id: options.id ?? randomUUID(),
     tenantId: options.tenantId,
@@ -47,10 +61,37 @@ export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
     teamVersionId: options.teamVersionId,
     environmentVersionId: options.environmentVersionId,
     status: 'active' as const,
+    executionMode: options.executionMode ?? 'collaborative_mve',
+    controlState:
+      options.executionMode === 'agentic_mve'
+        ? initialAgenticLead
+          ? 'lead_running'
+          : 'lead_ready'
+        : null,
+    revision: initialAgenticLead ? 1 : 0,
+    leadTurnCount: initialAgenticLead ? 1 : 0,
+    stopReason: null,
+    completionRequestedByRunId: null,
     phase: 'lead_kickoff' as const,
     finalText: null,
     createdAt: timestamp,
     updatedAt: timestamp,
+  });
+}
+
+export function transitionAgenticControlState(
+  run: TeamRun,
+  expectedRevision: number,
+  to: AgenticTeamControlState,
+): TeamRun {
+  if (run.executionMode !== 'agentic_mve')
+    throw new Error('Not an agentic team run.');
+  if (run.revision !== expectedRevision)
+    throw new Error('Team run revision conflict.');
+  return Object.freeze({
+    ...run,
+    controlState: to,
+    revision: run.revision + 1,
   });
 }
 

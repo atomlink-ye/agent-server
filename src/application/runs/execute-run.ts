@@ -34,6 +34,12 @@ import type { SessionRepository } from '../ports/session-repository.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import {
+  deriveAgenticLeadCommandPolicy,
+  type AgenticLeadCommandPolicy,
+} from '../teams/agentic-lead-command-policy.js';
+import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
+import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CompleteRun } from './complete-run.js';
@@ -385,11 +391,43 @@ export class ExecuteRun {
           invokableVersionId,
           task,
         );
-    const runtimeToolRefs = leadFinalization
-      ? resolved.toolRefs.filter(
-          (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
-        )
-      : resolved.toolRefs;
+    const agenticLeadState =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      member?.role === 'lead'
+        ? await this.loadAgenticLeadState(collaborativeTeam, task)
+        : null;
+    const runtimeToolRefs =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      task.teamTaskKind === 'work_attempt'
+        ? []
+        : collaborativeTeam?.executionMode === 'agentic_mve' &&
+            member?.role === 'lead'
+          ? agenticLeadToolRefs(agenticLeadState!.policy)
+          : leadFinalization
+            ? resolved.toolRefs.filter(
+                (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
+              )
+            : resolved.toolRefs;
+    const turnPrompt =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      member?.role === 'lead'
+        ? await this.withAgenticLeadContext(
+            resolved.turnPrompt,
+            claim.run.id,
+            task.id,
+            collaborativeTeam,
+            task,
+            agenticLeadState,
+          )
+        : resolved.turnPrompt;
+    const systemPrompt =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      task.teamTaskKind === 'work_attempt'
+        ? `${resolved.systemPrompt}\n\nThis is an assigned Agentic Team WorkItemAttempt with controller-provided evidence in the user turn. Do not claim or update WorkItems. Do not use any tool, subagent, shell, search, read, write, edit, fetch, legacy team tool, or Team mutation tool. Return a plain-text evidence report using only the provided evidence and immediately end the turn.`
+        : collaborativeTeam?.executionMode === 'agentic_mve' &&
+            member?.role === 'lead'
+          ? `${resolved.systemPrompt}\n\nAgentic Team policy: this Lead turn is tool-controlled. Never use shell, filesystem, or legacy team_task_* tools. Use only the currently authorized Agentic Team MCP command named in the bounded snapshot. If no command is authorized, issue no command rather than substituting a shell command. Each Lead turn performs one current decision only. After calling any mutating Team command, immediately return a short decision text; do not call another tool, shell, or wait for a member in the same turn.`
+          : resolved.systemPrompt;
     let sessionRuntime = runtimeSession;
     if (
       this.runtimeSessions &&
@@ -523,7 +561,12 @@ export class ExecuteRun {
     )
       refreshableBinder.refreshForSession(
         task.sessionId ?? member?.id ?? task.id,
-        sessionRuntime.toolRefs,
+        collaborativeTeam?.executionMode === 'agentic_mve' &&
+          member?.role === 'lead'
+          ? runtimeToolRefs
+          : task.teamTaskKind === 'work_attempt'
+            ? []
+            : sessionRuntime.toolRefs,
       );
     const runtimeEventSink = this.events
       ? {
@@ -544,7 +587,7 @@ export class ExecuteRun {
             ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
             ...(cellCwd ? { cellCwd } : {}),
             runId: claim.run.id,
-            prompt: resolved.turnPrompt,
+            prompt: turnPrompt,
             providerAgentId: priorProviderAgentId,
             ...(resolved.proposalLimit > 0
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
@@ -555,8 +598,8 @@ export class ExecuteRun {
             ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
             ...(cellCwd ? { cellCwd } : {}),
             runId: claim.run.id,
-            prompt: resolved.turnPrompt,
-            systemPrompt: resolved.systemPrompt,
+            prompt: turnPrompt,
+            systemPrompt,
             ...(extensions ? { extensions } : {}),
             ...(resolved.proposalLimit > 0
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
@@ -738,6 +781,95 @@ export class ExecuteRun {
     };
   }
 
+  private async withAgenticLeadContext(
+    prompt: string,
+    sourceRunId: string,
+    leadTaskId: string,
+    team: import('../../domain/teams/team-run.js').TeamRun,
+    task: import('../../domain/tasks/task.js').Task,
+    leadState: {
+      readonly policy: AgenticLeadCommandPolicy;
+      readonly workItems: readonly TeamWorkItem[];
+      readonly attempts: readonly TeamWorkItemAttempt[];
+    } | null,
+  ): Promise<string> {
+    const members = this.collaborativeExecutions
+      ? await this.collaborativeExecutions.findMembersByTeamRunId(team.id, {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        })
+      : [];
+    const roster = members
+      .filter((member) => member.role !== 'lead')
+      .map((member) => `${member.id} (${member.name})`)
+      .join(', ');
+    const workItems = leadState?.workItems ?? [];
+    const attempts = leadState?.attempts ?? [];
+    const snapshot = JSON.stringify({
+      goal: safeAgenticLeadSnapshotText(prompt),
+      members: members.map((member) => ({
+        member_id: member.id,
+        name: safeAgenticLeadSnapshotText(member.name),
+        role: member.role,
+      })),
+      work_items: workItems.slice(0, 16).map((item) => ({
+        id: item.id,
+        subject: safeAgenticLeadSnapshotText(item.subject),
+        status: item.status,
+        attempts: attempts
+          .filter((attempt) => attempt.workItemId === item.id)
+          .slice(0, 4)
+          .map((attempt) => ({
+            attempt_no: attempt.attemptNo,
+            assignee_member_id: attempt.assigneeMemberId,
+            status: attempt.status,
+            result_summary: safeAgenticLeadSnapshotText(attempt.resultSummary),
+            feedback: safeAgenticLeadSnapshotText(attempt.feedback),
+          })),
+      })),
+      limits: leadState?.policy.limits,
+      allowed_commands: leadState?.policy.allowedCommands,
+      eligible_targets: {
+        accept: leadState?.policy.eligibleAcceptWorkItemIds,
+        rework: leadState?.policy.eligibleReworkWorkItemIds,
+      },
+    });
+    return `${prompt}
+
+Agentic Team control protocol (authoritative for this turn): do not use the legacy team_task_* tools or shell commands. This turn may issue exactly one mutating Agentic command, and only if it appears in allowed_commands in the bounded snapshot. Use the current snapshot to choose: missing evidence means request_rework; a latest completed, qualifying attempt means accept; all work items accepted means request completion. Every command must use these exact values: team_run_id=${team.id}, source_run_id=${sourceRunId}, expected_revision=${team.revision}; include lead_task_id=${leadTaskId} only for commands whose schema requires it. The fixed member roster is: ${roster || 'none'}. Supply a fresh command_hash. After the command succeeds, immediately return a short decision text and end this turn; do not wait for members, call another tool, use shell, or inspect files. Do not call team_complete.
+
+Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
+  }
+
+  private async loadAgenticLeadState(
+    team: import('../../domain/teams/team-run.js').TeamRun,
+    task: import('../../domain/tasks/task.js').Task,
+  ) {
+    const owner = {
+      tenantId: task.tenantId,
+      workspaceId: task.workspaceId,
+      principalType: task.principalType,
+      principalId: task.principalId,
+    };
+    const workItems =
+      await this.collaborativeExecutions!.findWorkItemsByTeamRunId(
+        team.id,
+        owner,
+      );
+    const attempts =
+      await this.collaborativeExecutions!.findAttemptsByTeamRunId(
+        team.id,
+        owner,
+      );
+    return {
+      workItems,
+      attempts,
+      policy: deriveAgenticLeadCommandPolicy(team, workItems, attempts),
+    };
+  }
+
   private async loadPinnedMemory(
     task: import('../../domain/tasks/task.js').Task,
   ): Promise<string | null> {
@@ -751,6 +883,27 @@ export class ExecuteRun {
       expectedContentHash: task.memorySnapshotHash,
     });
   }
+}
+
+function safeAgenticLeadSnapshotText(value: string | null): string | null {
+  if (value === null) return null;
+  return value
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 512);
+}
+
+function agenticLeadToolRefs(
+  policy: AgenticLeadCommandPolicy,
+): readonly string[] {
+  const refs = new Map<string, string>([
+    ['team_work_create_and_assign', AGENT_SERVER_TEAM_TOOL_REFS[6]!],
+    ['team_work_accept', AGENT_SERVER_TEAM_TOOL_REFS[7]!],
+    ['team_work_request_rework', AGENT_SERVER_TEAM_TOOL_REFS[8]!],
+    ['team_completion_request', AGENT_SERVER_TEAM_TOOL_REFS[9]!],
+  ]);
+  return policy.allowedCommands.map((command) => refs.get(command)!);
 }
 
 function isSafeRuntimeCandidate(candidate: {

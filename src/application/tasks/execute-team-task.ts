@@ -26,6 +26,7 @@ import type { DagTeamExecutionRepository } from '../ports/team-execution-reposit
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import { CollaborativeTeamExecutor } from '../teams/collaborative-team-executor.js';
+import { AgenticTeamExecutor } from '../teams/agentic-team-executor.js';
 import type {
   TeamExecution,
   TeamNodeExecution,
@@ -62,6 +63,7 @@ export class ExecuteTeamTask {
     private readonly collaborativeExecutor?: CollaborativeTeamExecutor,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
     private readonly runtimeSessions?: RuntimeSessionRepository,
+    private readonly agenticExecutor?: AgenticTeamExecutor,
   ) {}
 
   public async execute(input: ExecuteTeamTaskInput): Promise<Run> {
@@ -89,6 +91,16 @@ export class ExecuteTeamTask {
         this.runtimeSessions,
         this.tasks,
         this.admission,
+      );
+    }
+
+    if (teamVersion?.executionMode === 'agentic_mve') {
+      if (!this.agenticExecutor)
+        throw new Error('Agentic team execution dependencies are unavailable.');
+      return this.agenticExecutor.activateTeamRun(
+        teamVersion,
+        input.claim,
+        input.task,
       );
     }
 

@@ -17,6 +17,7 @@ import {
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
+import type { Logger } from '../../shared/observability/logger.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -53,6 +54,7 @@ export function createDirectMemoryMcpHandler(input: {
   readonly teamTools?: { handler: TeamToolHandler };
   readonly createLearningProposal?: CreateLearningProposal;
   readonly market?: SyntheticMarketAdapter;
+  readonly logger?: Logger;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
@@ -132,7 +134,12 @@ export function createDirectMemoryMcpHandler(input: {
             server,
             input.teamTools.handler,
             actor,
-            grant.allowedTools,
+            grant.allowedTools.some((tool) =>
+              AGENT_SERVER_TEAM_TOOL_REFS.slice(6).includes(tool),
+            )
+              ? AGENT_SERVER_TEAM_TOOL_REFS.slice(6)
+              : grant.allowedTools,
+            (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
           );
       }
     }
@@ -172,6 +179,7 @@ function registerTools(
     readonly createLearningProposal?: CreateLearningProposal;
     readonly teamTools?: { handler: TeamToolHandler };
     readonly market?: SyntheticMarketAdapter;
+    readonly logger?: Logger;
   },
 ): void {
   if (grant.allowedTools.includes(AGENT_SERVER_MEMORY_READ_TOOL_REF)) {
@@ -203,7 +211,12 @@ function registerTools(
         description: 'Read the fixed synthetic ACME snapshot.',
         inputSchema: fixtureInput,
       },
-      (args) => safeSynthetic(() => market.stockSnapshot(args)),
+      (args) =>
+        loggedSynthetic(
+          'synthetic_stock_snapshot',
+          () => market.stockSnapshot(args),
+          input.logger,
+        ),
     );
   if (grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
     server.registerTool(
@@ -212,7 +225,12 @@ function registerTools(
         description: 'Read the fixed synthetic ACME event batch.',
         inputSchema: fixtureInput,
       },
-      (args) => safeSynthetic(() => market.eventBatch(args)),
+      (args) =>
+        loggedSynthetic(
+          'synthetic_event_batch',
+          () => market.eventBatch(args),
+          input.logger,
+        ),
     );
   if (
     grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF)
@@ -223,7 +241,12 @@ function registerTools(
         description: 'Read the fixed synthetic ACME analog summary.',
         inputSchema: fixtureInput,
       },
-      (args) => safeSynthetic(() => market.analogSummary(args)),
+      (args) =>
+        loggedSynthetic(
+          'synthetic_analog_summary',
+          () => market.analogSummary(args),
+          input.logger,
+        ),
     );
   if (
     grant.allowedTools.includes(
@@ -288,6 +311,29 @@ async function readMemory(
     content: [{ type: 'text' as const, text: JSON.stringify(result) }],
     structuredContent: result,
   };
+}
+
+function loggedSynthetic<T>(
+  toolName: string,
+  operation: () => T,
+  logger?: Logger,
+) {
+  const startedAt = Date.now();
+  logger?.log('info', 'runtime.mcp.tool.started', { tool_name: toolName });
+  const result = safeSynthetic(operation);
+  const outcome =
+    result.structuredContent &&
+    typeof result.structuredContent === 'object' &&
+    'error' in result.structuredContent &&
+    result.structuredContent.error === 'invalid_request'
+      ? 'invalid_request'
+      : 'success';
+  logger?.log('info', 'runtime.mcp.tool.completed', {
+    tool_name: toolName,
+    elapsed_ms: Date.now() - startedAt,
+    outcome,
+  });
+  return result;
 }
 
 function safeSynthetic<T>(operation: () => T) {

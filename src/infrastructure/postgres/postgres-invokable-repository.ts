@@ -482,8 +482,11 @@ export class PostgresInvokableRepository implements InvokableRepository {
     }
 
     if (version.status === 'published') {
-      if (version.executionMode === 'collaborative_mve') {
-        // Collaborative versions do not have compiled plans.
+      if (
+        version.executionMode === 'collaborative_mve' ||
+        version.executionMode === 'agentic_mve'
+      ) {
+        // Runtime-coordinated versions do not have compiled plans.
         await this.database.query(
           `
             INSERT INTO team_versions (

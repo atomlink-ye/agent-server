@@ -84,9 +84,11 @@ import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/po
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
+import { SyntheticTeamEvidenceProvider } from './adapters/demo-market/synthetic-team-evidence-provider.js';
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
 import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
 import { TeamToolHandler } from './application/teams/team-tools.js';
+import { AgenticTeamExecutor } from './application/teams/agentic-team-executor.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -330,6 +332,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     },
     createLearningProposal,
     new SyntheticMarketAdapter(),
+    logger,
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,
@@ -394,12 +397,20 @@ export async function createService(config: AppConfig, logger: Logger) {
   const collaborativeExecutor = new CollaborativeTeamExecutor(
     collaborativeTeamExecutions,
   );
+  const agenticExecutor = new AgenticTeamExecutor(
+    collaborativeTeamExecutions,
+    taskRepository,
+    runRepository,
+    admissionRepository,
+    new SyntheticTeamEvidenceProvider(),
+  );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
     collaborativeTeamExecutions,
     collaborativeExecutor,
     taskRepository,
     runRepository,
     admissionRepository,
+    agenticExecutor,
   );
   const advanceTeamExecution = new AdvanceTeamExecution(
     teamExecutions,
@@ -431,6 +442,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     collaborativeExecutor,
     collaborativeTeamExecutions,
     runtimeSessions,
+    agenticExecutor,
   );
   const executeRun = new ExecuteRun(
     completeRun,
@@ -551,6 +563,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     agentRegistry,
     invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
+    tasks: taskRepository,
     environmentRegistry,
     sessions,
     submitSessionTurn,

@@ -224,7 +224,21 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         throw new RuntimeExecutionError(
           'Paseo independent workspace creation is unavailable.',
         );
+      const workspaceStartedAt = Date.now();
+      this.#logger.log('info', 'runtime.workspace.create.started', {
+        run_id: input.runId,
+        managed_cell: managedCellExecution,
+        has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
+        model_id: this.#model.id,
+      });
       workspaceId = await this.#client.createIndependentWorkspace(cwd);
+      this.#logger.log('info', 'runtime.workspace.create.completed', {
+        run_id: input.runId,
+        managed_cell: managedCellExecution,
+        has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
+        model_id: this.#model.id,
+        elapsed_ms: Date.now() - workspaceStartedAt,
+      });
       await this.#client.setWorkspaceTitle(
         workspaceId,
         this.#options.workspaceTitle,
@@ -1237,6 +1251,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     let nestedPollPromise: Promise<void> | null = null;
 
     try {
+      const modelId = this.#model.id;
       const agent =
         input.operation === 'continue'
           ? {
@@ -1244,17 +1259,34 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
               provider: 'opencode',
               model: this.#model.id,
             }
-          : await this.#client.createOpenCodeAgent({
-              cwd: input.cellCwd ?? this.#options.cwd,
-              workspaceId,
-              model: this.#model.id,
-              systemPrompt: input.systemPrompt,
-              initialPrompt: prompt,
-              runId: input.runId,
-              ...(input.extensions?.mcpServers
-                ? { mcpServers: input.extensions.mcpServers }
-                : {}),
-            });
+          : await (async () => {
+              const agentStartedAt = Date.now();
+              this.#logger.log('info', 'runtime.agent.create.started', {
+                run_id: input.runId,
+                managed_cell: managedCellExecution,
+                has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
+                model_id: modelId,
+              });
+              const created = await this.#client.createOpenCodeAgent({
+                cwd: input.cellCwd ?? this.#options.cwd,
+                workspaceId,
+                model: modelId,
+                systemPrompt: input.systemPrompt,
+                initialPrompt: prompt,
+                runId: input.runId,
+                ...(input.extensions?.mcpServers
+                  ? { mcpServers: input.extensions.mcpServers }
+                  : {}),
+              });
+              this.#logger.log('info', 'runtime.agent.create.completed', {
+                run_id: input.runId,
+                managed_cell: managedCellExecution,
+                has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
+                model_id: modelId,
+                elapsed_ms: Date.now() - agentStartedAt,
+              });
+              return created;
+            })();
       activeAgentId = agent.id;
       this.#agents.set(input.runId, agent.id);
 
@@ -1281,15 +1313,43 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       nestedActivityReady = true;
       streamReady = true;
 
+      const sendStartedAt = Date.now();
+      this.#logger.log('info', 'runtime.message.send.started', {
+        run_id: input.runId,
+        elapsed_ms: 0,
+        status: 'started',
+      });
       await this.#client.sendAgentMessage(agent.id, prompt);
+      this.#logger.log('info', 'runtime.message.send.completed', {
+        run_id: input.runId,
+        elapsed_ms: Date.now() - sendStartedAt,
+        status: 'completed',
+      });
       nestedPollPromise = pollNestedActivity();
       let finished;
+      const waitStartedAt = Date.now();
+      this.#logger.log('info', 'runtime.wait.started', {
+        run_id: input.runId,
+        elapsed_ms: 0,
+        status: 'started',
+      });
       try {
         finished = await this.#client.waitForFinish(
           agent.id,
           this.#options.executionTimeoutMs,
         );
+        this.#logger.log('info', 'runtime.wait.completed', {
+          run_id: input.runId,
+          elapsed_ms: Date.now() - waitStartedAt,
+          status: finished.status,
+        });
       } catch (error) {
+        void error;
+        this.#logger.log('info', 'runtime.wait.completed', {
+          run_id: input.runId,
+          elapsed_ms: Date.now() - waitStartedAt,
+          status: 'error',
+        });
         acceptingTurnActivity = false;
         nestedActivityReady = false;
         nestedPolling = false;

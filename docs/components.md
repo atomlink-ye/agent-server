@@ -2,15 +2,15 @@
 
 Components are ownership and contract boundaries, not deployment promises. The baseline is a modular monolith with a separate Paseo process; future services may be extracted only when durability, security, or scaling evidence requires it.
 
-| Component                                                                  | Responsibility                                  | Current status                      |
-| -------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------- |
-| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                             |
-| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline                   |
-| [Paseo Runtime Adapter](components/paseo-runtime-adapter.md)               | Leaf-agent provider translation                 | Implemented baseline                |
-| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                             |
-| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline            |
-| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | HTTP and local Project Lab baseline |
-| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline                    |
+| Component                                                                  | Responsibility                                  | Current status                            |
+| -------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------- |
+| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                                   |
+| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline                         |
+| [Paseo Runtime Adapter](components/paseo-runtime-adapter.md)               | Leaf-agent provider translation                 | Implemented baseline                      |
+| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                                   |
+| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline                  |
+| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agentic Team Project-in-Web-Chat baseline |
+| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline                          |
 
 Dependencies point inward: entrypoints and adapters depend on application ports; application depends on domain; domain imports neither frameworks nor Paseo.
 
@@ -103,22 +103,19 @@ convergence. This is a local fresh-session MVE, not production identity, ACL,
 cancel, old-session restart recovery, backpressure, or broader console
 functionality.
 
-## Self-learning Project Lab boundary
+## Agentic Team Project and Agent Session boundary
 
-The fixed Project Lab is a thin observer/launcher over the managed self-learning
-Project and Team. Its Next.js same-origin strict BFF owns the server-side Agent
-Server bearer and binds the flow to `WEB_WORKSPACE_ID`,
-`WEB_SELF_LEARNING_TEAM_VERSION_ID`, and `WEB_SELF_LEARNING_MEMORY_STORE_ID`.
-It exposes only launch, bounded aggregate, and root-bound proposal review
-operations. The aggregate is reconstructed from durable Task, TeamRun, activity,
-proposal, and canonical Memory state on every refresh; the browser is not a
-configuration authority.
+The Agentic Team Project is a thin observer/launcher over the fixed Team. Its
+Next.js same-origin BFF owns the server-side Agent Server bearer and binds the
+flow to `WEB_WORKSPACE_ID`, `WEB_AGENTIC_TEAM_VERSION_ID`, and
+`WEB_ENVIRONMENT_VERSION_ID`. It exposes launch, one owner-checked Project
+projection, three read-only Agent Sessions, historical session Run events, and
+Project Run SSE. The browser is not a configuration authority and never calls
+`/api/v1`.
 
-The launcher uses the fixed three-member Team and fixed learning activity/tool
-allow-list. The BFF rejects cross-root or cross-proposal review, validates strict
-same-origin mutations, applies no-store responses and bounded payloads, and
-normalizes failures to safe classes. Bearer credentials, provider/runtime IDs,
-local paths, prompts, raw events, raw upstream errors, and runtime Memory-write
-capabilities remain outside the browser contract. This is local/single-operator
+The backend projection keeps TeamMemberRun linkage and bounded Lead/member turn
+history while hiding bearer credentials, RuntimeSession IDs, prompts, raw event
+payloads, raw upstream errors, and provider IDs. URL-backed selection restores
+the Project and selected Agent Session on refresh. This is local/single-operator
 only; production or multi-user deployment requires a new authentication Human
-Gate.
+Gate. ProductSession Chat remains a separate unchanged path.

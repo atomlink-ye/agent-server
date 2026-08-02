@@ -133,6 +133,10 @@ export function registerTeamRoutes(
           roster: parsed.package.spec.roster,
           environmentVersionId: parsed.package.spec.environmentVersionId,
         },
+        executionMode:
+          parsed.package.spec.coordination.mode === 'agentic_mve'
+            ? 'agentic_mve'
+            : 'collaborative_mve',
       });
       const atomicImport = d.invokableRepository.importTeamVersionAtomically
         ? await d.invokableRepository.importTeamVersionAtomically({
@@ -297,13 +301,13 @@ export function registerTeamRoutes(
       );
     }
     if (
-      version.executionMode !== 'collaborative_mve' ||
+      !['collaborative_mve', 'agentic_mve'].includes(version.executionMode) ||
       !version.collaborationSpec
     )
       throw new HttpError(
         400,
         'invalid_team_package',
-        'The team version is not collaborative.',
+        'The team version is not executable.',
       );
     for (const ref of [
       version.collaborationSpec.lead.agentVersionId,

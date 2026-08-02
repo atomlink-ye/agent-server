@@ -33,6 +33,9 @@ interface TaskFields {
   readonly failureDetail?: string | null;
   readonly memorySnapshotId?: string | null;
   readonly memorySnapshotHash?: string | null;
+  readonly teamMemberRunId?: string | null;
+  readonly teamSequence?: number | null;
+  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
 }
 
 export type Task = TaskFields & TaskOrigin;
@@ -55,6 +58,9 @@ interface CreateRootTaskFields {
   readonly inputSnapshotRef: string;
   readonly inputFingerprint: string;
   readonly now?: () => Date;
+  readonly teamMemberRunId?: string | null;
+  readonly teamSequence?: number | null;
+  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
   readonly sourceMessageId?: string | null;
 }
 
@@ -77,6 +83,9 @@ export interface CreateChildTaskOptions {
   readonly logicalStepKey: string;
   readonly nodePath: string;
   readonly now?: () => Date;
+  readonly teamMemberRunId?: string | null;
+  readonly teamSequence?: number | null;
+  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
 }
 
 const ROOT_TASK_DEPTH = 0;
@@ -114,6 +123,9 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     inputFingerprint: options.inputFingerprint,
     createdAt: timestamp,
     updatedAt: timestamp,
+    teamMemberRunId: options.teamMemberRunId ?? null,
+    teamSequence: options.teamSequence ?? null,
+    teamTaskKind: options.teamTaskKind ?? null,
     sourceMessageId: options.sourceMessageId ?? null,
   });
 }
@@ -143,6 +155,9 @@ export function createChildTask(options: CreateChildTaskOptions): Task {
     inputFingerprint: options.inputFingerprint,
     createdAt: timestamp,
     updatedAt: timestamp,
+    teamMemberRunId: options.teamMemberRunId ?? null,
+    teamSequence: options.teamSequence ?? null,
+    teamTaskKind: options.teamTaskKind ?? null,
   });
 }
 

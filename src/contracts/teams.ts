@@ -24,7 +24,11 @@ export const TeamVersionResponseSchema = z
     status: z.enum(['draft', 'published']),
     name: z.string(),
     description: z.string().nullable(),
-    execution_mode: z.enum(['legacy_graph', 'collaborative_mve']),
+    execution_mode: z.enum([
+      'legacy_graph',
+      'collaborative_mve',
+      'agentic_mve',
+    ]),
     environment_version_id: uuid.nullable(),
     collaboration_spec: z.unknown().nullable(),
     created_at: timestamp,
@@ -58,6 +62,14 @@ export const TeamRunResponseSchema = z
     final_text: z.string().nullable(),
     created_at: timestamp,
     updated_at: timestamp,
+    execution_mode: z.enum(['collaborative_mve', 'agentic_mve']).nullable(),
+    control_state: z
+      .enum(['lead_ready', 'lead_running', 'member_work_running', 'terminal'])
+      .nullable(),
+    revision: z.number().int(),
+    lead_turn_count: z.number().int(),
+    stop_reason: z.string().nullable(),
+    completion_requested_by_run_id: uuid.nullable(),
   })
   .strict();
 export const TeamMemberResponseSchema = z
@@ -86,6 +98,8 @@ export const TeamWorkItemResponseSchema = z
       'completed',
       'blocked',
       'cancelled',
+      'open',
+      'accepted',
     ]),
     owner_member_id: uuid.nullable(),
     created_by_member_id: uuid,
@@ -94,5 +108,67 @@ export const TeamWorkItemResponseSchema = z
     created_at: timestamp,
     updated_at: timestamp,
     completed_at: timestamp.nullable(),
+  })
+  .strict();
+export const TeamWorkItemAttemptResponseSchema = z
+  .object({
+    id: uuid,
+    work_item_id: uuid,
+    team_run_id: uuid,
+    attempt_no: z.number().int(),
+    assignee_member_id: uuid,
+    requested_by_lead_task_id: uuid,
+    feedback: z.string().nullable(),
+    execution_task_id: uuid.nullable(),
+    status: z.enum(['queued', 'running', 'completed', 'failed']),
+    result_summary: z.string().nullable(),
+    created_at: timestamp,
+    updated_at: timestamp,
+    completed_at: timestamp.nullable(),
+  })
+  .strict();
+
+export const AgenticTeamProjectTurnSchema = z
+  .object({
+    task_id: uuid,
+    run_id: uuid,
+    sequence: z.number().int(),
+    kind: z.enum(['lead_turn', 'work_attempt']),
+    status: z.enum(['queued', 'running', 'completed', 'failed']),
+    context: z.string(),
+    result_text: z.string().nullable(),
+    work_item_id: uuid.nullable(),
+    attempt_id: uuid.nullable(),
+    attempt_no: z.number().int().nullable(),
+    created_at: timestamp,
+    updated_at: timestamp,
+  })
+  .strict();
+
+export const AgenticTeamProjectSessionSchema = z
+  .object({
+    team_member_run_id: uuid,
+    name: z.string(),
+    role: z.enum(['lead', 'member']),
+    status: z.enum(['starting', 'active', 'idle', 'stopped', 'failed']),
+    turns: z.array(AgenticTeamProjectTurnSchema),
+  })
+  .strict();
+
+export const AgenticTeamProjectResponseSchema = z
+  .object({
+    project: z
+      .object({
+        root_task_id: uuid,
+        team_run_id: uuid,
+        team_version_id: uuid,
+        status: z.enum(['active', 'waiting', 'succeeded', 'failed']),
+        final_text: z.string().nullable(),
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .strict()
+      .nullable(),
+    sessions: z.array(AgenticTeamProjectSessionSchema).optional(),
   })
   .strict();

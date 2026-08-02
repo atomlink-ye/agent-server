@@ -6,6 +6,8 @@ import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
 import {
   ConversationSidebar,
   type ChatSummary,
+  type TeamProject,
+  type TeamSession,
 } from '@/components/chat/conversation-sidebar';
 import { RunDetails, type ViewStatus } from '@/components/chat/run-details';
 import {
@@ -32,6 +34,30 @@ type ProductSession = {
   environment_version_id: string;
 };
 type SessionResponse = { session: ProductSession; messages: Message[] };
+type TeamTurn = {
+  task_id: string;
+  run_id: string;
+  sequence: number;
+  context: string;
+  result_text: string | null;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+};
+type TeamSessionResponse = {
+  agent_session_id: string;
+  team_run_id: string;
+  name: string;
+  role: 'lead' | 'member';
+  read_only: true;
+  turns: TeamTurn[];
+};
+type ChatSelection =
+  | { kind: 'product_session'; sessionId: string }
+  | {
+      kind: 'team_agent_session';
+      rootTaskId: string;
+      teamRunId: string;
+      memberRunId: string;
+    };
 type ReplayStatus = 'loading' | 'ready' | 'unavailable';
 type RunTracking = {
   taskId: string;
@@ -48,9 +74,41 @@ type Turn = {
   assistant?: Message;
 };
 
+const TEAM_ROOT_TASK_PARAM = 'rootTaskId';
+const TEAM_MEMBER_RUN_PARAM = 'memberRunId';
+
+function readTeamUrlSelection():
+  { rootTaskId: string; memberRunId: string } | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const params = new URLSearchParams(window.location.search);
+  const rootTaskId = params.get(TEAM_ROOT_TASK_PARAM);
+  const memberRunId = params.get(TEAM_MEMBER_RUN_PARAM);
+  if (!rootTaskId && !memberRunId) return undefined;
+  if (!isUuid(rootTaskId) || !isUuid(memberRunId)) return undefined;
+  return { rootTaskId, memberRunId };
+}
+
+function hasTeamUrlSelection(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.has(TEAM_ROOT_TASK_PARAM) || params.has(TEAM_MEMBER_RUN_PARAM);
+}
+
+function isUuid(value: string | null): value is string {
+  return (
+    value !== null &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  );
+}
+
 export default function HomePage() {
   const initializationRef = useRef<Promise<void> | null>(null);
   const [sessionId, setSessionId] = useState<string>();
+  const [selection, setSelection] = useState<ChatSelection>();
+  const [teamProject, setTeamProject] = useState<TeamProject>();
+  const [teamSession, setTeamSession] = useState<TeamSessionResponse>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [text, setText] = useState('');
@@ -83,6 +141,14 @@ export default function HomePage() {
   const projectionsRef = useRef(projections);
   const navigationPendingRef = useRef(false);
   const navigationOperationRef = useRef(0);
+  const selectTeamSessionRef = useRef<
+    | ((
+        session: TeamSession,
+        existingOperation?: number,
+        projectOverride?: TeamProject,
+      ) => Promise<void>)
+    | undefined
+  >(undefined);
   activeTaskIdRef.current = activeTaskId;
   projectionsRef.current = projections;
 
@@ -107,6 +173,44 @@ export default function HomePage() {
     const data = (await response.json()) as { sessions: ChatSummary[] };
     setChats(data.sessions);
     return data.sessions;
+  }, []);
+
+  const refreshTeamProject = useCallback(async () => {
+    try {
+      const response = await fetch('/api/team-project', { cache: 'no-store' });
+      if (!response.ok) return undefined;
+      const data = (await response.json()) as TeamProject | null;
+      setTeamProject(data ?? undefined);
+      return data ?? undefined;
+    } catch {
+      // Project discovery is optional; the existing Chats list remains primary.
+      return undefined;
+    }
+  }, []);
+
+  const updateTeamUrl = useCallback(
+    (rootTaskId: string, memberRunId: string) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set(TEAM_ROOT_TASK_PARAM, rootTaskId);
+      url.searchParams.set(TEAM_MEMBER_RUN_PARAM, memberRunId);
+      window.history.replaceState(
+        {},
+        '',
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    },
+    [],
+  );
+
+  const clearTeamUrl = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete(TEAM_ROOT_TASK_PARAM);
+    url.searchParams.delete(TEAM_MEMBER_RUN_PARAM);
+    window.history.replaceState(
+      {},
+      '',
+      `${url.pathname}${url.search}${url.hash}`,
+    );
   }, []);
 
   const finishSuccessfulRun = useCallback(() => {
@@ -200,7 +304,10 @@ export default function HomePage() {
         epoch,
       );
       if (selectionEpochRef.current !== epoch) return;
+      clearTeamUrl();
       setSessionId(session.session_id);
+      setSelection({ kind: 'product_session', sessionId: session.session_id });
+      setTeamSession(undefined);
       setMessages(nextMessages);
       setProjections(projections);
       setReplayStatus(
@@ -241,7 +348,7 @@ export default function HomePage() {
           : null;
       setMobileSidebarOpen(false);
     },
-    [buildReplayProjections],
+    [buildReplayProjections, clearTeamUrl],
   );
 
   const loadSession = useCallback(async () => {
@@ -250,13 +357,35 @@ export default function HomePage() {
       const operation = beginNavigation();
       if (operation === null) return;
       try {
-        const sessionResponse = await fetch('/api/session', {
-          cache: 'no-store',
-        });
-        if (!sessionResponse.ok) throw new Error('session');
-        const data = (await sessionResponse.json()) as SessionResponse;
-        const chatItems = await refreshChats();
+        const requestedTeam = readTeamUrlSelection();
+        const hasTeamUrl = hasTeamUrlSelection();
+        const [sessionResponse, chatItems, project] = await Promise.all([
+          requestedTeam
+            ? Promise.resolve(null)
+            : fetch('/api/session', { cache: 'no-store' }),
+          refreshChats(),
+          refreshTeamProject(),
+        ]);
         setChats(chatItems);
+        if (
+          requestedTeam &&
+          project?.root_task_id === requestedTeam.rootTaskId
+        ) {
+          const teamSession = project.sessions.find(
+            (session) => session.agent_session_id === requestedTeam.memberRunId,
+          );
+          if (teamSession) {
+            await selectTeamSessionRef.current?.(
+              teamSession,
+              operation,
+              project,
+            );
+            return;
+          }
+        }
+        if (hasTeamUrl) clearTeamUrl();
+        if (!sessionResponse || !sessionResponse.ok) throw new Error('session');
+        const data = (await sessionResponse.json()) as SessionResponse;
         await activateSession(data.session, data.messages);
       } finally {
         finishNavigation(operation);
@@ -264,7 +393,14 @@ export default function HomePage() {
     })();
     initializationRef.current = initialization;
     await initialization;
-  }, [activateSession, beginNavigation, finishNavigation, refreshChats]);
+  }, [
+    activateSession,
+    beginNavigation,
+    clearTeamUrl,
+    finishNavigation,
+    refreshChats,
+    refreshTeamProject,
+  ]);
 
   useEffect(() => {
     void loadSession().catch(() => {
@@ -497,9 +633,65 @@ export default function HomePage() {
     };
   }, [activeRunId, activeTaskId, finishFailedRun, finishSuccessfulRun, status]);
 
+  useEffect(() => {
+    if (
+      selection?.kind !== 'team_agent_session' ||
+      !teamSession ||
+      status !== 'running'
+    )
+      return;
+    const turn = teamSession.turns.find((item) => item.status === 'running');
+    if (!turn) return;
+    const source = new EventSource(
+      `/api/team-project/runs/${encodeURIComponent(turn.run_id)}/events?task=${encodeURIComponent(selection.rootTaskId)}`,
+    );
+    eventSourceRef.current?.close();
+    eventSourceRef.current = source;
+    let nextProjection =
+      projectionsRef.current[turn.run_id] ?? initialStreamProjection;
+    const onEvent = (event: Event) => {
+      const data = event instanceof MessageEvent ? event.data : undefined;
+      if (typeof data !== 'string') return;
+      const parsed = parseRunStreamEvent(data);
+      if (!parsed) return;
+      nextProjection = reduceRunStreamEvent(nextProjection, parsed);
+      setProjections((current) => ({
+        ...current,
+        [turn.run_id]: nextProjection,
+      }));
+      if (nextProjection.terminal) {
+        source.close();
+        void (async () => {
+          try {
+            const response = await fetch(
+              `/api/team-project/sessions/${encodeURIComponent(selection.memberRunId)}?task=${encodeURIComponent(selection.rootTaskId)}`,
+              { cache: 'no-store' },
+            );
+            if (response.ok) {
+              setTeamSession((await response.json()) as TeamSessionResponse);
+              setStatus('completed');
+            }
+          } catch {
+            // The saved transcript remains visible if refresh is unavailable.
+          }
+        })();
+      }
+    };
+    source.addEventListener('started', onEvent);
+    source.addEventListener('output', onEvent);
+    source.addEventListener('succeeded', onEvent);
+    source.addEventListener('failed', onEvent);
+    source.addEventListener('cancelled', onEvent);
+    source.addEventListener('message', onEvent);
+    return () => {
+      source.close();
+      if (eventSourceRef.current === source) eventSourceRef.current = null;
+    };
+  }, [selection, status, teamSession]);
+
   async function selectChat(nextSessionId: string) {
     if (
-      status === 'running' ||
+      (status === 'running' && selection?.kind !== 'team_agent_session') ||
       navigationPendingRef.current ||
       nextSessionId === sessionId
     ) {
@@ -524,8 +716,107 @@ export default function HomePage() {
     }
   }
 
+  async function selectTeamSession(
+    session: TeamSession,
+    existingOperation?: number,
+    projectOverride?: TeamProject,
+  ) {
+    const project = projectOverride ?? teamProject;
+    if (
+      !project ||
+      (navigationPendingRef.current && existingOperation === undefined)
+    ) {
+      setMobileSidebarOpen(false);
+      return;
+    }
+    const operation = existingOperation ?? beginNavigation();
+    if (operation === null) return;
+    updateTeamUrl(project.root_task_id, session.agent_session_id);
+    const nextSelection: ChatSelection = {
+      kind: 'team_agent_session',
+      rootTaskId: project.root_task_id,
+      teamRunId: project.team_run_id,
+      memberRunId: session.agent_session_id,
+    };
+    selectionEpochRef.current += 1;
+    runEpochRef.current += 1;
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    setSseConnected(false);
+    setError(undefined);
+    setStatus('loading');
+    setSessionId(undefined);
+    setSelection(nextSelection);
+    setTeamSession(undefined);
+    setMessages([]);
+    setProjections({});
+    setReplayStatus({});
+    setActiveTaskId(undefined);
+    setActiveRunId(undefined);
+    try {
+      const response = await fetch(
+        `/api/team-project/sessions/${encodeURIComponent(session.agent_session_id)}?task=${encodeURIComponent(project.root_task_id)}`,
+        { cache: 'no-store' },
+      );
+      if (!response.ok) throw new Error('team session');
+      const data = (await response.json()) as TeamSessionResponse;
+      const eventResults = await Promise.all(
+        data.turns.map(async (turn) => {
+          try {
+            const eventsResponse = await fetch(
+              `/api/team-project/sessions/${encodeURIComponent(session.agent_session_id)}/runs/${encodeURIComponent(turn.run_id)}/events?task=${encodeURIComponent(project.root_task_id)}`,
+              { cache: 'no-store' },
+            );
+            if (!eventsResponse.ok) throw new Error('team events');
+            const eventData = (await eventsResponse.json()) as {
+              events: Array<{
+                sequence: number;
+                type: string;
+                payload?: unknown;
+              }>;
+            };
+            let projection = initialStreamProjection;
+            for (const event of eventData.events) {
+              const parsed = parseRunStreamEvent(JSON.stringify(event));
+              if (parsed) projection = reduceRunStreamEvent(projection, parsed);
+            }
+            return [turn.run_id, projection] as const;
+          } catch {
+            return [turn.run_id, initialStreamProjection] as const;
+          }
+        }),
+      );
+      setTeamSession(data);
+      setProjections(Object.fromEntries(eventResults));
+      setReplayStatus(
+        Object.fromEntries(data.turns.map((turn) => [turn.run_id, 'ready'])),
+      );
+      setRunDetails({
+        taskId: data.turns.at(-1)?.task_id,
+        runId: data.turns.at(-1)?.run_id,
+      });
+      setStatus(
+        data.turns.some((turn) => turn.status === 'running')
+          ? 'running'
+          : 'completed',
+      );
+    } catch {
+      setError('This Agent Session could not be opened.');
+      setStatus('failed');
+    } finally {
+      setMobileSidebarOpen(false);
+      if (existingOperation === undefined) finishNavigation(operation);
+    }
+  }
+
+  selectTeamSessionRef.current = selectTeamSession;
+
   async function createChat() {
-    if (status === 'running' || navigationPendingRef.current) return;
+    if (
+      (status === 'running' && selection?.kind !== 'team_agent_session') ||
+      navigationPendingRef.current
+    )
+      return;
     const operation = beginNavigation();
     if (operation === null) return;
     setError(undefined);
@@ -646,17 +937,27 @@ export default function HomePage() {
         }
       : chat,
   );
+  const selectedTeam = selection?.kind === 'team_agent_session';
 
   return (
     <main className="page-shell">
       <section className="chat-frame" aria-label="Agent Server Web Chat">
         <ConversationSidebar
           chats={sidebarChats}
+          project={teamProject}
           selectedSessionId={sessionId}
-          disabled={status === 'running' || navigationPending}
+          selectedTeamSessionId={
+            selectedTeam ? selection.memberRunId : undefined
+          }
+          disabled={
+            (status === 'running' &&
+              selection?.kind !== 'team_agent_session') ||
+            navigationPending
+          }
           mobileOpen={mobileSidebarOpen}
           onNewChat={() => void createChat()}
           onSelect={(id) => void selectChat(id)}
+          onSelectTeam={(session) => void selectTeamSession(session)}
           onCloseMobile={() => setMobileSidebarOpen(false)}
         />
         <section className="chat-main">
@@ -675,8 +976,16 @@ export default function HomePage() {
                 A
               </span>
               <div>
-                <p className="eyebrow">Selected ProductSession</p>
-                <h1>Research Desk</h1>
+                <p className="eyebrow">
+                  {selectedTeam
+                    ? 'Selected Agent Session'
+                    : 'Selected ProductSession'}
+                </p>
+                <h1>
+                  {selectedTeam
+                    ? (teamSession?.name ?? 'Agent Session')
+                    : 'Research Desk'}
+                </h1>
               </div>
             </div>
             <div className="header-state">
@@ -684,24 +993,28 @@ export default function HomePage() {
                 {statusLabel(status)}
               </span>
               <span className="state-detail">
-                Same Agent · same runtime context
+                {selectedTeam
+                  ? `${teamSession?.role === 'lead' ? 'Lead' : 'Member'} · read-only transcript`
+                  : 'Same Agent · same runtime context'}
               </span>
             </div>
-            <details className="run-details-disclosure">
-              <summary>Details</summary>
-              <RunDetails
-                projection={
-                  activeRunId
-                    ? (projections[activeRunId] ?? initialStreamProjection)
-                    : initialStreamProjection
-                }
-                status={status}
-                sessionId={sessionId}
-                taskId={runDetails.taskId}
-                runId={runDetails.runId}
-                connected={sseConnected}
-              />
-            </details>
+            {!selectedTeam ? (
+              <details className="run-details-disclosure">
+                <summary>Details</summary>
+                <RunDetails
+                  projection={
+                    activeRunId
+                      ? (projections[activeRunId] ?? initialStreamProjection)
+                      : initialStreamProjection
+                  }
+                  status={status}
+                  sessionId={sessionId}
+                  taskId={runDetails.taskId}
+                  runId={runDetails.runId}
+                  connected={sseConnected}
+                />
+              </details>
+            ) : null}
           </header>
           <div className="chat-layout">
             <section className="conversation-column">
@@ -709,24 +1022,32 @@ export default function HomePage() {
                 className="message-list"
                 aria-live={activeRunId ? 'polite' : undefined}
               >
-                {!messages.length && status !== 'loading' ? (
+                {!selectedTeam && !messages.length && status !== 'loading' ? (
                   <EmptyState onPrompt={setText} />
                 ) : null}
                 {status === 'loading' ? <LoadingState /> : null}
-                {turns.map((turn) => (
-                  <TurnView
-                    key={turn.taskId}
-                    turn={turn}
-                    activeRunId={activeRunId}
+                {!selectedTeam &&
+                  turns.map((turn) => (
+                    <TurnView
+                      key={turn.taskId}
+                      turn={turn}
+                      activeRunId={activeRunId}
+                      projections={projections}
+                      replayStatus={replayStatus}
+                      transientAssistantText={
+                        turn.taskId === activeTaskId
+                          ? transientAssistantText
+                          : undefined
+                      }
+                    />
+                  ))}
+                {selectedTeam && teamSession ? (
+                  <TeamTranscript
+                    session={teamSession}
                     projections={projections}
                     replayStatus={replayStatus}
-                    transientAssistantText={
-                      turn.taskId === activeTaskId
-                        ? transientAssistantText
-                        : undefined
-                    }
                   />
-                ))}
+                ) : null}
                 {error && status !== 'running' ? (
                   <ErrorState
                     message={error}
@@ -735,16 +1056,22 @@ export default function HomePage() {
                   />
                 ) : null}
               </div>
-              <Composer
-                text={text}
-                setText={setText}
-                status={status}
-                pending={navigationPending}
-                error={error}
-                onSend={() => void sendMessage()}
-                onRetry={() => void sendMessage(retryText)}
-                hasRetry={Boolean(error && retryText)}
-              />
+              {selectedTeam ? (
+                <div className="read-only-session">
+                  This Agent Session is read-only.
+                </div>
+              ) : (
+                <Composer
+                  text={text}
+                  setText={setText}
+                  status={status}
+                  pending={navigationPending}
+                  error={error}
+                  onSend={() => void sendMessage()}
+                  onRetry={() => void sendMessage(retryText)}
+                  hasRetry={Boolean(error && retryText)}
+                />
+              )}
             </section>
           </div>
         </section>
@@ -794,6 +1121,60 @@ function TurnView({
           </div>
         </article>
       ) : null}
+    </div>
+  );
+}
+
+function TeamTranscript({
+  session,
+  projections,
+  replayStatus,
+}: {
+  readonly session: TeamSessionResponse;
+  readonly projections: Readonly<Record<string, StreamProjection>>;
+  readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
+}) {
+  if (session.turns.length === 0)
+    return (
+      <div className="team-empty-state">
+        <p>No turns have been recorded for this Agent Session yet.</p>
+      </div>
+    );
+  return (
+    <div className="team-transcript">
+      {session.turns.map((turn) => (
+        <div className="team-turn" key={`${turn.task_id}-${turn.sequence}`}>
+          <div className="team-context-block">
+            <span>Assignment context</span>
+            <p>{turn.context || 'No additional context.'}</p>
+          </div>
+          <ActivityPanel
+            projection={projections[turn.run_id] ?? initialStreamProjection}
+            active={turn.status === 'running'}
+            replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
+            replayLoading={replayStatus[turn.run_id] === 'loading'}
+          />
+          {turn.result_text ? (
+            <article className="message assistant">
+              <p className="message-label">
+                {session.role === 'lead' ? 'Lead' : session.name}
+              </p>
+              <div className="assistant-surface">
+                <AssistantMarkdown text={turn.result_text} />
+              </div>
+              <p className="message-meta">
+                {turn.status === 'failed' ? 'Turn failed' : 'Saved response'}
+              </p>
+            </article>
+          ) : (
+            <p className="team-result-pending">
+              {turn.status === 'running'
+                ? 'Working on this assignment…'
+                : 'No result recorded.'}
+            </p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

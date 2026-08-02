@@ -1,6 +1,7 @@
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
+import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import type {
   TeamExecution,
   TeamNodeExecution,
@@ -52,6 +53,10 @@ export interface TeamExecutionRepository {
     rootTaskId: string,
     owner: OwnerScope,
   ): Promise<TeamRun | null>;
+  findLatestAgenticTeamRun(
+    owner: OwnerScope,
+    rootTaskId?: string,
+  ): Promise<TeamRun | null>;
   updateTeamRunPhase(
     id: string,
     phase: TeamRun['phase'],
@@ -77,6 +82,9 @@ export interface TeamExecutionRepository {
     readonly finalText: string;
     readonly owner: OwnerScope;
     readonly updatedAt: string;
+    readonly completionIntent?: 'legacy_lead_finalize' | 'agentic';
+    readonly executionMode?: TeamRun['executionMode'];
+    readonly leadRunId?: string;
   }): Promise<TeamRun>;
 
   createMemberRun(member: TeamMemberRun): Promise<void>;
@@ -121,4 +129,62 @@ export interface TeamExecutionRepository {
       readonly role?: 'lead' | 'member';
     },
   ): Promise<TeamWorkItem>;
+  findAttemptsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt[]>;
+  bindAttemptExecution(
+    attemptId: string,
+    executionTaskId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt>;
+  updateAttemptStatus(
+    attemptId: string,
+    status: TeamWorkItemAttempt['status'],
+    resultSummary: string | null,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt>;
+
+  createAssignedWork(input: {
+    readonly teamRunId: string;
+    readonly sourceRunId: string;
+    readonly leadTaskId: string;
+    readonly assigneeMemberId: string;
+    readonly subject: string;
+    readonly description: string | null;
+    readonly commandHash: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<{ item: TeamWorkItem; attempt: TeamWorkItemAttempt }>;
+  acceptWork(input: {
+    readonly teamRunId: string;
+    readonly workItemId: string;
+    readonly sourceRunId: string;
+    readonly commandHash: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<TeamWorkItem>;
+  requestRework(input: {
+    readonly teamRunId: string;
+    readonly workItemId: string;
+    readonly assigneeMemberId: string;
+    readonly feedback: string;
+    readonly sourceRunId: string;
+    readonly leadTaskId: string;
+    readonly commandHash: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<TeamWorkItemAttempt>;
+  requestCompletion(input: {
+    readonly teamRunId: string;
+    readonly sourceRunId: string;
+    readonly commandHash: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<{ requested: true }>;
+  advanceAgenticLead(input: {
+    teamRunId: string;
+    expectedRevision: number;
+    owner: OwnerScope;
+  }): Promise<TeamRun>;
 }

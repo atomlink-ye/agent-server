@@ -132,6 +132,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0019_team_dag_mve' },
       { version: '0020_collaborative_team_mve' },
       { version: '0021_web_chat_streaming_mve' },
+      { version: '0022_learning_proposal_mve' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -178,6 +179,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0019_team_dag_mve' },
       { version: '0020_collaborative_team_mve' },
       { version: '0021_web_chat_streaming_mve' },
+      { version: '0022_learning_proposal_mve' },
     ]);
   });
 

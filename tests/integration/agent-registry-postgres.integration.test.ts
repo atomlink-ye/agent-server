@@ -233,6 +233,7 @@ describe('managed agent registry migration', () => {
       '0019_team_dag_mve',
       '0020_collaborative_team_mve',
       '0021_web_chat_streaming_mve',
+      '0022_learning_proposal_mve',
     ]);
   });
 

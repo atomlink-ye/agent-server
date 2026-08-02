@@ -200,6 +200,8 @@ export class AgenticTeamExecutor {
       executionTaskId: string | null;
       status: string;
       assigneeMemberId: string;
+      attemptNo: number;
+      feedback: string | null;
     }[],
     owner: OwnerScope,
   ) {
@@ -212,6 +214,17 @@ export class AgenticTeamExecutor {
     )) {
       const member = members.find((m) => m.id === attempt.assigneeMemberId);
       if (!member) throw new Error('Agentic attempt assignee is missing.');
+      const feedback = attempt.feedback
+        ?.replace(/[\u0000-\u001f\u007f]/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .slice(0, 512);
+      const attemptPrompt =
+        attempt.attemptNo === 1
+          ? 'This is attempt 1. Call only synthetic_stock_snapshot. Return snapshot evidence and explicitly do not provide event evidence.'
+          : feedback
+            ? `This is attempt ${attempt.attemptNo}. Lead feedback: ${feedback} Call only synthetic_event_batch to add the missing event evidence, then return the completed evidence summary.`
+            : `This is attempt ${attempt.attemptNo}. No Lead feedback is available; return a concise evidence summary without calling a Team tool.`;
       const task = this.child(
         parent,
         {
@@ -220,7 +233,7 @@ export class AgenticTeamExecutor {
         } as Run,
         member,
         `member:${team.id}:${member.id}:work_attempt:${attempt.id}`,
-        `team_run_id: ${team.id}\n\nComplete one assigned work item with concrete event evidence. If the first pass lacked event evidence, address the lead feedback explicitly.`,
+        `team_run_id: ${team.id}\n\nYou are completing assigned WorkItemAttempt ${attempt.attemptNo}. Do not claim or update the WorkItem. Do not call shell/search/read/write/edit/fetch/subagent or any Team mutation tool. ${attemptPrompt} After the evidence call, return plain-text evidence and immediately end the turn.`,
         member.agentVersionId,
         'work_attempt',
       );

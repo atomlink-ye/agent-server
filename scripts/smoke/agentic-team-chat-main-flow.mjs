@@ -143,7 +143,15 @@ try {
     createLogger({
       service: config.serviceName,
       minimumLevel: config.logLevel,
-      write: () => undefined,
+      write: (line) => {
+        const event = JSON.parse(line);
+        if (
+          typeof event.event === 'string' &&
+          (event.event.startsWith('runtime.workspace.create.') ||
+            event.event.startsWith('runtime.agent.create.'))
+        )
+          console.log(line);
+      },
     }),
   );
   await service.runtime.initialize();

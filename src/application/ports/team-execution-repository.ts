@@ -122,6 +122,21 @@ export interface TeamExecutionRepository {
       readonly role?: 'lead' | 'member';
     },
   ): Promise<TeamWorkItem>;
+  findAttemptsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt[]>;
+  bindAttemptExecution(
+    attemptId: string,
+    executionTaskId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt>;
+  updateAttemptStatus(
+    attemptId: string,
+    status: TeamWorkItemAttempt['status'],
+    resultSummary: string | null,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt>;
 
   createAssignedWork(input: {
     readonly teamRunId: string;
@@ -160,4 +175,9 @@ export interface TeamExecutionRepository {
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<{ requested: true }>;
+  advanceAgenticLead(input: {
+    teamRunId: string;
+    expectedRevision: number;
+    owner: OwnerScope;
+  }): Promise<TeamRun>;
 }

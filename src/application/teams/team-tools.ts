@@ -108,7 +108,7 @@ export class TeamToolHandler {
     if (team.phase !== 'lead_finalize')
       throw new Error('Team can only be completed during lead_finalize.');
     const items = await this.repo.findWorkItemsByTeamRunId(teamRunId, actor);
-    if (items.some((item) => item.status !== 'completed'))
+    if (items.some((item) => !['completed', 'accepted'].includes(item.status)))
       throw new Error('Team has unfinished work items.');
     const normalizedFinalText = normalizeTeamRunFinalText(finalText);
     return this.repo.completeTeamRunAtomically({

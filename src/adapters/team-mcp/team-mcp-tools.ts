@@ -99,6 +99,122 @@ export function registerTeamMcpTools(
       ({ team_run_id, final_text }) =>
         result(handler.team_complete(team_run_id, final_text, actor)),
     );
+  if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[6]!))
+    server.registerTool(
+      'team_work_create_and_assign',
+      {
+        description: 'Assign durable work.',
+        inputSchema: {
+          team_run_id: id,
+          subject: z.string(),
+          assignee_member_id: id,
+          source_run_id: id,
+          lead_task_id: id,
+          command_hash: z.string(),
+          expected_revision: z.number().int(),
+        },
+      },
+      (i) =>
+        result(
+          handler.team_work_create_and_assign(
+            {
+              teamRunId: i.team_run_id,
+              subject: i.subject,
+              assigneeMemberId: i.assignee_member_id,
+              sourceRunId: i.source_run_id,
+              leadTaskId: i.lead_task_id,
+              commandHash: i.command_hash,
+              expectedRevision: i.expected_revision,
+            },
+            actor,
+          ),
+        ),
+    );
+  if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[7]!))
+    server.registerTool(
+      'team_work_accept',
+      {
+        description: 'Accept work.',
+        inputSchema: {
+          team_run_id: id,
+          work_item_id: id,
+          source_run_id: id,
+          command_hash: z.string(),
+          expected_revision: z.number().int(),
+        },
+      },
+      (i) =>
+        result(
+          handler.team_work_accept(
+            {
+              teamRunId: i.team_run_id,
+              workItemId: i.work_item_id,
+              sourceRunId: i.source_run_id,
+              commandHash: i.command_hash,
+              expectedRevision: i.expected_revision,
+            },
+            actor,
+          ),
+        ),
+    );
+  if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[8]!))
+    server.registerTool(
+      'team_work_request_rework',
+      {
+        description: 'Request bounded rework.',
+        inputSchema: {
+          team_run_id: id,
+          work_item_id: id,
+          assignee_member_id: id,
+          feedback: z.string(),
+          source_run_id: id,
+          lead_task_id: id,
+          command_hash: z.string(),
+          expected_revision: z.number().int(),
+        },
+      },
+      (i) =>
+        result(
+          handler.team_work_request_rework(
+            {
+              teamRunId: i.team_run_id,
+              workItemId: i.work_item_id,
+              assigneeMemberId: i.assignee_member_id,
+              feedback: i.feedback,
+              sourceRunId: i.source_run_id,
+              leadTaskId: i.lead_task_id,
+              commandHash: i.command_hash,
+              expectedRevision: i.expected_revision,
+            },
+            actor,
+          ),
+        ),
+    );
+  if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[9]!))
+    server.registerTool(
+      'team_completion_request',
+      {
+        description: 'Request completion.',
+        inputSchema: {
+          team_run_id: id,
+          source_run_id: id,
+          command_hash: z.string(),
+          expected_revision: z.number().int(),
+        },
+      },
+      (i) =>
+        result(
+          handler.team_completion_request(
+            {
+              teamRunId: i.team_run_id,
+              sourceRunId: i.source_run_id,
+              commandHash: i.command_hash,
+              expectedRevision: i.expected_revision,
+            },
+            actor,
+          ),
+        ),
+    );
 }
 
 async function result(value: Promise<unknown>) {

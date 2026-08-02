@@ -87,6 +87,7 @@ import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
 import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
 import { TeamToolHandler } from './application/teams/team-tools.js';
+import { AgenticTeamExecutor } from './application/teams/agentic-team-executor.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -394,12 +395,19 @@ export async function createService(config: AppConfig, logger: Logger) {
   const collaborativeExecutor = new CollaborativeTeamExecutor(
     collaborativeTeamExecutions,
   );
+  const agenticExecutor = new AgenticTeamExecutor(
+    collaborativeTeamExecutions,
+    taskRepository,
+    runRepository,
+    admissionRepository,
+  );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
     collaborativeTeamExecutions,
     collaborativeExecutor,
     taskRepository,
     runRepository,
     admissionRepository,
+    agenticExecutor,
   );
   const advanceTeamExecution = new AdvanceTeamExecution(
     teamExecutions,
@@ -431,6 +439,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     collaborativeExecutor,
     collaborativeTeamExecutions,
     runtimeSessions,
+    agenticExecutor,
   );
   const executeRun = new ExecuteRun(
     completeRun,

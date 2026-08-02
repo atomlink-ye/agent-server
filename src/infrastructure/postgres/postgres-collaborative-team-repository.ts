@@ -33,6 +33,12 @@ type TeamRunRow = Omit<TeamRun, never> & {
   root_run_id: string;
   team_version_id: string;
   environment_version_id: string;
+  execution_mode: TeamRun['executionMode'];
+  control_state: TeamRun['controlState'];
+  revision: number;
+  lead_turn_count: number;
+  stop_reason: string | null;
+  completion_requested_by_run_id: string | null;
   final_text: string | null;
   created_at: string | Date;
   updated_at: string | Date;
@@ -88,7 +94,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   ) {}
   public async createTeamRun(run: TeamRun): Promise<void> {
     await this.database.query(
-      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,execution_mode,control_state,revision,lead_turn_count,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [
         run.id,
         run.tenantId,
@@ -102,6 +108,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         run.status,
         run.phase,
         run.finalText,
+        run.executionMode,
+        run.controlState,
+        run.revision,
+        run.leadTurnCount,
         run.createdAt,
         run.updatedAt,
       ],
@@ -183,7 +193,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       if (team.phase !== 'lead_finalize')
         throw new Error('Team can only be completed during lead_finalize.');
       const unfinished = await client.query(
-        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'completed' LIMIT 1`,
+        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('completed','accepted') LIMIT 1`,
         [input.teamRunId],
       );
       if (unfinished.rows?.[0])
@@ -380,6 +390,46 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     if (!r.rows?.[0]) throw new Error('Work item was not found.');
     return mapWork(r.rows[0]);
   }
+  public async findAttemptsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt[]> {
+    const r = await this.database.query<AttemptRow>(
+      `SELECT * FROM team_work_item_attempts WHERE team_run_id=$1 AND ${ownerSql('', 2)} ORDER BY created_at, attempt_no`,
+      [teamRunId, ...ownerValues(owner)],
+    );
+    return (r.rows ?? []).map(mapAttempt);
+  }
+  public async bindAttemptExecution(
+    attemptId: string,
+    executionTaskId: string,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt> {
+    const r = await this.database.query<AttemptRow>(
+      `UPDATE team_work_item_attempts SET execution_task_id=$2 WHERE id=$1 AND ${ownerSql('', 3)} AND execution_task_id IS NULL RETURNING *`,
+      [attemptId, executionTaskId, ...ownerValues(owner)],
+    );
+    if (r.rows?.[0]) return mapAttempt(r.rows[0]);
+    const existing = await this.database.query<AttemptRow>(
+      `SELECT * FROM team_work_item_attempts WHERE id=$1 AND ${ownerSql('', 2)}`,
+      [attemptId, ...ownerValues(owner)],
+    );
+    if (!existing.rows?.[0]) throw new Error('Work attempt was not found.');
+    return mapAttempt(existing.rows[0]);
+  }
+  public async updateAttemptStatus(
+    attemptId: string,
+    status: TeamWorkItemAttempt['status'],
+    resultSummary: string | null,
+    owner: OwnerScope,
+  ): Promise<TeamWorkItemAttempt> {
+    const r = await this.database.query<AttemptRow>(
+      `UPDATE team_work_item_attempts SET status=$2,result_summary=$3,completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END,updated_at=now() WHERE id=$1 AND ${ownerSql('', 4)} RETURNING *`,
+      [attemptId, status, resultSummary, ...ownerValues(owner)],
+    );
+    if (!r.rows?.[0]) throw new Error('Work attempt was not found.');
+    return mapAttempt(r.rows[0]);
+  }
 
   public async createAssignedWork(input: {
     teamRunId: string;
@@ -483,6 +533,12 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamWorkItem> {
+    const fence = await this.database.query(
+      `UPDATE team_runs SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} RETURNING id`,
+      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+    );
+    if (!fence.rows?.[0])
+      throw new Error('Agentic Team run fence or revision is stale.');
     const item = await this.findWorkItemById(input.workItemId, input.owner);
     if (!item || item.teamRunId !== input.teamRunId)
       throw new Error('Work item was not found.');
@@ -504,6 +560,12 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamWorkItemAttempt> {
+    const fence = await this.database.query(
+      `UPDATE team_runs SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} RETURNING id`,
+      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+    );
+    if (!fence.rows?.[0])
+      throw new Error('Agentic Team run fence or revision is stale.');
     const rows = await this.database.query<AttemptRow>(
       'SELECT * FROM team_work_item_attempts WHERE work_item_id=$1 ORDER BY attempt_no DESC LIMIT 1',
       [input.workItemId],
@@ -556,6 +618,21 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     if (!r.rowCount)
       throw new Error('Agentic Team run fence or revision is stale.');
     return { requested: true };
+  }
+  public async advanceAgenticLead(input: {
+    teamRunId: string;
+    expectedRevision: number;
+    owner: OwnerScope;
+  }): Promise<TeamRun> {
+    const r = await this.database.query<TeamRunRow>(
+      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND lead_turn_count < 4 AND ${ownerSql('', 3)} RETURNING *`,
+      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+    );
+    if (!r.rows?.[0])
+      throw new Error(
+        'Agentic Team lead turn limit or revision fence exceeded.',
+      );
+    return mapRun(r.rows[0]);
   }
   private async findRun(
     predicate: string,
@@ -616,7 +693,7 @@ function iso(v: string | Date | null): string | null {
 }
 function mapRun(r: TeamRunRow): TeamRun {
   return {
-    ...r,
+    id: r.id,
     tenantId: r.tenant_id,
     workspaceId: r.workspace_id,
     principalType: r.principal_type,
@@ -626,6 +703,14 @@ function mapRun(r: TeamRunRow): TeamRun {
     teamVersionId: r.team_version_id,
     environmentVersionId: r.environment_version_id,
     finalText: r.final_text,
+    executionMode: r.execution_mode,
+    controlState: r.control_state,
+    revision: r.revision,
+    leadTurnCount: r.lead_turn_count,
+    stopReason: r.stop_reason,
+    completionRequestedByRunId: r.completion_requested_by_run_id,
+    status: r.status,
+    phase: r.phase,
     createdAt: iso(r.created_at)!,
     updatedAt: iso(r.updated_at)!,
   };

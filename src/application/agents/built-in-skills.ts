@@ -16,6 +16,10 @@ export const AGENT_SERVER_TEAM_TOOL_REFS = Object.freeze([
   'agent-server/team-task-claim',
   'agent-server/team-task-update',
   'agent-server/team-complete',
+  'agent-server/team-work-create-and-assign',
+  'agent-server/team-work-accept',
+  'agent-server/team-work-request-rework',
+  'agent-server/team-completion-request',
 ]);
 export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_MEMORY_READ_TOOL_REF,

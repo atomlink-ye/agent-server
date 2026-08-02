@@ -125,6 +125,20 @@ export class AgenticTeamExecutor {
     );
     if (input.task.teamTaskKind === 'lead_turn') {
       if (fresh.completionRequestedByRunId) {
+        // A completion request may arrive in the same Lead turn as the final
+        // assignments. Materialize those queued attempts before deciding that
+        // the Team is complete; otherwise the request can strand work forever.
+        await this.materializeQueuedAttempts(
+          fresh,
+          input.task,
+          currentAttempts,
+          owner,
+        );
+        const after = await this.executions.findAttemptsByTeamRunId(
+          fresh.id,
+          owner,
+        );
+        if (after.some((a) => a.status !== 'completed')) return;
         await this.executions.completeTeamRunAtomically({
           teamRunId: fresh.id,
           rootRunId: fresh.rootRunId,

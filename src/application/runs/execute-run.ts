@@ -385,11 +385,31 @@ export class ExecuteRun {
           invokableVersionId,
           task,
         );
-    const runtimeToolRefs = leadFinalization
-      ? resolved.toolRefs.filter(
-          (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
-        )
-      : resolved.toolRefs;
+    const runtimeToolRefs =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      member?.role === 'lead'
+        ? AGENT_SERVER_TEAM_TOOL_REFS.slice(6)
+        : leadFinalization
+          ? resolved.toolRefs.filter(
+              (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
+            )
+          : resolved.toolRefs;
+    const turnPrompt =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      member?.role === 'lead'
+        ? await this.withAgenticLeadContext(
+            resolved.turnPrompt,
+            claim.run.id,
+            task.id,
+            collaborativeTeam,
+            task,
+          )
+        : resolved.turnPrompt;
+    const systemPrompt =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      member?.role === 'lead'
+        ? `${resolved.systemPrompt}\n\nAgentic Team policy: this Lead turn is tool-controlled. Never use shell, filesystem, or legacy team_task_* tools. Use only the four agentic Team MCP tools named in the task instructions; if information is unavailable, issue no command rather than substituting a shell command.`
+        : resolved.systemPrompt;
     let sessionRuntime = runtimeSession;
     if (
       this.runtimeSessions &&
@@ -544,7 +564,7 @@ export class ExecuteRun {
             ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
             ...(cellCwd ? { cellCwd } : {}),
             runId: claim.run.id,
-            prompt: resolved.turnPrompt,
+            prompt: turnPrompt,
             providerAgentId: priorProviderAgentId,
             ...(resolved.proposalLimit > 0
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
@@ -555,8 +575,8 @@ export class ExecuteRun {
             ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
             ...(cellCwd ? { cellCwd } : {}),
             runId: claim.run.id,
-            prompt: resolved.turnPrompt,
-            systemPrompt: resolved.systemPrompt,
+            prompt: turnPrompt,
+            systemPrompt,
             ...(extensions ? { extensions } : {}),
             ...(resolved.proposalLimit > 0
               ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
@@ -736,6 +756,30 @@ export class ExecuteRun {
       skills: [],
       toolRefs: [],
     };
+  }
+
+  private async withAgenticLeadContext(
+    prompt: string,
+    sourceRunId: string,
+    leadTaskId: string,
+    team: import('../../domain/teams/team-run.js').TeamRun,
+    task: import('../../domain/tasks/task.js').Task,
+  ): Promise<string> {
+    const members = this.collaborativeExecutions
+      ? await this.collaborativeExecutions.findMembersByTeamRunId(team.id, {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        })
+      : [];
+    const roster = members
+      .filter((member) => member.role !== 'lead')
+      .map((member) => `${member.id} (${member.name})`)
+      .join(', ');
+    return `${prompt}
+
+Agentic Team control protocol (authoritative for this turn): do not use the legacy team_task_* tools or shell commands. Use the available MCP tools team_work_create_and_assign, team_work_accept, team_work_request_rework, and team_completion_request. Every command must use these exact values: team_run_id=${team.id}, source_run_id=${sourceRunId}, lead_task_id=${leadTaskId}, expected_revision=${team.revision}. The fixed member roster is: ${roster || 'none'}. Supply a fresh command_hash for each command. After a command response, use its returned revision for the next command. Create and assign work to the fixed roster, accept completed evidence or request at most one bounded rework, then request completion; do not call team_complete.`;
   }
 
   private async loadPinnedMemory(

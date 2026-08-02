@@ -663,6 +663,7 @@ async function focusedSnapshot(taskId) {
   const tasks = await db.query(
     `SELECT t.id,t.team_task_kind,t.logical_step_key,t.status AS task_status,
             t.team_member_run_id,r.id AS run_id,r.status AS run_status,r.lease_expires_at,
+            r.error->>'code' AS run_error_code,
             rs.id AS runtime_session_id,rs.provider_agent_id,
             av.canonical_package->'spec'->'tools' AS agent_tool_refs,
             sls.tool_refs AS session_tool_refs
@@ -700,6 +701,21 @@ async function focusedSnapshot(taskId) {
       )
     : { rows: [] };
   const grantRefs = await readGrantRefs();
+  const runIds = tasks.rows.map((row) => row.run_id).filter(Boolean);
+  const childEvents = runIds.length
+    ? await db.query(
+        `SELECT run_id,type,created_at,payload
+           FROM run_events WHERE run_id = ANY($1::uuid[])
+          ORDER BY created_at DESC`,
+        [runIds],
+      )
+    : { rows: [] };
+  const eventsByRun = new Map();
+  for (const event of childEvents.rows) {
+    const existing = eventsByRun.get(event.run_id) ?? [];
+    if (existing.length < 10) existing.push(safeRunEvent(event));
+    eventsByRun.set(event.run_id, existing);
+  }
   const safeTasks = tasks.rows.map((row) => ({
     task_id: row.id,
     kind: row.team_task_kind,
@@ -707,7 +723,9 @@ async function focusedSnapshot(taskId) {
     task_status: row.task_status,
     run_id: row.run_id,
     run_status: row.run_status,
+    run_error_code: safeEnum(row.run_error_code, SAFE_ERROR_CODES),
     member_id: row.team_member_run_id,
+    last_10_events: eventsByRun.get(row.run_id) ?? [],
     runtime_session: row.runtime_session_id
       ? {
           exists: true,
@@ -751,6 +769,12 @@ async function focusedSnapshot(taskId) {
       status: row.status,
       materialized: row.execution_task_id !== null,
       has_result: Boolean(row.result_summary),
+      linked_run_status:
+        safeTasks.find((task) => task.task_id === row.execution_task_id)
+          ?.run_status ?? null,
+      linked_run_error_code:
+        safeTasks.find((task) => task.task_id === row.execution_task_id)
+          ?.run_error_code ?? null,
     })),
     lease_expired: safeTasks.some((row) => row.lease_expired),
     leadTerminal: safeTasks.some(
@@ -761,6 +785,70 @@ async function focusedSnapshot(taskId) {
         ),
     ),
   };
+}
+
+const SAFE_TOOL_NAMES = new Set([
+  'synthetic_stock_snapshot',
+  'synthetic_event_batch',
+  'team_work_create_and_assign',
+  'team_work_accept',
+  'team_work_request_rework',
+  'team_completion_request',
+]);
+const SAFE_DETAIL_KINDS = new Set([
+  'shell',
+  'read',
+  'edit',
+  'write',
+  'search',
+  'fetch',
+  'subagent',
+  'other',
+]);
+const SAFE_PERMISSION_KINDS = new Set([
+  'tool',
+  'plan',
+  'question',
+  'mode',
+  'other',
+]);
+const SAFE_ERROR_CODES = new Set([
+  'runtime_execution_failed',
+  'runtime_timed_out',
+  'cancelled',
+  'terminal_persistence_failed',
+]);
+
+function safeRunEvent(event) {
+  const payload = event.payload ?? {};
+  return {
+    type: event.type,
+    tool: safeEnum(payload.tool_name, SAFE_TOOL_NAMES),
+    status: safeString(payload.status),
+    detail_kind: safeEnum(payload.detail_kind, SAFE_DETAIL_KINDS),
+    permission_kind:
+      event.type === 'permission'
+        ? safeEnum(
+            payload.permission_kind ?? payload.kind,
+            SAFE_PERMISSION_KINDS,
+          )
+        : null,
+    label: safeLabel(payload.label),
+    at: event.created_at,
+  };
+}
+
+function safeEnum(value, allowed) {
+  return typeof value === 'string' && allowed.has(value) ? value : null;
+}
+
+function safeLabel(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^[A-Za-z][A-Za-z0-9 _-]{0,79}$/u.test(value)
+  )
+    return null;
+  return value;
 }
 
 function safeToolRefs(value) {
@@ -819,14 +907,14 @@ function focusedStageSatisfied(requestedStage, snapshot) {
   if (requestedStage === 'attempt1_terminal')
     return attempts.some(
       (row) =>
-        row.attempt_no === 1 && ['completed', 'failed'].includes(row.status),
+        row.attempt_no === 1 && row.status === 'completed' && row.has_result,
     );
   if (requestedStage === 'rework_command')
     return receipts.has('team_work_request_rework');
   if (requestedStage === 'attempt2_terminal')
     return attempts.some(
       (row) =>
-        row.attempt_no === 2 && ['completed', 'failed'].includes(row.status),
+        row.attempt_no === 2 && row.status === 'completed' && row.has_result,
     );
   if (requestedStage === 'completion')
     return (

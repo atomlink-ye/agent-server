@@ -408,7 +408,7 @@ export class ExecuteRun {
     const systemPrompt =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
       member?.role === 'lead'
-        ? `${resolved.systemPrompt}\n\nAgentic Team policy: this Lead turn is tool-controlled. Never use shell, filesystem, or legacy team_task_* tools. Use only the four agentic Team MCP tools named in the task instructions; if information is unavailable, issue no command rather than substituting a shell command.`
+        ? `${resolved.systemPrompt}\n\nAgentic Team policy: this Lead turn is tool-controlled. Never use shell, filesystem, or legacy team_task_* tools. Use only the four agentic Team MCP tools named in the task instructions; if information is unavailable, issue no command rather than substituting a shell command. Each Lead turn performs one current decision only. After calling any mutating Team command (assign, accept, rework, or completion request), immediately return a short decision text; do not call another tool, shell, or wait for a member in the same turn.`
         : resolved.systemPrompt;
     let sessionRuntime = runtimeSession;
     if (

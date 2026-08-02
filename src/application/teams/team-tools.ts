@@ -118,6 +118,8 @@ export class TeamToolHandler {
       finalText: normalizedFinalText,
       owner: actor,
       updatedAt: this.now().toISOString(),
+      completionIntent: 'legacy_lead_finalize',
+      executionMode: 'collaborative_mve',
     });
   }
 

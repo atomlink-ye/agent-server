@@ -78,6 +78,9 @@ export interface TeamExecutionRepository {
     readonly finalText: string;
     readonly owner: OwnerScope;
     readonly updatedAt: string;
+    readonly completionIntent?: 'legacy_lead_finalize' | 'agentic';
+    readonly executionMode?: TeamRun['executionMode'];
+    readonly leadRunId?: string;
   }): Promise<TeamRun>;
 
   createMemberRun(member: TeamMemberRun): Promise<void>;

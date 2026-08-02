@@ -48,10 +48,13 @@ export class PostgresTaskRepository implements TaskRepository {
           input_fingerprint,
            memory_snapshot_id,
            memory_snapshot_hash,
+           team_member_run_id,
+           team_sequence,
+           team_task_kind,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -74,6 +77,9 @@ export class PostgresTaskRepository implements TaskRepository {
           input_fingerprint = EXCLUDED.input_fingerprint,
            memory_snapshot_id = EXCLUDED.memory_snapshot_id,
            memory_snapshot_hash = EXCLUDED.memory_snapshot_hash,
+           team_member_run_id = EXCLUDED.team_member_run_id,
+           team_sequence = EXCLUDED.team_sequence,
+           team_task_kind = EXCLUDED.team_task_kind,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at
       `,
@@ -99,6 +105,9 @@ export class PostgresTaskRepository implements TaskRepository {
         task.inputFingerprint,
         task.memorySnapshotId ?? null,
         task.memorySnapshotHash ?? null,
+        task.teamMemberRunId ?? null,
+        task.teamSequence ?? null,
+        task.teamTaskKind ?? null,
         task.createdAt,
         task.updatedAt,
       ],
@@ -222,6 +231,9 @@ interface TaskRow {
   readonly input_fingerprint: string;
   readonly memory_snapshot_id: string | null;
   readonly memory_snapshot_hash: string | null;
+  readonly team_member_run_id: string | null;
+  readonly team_sequence: number | null;
+  readonly team_task_kind: 'lead_turn' | 'work_attempt' | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly session_id: string | null;
@@ -261,6 +273,9 @@ const TASK_SELECT_SQL = `
     tasks.input_fingerprint,
     tasks.memory_snapshot_id,
     tasks.memory_snapshot_hash,
+    tasks.team_member_run_id,
+    tasks.team_sequence,
+    tasks.team_task_kind,
     tasks.created_at,
     tasks.updated_at,
     tasks.session_id,
@@ -323,6 +338,9 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     inputFingerprint: row.input_fingerprint,
     memorySnapshotId: row.memory_snapshot_id,
     memorySnapshotHash: row.memory_snapshot_hash,
+    teamMemberRunId: row.team_member_run_id,
+    teamSequence: row.team_sequence === null ? null : Number(row.team_sequence),
+    teamTaskKind: row.team_task_kind,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     sessionId: row.session_id,

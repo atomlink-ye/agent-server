@@ -172,6 +172,9 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     readonly finalText: string;
     readonly owner: OwnerScope;
     readonly updatedAt: string;
+    readonly completionIntent?: 'legacy_lead_finalize' | 'agentic';
+    readonly executionMode?: TeamRun['executionMode'];
+    readonly leadRunId?: string;
   }): Promise<TeamRun> {
     const normalizedFinalText = normalizeTeamRunFinalText(input.finalText);
     const client = this.database.connect
@@ -190,14 +193,48 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         await client.query('COMMIT');
         return mapRun(team);
       }
-      if (team.phase !== 'lead_finalize')
-        throw new Error('Team can only be completed during lead_finalize.');
-      const unfinished = await client.query(
-        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('completed','accepted') LIMIT 1`,
-        [input.teamRunId],
-      );
-      if (unfinished.rows?.[0])
-        throw new Error('Team has unfinished work items.');
+      if (team.execution_mode === 'agentic_mve') {
+        if (
+          input.completionIntent !== 'agentic' ||
+          input.executionMode !== 'agentic_mve' ||
+          !input.leadRunId ||
+          !team.completion_requested_by_run_id
+        )
+          throw new Error(
+            'Agentic Team completion intent or fence is invalid.',
+          );
+        const lead = await client.query(
+          `SELECT 1 FROM runs WHERE id=$1 AND status='succeeded'`,
+          [input.leadRunId],
+        );
+        if (!lead.rows?.[0])
+          throw new Error('Agentic Lead Run was not succeeded.');
+        const unsettled = await client.query(
+          `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND (status <> 'completed' OR result_summary IS NULL) LIMIT 1`,
+          [input.teamRunId],
+        );
+        if (unsettled.rows?.[0])
+          throw new Error('Agentic Team has unsettled work attempts.');
+        const unaccepted = await client.query(
+          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' LIMIT 1`,
+          [input.teamRunId],
+        );
+        if (unaccepted.rows?.[0])
+          throw new Error('Agentic Team has unaccepted work.');
+      } else {
+        if (
+          input.completionIntent !== 'legacy_lead_finalize' ||
+          input.executionMode === 'agentic_mve' ||
+          team.phase !== 'lead_finalize'
+        )
+          throw new Error('Team can only be completed during lead_finalize.');
+        const unfinished = await client.query(
+          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('completed','accepted') LIMIT 1`,
+          [input.teamRunId],
+        );
+        if (unfinished.rows?.[0])
+          throw new Error('Team has unfinished work items.');
+      }
       const updated = await client.query<TeamRunRow>(
         `UPDATE team_runs SET status='succeeded', phase='done', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
@@ -467,7 +504,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const itemId = randomUUID();
       const attemptId = randomUUID();
       await client.query(
-        `INSERT INTO team_work_items (id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,'open',$5,(SELECT id FROM team_member_runs WHERE team_run_id=$2 AND role='lead' LIMIT 1),$6,$7,$8,$9,$10,$10)`,
+        `INSERT INTO team_work_items (id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,'pending',$5,(SELECT id FROM team_member_runs WHERE team_run_id=$2 AND role='lead' LIMIT 1),$6,$7,$8,$9,$10,$10)`,
         [
           itemId,
           input.teamRunId,
@@ -533,21 +570,74 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamWorkItem> {
-    const fence = await this.database.query(
-      `UPDATE team_runs SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} RETURNING id`,
-      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
-    );
-    if (!fence.rows?.[0])
-      throw new Error('Agentic Team run fence or revision is stale.');
-    const item = await this.findWorkItemById(input.workItemId, input.owner);
-    if (!item || item.teamRunId !== input.teamRunId)
-      throw new Error('Work item was not found.');
-    return this.updateWorkItemStatus(
-      item.id,
-      'accepted',
-      item.completionSummary,
-      { ...input.owner, role: 'lead' },
-    );
+    const client = this.database.connect
+      ? await this.database.connect()
+      : this.database;
+    try {
+      await client.query('BEGIN');
+      const receipt = await client.query<{
+        result_json: { work_item_id?: string };
+      }>(
+        'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+        [input.sourceRunId, input.commandHash],
+      );
+      if (receipt.rows?.[0]?.result_json?.work_item_id) {
+        const replay = await client.query<WorkRow>(
+          'SELECT * FROM team_work_items WHERE id=$1',
+          [receipt.rows[0].result_json.work_item_id],
+        );
+        if (!replay.rows?.[0])
+          throw new Error('Accepted work receipt target is missing.');
+        await client.query('COMMIT');
+        return mapWork(replay.rows[0]);
+      }
+      const team = await client.query<TeamRunRow>(
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} FOR UPDATE`,
+        [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+      );
+      if (!team.rows?.[0])
+        throw new Error('Agentic Team run fence or revision is stale.');
+      const item = await client.query<WorkRow>(
+        `SELECT * FROM team_work_items WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
+        [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
+      );
+      if (!item.rows?.[0]) throw new Error('Work item was not found.');
+      const latest = await client.query<AttemptRow>(
+        `SELECT * FROM team_work_item_attempts WHERE work_item_id=$1 ORDER BY attempt_no DESC LIMIT 1`,
+        [input.workItemId],
+      );
+      const attempt = latest.rows?.[0];
+      if (!attempt || attempt.status !== 'completed' || !attempt.result_summary)
+        throw new Error(
+          'Work can only be accepted after its latest attempt completed with a result.',
+        );
+      const now = new Date().toISOString();
+      const updated = await client.query<WorkRow>(
+        `UPDATE team_work_items SET status='accepted',updated_at=$2 WHERE id=$1 RETURNING *`,
+        [input.workItemId, now],
+      );
+      await client.query(
+        `UPDATE team_runs SET revision=revision+1,updated_at=$2 WHERE id=$1`,
+        [input.teamRunId, now],
+      );
+      await client.query(
+        `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_work_accept',$3::jsonb,$4)`,
+        [
+          input.sourceRunId,
+          input.commandHash,
+          JSON.stringify({ work_item_id: input.workItemId }),
+          now,
+        ],
+      );
+      await client.query('COMMIT');
+      return mapWork(updated.rows![0]!);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      if ('release' in client && typeof client.release === 'function')
+        client.release();
+    }
   }
   public async requestRework(input: {
     teamRunId: string;
@@ -560,43 +650,87 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamWorkItemAttempt> {
-    const fence = await this.database.query(
-      `UPDATE team_runs SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} RETURNING id`,
-      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
-    );
-    if (!fence.rows?.[0])
-      throw new Error('Agentic Team run fence or revision is stale.');
-    const rows = await this.database.query<AttemptRow>(
-      'SELECT * FROM team_work_item_attempts WHERE work_item_id=$1 ORDER BY attempt_no DESC LIMIT 1',
-      [input.workItemId],
-    );
-    const previous = rows.rows?.[0];
-    if (!previous || previous.attempt_no >= 2)
-      throw new Error('Work item attempt limit exhausted.');
-    const now = new Date().toISOString();
-    const id = randomUUID();
-    await this.database.query(
-      `INSERT INTO team_work_item_attempts (id,work_item_id,team_run_id,attempt_no,assignee_member_id,requested_by_lead_task_id,feedback,status,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',$8,$9,$10,$11,$12,$12)`,
-      [
-        id,
-        input.workItemId,
-        input.teamRunId,
-        previous.attempt_no + 1,
-        input.assigneeMemberId,
-        input.leadTaskId,
-        input.feedback,
-        ...ownerValues(input.owner),
-        now,
-      ],
-    );
-    return mapAttempt(
-      (
-        await this.database.query<AttemptRow>(
+    const client = this.database.connect
+      ? await this.database.connect()
+      : this.database;
+    try {
+      await client.query('BEGIN');
+      const receipt = await client.query<{
+        result_json: { attempt_id?: string };
+      }>(
+        'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+        [input.sourceRunId, input.commandHash],
+      );
+      if (receipt.rows?.[0]?.result_json?.attempt_id) {
+        const replay = await client.query<AttemptRow>(
           'SELECT * FROM team_work_item_attempts WHERE id=$1',
-          [id],
-        )
-      ).rows![0]!,
-    );
+          [receipt.rows[0].result_json.attempt_id],
+        );
+        if (!replay.rows?.[0])
+          throw new Error('Rework receipt target is missing.');
+        await client.query('COMMIT');
+        return mapAttempt(replay.rows[0]);
+      }
+      const team = await client.query<TeamRunRow>(
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND execution_mode='agentic_mve' AND ${ownerSql('', 3)} FOR UPDATE`,
+        [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+      );
+      if (!team.rows?.[0])
+        throw new Error('Agentic Team run fence or revision is stale.');
+      const rows = await client.query<AttemptRow>(
+        'SELECT * FROM team_work_item_attempts WHERE work_item_id=$1 ORDER BY attempt_no DESC LIMIT 1 FOR UPDATE',
+        [input.workItemId],
+      );
+      const previous = rows.rows?.[0];
+      if (
+        !previous ||
+        previous.attempt_no >= 2 ||
+        previous.status !== 'completed' ||
+        !previous.result_summary
+      )
+        throw new Error('Rework requires a completed attempt with a result.');
+      const now = new Date().toISOString();
+      const id = randomUUID();
+      await client.query(
+        `INSERT INTO team_work_item_attempts (id,work_item_id,team_run_id,attempt_no,assignee_member_id,requested_by_lead_task_id,feedback,status,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',$8,$9,$10,$11,$12,$12)`,
+        [
+          id,
+          input.workItemId,
+          input.teamRunId,
+          previous.attempt_no + 1,
+          input.assigneeMemberId,
+          input.leadTaskId,
+          input.feedback,
+          ...ownerValues(input.owner),
+          now,
+        ],
+      );
+      await client.query(
+        'UPDATE team_runs SET revision=revision+1,updated_at=$2 WHERE id=$1',
+        [input.teamRunId, now],
+      );
+      await client.query(
+        `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_work_request_rework',$3::jsonb,$4)`,
+        [
+          input.sourceRunId,
+          input.commandHash,
+          JSON.stringify({ attempt_id: id }),
+          now,
+        ],
+      );
+      const result = await client.query<AttemptRow>(
+        'SELECT * FROM team_work_item_attempts WHERE id=$1',
+        [id],
+      );
+      await client.query('COMMIT');
+      return mapAttempt(result.rows![0]!);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      if ('release' in client && typeof client.release === 'function')
+        client.release();
+    }
   }
   public async requestCompletion(input: {
     teamRunId: string;
@@ -605,19 +739,45 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<{ requested: true }> {
-    const r = await this.database.query(
-      "UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now() WHERE id=$1 AND revision=$3 AND execution_mode='agentic_mve' AND " +
-        ownerSql('', 4),
-      [
-        input.teamRunId,
-        input.sourceRunId,
-        input.expectedRevision,
-        ...ownerValues(input.owner),
-      ],
-    );
-    if (!r.rowCount)
-      throw new Error('Agentic Team run fence or revision is stale.');
-    return { requested: true };
+    const client = this.database.connect
+      ? await this.database.connect()
+      : this.database;
+    try {
+      await client.query('BEGIN');
+      const receipt = await client.query<{ result_json: unknown }>(
+        'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+        [input.sourceRunId, input.commandHash],
+      );
+      if (receipt.rows?.[0]) {
+        await client.query('COMMIT');
+        return { requested: true };
+      }
+      const r = await client.query(
+        "UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now() WHERE id=$1 AND revision=$3 AND execution_mode='agentic_mve' AND " +
+          ownerSql('', 4) +
+          ' RETURNING id',
+        [
+          input.teamRunId,
+          input.sourceRunId,
+          input.expectedRevision,
+          ...ownerValues(input.owner),
+        ],
+      );
+      if (!r.rows?.[0])
+        throw new Error('Agentic Team run fence or revision is stale.');
+      await client.query(
+        `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_completion_request','{"requested":true}'::jsonb,now())`,
+        [input.sourceRunId, input.commandHash],
+      );
+      await client.query('COMMIT');
+      return { requested: true };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      if ('release' in client && typeof client.release === 'function')
+        client.release();
+    }
   }
   public async advanceAgenticLead(input: {
     teamRunId: string;

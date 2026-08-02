@@ -146,6 +146,9 @@ export class AgenticTeamExecutor {
           finalText: input.run.result?.text ?? 'Team completed.',
           owner,
           updatedAt: this.now().toISOString(),
+          completionIntent: 'agentic',
+          executionMode: 'agentic_mve',
+          leadRunId: input.run.id,
         });
         return;
       }

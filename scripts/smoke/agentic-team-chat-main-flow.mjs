@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rm, rename, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  rm,
+  rename,
+  writeFile,
+  readdir,
+  readFile,
+} from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register as registerTsx } from 'tsx/esm/api';
@@ -639,8 +646,14 @@ async function focusedSnapshot(taskId) {
   const teamRun = team.rows[0] ?? null;
   const tasks = await db.query(
     `SELECT t.id,t.team_task_kind,t.logical_step_key,t.status AS task_status,
-            r.id AS run_id,r.status AS run_status,r.lease_expires_at
+            t.team_member_run_id,r.id AS run_id,r.status AS run_status,r.lease_expires_at,
+            rs.id AS runtime_session_id,rs.provider_agent_id,
+            av.canonical_package->'spec'->'tools' AS agent_tool_refs,
+            sls.tool_refs AS session_tool_refs
        FROM tasks t LEFT JOIN runs r ON r.task_id=t.id
+       LEFT JOIN runtime_sessions rs ON rs.task_id=t.id
+       LEFT JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
+       LEFT JOIN agent_versions av ON av.id::text=t.invokable_version_id
       WHERE t.root_task_id=$1 ORDER BY t.created_at`,
     [taskId],
   );
@@ -660,6 +673,17 @@ async function focusedSnapshot(taskId) {
         [teamRun.id],
       )
     : { rows: [] };
+  const leadRun = tasks.rows.find(
+    (row) => row.team_task_kind === 'lead_turn' && row.run_id,
+  );
+  const events = leadRun
+    ? await db.query(
+        `SELECT type,created_at,payload
+           FROM run_events WHERE run_id=$1 ORDER BY sequence DESC LIMIT 10`,
+        [leadRun.run_id],
+      )
+    : { rows: [] };
+  const grantRefs = await readGrantRefs();
   const safeTasks = tasks.rows.map((row) => ({
     task_id: row.id,
     kind: row.team_task_kind,
@@ -667,6 +691,16 @@ async function focusedSnapshot(taskId) {
     task_status: row.task_status,
     run_id: row.run_id,
     run_status: row.run_status,
+    member_id: row.team_member_run_id,
+    runtime_session: row.runtime_session_id
+      ? {
+          exists: true,
+          id: row.runtime_session_id,
+          provider_agent_id: row.provider_agent_id,
+        }
+      : { exists: false },
+    effective_agent_tool_refs: safeToolRefs(row.agent_tool_refs),
+    session_tool_refs: safeToolRefs(row.session_tool_refs),
     lease_expired:
       row.lease_expires_at !== null &&
       Date.parse(row.lease_expires_at) < Date.now(),
@@ -684,6 +718,18 @@ async function focusedSnapshot(taskId) {
       : null,
     tasks_runs: safeTasks,
     receipt_names: receipts.rows.map((row) => row.command_name),
+    lead_run: leadRun
+      ? {
+          status: leadRun.run_status,
+          last_10_events: events.rows.reverse().map((row) => ({
+            type: row.type,
+            tool: safeString(row.payload?.tool_name),
+            status: safeString(row.payload?.status),
+            at: row.created_at,
+          })),
+        }
+      : null,
+    mcp_grant_refs: grantRefs,
     attempts: attempts.rows.map((row) => ({
       attempt_no: Number(row.attempt_no),
       status: row.status,
@@ -699,6 +745,45 @@ async function focusedSnapshot(taskId) {
         ),
     ),
   };
+}
+
+function safeToolRefs(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) =>
+      typeof entry === 'string'
+        ? entry
+        : typeof entry?.ref === 'string'
+          ? entry.ref
+          : null,
+    )
+    .filter(Boolean);
+}
+
+function safeString(value) {
+  return typeof value === 'string' ? value : null;
+}
+
+async function readGrantRefs() {
+  const refs = [];
+  try {
+    const cells = await readdir(cellRoot, { withFileTypes: true });
+    for (const cell of cells.filter((entry) => entry.isDirectory())) {
+      const grants = join(cellRoot, cell.name, 'skill-receipts', 'grants');
+      for (const file of await readdir(grants).catch(() => [])) {
+        if (!file.endsWith('.json')) continue;
+        const receipt = JSON.parse(await readFile(join(grants, file), 'utf8'));
+        refs.push({
+          grant_id:
+            typeof receipt.grantId === 'string' ? receipt.grantId : null,
+          allowed_tools: safeToolRefs(receipt.allowedTools),
+        });
+      }
+    }
+  } catch {
+    return [];
+  }
+  return refs;
 }
 
 function focusedStageSatisfied(requestedStage, snapshot) {

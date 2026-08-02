@@ -88,6 +88,8 @@ if (!STAGES.has(stage))
 const stageTimeoutMs = Number(
   process.env.AGENTIC_TEAM_SMOKE_STAGE_TIMEOUT_MS ?? 90_000,
 );
+if (stage !== 'full')
+  process.env.PASEO_EXECUTION_TIMEOUT_MS ??= String(stageTimeoutMs);
 class FocusedStageComplete extends Error {}
 const retainFile = process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE
   ? resolve(process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE)

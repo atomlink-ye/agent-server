@@ -1,0 +1,17 @@
+apiVersion: agent-server/v1alpha1
+kind: ManagedTeam
+metadata:
+  name: self-learning-market-research-team
+spec:
+  environmentVersionId: environment://synthetic-paseo
+  lead:
+    name: lead
+    agentVersionId: agent://lead
+  roster:
+    - name: opportunity-analyst
+      agentVersionId: agent://opportunity-analyst
+    - name: analog-risk-reviewer
+      agentVersionId: agent://analog-risk-reviewer
+  coordination:
+    mode: collaborative
+    taskAssignment: lead_or_self_claim

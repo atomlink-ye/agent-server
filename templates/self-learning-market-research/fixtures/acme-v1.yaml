@@ -1,0 +1,20 @@
+fixture_ref: fixture://self-learning-market-research/acme-v1
+symbol: ACME
+data_as_of: '2026-07-31'
+synthetic: true
+label: synthetic demo only
+snapshot:
+  last_price: 101.25
+  volume_index: 1.18
+events:
+  - id: acme-event-01
+    kind: product-update
+    date: '2026-07-29'
+    relevance: moderate
+analogs:
+  - id: analog-alpha
+    similarity: bounded-medium
+    outcome_band: mixed
+risk_notes:
+  - Synthetic values do not represent market data.
+  - No precise backtest or investment recommendation is provided.

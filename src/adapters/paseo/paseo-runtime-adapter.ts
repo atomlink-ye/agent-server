@@ -286,6 +286,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status: string;
         label: string;
         summary: string;
+        readonly toolName?: string | undefined;
         readonly detailKind?:
           'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
         readonly detailText?: string;
@@ -301,6 +302,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         readonly status: 'completed' | 'failed' | 'cancelled';
         readonly label: string;
         readonly summary: string;
+        readonly toolName: string;
         readonly quality: number;
       }
     >();
@@ -394,6 +396,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       status: 'running' | 'completed' | 'failed' | 'cancelled',
       label: string,
       summary: string,
+      toolName?: string,
       parentActivityId?: string,
       quality = 0,
       detailText?: string,
@@ -423,7 +426,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         if (
           deferred?.category === category &&
           deferred?.label === label &&
-          deferred?.summary === summary
+          deferred?.summary === summary &&
+          deferred?.toolName === (toolName ?? previous?.toolName ?? label)
         )
           return;
         if (deferred && quality <= deferred.quality) return;
@@ -432,6 +436,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           status,
           label,
           summary,
+          toolName: toolName ?? previous?.toolName ?? label,
           quality,
         });
         return;
@@ -470,6 +475,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status,
         label: bestLabel,
         summary: bestSummary,
+        ...((toolName ?? previous?.toolName)
+          ? { toolName: toolName ?? previous?.toolName }
+          : {}),
         ...runtimeToolDetail(category, detailText, exitCode),
         ...(bestDetailText !== undefined ? { detailText: bestDetailText } : {}),
         ...(exitCode !== undefined
@@ -487,6 +495,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status,
         label: bestLabel,
         summary: bestSummary,
+        ...((toolName ?? previous?.toolName)
+          ? { toolName: toolName ?? previous?.toolName }
+          : {}),
         ...(bestDetailText !== undefined ? { detailText: bestDetailText } : {}),
         ...(exitCode !== undefined
           ? { exitCode }
@@ -511,6 +522,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           current && current.quality >= state.quality
             ? current.summary
             : state.summary,
+          current?.toolName ?? state.toolName,
           undefined,
           quality,
         );
@@ -586,6 +598,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           'running',
           presentation.label,
           presentation.summary,
+          call.name,
           undefined,
           presentation.quality,
           presentation.detailText,
@@ -597,6 +610,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status,
         presentation.label,
         presentation.summary,
+        call.name,
         parentActivityId,
         presentation.quality,
         presentation.detailText,
@@ -777,6 +791,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           safeSingleLine(`Sub-agent task: ${descriptorLabel}`, 80, false) ??
             parentState.label,
           parentState.summary,
+          parentState.toolName,
           undefined,
           2,
         );
@@ -988,6 +1003,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status,
         parentState.label,
         parentState.summary,
+        parentState.toolName,
         undefined,
         parentState.quality,
       );

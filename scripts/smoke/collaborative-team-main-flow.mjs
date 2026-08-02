@@ -139,7 +139,7 @@ try {
 
   // ---- Import and publish 3 Agents ----
   const agents = [];
-  for (const name of ['lead', 'researcher', 'critic']) {
+  for (const name of ['lead', 'analyst', 'verifier']) {
     const imported = await request('/api/v1/agents:import', {
       method: 'POST',
       body: { source: agentYaml(name) },
@@ -171,14 +171,14 @@ try {
 
   // ---- Import and publish collaborative Team via API ----
   const leadAgent = agents.find((a) => a.name === 'lead');
-  const researcherAgent = agents.find((a) => a.name === 'researcher');
-  const criticAgent = agents.find((a) => a.name === 'critic');
-  if (!leadAgent || !researcherAgent || !criticAgent)
+  const analystAgent = agents.find((a) => a.name === 'analyst');
+  const verifierAgent = agents.find((a) => a.name === 'verifier');
+  if (!leadAgent || !analystAgent || !verifierAgent)
     throw new Error('missing_agent_versions');
   const teamPackage = teamYaml(
     leadAgent.versionId,
-    researcherAgent.versionId,
-    criticAgent.versionId,
+    analystAgent.versionId,
+    verifierAgent.versionId,
     env.version.id,
   );
   const teamImportKey = randomUUID();
@@ -220,7 +220,7 @@ try {
     body: {
       invokable: { kind: 'team', version_id: teamPublished.id },
       input: {
-        text: 'Lead: create two research tasks for the researcher and critic, then synthesize their results.',
+        text: 'Lead: create two research tasks for the analyst and verifier, then synthesize their results.',
       },
     },
     idempotencyKey: randomUUID(),
@@ -271,6 +271,14 @@ try {
   if (leadMembers.length !== 1)
     throw new Error(`expected_single_lead_member: ${leadMembers.length}`);
   const [leadMember] = leadMembers;
+  const memberNames = members
+    .filter((m) => m.role === 'member')
+    .map((m) => m.name);
+  if (
+    new Set(memberNames).size !== 2 ||
+    memberNames.some((name) => ['researcher', 'critic'].includes(name))
+  )
+    throw new Error(`unexpected_member_names: ${JSON.stringify(memberNames)}`);
 
   // ---- Verify WorkItems ----
   const workItems = await request(
@@ -290,6 +298,35 @@ try {
   )
     throw new Error(
       `work_items_not_completed: total=${workItems.length} lead=${leadWorkItems.length} completed=${completedItems.length}`,
+    );
+
+  // Every member Task and its latest/current Run must be terminal at root success.
+  const memberTaskRows = await db.query(
+    `SELECT m.name, m.id AS member_id, t.id AS task_id, t.status AS task_status,
+            r.id AS run_id, r.status AS run_status
+       FROM team_member_runs m
+       LEFT JOIN tasks t ON t.root_task_id=$1
+         AND t.logical_step_key = 'member:' || $2::text || ':' || m.id::text || ':member_work'
+       LEFT JOIN LATERAL (
+         SELECT id, status FROM runs WHERE task_id=t.id ORDER BY attempt DESC LIMIT 1
+       ) r ON true
+      WHERE m.team_run_id=$2::uuid AND m.role='member'
+      ORDER BY m.name`,
+    [rootTaskId, teamRunResult.id],
+  );
+  console.log(`member_task_run_states: ${JSON.stringify(memberTaskRows.rows)}`);
+  if (
+    memberTaskRows.rows.length !== 2 ||
+    memberTaskRows.rows.some(
+      (row) =>
+        !['completed', 'failed', 'cancelled'].includes(row.task_status) ||
+        !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
+          row.run_status,
+        ),
+    )
+  )
+    throw new Error(
+      `member_task_or_run_not_terminal: ${JSON.stringify(memberTaskRows.rows)}`,
     );
 
   // ---- Verify runtime sessions (via DB inspection) ----
@@ -348,22 +385,34 @@ try {
   );
   if (latestStart >= earliestEnd)
     throw new Error('member_execution_intervals_do_not_overlap');
-  const leadBindings = await db.query(
-    `SELECT tm.runtime_session_id, b.provider_agent_id
-       FROM team_member_runs tm
-       JOIN tasks t ON t.root_task_id=$1 AND t.logical_step_key LIKE 'lead:%'
+  const leadExecutions = await db.query(
+    `SELECT t.logical_step_key, rs.scope_kind, rs.provider_agent_id
+       FROM tasks t
        JOIN runs r ON r.task_id=t.id
-       JOIN runtime_session_bindings b ON b.run_id=r.id
-      WHERE tm.team_run_id=$2 AND tm.role='lead'
-      ORDER BY t.logical_step_key`,
-    [rootTaskId, teamRunResult.id],
+       LEFT JOIN runtime_sessions rs ON rs.task_id=t.id
+      WHERE t.root_task_id=$1 AND t.logical_step_key LIKE 'lead:%'
+      ORDER BY t.logical_step_key, r.attempt DESC`,
+    [rootTaskId],
+  );
+  const kickoffExecution = leadExecutions.rows.find((r) =>
+    r.logical_step_key.endsWith(':kickoff'),
+  );
+  const finalizationExecution = leadExecutions.rows.find((r) =>
+    r.logical_step_key.endsWith(':finalize'),
   );
   if (
-    leadBindings.rows.length < 2 ||
-    new Set(leadBindings.rows.map((r) => r.runtime_session_id)).size !== 1 ||
-    new Set(leadBindings.rows.map((r) => r.provider_agent_id)).size !== 1
+    !kickoffExecution ||
+    !finalizationExecution ||
+    kickoffExecution.scope_kind !== 'team_member' ||
+    finalizationExecution.scope_kind !== 'task' ||
+    !kickoffExecution.provider_agent_id ||
+    !finalizationExecution.provider_agent_id ||
+    kickoffExecution.provider_agent_id ===
+      finalizationExecution.provider_agent_id
   )
-    throw new Error('lead_runtime_session_provider_not_reused');
+    throw new Error(
+      `lead_runtime_scope_provider_not_isolated: ${JSON.stringify(leadExecutions.rows)}`,
+    );
   const rootEvents = await db.query(
     `SELECT type,payload FROM run_events WHERE run_id=$1 AND type IN ('output','succeeded')`,
     [teamRunResult.root_run_id],
@@ -373,6 +422,20 @@ try {
     !rootEvents.rows.some((r) => r.type === 'succeeded')
   )
     throw new Error('root_completion_events_missing');
+  const finalizationRun = await db.query(
+    `SELECT r.status, r.result
+       FROM runs r
+       JOIN tasks t ON t.id=r.task_id
+      WHERE t.root_task_id=$1 AND t.logical_step_key LIKE 'lead:%:finalize'
+      ORDER BY r.attempt DESC LIMIT 1`,
+    [rootTaskId],
+  );
+  const finalText = finalizationRun.rows[0]?.result?.text?.trim();
+  console.log(
+    `lead_finalization_run: ${JSON.stringify({ status: finalizationRun.rows[0]?.status, has_result_text: Boolean(finalText) })}`,
+  );
+  if (finalizationRun.rows[0]?.status !== 'succeeded' || !finalText)
+    throw new Error('lead_finalization_plain_text_missing');
   await request(`/api/v1/team-runs/${teamRunResult.id}`, {
     method: 'GET',
     status: 404,
@@ -512,10 +575,10 @@ async function pollCollaborativeChildren(rootTaskId) {
 
 function agentYaml(name) {
   const displayName =
-    name === 'lead' ? 'Lead' : name === 'researcher' ? 'Researcher' : 'Critic';
+    name === 'lead' ? 'Lead' : name === 'analyst' ? 'Analyst' : 'Verifier';
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: collab-smoke-${name}\nspec:\n  description: Collaborative team smoke ${displayName}\n  instructions: You are the ${displayName} in a collaborative team. ${
     name === 'lead'
-      ? 'Create two distinct research work items for the Researcher and Critic using team_task_create, then wait. After they complete, read their results via team_task_list and produce a final synthesis via team_complete.'
+      ? 'Create two distinct research work items for the Analyst and Verifier using team_task_create, then wait. During finalization, return a plain-text synthesis of the completed work; do not call team_complete.'
       : `When assigned a work item, claim it with team_task_claim, complete the research, and update it as completed with team_task_update. ONLY do ONE work item.`
   }\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n    - ref: agent-server/team-task-create\n      kind: tool\n    - ref: agent-server/team-task-list\n      kind: tool\n    - ref: agent-server/team-task-claim\n      kind: tool\n    - ref: agent-server/team-task-update\n      kind: tool\n    - ref: agent-server/team-members-list\n      kind: tool\n    - ref: agent-server/team-complete\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
@@ -524,6 +587,6 @@ function environmentYaml() {
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: collab-team-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
 
-function teamYaml(leadAgentId, researcherAgentId, criticAgentId, envVersionId) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: collab-research-team\nspec:\n  environmentVersionId: ${envVersionId}\n  lead:\n    name: lead\n    agentVersionId: ${leadAgentId}\n  roster:\n    - name: researcher\n      agentVersionId: ${researcherAgentId}\n    - name: critic\n      agentVersionId: ${criticAgentId}\n  coordination:\n    mode: collaborative\n    taskAssignment: lead_or_self_claim\n`;
+function teamYaml(leadAgentId, analystAgentId, verifierAgentId, envVersionId) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: collab-research-team\nspec:\n  environmentVersionId: ${envVersionId}\n  lead:\n    name: lead\n    agentVersionId: ${leadAgentId}\n  roster:\n    - name: analyst\n      agentVersionId: ${analystAgentId}\n    - name: verifier\n      agentVersionId: ${verifierAgentId}\n  coordination:\n    mode: collaborative\n    taskAssignment: lead_or_self_claim\n`;
 }

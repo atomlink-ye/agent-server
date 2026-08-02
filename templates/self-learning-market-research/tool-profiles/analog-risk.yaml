@@ -1,0 +1,14 @@
+apiVersion: agent-server/v1alpha1
+kind: LocalToolProfile
+metadata:
+  name: analog-risk
+spec:
+  tools:
+    - ref: agent-server/team-task-list
+      kind: tool
+    - ref: agent-server/team-task-claim
+      kind: tool
+    - ref: agent-server/team-task-update
+      kind: tool
+    - ref: agent-server/synthetic-analog-summary
+      kind: tool

@@ -23,11 +23,21 @@ erDiagram
 
 Agent Version and Team Version implement one immutable Invokable Version reference. Every root or child node invocation is a Task. The Task records tenant, root/parent genealogy, stable node path/logical step, spawn generation, depth, immutable Invokable version, input and completion snapshots, ingress scope/idempotency, and aggregate status.
 
-A Run is one attempt for that Task. Waiting for a child or approval resumes the same Run through a new Activation; retry after a terminal attempt creates a new Run. There is no persistent `NodeInvocation`, `TeamRun`, or provider session that competes with Task as identity.
+A Run is one attempt for that Task. Waiting for a child or approval resumes the same Run through a new Activation; retry after a terminal attempt creates a new Run. There is no persistent `NodeInvocation` or provider session that competes with Task as identity.
+
+The Collaborative Team MVE adds a durable TeamRun coordination record with
+MemberRuns and WorkItems; these records do not replace Task/Run identity.
+Each member Task has an independent RuntimeSession; lead finalization uses a
+fresh task-scoped RuntimeSession/provider Agent while the lead member's
+canonical session remains the kickoff team_member session. Exactly one completed,
+member-owned WorkItem per roster member, completed member Tasks, and succeeded
+latest Runs are required before bounded lead finalization. The older
+sequential Team and opt-in DAG records remain transitional compatibility
+paths.
 
 ## Session boundaries
 
-Product Session is optional conversation continuity and a root-turn lane. Task can exist without it for child, schedule, or event work. Runtime Session is only a leaf provider context and is bound by product session/node scope, Invokable version, principal, Workspace, credential policy, and reset generation. Team and sibling nodes do not share it.
+Product Session is optional conversation continuity and a root-turn lane. Task can exist without it for child, schedule, or event work. Runtime Session is only a leaf provider context and is bound by product session/node scope, Invokable version, principal, Workspace, credential policy, and reset generation. Team members do not share RuntimeSessions; lead finalization is an independent task-scoped execution rather than reuse of the lead member binding.
 
 ## Artifact model
 

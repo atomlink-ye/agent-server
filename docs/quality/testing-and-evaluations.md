@@ -58,6 +58,23 @@ application/unit evidence, not by HTTP contract tests.
 
 External free models, network, and rate limits are not stable enough for a mandatory PR gate. A failure must distinguish installation, daemon health, model discovery, Agent creation, generation, contract, and cleanup.
 
+### Real smoke debugging order
+
+For a new real smoke path, debug in one reusable environment with short
+timeouts before running the full smoke. Reuse the same project, Project Lock,
+database, and root-task queries throughout the loop:
+
+1. manually or stepwise verify setup/apply;
+2. verify Lead kickoff;
+3. verify member creation and completion;
+4. verify Lead finalization and root completion;
+5. run a short `watch` to verify observation and convergence.
+
+Only after every stage passes should the overall smoke run once as the phase
+acceptance check. Do not repeatedly pay for an opaque long-running end-to-end
+script while debugging a single stage. Query existing state and reuse the
+existing root task rather than causing duplicate model calls.
+
 ## Future durability and security tests
 
 - State-machine model/property tests for broader Task, Run, Team graph, approval, cancel, and retry behavior.

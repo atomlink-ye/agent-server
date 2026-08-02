@@ -15,7 +15,10 @@ import type {
   TeamExecutionRepository,
   OwnerScope,
 } from '../ports/team-execution-repository.js';
-import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
+import {
+  decodeRootTaskRunRequestSnapshotRef,
+  encodeRootTaskRunRequestSnapshotRef,
+} from '../tasks/root-task-input.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 
 export class CollaborativeTeamExecutor {
@@ -37,6 +40,11 @@ export class CollaborativeTeamExecutor {
     const spec = teamVersion.collaborationSpec;
     if (!spec)
       throw new Error('Collaborative team version has no collaboration spec.');
+    const rootInput = rootTaskInput(rootTask.inputSnapshotRef);
+    if (rootInput === null)
+      throw new Error(
+        'Team root task input is unavailable or outside the allowed bounds.',
+      );
     const owner = ownerOf(rootTask);
     const teamRun = createTeamRun({
       ...owner,
@@ -69,10 +77,10 @@ export class CollaborativeTeamExecutor {
       rootClaim.run,
       lead,
       `lead:${teamRun.id}:${lead.id}:kickoff`,
-      `team_run_id: ${teamRun.id}\n\nYou are the lead. Create exactly two work items with team_task_create for the researcher and critic. Then stop without finalizing; teammates will run next.\n\nOriginal request: ${rootClaim.run.prompt}`,
+      `team_run_id: ${teamRun.id}\n\nYou are ${spec.lead.name}, the lead. Create exactly ${spec.roster.length} work items with team_task_create, one for each teammate: ${spec.roster.map((member) => member.name).join(', ')}. Then stop without finalizing; teammates will run next.\n\nOriginal request: ${rootInput}`,
       lead.agentVersionId,
     );
-    const leadRun = createRun(rootClaim.run.prompt, { now: this.now });
+    const leadRun = createRun(rootInput, { now: this.now });
     let waitingRootRun: Run | null = null;
     await this.teamExecutions.createTeamRun(teamRun);
     await this.teamExecutions.createMemberRun(
@@ -173,27 +181,53 @@ export class CollaborativeTeamExecutor {
       teamRun.id,
       ownerOfTeam(teamRun),
     );
-    // Advance when all work items are completed, OR when all member tasks have
-    // reached a terminal state (even if some work items were left pending due
-    // to member failures).
-    if (items.some((i) => i.status !== 'completed')) {
-      const childTasks = await tasks.findByRootTaskIdForOwner(
-        teamRun.rootTaskId,
-        ownerOf(task),
-      );
-      const memberTasks = childTasks.filter((r) =>
-        r.task.logicalStepKey?.includes(':member_work'),
-      );
-      if (memberTasks.length === 0) return;
-      if (
-        memberTasks.some(
-          (r) => r.task.status === 'queued' || r.task.status === 'active',
-        )
+    const members = (
+      await execution.findMembersByTeamRunId(teamRun.id, ownerOfTeam(teamRun))
+    ).filter((member) => member.role === 'member');
+    if (
+      members.length === 0 ||
+      items.length !== members.length ||
+      items.some((item) => item.status !== 'completed')
+    )
+      return;
+    const memberIds = new Set(members.map((member) => member.id));
+    const ownedItemMemberIds = items.map((item) => item.ownerMemberId);
+    if (
+      ownedItemMemberIds.some(
+        (memberId) => memberId === null || !memberIds.has(memberId),
+      ) ||
+      new Set(ownedItemMemberIds).size !== members.length
+    )
+      return;
+    const childTasks = await tasks.findByRootTaskIdForOwner(
+      teamRun.rootTaskId,
+      ownerOf(task),
+    );
+    const memberTaskRecords = childTasks.filter((record) =>
+      record.task.logicalStepKey?.startsWith(`member:${teamRun.id}:`),
+    );
+    if (
+      memberTaskRecords.length !== members.length ||
+      memberTaskRecords.some(
+        (record) =>
+          record.task.status !== 'completed' ||
+          !record.latestRun ||
+          record.latestRun.status !== 'succeeded' ||
+          !members.some(
+            (member) =>
+              record.task.logicalStepKey ===
+              `member:${teamRun.id}:${member.id}:member_work`,
+          ),
       )
-        return;
-    }
+    )
+      return;
     const root = await tasks.findById(teamRun.rootTaskId);
     if (!root) throw new Error('Team root task not found.');
+    const rootInput = rootTaskInput(root.inputSnapshotRef);
+    if (rootInput === null)
+      throw new Error(
+        'Team root task input is unavailable or outside the allowed bounds.',
+      );
     const lead = (
       await execution.findMembersByTeamRunId(teamRun.id, ownerOfTeam(teamRun))
     ).find((m) => m.role === 'lead');
@@ -203,12 +237,15 @@ export class CollaborativeTeamExecutor {
       completed,
       lead,
       `lead:${teamRun.id}:${lead.id}:finalize`,
-      `team_run_id: ${teamRun.id}\n\nUse team_task_list to review completed teammate work, then call team_complete with a concise final_text. Do not inspect repository files.`,
+      this.finalizationPrompt(items, rootInput),
       lead.agentVersionId,
     );
-    const run = createRun('Review teammate work and call team_complete.', {
-      now: this.now,
-    });
+    const run = createRun(
+      'Review completed teammate work and return the final answer.',
+      {
+        now: this.now,
+      },
+    );
     await admission.withTransaction(async (tx) => {
       if (!tx.teamExecutions)
         throw new Error(
@@ -226,6 +263,68 @@ export class CollaborativeTeamExecutor {
       await tx.enqueueRunDispatch(run.id, run.createdAt);
     });
   }
+
+  public async completeLeadFinalization(input: {
+    readonly run: Run;
+    readonly task: Task;
+    readonly execution: TeamExecutionRepository;
+  }): Promise<void> {
+    const finalText = input.run.result?.text.trim();
+    if (!finalText)
+      throw new Error(
+        'Lead finalization produced no result text; team completion is blocked.',
+      );
+    const teamRun = await input.execution.findTeamRunByRootTaskId(
+      input.task.rootTaskId,
+      ownerOf(input.task),
+    );
+    if (!teamRun || teamRun.phase !== 'lead_finalize') return;
+    await input.execution.completeTeamRunAtomically({
+      teamRunId: teamRun.id,
+      rootRunId: teamRun.rootRunId,
+      rootTaskId: teamRun.rootTaskId,
+      finalText,
+      owner: ownerOfTeam(teamRun),
+      updatedAt: input.run.updatedAt,
+    });
+  }
+
+  private finalizationPrompt(
+    items: ReadonlyArray<{
+      subject: string;
+      description: string | null;
+      completionSummary: string | null;
+    }>,
+    rootInput: string,
+  ): string {
+    if (
+      items.length === 0 ||
+      items.length > CollaborativeTeamExecutor.MAX_FINALIZATION_ITEMS
+    )
+      throw new Error('Team finalization input is outside the allowed bounds.');
+    for (const item of items) {
+      if (
+        item.subject.length === 0 ||
+        item.subject.length > CollaborativeTeamExecutor.MAX_SUBJECT_CHARS ||
+        item.completionSummary === null ||
+        item.completionSummary.length === 0
+      )
+        throw new Error(
+          'Team finalization input is outside the allowed bounds.',
+        );
+    }
+    const completedWork = items
+      .map(
+        (item) =>
+          `- Subject: ${safeTeamText(item.subject)}\n  Description/context: ${safeTeamText(item.description ?? '(none)')}\n  Completion summary: ${safeTeamText(item.completionSummary!)}`,
+      )
+      .join('\n');
+    const prompt = `Return the final answer as plain text. Do not call team_task_list or team_complete, and do not inspect repository files. Use the original request and synthesize the completed teammate work below.\n\nOriginal request: ${safeTeamText(rootInput)}\n\n${completedWork}`;
+    return prompt;
+  }
+
+  private static readonly MAX_FINALIZATION_ITEMS = 8;
+  private static readonly MAX_SUBJECT_CHARS = 256;
 
   private child(
     parent: Task,
@@ -263,6 +362,33 @@ function ownerOf(task: Task): OwnerScope {
     principalId: task.principalId,
   };
 }
+
+const MAX_ROOT_INPUT_BYTES = 64 * 1024;
+
+function rootTaskInput(snapshotRef: string): string | null {
+  try {
+    const prompt = decodeRootTaskRunRequestSnapshotRef(snapshotRef).prompt;
+    if (!prompt || Buffer.byteLength(prompt, 'utf8') > MAX_ROOT_INPUT_BYTES)
+      return null;
+    return prompt;
+  } catch {
+    return null;
+  }
+}
+
+function safeTeamText(value: string): string {
+  return value
+    .replace(/bearer\s+[^\s]+/gi, 'bearer [redacted]')
+    .replace(
+      /\b(?:credential|token|password|secret|api[-_ ]?key)\s*[:=]\s*[^\s,;]+/gi,
+      '[redacted credential]',
+    )
+    .replace(
+      /(?:^|[\s"'=])(?:~\/|\/|[A-Za-z]:\\)[^\s"'`]+/g,
+      '$1[redacted path]',
+    );
+}
+
 function ownerOfTeam(team: {
   tenantId: string;
   workspaceId: string;

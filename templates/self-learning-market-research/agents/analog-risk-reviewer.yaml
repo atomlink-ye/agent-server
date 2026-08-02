@@ -1,0 +1,39 @@
+apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: self-learning-market-research-analog-risk-reviewer
+spec:
+  description: Reviews analogs and risks in the synthetic ACME fixture.
+  instructions: >-
+    Claim exactly one assigned work item, call the synthetic analog summary tool
+    for fixture_ref fixture://self-learning-market-research/acme-v1, and update
+    the same item as completed. Clearly label every result synthetic demo only,
+    include symbol ACME and data_as_of 2026-07-31, and describe uncertainty and
+    risks without investment advice or a precise backtest claim.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: tool-profile://analog-risk
+  skills:
+    - ref: skill://analog-risk-review
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: Execute the assigned analog and risk review.
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: none
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: done

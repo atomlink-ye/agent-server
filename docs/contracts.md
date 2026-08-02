@@ -8,6 +8,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Memory Store / Memory API](contracts/memory-api.md) documents the canonical API-first Store, stable Memory, immutable Version, and built-in Skill boundary.
 - [Managed Workspace memory snapshots](contracts/managed-workspace-memory-api.md) documents Product Workspace-owned immutable entries, verified local projections, snapshot reads, and rebuild behavior.
 - [Managed Environment API](contracts/managed-environment-api.md) documents the fixed authenticated Environment package, ProductSession pin, and internal RuntimeSession/Cell baseline.
+- [Self-learning Web API](contracts/self-learning-web-api.md) documents the fixed Project Lab BFF launch, bounded aggregate, root-bound review, safe errors, and local-only boundary.
 - [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public Phase B registry surface.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.

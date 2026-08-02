@@ -6,6 +6,16 @@ import { z } from 'zod';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
 import type { TeamToolHandler } from '../../application/teams/team-tools.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
+import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
+import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
+import type { LearningProposal } from '../../domain/learning/learning-proposal.js';
+import type { AccessContext } from '../../application/control-plane/access-context.js';
+import {
+  AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
+  AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
+  AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
+  AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
+} from '../../application/agents/built-in-skills.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
@@ -21,6 +31,15 @@ const memoryReadInput = {
   memory_store_id: UUID,
   path: z.string(),
 };
+const fixtureInput = { fixture_ref: z.string(), symbol: z.string() };
+const proposalInput = z
+  .object({
+    memory_store_id: UUID,
+    target_path: z.string(),
+    proposed_content: z.string(),
+    evidence_refs: z.array(z.string()),
+  })
+  .strict();
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 type McpSession = Readonly<{
   readonly server: McpServer;
@@ -32,6 +51,8 @@ export function createDirectMemoryMcpHandler(input: {
   readonly repository: MemoryApiRepository;
   readonly grants: RuntimeToolGrantService;
   readonly teamTools?: { handler: TeamToolHandler };
+  readonly createLearningProposal?: CreateLearningProposal;
+  readonly market?: SyntheticMarketAdapter;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
@@ -90,7 +111,7 @@ export function createDirectMemoryMcpHandler(input: {
         },
       });
     if (!existing) {
-      registerTools(server, grant, input.repository);
+      registerTools(server, grant, input.repository, input);
       if (
         input.teamTools &&
         grant.allowedTools.some((tool) =>
@@ -98,7 +119,7 @@ export function createDirectMemoryMcpHandler(input: {
         )
       ) {
         const actor = await input.teamTools.handler.actorForMemberRun(
-          grant.productSessionId,
+          grant.teamMemberRunId ?? grant.productSessionId,
           {
             tenantId: grant.tenantId,
             workspaceId: grant.workspaceId,
@@ -147,6 +168,11 @@ function registerTools(
   server: McpServer,
   grant: RuntimeToolGrant,
   repository: MemoryApiRepository,
+  input: {
+    readonly createLearningProposal?: CreateLearningProposal;
+    readonly teamTools?: { handler: TeamToolHandler };
+    readonly market?: SyntheticMarketAdapter;
+  },
 ): void {
   if (grant.allowedTools.includes(AGENT_SERVER_MEMORY_READ_TOOL_REF)) {
     server.registerTool(
@@ -167,6 +193,59 @@ function registerTools(
     );
     placeholder.remove();
   }
+  const market = input.market ?? new SyntheticMarketAdapter();
+  if (
+    grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF)
+  )
+    server.registerTool(
+      'synthetic_stock_snapshot',
+      {
+        description: 'Read the fixed synthetic ACME snapshot.',
+        inputSchema: fixtureInput,
+      },
+      (args) => safeSynthetic(() => market.stockSnapshot(args)),
+    );
+  if (grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
+    server.registerTool(
+      'synthetic_event_batch',
+      {
+        description: 'Read the fixed synthetic ACME event batch.',
+        inputSchema: fixtureInput,
+      },
+      (args) => safeSynthetic(() => market.eventBatch(args)),
+    );
+  if (
+    grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF)
+  )
+    server.registerTool(
+      'synthetic_analog_summary',
+      {
+        description: 'Read the fixed synthetic ACME analog summary.',
+        inputSchema: fixtureInput,
+      },
+      (args) => safeSynthetic(() => market.analogSummary(args)),
+    );
+  if (
+    grant.allowedTools.includes(
+      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
+    ) &&
+    input.createLearningProposal
+  )
+    server.registerTool(
+      'learning_proposal_create',
+      {
+        description: 'Create a human-reviewed learning proposal.',
+        inputSchema: proposalInput.shape,
+      },
+      (args) =>
+        createProposal(
+          args,
+          grant,
+          repository,
+          input.createLearningProposal!,
+          input.teamTools,
+        ),
+    );
 }
 
 async function readMemory(
@@ -198,10 +277,120 @@ async function readMemory(
   const memory = memories?.find((candidate) => candidate.path === path);
   if (!memory) return notFound();
   const result = {
+    memory_id: memory.id,
+    memory_version_id: memory.current.id,
+    version: memory.current.version,
     path: memory.path,
     content_sha256: memory.current.contentSha256,
     content: memory.current.content,
   };
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+    structuredContent: result,
+  };
+}
+
+function safeSynthetic<T>(operation: () => T) {
+  try {
+    const value = operation();
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+      structuredContent: value as Record<string, unknown>,
+    };
+  } catch {
+    return invalidRequest();
+  }
+}
+
+async function createProposal(
+  args: {
+    memory_store_id: string;
+    target_path: string;
+    proposed_content: string;
+    evidence_refs: string[];
+  },
+  grant: RuntimeToolGrant,
+  repository: MemoryApiRepository,
+  create: CreateLearningProposal,
+  teamTools?: { handler: TeamToolHandler },
+) {
+  if (!grant.taskId || !grant.runId || !grant.teamMemberRunId || !teamTools)
+    return notFound();
+  const owner = {
+    tenantId: grant.tenantId,
+    workspaceId: grant.workspaceId,
+    principalType: grant.principalType,
+    principalId: grant.principalId,
+  };
+  try {
+    const actor = await teamTools.handler.actorForMemberRun(
+      grant.teamMemberRunId,
+      owner,
+    );
+    if (!actor) return notFound();
+    const store = await repository.getStore(args.memory_store_id, owner);
+    if (!store || store.owner.workspaceId !== grant.workspaceId)
+      return notFound();
+    const memories = await repository.listMemories(args.memory_store_id, owner);
+    const memory = memories?.find(
+      (candidate) => candidate.path === normalizeMemoryPath(args.target_path),
+    );
+    if (!memory) return notFound();
+    const proposal = await create.execute({
+      sourceTeamRunId: actor.teamRunId,
+      sourceTaskId: grant.taskId,
+      sourceRunId: grant.runId,
+      targetMemoryStoreId: args.memory_store_id,
+      targetMemoryId: memory.id,
+      targetPath: memory.path,
+      baseContentSha256: memory.current.contentSha256,
+      proposedContent: args.proposed_content,
+      evidenceRefs: args.evidence_refs,
+      accessContext: {
+        ...owner,
+        policySnapshotVersion: 'runtime',
+      } as AccessContext,
+    });
+    return proposal ? success(toMcpProposalProjection(proposal)) : notFound();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /invalid|normalized|exceeds|evidence/i.test(error.message)
+    )
+      return invalidRequest();
+    return internalError();
+  }
+}
+
+function toMcpProposalProjection(proposal: LearningProposal) {
+  return {
+    learning_proposal_id: proposal.id,
+    status: proposal.status,
+    source: {
+      team_run_id: proposal.sourceTeamRunId,
+      task_id: proposal.sourceTaskId,
+      run_id: proposal.sourceRunId,
+    },
+    target: {
+      memory_store_id: proposal.targetMemoryStoreId,
+      memory_id: proposal.targetMemoryId,
+      path: proposal.targetPath,
+      base_content_sha256: proposal.baseContentSha256,
+    },
+    evidence_refs: proposal.evidenceRefs,
+    created_at: proposal.createdAt,
+  };
+}
+
+function success(value: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+    structuredContent: value as Record<string, unknown>,
+  };
+}
+
+function invalidRequest() {
+  const result = { error: 'invalid_request' as const };
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result) }],
     structuredContent: result,

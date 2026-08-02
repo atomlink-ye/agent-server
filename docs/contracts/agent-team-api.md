@@ -1,6 +1,6 @@
 # Agent and Team registry contract
 
-This phase implements durable Agent and Team registry records in PostgreSQL, but it does **not** expose public `/api/v1/agents` or `/api/v1/teams` HTTP routes yet. The current contract is the persisted Invokable model consumed by canonical Task admission and sequential Team execution.
+This phase implements durable owner-scoped Agent and Team registry records in PostgreSQL and their authenticated validate/import/read/list/publish routes. The current contract is the persisted Invokable model consumed by canonical Task admission and Team execution.
 
 ## Resource families
 
@@ -53,11 +53,29 @@ waits for both successes, then materializes a synthesizer child and completes
 the root. Child execution uses task-scoped RuntimeSessions/RuntimeCells and one
 shared EnvironmentVersion. Failure is fail-fast/deferred.
 
+## Collaborative Team MVE
+
+The published Team registry model contains one lead and a persisted roster.
+`POST /api/v1/tasks:invoke` creates the root Task/Run and a durable `TeamRun`;
+`GET /api/v1/tasks/{id}/team-run` plus the TeamRun member/task routes expose
+owner-scoped `TeamRun`, `MemberRun`, and `WorkItem` state. The lead kickoff
+prompt is generated from the stored roster names. Members use the team MCP
+tools (`team_members_list`, `team_task_list`, `team_task_create`,
+`team_task_claim`, `team_task_update`, and `team_complete`) through the runtime
+boundary. Each member has an independent RuntimeSession. Lead finalization uses
+a fresh task-scoped runtime execution/provider Agent while the lead member's
+canonical session remains the kickoff team_member session.
+
+Lead finalization requires exactly one completed, member-owned WorkItem per
+roster member, every member Task to be `completed`, and every member Task's
+latest/current Run to be `succeeded`. CAS phase transitions and owner scope
+remain enforcement boundaries.
+
 ## Explicit non-goals
 
 This contract does not claim:
 
-- public Agent/Team CRUD APIs
+- generalized Agent/Team CRUD beyond the implemented registry routes
 - generalized Team V1 parallel/join behavior beyond the observed `dag-mve-v1` subset
 - approvals, retry, reconcile, cancel propagation, or budget semantics
 - crash recovery, restart/resume, and production readiness

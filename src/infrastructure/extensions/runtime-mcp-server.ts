@@ -4,6 +4,8 @@ import { RuntimeToolGrantService } from '../../application/extensions/runtime-to
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
 import type { TeamToolHandler } from '../../application/teams/team-tools.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
+import type { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
+import type { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
 
 export class RuntimeMcpServer {
   readonly grants: RuntimeToolGrantService;
@@ -18,6 +20,8 @@ export class RuntimeMcpServer {
     private readonly teamTools?: {
       handler: TeamToolHandler;
     },
+    private readonly createLearningProposal?: CreateLearningProposal,
+    private readonly market?: SyntheticMarketAdapter,
   ) {
     this.#repository = repository;
     this.grants = grants;
@@ -32,6 +36,10 @@ export class RuntimeMcpServer {
           repository: this.#repository,
           grants: this.grants,
           ...(this.teamTools ? { teamTools: this.teamTools } : {}),
+          ...(this.createLearningProposal
+            ? { createLearningProposal: this.createLearningProposal }
+            : {}),
+          ...(this.market ? { market: this.market } : {}),
         }),
       );
       this.#server = server;

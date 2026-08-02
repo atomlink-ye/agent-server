@@ -26,6 +26,7 @@ import {
   buildTurnPrompt,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
+import { AGENT_SERVER_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
@@ -318,6 +319,8 @@ export class ExecuteRun {
             )
           ).find((candidate) => candidate.id === memberId)
         : null;
+    const leadFinalization =
+      member?.role === 'lead' && task.logicalStepKey?.endsWith(':finalize');
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -338,7 +341,7 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : member && this.runtimeSessions?.findByTeamMember
+        : member && !leadFinalization && this.runtimeSessions?.findByTeamMember
           ? await this.runtimeSessions.findByTeamMember({
               teamMemberRunId: member.id,
               tenantId: task.tenantId,
@@ -382,6 +385,11 @@ export class ExecuteRun {
           invokableVersionId,
           task,
         );
+    const runtimeToolRefs = leadFinalization
+      ? resolved.toolRefs.filter(
+          (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
+        )
+      : resolved.toolRefs;
     let sessionRuntime = runtimeSession;
     if (
       this.runtimeSessions &&
@@ -426,9 +434,11 @@ export class ExecuteRun {
             agentVersionId: resolved.agentVersionId,
             environmentVersionId: environmentVersionId!,
             resolvedSkills: resolved.skills,
-            toolRefs: resolved.toolRefs,
+            toolRefs: runtimeToolRefs,
           })
-        : member && this.runtimeSessions.createOrGetForTeamMember
+        : member &&
+            !leadFinalization &&
+            this.runtimeSessions.createOrGetForTeamMember
           ? await this.runtimeSessions.createOrGetForTeamMember({
               teamMemberRunId: member.id,
               taskId: task.id,
@@ -439,7 +449,7 @@ export class ExecuteRun {
               agentVersionId: resolved.agentVersionId,
               environmentVersionId: environmentVersionId!,
               resolvedSkills: resolved.skills,
-              toolRefs: resolved.toolRefs,
+              toolRefs: runtimeToolRefs,
             })
           : await this.runtimeSessions.createOrGetForTask({
               taskId: task.id,
@@ -450,10 +460,15 @@ export class ExecuteRun {
               agentVersionId: resolved.agentVersionId,
               environmentVersionId: environmentVersionId!,
               resolvedSkills: resolved.skills,
-              toolRefs: resolved.toolRefs,
+              toolRefs: runtimeToolRefs,
             });
     }
-    if (member && sessionRuntime && this.collaborativeExecutions)
+    if (
+      member &&
+      !leadFinalization &&
+      sessionRuntime &&
+      this.collaborativeExecutions
+    )
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
         sessionRuntime.id,
@@ -472,7 +487,7 @@ export class ExecuteRun {
     let extensions;
     if (
       !priorProviderAgentId &&
-      (resolved.skills.length > 0 || resolved.toolRefs.length > 0)
+      (resolved.skills.length > 0 || runtimeToolRefs.length > 0)
     ) {
       if (!this.runtimeExtensionBinder)
         throw new Error('Runtime extension binding is unavailable.');
@@ -483,8 +498,11 @@ export class ExecuteRun {
         workspaceId: task.workspaceId,
         ...(task.sessionId ? { productSessionId: task.sessionId } : {}),
         ...(!task.sessionId ? { scopeId: member?.id ?? task.id } : {}),
+        taskId: task.id,
+        runId: claim.run.id,
+        ...(member?.id ? { teamMemberRunId: member.id } : {}),
         skills: resolved.skills,
-        toolRefs: resolved.toolRefs,
+        toolRefs: runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
     }
@@ -773,6 +791,7 @@ function runtimeEventPayload(
         status: event.status,
         label: event.label,
         summary: event.summary,
+        ...safeRuntimeToolNamePayload(event.toolName),
         ...(event.detailKind
           ? { detail_kind: event.detailKind }
           : ['shell', 'read', 'write', 'edit', 'search', 'fetch'].includes(
@@ -829,6 +848,23 @@ function runtimeEventPayload(
     default:
       return assertNeverRuntimeEvent(event);
   }
+}
+
+const safeRuntimeToolNames = new Set([
+  'synthetic_stock_snapshot',
+  'synthetic_event_batch',
+  'synthetic_analog_summary',
+  'learning_proposal_create',
+  'agent_server_memory_read',
+]);
+const runtimeMcpToolPrefix = 'agent-server-memory-api_';
+
+function safeRuntimeToolNamePayload(toolName: string | undefined) {
+  if (!toolName) return {};
+  const normalized = toolName.startsWith(runtimeMcpToolPrefix)
+    ? toolName.slice(runtimeMcpToolPrefix.length)
+    : toolName;
+  return safeRuntimeToolNames.has(normalized) ? { tool_name: normalized } : {};
 }
 
 function assertNeverRuntimeEvent(

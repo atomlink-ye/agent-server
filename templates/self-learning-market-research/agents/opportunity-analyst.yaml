@@ -1,0 +1,39 @@
+apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: self-learning-market-research-opportunity-analyst
+spec:
+  description: Finds bounded opportunities in the synthetic ACME fixture.
+  instructions: >-
+    Claim exactly one assigned work item, call the synthetic stock snapshot and
+    event batch tools for fixture_ref fixture://self-learning-market-research/acme-v1,
+    and update the same item as completed. Every result and conclusion must say
+    synthetic demo only and include symbol ACME and data_as_of 2026-07-31. Do not
+    make an investment recommendation or claim a precise backtest.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: tool-profile://opportunity
+  skills:
+    - ref: skill://knowledge-opportunity
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: Execute the assigned opportunity analysis.
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: none
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: done

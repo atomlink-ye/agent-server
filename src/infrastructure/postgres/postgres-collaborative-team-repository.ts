@@ -3,7 +3,10 @@ import type {
   TeamExecutionRepository,
   OwnerScope,
 } from '../../application/ports/team-execution-repository.js';
-import type { TeamRun } from '../../domain/teams/team-run.js';
+import {
+  normalizeTeamRunFinalText,
+  type TeamRun,
+} from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 
@@ -143,6 +146,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     readonly owner: OwnerScope;
     readonly updatedAt: string;
   }): Promise<TeamRun> {
+    const normalizedFinalText = normalizeTeamRunFinalText(input.finalText);
     const client = this.database.connect
       ? await this.database.connect()
       : this.database;
@@ -155,6 +159,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const team = locked.rows?.[0];
       if (!team) throw new Error('Team run was not found.');
       if (team.status === 'succeeded' && team.phase === 'done') {
+        normalizeTeamRunFinalText(team.final_text ?? '');
         await client.query('COMMIT');
         return mapRun(team);
       }
@@ -168,13 +173,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         throw new Error('Team has unfinished work items.');
       const updated = await client.query<TeamRunRow>(
         `UPDATE team_runs SET status='succeeded', phase='done', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
-        [input.teamRunId, input.finalText, input.updatedAt],
+        [input.teamRunId, normalizedFinalText, input.updatedAt],
       );
       const run = await client.query(
         `UPDATE runs SET status='succeeded', result=$2::jsonb, error=NULL, updated_at=$3 WHERE id=$1 AND status='waiting_children' RETURNING id`,
         [
           input.rootRunId,
-          JSON.stringify({ text: input.finalText }),
+          JSON.stringify({ text: normalizedFinalText }),
           input.updatedAt,
         ],
       );
@@ -190,11 +195,11 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         if (!exists.rows?.[0]) throw new Error('Team root task not found.');
       }
       for (const [type, payload] of [
-        ['output', { text: input.finalText }],
+        ['output', { text: normalizedFinalText }],
         ['succeeded', {}],
       ] as const) {
         await client.query(
-          `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 ON CONFLICT(run_id,type) DO UPDATE SET payload=EXCLUDED.payload`,
+          `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2`,
           [
             randomUUID(),
             input.rootRunId,

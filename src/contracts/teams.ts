@@ -33,6 +33,13 @@ export const TeamVersionResponseSchema = z
     links,
   })
   .strict();
+export const TeamImportResponseSchema = z
+  .object({
+    result: z.enum(['created', 'converged', 'replayed']),
+    team: TeamDefinitionResponseSchema,
+    version: TeamVersionResponseSchema,
+  })
+  .strict();
 export const TeamVersionListResponseSchema = z
   .object({
     items: z.array(TeamVersionResponseSchema),

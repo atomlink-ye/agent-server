@@ -46,6 +46,23 @@ bound idle provider Agent when continuation is available; Thread command remains
 fallback. This is a compatibility seam, not a canonical User/Membership or
 production channel platform.
 
+### Self-learning Project Lab
+
+The fixed Project Lab is a local/single-operator observer and launcher for the
+self-learning Project/Team. Its same-origin strict BFF uses server-only bearer
+credentials and three configured bindings: workspace, Team version, and Memory
+Store. Launch accepts only `{}` and starts the fixed Team; aggregate reads are
+bounded and reconstruct durable Task, TeamRun, member, WorkItem, activity,
+proposal, report, and Memory receipt state on refresh. Review is root-bound to
+the proposal discovered in that aggregate.
+
+The BFF allow-list is limited to the four approved learning activity tools and
+the safe aggregate fields. Mutations require strict same-origin validation;
+responses are `no-store`; missing configuration fails closed. Browser code never
+receives the Agent Server bearer, provider/runtime IDs, local paths, prompts,
+raw events, raw upstream errors, or a Memory-write capability. Production or
+multi-user deployment requires a new authentication Human Gate.
+
 Every Card-eligible Memory proposal immediately creates a Bot-owned editable Doc
 before the initial `card_with_doc` surface. New Cards show only `Open Doc`,
 `Accept`, and `Reject`; legacy edit/Preview actions remain inbound-only. Direct

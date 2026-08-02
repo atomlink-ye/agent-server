@@ -23,6 +23,10 @@ const applicationEnvironmentNames = [
   'POSTGRES_URL',
   'SERVICE_ACCOUNTS_JSON',
 ];
+const paseoEnvironmentNames = [
+  'OPENCODE_GO_API_KEY',
+  'OPENCODE_CONFIG_CONTENT',
+];
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -51,6 +55,7 @@ if (command.length === 0) {
     runtimeRoot,
     port: paseoPort,
     listenHost: paseoListenHost,
+    environmentVariableNames: paseoEnvironmentNames,
   });
 
   const child = spawn(command[0], command.slice(1), {

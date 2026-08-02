@@ -31,7 +31,8 @@ export class TeamPhaseCoordinator {
     if (!team) return;
     if (
       team.phase === 'lead_kickoff' &&
-      input.task.logicalStepKey?.includes(':kickoff')
+      input.task.logicalStepKey?.includes(':kickoff') &&
+      input.run.status === 'succeeded'
     )
       await this.executor.fanOutTeammateTurns(
         team,
@@ -52,5 +53,15 @@ export class TeamPhaseCoordinator {
         this.runs,
         this.admission,
       );
+    else if (
+      team.phase === 'lead_finalize' &&
+      input.task.logicalStepKey?.includes(':finalize') &&
+      input.run.status === 'succeeded'
+    )
+      await this.executor.completeLeadFinalization({
+        run: input.run,
+        task: input.task,
+        execution: this.executions,
+      });
   }
 }

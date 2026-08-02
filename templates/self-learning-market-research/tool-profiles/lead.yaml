@@ -1,0 +1,16 @@
+apiVersion: agent-server/v1alpha1
+kind: LocalToolProfile
+metadata:
+  name: lead
+spec:
+  tools:
+    - ref: agent-server/team-members-list
+      kind: tool
+    - ref: agent-server/team-task-create
+      kind: tool
+    - ref: agent-server/team-task-list
+      kind: tool
+    - ref: agent-server/learning-proposal-create
+      kind: tool
+    - ref: agent-server/memory-read
+      kind: tool

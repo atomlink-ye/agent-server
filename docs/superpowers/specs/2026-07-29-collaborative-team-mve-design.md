@@ -2,7 +2,7 @@
 
 ## Outcome
 
-API-submitted published ManagedTeam with fixed lead plus two roster members, each with independent RuntimeSession/Cell, running real Paseo/OpenCode; lead dynamically creates WorkItems, teammates self-claim and execute in parallel, lead resumes its original RuntimeSession and calls team_complete to finish the root.
+API-submitted published ManagedTeam with fixed lead plus two roster members, each with independent RuntimeSession/Cell, running real Paseo/OpenCode; lead dynamically creates WorkItems, teammates self-claim and execute in parallel, and a fresh task-scoped lead finalization run synthesizes completed work before the control plane finishes the root.
 
 ## Authority
 
@@ -116,20 +116,23 @@ Phase member_work:
 Second member terminal → atomic transaction:
   A. Persist member terminal state
   B. Check both required WorkItems completed
-  C. Create lead-continuation Task/Run + dispatch
+  C. Create lead-finalization Task/Run + dispatch
   D. TeamRun phase CAS member_work→lead_finalize
 
 Phase lead_finalize:
-  10. Lead resumes same RuntimeSession
-  11. Lead reads WorkItem summaries via team_task_list
-  12. Lead calls team_complete(final_text)
+  10. Lead finalization uses a fresh task-scoped RuntimeSession/provider Agent; the lead member's canonical session remains the kickoff team_member session
+  11. Lead receives bounded WorkItem summaries and returns plain-text synthesis
+  12. TeamPhaseCoordinator completes the TeamRun/root after the finalization Run succeeds with non-empty text
 
-team_complete → atomic transaction:
-  A. Validate caller is lead, no pending/in-progress required WorkItems
+Lead finalization completion → atomic transaction:
+  A. Validate finalization phase, successful lead finalization Run, and no pending/in-progress required WorkItems
   B. Set TeamRun status=succeeded, phase=done
   C. Finalize root waiting Run: status=succeeded, result text, output + succeeded events
   D. Complete root Task
   E. TeamRun phase CAS lead_finalize→done
+
+`team_complete` remains a lead-only tool contract for compatibility, but root
+completion in this MVE does not depend on the model invoking it.
 ```
 
 ## Team MCP tools
@@ -182,8 +185,8 @@ Unique key: (team_run_id, member_id, phase)
 - tasks:invoke(kind=team) creates TeamRun.
 - Lead kickoff creates 2 WorkItems dynamically.
 - Both members execute in parallel (observed overlapping lifecycle intervals).
-- Three distinct RuntimeSession/Cell/provider-agent bindings.
-- Lead resumes original RuntimeSession for continuation.
-- team_complete succeeds root; output/succeeded events present.
+- Four distinct runtime executions: one lead kickoff team_member session, two member team_member sessions, and one fresh task-scoped lead finalization provider Agent.
+- Finalization Run succeeds with non-empty synthesis text.
+- Control-plane completion succeeds root; output/succeeded events present.
 - Task tree shows member execution lineage.
 - Foreign-owner read returns hidden not-found.

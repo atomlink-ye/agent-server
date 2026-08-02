@@ -1,0 +1,78 @@
+apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: self-learning-market-research-lead
+spec:
+  description: Lead for a bounded synthetic market research and learning loop.
+  instructions: >-
+    You are the team lead. For the first pass, create exactly two work items,
+    one for opportunity-analyst and one for analog-risk-reviewer, then wait for
+    both members to complete. Do not create any other work item. For mode learn,
+    synthesize the member evidence into exactly six labelled sections: Scope,
+    Snapshot, Events, Opportunities, Analog and risk review, and Learning loop.
+    Include the literal phrase synthetic demo only, state fixture_ref
+    fixture://self-learning-market-research/acme-v1, symbol ACME, and data_as_of
+    2026-07-31. In learn mode, decode the root input and read its
+    memory_store_id and memory_path values; do not invent or infer either value.
+    Before finalization and before returning the six sections, call
+    learning_proposal_create exactly once with memory_store_id from root input,
+    target_path from root memory_path, proposed_content containing synthetic demo
+    only, and evidence_refs containing the root fixture_ref. Only a structured
+    pending proposal receipt counts as success. Never use shell, files, a
+    scratchpad, or prose to simulate the proposal; if the tool call does not
+    return that receipt, do not claim success. For mode recall, first decode the
+    root input and call agent_server_memory_read with its memory_store_id and
+    memory_path before reasoning. Report the returned path, version, SHA,
+    principle, and application; do not use prior conversation history. Never
+    present the result as investment advice or a precise backtest.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: tool-profile://lead
+  skills:
+    - ref: skill://team-lead-report
+    - ref: skill://human-learning-loop
+  input:
+    schema:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [learn, recall]
+          additionalProperties: false
+        memory_store_id:
+          type: string
+          additionalProperties: false
+        memory_path:
+          type: string
+          additionalProperties: false
+        fixture_ref:
+          type: string
+          additionalProperties: false
+        symbol:
+          type: string
+          additionalProperties: false
+        data_as_of:
+          type: string
+          additionalProperties: false
+        synthetic:
+          type: boolean
+          additionalProperties: false
+      required: [mode, memory_store_id, memory_path]
+      additionalProperties: false
+    prompt: Execute the lead role in mode {{input.mode}}.
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 1
+  permissions:
+    network: none
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: done

@@ -25,6 +25,18 @@ When runtime work succeeds but terminal persistence fails, the kernel preserves 
 
 The observed `dag-mve-v1` path starts two parallel leaf child Tasks/Runs, transitions the root Run to `waiting_children` without retaining its lease, durably joins both successes, then starts a synthesizer child and completes the root. Each child gets task-scoped RuntimeSession/RuntimeCell state while the Team uses one shared EnvironmentVersion. `sequential-mvp-v1` remains unchanged. Crash recovery, restart/resume, retries, cancellation propagation, generalized reconciliation, approvals, budget propagation, and artifact/evidence orchestration remain out of scope.
 
+The Collaborative Team MVE is the separate managed Team path: registry/API
+submission creates a TeamRun with one lead and its persisted roster. TeamRun,
+MemberRun, and WorkItem reads are owner-scoped. The lead kickoff prompt is
+roster-driven, members use the team MCP tools, and each member runs in an
+independent RuntimeSession. Lead finalization uses a fresh task-scoped runtime
+execution/provider Agent while the lead member's canonical session remains the
+kickoff team_member session.
+Lead finalization requires exactly one completed, member-owned WorkItem per
+roster member, every member Task to be completed, and every latest/current Run
+to be succeeded. Retry, recovery, cancellation, migration, and production
+readiness remain deferred.
+
 ## Minimum Phase D interaction
 
 Claimed execution binds the Run to a provider session and persists `started`,
@@ -66,7 +78,13 @@ Agent a Memory HTTP capability. Continuation sends only the current turn.
 
 ## Team boundary
 
-Agent and Team are both Invokable versions. `sequential-mvp-v1` executes compiled sequential control-plane IR. Opt-in `dag-mve-v1` creates two parallel leaf child Tasks/Runs, waits for their durable join, then creates a synthesizer child; it never creates a Paseo session for the whole graph. Leaf Agent Runs alone cross the Runtime Port. Public callers continue to use Task invoke/read/tree routes; no Team CRUD/API was added.
+Agent and Team are both Invokable versions. Collaborative Team uses the
+managed Team registry/API and durable TeamRun/MemberRun/WorkItem records;
+`sequential-mvp-v1` remains compiled sequential compatibility IR. Opt-in
+`dag-mve-v1` creates two parallel leaf child Tasks/Runs, waits for their
+durable join, then creates a synthesizer child. Leaf Agent Runs alone cross
+the Runtime Port. Public callers invoke through Task routes and inspect
+owner-scoped TeamRun reads.
 
 ## Completion evidence
 

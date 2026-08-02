@@ -4,21 +4,16 @@ import {
   randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
-
-export const AGENT_SERVER_MEMORY_READ_TOOL_REF = 'agent-server/memory-read';
-export const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
-export const AGENT_SERVER_TEAM_TOOL_REFS = Object.freeze([
-  'agent-server/team-members-list',
-  'agent-server/team-task-create',
-  'agent-server/team-task-list',
-  'agent-server/team-task-claim',
-  'agent-server/team-task-update',
-  'agent-server/team-complete',
-]);
-const SUPPORTED_TOOL_REFS = new Set([
+import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  ...AGENT_SERVER_TEAM_TOOL_REFS,
-]);
+  AGENT_SERVER_TEAM_TOOL_REFS,
+  SUPPORTED_MANAGED_AGENT_TOOL_REFS,
+} from '../agents/built-in-skills.js';
+export {
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+  AGENT_SERVER_TEAM_TOOL_REFS,
+} from '../agents/built-in-skills.js';
+export const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
 
 export type RuntimeToolGrant = Readonly<{
   readonly grantId: string;
@@ -27,6 +22,9 @@ export type RuntimeToolGrant = Readonly<{
   readonly principalId: string;
   readonly workspaceId: string;
   readonly productSessionId: string;
+  readonly taskId?: string;
+  readonly runId?: string;
+  readonly teamMemberRunId?: string;
   readonly allowedTools: readonly string[];
   readonly expiresAt: string;
 }>;
@@ -55,6 +53,9 @@ export class RuntimeToolGrantService {
     readonly principalId: string;
     readonly workspaceId: string;
     readonly productSessionId: string;
+    readonly taskId?: string;
+    readonly runId?: string;
+    readonly teamMemberRunId?: string;
     readonly allowedTools?: readonly string[];
     readonly ttlMs?: number;
   }): RuntimeToolGrantIssue {
@@ -64,7 +65,7 @@ export class RuntimeToolGrantService {
     ];
     if (
       new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some((tool) => !SUPPORTED_TOOL_REFS.has(tool))
+      allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
     )
       throw new Error('Unsupported or duplicate runtime tool ref.');
     const token = randomBytes(32).toString('base64url');
@@ -78,6 +79,11 @@ export class RuntimeToolGrantService {
       principalId: input.principalId,
       workspaceId: input.workspaceId,
       productSessionId: input.productSessionId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.runId ? { runId: input.runId } : {}),
+      ...(input.teamMemberRunId
+        ? { teamMemberRunId: input.teamMemberRunId }
+        : {}),
       allowedTools: Object.freeze([...allowedTools]),
       expiresAt,
       tokenHash: hashToken(token),
@@ -122,7 +128,7 @@ export class RuntimeToolGrantService {
   ): void {
     if (
       new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some((tool) => !SUPPORTED_TOOL_REFS.has(tool))
+      allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
     )
       throw new Error('Unsupported or duplicate runtime tool ref.');
     const expiresAt = new Date(Date.now() + Math.max(1, ttlMs)).toISOString();

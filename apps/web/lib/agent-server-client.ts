@@ -62,21 +62,20 @@ export class AgentServerError extends Error {
   }
 }
 
-function requireConfig(): {
-  baseUrl: string;
-  token: string;
-  agentVersionId: string;
-  environmentVersionId: string;
-} {
-  if (!baseUrl || !token || !agentVersionId || !environmentVersionId) {
-    throw new AgentServerError(500, 'web_configuration_missing');
-  }
+function requireConfig(): { baseUrl: string; token: string } {
+  if (!baseUrl || !token)
+    throw new AgentServerError(503, 'web_configuration_missing');
   return {
     baseUrl: baseUrl.replace(/\/$/, ''),
     token,
-    agentVersionId,
-    environmentVersionId,
   };
+}
+
+function requireChatConfig() {
+  const config = requireConfig();
+  if (!agentVersionId || !environmentVersionId)
+    throw new AgentServerError(503, 'web_configuration_missing');
+  return { ...config, agentVersionId, environmentVersionId };
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -147,12 +146,13 @@ export async function createWorkspace(): Promise<{ workspace_id: string }> {
 export async function createSession(
   workspaceId: string,
 ): Promise<ProductSession> {
+  const config = requireChatConfig();
   return request<ProductSession>('/api/v1/sessions', {
     method: 'POST',
     body: JSON.stringify({
       workspace_id: workspaceId,
-      agent_version_id: requireConfig().agentVersionId,
-      environment_version_id: requireConfig().environmentVersionId,
+      agent_version_id: config.agentVersionId,
+      environment_version_id: config.environmentVersionId,
     }),
   });
 }
@@ -223,8 +223,96 @@ export async function getAllRunEvents(runId: string): Promise<RunEvent[]> {
   }
 }
 
+export async function getRunEventsPage(runId: string, after: number) {
+  return request<{ events: RunEvent[]; next_cursor: number | null }>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/events?after=${after}`,
+  );
+}
+
+export async function listLearningProposals(workspaceId: string) {
+  return request<unknown>(
+    `/api/v1/learning-proposals?workspace_id=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
 export function getConfiguredWorkspaceId(): string | undefined {
   return configuredWorkspaceId;
+}
+
+export function getSelfLearningConfig() {
+  return {
+    workspaceId: process.env.WEB_WORKSPACE_ID,
+    teamVersionId: process.env.WEB_SELF_LEARNING_TEAM_VERSION_ID,
+    memoryStoreId: process.env.WEB_SELF_LEARNING_MEMORY_STORE_ID,
+  };
+}
+
+export async function invokeTeamVersion(
+  workspaceId: string,
+  teamVersionId: string,
+  text: string,
+  idempotencyKey: string,
+) {
+  return request<unknown>('/api/v1/tasks:invoke', {
+    method: 'POST',
+    headers: { 'idempotency-key': idempotencyKey },
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      invokable: { kind: 'team', version_id: teamVersionId },
+      input: { text },
+    }),
+  });
+}
+
+export async function getTask(taskId: string) {
+  return request<unknown>(`/api/v1/tasks/${encodeURIComponent(taskId)}`);
+}
+export async function getTaskTree(taskId: string) {
+  return request<unknown>(`/api/v1/tasks/${encodeURIComponent(taskId)}/tree`);
+}
+export async function getTeamRunByTask(taskId: string) {
+  return request<unknown>(
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/team-run`,
+  );
+}
+export async function getTeamRunMembers(teamRunId: string) {
+  return request<unknown>(
+    `/api/v1/team-runs/${encodeURIComponent(teamRunId)}/members`,
+  );
+}
+export async function getTeamRunTasks(teamRunId: string) {
+  return request<unknown>(
+    `/api/v1/team-runs/${encodeURIComponent(teamRunId)}/tasks`,
+  );
+}
+export async function getLearningProposal(proposalId: string) {
+  return request<unknown>(
+    `/api/v1/learning-proposals/${encodeURIComponent(proposalId)}`,
+  );
+}
+export async function reviewLearningProposal(
+  proposalId: string,
+  action: 'accept' | 'reject' | 'edit_and_accept',
+  content?: string,
+) {
+  const path =
+    action === 'accept'
+      ? 'accept'
+      : action === 'reject'
+        ? 'reject'
+        : 'edit-and-accept';
+  return request<unknown>(
+    `/api/v1/learning-proposals/${encodeURIComponent(proposalId)}/${path}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(action === 'edit_and_accept' ? { content } : {}),
+    },
+  );
+}
+export async function getMemory(storeId: string, memoryId: string) {
+  return request<unknown>(
+    `/api/v1/memory-stores/${encodeURIComponent(storeId)}/memories/${encodeURIComponent(memoryId)}`,
+  );
 }
 
 function isUuid(value: string) {

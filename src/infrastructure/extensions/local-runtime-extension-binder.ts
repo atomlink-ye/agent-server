@@ -53,6 +53,11 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       principalId: input.principalId,
       workspaceId: input.workspaceId,
       productSessionId: grantScopeId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.runId ? { runId: input.runId } : {}),
+      ...(input.teamMemberRunId
+        ? { teamMemberRunId: input.teamMemberRunId }
+        : {}),
       allowedTools: input.toolRefs,
     });
     let ownedReceipt = false;

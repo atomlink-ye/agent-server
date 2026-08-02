@@ -84,6 +84,7 @@ import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/po
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
+import { SyntheticTeamEvidenceProvider } from './adapters/demo-market/synthetic-team-evidence-provider.js';
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
 import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
 import { TeamToolHandler } from './application/teams/team-tools.js';
@@ -401,6 +402,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     taskRepository,
     runRepository,
     admissionRepository,
+    new SyntheticTeamEvidenceProvider(),
   );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
     collaborativeTeamExecutions,

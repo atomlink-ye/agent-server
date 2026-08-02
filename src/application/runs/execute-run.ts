@@ -26,12 +26,7 @@ import {
   buildTurnPrompt,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
-import {
-  AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
-  AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
-  AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
-  AGENT_SERVER_TEAM_TOOL_REFS,
-} from '../agents/built-in-skills.js';
+import { AGENT_SERVER_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
@@ -393,12 +388,7 @@ export class ExecuteRun {
     const runtimeToolRefs =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
       task.teamTaskKind === 'work_attempt'
-        ? resolved.toolRefs.filter(
-            (ref) =>
-              ref === AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF ||
-              ref === AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF ||
-              ref === AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
-          )
+        ? []
         : collaborativeTeam?.executionMode === 'agentic_mve' &&
             member?.role === 'lead'
           ? AGENT_SERVER_TEAM_TOOL_REFS.slice(6)
@@ -421,7 +411,7 @@ export class ExecuteRun {
     const systemPrompt =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
       task.teamTaskKind === 'work_attempt'
-        ? `${resolved.systemPrompt}\n\nThis is an assigned Agentic Team WorkItemAttempt. Do not claim or update WorkItems. Do not use shell, search, read, write, edit, fetch, subagent, legacy team tools, or any Team mutation tool. Use only the authorized synthetic MCP tools in this turn. After the authorized evidence call, return a plain-text evidence summary and immediately end the turn.`
+        ? `${resolved.systemPrompt}\n\nThis is an assigned Agentic Team WorkItemAttempt with controller-provided evidence in the user turn. Do not claim or update WorkItems. Do not use any tool, subagent, shell, search, read, write, edit, fetch, legacy team tool, or Team mutation tool. Return a plain-text evidence report using only the provided evidence and immediately end the turn.`
         : collaborativeTeam?.executionMode === 'agentic_mve' &&
             member?.role === 'lead'
           ? `${resolved.systemPrompt}\n\nAgentic Team policy: this Lead turn is tool-controlled. Never use shell, filesystem, or legacy team_task_* tools. Use only the four agentic Team MCP tools named in the task instructions; if information is unavailable, issue no command rather than substituting a shell command. Each Lead turn performs one current decision only. After calling any mutating Team command (assign, accept, rework, or completion request), immediately return a short decision text; do not call another tool, shell, or wait for a member in the same turn.`

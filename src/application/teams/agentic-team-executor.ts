@@ -15,6 +15,7 @@ import type {
   OwnerScope,
 } from '../ports/team-execution-repository.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
+import type { TeamEvidenceProvider } from '../ports/team-evidence-provider.js';
 
 const LIMIT = 4;
 
@@ -24,6 +25,7 @@ export class AgenticTeamExecutor {
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
+    private readonly evidence: TeamEvidenceProvider,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -221,10 +223,14 @@ export class AgenticTeamExecutor {
         .slice(0, 512);
       const attemptPrompt =
         attempt.attemptNo === 1
-          ? 'This is attempt 1. Call only synthetic_stock_snapshot. Return snapshot evidence and explicitly do not provide event evidence.'
+          ? 'This is attempt 1. The provided snapshot evidence intentionally excludes event evidence; report that gap explicitly.'
           : feedback
-            ? `This is attempt ${attempt.attemptNo}. Lead feedback: ${feedback} Call only synthetic_event_batch to add the missing event evidence, then return the completed evidence summary.`
-            : `This is attempt ${attempt.attemptNo}. No Lead feedback is available; return a concise evidence summary without calling a Team tool.`;
+            ? `This is attempt ${attempt.attemptNo}. Lead feedback: ${feedback} The provided evidence adds the requested event evidence; report the completed evidence summary.`
+            : `This is attempt ${attempt.attemptNo}. No Lead feedback is available; return a concise report from the provided evidence.`;
+      const evidence = this.evidence.getWorkAttemptEvidence({
+        attemptNo: attempt.attemptNo,
+        feedback: feedback ?? null,
+      });
       const task = this.child(
         parent,
         {
@@ -233,7 +239,7 @@ export class AgenticTeamExecutor {
         } as Run,
         member,
         `member:${team.id}:${member.id}:work_attempt:${attempt.id}`,
-        `team_run_id: ${team.id}\n\nYou are completing assigned WorkItemAttempt ${attempt.attemptNo}. Do not claim or update the WorkItem. Do not call shell/search/read/write/edit/fetch/subagent or any Team mutation tool. ${attemptPrompt} After the evidence call, return plain-text evidence and immediately end the turn.`,
+        `team_run_id: ${team.id}\n\nYou are completing assigned WorkItemAttempt ${attempt.attemptNo}. Lead feedback: ${feedback ?? '(none)'}\nProvided bounded synthetic evidence (use only this; do not call any tool, subagent, shell, search, read, write, or edit): ${JSON.stringify(evidence)}\n\n${attemptPrompt} Return a plain-text report based only on the provided evidence and immediately end the turn.`,
         member.agentVersionId,
         'work_attempt',
       );

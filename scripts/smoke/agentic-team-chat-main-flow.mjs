@@ -148,7 +148,9 @@ try {
         if (
           typeof event.event === 'string' &&
           (event.event.startsWith('runtime.workspace.create.') ||
-            event.event.startsWith('runtime.agent.create.'))
+            event.event.startsWith('runtime.agent.create.') ||
+            event.event.startsWith('runtime.message.send.') ||
+            event.event.startsWith('runtime.wait.'))
         )
           console.log(line);
       },

@@ -1313,15 +1313,43 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       nestedActivityReady = true;
       streamReady = true;
 
+      const sendStartedAt = Date.now();
+      this.#logger.log('info', 'runtime.message.send.started', {
+        run_id: input.runId,
+        elapsed_ms: 0,
+        status: 'started',
+      });
       await this.#client.sendAgentMessage(agent.id, prompt);
+      this.#logger.log('info', 'runtime.message.send.completed', {
+        run_id: input.runId,
+        elapsed_ms: Date.now() - sendStartedAt,
+        status: 'completed',
+      });
       nestedPollPromise = pollNestedActivity();
       let finished;
+      const waitStartedAt = Date.now();
+      this.#logger.log('info', 'runtime.wait.started', {
+        run_id: input.runId,
+        elapsed_ms: 0,
+        status: 'started',
+      });
       try {
         finished = await this.#client.waitForFinish(
           agent.id,
           this.#options.executionTimeoutMs,
         );
+        this.#logger.log('info', 'runtime.wait.completed', {
+          run_id: input.runId,
+          elapsed_ms: Date.now() - waitStartedAt,
+          status: finished.status,
+        });
       } catch (error) {
+        void error;
+        this.#logger.log('info', 'runtime.wait.completed', {
+          run_id: input.runId,
+          elapsed_ms: Date.now() - waitStartedAt,
+          status: 'error',
+        });
         acceptingTurnActivity = false;
         nestedActivityReady = false;
         nestedPolling = false;

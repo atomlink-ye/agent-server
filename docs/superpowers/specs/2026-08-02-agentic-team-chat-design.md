@@ -1,8 +1,8 @@
 # Agentic Team Chat MVE Design
 
-**Status:** approved for implementation  
-**Date:** 2026-08-02  
-**Stage:** Prove  
+**Status:** approved for implementation
+**Date:** 2026-08-02
+**Stage:** Prove
 **Human Gates:** durable schema, Team public contract, Team capability changes
 
 ## Problem

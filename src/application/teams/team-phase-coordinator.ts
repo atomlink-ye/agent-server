@@ -5,6 +5,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunRepository } from '../ports/run-repository.js';
 import type { AdmissionRepository } from '../ports/admission-repository.js';
 import { CollaborativeTeamExecutor } from './collaborative-team-executor.js';
+import { AgenticTeamExecutor } from './agentic-team-executor.js';
 
 export class TeamPhaseCoordinator {
   public constructor(
@@ -13,6 +14,7 @@ export class TeamPhaseCoordinator {
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
+    private readonly agenticExecutor?: AgenticTeamExecutor,
   ) {}
   public async execute(input: {
     readonly run: Run;
@@ -29,6 +31,11 @@ export class TeamPhaseCoordinator {
       owner,
     );
     if (!team) return;
+    if (team.executionMode === 'agentic_mve') {
+      if (!this.agenticExecutor) throw new Error('Agentic Team executor is unavailable.');
+      await this.agenticExecutor.handleTerminalRun({ team, task: input.task, run: input.run });
+      return;
+    }
     if (
       team.phase === 'lead_kickoff' &&
       input.task.logicalStepKey?.includes(':kickoff') &&

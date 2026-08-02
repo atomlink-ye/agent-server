@@ -6,6 +6,7 @@ import type { TeamToolHandler } from '../../application/teams/team-tools.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
 import type { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
+import type { Logger } from '../../shared/observability/logger.js';
 
 export class RuntimeMcpServer {
   readonly grants: RuntimeToolGrantService;
@@ -22,6 +23,7 @@ export class RuntimeMcpServer {
     },
     private readonly createLearningProposal?: CreateLearningProposal,
     private readonly market?: SyntheticMarketAdapter,
+    private readonly logger?: Logger,
   ) {
     this.#repository = repository;
     this.grants = grants;
@@ -40,6 +42,7 @@ export class RuntimeMcpServer {
             ? { createLearningProposal: this.createLearningProposal }
             : {}),
           ...(this.market ? { market: this.market } : {}),
+          ...(this.logger ? { logger: this.logger } : {}),
         }),
       );
       this.#server = server;

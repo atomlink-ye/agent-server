@@ -331,6 +331,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     },
     createLearningProposal,
     new SyntheticMarketAdapter(),
+    logger,
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,

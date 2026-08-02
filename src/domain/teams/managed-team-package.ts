@@ -35,7 +35,7 @@ export interface RosterMemberSpec {
 }
 
 export interface CoordinationSpec {
-  readonly mode: 'collaborative';
+  readonly mode: 'collaborative' | 'agentic_mve';
   readonly taskAssignment: 'lead_or_self_claim';
 }
 
@@ -145,7 +145,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     'environmentVersionId',
     'lead',
     'roster',
-    'coordination',
+    'coordination', 'executionMode',
   ]);
   for (const key of Object.keys(spec)) {
     if (!allowedSpecKeys.has(key)) {
@@ -248,7 +248,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
   }
 
   const coordination = spec.coordination as Record<string, unknown> | undefined;
-  if (!coordination || coordination.mode !== 'collaborative') {
+  if (!coordination || (coordination.mode !== 'collaborative' && coordination.mode !== 'agentic_mve')) {
     throw new TeamPackageValidationError(
       'invalid_coordination',
       'spec.coordination.mode must be collaborative.',
@@ -281,7 +281,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       },
       roster: rosterMembers,
       coordination: {
-        mode: 'collaborative' as const,
+        mode: coordination.mode as 'collaborative' | 'agentic_mve',
         taskAssignment: 'lead_or_self_claim' as const,
       },
     },

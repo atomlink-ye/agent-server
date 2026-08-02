@@ -133,6 +133,7 @@ export function registerTeamRoutes(
           roster: parsed.package.spec.roster,
           environmentVersionId: parsed.package.spec.environmentVersionId,
         },
+        executionMode: parsed.package.spec.coordination.mode === 'agentic_mve' ? 'agentic_mve' : 'collaborative_mve',
       });
       const atomicImport = d.invokableRepository.importTeamVersionAtomically
         ? await d.invokableRepository.importTeamVersionAtomically({

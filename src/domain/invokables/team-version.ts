@@ -21,7 +21,7 @@ import {
   type InvokableVersionStatus,
 } from './invokable.js';
 
-export type TeamExecutionMode = 'legacy_graph' | 'collaborative_mve';
+export type TeamExecutionMode = 'legacy_graph' | 'collaborative_mve' | 'agentic_mve';
 
 export interface TeamCollaborationSpec {
   readonly lead: { readonly name: string; readonly agentVersionId: string };
@@ -70,6 +70,7 @@ export interface CreateCollaborativeDraftTeamVersionOptions extends InvokableOwn
   readonly description?: string | null;
   readonly collaborationSpec: TeamCollaborationSpec;
   readonly now?: () => Date;
+  readonly executionMode?: 'collaborative_mve' | 'agentic_mve';
 }
 
 export interface ReviseDraftTeamVersionPatch {
@@ -120,7 +121,7 @@ export function createCollaborativeDraftTeamVersion(
     status: 'draft',
     name: options.name,
     description: normalizeOptionalText(options.description),
-    executionMode: 'collaborative_mve',
+    executionMode: options.executionMode ?? 'collaborative_mve',
     graph: null,
     collaborationSpec: options.collaborationSpec,
     environmentVersionId: options.collaborationSpec.environmentVersionId,
@@ -174,7 +175,7 @@ export function publishCollaborativeTeamVersion(
   now: () => Date = () => new Date(),
 ): TeamVersion {
   assertDraft(version, 'Team version');
-  if (version.executionMode !== 'collaborative_mve') {
+  if (version.executionMode !== 'collaborative_mve' && version.executionMode !== 'agentic_mve') {
     throw new Error(
       'Only collaborative team versions can be published without a compiled plan',
     );
@@ -205,11 +206,11 @@ export function rehydrateTeamVersion(
   const executionMode: TeamExecutionMode =
     snapshot.executionMode ?? 'legacy_graph';
   const collaborationSpec: TeamCollaborationSpec | null =
-    executionMode === 'collaborative_mve'
+    executionMode === 'collaborative_mve' || executionMode === 'agentic_mve'
       ? (snapshot.collaborationSpec ?? null)
       : null;
 
-  if (executionMode === 'collaborative_mve' && !collaborationSpec) {
+  if ((executionMode === 'collaborative_mve' || executionMode === 'agentic_mve') && !collaborationSpec) {
     throw new Error('Collaborative team versions require collaborationSpec');
   }
 
@@ -223,7 +224,7 @@ export function rehydrateTeamVersion(
     if (snapshot.publishedAt !== null) {
       throw new Error('Draft team versions cannot have publishedAt set');
     }
-    if (executionMode !== 'collaborative_mve' && compiledPlan !== null) {
+    if (executionMode !== 'collaborative_mve' && executionMode !== 'agentic_mve' && compiledPlan !== null) {
       throw new Error('Draft team versions cannot have a compiled plan');
     }
   } else if (snapshot.status === 'published') {
@@ -236,7 +237,7 @@ export function rehydrateTeamVersion(
         'Published team versions require updatedAt greater than or equal to publishedAt',
       );
     }
-    if (executionMode === 'collaborative_mve') {
+    if (executionMode === 'collaborative_mve' || executionMode === 'agentic_mve') {
       if (!collaborationSpec) {
         throw new Error(
           'Published collaborative team versions require collaborationSpec',
@@ -269,7 +270,7 @@ export function rehydrateTeamVersion(
   }
 
   const graph: TeamGraph | null =
-    executionMode === 'collaborative_mve'
+    executionMode === 'collaborative_mve' || executionMode === 'agentic_mve'
       ? null
       : snapshot.graph
         ? 'mode' in snapshot.graph &&

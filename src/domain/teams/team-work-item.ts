@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 export type TeamWorkItemStatus =
-  'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled';
+  'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled' | 'open' | 'accepted';
 
 export interface TeamWorkItem {
   readonly id: string;

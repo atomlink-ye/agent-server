@@ -86,6 +86,9 @@ self-learning-team-phase2-smoke:
 self-learning-team-phase3-smoke:
 	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env PHASE3_SMOKE_POLL_MS --pass-env PHASE3_SMOKE_TIMEOUT_MS --pass-env PHASE3_SMOKE_RETAIN_FILE -- pnpm smoke:self-learning-team-phase3
 
+agentic-team-chat-smoke:
+	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env AGENTIC_TEAM_SMOKE_RETAIN_FILE -- pnpm smoke:agentic-team-chat
+
 clean:
 	docker compose down --remove-orphans
 	docker compose --profile postgres-test rm -sf postgres-test

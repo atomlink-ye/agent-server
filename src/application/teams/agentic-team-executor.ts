@@ -5,10 +5,20 @@ import type { TeamExecutionRepository } from '../ports/team-execution-repository
 
 export class AgenticTeamExecutor {
   public constructor(private readonly executions: TeamExecutionRepository) {}
-  public async handleTerminalRun(input: { team: TeamRun; task: Task; run: Run }): Promise<void> {
+  public async handleTerminalRun(input: {
+    team: TeamRun;
+    task: Task;
+    run: Run;
+  }): Promise<void> {
     if (input.team.executionMode !== 'agentic_mve') return;
-    if (input.team.leadTurnCount >= 4) throw new Error('Agentic Team stopped: lead_turn_limit.');
-    if (input.task.teamTaskKind !== 'lead_turn' && input.task.teamTaskKind !== 'work_attempt') throw new Error('Agentic Team child task is missing explicit task kind.');
-    void input.run; void this.executions;
+    if (input.team.leadTurnCount >= 4)
+      throw new Error('Agentic Team stopped: lead_turn_limit.');
+    if (
+      input.task.teamTaskKind !== 'lead_turn' &&
+      input.task.teamTaskKind !== 'work_attempt'
+    )
+      throw new Error('Agentic Team child task is missing explicit task kind.');
+    void input.run;
+    void this.executions;
   }
 }

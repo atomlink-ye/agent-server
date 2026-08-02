@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 export type TeamRunStatus = 'active' | 'waiting' | 'succeeded' | 'failed';
 export type TeamExecutionMode = 'collaborative_mve' | 'agentic_mve';
-export type AgenticTeamControlState = 'lead_ready' | 'lead_running' | 'member_work_running' | 'terminal';
+export type AgenticTeamControlState =
+  'lead_ready' | 'lead_running' | 'member_work_running' | 'terminal';
 export type TeamRunPhase =
   'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
 
@@ -69,10 +70,20 @@ export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
   });
 }
 
-export function transitionAgenticControlState(run: TeamRun, expectedRevision: number, to: AgenticTeamControlState): TeamRun {
-  if (run.executionMode !== 'agentic_mve') throw new Error('Not an agentic team run.');
-  if (run.revision !== expectedRevision) throw new Error('Team run revision conflict.');
-  return Object.freeze({ ...run, controlState: to, revision: run.revision + 1 });
+export function transitionAgenticControlState(
+  run: TeamRun,
+  expectedRevision: number,
+  to: AgenticTeamControlState,
+): TeamRun {
+  if (run.executionMode !== 'agentic_mve')
+    throw new Error('Not an agentic team run.');
+  if (run.revision !== expectedRevision)
+    throw new Error('Team run revision conflict.');
+  return Object.freeze({
+    ...run,
+    controlState: to,
+    revision: run.revision + 1,
+  });
 }
 
 export function transitionTeamRunPhase(

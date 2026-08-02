@@ -95,8 +95,11 @@ export class ExecuteTeamTask {
     }
 
     if (teamVersion?.executionMode === 'agentic_mve') {
-      if (!this.agenticExecutor) throw new Error('Agentic team execution dependencies are unavailable.');
-      throw new Error('Agentic team activation requires the durable scheduler.');
+      if (!this.agenticExecutor)
+        throw new Error('Agentic team execution dependencies are unavailable.');
+      throw new Error(
+        'Agentic team activation requires the durable scheduler.',
+      );
     }
 
     if (!teamVersion?.compiledPlan) {

@@ -24,7 +24,11 @@ export const TeamVersionResponseSchema = z
     status: z.enum(['draft', 'published']),
     name: z.string(),
     description: z.string().nullable(),
-    execution_mode: z.enum(['legacy_graph', 'collaborative_mve', 'agentic_mve']),
+    execution_mode: z.enum([
+      'legacy_graph',
+      'collaborative_mve',
+      'agentic_mve',
+    ]),
     environment_version_id: uuid.nullable(),
     collaboration_spec: z.unknown().nullable(),
     created_at: timestamp,
@@ -59,7 +63,9 @@ export const TeamRunResponseSchema = z
     created_at: timestamp,
     updated_at: timestamp,
     execution_mode: z.enum(['collaborative_mve', 'agentic_mve']).nullable(),
-    control_state: z.enum(['lead_ready','lead_running','member_work_running','terminal']).nullable(),
+    control_state: z
+      .enum(['lead_ready', 'lead_running', 'member_work_running', 'terminal'])
+      .nullable(),
     revision: z.number().int(),
     lead_turn_count: z.number().int(),
     stop_reason: z.string().nullable(),
@@ -91,7 +97,9 @@ export const TeamWorkItemResponseSchema = z
       'in_progress',
       'completed',
       'blocked',
-      'cancelled', 'open', 'accepted',
+      'cancelled',
+      'open',
+      'accepted',
     ]),
     owner_member_id: uuid.nullable(),
     created_by_member_id: uuid,
@@ -102,10 +110,20 @@ export const TeamWorkItemResponseSchema = z
     completed_at: timestamp.nullable(),
   })
   .strict();
-export const TeamWorkItemAttemptResponseSchema = z.object({
-  id: uuid, work_item_id: uuid, team_run_id: uuid, attempt_no: z.number().int(),
-  assignee_member_id: uuid, requested_by_lead_task_id: uuid, feedback: z.string().nullable(),
-  execution_task_id: uuid.nullable(), status: z.enum(['queued','running','completed','failed']),
-  result_summary: z.string().nullable(), created_at: timestamp, updated_at: timestamp,
-  completed_at: timestamp.nullable(),
-}).strict();
+export const TeamWorkItemAttemptResponseSchema = z
+  .object({
+    id: uuid,
+    work_item_id: uuid,
+    team_run_id: uuid,
+    attempt_no: z.number().int(),
+    assignee_member_id: uuid,
+    requested_by_lead_task_id: uuid,
+    feedback: z.string().nullable(),
+    execution_task_id: uuid.nullable(),
+    status: z.enum(['queued', 'running', 'completed', 'failed']),
+    result_summary: z.string().nullable(),
+    created_at: timestamp,
+    updated_at: timestamp,
+    completed_at: timestamp.nullable(),
+  })
+  .strict();

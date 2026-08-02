@@ -121,21 +121,70 @@ export class TeamToolHandler {
     });
   }
 
-  public async team_work_create_and_assign(input: { teamRunId: string; subject: string; description?: string; assigneeMemberId: string; sourceRunId: string; leadTaskId: string; commandHash: string; expectedRevision: number }, actor: TeamToolActor) {
-    if (actor.role !== 'lead') throw new Error('Only the team lead can assign work.');
+  public async team_work_create_and_assign(
+    input: {
+      teamRunId: string;
+      subject: string;
+      description?: string;
+      assigneeMemberId: string;
+      sourceRunId: string;
+      leadTaskId: string;
+      commandHash: string;
+      expectedRevision: number;
+    },
+    actor: TeamToolActor,
+  ) {
+    if (actor.role !== 'lead')
+      throw new Error('Only the team lead can assign work.');
     await this.team(input.teamRunId, actor);
-    return this.repo.createAssignedWork({ ...input, description: input.description ?? null, owner: actor });
+    return this.repo.createAssignedWork({
+      ...input,
+      description: input.description ?? null,
+      owner: actor,
+    });
   }
-  public async team_work_accept(input: { teamRunId: string; workItemId: string; sourceRunId: string; commandHash: string; expectedRevision: number }, actor: TeamToolActor) {
-    if (actor.role !== 'lead') throw new Error('Only the team lead can accept work.');
+  public async team_work_accept(
+    input: {
+      teamRunId: string;
+      workItemId: string;
+      sourceRunId: string;
+      commandHash: string;
+      expectedRevision: number;
+    },
+    actor: TeamToolActor,
+  ) {
+    if (actor.role !== 'lead')
+      throw new Error('Only the team lead can accept work.');
     return this.repo.acceptWork({ ...input, owner: actor });
   }
-  public async team_work_request_rework(input: { teamRunId: string; workItemId: string; assigneeMemberId: string; feedback: string; sourceRunId: string; leadTaskId: string; commandHash: string; expectedRevision: number }, actor: TeamToolActor) {
-    if (actor.role !== 'lead') throw new Error('Only the team lead can request rework.');
+  public async team_work_request_rework(
+    input: {
+      teamRunId: string;
+      workItemId: string;
+      assigneeMemberId: string;
+      feedback: string;
+      sourceRunId: string;
+      leadTaskId: string;
+      commandHash: string;
+      expectedRevision: number;
+    },
+    actor: TeamToolActor,
+  ) {
+    if (actor.role !== 'lead')
+      throw new Error('Only the team lead can request rework.');
     return this.repo.requestRework({ ...input, owner: actor });
   }
-  public async team_completion_request(input: { teamRunId: string; sourceRunId: string; commandHash: string; expectedRevision: number }, actor: TeamToolActor) {
-    if (actor.role !== 'lead') throw new Error('Only the team lead can request completion.');
+  public async team_completion_request(
+    input: {
+      teamRunId: string;
+      sourceRunId: string;
+      commandHash: string;
+      expectedRevision: number;
+    },
+    actor: TeamToolActor,
+  ) {
+    if (actor.role !== 'lead')
+      throw new Error('Only the team lead can request completion.');
     return this.repo.requestCompletion({ ...input, owner: actor });
   }
   private async team(id: string, actor: OwnerScope) {

@@ -145,7 +145,8 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     'environmentVersionId',
     'lead',
     'roster',
-    'coordination', 'executionMode',
+    'coordination',
+    'executionMode',
   ]);
   for (const key of Object.keys(spec)) {
     if (!allowedSpecKeys.has(key)) {
@@ -248,7 +249,11 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
   }
 
   const coordination = spec.coordination as Record<string, unknown> | undefined;
-  if (!coordination || (coordination.mode !== 'collaborative' && coordination.mode !== 'agentic_mve')) {
+  if (
+    !coordination ||
+    (coordination.mode !== 'collaborative' &&
+      coordination.mode !== 'agentic_mve')
+  ) {
     throw new TeamPackageValidationError(
       'invalid_coordination',
       'spec.coordination.mode must be collaborative.',

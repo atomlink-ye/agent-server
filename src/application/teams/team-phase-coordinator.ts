@@ -32,8 +32,13 @@ export class TeamPhaseCoordinator {
     );
     if (!team) return;
     if (team.executionMode === 'agentic_mve') {
-      if (!this.agenticExecutor) throw new Error('Agentic Team executor is unavailable.');
-      await this.agenticExecutor.handleTerminalRun({ team, task: input.task, run: input.run });
+      if (!this.agenticExecutor)
+        throw new Error('Agentic Team executor is unavailable.');
+      await this.agenticExecutor.handleTerminalRun({
+        team,
+        task: input.task,
+        run: input.run,
+      });
       return;
     }
     if (

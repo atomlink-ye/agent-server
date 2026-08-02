@@ -66,6 +66,7 @@ Do not remove `apps/web/lib/self-learning-bff.ts` until the new real Web path ha
 ### Task 1: Add the forward-only Agentic Team schema and domain contracts
 
 **Files:**
+
 - Create: `src/infrastructure/postgres/migrations/0023_agentic_team_chat_mve.sql`
 - Create: `src/domain/teams/team-work-item-attempt.ts`
 - Modify: `src/domain/teams/team-run.ts`
@@ -157,10 +158,7 @@ Add these shapes without removing legacy phase functions:
 ```ts
 export type TeamExecutionMode = 'collaborative_mve' | 'agentic_mve';
 export type AgenticTeamControlState =
-  | 'lead_ready'
-  | 'lead_running'
-  | 'member_work_running'
-  | 'terminal';
+  'lead_ready' | 'lead_running' | 'member_work_running' | 'terminal';
 
 export interface TeamWorkItemAttempt {
   readonly id: string;
@@ -191,9 +189,15 @@ export function transitionAgenticControlState(
   expectedRevision: number,
   to: AgenticTeamControlState,
 ): TeamRun {
-  if (run.executionMode !== 'agentic_mve') throw new Error('Not an agentic team run.');
-  if (run.revision !== expectedRevision) throw new Error('Team run revision conflict.');
-  return Object.freeze({ ...run, controlState: to, revision: run.revision + 1 });
+  if (run.executionMode !== 'agentic_mve')
+    throw new Error('Not an agentic team run.');
+  if (run.revision !== expectedRevision)
+    throw new Error('Team run revision conflict.');
+  return Object.freeze({
+    ...run,
+    controlState: to,
+    revision: run.revision + 1,
+  });
 }
 ```
 
@@ -231,6 +235,7 @@ git commit -m "Add agentic Team durable model"
 ### Task 2: Implement semantic Team commands and durable attempts
 
 **Files:**
+
 - Modify: `src/application/ports/team-execution-repository.ts`
 - Modify: `src/infrastructure/postgres/postgres-collaborative-team-repository.ts`
 - Modify: `src/application/teams/team-tools.ts`
@@ -303,6 +308,7 @@ git commit -m "Add agentic Team commands"
 ### Task 3: Build the bounded Agentic turn scheduler
 
 **Files:**
+
 - Create: `src/application/teams/agentic-team-executor.ts`
 - Modify: `src/application/teams/team-phase-coordinator.ts`
 - Modify: `src/application/runs/execute-run.ts`
@@ -314,7 +320,11 @@ Keep the current `CollaborativeTeamExecutor` untouched for legacy runs. Add:
 
 ```ts
 if (team.executionMode === 'agentic_mve') {
-  await this.agentic.handleTerminalRun({ team, task: input.task, run: input.run });
+  await this.agentic.handleTerminalRun({
+    team,
+    task: input.task,
+    run: input.run,
+  });
   return;
 }
 ```
@@ -403,6 +413,7 @@ git commit -m "Run bounded agentic Team turns"
 ### Task 4: Make the self-learning fixture prove autonomous rework
 
 **Files:**
+
 - Modify: `templates/self-learning-market-research/team-project.yaml`
 - Modify: `templates/self-learning-market-research/teams/market-research.yaml`
 - Modify: `templates/self-learning-market-research/agents/lead.yaml`
@@ -471,6 +482,7 @@ git commit -m "Prove agentic Team rework flow"
 ### Task 5: Add the Project and Agent Session BFF projection
 
 **Files:**
+
 - Create: `apps/web/lib/agentic-team-bff.ts`
 - Create: `apps/web/app/api/team-project/runs/route.ts`
 - Create: `apps/web/app/api/team-project/route.ts`
@@ -545,6 +557,7 @@ git commit -m "Project Team runs as agent sessions"
 ### Task 6: Integrate Project Agent Sessions into Web Chat
 
 **Files:**
+
 - Modify: `apps/web/app/page.tsx`
 - Modify: `apps/web/components/chat/conversation-sidebar.tsx`
 - Modify: `apps/web/components/chat/activity-panel.tsx`
@@ -601,6 +614,7 @@ git commit -m "Show Team agent sessions in Web Chat"
 ### Task 7: Prove the full Web path, then retire Project Lab
 
 **Files:**
+
 - Modify: `scripts/smoke/agentic-team-chat-main-flow.mjs`
 - Remove after pass: `apps/web/app/projects/page.tsx`
 - Remove after pass: `apps/web/components/projects/project-lab.tsx`
@@ -650,6 +664,7 @@ git commit -m "Replace Project Lab with Team chat"
 ### Task 8: Align documentation and run proportionate completion checks
 
 **Files:**
+
 - Modify: `docs/features.md`
 - Modify: `docs/components.md`
 - Modify: `docs/contracts/agent-team-api.md`

@@ -51,6 +51,37 @@ const AGENTIC_COMMAND_RECEIPTS = new Set([
   'team_work_accept',
   'team_completion_request',
 ]);
+const SAFE_TOOL_NAMES = new Set([
+  'synthetic_stock_snapshot',
+  'synthetic_event_batch',
+  'team_work_create_and_assign',
+  'team_work_accept',
+  'team_work_request_rework',
+  'team_completion_request',
+]);
+const SAFE_DETAIL_KINDS = new Set([
+  'shell',
+  'read',
+  'edit',
+  'write',
+  'search',
+  'fetch',
+  'subagent',
+  'other',
+]);
+const SAFE_PERMISSION_KINDS = new Set([
+  'tool',
+  'plan',
+  'question',
+  'mode',
+  'other',
+]);
+const SAFE_ERROR_CODES = new Set([
+  'runtime_execution_failed',
+  'runtime_timed_out',
+  'cancelled',
+  'terminal_persistence_failed',
+]);
 const stage = process.env.AGENTIC_TEAM_SMOKE_STAGE ?? 'full';
 if (!STAGES.has(stage))
   throw new Error(`invalid_agentic_smoke_stage: ${stage}`);
@@ -786,38 +817,6 @@ async function focusedSnapshot(taskId) {
     ),
   };
 }
-
-const SAFE_TOOL_NAMES = new Set([
-  'synthetic_stock_snapshot',
-  'synthetic_event_batch',
-  'team_work_create_and_assign',
-  'team_work_accept',
-  'team_work_request_rework',
-  'team_completion_request',
-]);
-const SAFE_DETAIL_KINDS = new Set([
-  'shell',
-  'read',
-  'edit',
-  'write',
-  'search',
-  'fetch',
-  'subagent',
-  'other',
-]);
-const SAFE_PERMISSION_KINDS = new Set([
-  'tool',
-  'plan',
-  'question',
-  'mode',
-  'other',
-]);
-const SAFE_ERROR_CODES = new Set([
-  'runtime_execution_failed',
-  'runtime_timed_out',
-  'cancelled',
-  'terminal_persistence_failed',
-]);
 
 function safeRunEvent(event) {
   const payload = event.payload ?? {};

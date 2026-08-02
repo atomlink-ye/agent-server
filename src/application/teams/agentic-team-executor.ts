@@ -309,6 +309,7 @@ export class AgenticTeamExecutor {
       rootTaskId: parent.rootTaskId,
       parentTaskId: parent.id,
       parentRunId: parentRun.id,
+      teamMemberRunId: member.id,
       invokableKind: 'agent',
       invokableVersionId: agentVersionId,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt }),

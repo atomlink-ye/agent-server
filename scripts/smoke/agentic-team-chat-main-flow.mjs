@@ -82,6 +82,13 @@ const SAFE_ERROR_CODES = new Set([
   'cancelled',
   'terminal_persistence_failed',
 ]);
+const SAFE_RUN_EVENT_TYPES = new Set([
+  'started',
+  'output',
+  'succeeded',
+  'failed',
+  'cancelled',
+]);
 const stage = process.env.AGENTIC_TEAM_SMOKE_STAGE ?? 'full';
 if (!STAGES.has(stage))
   throw new Error(`invalid_agentic_smoke_stage: ${stage}`);
@@ -298,7 +305,7 @@ try {
     body: {
       invokable: { kind: 'team', version_id: teamPublished.id },
       input: {
-        text: 'Lead: create two research tasks for the analyst and verifier, then synthesize their results.',
+        text: 'Lead: create one research task for a member, then synthesize its result.',
       },
     },
     idempotencyKey: randomUUID(),
@@ -358,10 +365,7 @@ try {
   const memberNames = members
     .filter((m) => m.role === 'member')
     .map((m) => m.name);
-  if (
-    new Set(memberNames).size !== 2 ||
-    memberNames.some((name) => ['researcher', 'critic'].includes(name))
-  )
+  if (new Set(memberNames).size !== 2)
     throw new Error(`unexpected_member_names: ${JSON.stringify(memberNames)}`);
 
   // ---- Verify WorkItems ----
@@ -378,8 +382,8 @@ try {
   );
   console.log(`completed_work_items: ${completedItems.length}`);
   if (
-    workItems.length !== 2 ||
-    leadWorkItems.length !== 2 ||
+    workItems.length !== 1 ||
+    leadWorkItems.length !== 1 ||
     completedItems.length !== workItems.length
   )
     throw new Error(
@@ -389,8 +393,9 @@ try {
   // ---- Verify runtime sessions (via DB inspection) ----
   await new Promise((resolve) => setTimeout(resolve, 10000));
   const runtimeSessions = await db.query(
-    `SELECT m.id AS member_id, m.name, m.role, m.status, m.runtime_session_id,
-            r.scope_kind, r.provider_agent_id
+    `SELECT m.id AS member_id, m.name, m.role, m.status AS member_status,
+            m.runtime_session_id, r.scope_kind,
+            r.provider_agent_id
        FROM team_member_runs m
        LEFT JOIN runtime_sessions r ON r.id = m.runtime_session_id
       WHERE m.team_run_id=$1
@@ -400,76 +405,93 @@ try {
   const linkedMembers = runtimeSessions.rows.filter(
     (r) => r.runtime_session_id !== null,
   );
+  const linkedMemberRoles = linkedMembers.map((r) => r.role);
   if (
     runtimeSessions.rows.length !== 3 ||
-    linkedMembers.length !== 3 ||
+    linkedMembers.length !== 2 ||
+    linkedMemberRoles.filter((role) => role === 'lead').length !== 1 ||
+    linkedMemberRoles.filter((role) => role === 'member').length !== 1 ||
     linkedMembers.some(
       (r) =>
         r.scope_kind !== 'team_member' ||
-        !['idle', 'stopped'].includes(r.status),
+        !r.provider_agent_id ||
+        !['idle', 'stopped'].includes(r.member_status),
     )
   )
     throw new Error(
-      `expected_three_linked_team_member_runtime_sessions: ${JSON.stringify(runtimeSessions.rows)}`,
+      `expected_two_linked_team_member_runtime_sessions: total=${runtimeSessions.rows.length} linked=${linkedMembers.length}`,
     );
-  if (new Set(linkedMembers.map((r) => r.provider_agent_id)).size !== 3)
+  if (new Set(linkedMembers.map((r) => r.provider_agent_id)).size !== 2)
     throw new Error('expected_distinct_member_provider_bindings');
-  const memberIntervals = await db.query(
-    `SELECT m.name AS member_name,
-            MIN(e.created_at) FILTER (WHERE e.type='started') AS started_at,
-            COALESCE(
-              MAX(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed')),
-              MAX(r.updated_at) FILTER (WHERE r.status IN ('succeeded','failed','cancelled'))
-            ) AS terminal_at
-       FROM team_member_runs m
-       JOIN tasks t ON t.root_task_id=$1 AND t.logical_step_key = 'member:' || $2::text || ':' || m.id::text || ':member_work'
-       JOIN runs r ON r.task_id=t.id
-       JOIN run_events e ON e.run_id=r.id
-      WHERE m.team_run_id=$2::uuid AND m.role='member'
-      GROUP BY m.name`,
-    [rootTaskId, teamRunResult.id],
-  );
-  const intervals = memberIntervals.rows.filter(
-    (r) => r.started_at !== null && r.terminal_at !== null,
-  );
-  if (intervals.length < 2)
-    throw new Error('member_execution_intervals_missing');
-  const latestStart = Math.max(
-    ...intervals.map((r) => Date.parse(r.started_at)),
-  );
-  const earliestEnd = Math.min(
-    ...intervals.map((r) => Date.parse(r.terminal_at)),
-  );
-  if (latestStart >= earliestEnd)
-    throw new Error('member_execution_intervals_do_not_overlap');
-  const leadExecutions = await db.query(
-    `SELECT t.logical_step_key, rs.scope_kind, rs.provider_agent_id
+  const workAttemptTasks = await db.query(
+    `SELECT t.id,t.status AS task_status,t.team_member_run_id,r.status AS run_status
        FROM tasks t
        JOIN runs r ON r.task_id=t.id
-       LEFT JOIN runtime_sessions rs ON rs.task_id=t.id
-      WHERE t.root_task_id=$1 AND t.logical_step_key LIKE 'lead:%'
-      ORDER BY t.logical_step_key, r.attempt DESC`,
+      WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt'
+      ORDER BY t.created_at`,
     [rootTaskId],
   );
-  const kickoffExecution = leadExecutions.rows.find((r) =>
-    r.logical_step_key.endsWith(':kickoff'),
+  const nonLeadMemberIds = new Set(
+    members.filter((m) => m.role === 'member').map((m) => m.id),
   );
-  const finalizationExecution = leadExecutions.rows.find((r) =>
-    r.logical_step_key.endsWith(':finalize'),
+  const attemptMemberIds = new Set(
+    workAttemptTasks.rows.map((row) => row.team_member_run_id),
   );
   if (
-    !kickoffExecution ||
-    !finalizationExecution ||
-    kickoffExecution.scope_kind !== 'team_member' ||
-    finalizationExecution.scope_kind !== 'task' ||
-    !kickoffExecution.provider_agent_id ||
-    !finalizationExecution.provider_agent_id ||
-    kickoffExecution.provider_agent_id ===
-      finalizationExecution.provider_agent_id
+    workAttemptTasks.rows.length !== 2 ||
+    attemptMemberIds.size !== 1 ||
+    !nonLeadMemberIds.has(workAttemptTasks.rows[0]?.team_member_run_id) ||
+    workAttemptTasks.rows.some(
+      (row) =>
+        row.task_status !== 'completed' || row.run_status !== 'succeeded',
+    )
   )
-    throw new Error(
-      `lead_runtime_scope_provider_not_isolated: ${JSON.stringify(leadExecutions.rows)}`,
-    );
+    throw new Error('work_attempt_tasks_not_sequentially_completed');
+  const attemptsForTasks = await db.query(
+    `SELECT execution_task_id,COUNT(*) AS count
+       FROM team_work_item_attempts
+      WHERE team_run_id=$1
+      GROUP BY execution_task_id`,
+    [teamRunResult.id],
+  );
+  if (
+    attemptsForTasks.rows.length !== 2 ||
+    attemptsForTasks.rows.some((row) => Number(row.count) !== 1) ||
+    attemptsForTasks.rows.some(
+      (row) =>
+        !workAttemptTasks.rows.some(
+          (task) => task.id === row.execution_task_id,
+        ),
+    )
+  )
+    throw new Error('work_attempt_tasks_not_uniquely_linked');
+  const leadTurnTasks = await db.query(
+    `SELECT t.id,t.status AS task_status,t.team_member_run_id,r.status AS run_status
+       FROM tasks t
+       JOIN runs r ON r.task_id=t.id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+      ORDER BY t.created_at`,
+    [rootTaskId],
+  );
+  if (
+    leadTurnTasks.rows.length !== 4 ||
+    leadTurnTasks.rows.some(
+      (row) =>
+        row.team_member_run_id !== leadMember.id ||
+        row.task_status !== 'completed' ||
+        row.run_status !== 'succeeded',
+    )
+  )
+    throw new Error('lead_turn_tasks_not_completed');
+  const leadRuntimeSession = runtimeSessions.rows.find(
+    (row) => row.role === 'lead',
+  );
+  if (
+    !leadRuntimeSession?.runtime_session_id ||
+    leadRuntimeSession.scope_kind !== 'team_member' ||
+    !leadRuntimeSession.provider_agent_id
+  )
+    throw new Error('lead_reusable_runtime_session_missing');
   const rootEvents = await db.query(
     `SELECT type,payload FROM run_events WHERE run_id=$1 AND type IN ('output','succeeded')`,
     [teamRunResult.root_run_id],
@@ -479,20 +501,24 @@ try {
     !rootEvents.rows.some((r) => r.type === 'succeeded')
   )
     throw new Error('root_completion_events_missing');
-  const finalizationRun = await db.query(
-    `SELECT r.status, r.result
-       FROM runs r
+  const completionRuns = await db.query(
+    `SELECT r.status, (NULLIF(BTRIM(r.result->>'text'),'') IS NOT NULL) AS has_result_text
+       FROM team_command_receipts c
+       JOIN runs r ON r.id=c.source_run_id
        JOIN tasks t ON t.id=r.task_id
-      WHERE t.root_task_id=$1 AND t.logical_step_key LIKE 'lead:%:finalize'
-      ORDER BY r.attempt DESC LIMIT 1`,
+      WHERE c.command_name='team_completion_request' AND t.root_task_id=$1
+      ORDER BY c.created_at DESC`,
     [rootTaskId],
   );
-  const finalText = finalizationRun.rows[0]?.result?.text?.trim();
-  console.log(
-    `lead_finalization_run: ${JSON.stringify({ status: finalizationRun.rows[0]?.status, has_result_text: Boolean(finalText) })}`,
+  const completionRun = completionRuns.rows.find(
+    (row) => row.status === 'succeeded' && row.has_result_text,
   );
-  if (finalizationRun.rows[0]?.status !== 'succeeded' || !finalText)
-    throw new Error('lead_finalization_plain_text_missing');
+  const hasTeamFinalText = Boolean(teamRunResult.final_text?.trim());
+  console.log(
+    `completion_evidence: ${JSON.stringify({ source_run_succeeded: Boolean(completionRun), team_final_text: hasTeamFinalText })}`,
+  );
+  if (!completionRun && !hasTeamFinalText)
+    throw new Error('agentic_completion_text_missing');
   await request(`/api/v1/team-runs/${teamRunResult.id}`, {
     method: 'GET',
     status: 404,
@@ -501,23 +527,16 @@ try {
   const logicalSteps = children.map((t) => t.logical_step_key).filter(Boolean);
   if (new Set(logicalSteps).size !== logicalSteps.length)
     throw new Error('duplicate_logical_step_tasks');
-  const allRuntimeSessions = await db.query(
-    `SELECT scope_kind, scope_id FROM runtime_sessions WHERE tenant_id=$1`,
-    [tenantId],
-  );
-  const teamMemberSessions = allRuntimeSessions.rows.filter(
-    (r) => r.scope_kind === 'team_member',
-  );
-  console.log(`team_member_runtime_sessions: ${teamMemberSessions.length}`);
+  console.log(`team_member_runtime_sessions: ${linkedMembers.length}`);
 
   const agenticEvidence = await db.query(
     `SELECT tr.lead_turn_count, COUNT(DISTINCT a.work_item_id) AS work_items, COUNT(*) AS attempts, COUNT(*) FILTER (WHERE a.attempt_no=2) AS rework_attempts, COUNT(*) FILTER (WHERE a.status='completed') AS completed_attempts, COUNT(DISTINCT a.execution_task_id) AS linked_attempt_tasks FROM team_runs tr LEFT JOIN team_work_item_attempts a ON a.team_run_id=tr.id WHERE tr.id=$1 GROUP BY tr.id`,
     [teamRunResult.id],
   );
   const evidence = agenticEvidence.rows[0];
-  if (Number(evidence.lead_turn_count) < 2)
-    throw new Error('agentic_lead_turns_missing');
-  if (Number(evidence.work_items) < 1 || Number(evidence.attempts) < 2)
+  if (Number(evidence.lead_turn_count) !== 4)
+    throw new Error('agentic_lead_turn_count_mismatch');
+  if (Number(evidence.work_items) !== 1 || Number(evidence.attempts) !== 2)
     throw new Error('agentic_attempts_missing');
   if (Number(evidence.rework_attempts) < 1)
     throw new Error('agentic_rework_missing');
@@ -562,10 +581,11 @@ try {
       status: 'passed',
       root_task: 'completed',
       child_tasks: children.length,
-      lead_work_items: leadWorkItems.length,
-      dynamic_work_items: leadWorkItems.length === 2,
-      member_runtime_sessions: teamMemberSessions.length,
-      phases: 'lead_kickoff -> member_work -> lead_finalize -> done',
+      work_items: workItems.length,
+      lead_turns: leadTurnTasks.rows.length,
+      member_runtime_sessions: linkedMembers.length,
+      phases:
+        'lead turn -> attempt 1 -> rework -> attempt 2 -> accept -> completion',
       team_run_status: teamRunResult.status,
     }),
   );
@@ -707,15 +727,31 @@ async function focusedSnapshot(taskId) {
       WHERE t.root_task_id=$1 ORDER BY t.created_at`,
     [taskId],
   );
+  const runIds = tasks.rows.map((row) => row.run_id).filter(Boolean);
   const receipts = teamRun
     ? await db.query(
-        `SELECT command_name FROM team_command_receipts
+        `SELECT command_name,created_at FROM team_command_receipts
           WHERE source_run_id IN (SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id
                                    WHERE t.root_task_id=$1)
           ORDER BY created_at`,
         [taskId],
       )
     : { rows: [] };
+  const receiptsByRun = new Map();
+  if (runIds.length) {
+    const runReceipts = await db.query(
+      `SELECT source_run_id,command_name,created_at
+         FROM team_command_receipts
+        WHERE source_run_id = ANY($1::uuid[])
+        ORDER BY created_at DESC`,
+      [runIds],
+    );
+    for (const receipt of runReceipts.rows) {
+      const existing = receiptsByRun.get(receipt.source_run_id) ?? [];
+      existing.push(receipt);
+      receiptsByRun.set(receipt.source_run_id, existing);
+    }
+  }
   const attempts = teamRun
     ? await db.query(
         `SELECT attempt_no,status,execution_task_id,result_summary
@@ -734,7 +770,6 @@ async function focusedSnapshot(taskId) {
       )
     : { rows: [] };
   const grantRefs = await readGrantRefs();
-  const runIds = tasks.rows.map((row) => row.run_id).filter(Boolean);
   const childEvents = runIds.length
     ? await db.query(
         `SELECT run_id,type,created_at,payload
@@ -759,6 +794,13 @@ async function focusedSnapshot(taskId) {
     run_error_code: safeEnum(row.run_error_code, SAFE_ERROR_CODES),
     member_id: row.team_member_run_id,
     last_10_events: eventsByRun.get(row.run_id) ?? [],
+    ...(row.team_task_kind === 'lead_turn' && row.run_id
+      ? {
+          command_receipts: safeCommandReceipts(
+            receiptsByRun.get(row.run_id) ?? [],
+          ),
+        }
+      : {}),
     runtime_session: row.runtime_session_id
       ? {
           exists: true,
@@ -784,7 +826,9 @@ async function focusedSnapshot(taskId) {
         }
       : null,
     tasks_runs: safeTasks,
-    receipt_names: receipts.rows.map((row) => row.command_name),
+    receipt_names: receipts.rows
+      .map((row) => safeEnum(row.command_name, AGENTIC_COMMAND_RECEIPTS))
+      .filter(Boolean),
     lead_run: leadRun
       ? {
           status: leadRun.run_status,
@@ -823,7 +867,7 @@ async function focusedSnapshot(taskId) {
 function safeRunEvent(event) {
   const payload = event.payload ?? {};
   return {
-    type: event.type,
+    type: safeEnum(event.type, SAFE_RUN_EVENT_TYPES),
     tool: safeEnum(payload.tool_name, SAFE_TOOL_NAMES),
     status: safeString(payload.status),
     detail_kind: safeEnum(payload.detail_kind, SAFE_DETAIL_KINDS),
@@ -836,6 +880,18 @@ function safeRunEvent(event) {
         : null,
     label: safeLabel(payload.label),
     at: event.created_at,
+  };
+}
+
+function safeCommandReceipts(receipts) {
+  return {
+    exists: receipts.length > 0,
+    names: receipts
+      .map((receipt) =>
+        safeEnum(receipt.command_name, AGENTIC_COMMAND_RECEIPTS),
+      )
+      .filter(Boolean),
+    latest_at: receipts[0]?.created_at ?? null,
   };
 }
 

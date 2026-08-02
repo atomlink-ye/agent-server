@@ -350,11 +350,19 @@ Construct Lead input from durable state only:
   members: [{ member_id, name, role }],
   work_items: [{ id, subject, status, attempts: [{ attempt_no, assignee, status, result_summary, feedback }] }],
   limits: { max_lead_turns: 4, max_work_items: 4, max_attempts_per_item: 2 },
-  allowed_commands: ['create_and_assign', 'accept', 'request_rework', 'request_completion']
+  allowed_commands: [{ command: 'create_and_assign' }]
 }
 ```
 
-The prompt must ask the Lead to inspect evidence and choose commands; it must not prescribe the number or sequence of member tasks.
+Derive `allowed_commands` from the same durable snapshot. With no WorkItems,
+allow create. While any WorkItem remains unaccepted and no attempt is active,
+allow eligible accept/rework targets and allow create while below the four-item
+cap. Once at least one WorkItem exists and every WorkItem is accepted, expose
+only `request_completion`; this terminal-ready state cannot reopen through a
+new create command. Use the same policy for prompt guidance and current-turn
+tool grants. The prompt must ask the Lead to inspect evidence and choose among
+only these commands; it must not prescribe the number or sequence of member
+tasks before terminal-ready.
 
 - [ ] **Step 4: Materialize queued attempts**
 
@@ -387,6 +395,13 @@ if (team.completionRequestedByRunId === run.id) {
 ```
 
 If commands created queued attempts, materialize them. If neither completion nor durable progress occurred, schedule no more than the remaining Lead turn allowance; on exhaustion, fail with `lead_turn_limit`.
+
+Refresh Agentic Lead continuation authorization from current-turn tool refs
+rather than the RuntimeSession's original broad launch snapshot. Receipt
+validation, transaction-wide source fencing, exact completion-run hardening,
+cross-team assignee fencing, root Run/Task failure propagation, generalized
+lead-turn exhaustion handling, and active-attempt concurrency hardening remain
+deferred beyond the MVE smoke blocker.
 
 - [ ] **Step 7: Reuse Team member RuntimeSessions**
 

@@ -121,6 +121,16 @@ export class RuntimeToolGrantService {
     this.#grants.delete(grantId);
   }
 
+  public isToolAllowed(grantId: string, toolRef: string): boolean {
+    this.pruneExpired();
+    const grant = this.#grants.get(grantId);
+    return Boolean(
+      grant &&
+      Date.parse(grant.expiresAt) > Date.now() &&
+      grant.allowedTools.includes(toolRef),
+    );
+  }
+
   public refreshForSession(
     productSessionId: string,
     allowedTools: readonly string[],
@@ -133,13 +143,12 @@ export class RuntimeToolGrantService {
       throw new Error('Unsupported or duplicate runtime tool ref.');
     const expiresAt = new Date(Date.now() + Math.max(1, ttlMs)).toISOString();
     for (const [grantId, grant] of this.#grants) {
-      if (
-        grant.productSessionId !== productSessionId ||
-        grant.allowedTools.length !== allowedTools.length ||
-        grant.allowedTools.some((tool, index) => tool !== allowedTools[index])
-      )
-        continue;
-      this.#grants.set(grantId, { ...grant, expiresAt });
+      if (grant.productSessionId !== productSessionId) continue;
+      this.#grants.set(grantId, {
+        ...grant,
+        allowedTools: Object.freeze([...allowedTools]),
+        expiresAt,
+      });
     }
   }
 

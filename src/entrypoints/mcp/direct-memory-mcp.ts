@@ -134,7 +134,12 @@ export function createDirectMemoryMcpHandler(input: {
             server,
             input.teamTools.handler,
             actor,
-            grant.allowedTools,
+            grant.allowedTools.some((tool) =>
+              AGENT_SERVER_TEAM_TOOL_REFS.slice(6).includes(tool),
+            )
+              ? AGENT_SERVER_TEAM_TOOL_REFS.slice(6)
+              : grant.allowedTools,
+            (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
           );
       }
     }

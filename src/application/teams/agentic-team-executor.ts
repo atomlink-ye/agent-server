@@ -71,7 +71,7 @@ export class AgenticTeamExecutor {
       claim.run,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `team_run_id: ${team.id}\n\nYou are the lead. Use the quality rubric: assign exactly one research work item to each teammate, then inspect their evidence. Do not complete the team until all accepted.\n\nOriginal request: ${claim.run.prompt}`,
+      `team_run_id: ${team.id}\n\nYou are the Lead. Review the objective and the empty WorkItem/Attempt snapshot below. Choose the single most valuable teammate for the next decision and call exactly one team_work_create_and_assign command. Then immediately return a short decision text and end this turn; do not inspect files, call another tool, or wait for members.\n\nObjective: ${claim.run.prompt}\n\nCurrent WorkItem/Attempt snapshot: empty.`,
       lead.agentVersionId,
     );
     const leadRun = createRun(claim.run.prompt, { now: this.now });

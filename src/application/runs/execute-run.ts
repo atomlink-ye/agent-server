@@ -777,9 +777,42 @@ export class ExecuteRun {
       .filter((member) => member.role !== 'lead')
       .map((member) => `${member.id} (${member.name})`)
       .join(', ');
+    const workItems = this.collaborativeExecutions
+      ? await this.collaborativeExecutions.findWorkItemsByTeamRunId(team.id, {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        })
+      : [];
+    const attempts = this.collaborativeExecutions
+      ? await this.collaborativeExecutions.findAttemptsByTeamRunId(team.id, {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        })
+      : [];
+    const snapshot = JSON.stringify({
+      work_items: workItems.slice(0, 16).map((item) => ({
+        id: item.id,
+        subject: safeAgenticLeadSnapshotText(item.subject),
+        status: item.status,
+      })),
+      attempts: attempts.slice(0, 32).map((attempt) => ({
+        work_item_id: attempt.workItemId,
+        attempt_no: attempt.attemptNo,
+        assignee_member_id: attempt.assigneeMemberId,
+        status: attempt.status,
+        result_summary: safeAgenticLeadSnapshotText(attempt.resultSummary),
+        feedback: safeAgenticLeadSnapshotText(attempt.feedback),
+      })),
+    });
     return `${prompt}
 
-Agentic Team control protocol (authoritative for this turn): do not use the legacy team_task_* tools or shell commands. Use the available MCP tools team_work_create_and_assign, team_work_accept, team_work_request_rework, and team_completion_request. Every command must use these exact values: team_run_id=${team.id}, source_run_id=${sourceRunId}, lead_task_id=${leadTaskId}, expected_revision=${team.revision}. The fixed member roster is: ${roster || 'none'}. Supply a fresh command_hash for each command. After a command response, use its returned revision for the next command. Create and assign work to the fixed roster, accept completed evidence or request at most one bounded rework, then request completion; do not call team_complete.`;
+Agentic Team control protocol (authoritative for this turn): do not use the legacy team_task_* tools or shell commands. This turn may issue exactly one mutating Agentic command: team_work_create_and_assign OR team_work_request_rework OR team_work_accept OR team_completion_request. Use the current snapshot to choose: missing evidence means request_rework; a latest completed, qualifying attempt means accept; all work items accepted means request completion. Every command must use these exact values: team_run_id=${team.id}, source_run_id=${sourceRunId}, lead_task_id=${leadTaskId}, expected_revision=${team.revision}. The fixed member roster is: ${roster || 'none'}. Supply a fresh command_hash. After the command succeeds, immediately return a short decision text and end this turn; do not wait for members, call another tool, use shell, or inspect files. Do not call team_complete.
+
+Current WorkItem/Attempt snapshot (bounded, control-plane fields only): ${snapshot}`;
   }
 
   private async loadPinnedMemory(
@@ -795,6 +828,15 @@ Agentic Team control protocol (authoritative for this turn): do not use the lega
       expectedContentHash: task.memorySnapshotHash,
     });
   }
+}
+
+function safeAgenticLeadSnapshotText(value: string | null): string | null {
+  if (value === null) return null;
+  return value
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 512);
 }
 
 function isSafeRuntimeCandidate(candidate: {

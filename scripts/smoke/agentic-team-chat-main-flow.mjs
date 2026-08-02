@@ -45,6 +45,12 @@ const STAGES = new Set([
   'completion',
   'full',
 ]);
+const AGENTIC_COMMAND_RECEIPTS = new Set([
+  'team_work_create_and_assign',
+  'team_work_request_rework',
+  'team_work_accept',
+  'team_completion_request',
+]);
 const stage = process.env.AGENTIC_TEAM_SMOKE_STAGE ?? 'full';
 if (!STAGES.has(stage))
   throw new Error(`invalid_agentic_smoke_stage: ${stage}`);
@@ -804,9 +810,9 @@ function focusedStageSatisfied(requestedStage, snapshot) {
       snapshot.team_run?.execution_mode === 'agentic_mve' &&
       snapshot.tasks_runs.some((row) => row.kind === 'lead_turn') &&
       snapshot.tasks_runs.some(
-        (row) => row.kind === 'lead_turn' && row.run_id,
+        (row) => row.kind === 'lead_turn' && row.run_status === 'succeeded',
       ) &&
-      [...receipts].some((name) => name.startsWith('team_')),
+      [...receipts].some((name) => AGENTIC_COMMAND_RECEIPTS.has(name)),
     );
   if (requestedStage === 'attempt1_materialized')
     return attempts.some((row) => row.attempt_no === 1 && row.materialized);

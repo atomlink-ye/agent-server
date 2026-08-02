@@ -53,6 +53,10 @@ export interface TeamExecutionRepository {
     rootTaskId: string,
     owner: OwnerScope,
   ): Promise<TeamRun | null>;
+  findLatestAgenticTeamRun(
+    owner: OwnerScope,
+    rootTaskId?: string,
+  ): Promise<TeamRun | null>;
   updateTeamRunPhase(
     id: string,
     phase: TeamRun['phase'],

@@ -7,6 +7,38 @@ const environmentVersionId = process.env.WEB_ENVIRONMENT_VERSION_ID;
 const workspaceName = process.env.WEB_WORKSPACE_NAME ?? 'Web Chat MVE';
 const configuredWorkspaceId = process.env.WEB_WORKSPACE_ID;
 
+export type AgenticTeamProjectResponse = {
+  project: {
+    root_task_id: string;
+    team_run_id: string;
+    team_version_id: string;
+    status: 'active' | 'waiting' | 'succeeded' | 'failed';
+    final_text: string | null;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  sessions?: {
+    team_member_run_id: string;
+    name: string;
+    role: 'lead' | 'member';
+    status: 'starting' | 'active' | 'idle' | 'stopped' | 'failed';
+    turns: {
+      task_id: string;
+      run_id: string;
+      sequence: number;
+      kind: 'lead_turn' | 'work_attempt';
+      status: 'queued' | 'running' | 'completed' | 'failed';
+      context: string;
+      result_text: string | null;
+      work_item_id: string | null;
+      attempt_id: string | null;
+      attempt_no: number | null;
+      created_at: string;
+      updated_at: string;
+    }[];
+  }[];
+};
+
 export type ProductMessage = {
   id: string;
   session_id: string;
@@ -245,6 +277,52 @@ export function getSelfLearningConfig() {
     teamVersionId: process.env.WEB_SELF_LEARNING_TEAM_VERSION_ID,
     memoryStoreId: process.env.WEB_SELF_LEARNING_MEMORY_STORE_ID,
   };
+}
+
+export function getAgenticTeamConfig() {
+  return {
+    workspaceId: process.env.WEB_WORKSPACE_ID,
+    teamVersionId:
+      process.env.WEB_AGENTIC_TEAM_VERSION_ID ??
+      process.env.WEB_SELF_LEARNING_TEAM_VERSION_ID,
+    environmentVersionId: process.env.WEB_ENVIRONMENT_VERSION_ID,
+  };
+}
+
+function requireTeamConfig() {
+  const config = getAgenticTeamConfig();
+  if (
+    !config.workspaceId ||
+    !config.teamVersionId ||
+    !config.environmentVersionId
+  )
+    throw new AgentServerError(503, 'web_configuration_missing');
+  return config;
+}
+
+export async function invokeConfiguredAgenticTeam(
+  text: string,
+  idempotencyKey: string,
+) {
+  const config = requireTeamConfig();
+  return request<{ task_id: string }>('/api/v1/tasks:invoke', {
+    method: 'POST',
+    headers: { 'idempotency-key': idempotencyKey },
+    body: JSON.stringify({
+      workspace_id: config.workspaceId,
+      invokable: { kind: 'team', version_id: config.teamVersionId },
+      input: { text },
+    }),
+  });
+}
+
+export async function getAgenticTeamProject(rootTaskId?: string) {
+  const query = rootTaskId
+    ? `?root_task_id=${encodeURIComponent(rootTaskId)}`
+    : '';
+  return request<AgenticTeamProjectResponse>(
+    `/api/v1/team-runs:project${query}`,
+  );
 }
 
 export async function invokeTeamVersion(

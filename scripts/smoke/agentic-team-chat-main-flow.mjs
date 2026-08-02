@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { register as registerTsx } from 'tsx/esm/api';
 registerTsx();
 import { serve } from '@hono/node-server';
@@ -110,6 +111,9 @@ let paseo;
 let api;
 let service;
 let apiUrl;
+let next;
+let webUrl;
+let bffProject;
 const useOpenCodeGo = Boolean(process.env.OPENCODE_GO_API_KEY);
 if (useOpenCodeGo) {
   process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
@@ -299,19 +303,69 @@ try {
     throw new Error('team_publish_idempotency_did_not_replay');
   console.log(`team_version_id: ${teamPublished.id}`);
 
-  // ---- Invoke Team ----
-  const invoked = await request('/api/v1/tasks:invoke', {
-    method: 'POST',
-    body: {
-      invokable: { kind: 'team', version_id: teamPublished.id },
-      input: {
-        text: 'Lead: create one research task for a member, then synthesize its result.',
+  if (stage === 'full') {
+    const webPort = process.env.AGENTIC_TEAM_WEB_PORT
+      ? validatedPort(process.env.AGENTIC_TEAM_WEB_PORT)
+      : await getAvailablePort();
+    webUrl = `http://127.0.0.1:${webPort}`;
+    next = spawn(
+      'pnpm',
+      [
+        '--dir',
+        join(root, 'apps/web'),
+        'exec',
+        'next',
+        'dev',
+        '-H',
+        '0.0.0.0',
+        '-p',
+        String(webPort),
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          AGENT_SERVER_BASE_URL: apiUrl,
+          AGENT_SERVER_SERVICE_TOKEN: token,
+          WEB_WORKSPACE_ID: workspaceId,
+          WEB_AGENT_VERSION_ID: leadAgent.versionId,
+          WEB_AGENTIC_TEAM_VERSION_ID: teamPublished.id,
+          WEB_ENVIRONMENT_VERSION_ID: env.version.id,
+        },
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'ignore', 'ignore'],
       },
-    },
-    idempotencyKey: randomUUID(),
-    status: 202,
-  });
-  rootTaskId = invoked.task_id;
+    );
+    await waitForHttp(`${webUrl}/`, 90_000);
+  }
+
+  // ---- Invoke Team through the browser-facing BFF in full mode ----
+  const invoked =
+    stage === 'full'
+      ? await webRequest('/api/team-project/runs', {
+          method: 'POST',
+          body: {},
+          status: 202,
+        })
+      : await request('/api/v1/tasks:invoke', {
+          method: 'POST',
+          body: {
+            invokable: { kind: 'team', version_id: teamPublished.id },
+            input: {
+              text: 'Lead: create one research task for a member, then synthesize its result.',
+            },
+          },
+          idempotencyKey: randomUUID(),
+          status: 202,
+        });
+  if (stage === 'full') {
+    if (!onlyKeys(invoked, ['root_task_id']) || !uuid(invoked.root_task_id))
+      throw new Error('team_project_launch_contract_invalid');
+    rootTaskId = invoked.root_task_id;
+  } else {
+    if (!uuid(invoked.task_id)) throw new Error('team_launch_contract_invalid');
+    rootTaskId = invoked.task_id;
+  }
   console.log(`root_task_id: ${rootTaskId}`);
 
   if (stage !== 'full') {
@@ -546,6 +600,52 @@ try {
     throw new Error('agentic_attempt_task_linkage_missing');
   console.log(`agentic_evidence: ${JSON.stringify(evidence)}`);
 
+  if (stage === 'full') {
+    const reworkFeedbackResult = await db.query(
+      `SELECT feedback FROM team_work_item_attempts WHERE team_run_id=$1 AND attempt_no=2 LIMIT 1`,
+      [teamRunResult.id],
+    );
+    const reworkFeedback = reworkFeedbackResult.rows[0]?.feedback;
+    if (typeof reworkFeedback !== 'string' || !reworkFeedback)
+      throw new Error('agentic_rework_feedback_missing');
+    bffProject = await pollBffProject(
+      rootTaskId,
+      teamRunResult.id,
+      reworkFeedback
+        .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .slice(0, 64),
+    );
+    const turnIds = new Set();
+    for (const session of bffProject.sessions) {
+      if (turnIds.has(session.agent_session_id))
+        throw new Error('bff_project_ids_not_distinct');
+      turnIds.add(session.agent_session_id);
+    }
+    for (const session of bffProject.sessions) {
+      for (const turn of session.turns) {
+        if (turnIds.has(turn.run_id) || turnIds.has(turn.task_id))
+          throw new Error('bff_turn_ids_not_distinct');
+        turnIds.add(turn.run_id);
+        turnIds.add(turn.task_id);
+        const replay = await webRequest(
+          `/api/team-project/sessions/${session.agent_session_id}/runs/${turn.run_id}/events?task=${rootTaskId}`,
+          { method: 'GET', status: 200 },
+        );
+        if (!replay || !Array.isArray(replay.events))
+          throw new Error('bff_event_replay_contract_invalid');
+      }
+    }
+    const turnCount = bffProject.sessions.reduce(
+      (count, session) => count + session.turns.length,
+      0,
+    );
+    console.log(
+      `bff_project: ${JSON.stringify({ status: bffProject.status, sessions: bffProject.sessions.length, historical_event_replays: turnCount })}`,
+    );
+  }
+
   if (retainFile) {
     const temp = `${retainFile}.tmp-${process.pid}`;
     await mkdir(resolve(retainFile, '..'), { recursive: true });
@@ -555,6 +655,20 @@ try {
         status: 'retained-ready',
         root_task_id: rootTaskId,
         team_run_id: teamRunResult.id,
+        ...(bffProject
+          ? {
+              agent_session_ids: bffProject.sessions.map(
+                (session) => session.agent_session_id,
+              ),
+              attempt_task_run_ids: bffProject.sessions.flatMap((session) =>
+                session.turns.map((turn) => ({
+                  task_id: turn.task_id,
+                  run_id: turn.run_id,
+                })),
+              ),
+              web_url: webUrl,
+            }
+          : {}),
         db_name: dbName,
         api_url: apiUrl,
         runtime_root: '<runtime-root>',
@@ -570,6 +684,7 @@ try {
         status: 'retained-ready',
         root_task_id: rootTaskId,
         team_run_id: teamRunResult.id,
+        ...(webUrl ? { web_url: webUrl } : {}),
       }),
     );
     await new Promise(() => {});
@@ -587,6 +702,13 @@ try {
       phases:
         'lead turn -> attempt 1 -> rework -> attempt 2 -> accept -> completion',
       team_run_status: teamRunResult.status,
+      ...(bffProject
+        ? {
+            bff_project: 'passed',
+            bff_sessions: bffProject.sessions.length,
+            ...(retained ? { web_url: webUrl } : {}),
+          }
+        : {}),
     }),
   );
 } catch (error) {
@@ -597,6 +719,9 @@ try {
     console.error(`preserved_runtime_root: ${runtimeRoot}`);
     process.exitCode = 1;
   } else {
+    await (next ? stopProcessTree(next) : Promise.resolve()).catch(
+      () => undefined,
+    );
     await new Promise(
       (resolveClose) => api?.close?.(() => resolveClose()) ?? resolveClose(),
     ).catch(() => undefined);
@@ -634,6 +759,138 @@ async function request(path, options) {
     );
   }
   return body;
+}
+
+async function webRequest(path, options) {
+  const response = await fetch(`${webUrl}${path}`, {
+    method: options.method,
+    headers: {
+      origin: webUrl,
+      'content-type': 'application/json',
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const body =
+    response.status === 204 ? null : await response.json().catch(() => null);
+  if (response.status !== options.status)
+    throw new Error(`web_http_${response.status}_expected_${options.status}`);
+  return body;
+}
+
+async function pollBffProject(taskId, expectedTeamRunId, reworkFeedback) {
+  const deadline = Date.now() + 600_000;
+  while (Date.now() < deadline) {
+    const project = await webRequest(`/api/team-project?task=${taskId}`, {
+      method: 'GET',
+      status: 200,
+    });
+    if (project?.status === 'completed') {
+      if (
+        project.root_task_id !== taskId ||
+        project.team_run_id !== expectedTeamRunId
+      )
+        throw new Error('bff_project_identity_mismatch');
+      assertBffProjectSummary(project);
+      const sessions = await Promise.all(
+        project.sessions.map(async (summary) => {
+          const session = await webRequest(
+            `/api/team-project/sessions/${summary.agent_session_id}?task=${taskId}`,
+            { method: 'GET', status: 200 },
+          );
+          if (
+            session.agent_session_id !== summary.agent_session_id ||
+            session.team_run_id !== expectedTeamRunId ||
+            session.read_only !== true ||
+            session.name !== summary.name ||
+            session.role !== summary.role
+          )
+            throw new Error('bff_session_identity_invalid');
+          return session;
+        }),
+      );
+      const aggregate = { ...project, sessions };
+      assertBffProject(aggregate, reworkFeedback);
+      return aggregate;
+    }
+    if (!project || project.status === 'failed')
+      throw new Error('bff_project_failed');
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+  }
+  throw new Error('bff_project_timeout');
+}
+
+function assertBffProjectSummary(project) {
+  if (project.name !== 'Agentic Team' || project.sessions.length !== 3)
+    throw new Error('bff_project_roster_invalid');
+  const lead = project.sessions.filter((session) => session.role === 'lead');
+  const members = project.sessions.filter(
+    (session) => session.role === 'member',
+  );
+  if (lead.length !== 1 || members.length !== 2)
+    throw new Error('bff_project_roles_invalid');
+  const sessionIds = project.sessions.map(
+    (session) => session.agent_session_id,
+  );
+  if (new Set(sessionIds).size !== sessionIds.length)
+    throw new Error('bff_session_ids_not_distinct');
+  for (const session of project.sessions)
+    if (!uuid(session.agent_session_id))
+      throw new Error('bff_session_id_invalid');
+}
+
+function assertBffProject(project, reworkFeedback) {
+  assertBffProjectSummary(project);
+  const lead = project.sessions.filter((session) => session.role === 'lead');
+  const members = project.sessions.filter(
+    (session) => session.role === 'member',
+  );
+  const leadSession = lead[0];
+  const memberTurns = members.map((session) => session.turns);
+  if (
+    memberTurns.filter((turns) => turns.length === 2).length !== 1 ||
+    memberTurns.filter((turns) => turns.length === 0).length !== 1 ||
+    leadSession.turns.length !== 4
+  )
+    throw new Error('bff_project_turn_counts_invalid');
+  for (const session of project.sessions) {
+    for (const turn of session.turns) {
+      if (!uuid(turn.task_id) || !uuid(turn.run_id))
+        throw new Error('bff_turn_id_invalid');
+    }
+    for (let i = 1; i < session.turns.length; i++)
+      if (session.turns[i - 1].sequence >= session.turns[i].sequence)
+        throw new Error('bff_project_turn_order_invalid');
+  }
+  const reworked = memberTurns.find((turns) => turns.length === 2);
+  if (!reworked?.[1].context || !reworked[1].context.includes(reworkFeedback))
+    throw new Error('bff_project_rework_context_missing');
+}
+
+function onlyKeys(value, keys) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).every((key) => keys.includes(key)) &&
+    keys.every((key) => Object.hasOwn(value, key))
+  );
+}
+
+function uuid(value) {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  );
+}
+
+function validatedPort(value) {
+  if (!/^[0-9]+$/.test(value)) throw new Error('invalid_agentic_team_web_port');
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new Error('invalid_agentic_team_web_port');
+  return port;
 }
 
 async function poll(taskId) {

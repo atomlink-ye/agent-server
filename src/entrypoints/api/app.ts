@@ -40,6 +40,7 @@ import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
 import type { InvokableRepository } from '../../application/ports/invokable-repository.js';
 import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
+import type { TaskRepository } from '../../application/ports/task-repository.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerTeamRunRoutes } from './routes/team-runs.js';
 import {
@@ -47,6 +48,7 @@ import {
   type MemoryApiRouteDependencies,
 } from './routes/memory-api.js';
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
+import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -70,6 +72,7 @@ export interface AppDependencies {
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;
+  readonly tasks?: TaskRepository;
   readonly sessions?: SessionRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
@@ -135,10 +138,14 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       invokableRepository: dependencies.invokableRepository,
       environmentRegistry: dependencies.environmentRegistry,
     });
-  if (dependencies.teamExecutions)
+  if (dependencies.teamExecutions && dependencies.tasks)
     registerTeamRunRoutes(app, {
       config: dependencies.config,
       teamExecutions: dependencies.teamExecutions,
+      projectAgenticTeam: new ProjectAgenticTeam(
+        dependencies.teamExecutions,
+        dependencies.tasks,
+      ),
     });
   if (dependencies.environmentRegistry)
     registerEnvironmentRoutes(app, {

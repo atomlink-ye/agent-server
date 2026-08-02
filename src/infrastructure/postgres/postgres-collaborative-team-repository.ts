@@ -129,6 +129,23 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   ): Promise<TeamRun | null> {
     return this.findRun('root_task_id = $1', [id, ...ownerValues(owner)]);
   }
+  public async findLatestAgenticTeamRun(
+    owner: OwnerScope,
+    rootTaskId?: string,
+  ): Promise<TeamRun | null> {
+    const predicate = rootTaskId
+      ? "root_task_id = $1 AND execution_mode = 'agentic_mve'"
+      : "execution_mode = 'agentic_mve'";
+    const values = rootTaskId
+      ? [rootTaskId, ...ownerValues(owner)]
+      : ownerValues(owner);
+    const ownerStart = rootTaskId ? 2 : 1;
+    const r = await this.database.query<TeamRunRow>(
+      `SELECT * FROM team_runs WHERE ${predicate} AND ${ownerSql('', ownerStart)} ORDER BY created_at DESC, id DESC LIMIT 1`,
+      values,
+    );
+    return r.rows?.[0] ? mapRun(r.rows[0]) : null;
+  }
   public async updateTeamRunPhase(
     id: string,
     phase: TeamRun['phase'],

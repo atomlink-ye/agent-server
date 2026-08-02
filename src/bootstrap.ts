@@ -563,6 +563,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     agentRegistry,
     invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
+    tasks: taskRepository,
     environmentRegistry,
     sessions,
     submitSessionTurn,

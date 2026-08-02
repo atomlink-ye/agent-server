@@ -1,17 +1,15 @@
 import { NextResponse } from 'next/server';
 import { AgentServerError } from '@/lib/agent-server-client';
-import { aggregate, BffError, validUuid } from '@/lib/self-learning-bff';
-
+import { BffError, getProject, validTeamUuid } from '@/lib/agentic-team-bff';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-type Context = { params: Promise<{ rootTaskId: string }> };
-export async function GET(_: Request, context: Context) {
-  const id = (await context.params).rootTaskId;
-  if (!validUuid(id)) return out({ error: 'not_found' }, 404);
+export async function GET(request: Request) {
+  const task = new URL(request.url).searchParams.get('task') ?? undefined;
+  if (task && !validTeamUuid(task)) return out({ error: 'not_found' }, 404);
   try {
-    return out(await aggregate(id), 200);
-  } catch (e) {
-    return error(e);
+    return out(await getProject(task), 200);
+  } catch (error) {
+    return fail(error);
   }
 }
 function out(body: unknown, status: number) {
@@ -20,11 +18,11 @@ function out(body: unknown, status: number) {
     headers: { 'cache-control': 'no-store' },
   });
 }
-function error(e: unknown) {
+function fail(error: unknown) {
   const status =
-    e instanceof AgentServerError && e.status === 503
+    error instanceof AgentServerError && error.status === 503
       ? 503
-      : e instanceof BffError && e.kind === 'bad_gateway'
+      : error instanceof BffError && error.kind === 'bad_gateway'
         ? 502
         : 404;
   return out(

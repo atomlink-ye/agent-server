@@ -16,13 +16,66 @@ import {
 } from '../authentication.js';
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
+import { z } from 'zod';
+import { ProjectAgenticTeam } from '../../../application/teams/project-agentic-team.js';
+import { AgenticTeamProjectResponseSchema } from '../../../contracts/teams.js';
 export function registerTeamRunRoutes(
   app: Hono<ApiEnvironment>,
-  d: { config: AppConfig; teamExecutions: TeamExecutionRepository },
+  d: {
+    config: AppConfig;
+    teamExecutions: TeamExecutionRepository;
+    projectAgenticTeam: ProjectAgenticTeam;
+  },
 ): void {
   const auth = new ServiceAccountAuthenticator(d.config.serviceAccounts ?? []);
   for (const p of ['/api/v1/tasks/*/team-run', '/api/v1/team-runs/*'])
     app.use(p, requireServiceAccountAccess(auth));
+  app.use('/api/v1/team-runs:project', requireServiceAccountAccess(auth));
+  app.get('/api/v1/team-runs:project', async (c) => {
+    const rootTaskId = c.req.query('root_task_id');
+    if (rootTaskId && !z.uuid().safeParse(rootTaskId).success)
+      throw new HttpError(
+        400,
+        'invalid_root_task_id',
+        'The root task ID is invalid.',
+      );
+    const projection = await d.projectAgenticTeam.execute(owner(c), rootTaskId);
+    if (!projection) return c.json({ project: null }, 200);
+    return c.json(
+      AgenticTeamProjectResponseSchema.parse({
+        project: {
+          root_task_id: projection.project.rootTaskId,
+          team_run_id: projection.project.teamRunId,
+          team_version_id: projection.project.teamVersionId,
+          status: projection.project.status,
+          final_text: projection.project.finalText,
+          created_at: projection.project.createdAt,
+          updated_at: projection.project.updatedAt,
+        },
+        sessions: projection.sessions.map((session) => ({
+          team_member_run_id: session.teamMemberRunId,
+          name: session.name,
+          role: session.role,
+          status: session.status,
+          turns: session.turns.map((turn) => ({
+            task_id: turn.taskId,
+            run_id: turn.runId,
+            sequence: turn.sequence,
+            kind: turn.kind,
+            status: turn.status,
+            context: turn.context,
+            result_text: turn.resultText,
+            work_item_id: turn.workItemId,
+            attempt_id: turn.attemptId,
+            attempt_no: turn.attemptNo,
+            created_at: turn.createdAt,
+            updated_at: turn.updatedAt,
+          })),
+        })),
+      }),
+      200,
+    );
+  });
   app.get('/api/v1/tasks/:taskId/team-run', async (c) => {
     const r = await d.teamExecutions.findTeamRunByRootTaskId(
       c.req.param('taskId'),

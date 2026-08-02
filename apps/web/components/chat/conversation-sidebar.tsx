@@ -10,23 +10,45 @@ export type ChatSummary = {
   readonly status?: 'Working' | 'Completed' | 'Failed' | 'Ready';
 };
 
+export type TeamProject = {
+  readonly root_task_id: string;
+  readonly team_run_id: string;
+  readonly name: string;
+  readonly status: 'working' | 'completed' | 'failed';
+  readonly sessions: readonly TeamSession[];
+};
+
+export type TeamSession = {
+  readonly agent_session_id: string;
+  readonly name: string;
+  readonly role: 'lead' | 'member';
+  readonly status: 'queued' | 'running' | 'completed' | 'failed';
+  readonly latest_summary: string | null;
+};
+
 type ConversationSidebarProps = {
   readonly chats: readonly ChatSummary[];
+  readonly project?: TeamProject;
+  readonly selectedTeamSessionId?: string;
   readonly selectedSessionId?: string;
   readonly disabled: boolean;
   readonly mobileOpen: boolean;
   readonly onNewChat: () => void;
   readonly onSelect: (sessionId: string) => void;
+  readonly onSelectTeam: (session: TeamSession) => void;
   readonly onCloseMobile: () => void;
 };
 
 export function ConversationSidebar({
   chats,
+  project,
+  selectedTeamSessionId,
   selectedSessionId,
   disabled,
   mobileOpen,
   onNewChat,
   onSelect,
+  onSelectTeam,
   onCloseMobile,
 }: ConversationSidebarProps) {
   const firstControlRef = useRef<HTMLButtonElement>(null);
@@ -72,7 +94,64 @@ export function ConversationSidebar({
         >
           <span aria-hidden="true">+</span> New Chat
         </button>
-        <div className="sidebar-section-label">Recent conversations</div>
+        {project ? (
+          <section className="project-directory" aria-label="Project">
+            <button
+              type="button"
+              className="project-directory-heading"
+              onClick={() => {
+                const lead = project.sessions.find(
+                  (session) => session.role === 'lead',
+                );
+                if (lead) onSelectTeam(lead);
+              }}
+              disabled={disabled}
+              aria-current={
+                selectedTeamSessionId ===
+                project.sessions.find((session) => session.role === 'lead')
+                  ?.agent_session_id
+                  ? 'page'
+                  : undefined
+              }
+            >
+              <span>
+                <span className="sidebar-section-label">Project</span>
+                <strong>{project.name}</strong>
+              </span>
+              <span className={`project-status ${project.status}`}>
+                {statusLabel(project.status)}
+              </span>
+            </button>
+            <div className="project-session-list">
+              {project.sessions.map((session) => (
+                <button
+                  key={session.agent_session_id}
+                  type="button"
+                  className={`project-session-item ${session.agent_session_id === selectedTeamSessionId ? 'is-selected' : ''}`}
+                  aria-current={
+                    session.agent_session_id === selectedTeamSessionId
+                      ? 'page'
+                      : undefined
+                  }
+                  disabled={disabled}
+                  onClick={() => onSelectTeam(session)}
+                >
+                  <span className="project-session-main">
+                    <strong>{session.name}</strong>
+                    <small>
+                      {session.role === 'lead' ? 'Lead' : 'Member'} · Agent
+                      Session
+                    </small>
+                  </span>
+                  <span className={`project-session-status ${session.status}`}>
+                    {statusLabel(session.status)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <div className="sidebar-section-label">Chats</div>
         <nav className="conversation-list" aria-label="Recent conversations">
           {chats.length === 0 ? (
             <p className="sidebar-empty">No conversations yet.</p>
@@ -113,6 +192,16 @@ export function ConversationSidebar({
       </aside>
     </>
   );
+}
+
+function statusLabel(value: TeamProject['status'] | TeamSession['status']) {
+  return value === 'working' || value === 'running'
+    ? 'Working'
+    : value === 'failed'
+      ? 'Failed'
+      : value === 'queued'
+        ? 'Queued'
+        : 'Completed';
 }
 
 function statusFor(chat: ChatSummary) {

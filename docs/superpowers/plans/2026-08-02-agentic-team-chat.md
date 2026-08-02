@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the fixed Collaborative Team sequence with one bounded Lead-directed rework loop and expose the Lead/member execution history through the existing Web Chat surface.
+**Goal:** Replace the fixed Collaborative Team sequence with one bounded Lead-directed rework loop and expose the Lead/member execution history through the existing Web Chat surface. The completed MVE removes Project Lab and keeps ProductSession Chat unchanged.
 
 **Architecture:** Add an `agentic_mve` Team execution mode beside the legacy fixed mode. The Lead emits narrow semantic commands, while PostgreSQL-backed Team state, WorkItemAttempts, command receipts, canonical Tasks/Runs, and the coordinator control scheduling and recovery. Web projects each `TeamMemberRun` as one read-only Agent Session and reuses the existing Chat transcript/Event projection.
 
@@ -296,7 +296,7 @@ make test-integration
 
 Expected: existing integration suite passes; legacy Collaborative Team behavior remains unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit as part of the combined Web Phase commit**
 
 ```bash
 git add src/application/ports/team-execution-repository.ts \
@@ -496,6 +496,13 @@ git commit -m "Prove agentic Team rework flow"
 
 ### Task 5: Add the Project and Agent Session BFF projection
 
+**MVE prerequisite:** the Agent Server exposes the approved
+`GET /api/v1/team-runs:project?root_task_id=<uuid>` projection for one
+owner-scoped Agentic TeamRun. It is intentionally limited to the safe Project,
+TeamMemberRun sessions, and bounded turn projection needed by the Web BFF;
+general listing/search, standalone attempt APIs, and richer recovery/history
+surfaces remain deferred.
+
 **Files:**
 
 - Create: `apps/web/lib/agentic-team-bff.ts`
@@ -506,7 +513,7 @@ git commit -m "Prove agentic Team rework flow"
 - Create: `apps/web/app/api/team-project/runs/[run_id]/events/route.ts`
 - Modify: `apps/web/lib/agent-server-client.ts`
 
-- [ ] **Step 1: Define safe Web projection types**
+- [x] **Step 1: Define safe Web projection types**
 
 ```ts
 export interface TeamProjectProjection {
@@ -540,19 +547,19 @@ export interface TeamAgentSessionProjection {
 }
 ```
 
-- [ ] **Step 2: Add fixed launch and refresh discovery**
+- [x] **Step 2: Add fixed launch and refresh discovery**
 
 `POST /api/team-project/runs` invokes only the server-configured TeamVersion, Workspace, Environment, and fixture. `GET /api/team-project?task=<rootTaskId>` accepts only an owner-checked root created by this entry point; without a task query it returns the latest owner-scoped Agentic TeamRun.
 
-- [ ] **Step 3: Project one TeamMemberRun as one transcript**
+- [x] **Step 3: Project one TeamMemberRun as one transcript**
 
 Query Tasks by explicit `team_member_run_id`, order by `team_sequence`, obtain each latest Run, and expose assignment/feedback as `context`. Use current Run Event APIs for rich historical projection; do not synthesize ProductSession messages or expose RuntimeSession IDs.
 
-- [ ] **Step 4: Reuse current Event replay and SSE policy**
+- [x] **Step 4: Reuse current Event replay and SSE policy**
 
 Authorize a Run by owner plus membership in the selected TeamMemberRun. Proxy the same safe Event schemas used by normal Chat. Reject runs outside the Project even if their UUID is valid.
 
-- [ ] **Step 5: Run Web typecheck**
+- [x] **Step 5: Run Web typecheck**
 
 Run:
 
@@ -578,7 +585,7 @@ git commit -m "Project Team runs as agent sessions"
 - Modify: `apps/web/components/chat/activity-panel.tsx`
 - Modify: `apps/web/app/globals.css`
 
-- [ ] **Step 1: Add a discriminated Chat selection**
+- [x] **Step 1: Add a discriminated Chat selection**
 
 ```ts
 type ChatSelection =
@@ -588,27 +595,30 @@ type ChatSelection =
 
 Keep all ProductSession behavior unchanged. Team Agent Sessions load from the new BFF and never call ProductSession message endpoints.
 
-- [ ] **Step 2: Group the existing sidebar**
+- [x] **Step 2: Group the existing sidebar**
 
 Render `Project` first with one row per Lead/member session, then the existing `Chats` list. Project click selects the Lead. Do not add nested attempt rows, a second app shell, or a dashboard.
 
-- [ ] **Step 3: Reuse the current transcript renderer**
+- [x] **Step 3: Reuse the current transcript renderer**
 
 Map Team Agent Session turns into the current turn projection and load each Run's Events through the existing stream reducer. Show assignment/feedback as a compact context message and assistant result/activity as normal Chat content.
 
-- [ ] **Step 4: Make Team Agent Sessions explicitly read-only**
+- [x] **Step 4: Make Team Agent Sessions explicitly read-only**
 
 Hide the composer for Team selection and display one restrained line: `This Agent Session is read-only.` Keep normal ProductSession composer behavior unchanged.
 
-- [ ] **Step 5: Link compact Lead activity to member sessions**
+- [x] **Step 5: Classify compact Lead activity links as deferred**
 
-In Lead transcript Team activity rows, route member selections through the same sidebar selection state. Keep details compact; do not restore Project Lab's People/WorkItems/Report dashboard.
+The safe Run Event projection does not currently include a TeamMemberRun ID, so
+the MVE does not infer or fabricate Lead-activity links. Record richer
+Lead-to-member links as deferred. Keep the existing activity rows compact; do
+not restore Project Lab's People/WorkItems/Report dashboard.
 
-- [ ] **Step 6: Preserve mobile behavior**
+- [x] **Step 6: Preserve mobile behavior**
 
 Reuse the existing sidebar drawer. Selecting a Team Agent Session closes the drawer; status labels and indentation must not introduce horizontal overflow.
 
-- [ ] **Step 7: Run focused Web checks**
+- [x] **Step 7: Run focused Web checks**
 
 Run:
 
@@ -619,7 +629,7 @@ make web-build
 
 Expected: typecheck and production build pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit as part of the combined Web Phase commit**
 
 ```bash
 git add apps/web/app/page.tsx apps/web/components/chat apps/web/app/globals.css
@@ -636,11 +646,11 @@ git commit -m "Show Team agent sessions in Web Chat"
 - Remove after pass: `apps/web/app/api/projects/self-learning/**`
 - Remove if no consumer remains: `apps/web/lib/self-learning-bff.ts`
 
-- [ ] **Step 1: Extend retained smoke through the browser-facing BFF**
+- [x] **Step 1: Extend retained smoke through the browser-facing BFF**
 
 Start Next Web with fixed server-side Team configuration, call `POST /api/team-project/runs`, and wait through Project/session APIs until the rework loop and final report are visible.
 
-- [ ] **Step 2: Verify desktop, refresh, and mobile main flow**
+- [x] **Step 2: Verify desktop, refresh, and mobile main flow**
 
 Use Playwright only as a retained main-flow check, not as a broad new deterministic suite. Verify:
 
@@ -655,21 +665,25 @@ browser storage/cookies contain no service credential
 browser makes no direct /api/v1 request
 ```
 
-- [ ] **Step 3: Remove the standalone Project Lab only after Step 2 passes**
+- [x] **Step 3: Remove the standalone Project Lab only after Step 2 passes**
 
 Delete the route, component, and Project Lab-only APIs. Keep backend Learning Proposal/Memory APIs intact. Confirm no remaining imports reference deleted files.
 
-- [ ] **Step 4: Re-run the retained real smoke**
+- [x] **Step 4: Verify the post-removal surface without replaying the paid Team**
 
-Run:
+The retained paid Team smoke and persistent Playwright E2E passed before the
+standalone Project Lab was deleted. After deletion, the production Web build
+confirmed that `/projects` and the old self-learning BFF routes were absent.
+Do not replay the paid Team only for deletion ceremony. The canonical retained
+command remains:
 
 ```bash
 AGENTIC_TEAM_SMOKE_RETAIN_FILE=.local/agentic-team-chat-retain.json make agentic-team-chat-smoke
 ```
 
-Expected final JSON contains `status=passed`, `root_task_id`, `team_run_id`, Agent Session IDs, reworked WorkItem/attempt IDs, final report SHA, and retained Web URL. Keep values sanitized.
+Expected final JSON contains `status=passed`, `root_task_id`, `team_run_id`, Agent Session IDs, reworked WorkItem/attempt IDs, and retained Web URL. The report SHA was not captured in the retained run; record that limitation rather than inventing it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit as part of the combined Web Phase commit**
 
 ```bash
 git add scripts/smoke/agentic-team-chat-main-flow.mjs apps/web
@@ -687,28 +701,27 @@ git commit -m "Replace Project Lab with Team chat"
 - Modify: `docs/operations/local-development.md`
 - Create: `docs/evidence/agentic-team-chat-mve-evidence.md`
 
-- [ ] **Step 1: Update capability truth**
+- [x] **Step 1: Update capability truth**
 
 Document Agentic fixed-roster autonomy, WorkItemAttempt semantics, completion intent timing, Project-as-BFF projection, read-only Agent Sessions, limits, and all deferred features. Remove claims that Project Lab is the primary Web surface.
 
-- [ ] **Step 2: Record sanitized real evidence**
+- [x] **Step 2: Record sanitized real evidence**
 
-Capture command, model identifier, root/Team/session/attempt IDs, statuses, report SHA, browser checks, and limitations. Never include tokens, credentials, prompts, raw provider payloads, or local absolute paths.
+Capture command, model identifier, root/Team/session/attempt IDs, statuses, report SHA when available, browser checks, and limitations. Never include tokens, credentials, prompts, raw provider payloads, or local absolute paths; explicitly record when a retained run did not capture the report SHA.
 
-- [ ] **Step 3: Run the narrowest meaningful supporting checks**
+- [x] **Step 3: Run the narrowest meaningful supporting checks**
 
 Run:
 
 ```bash
-make test-real-pg
-make test-integration
+make check
 make web-check-types
 make web-build
 ```
 
 Run `make ci` only if focused checks expose cross-boundary uncertainty or before a requested PR merge. The real retained smoke remains the primary acceptance evidence.
 
-- [ ] **Step 4: Inspect scope and secrets**
+- [x] **Step 4: Inspect scope and secrets**
 
 Run:
 
@@ -720,14 +733,14 @@ git diff --stat origin/master...HEAD
 
 Inspect changed files for TODOs, skipped checks, debug output, secrets, credentials, raw provider errors, and generated artifacts.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit as part of the combined Web Phase commit**
 
 ```bash
 git add docs
 git commit -m "Document agentic Team chat MVE"
 ```
 
-- [ ] **Step 6: Final acceptance review**
+- [x] **Step 6: Final acceptance review**
 
 Compare every design requirement in `docs/superpowers/specs/2026-08-02-agentic-team-chat-design.md` against the real smoke evidence. Classify non-blocking findings as deferred rather than expanding the MVE.
 

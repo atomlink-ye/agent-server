@@ -71,6 +71,35 @@ roster member, every member Task to be `completed`, and every member Task's
 latest/current Run to be `succeeded`. CAS phase transitions and owner scope
 remain enforcement boundaries.
 
+## Agentic Team MVE
+
+An `agentic_mve` Team has one fixed Lead and a fixed published roster. The Lead
+may issue only bounded semantic commands. The observed path creates one
+WorkItem and permits immutable attempts numbered 1 and 2; rework feedback is
+persisted on the second attempt. Each Lead turn and member attempt is a
+canonical Task/Run linked to its `TeamMemberRun`. Member Tasks reuse that
+member's internal RuntimeSession, which is never exposed by the Web contract.
+
+The Lead may request completion only after all WorkItems are accepted and no
+attempt is queued or running. In that terminal-ready state the only mutating
+Lead grant is the completion request. Completion is applied only after the
+requesting Lead Run succeeds. The MVE uses bounded limits of four Lead turns,
+four WorkItems, and two attempts per WorkItem. The fixed Verifier is part of the
+roster but was unused in the observed run; its Web status is therefore
+`queued`, with no fabricated result.
+
+The upstream safe Project projection is:
+
+```text
+GET /api/v1/team-runs:project?root_task_id=<uuid>
+```
+
+It is one owner-checked projection for a root Task and includes the Project,
+TeamRun, fixed TeamMemberRun sessions, bounded turns, WorkItems, attempts, and
+completion/report state needed by the Web BFF. General TeamRun listing,
+standalone attempt APIs, pagination, and richer recovery/history surfaces remain
+deferred.
+
 ## Explicit non-goals
 
 This contract does not claim:

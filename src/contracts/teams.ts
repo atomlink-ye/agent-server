@@ -127,3 +127,48 @@ export const TeamWorkItemAttemptResponseSchema = z
     completed_at: timestamp.nullable(),
   })
   .strict();
+
+export const AgenticTeamProjectTurnSchema = z
+  .object({
+    task_id: uuid,
+    run_id: uuid,
+    sequence: z.number().int(),
+    kind: z.enum(['lead_turn', 'work_attempt']),
+    status: z.enum(['queued', 'running', 'completed', 'failed']),
+    context: z.string(),
+    result_text: z.string().nullable(),
+    work_item_id: uuid.nullable(),
+    attempt_id: uuid.nullable(),
+    attempt_no: z.number().int().nullable(),
+    created_at: timestamp,
+    updated_at: timestamp,
+  })
+  .strict();
+
+export const AgenticTeamProjectSessionSchema = z
+  .object({
+    team_member_run_id: uuid,
+    name: z.string(),
+    role: z.enum(['lead', 'member']),
+    status: z.enum(['starting', 'active', 'idle', 'stopped', 'failed']),
+    turns: z.array(AgenticTeamProjectTurnSchema),
+  })
+  .strict();
+
+export const AgenticTeamProjectResponseSchema = z
+  .object({
+    project: z
+      .object({
+        root_task_id: uuid,
+        team_run_id: uuid,
+        team_version_id: uuid,
+        status: z.enum(['active', 'waiting', 'succeeded', 'failed']),
+        final_text: z.string().nullable(),
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .strict()
+      .nullable(),
+    sessions: z.array(AgenticTeamProjectSessionSchema).optional(),
+  })
+  .strict();

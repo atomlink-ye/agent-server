@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 postgres=0
 pass_env=()
+publish_port=''
 
 while (($#)); do
   case "$1" in
@@ -16,12 +17,20 @@ while (($#)); do
       pass_env+=("$2")
       shift 2
       ;;
+    --publish)
+      (($# >= 2)) || { printf '%s\n' 'docker-run: --publish requires a TCP port' >&2; exit 2; }
+      [[ "$2" =~ ^[0-9]+$ ]] || { printf 'docker-run: invalid TCP port: %s\n' "$2" >&2; exit 2; }
+      ((10#$2 >= 1 && 10#$2 <= 65535)) || { printf 'docker-run: TCP port out of range: %s\n' "$2" >&2; exit 2; }
+      [[ -z "$publish_port" ]] || { printf '%s\n' 'docker-run: only one --publish port is supported' >&2; exit 2; }
+      publish_port="$2"
+      shift 2
+      ;;
     --)
       shift
       break
       ;;
     *)
-      printf '%s\n' 'docker-run: expected --postgres, --pass-env NAME, or --' >&2
+      printf '%s\n' 'docker-run: expected --postgres, --pass-env NAME, --publish PORT, or --' >&2
       exit 2
       ;;
   esac
@@ -82,8 +91,11 @@ if ((${#pass_env[@]})); then
     fi
   done
 fi
-
-if ((${#env_args[@]})); then
+if [[ -n "$publish_port" ]] && ((${#env_args[@]})); then
+  "${compose[@]}" run --rm --no-deps -p "127.0.0.1:${publish_port}:${publish_port}" "${env_args[@]}" runner "$@" &
+elif [[ -n "$publish_port" ]]; then
+  "${compose[@]}" run --rm --no-deps -p "127.0.0.1:${publish_port}:${publish_port}" runner "$@" &
+elif ((${#env_args[@]})); then
   "${compose[@]}" run --rm --no-deps "${env_args[@]}" runner "$@" &
 else
   "${compose[@]}" run --rm --no-deps runner "$@" &

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 postgres=0
+bind_local=0
 pass_env=()
 publish_port=''
 
@@ -9,6 +10,10 @@ while (($#)); do
   case "$1" in
     --postgres)
       postgres=1
+      shift
+      ;;
+    --bind-local)
+      bind_local=1
       shift
       ;;
     --pass-env)
@@ -30,7 +35,7 @@ while (($#)); do
       break
       ;;
     *)
-      printf '%s\n' 'docker-run: expected --postgres, --pass-env NAME, --publish PORT, or --' >&2
+      printf '%s\n' 'docker-run: expected --postgres, --bind-local, --pass-env NAME, --publish PORT, or --' >&2
       exit 2
       ;;
   esac
@@ -45,9 +50,11 @@ if ((postgres)); then
   existing_postgres_test_id="$("${compose[@]}" --profile postgres-test ps -aq postgres-test 2>/dev/null || true)"
 fi
 cleanup() {
+  local exit_status=$?
   if ((postgres && started_postgres_test)) && [[ -z "$existing_postgres_test_id" ]]; then
     "${compose[@]}" --profile postgres-test rm -sf postgres-test >/dev/null 2>&1 || true
   fi
+  return "$exit_status"
 }
 forward_signal() {
   local signal="$1"
@@ -91,15 +98,19 @@ if ((${#pass_env[@]})); then
     fi
   done
 fi
-if [[ -n "$publish_port" ]] && ((${#env_args[@]})); then
-  "${compose[@]}" run --rm --no-deps -p "127.0.0.1:${publish_port}:${publish_port}" "${env_args[@]}" runner "$@" &
-elif [[ -n "$publish_port" ]]; then
-  "${compose[@]}" run --rm --no-deps -p "127.0.0.1:${publish_port}:${publish_port}" runner "$@" &
-elif ((${#env_args[@]})); then
-  "${compose[@]}" run --rm --no-deps "${env_args[@]}" runner "$@" &
-else
-  "${compose[@]}" run --rm --no-deps runner "$@" &
+run_args=(run --rm --no-deps)
+if [[ -n "$publish_port" ]]; then
+  run_args+=(-p "127.0.0.1:${publish_port}:${publish_port}")
 fi
+if ((bind_local)); then
+  mkdir -p .local
+  run_args+=(-v "$(pwd)/.local:/workspace/.local")
+fi
+if ((${#env_args[@]})); then
+  run_args+=("${env_args[@]}")
+fi
+run_args+=(runner "$@")
+"${compose[@]}" "${run_args[@]}" &
 child_pid=$!
 if wait "$child_pid"; then
   child_status=$?

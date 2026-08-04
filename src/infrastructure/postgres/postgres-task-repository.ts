@@ -246,7 +246,8 @@ interface TaskRow {
   readonly memory_snapshot_hash: string | null;
   readonly team_member_run_id: string | null;
   readonly team_sequence: number | null;
-  readonly team_task_kind: 'lead_turn' | 'work_attempt' | null;
+  readonly team_task_kind:
+    'lead_turn' | 'work_attempt' | 'direct_message' | null;
   readonly source_team_message_id: string | null;
   readonly input_team_message_ids: readonly string[] | null;
   readonly created_at: string | Date;

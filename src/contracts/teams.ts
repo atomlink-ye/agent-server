@@ -133,7 +133,7 @@ export const AgenticTeamProjectTurnSchema = z
     task_id: uuid,
     run_id: uuid,
     sequence: z.number().int(),
-    kind: z.enum(['lead_turn', 'work_attempt']),
+    kind: z.enum(['lead_turn', 'work_attempt', 'direct_message']),
     status: z.enum(['queued', 'running', 'completed', 'failed']),
     context: z.string(),
     result_text: z.string().nullable(),
@@ -163,12 +163,63 @@ export const AgenticTeamProjectResponseSchema = z
         team_run_id: uuid,
         team_version_id: uuid,
         status: z.enum(['active', 'waiting', 'succeeded', 'failed']),
+        phase: z.enum(['lead_kickoff', 'member_work', 'lead_finalize', 'done']),
         final_text: z.string().nullable(),
         created_at: timestamp,
         updated_at: timestamp,
       })
       .strict()
       .nullable(),
-    sessions: z.array(AgenticTeamProjectSessionSchema).optional(),
+    work_items: z.array(
+      z
+        .object({
+          work_ref: z.string().regex(/^work-\d+$/),
+          subject: z.string(),
+          status: TeamWorkItemResponseSchema.shape.status,
+          assignee_name: z.string().nullable(),
+          dependency_refs: z.array(z.string().regex(/^work-\d+$/)),
+          latest_attempt: z
+            .object({
+              attempt_no: z.number().int(),
+              status: z.enum(['queued', 'running', 'completed', 'failed']),
+              feedback_summary: z.string().nullable(),
+              result_summary: z.string().nullable(),
+            })
+            .nullable(),
+        })
+        .strict(),
+    ),
+    gates: z
+      .object({
+        finish_ready: z.boolean(),
+        all_work_accepted: z.boolean(),
+        no_active_attempts: z.boolean(),
+        all_members_idle: z.boolean(),
+      })
+      .strict(),
+    direct_messages: z.array(
+      z
+        .object({
+          sequence: z.number().int().positive(),
+          sender_name: z.string(),
+          recipient_name: z.string(),
+          summary: z.string(),
+          status: z.enum(['delivered', 'read']),
+          created_at: timestamp,
+        })
+        .strict(),
+    ),
+    sessions: z.array(AgenticTeamProjectSessionSchema),
+  })
+  .strict();
+
+export const TeamDirectMessageResponseSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    sender_name: z.string(),
+    recipient_name: z.string(),
+    summary: z.string(),
+    status: z.enum(['delivered', 'read']),
+    created_at: timestamp,
   })
   .strict();

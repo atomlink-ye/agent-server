@@ -19,4 +19,31 @@ export interface TeamMessageRepository {
     readonly taskId: string;
     readonly owner: OwnerScope;
   }): Promise<readonly TeamMessage[]>;
+  claimDirectForTask(input: {
+    readonly messageId: string;
+    readonly taskId: string;
+    readonly teamRunId: string;
+    readonly recipientMemberRunId: string;
+    readonly owner: OwnerScope;
+  }): Promise<TeamMessage>;
+  markDirectDelivered(input: {
+    readonly messageId: string;
+    readonly taskId: string;
+    readonly owner: OwnerScope;
+  }): Promise<TeamMessage | null>;
+  sendDirect(input: {
+    readonly teamRunId: string;
+    readonly senderMemberRunId: string;
+    readonly recipientMemberRunId: string;
+    readonly dedupKey: string;
+    readonly body: string;
+    readonly sourceTaskId: string;
+    readonly sourceRunId: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<TeamMessage>;
+  listDirectForTeamRun(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<readonly TeamMessage[]>;
 }

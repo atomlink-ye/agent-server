@@ -34,8 +34,8 @@ import type {
 import type { CompiledDagTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
 import { CompleteRun } from '../runs/complete-run.js';
 import {
-  createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
+  RunPostPersistenceError,
 } from '../runs/runtime-execution-receipt.js';
 import {
   decodeRootTaskRunRequestSnapshotRef,
@@ -356,15 +356,12 @@ export class ExecuteTeamTask {
         this.now,
       );
 
-      try {
-        return await this.completeRun.execute({ claim, run: succeeded });
-      } catch {
-        throw new RunCompletionPersistenceError(
-          createRuntimeExecutionReceipt(succeeded, claim.taskId),
-        );
-      }
+      return await this.completeRun.execute({ claim, run: succeeded });
     } catch (error) {
-      if (error instanceof RunCompletionPersistenceError) {
+      if (
+        error instanceof RunCompletionPersistenceError ||
+        error instanceof RunPostPersistenceError
+      ) {
         throw error;
       }
       const failure: RunFailure =
@@ -384,13 +381,7 @@ export class ExecuteTeamTask {
         this.now,
       );
 
-      try {
-        return await this.completeRun.execute({ claim, run: failed });
-      } catch {
-        throw new RunCompletionPersistenceError(
-          createRuntimeExecutionReceipt(failed, claim.taskId),
-        );
-      }
+      return this.completeRun.execute({ claim, run: failed });
     }
   }
 }

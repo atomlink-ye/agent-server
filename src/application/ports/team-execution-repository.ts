@@ -14,6 +14,11 @@ export interface OwnerScope {
   readonly principalId: string;
 }
 
+export interface TeamWorkDependency {
+  readonly workItemId: string;
+  readonly dependsOnWorkItemId: string;
+}
+
 export type TeamExecutionErrorCode =
   | 'stale_state'
   | 'not_allowed'
@@ -61,6 +66,28 @@ export interface RecordNodeResultInput {
   readonly principalId: string;
 }
 
+export type FailTeamRunInput = Readonly<{
+  teamRunId: string;
+  rootRunId: string;
+  rootTaskId: string;
+  owner: OwnerScope;
+  updatedAt: string;
+  failure: {
+    readonly code: 'runtime_execution_failed';
+    readonly message: string;
+  };
+}> &
+  (
+    | Readonly<{
+        stopReason: 'lead_no_progress';
+        expectedRevision: number;
+      }>
+    | Readonly<{
+        stopReason: 'lead_turn_limit' | 'lead_run_failed';
+        expectedRevision?: never;
+      }>
+  );
+
 // -- Collaborative team execution repository (new) --
 export interface TeamExecutionRepository {
   createTeamRun(run: TeamRun): Promise<void>;
@@ -102,17 +129,7 @@ export interface TeamExecutionRepository {
     readonly executionMode?: TeamRun['executionMode'];
     readonly leadRunId?: string;
   }): Promise<TeamRun>;
-  failTeamRunAtomically(input: {
-    readonly teamRunId: string;
-    readonly rootRunId: string;
-    readonly rootTaskId: string;
-    readonly owner: OwnerScope;
-    readonly updatedAt: string;
-    readonly failure: {
-      readonly code: 'runtime_execution_failed';
-      readonly message: string;
-    };
-  }): Promise<TeamRun>;
+  failTeamRunAtomically(input: FailTeamRunInput): Promise<TeamRun>;
 
   createMemberRun(member: TeamMemberRun): Promise<void>;
   findMembersByTeamRunId(
@@ -141,6 +158,10 @@ export interface TeamExecutionRepository {
     owner: OwnerScope,
   ): Promise<TeamWorkItem[]>;
   findWorkItemById(id: string, owner: OwnerScope): Promise<TeamWorkItem | null>;
+  findWorkDependenciesByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<readonly TeamWorkDependency[]>;
   atomicClaimWorkItem(
     id: string,
     ownerMemberId: string,
@@ -170,6 +191,7 @@ export interface TeamExecutionRepository {
     readonly executionTaskId: string;
     readonly teamRunId: string;
     readonly assigneeMemberId: string;
+    readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<TeamWorkItemAttempt>;
   updateAttemptStatus(
@@ -194,6 +216,7 @@ export interface TeamExecutionRepository {
     readonly assigneeMemberId: string;
     readonly subject: string;
     readonly description: string | null;
+    readonly dependsOnWorkItemIds?: readonly string[];
     readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;

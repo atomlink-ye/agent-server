@@ -19,6 +19,7 @@ describe('CompleteRun cancellation arbitration', () => {
       let taskProjected = false;
       let laneAdvanced = false;
       let assistantProjected = false;
+      let assistantProjectionReceiver: unknown;
       const events = {
         append: vi.fn(async (_id: string, type: string) => {
           if (['succeeded', 'failed', 'cancelled'].includes(type)) {
@@ -42,7 +43,8 @@ describe('CompleteRun cancellation arbitration', () => {
         }),
       };
       const sessions = {
-        appendAssistantMessage: vi.fn(async () => {
+        appendAssistantMessage: vi.fn(async function (this: unknown) {
+          assistantProjectionReceiver = this;
           assistantProjected = true;
           order.push('assistant');
         }),
@@ -76,6 +78,8 @@ describe('CompleteRun cancellation arbitration', () => {
       expect(sessions.appendAssistantMessage).toHaveBeenCalledTimes(
         status === 'succeeded' ? 1 : 0,
       );
+      if (status === 'succeeded')
+        expect(assistantProjectionReceiver).toBe(sessions);
       expect(order).toEqual(
         status === 'succeeded'
           ? [

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-export type TeamMessageStatus = 'queued' | 'consumed';
-export type TeamMessageKind = 'wake' | 'work_update';
+export type TeamMessageStatus = 'queued' | 'consumed' | 'delivered' | 'read';
+export type TeamMessageKind = 'wake' | 'work_update' | 'direct';
 
 export interface TeamMessage {
   readonly id: string;
@@ -66,7 +66,7 @@ export function createTeamMessage(
     kind: options.kind,
     dedupKey,
     body,
-    status: 'queued' as const,
+    status: 'queued',
     consumedByTaskId: null,
     createdAt,
     consumedAt: null,

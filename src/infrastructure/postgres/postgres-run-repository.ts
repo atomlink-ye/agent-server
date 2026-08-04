@@ -147,6 +147,36 @@ export class PostgresRunRepository implements RunRepository {
     );
   }
 
+  public async hasNonterminalRunsForTeamMemberChildTasks(
+    rootTaskId: string,
+    teamMemberRunIds: readonly string[],
+    ownerScope: RunOwnerScope,
+  ): Promise<boolean> {
+    if (teamMemberRunIds.length === 0) return false;
+    const result = await this.database.query(
+      `SELECT 1
+         FROM runs
+         JOIN tasks ON tasks.id=runs.task_id
+        WHERE tasks.root_task_id=$1
+          AND tasks.team_member_run_id=ANY($2::uuid[])
+          AND runs.status NOT IN ('succeeded','failed','timed_out','cancelled')
+          AND tasks.tenant_id=$3
+          AND tasks.workspace_id=$4
+          AND tasks.principal_type=$5
+          AND tasks.principal_id=$6
+        LIMIT 1`,
+      [
+        rootTaskId,
+        teamMemberRunIds,
+        ownerScope.tenantId,
+        ownerScope.workspaceId,
+        ownerScope.principalType,
+        ownerScope.principalId,
+      ],
+    );
+    return Boolean(result.rows?.[0]);
+  }
+
   public async requestCancellation(
     taskId: string,
     requestedAt: string,

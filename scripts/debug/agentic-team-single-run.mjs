@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -13,8 +13,27 @@ import {
 } from '../dev/paseo-process.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const canonicalSnapshotInvocation =
+  'synthetic_stock_snapshot({fixture_ref:"fixture://self-learning-market-research/acme-v1",symbol:"ACME"})';
+const supportedModels = new Set([
+  'opencode-go/deepseek-v4-flash',
+  'opencode-go/mimo-v2.5',
+  'opencode-go/glm-5.2',
+]);
+const requestedModel =
+  process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
+if (!supportedModels.has(requestedModel)) {
+  throw new Error(`unsupported_PASEO_MODEL:${requestedModel}`);
+}
+const [providerId, modelId] = requestedModel.split('/');
+const profile = process.env.AGENTIC_TEAM_STEP_PROFILE ?? 'legacy';
+const isPhase3Profile = profile === 'phase3_v2';
+if (!['legacy', 'phase3_v2'].includes(profile)) {
+  throw new Error('invalid_AGENTIC_TEAM_STEP_PROFILE');
+}
 const fixtureName =
-  process.env.AGENTIC_TEAM_STEP_FIXTURE ?? 'agentic-team-step';
+  process.env.AGENTIC_TEAM_STEP_FIXTURE ??
+  (isPhase3Profile ? 'agentic-team-phase3-step' : 'agentic-team-step');
 if (!/^[a-z0-9-]+$/u.test(fixtureName)) {
   throw new Error('invalid_AGENTIC_TEAM_STEP_FIXTURE');
 }
@@ -23,14 +42,21 @@ const manifestPath = join(evidenceRoot, 'manifest.json');
 const inspectEnvPath = join(evidenceRoot, 'inspect.env');
 const command = process.argv[2];
 const selectedRunId = process.argv[3];
-const allowedCommands = new Set(['init', 'prove', 'status', 'next', 'step']);
+const allowedCommands = new Set(
+  isPhase3Profile
+    ? ['init', 'status', 'next', 'step']
+    : ['init', 'prove', 'status', 'next', 'step'],
+);
 if (!allowedCommands.has(command) || (command === 'step' && !selectedRunId)) {
   throw new Error(
-    'usage: node scripts/debug/agentic-team-single-run.mjs init|prove|status|next|step <run-id>',
+    isPhase3Profile
+      ? 'usage: AGENTIC_TEAM_STEP_PROFILE=phase3_v2 node scripts/debug/agentic-team-single-run.mjs init|status|next|step <run-id>'
+      : 'usage: node scripts/debug/agentic-team-single-run.mjs init|prove|status|next|step <run-id>',
   );
 }
 
 await mkdir(evidenceRoot, { recursive: true });
+await chmod(evidenceRoot, 0o700);
 if (command === 'init' || command === 'prove') await initialize();
 else await useFixture();
 
@@ -94,7 +120,7 @@ async function initialize() {
         ],
       );
       const agents = [];
-      for (const name of ['lead', 'analyst', 'verifier']) {
+      for (const name of fixtureAgentNames()) {
         const imported = await request(
           '/api/v1/agents:import',
           'POST',
@@ -129,8 +155,8 @@ async function initialize() {
         {
           source: teamYaml(
             byName('lead'),
-            byName('analyst'),
-            byName('verifier'),
+            byName(isPhase3Profile ? 'member' : 'analyst'),
+            byName(isPhase3Profile ? 'observer' : 'verifier'),
             environment.version.id,
           ),
         },
@@ -148,12 +174,13 @@ async function initialize() {
         {
           invokable: { kind: 'team', version_id: publishedTeam.id },
           input: {
-            text: 'Lead: create one research task for each member, review both, and finish.',
+            text: fixtureRootInput(),
           },
         },
         202,
       );
       const manifest = {
+        profile,
         fixture_id: fixtureId,
         root_task_id: invoked.task_id,
         db_name: dbName,
@@ -163,7 +190,7 @@ async function initialize() {
         workspace_id: workspaceId,
         tenant_id: tenantId,
         principal_id: principalId,
-        model: 'opencode-go/deepseek-v4-flash',
+        model: requestedModel,
         created_at: new Date().toISOString(),
       };
       await atomicJson(manifestPath, manifest, 0o600);
@@ -172,9 +199,15 @@ async function initialize() {
         `DATABASE_URL=${shellQuote(dbUrl.toString())}\nPOSTGRES_URL=${shellQuote(dbUrl.toString())}\nROOT_TASK_ID=${invoked.task_id}\nRUNTIME_ROOT=${shellQuote(runtimeRoot)}\n`,
         0o600,
       );
-      const snapshot = await normalizedSnapshot(db, invoked.task_id);
-      await captureEvidence('00-init', snapshot, null);
-      printSummary(snapshot);
+      if (isPhase3Profile) {
+        const snapshot = await phase3SafeSnapshot(db, invoked.task_id);
+        await capturePhase3Evidence('00-init', { snapshot: snapshot.snapshot });
+        printPhase3Summary(snapshot);
+      } else {
+        const snapshot = await normalizedSnapshot(db, invoked.task_id);
+        await captureEvidence('00-init', snapshot, null);
+        printSummary(snapshot);
+      }
       if (command === 'prove') {
         await proveFixture({
           db,
@@ -255,7 +288,14 @@ async function proveFixture(input) {
 
 async function useFixture() {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  assertFixtureModel(manifest);
   const env = parseInspectEnv(await readFile(inspectEnvPath, 'utf8'));
+  if (isPhase3Profile) {
+    if (manifest.profile !== 'phase3_v2')
+      throw new Error('fixture_profile_mismatch: expected_phase3_v2');
+    await usePhase3Fixture(manifest, env);
+    return;
+  }
   const db = new Client({ connectionString: env.DATABASE_URL });
   await db.connect();
   try {
@@ -374,6 +414,100 @@ async function useFixture() {
   }
 }
 
+async function usePhase3Fixture(manifest, env) {
+  const db = new Client({ connectionString: env.DATABASE_URL });
+  await db.connect();
+  try {
+    const before = await phase3SafeSnapshot(db, manifest.root_task_id);
+    if (command === 'status') {
+      await capturePhase3Evidence(nextEvidenceName('status'), {
+        snapshot: before.snapshot,
+      });
+      printPhase3Summary(before);
+      return;
+    }
+
+    const next = phase3UniqueNext(before);
+    if (command === 'next') {
+      console.log(JSON.stringify(phase3PublicNext(next), null, 2));
+      return;
+    }
+    if (selectedRunId !== next.run_id)
+      throw new Error(
+        `selected_run_is_not_unique_next: expected ${next.run_id}`,
+      );
+    assertPhase3BeforeStep(before, next);
+    requireAuthorizedCredentialSource();
+    configureProvider();
+
+    let paseo;
+    let service;
+    const startedAt = Date.now();
+    try {
+      paseo = await startFixturePaseo(manifest.runtime_root);
+      configureService({
+        dbUrl: env.DATABASE_URL,
+        paseo,
+        projectCwd: manifest.project_cwd,
+        cellRoot: manifest.cell_root,
+        runtimeRoot: manifest.runtime_root,
+        token: 'debug-not-used',
+        tenantId: manifest.tenant_id,
+        principalId: manifest.principal_id,
+        workspaceId: manifest.workspace_id,
+      });
+      service = await createDebugService();
+      await service.runtime.initialize();
+      await service.singleRunDebug.stopDispatcher();
+      const result =
+        await service.singleRunDebug.claimAndExecute(selectedRunId);
+      if (!result.claimed) throw new Error('exact_run_claim_failed');
+      const after = await phase3SafeSnapshot(db, manifest.root_task_id);
+      const elapsedMs = Date.now() - startedAt;
+      const evidenceName = nextEvidenceName(`step-${next.kind}`);
+      let assertionError;
+      try {
+        assertPhase3AfterStep(before, after, next);
+      } catch (error) {
+        assertionError = error;
+      }
+      await capturePhase3Evidence(evidenceName, {
+        before: before.snapshot,
+        after: after.snapshot,
+        transition: {
+          selected_run_hash: next.run_hash,
+          kind: next.kind,
+          terminal_status: result.terminalStatus ?? null,
+          elapsed_ms: elapsedMs,
+          assertion: assertionError?.message ?? 'passed',
+        },
+      });
+      if (assertionError) throw assertionError;
+      console.log(
+        JSON.stringify(
+          {
+            transition: next.kind,
+            run_id: selectedRunId,
+            terminal_status: result.terminalStatus ?? null,
+            elapsed_ms: elapsedMs,
+            evidence_id: evidenceName,
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
+      await service?.close?.().catch(() => undefined);
+      await (
+        paseo?.child ? stopProcessTree(paseo.child) : Promise.resolve()
+      ).catch(() => undefined);
+    }
+  } finally {
+    await db.end();
+  }
+}
+
 async function createDebugService() {
   const { loadConfig } = await import('../../src/shared/config.ts');
   const { createLogger } =
@@ -387,7 +521,10 @@ async function createDebugService() {
       minimumLevel: config.logLevel,
       write: () => undefined,
     }),
-    { singleRunDebug: true },
+    {
+      singleRunDebug: true,
+      ...(isPhase3Profile ? { deferTeamWakeReconcile: true } : {}),
+    },
   );
 }
 
@@ -414,7 +551,7 @@ function configureService(input) {
     input.runtimeRoot,
     'skills',
   );
-  process.env.PASEO_MODEL = 'opencode-go/deepseek-v4-flash';
+  process.env.PASEO_MODEL = requestedModel;
   process.env.PASEO_EXECUTION_TIMEOUT_MS ??= '600000';
   process.env.SERVICE_ACCOUNTS_JSON = JSON.stringify([
     {
@@ -432,17 +569,25 @@ function configureProvider() {
     $schema: 'https://opencode.ai/config.json',
     agent: { build: { permission: 'allow' } },
     provider: {
-      'opencode-go': {
+      [providerId]: {
         npm: '@ai-sdk/openai-compatible',
         name: 'OpenCode Go',
         options: {
           baseURL: 'https://opencode.ai/zen/go/v1',
           apiKey: '{env:OPENCODE_GO_API_KEY}',
         },
-        models: { 'deepseek-v4-flash': { name: 'deepseek-v4-flash' } },
+        models: { [modelId]: { name: modelId } },
       },
     },
   });
+}
+
+function assertFixtureModel(manifest) {
+  if (manifest.model !== requestedModel) {
+    throw new Error(
+      `fixture_model_mismatch: expected_${requestedModel}_received_${manifest.model ?? 'missing'}`,
+    );
+  }
 }
 
 function createRequest(app, token) {
@@ -460,6 +605,250 @@ function createRequest(app, token) {
       throw new Error(`http_${response.status}_expected_${expected}`);
     return response.json();
   };
+}
+
+async function phase3SafeSnapshot(db, rootTaskId) {
+  const team =
+    (
+      await db.query(
+        `SELECT status,control_state,phase FROM team_runs WHERE root_task_id=$1 ORDER BY created_at DESC LIMIT 1`,
+        [rootTaskId],
+      )
+    ).rows[0] ?? null;
+  const rows = (
+    await db.query(
+      `SELECT r.id AS run_id,r.status AS run_status,
+        COALESCE(t.team_task_kind, 'root') AS kind,
+        rs.provider_agent_id,
+        r.cancellation_requested,
+        r.lease_owner IS NOT NULL OR r.activation_id IS NOT NULL AS has_active_claim,
+        EXISTS(
+          SELECT 1 FROM run_dispatches d
+          WHERE d.run_id=r.id AND d.event_type='run.enqueue'
+            AND d.published_at IS NULL
+        ) AS has_ready_dispatch,
+        (t.session_id IS NULL OR sl.active_task_id=t.id) AS has_session_lane
+      FROM tasks t
+      JOIN runs r ON r.task_id=t.id
+      LEFT JOIN session_lanes sl ON sl.session_id=t.session_id
+      LEFT JOIN runtime_sessions rs ON rs.task_id=t.id AND rs.scope_kind='task'
+      WHERE t.root_task_id=$1
+      ORDER BY r.created_at,r.attempt`,
+      [rootTaskId],
+    )
+  ).rows;
+  const selectable = rows.filter(
+    (row) =>
+      row.run_status === 'queued' &&
+      !row.cancellation_requested &&
+      row.has_ready_dispatch &&
+      row.has_session_lane &&
+      !row.has_active_claim,
+  );
+  const runs = rows.map((row) => ({
+    run_hash: phase3IdHash(row.run_id),
+    binding_hash: row.provider_agent_id
+      ? phase3IdHash(row.provider_agent_id)
+      : null,
+    kind: row.kind,
+    status: row.run_status,
+    dispatch_ready: Boolean(row.has_ready_dispatch),
+    selectable: selectable.some((candidate) => candidate.run_id === row.run_id),
+  }));
+  const snapshot = {
+    schema: 'agentic-team-phase3-safe-snapshot/v2',
+    team: team
+      ? {
+          status: team.status,
+          control_state: team.control_state,
+          phase: team.phase,
+        }
+      : null,
+    counts: {
+      runs: runs.length,
+      selectable_runs: selectable.length,
+      active_claims: rows.filter((row) => row.has_active_claim).length,
+      by_status: countBy(runs, (run) => run.status),
+      by_kind: countBy(runs, (run) => run.kind),
+    },
+    runs,
+  };
+  return { snapshot, rows, selectable };
+}
+
+function phase3UniqueNext(state) {
+  if (state.selectable.length === 0)
+    throw new Error('phase3_next_blocked:no_legal_queued_run');
+  if (state.selectable.length > 1)
+    throw new Error(
+      `phase3_next_blocked:multiple_legal_queued_runs:${state.selectable.length}`,
+    );
+  const row = state.selectable[0];
+  return {
+    run_id: row.run_id,
+    run_hash: phase3IdHash(row.run_id),
+    kind: row.kind,
+  };
+}
+
+function phase3PublicNext(next) {
+  return {
+    run_id: next.run_id,
+    run_hash: next.run_hash,
+    kind: next.kind,
+  };
+}
+
+function printPhase3Summary(state) {
+  let next;
+  try {
+    next = phase3PublicNext(phase3UniqueNext(state));
+  } catch (error) {
+    next = { blocked: error.message };
+  }
+  console.log(JSON.stringify({ snapshot: state.snapshot, next }, null, 2));
+}
+
+function assertPhase3BeforeStep(state, next) {
+  if (state.snapshot.counts.active_claims !== 0)
+    throw new Error('phase3_invariant_active_claim_exists');
+  if (
+    state.selectable.length !== 1 ||
+    state.selectable[0].run_id !== next.run_id
+  )
+    throw new Error('phase3_invariant_unique_selection_changed');
+}
+
+function assertPhase3AfterStep(before, after, next) {
+  const selected = after.rows.find((row) => row.run_id === next.run_id);
+  if (
+    !selected ||
+    ![
+      'succeeded',
+      'failed',
+      'timed_out',
+      'cancelled',
+      'waiting_children',
+    ].includes(selected.run_status)
+  )
+    throw new Error(
+      `phase3_selected_run_not_terminal:${selected?.run_status ?? 'missing'}`,
+    );
+  if (selected.has_active_claim)
+    throw new Error('phase3_selected_run_claim_not_released');
+  if (after.snapshot.counts.active_claims !== 0)
+    throw new Error('phase3_invariant_active_claim_after_step');
+  if (
+    next.kind === 'lead_turn' &&
+    ['succeeded', 'waiting_children'].includes(selected.run_status) &&
+    !selected.provider_agent_id
+  )
+    throw new Error('phase3_lead_missing_task_binding');
+  const leadBindingIds = after.rows
+    .filter((row) => row.kind === 'lead_turn' && row.provider_agent_id)
+    .map((row) => row.provider_agent_id);
+  if (new Set(leadBindingIds).size !== leadBindingIds.length)
+    throw new Error('phase3_lead_binding_reused');
+  const afterByRunId = new Map(after.rows.map((row) => [row.run_id, row]));
+  const rootCascade = phase3RootTerminalCascade(before, after, next, selected);
+  for (const prior of before.rows) {
+    if (prior.run_id === next.run_id) continue;
+    const current = afterByRunId.get(prior.run_id);
+    if (
+      rootCascade &&
+      prior.run_id === rootCascade.run_id &&
+      current?.run_status === rootCascade.run_status &&
+      Boolean(current.has_ready_dispatch) === Boolean(prior.has_ready_dispatch)
+    )
+      continue;
+    if (
+      !current ||
+      current.run_status !== prior.run_status ||
+      Boolean(current.has_ready_dispatch) !== Boolean(prior.has_ready_dispatch)
+    )
+      throw new Error('phase3_non_selected_run_advanced');
+  }
+  const teamBecameTerminal = phase3TeamBecameTerminal(
+    before.snapshot.team,
+    after.snapshot.team,
+  );
+  if (
+    next.kind === 'lead_turn' &&
+    ['failed', 'timed_out', 'cancelled'].includes(selected.run_status) &&
+    !rootCascade
+  )
+    throw new Error('phase3_failed_lead_missing_root_terminal');
+  if (
+    rootCascade &&
+    !phase3TerminalTeamMatches(after.snapshot.team, rootCascade)
+  )
+    throw new Error('phase3_root_terminal_without_team_terminal');
+  if (teamBecameTerminal && !rootCascade)
+    throw new Error('phase3_team_terminal_without_root_terminal');
+}
+
+function phase3RootTerminalCascade(before, after, next, selected) {
+  if (next.kind !== 'lead_turn') return null;
+  const expectedRootStatus =
+    selected.run_status === 'succeeded'
+      ? 'succeeded'
+      : ['failed', 'timed_out', 'cancelled'].includes(selected.run_status)
+        ? 'failed'
+        : null;
+  if (!expectedRootStatus) return null;
+  const rootBefore = before.rows.find((row) => row.kind === 'root');
+  const rootAfter = rootBefore
+    ? after.rows.find((row) => row.run_id === rootBefore.run_id)
+    : null;
+  if (
+    !rootBefore ||
+    !rootAfter ||
+    rootBefore.run_status === rootAfter.run_status
+  )
+    return null;
+  if (
+    rootBefore.run_status !== 'waiting_children' ||
+    rootAfter.run_status !== expectedRootStatus
+  )
+    return null;
+  return { run_id: rootBefore.run_id, run_status: expectedRootStatus };
+}
+
+function phase3TeamBecameTerminal(before, after) {
+  return (
+    ['active', 'waiting'].includes(before?.status) &&
+    ['succeeded', 'failed'].includes(after?.status)
+  );
+}
+
+function phase3TerminalTeamMatches(after, rootCascade) {
+  return (
+    ['succeeded', 'failed'].includes(after?.status) &&
+    after?.control_state === 'terminal' &&
+    after?.phase === 'done' &&
+    after.status === rootCascade.run_status
+  );
+}
+
+function countBy(values, keyOf) {
+  return Object.fromEntries(
+    [
+      ...values
+        .reduce((counts, value) => {
+          const key = keyOf(value);
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+          return counts;
+        }, new Map())
+        .entries(),
+    ].sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function phase3IdHash(value) {
+  return createHash('sha256')
+    .update(`agentic-team-phase3-safe-id/v1:${value}`)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 async function normalizedSnapshot(db, rootTaskId) {
@@ -692,6 +1081,27 @@ async function captureEvidence(name, snapshot, transition) {
     0o600,
   );
 }
+async function capturePhase3Evidence(name, value) {
+  assertPhase3EvidenceSafe(value);
+  await atomicJson(join(evidenceRoot, `${name}.json`), value, 0o600);
+}
+function assertPhase3EvidenceSafe(value) {
+  const forbiddenKey =
+    /runtime.?session|provider.?agent|lease.?owner|(^|_)owner|tenant|secret|token|prompt|result|payload|path/iu;
+  const walk = (entry) => {
+    if (Array.isArray(entry)) {
+      entry.forEach(walk);
+      return;
+    }
+    if (!entry || typeof entry !== 'object') return;
+    for (const [key, nested] of Object.entries(entry)) {
+      if (forbiddenKey.test(key))
+        throw new Error(`phase3_unsafe_evidence_key:${key}`);
+      walk(nested);
+    }
+  };
+  walk(value);
+}
 function nextEvidenceName(label) {
   return `${String(Date.now())}-${label.replace(/[^a-z0-9-]/gi, '-')}`;
 }
@@ -737,7 +1147,20 @@ function requireAuthorizedCredentialSource() {
     );
 }
 
+function fixtureAgentNames() {
+  return isPhase3Profile
+    ? ['lead', 'member', 'observer']
+    : ['lead', 'analyst', 'verifier'];
+}
+
+function fixtureRootInput() {
+  return isPhase3Profile
+    ? 'Execute the next legal Team transition. On the empty board, create the two bounded Work items with the required dependency, then stop.'
+    : 'Lead: create one research task for each member, review both, and finish.';
+}
+
 function agentYaml(name) {
+  if (isPhase3Profile) return phase3AgentYaml(name);
   const displayName =
     name === 'lead' ? 'Lead' : name === 'analyst' ? 'Analyst' : 'Verifier';
   const tools =
@@ -752,9 +1175,96 @@ function agentYaml(name) {
         : 'Use canonical member tools. Obtain stock snapshot and event batch, checkpoint once, submit once. Include ACME, data_as_of 2026-07-31, uncertainty, risk, and no investment advice.';
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: team-step-${name}\nspec:\n  description: Agentic Team step debugger ${displayName}\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${tools}\n    - ref: agent-server/synthetic-stock-snapshot\n      kind: tool\n    - ref: agent-server/synthetic-event-batch\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
+function phase3AgentYaml(name) {
+  const lead = name === 'lead';
+  const instructions = lead
+    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member; then create Work B assigned to observer with dependency_refs ["work-1"]; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On a later turn, when both Work items are accepted and the direct message is delivered, call team_finish exactly once and stop. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. Only the original outer member may create at most one bounded domain child subagent. If you are any descendant, do not create another subagent; return findings to the original outer member. All descendants share this Team identity and context. The outer member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. A descendant may submit only if the outer member cannot. After the first successful submit, the whole tree must stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+  const refs = lead
+    ? [
+        'team-state',
+        'team-work-list',
+        'team-work-create',
+        'team-work-accept-v2',
+        'team-finish',
+        'team-message-send',
+      ]
+    : [
+        'team-state',
+        'team-work-list',
+        'team-work-checkpoint',
+        'team-work-submit',
+        'synthetic-stock-snapshot',
+      ];
+  return `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: agentic-team-phase3-${name}
+spec:
+  description: Phase 3 retained Team ${name} role
+  instructions: ${JSON.stringify(instructions)}
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}
+  skills: []
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: "Execute exactly the next legal Team transition for your role."
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: read_only
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: "done"
+`;
+}
+
 function environmentYaml() {
+  if (isPhase3Profile)
+    return `apiVersion: agent-server/v1alpha1
+kind: ManagedEnvironment
+metadata:
+  name: agentic-team-phase3-step
+spec:
+  adapter: paseo
+  provider: opencode
+  modelPolicyRef: free-only
+  runtimeCellPolicy: per_runtime_session
+`;
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: agentic-team-step\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
 function teamYaml(lead, analyst, verifier, environment) {
+  if (isPhase3Profile)
+    return `apiVersion: agent-server/v1alpha1
+kind: ManagedTeam
+metadata:
+  name: agentic-team-phase3-step
+spec:
+  environmentVersionId: ${environment}
+  lead:
+    name: lead
+    agentVersionId: ${lead}
+  roster:
+    - name: member
+      agentVersionId: ${analyst}
+    - name: observer
+      agentVersionId: ${verifier}
+  coordination:
+    mode: agentic_mve
+    taskAssignment: lead_or_self_claim
+`;
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agentic-team-step\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: analyst\n      agentVersionId: ${analyst}\n    - name: verifier\n      agentVersionId: ${verifier}\n  coordination:\n    mode: agentic_mve\n    taskAssignment: lead_or_self_claim\n`;
 }

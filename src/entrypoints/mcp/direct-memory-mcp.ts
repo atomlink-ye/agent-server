@@ -1,6 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  McpServer,
+  type RegisteredTool,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
@@ -18,12 +21,9 @@ import {
 } from '../../application/agents/built-in-skills.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import { canonicalTeamToolRefsForRole } from '../../application/teams/team-policy-evaluator.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  AGENT_SERVER_TEAM_TOOL_REFS,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
@@ -48,6 +48,7 @@ type McpSession = Readonly<{
   readonly server: McpServer;
   readonly transport: StreamableHTTPServerTransport;
   readonly grantId: string;
+  readonly refreshTools: (allowedTools: readonly string[]) => void;
 }>;
 
 export function createDirectMemoryMcpHandler(input: {
@@ -109,47 +110,61 @@ export function createDirectMemoryMcpHandler(input: {
         name: 'agent-server-memory-mcp',
         version: '0.1.0',
       });
+    let refreshTools: (allowedTools: readonly string[]) => void =
+      existing?.refreshTools ?? (() => undefined);
     let transport!: StreamableHTTPServerTransport;
     transport =
       existing?.transport ??
       new StreamableHTTPServerTransport({
         sessionIdGenerator: randomUUID,
         onsessioninitialized: (id) => {
-          sessions.set(id, { server, transport, grantId: grant.grantId });
+          sessions.set(id, {
+            server,
+            transport,
+            grantId: grant.grantId,
+            refreshTools,
+          });
         },
       });
     if (!existing) {
-      registerTools(server, grant, input.repository, input);
+      const registeredTools = registerTools(
+        server,
+        grant,
+        input.repository,
+        input,
+        input.grants,
+      );
+      const refreshRegisteredTools = (allowedTools: readonly string[]) => {
+        for (const [toolRef, registration] of registeredTools) {
+          const shouldEnable = allowedTools.includes(toolRef);
+          if (registration.enabled === shouldEnable) continue;
+          if (shouldEnable) registration.enable();
+          else registration.disable();
+        }
+      };
+      let refreshTeamTools: (allowedTools: readonly string[]) => void = () =>
+        undefined;
       if (
         input.teamTools &&
-        grant.allowedTools.some(
-          (tool) =>
-            AGENT_SERVER_TEAM_TOOL_REFS.includes(tool) ||
-            (
-              Object.values(
-                AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
-              ) as readonly string[]
-            ).includes(tool),
-        )
+        grant.teamMemberRunId &&
+        grant.taskId &&
+        grant.runId
       ) {
-        const actor =
-          grant.teamMemberRunId && grant.taskId && grant.runId
-            ? await input.teamTools.handler.actorForMemberRun(
-                grant.teamMemberRunId,
-                {
-                  tenantId: grant.tenantId,
-                  workspaceId: grant.workspaceId,
-                  principalType: grant.principalType,
-                  principalId: grant.principalId,
-                },
-              )
-            : null;
+        const actor = await input.teamTools.handler.actorForMemberRun(
+          grant.teamMemberRunId,
+          {
+            tenantId: grant.tenantId,
+            workspaceId: grant.workspaceId,
+            principalType: grant.principalType,
+            principalId: grant.principalId,
+          },
+        );
         if (actor)
-          registerTeamMcpTools(
+          refreshTeamTools = registerTeamMcpTools(
             server,
             input.teamTools.handler,
             actor,
-            canonicalTeamToolRefsForRole(actor.role),
+            grant.allowedTools,
             (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
             input.teamTools.contextResolver && input.teamTools.commands
               ? {
@@ -166,6 +181,10 @@ export function createDirectMemoryMcpHandler(input: {
               : undefined,
           );
       }
+      refreshTools = (allowedTools) => {
+        refreshRegisteredTools(allowedTools);
+        refreshTeamTools(allowedTools);
+      };
     }
     const newSession = !existing;
     if (newSession) {
@@ -180,6 +199,7 @@ export function createDirectMemoryMcpHandler(input: {
         await server.connect(
           transport as unknown as Parameters<typeof server.connect>[0],
         );
+      refreshTools(grant.allowedTools);
       await transport.handleRequest(req, res, body);
     } catch {
       if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });
@@ -205,9 +225,31 @@ function registerTools(
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
   },
-): void {
+  grants: RuntimeToolGrantService,
+): Map<string, RegisteredTool> {
+  const registrations = new Map<string, RegisteredTool>();
+  const register = (
+    toolRef: string,
+    name: string,
+    config: any,
+    operation: (args: any, currentGrant: RuntimeToolGrant) => unknown,
+  ) => {
+    registrations.set(
+      toolRef,
+      (server.registerTool as any)(name, config, async (args: any) => {
+        const currentGrant = grants.get(grant.grantId);
+        if (
+          !currentGrant ||
+          !grants.isToolAllowed(currentGrant.grantId, toolRef)
+        )
+          return notFound();
+        return operation(args, currentGrant);
+      }),
+    );
+  };
   if (grant.allowedTools.includes(AGENT_SERVER_MEMORY_READ_TOOL_REF)) {
-    server.registerTool(
+    register(
+      AGENT_SERVER_MEMORY_READ_TOOL_REF,
       AGENT_SERVER_MEMORY_READ_MCP_NAME,
       {
         description: 'Read one authorized Memory by normalized path.',
@@ -215,21 +257,15 @@ function registerTools(
         annotations: { readOnlyHint: true },
         _meta: { risk: 'read_only' },
       },
-      async (args) => readMemory(args, grant, repository),
+      async (args, currentGrant) => readMemory(args, currentGrant, repository),
     );
-  } else {
-    const placeholder = server.registerTool(
-      AGENT_SERVER_MEMORY_READ_MCP_NAME,
-      { description: 'Unavailable.', inputSchema: memoryReadInput },
-      async () => notFound(),
-    );
-    placeholder.remove();
   }
   const market = input.market ?? new SyntheticMarketAdapter();
   if (
     grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF)
   )
-    server.registerTool(
+    register(
+      AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
       'synthetic_stock_snapshot',
       {
         description: 'Read the fixed synthetic ACME snapshot.',
@@ -243,7 +279,8 @@ function registerTools(
         ),
     );
   if (grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
-    server.registerTool(
+    register(
+      AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
       'synthetic_event_batch',
       {
         description: 'Read the fixed synthetic ACME event batch.',
@@ -259,7 +296,8 @@ function registerTools(
   if (
     grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF)
   )
-    server.registerTool(
+    register(
+      AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
       'synthetic_analog_summary',
       {
         description: 'Read the fixed synthetic ACME analog summary.',
@@ -278,21 +316,23 @@ function registerTools(
     ) &&
     input.createLearningProposal
   )
-    server.registerTool(
+    register(
+      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
       'learning_proposal_create',
       {
         description: 'Create a human-reviewed learning proposal.',
         inputSchema: proposalInput.shape,
       },
-      (args) =>
+      (args, currentGrant) =>
         createProposal(
           args,
-          grant,
+          currentGrant,
           repository,
           input.createLearningProposal!,
           input.teamTools,
         ),
     );
+  return registrations;
 }
 
 async function readMemory(

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  FailTeamRunInput,
   TeamExecutionRepository,
   OwnerScope,
+  TeamWorkDependency,
 } from '../../application/ports/team-execution-repository.js';
 import { TeamExecutionError } from '../../application/ports/team-execution-repository.js';
 import {
@@ -321,17 +323,9 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         client.release();
     }
   }
-  public async failTeamRunAtomically(input: {
-    readonly teamRunId: string;
-    readonly rootRunId: string;
-    readonly rootTaskId: string;
-    readonly owner: OwnerScope;
-    readonly updatedAt: string;
-    readonly failure: {
-      readonly code: 'runtime_execution_failed';
-      readonly message: string;
-    };
-  }): Promise<TeamRun> {
+  public async failTeamRunAtomically(
+    input: FailTeamRunInput,
+  ): Promise<TeamRun> {
     const client = this.database.connect
       ? await this.database.connect()
       : this.database;
@@ -343,6 +337,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       const team = locked.rows?.[0];
       if (!team) throw new Error('Team run was not found.');
+      if (
+        input.stopReason === 'lead_no_progress' &&
+        (team.revision !== input.expectedRevision ||
+          team.control_state !== 'lead_running' ||
+          team.completion_requested_by_run_id !== null)
+      )
+        throw new TeamExecutionError('stale_state');
       await assertTeamRootFence(
         client,
         team,
@@ -360,7 +361,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       }
       await client.query(
         `UPDATE team_runs SET status='failed', phase='done', control_state='terminal', stop_reason=$2, updated_at=$3 WHERE id=$1`,
-        [input.teamRunId, 'lead_turn_limit', input.updatedAt],
+        [input.teamRunId, input.stopReason, input.updatedAt],
       );
       const error = JSON.stringify(input.failure);
       const run = await client.query(
@@ -507,6 +508,27 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     );
     return r.rows?.[0] ? mapWork(r.rows[0]) : null;
   }
+  public async findWorkDependenciesByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<readonly TeamWorkDependency[]> {
+    const result = await this.database.query<{
+      work_item_id: string;
+      depends_on_work_item_id: string;
+    }>(
+      `SELECT work_item_id,depends_on_work_item_id
+         FROM team_work_item_dependencies
+        WHERE team_run_id=$1 AND ${ownerSql('', 2)}
+        ORDER BY work_item_id,depends_on_work_item_id`,
+      [teamRunId, ...ownerValues(owner)],
+    );
+    return (result.rows ?? []).map((row) =>
+      Object.freeze({
+        workItemId: row.work_item_id,
+        dependsOnWorkItemId: row.depends_on_work_item_id,
+      }),
+    );
+  }
   public async atomicClaimWorkItem(
     id: string,
     ownerMemberId: string,
@@ -583,62 +605,86 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     executionTaskId: string;
     teamRunId: string;
     assigneeMemberId: string;
+    expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamWorkItemAttempt> {
-    const member = await this.database.query<{ id: string }>(
-      `SELECT id FROM team_member_runs
-        WHERE id=$1 AND team_run_id=$2 AND role='member'
-          AND ${ownerSql('', 3)}
-        FOR UPDATE`,
-      [input.assigneeMemberId, input.teamRunId, ...ownerValues(input.owner)],
+    // The reconciler invokes this through AdmissionRepository.withTransaction.
+    // Do not create a nested transaction here: the Task, Run, Attempt, Message,
+    // and dispatch must either all commit or all remain queued together.
+    const team = await this.database.query<TeamRunRow>(
+      `SELECT * FROM team_runs WHERE id=$1 AND revision=$2
+         AND status IN ('active','waiting') AND ${ownerSql('', 3)} FOR UPDATE`,
+      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
     );
-    if (!member.rows?.[0])
-      throw new Error('Work attempt assignee was not available.');
-    const r = await this.database.query<AttemptRow>(
-      `UPDATE team_work_item_attempts a
-         SET execution_task_id=$2, status='running', updated_at=now()
-       FROM team_work_items w, team_runs t, team_member_runs m
-       WHERE a.id=$1 AND a.work_item_id=w.id AND a.team_run_id=$3
-         AND w.team_run_id=t.id AND a.assignee_member_id=$4
-         AND m.id=$4 AND m.team_run_id=t.id AND m.role='member'
-         AND a.status='queued' AND a.execution_task_id IS NULL
-         AND w.status='pending' AND t.status IN ('active','waiting')
-         AND NOT EXISTS (
-           SELECT 1 FROM team_work_item_attempts active_attempt
-            WHERE active_attempt.team_run_id=$3
-              AND active_attempt.assignee_member_id=$4
-              AND active_attempt.id<>a.id
-              AND active_attempt.status IN ('queued','running')
-              AND ${ownerSql('active_attempt', 5)}
+    if (team.rowCount !== 1 || !team.rows?.[0])
+      throw new TeamExecutionError('stale_state');
+    const claimed = await this.database.query<AttemptRow>(
+      `WITH attempt_claim AS (
+           UPDATE team_work_item_attempts a
+              SET execution_task_id=$2,status='running',updated_at=now()
+             FROM team_work_items w, team_member_runs m
+            WHERE a.id=$1 AND a.team_run_id=$3 AND a.work_item_id=w.id
+              AND a.assignee_member_id=$4
+              AND m.id=$4 AND m.team_run_id=$3 AND m.role='member'
+              AND m.status NOT IN ('stopped','failed')
+              AND a.status='queued' AND a.execution_task_id IS NULL
+              AND w.team_run_id=$3 AND w.status='pending'
+              AND ${ownerSql('a', 5)} AND ${ownerSql('w', 5)} AND ${ownerSql('m', 5)}
+              AND NOT EXISTS (
+                SELECT 1 FROM team_work_item_attempts active_attempt
+                 WHERE active_attempt.team_run_id=$3
+                   AND active_attempt.assignee_member_id=$4
+                   AND active_attempt.id<>a.id
+                   AND active_attempt.status IN ('queued','running')
+                   AND ${ownerSql('active_attempt', 5)}
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM tasks active_task
+                 WHERE active_task.root_task_id=$9
+                   AND active_task.team_member_run_id=$4
+                   AND active_task.id<>$2
+                   AND ${ownerSql('active_task', 5)}
+                   AND (
+                     active_task.status NOT IN ('completed','failed','cancelled')
+                     OR EXISTS (
+                       SELECT 1 FROM runs active_run
+                        WHERE active_run.task_id=active_task.id
+                          AND active_run.status NOT IN ('succeeded','failed','timed_out','cancelled')
+                     )
+                   )
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM team_work_item_dependencies d
+                  JOIN team_work_items dependency
+                    ON dependency.id=d.depends_on_work_item_id
+                   AND dependency.team_run_id=d.team_run_id
+                 WHERE d.team_run_id=$3 AND d.work_item_id=a.work_item_id
+                   AND ${ownerSql('d', 5)} AND ${ownerSql('dependency', 5)}
+                   AND dependency.status<>'accepted'
+              )
+           RETURNING a.*
+         ), work_claim AS (
+           UPDATE team_work_items w
+              SET status='in_progress',updated_at=now()
+             FROM attempt_claim a
+            WHERE w.id=a.work_item_id AND w.team_run_id=$3 AND w.status='pending'
+              AND ${ownerSql('w', 5)}
+           RETURNING w.id
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM tasks active_task
-            WHERE active_task.root_task_id=t.root_task_id
-              AND active_task.team_member_run_id=$4
-              AND active_task.id<>$2
-              AND active_task.status NOT IN ('completed','failed','cancelled')
-              AND ${ownerSql('active_task', 5)}
-         )
-         AND ${ownerSql('a', 5)} AND ${ownerSql('w', 5)}
-         AND ${ownerSql('t', 5)} AND ${ownerSql('m', 5)}
-       RETURNING a.*`,
+         SELECT a.* FROM attempt_claim a JOIN work_claim w ON w.id=a.work_item_id`,
       [
         input.attemptId,
         input.executionTaskId,
         input.teamRunId,
         input.assigneeMemberId,
         ...ownerValues(input.owner),
+        team.rows[0].root_task_id,
       ],
     );
-    if (!r.rows?.[0])
-      throw new Error('Work attempt was not ready to materialize.');
-    await this.database.query(
-      `UPDATE team_work_items SET status='in_progress', updated_at=now()
-       WHERE id=(SELECT work_item_id FROM team_work_item_attempts WHERE id=$1)
-         AND status='pending' AND ${ownerSql('', 2)}`,
-      [input.attemptId, ...ownerValues(input.owner)],
-    );
-    return mapAttempt(r.rows[0]);
+    if (claimed.rowCount !== 1 || !claimed.rows?.[0])
+      throw new TeamExecutionError('invalid_transition');
+    return mapAttempt(claimed.rows[0]);
   }
   public async updateAttemptStatus(
     attemptId: string,
@@ -647,7 +693,12 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope,
   ): Promise<TeamWorkItemAttempt> {
     const r = await this.database.query<AttemptRow>(
-      `UPDATE team_work_item_attempts SET status=$2,result_summary=$3,completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END,updated_at=now() WHERE id=$1 AND ${ownerSql('', 4)} RETURNING *`,
+      `UPDATE team_work_item_attempts
+          SET status=$2,result_summary=$3,
+              completed_at=CASE WHEN $2 IN ('completed','failed') THEN now() ELSE completed_at END,
+              updated_at=now()
+        WHERE id=$1 AND status='running' AND $2 IN ('completed','failed')
+          AND ${ownerSql('', 4)} RETURNING *`,
       [attemptId, status, resultSummary, ...ownerValues(owner)],
     );
     if (!r.rows?.[0]) throw new Error('Work attempt was not found.');
@@ -725,6 +776,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     assigneeMemberId: string;
     subject: string;
     description: string | null;
+    dependsOnWorkItemIds?: readonly string[];
     commandHash: string;
     expectedRevision: number;
     owner: OwnerScope;
@@ -819,6 +871,21 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         if (activeAttempt.rows?.[0] || activeTask.rows?.[0])
           throw new TeamExecutionError('conflict');
       }
+      const dependencies = [...new Set(input.dependsOnWorkItemIds ?? [])];
+      if (dependencies.length !== (input.dependsOnWorkItemIds ?? []).length)
+        throw new TeamExecutionError('invalid_transition');
+      if (dependencies.length > 0) {
+        const existingDependencies = await client.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM team_work_items
+            WHERE team_run_id=$1 AND id=ANY($2::uuid[]) AND ${ownerSql('', 3)}`,
+          [input.teamRunId, dependencies, ...ownerValues(input.owner)],
+        );
+        if (
+          Number(existingDependencies.rows?.[0]?.count ?? 0) !==
+          dependencies.length
+        )
+          throw new TeamExecutionError('not_found');
+      }
       const now = new Date().toISOString();
       const itemId = randomUUID();
       const attemptId = randomUUID();
@@ -834,6 +901,14 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           now,
         ],
       );
+      if (dependencies.length > 0)
+        await client.query(
+          `INSERT INTO team_work_item_dependencies
+            (team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id)
+           SELECT $1,$2,dependency_id,$3,$4,$5,$6
+             FROM unnest($7::uuid[]) AS dependency_id`,
+          [input.teamRunId, itemId, ...ownerValues(input.owner), dependencies],
+        );
       await client.query(
         `INSERT INTO team_work_item_attempts (id,work_item_id,team_run_id,attempt_no,assignee_member_id,requested_by_lead_task_id,status,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at) VALUES ($1,$2,$3,1,$4,$5,'queued',$6,$7,$8,$9,$10,$10)`,
         [
@@ -1226,14 +1301,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       : this.database;
     try {
       await client.query('BEGIN');
-      const receipt = await client.query<{ result_json: unknown }>(
-        'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
-        [input.sourceRunId, input.commandHash],
-      );
-      if (receipt.rows?.[0]) {
-        await client.query('COMMIT');
-        return { requested: true };
-      }
       const teamFence =
         input.executionMode === 'v2'
           ? "status NOT IN ('succeeded','failed','cancelled')"
@@ -1245,6 +1312,22 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         );
         if (!team.rows?.[0] || !input.leadTaskId)
           throw new TeamExecutionError('stale_state');
+        await assertV2ReplaySource(
+          client,
+          input.sourceRunId,
+          input.teamRunId,
+          input.leadTaskId,
+          team.rows[0].root_task_id,
+          input.owner,
+        );
+        const receipt = await client.query<{ result_json: unknown }>(
+          'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+          [input.sourceRunId, input.commandHash],
+        );
+        if (receipt.rows?.[0]) {
+          await client.query('COMMIT');
+          return { requested: true };
+        }
         await assertV2Source(
           client,
           input.sourceRunId,
@@ -1252,6 +1335,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           input.leadTaskId,
           team.rows[0].root_task_id,
           input.owner,
+        );
+        const anyWork = await client.query(
+          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)} LIMIT 1`,
+          [input.teamRunId, ...ownerValues(input.owner)],
         );
         const unfinished = await client.query(
           `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' AND ${ownerSql('', 2)} LIMIT 1`,
@@ -1261,8 +1348,44 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND status IN ('queued','running') AND ${ownerSql('', 2)} LIMIT 1`,
           [input.teamRunId, ...ownerValues(input.owner)],
         );
-        if (unfinished.rows?.[0] || activeAttempt.rows?.[0])
+        if (
+          !anyWork.rows?.[0] ||
+          unfinished.rows?.[0] ||
+          activeAttempt.rows?.[0]
+        )
           throw new TeamExecutionError('invalid_transition');
+        const nonterminalMemberChild = await client.query(
+          `SELECT 1
+             FROM tasks task
+             JOIN team_member_runs member
+               ON member.id=task.team_member_run_id
+              AND member.team_run_id=$1 AND member.role='member'
+             LEFT JOIN runs run ON run.task_id=task.id
+            WHERE task.root_task_id=$2
+              AND ${ownerSql('task', 3)}
+              AND ${ownerSql('member', 3)}
+              AND (
+                task.status NOT IN ('completed','failed','cancelled')
+                OR (run.id IS NOT NULL AND run.status NOT IN ('succeeded','failed','timed_out','cancelled'))
+              )
+            LIMIT 1`,
+          [
+            input.teamRunId,
+            team.rows[0].root_task_id,
+            ...ownerValues(input.owner),
+          ],
+        );
+        if (nonterminalMemberChild.rows?.[0])
+          throw new TeamExecutionError('invalid_transition');
+      } else {
+        const receipt = await client.query<{ result_json: unknown }>(
+          'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+          [input.sourceRunId, input.commandHash],
+        );
+        if (receipt.rows?.[0]) {
+          await client.query('COMMIT');
+          return { requested: true };
+        }
       }
       const r = await client.query(
         'UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now() WHERE id=$1 AND revision=$3 AND ' +
@@ -1388,6 +1511,33 @@ async function assertV2Source(
         AND ($4::uuid IS NULL OR t.id=$4)
         AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')
         AND t.status NOT IN ('completed','failed','cancelled')
+        AND ${ownerSql('t', 5)}`,
+    [
+      sourceRunId,
+      teamRunId,
+      rootTaskId,
+      sourceTaskId ?? null,
+      ...ownerValues(owner),
+    ],
+  );
+  if (!result.rows?.[0]) throw new TeamExecutionError('stale_state');
+}
+
+/** A finish receipt is replayable only by the original owner-scoped Lead source. */
+async function assertV2ReplaySource(
+  client: Queryable,
+  sourceRunId: string,
+  teamRunId: string,
+  sourceTaskId: string | undefined,
+  rootTaskId: string,
+  owner: OwnerScope,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT 1 FROM runs r
+       JOIN tasks t ON t.id=r.task_id
+       JOIN team_member_runs m ON m.id=t.team_member_run_id
+      WHERE r.id=$1 AND m.team_run_id=$2 AND m.role='lead'
+        AND t.root_task_id=$3 AND ($4::uuid IS NULL OR t.id=$4)
         AND ${ownerSql('t', 5)}`,
     [
       sourceRunId,

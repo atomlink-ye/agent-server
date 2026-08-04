@@ -26,8 +26,8 @@ bearer/grant resolution, and `PostgresRunDispatcher`; the provider runtime drive
 and model decisions were deterministic substitutes, with no provider or Paseo use.
 The authoritative redacted artifact is
 `.local/phase2-server-1785843608320-eae1b3ac/manifest.json`. Independent
-specification and migration/security reviews accepted the implementation; Phase 2
-remains uncommitted only until the applicable existing checks finish.
+specification and migration/security reviews accepted the implementation. Phase 2
+is committed at `ca5cfd5`; the applicable existing checks passed before commit.
 
 The required effective focused smoke ran with the authorized environment loaded
 before Make invokes `docker-run`. The earlier `OpenCodeModelUnavailableError` was
@@ -110,9 +110,10 @@ security boundaries, migrations, and core dependencies.
       message/durable-outer-scheduler/migration.
 - [x] Phase 2: implement and prove TeamMessage, canonical queued wake, one
       scheduler/reconciler, terminal facts, and context projection.
-- [ ] Phase 3: implement and prove dependencies, atomic claims, gates, graceful
-      finish semantics, Direct Message, Team Overview, and Web projection; permission
-      framework and graceful shutdown remain deferred.
+- [x] Phase 3: dependencies, atomic claims, gates, graceful finish semantics,
+      Direct Message, Team Overview, and Web projection are proven by the accepted
+      real-provider main flow; permission framework and graceful shutdown remain
+      deferred.
 - [ ] Phase 4: after the v2 main-chain E2E, destructively remove old executors,
       compilers, repositories, routes, contracts, templates, smokes, tools, and
       documentation claims.
@@ -133,9 +134,20 @@ security boundaries, migrations, and core dependencies.
       same-member continuation.
 - [x] Run the Phase 2 retained flow — expected: addressed TeamMessage, canonical
       queued Task wake, one reconciler, and durable pause/resume evidence.
-- [ ] Run `PASEO_MODEL=opencode-go/deepseek-v4-flash make agent-teams-v2-smoke`
-      with the authorized environment secret through the safe allowlist — expected:
-      terminal Team and safe replay; secret is not printed.
+- [x] Accepted Phase 3 paid main flow: `.local/agent-teams-v2-1785869240170-c8676f41/manifest.json`
+      recorded `RESULT_PASS` with `opencode-go/glm-5.2` in 156116ms (exit 0),
+      real provider/Paseo, no deterministic substitution, and empty stderr. It
+      proved 3 members, 2 accepted Work items/Attempts, 3 messages including 1
+      delivered Direct Message, 4 Lead turns, 2 member Runs, and four unique Lead
+      create/send/provider bindings.
+- [x] Phase 3 supporting verification passed on the current implementation:
+      `make test-integration` (143 passed, 36 skipped), `make web-check-types`,
+      `make web-build`, `make check`, `make test-real-pg` (74 passed), and the
+      scripted real-server/PostgreSQL/MCP main-flow smoke with `RESULT_PASS`.
+- [x] The retained Phase 3 `init/status/next/step` fixture proved exact single-Run
+      execution with the dispatcher stopped. Root advanced alone to
+      `waiting_children`; the selected Lead timeout atomically converged the child
+      Run, root Run, and Team to terminal failure without a second claim.
 - [x] Run only applicable existing focused checks — `make check` passed and the
       existing focused ProductSession provenance test passed 1/1 (4 skipped); no
       new test was authored.
@@ -157,11 +169,14 @@ security boundaries, migrations, and core dependencies.
   activation, Lead/member turn scheduling, and final completion; retained
   `src/application/tasks/execute-team-task.ts` calls only TeamDriver, while
   `src/application/runs/execute-run.ts` remains leaf Run execution.
-- RuntimeSession bearer/grant and providerAgentId are stable across Tasks; no new
-  token or Provider Agent/MCP session is created per Task. Turn-boundary refresh
-  atomically updates taskId/runId/allowedTools/contextEpoch after old Run terminal,
-  no in-flight Team tool, and no other active member Task; refresh precedes
-  runtime.execute(continue).
+- RuntimeSession bearer/grant and providerAgentId remain stable across member Work
+  and Direct continuations. Because a real Paseo/OpenCode `continue` retains its
+  initial MCP catalog, each agentic Lead control Task gets a fresh task-scoped
+  RuntimeSession, task/run/context-fenced grant, and Provider Agent with its exact
+  policy tool set; the durable task/board snapshot supplies Lead context. Old Lead
+  grants cannot authorize later Tasks, and no all-tools grant is issued. Member
+  turn-boundary refresh still follows old-Run-terminal, no-in-flight-Team-tool, and
+  no-other-active-member-Task checks before `runtime.execute(continue)`.
 - Phase 1 includes `src/infrastructure/extensions/local-runtime-extension-binder.ts`
   and `src/entrypoints/mcp/direct-memory-mcp.ts`; Direct MCP has no productSessionId
   fallback for Team actors and registers no mutation tools without
@@ -300,15 +315,24 @@ different-TeamRun evidence remains retained at
 
 ## Current blocker
 
-No known Phase 2 product, evidence, specification, migration, security, or check
-blocker. Phase 3 implementation is next.
+No Phase 3 product or provider blocker remains. The accepted GLM artifact also
+proves dependency/migration/replay, Direct delivery, safe projection, the
+completion fence, and mode-accurate member completion evidence. Key fixes retained
+by the implementation are fresh task-scoped Lead catalogs, canonical fixture
+prompts, stale-Lead/all-actor scheduling fences, recursive projection scanning, and
+the split between durable Lead commands and exposed coordination commands. Final
+verification also retained explicit stale-worker fencing, preserved the bound
+session-message receiver, made migration 0025 constraint replay schema-local, and
+made every later Lead CAS/Task/Run/dispatch admission one atomic transaction.
+
+Deferred, non-blocking: Direct redaction body text may retain the literal `$1`; it
+contains no secret and can be cleaned up later.
 
 ## Next exact command
 
-Create the approved Phase 2 boundary commit, inspect the Phase 3 Golden Path gaps
-against the accepted design, and implement the smallest real dependency/claim,
-Direct Message, and safe Team Overview vertical slice. Do not push, merge, reset,
-or clean.
+Begin Phase 4 Task 4.1 with the approved non-destructive canonical-v2 rewiring and
+reference scan. Destructive cleanup remains separately gated by the approved Phase
+4 scope and no-reference review. Do not push, merge, reset, or clean.
 
 ## Cleanup state
 

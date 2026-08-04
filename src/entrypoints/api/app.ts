@@ -40,6 +40,7 @@ import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
 import type { InvokableRepository } from '../../application/ports/invokable-repository.js';
 import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
+import type { TeamMessageRepository } from '../../application/ports/team-message-repository.js';
 import type { TaskRepository } from '../../application/ports/task-repository.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerTeamRunRoutes } from './routes/team-runs.js';
@@ -72,6 +73,7 @@ export interface AppDependencies {
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;
+  readonly teamMessages?: TeamMessageRepository;
   readonly tasks?: TaskRepository;
   readonly sessions?: SessionRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
@@ -138,12 +140,17 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       invokableRepository: dependencies.invokableRepository,
       environmentRegistry: dependencies.environmentRegistry,
     });
-  if (dependencies.teamExecutions && dependencies.tasks)
+  if (
+    dependencies.teamExecutions &&
+    dependencies.teamMessages &&
+    dependencies.tasks
+  )
     registerTeamRunRoutes(app, {
       config: dependencies.config,
       teamExecutions: dependencies.teamExecutions,
       projectAgenticTeam: new ProjectAgenticTeam(
         dependencies.teamExecutions,
+        dependencies.teamMessages,
         dependencies.tasks,
       ),
     });

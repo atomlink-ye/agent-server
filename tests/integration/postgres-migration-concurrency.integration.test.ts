@@ -13,6 +13,7 @@ const describeRealPostgres = connectionString ? describe : describe.skip;
 
 describeRealPostgres('real PostgreSQL migration concurrency', () => {
   const schema = `migration_concurrency_${crypto.randomUUID().replaceAll('-', '')}`;
+  const decoySchema = `migration_decoy_${crypto.randomUUID().replaceAll('-', '')}`;
   let admin!: Pool;
   let first!: Pool;
   let second!: Pool;
@@ -23,6 +24,28 @@ describeRealPostgres('real PostgreSQL migration concurrency', () => {
       maxConnections: 1,
     });
     await admin.query(`CREATE SCHEMA "${schema}"`);
+    await admin.query(`
+      CREATE SCHEMA "${decoySchema}";
+      CREATE TABLE "${decoySchema}".team_runs (
+        id uuid NOT NULL,
+        tenant_id text NOT NULL,
+        workspace_id text NOT NULL,
+        principal_type text NOT NULL,
+        principal_id text NOT NULL,
+        CONSTRAINT team_runs_id_owner_unique
+          UNIQUE (id, tenant_id, workspace_id, principal_type, principal_id)
+      );
+      CREATE TABLE "${decoySchema}".team_work_items (
+        id uuid NOT NULL,
+        team_run_id uuid NOT NULL,
+        tenant_id text NOT NULL,
+        workspace_id text NOT NULL,
+        principal_type text NOT NULL,
+        principal_id text NOT NULL,
+        CONSTRAINT team_work_items_id_team_owner_unique
+          UNIQUE (id, team_run_id, tenant_id, workspace_id, principal_type, principal_id)
+      );
+    `);
     first = new Pool({
       connectionString,
       max: 1,
@@ -38,6 +61,7 @@ describeRealPostgres('real PostgreSQL migration concurrency', () => {
   afterAll(async () => {
     await Promise.all([first?.end(), second?.end()]);
     await admin?.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await admin?.query(`DROP SCHEMA IF EXISTS "${decoySchema}" CASCADE`);
     await admin?.end();
   });
 
@@ -62,6 +86,25 @@ describeRealPostgres('real PostgreSQL migration concurrency', () => {
       ),
     ).resolves.toMatchObject({
       rows: [{ table_name: `${schema}.channel_ingress_events` }],
+    });
+    await expect(
+      admin.query(
+        `SELECT conname FROM pg_constraint
+          WHERE conrelid IN (
+            '"${schema}".team_runs'::regclass,
+            '"${schema}".team_work_items'::regclass
+          )
+            AND conname IN (
+              'team_runs_id_owner_unique',
+              'team_work_items_id_team_owner_unique'
+            )
+          ORDER BY conname`,
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        { conname: 'team_runs_id_owner_unique' },
+        { conname: 'team_work_items_id_team_owner_unique' },
+      ],
     });
   });
 });

@@ -49,7 +49,11 @@ export function deriveAgenticLeadCommandPolicy(
     team.status !== 'active' ||
     team.controlState === 'terminal' ||
     team.completionRequestedByRunId !== null ||
-    attempts.some((a) => a.status === 'queued' || a.status === 'running')
+    attempts.some(
+      (a) =>
+        a.status === 'running' ||
+        (a.status === 'queued' && a.executionTaskId !== null),
+    )
   )
     return none();
   if (limits.remainingLeadTurns === 0 && team.controlState !== 'lead_running')
@@ -73,27 +77,33 @@ export function deriveAgenticLeadCommandPolicy(
   const allowed: AgenticLeadCommand[] = [];
   if (accept.length) allowed.push('team_work_accept');
   if (rework.length) allowed.push('team_work_request_changes');
-  if (limits.remainingWorkItems > 0) allowed.push('team_work_create');
-  return {
-    ...none(),
-    allowedCommands: allowed,
-    eligibleAcceptWorkItemIds: accept,
-    eligibleReworkWorkItemIds: rework,
-  };
+  if (allowed.length)
+    return {
+      ...none(),
+      allowedCommands: allowed,
+      eligibleAcceptWorkItemIds: accept,
+      eligibleReworkWorkItemIds: rework,
+    };
+  if (limits.remainingWorkItems > 0)
+    return { ...none(), allowedCommands: ['team_work_create'] };
+  return none();
 }
 
 export type TeamPolicy = Readonly<{ allowedTools: readonly string[] }>;
 
+const canonicalTeamSafeReadToolRefs = Object.freeze([
+  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
+  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
+]);
+
 export function canonicalTeamToolRefsForRole(
   role: 'lead' | 'member',
 ): readonly string[] {
-  const read = [
-    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
-    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
-  ];
+  const read = [...canonicalTeamSafeReadToolRefs];
   const actions =
     role === 'lead'
       ? [
+          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
@@ -104,6 +114,10 @@ export function canonicalTeamToolRefsForRole(
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
         ];
   return Object.freeze([...read, ...actions]);
+}
+
+export function canonicalTeamToolRefsForDirectMessage(): readonly string[] {
+  return canonicalTeamSafeReadToolRefs;
 }
 
 export function canonicalTeamToolRefsForLeadPolicy(
@@ -119,17 +133,29 @@ export function canonicalTeamToolRefsForLeadPolicy(
   return Object.freeze([
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
+    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
     ...policy.allowedCommands.map((command) => commandRefs[command]),
   ]);
 }
 
 export class TeamPolicyEvaluator {
   public evaluate(context: TeamToolContext): TeamPolicy {
+    const permitted =
+      context.task.teamTaskKind === 'direct_message'
+        ? canonicalTeamToolRefsForDirectMessage()
+        : context.task.teamTaskKind === 'work_attempt' &&
+            context.attempt?.status === 'completed'
+          ? canonicalTeamSafeReadToolRefs
+          : context.task.teamTaskKind === 'work_attempt' &&
+              context.member.role === 'member'
+            ? canonicalTeamToolRefsForRole('member')
+            : context.task.teamTaskKind === 'lead_turn' &&
+                context.member.role === 'lead'
+              ? canonicalTeamToolRefsForRole('lead')
+              : [];
     return Object.freeze({
       allowedTools: Object.freeze(
-        canonicalTeamToolRefsForRole(context.member.role).filter((ref) =>
-          context.grant.allowedTools.includes(ref),
-        ),
+        permitted.filter((ref) => context.grant.allowedTools.includes(ref)),
       ),
     });
   }

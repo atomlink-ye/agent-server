@@ -5,11 +5,17 @@ import { TeamContextError } from './team-tool-context.js';
 import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import { AGENTIC_TEAM_LIMITS } from './team-policy-evaluator.js';
 import type { RunEventRepository } from '../ports/run-events.js';
+import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 
 export class TeamCommandService {
   public constructor(
     private readonly repo: TeamExecutionRepository,
     private readonly events: Pick<RunEventRepository, 'append'>,
+    private readonly messages: TeamMessageRepository,
+    private readonly wake?: Pick<
+      import('./team-wake-reconciler.js').TeamWakeReconciler,
+      'reconcileForRootTask'
+    >,
   ) {}
 
   public async state(context: TeamToolContext) {
@@ -57,6 +63,10 @@ export class TeamCommandService {
       context.teamRun.id,
       context.owner,
     );
+    const dependencies = await this.repo.findWorkDependenciesByTeamRunId(
+      context.teamRun.id,
+      context.owner,
+    );
     return [...items]
       .sort(
         (a, b) =>
@@ -79,6 +89,15 @@ export class TeamCommandService {
           latest_attempt: latest
             ? { status: latest.status, summary: safeText(latest.resultSummary) }
             : null,
+          dependency_refs: dependencies
+            .filter((edge) => edge.workItemId === item.id)
+            .map((edge) =>
+              items.findIndex(
+                (candidate) => candidate.id === edge.dependsOnWorkItemId,
+              ),
+            )
+            .filter((dependencyIndex) => dependencyIndex >= 0)
+            .map((dependencyIndex) => `work-${dependencyIndex + 1}`),
         };
       })
       .filter((item) => item.visible)
@@ -87,7 +106,12 @@ export class TeamCommandService {
 
   public async createWork(
     context: TeamToolContext,
-    input: { subject: string; description?: string; assignee: string },
+    input: {
+      subject: string;
+      description?: string;
+      assignee: string;
+      dependencyRefs?: readonly string[];
+    },
   ) {
     this.require(
       context,
@@ -95,6 +119,12 @@ export class TeamCommandService {
       'lead',
     );
     const member = await this.assignee(context, input.assignee);
+    const dependencyRefs = input.dependencyRefs ?? [];
+    const dependsOnWorkItemIds = await Promise.all(
+      dependencyRefs.map((ref) => this.resolveWorkRef(context, ref)),
+    );
+    if (new Set(dependsOnWorkItemIds).size !== dependsOnWorkItemIds.length)
+      throw new TeamContextError('invalid_request');
     const result = await this.repo.createAssignedWork({
       teamRunId: context.teamRun.id,
       sourceRunId: context.run.id,
@@ -102,6 +132,7 @@ export class TeamCommandService {
       assigneeMemberId: member.id,
       subject: input.subject,
       description: input.description ?? null,
+      dependsOnWorkItemIds,
       commandHash: hash('team_work_create', input),
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
@@ -112,6 +143,7 @@ export class TeamCommandService {
       subject: safeText(result.item.subject),
       status: result.item.status,
       assignee: member.name,
+      dependency_refs: dependencyRefs,
     };
   }
 
@@ -231,6 +263,50 @@ export class TeamCommandService {
     };
   }
 
+  public async sendMessage(
+    context: TeamToolContext,
+    input: { recipient: string; summary: string },
+  ) {
+    this.require(
+      context,
+      AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
+      'lead',
+    );
+    if (context.task.teamTaskKind !== 'lead_turn')
+      throw new TeamContextError('not_allowed');
+    const recipient = await this.assignee(context, input.recipient);
+    if (recipient.id === context.member.id)
+      throw new TeamContextError('invalid_request');
+    const summary = safeText(input.summary);
+    if (!summary) throw new TeamContextError('invalid_request');
+    const message = await this.messages.sendDirect({
+      teamRunId: context.teamRun.id,
+      senderMemberRunId: context.member.id,
+      recipientMemberRunId: recipient.id,
+      dedupKey: `member:${recipient.id}:direct:${context.run.id}:${hash(
+        'team_message_send',
+        {
+          recipient: recipient.name,
+          summary,
+        },
+      )}`,
+      body: summary,
+      sourceTaskId: context.task.id,
+      sourceRunId: context.run.id,
+      expectedRevision: context.teamRun.revision,
+      owner: context.owner,
+    });
+    await this.wake?.reconcileForRootTask(
+      context.teamRun.rootTaskId,
+      context.owner,
+    );
+    return {
+      sent: true,
+      recipient: recipient.name,
+      summary: safeText(message.body),
+    };
+  }
+
   private require(
     context: TeamToolContext,
     tool: string,
@@ -246,7 +322,6 @@ export class TeamCommandService {
     if (matches.length !== 1) throw new TeamContextError('not_found');
     return matches[0]!;
   }
-
   private async resolveWorkRef(context: TeamToolContext, workRef: string) {
     const match = /^work-(\d+)$/.exec(workRef);
     const items = (
@@ -284,6 +359,15 @@ function safeText(value: string | null | undefined): string | null {
   return value === null || value === undefined
     ? null
     : value
+        .replace(/bearer\s+(?:"[^"]*"|'[^']*'|[^\s]+)/gi, '[redacted]')
+        .replace(
+          /["']?\b(?:(?:access|refresh|id)[-_ ]?token|credential|token|password|secret|api[-_ ]?key)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
+          '[redacted]',
+        )
+        .replace(
+          /(?:^|[\s"'=])(?:~\/|\/|[A-Za-z]:\\)[^\s"'`]+/g,
+          '$1[redacted path]',
+        )
         .replace(/[\u0000-\u001f\u007f]/gu, ' ')
         .replace(/\s+/gu, ' ')
         .trim()

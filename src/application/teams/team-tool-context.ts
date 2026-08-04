@@ -8,6 +8,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunRepository } from '../ports/run-repository.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
+import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { Run } from '../../domain/runs/run.js';
 import { terminalRunStatuses } from '../../domain/runs/run-status.js';
@@ -20,6 +21,7 @@ export type TeamToolContext = Readonly<{
   member: TeamMemberRun;
   task: Task;
   run: Run;
+  attempt: TeamWorkItemAttempt | null;
   grant: RuntimeToolGrant;
   allowedTools: readonly string[];
   contextEpoch: string;
@@ -90,6 +92,16 @@ export class TeamToolContextResolver {
       throw new TeamContextError('stale_state');
     if (teamRun.status !== 'active' && teamRun.status !== 'waiting')
       throw new TeamContextError('not_allowed');
+    const attempt =
+      task.teamTaskKind === 'work_attempt'
+        ? (await this.teams.findAttemptsByTeamRunId(teamRun.id, owner)).find(
+            (candidate) =>
+              candidate.executionTaskId === task.id &&
+              candidate.assigneeMemberId === member.id,
+          )
+        : null;
+    if (task.teamTaskKind === 'work_attempt' && !attempt)
+      throw new TeamContextError('stale_state');
     const records = await this.tasks.findByRootTaskIdForOwner(
       teamRun.rootTaskId,
       owner,
@@ -108,6 +120,7 @@ export class TeamToolContextResolver {
       member,
       task,
       run,
+      attempt: attempt ?? null,
       grant,
       allowedTools: grant.allowedTools,
       contextEpoch: deriveTeamContextEpoch(task.id, run.id),

@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type {
+  McpServer,
+  RegisteredTool,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
 import type {
   TeamToolHandler,
   TeamToolActor,
@@ -29,12 +32,36 @@ export function registerTeamMcpTools(
     readonly end: (grantId: string) => void;
     readonly commands: TeamCommandService;
   },
-): void {
+): (allowedTools: readonly string[]) => void {
+  const registrations = new Map<string, RegisteredTool>();
+  const register = <Input extends z.ZodRawShape>(
+    ref: string,
+    name: string,
+    config: { inputSchema: Input } & Record<string, unknown>,
+    operation: (args: z.infer<z.ZodObject<Input>>) => unknown,
+  ) => {
+    const registration = (server.registerTool as any)(
+      name,
+      config,
+      operation,
+    ) as RegisteredTool;
+    registrations.set(ref, registration);
+    return registration;
+  };
+  const refreshRegisteredTools = (currentAllowedTools: readonly string[]) => {
+    for (const [ref, registration] of registrations) {
+      const shouldEnable = currentAllowedTools.includes(ref);
+      if (registration.enabled === shouldEnable) continue;
+      if (shouldEnable) registration.enable();
+      else registration.disable();
+    }
+  };
   const id = z.string().uuid();
   const invoke = (toolRef: string, operation: () => Promise<unknown>) =>
     authorize(toolRef) ? result(operation()) : authorizationError();
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[0]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[0]!,
       'team_members_list',
       {
         description: 'List collaborative team members.',
@@ -47,7 +74,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[1]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[1]!,
       'team_task_create',
       {
         description: 'Create a collaborative team work item.',
@@ -63,7 +91,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[2]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[2]!,
       'team_task_list',
       {
         description: 'List collaborative team work items.',
@@ -76,7 +105,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[3]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[3]!,
       'team_task_claim',
       {
         description: 'Claim a pending team work item.',
@@ -88,7 +118,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[4]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[4]!,
       'team_task_update',
       {
         description: 'Update a team work item.',
@@ -117,7 +148,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[5]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[5]!,
       'team_complete',
       {
         description: 'Complete the collaborative team.',
@@ -129,7 +161,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[6]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[6]!,
       'team_work_create_and_assign',
       {
         description: 'Assign durable work.',
@@ -160,7 +193,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[7]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[7]!,
       'team_work_accept',
       {
         description: 'Accept work.',
@@ -187,7 +221,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[8]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[8]!,
       'team_work_request_rework',
       {
         description: 'Request bounded rework.',
@@ -220,7 +255,8 @@ export function registerTeamMcpTools(
         ),
     );
   if (allowedTools.includes(AGENT_SERVER_TEAM_TOOL_REFS[9]!))
-    server.registerTool(
+    register(
+      AGENT_SERVER_TEAM_TOOL_REFS[9]!,
       'team_completion_request',
       {
         description: 'Request completion.',
@@ -244,17 +280,12 @@ export function registerTeamMcpTools(
           ),
         ),
     );
-  if (
-    context &&
-    Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS).some((ref) =>
-      allowedTools.includes(ref),
-    )
-  ) {
+  if (context) {
     const bound = context;
     const registerCanonical = (name: string, config: any, operation: any) => {
-      const registration = server.registerTool(name, config, operation);
       const ref = canonicalRefForName(name);
-      if (!ref || !allowedTools.includes(ref)) registration.remove();
+      if (!ref) return;
+      register(ref, name, config, operation);
     };
     const current = (
       ref: string,
@@ -312,9 +343,18 @@ export function registerTeamMcpTools(
           subject: z.string().min(1),
           description: z.string().optional(),
           assignee: z.string().min(1),
+          dependency_refs: z
+            .array(z.string().regex(/^work-\d+$/))
+            .max(4)
+            .optional(),
         },
       },
-      (i: { subject: string; assignee: string; description?: string }) =>
+      (i: {
+        subject: string;
+        assignee: string;
+        description?: string;
+        dependency_refs?: string[];
+      }) =>
         current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, (ctx) =>
           bound.commands.createWork(ctx, {
             subject: i.subject,
@@ -322,7 +362,24 @@ export function registerTeamMcpTools(
             ...(i.description === undefined
               ? {}
               : { description: i.description }),
+            ...(i.dependency_refs === undefined
+              ? {}
+              : { dependencyRefs: i.dependency_refs }),
           }),
+        ),
+    );
+    registerCanonical(
+      'team_message_send',
+      {
+        description: 'Send an addressed direct Team message.',
+        inputSchema: {
+          recipient: z.string().min(1),
+          summary: z.string().min(1).max(4096),
+        },
+      },
+      (i: { recipient: string; summary: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend, (ctx) =>
+          bound.commands.sendMessage(ctx, i),
         ),
     );
     registerCanonical(
@@ -388,7 +445,9 @@ export function registerTeamMcpTools(
           bound.commands.submit(ctx, i),
         ),
     );
+    refreshRegisteredTools(allowedTools);
   }
+  return refreshRegisteredTools;
 }
 
 function canonicalRefForName(name: string): string | null {
@@ -396,6 +455,7 @@ function canonicalRefForName(name: string): string | null {
     team_state: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     team_work_list: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
     team_work_create: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
+    team_message_send: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
     team_work_accept: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
     team_work_request_changes:
       AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,

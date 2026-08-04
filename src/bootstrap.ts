@@ -364,9 +364,17 @@ export async function createService(
     runRepository,
     teamPolicyEvaluator,
   );
+  const teamWakeReconciler = new TeamWakeReconciler(
+    teamMessages,
+    collaborativeTeamExecutions,
+    taskRepository,
+    admissionRepository,
+  );
   const teamCommandService = new TeamCommandService(
     collaborativeTeamExecutions,
     events,
+    teamMessages,
+    teamWakeReconciler,
   );
   const runtimeMcpServer = new RuntimeMcpServer(
     memoryApiRepository,
@@ -445,12 +453,6 @@ export async function createService(
   const collaborativeExecutor = new CollaborativeTeamExecutor(
     collaborativeTeamExecutions,
   );
-  const teamWakeReconciler = new TeamWakeReconciler(
-    teamMessages,
-    collaborativeTeamExecutions,
-    taskRepository,
-    admissionRepository,
-  );
   const terminalWakeReconciler = options.deferTeamWakeReconcile
     ? {
         reconcileForRootTask: async () => 0,
@@ -461,6 +463,7 @@ export async function createService(
     taskRepository,
     runRepository,
     admissionRepository,
+    teamMessages,
     terminalWakeReconciler,
   );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
@@ -523,6 +526,7 @@ export async function createService(
     teamExecutions,
     collaborativeTeamExecutions,
     runRepository,
+    terminalWakeReconciler,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -623,6 +627,7 @@ export async function createService(
     agentRegistry,
     invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
+    teamMessages,
     tasks: taskRepository,
     environmentRegistry,
     sessions,

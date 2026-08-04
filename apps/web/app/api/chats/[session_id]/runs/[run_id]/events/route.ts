@@ -5,6 +5,7 @@ import {
   getMessages,
 } from '@/lib/agent-server-client';
 import { requireSelectedWebSession } from '@/lib/selected-web-session';
+import { safeRunEvent } from '@/lib/safe-run-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,11 @@ export async function GET(_request: Request, context: Context) {
     const messages = await getMessages(sessionId);
     if (!messages.some((message) => message.run_id === runId))
       return notFound();
-    return NextResponse.json({ events: await getAllRunEvents(runId) });
+    return NextResponse.json({
+      events: (await getAllRunEvents(runId))
+        .map(safeRunEvent)
+        .filter((event): event is NonNullable<typeof event> => event !== null),
+    });
   } catch (error) {
     return safeError(error);
   }

@@ -14,9 +14,44 @@ export type AgenticTeamProjectResponse = {
     team_version_id: string;
     status: 'active' | 'waiting' | 'succeeded' | 'failed';
     final_text: string | null;
+    phase?: 'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
     created_at: string;
     updated_at: string;
   } | null;
+  work_items?: {
+    work_ref: string;
+    subject: string;
+    status:
+      | 'pending'
+      | 'ready'
+      | 'in_progress'
+      | 'submitted'
+      | 'accepted'
+      | 'changes_requested'
+      | 'blocked';
+    assignee_name: string | null;
+    dependency_refs: string[];
+    latest_attempt: {
+      attempt_no: number;
+      status: 'queued' | 'running' | 'completed' | 'failed';
+      feedback_summary: string | null;
+      result_summary: string | null;
+    } | null;
+  }[];
+  gates?: {
+    finish_ready: boolean;
+    all_work_accepted: boolean;
+    no_active_attempts: boolean;
+    all_members_idle: boolean;
+  };
+  direct_messages?: {
+    sequence: number;
+    sender_name: string;
+    recipient_name: string;
+    summary: string;
+    created_at: string;
+    status: 'delivered' | 'read';
+  }[];
   sessions?: {
     team_member_run_id: string;
     name: string;
@@ -26,12 +61,10 @@ export type AgenticTeamProjectResponse = {
       task_id: string;
       run_id: string;
       sequence: number;
-      kind: 'lead_turn' | 'work_attempt';
+      kind: 'lead_turn' | 'work_attempt' | 'direct_message';
       status: 'queued' | 'running' | 'completed' | 'failed';
       context: string;
       result_text: string | null;
-      work_item_id: string | null;
-      attempt_id: string | null;
       attempt_no: number | null;
       created_at: string;
       updated_at: string;

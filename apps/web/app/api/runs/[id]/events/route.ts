@@ -6,6 +6,7 @@ import {
 } from '@/lib/agent-server-client';
 import { requireSelectedWebSession } from '@/lib/selected-web-session';
 import { readProductSessionId } from '@/lib/session-cookie';
+import { safeRunEventStream } from '@/lib/safe-run-events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,7 +29,8 @@ export async function GET(request: Request, context: Context) {
       lastEventId: request.headers.get('last-event-id'),
       signal: request.signal,
     });
-    return new Response(upstream.body, {
+    if (!upstream.body) throw new AgentServerError(502, 'run_stream_empty');
+    return new Response(safeRunEventStream(upstream.body), {
       status: 200,
       headers: {
         'content-type':

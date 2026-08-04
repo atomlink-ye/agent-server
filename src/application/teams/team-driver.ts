@@ -16,7 +16,10 @@ import type {
 } from '../ports/team-execution-repository.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import type { TeamWakeReconciler } from './team-wake-reconciler.js';
+import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
+import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
+import { deriveAgenticLeadCommandPolicy } from './team-policy-evaluator.js';
 const LIMIT = Object.freeze({
   maxLeadTurns: 4,
   maxWorkItems: 4,
@@ -29,6 +32,10 @@ export class TeamDriver {
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
+    private readonly messages?: Pick<
+      TeamMessageRepository,
+      'markDirectDelivered'
+    >,
     private readonly reconciler?: Pick<
       TeamWakeReconciler,
       'reconcileForRootTask'
@@ -113,9 +120,64 @@ export class TeamDriver {
     const owner = ownerOf(input.task);
     if (
       input.task.teamTaskKind !== 'lead_turn' &&
-      input.task.teamTaskKind !== 'work_attempt'
+      input.task.teamTaskKind !== 'work_attempt' &&
+      input.task.teamTaskKind !== 'direct_message'
     )
       throw new Error('Agentic Team child task is missing explicit task kind.');
+    if (input.task.teamTaskKind === 'direct_message') {
+      if (!input.task.sourceTeamMessageId)
+        throw new Error('Direct Team message linkage is missing.');
+      if (input.run.status === 'succeeded') {
+        if (!this.messages)
+          throw new Error('Team message delivery is unavailable.');
+        const delivered = await this.messages.markDirectDelivered({
+          messageId: input.task.sourceTeamMessageId,
+          taskId: input.task.id,
+          owner,
+        });
+        if (!delivered)
+          throw new Error('Direct Team message delivery is stale.');
+        const fresh = await this.executions.findTeamRunById(
+          input.team.id,
+          owner,
+        );
+        if (!fresh || fresh.status !== 'active') return;
+        const attempts = await this.executions.findAttemptsByTeamRunId(
+          fresh.id,
+          owner,
+        );
+        if (!(await this.readyForLeadReview(fresh, attempts, owner))) return;
+        const lead = (
+          await this.executions.findMembersByTeamRunId(fresh.id, owner)
+        ).find((member) => member.role === 'lead');
+        if (!lead) throw new Error('Agentic Team lead member is missing.');
+        await this.scheduleLead(
+          fresh,
+          input.task,
+          owner,
+          'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.',
+        );
+      }
+      return;
+    }
+    if (
+      input.task.teamTaskKind === 'lead_turn' &&
+      input.run.status !== 'succeeded'
+    ) {
+      await this.executions.failTeamRunAtomically({
+        teamRunId: input.team.id,
+        rootRunId: input.team.rootRunId,
+        rootTaskId: input.team.rootTaskId,
+        owner,
+        updatedAt: this.now().toISOString(),
+        stopReason: 'lead_run_failed',
+        failure: {
+          code: 'runtime_execution_failed',
+          message: 'The Team Lead could not complete its turn.',
+        },
+      });
+      return;
+    }
     const attempts = await this.executions.findAttemptsByTeamRunId(
       input.team.id,
       owner,
@@ -130,8 +192,6 @@ export class TeamDriver {
           null,
           owner,
         );
-    } else if (input.run.status !== 'succeeded') {
-      throw new Error('Agentic lead run failed.');
     }
     const fresh = await this.executions.findTeamRunById(input.team.id, owner);
     if (!fresh || fresh.status !== 'active') return;
@@ -140,6 +200,51 @@ export class TeamDriver {
       owner,
     );
     if (input.task.teamTaskKind === 'lead_turn') {
+      if (
+        input.task.teamSequence === null ||
+        input.task.teamSequence === undefined ||
+        input.task.teamSequence !== fresh.leadTurnCount
+      )
+        return;
+      if (
+        fresh.controlState === 'lead_running' &&
+        fresh.completionRequestedByRunId === null
+      ) {
+        const workItems = await this.executions.findWorkItemsByTeamRunId(
+          fresh.id,
+          owner,
+        );
+        const policy = deriveAgenticLeadCommandPolicy(
+          fresh,
+          workItems,
+          currentAttempts,
+        );
+        if (policy.allowedCommands.length > 0) {
+          try {
+            await this.executions.failTeamRunAtomically({
+              teamRunId: fresh.id,
+              rootRunId: fresh.rootRunId,
+              rootTaskId: fresh.rootTaskId,
+              owner,
+              updatedAt: this.now().toISOString(),
+              stopReason: 'lead_no_progress',
+              expectedRevision: fresh.revision,
+              failure: {
+                code: 'runtime_execution_failed',
+                message: 'The Team Lead made no durable control progress.',
+              },
+            });
+          } catch (error) {
+            if (
+              error instanceof TeamExecutionError &&
+              error.code === 'stale_state'
+            )
+              return;
+            throw error;
+          }
+          return;
+        }
+      }
       if (fresh.completionRequestedByRunId) {
         // A completion request may arrive in the same Lead turn as the final
         // assignments. Materialize those queued attempts before deciding that
@@ -186,17 +291,14 @@ export class TeamDriver {
         after.some((a) => a.status !== 'completed' && a.status !== 'failed')
       )
         return;
+      if (!(await this.readyForLeadReview(fresh, after, owner))) return;
       await this.scheduleLead(
         fresh,
         input.task,
         owner,
         'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.',
       );
-    } else if (
-      currentAttempts.every(
-        (a) => a.status === 'completed' || a.status === 'failed',
-      )
-    ) {
+    } else if (await this.readyForLeadReview(fresh, currentAttempts, owner)) {
       const lead = (
         await this.executions.findMembersByTeamRunId(fresh.id, owner)
       ).find((m) => m.role === 'lead');
@@ -208,6 +310,54 @@ export class TeamDriver {
         'Review the latest teammate evidence and apply the quality rubric.',
       );
     }
+  }
+
+  private async readyForLeadReview(
+    team: TeamRun,
+    attempts: readonly {
+      workItemId: string;
+      status: string;
+    }[],
+    owner: OwnerScope,
+  ): Promise<boolean> {
+    const [members, taskRecords, workItems, dependencies] = await Promise.all([
+      this.executions.findMembersByTeamRunId(team.id, owner),
+      this.tasks.findByRootTaskIdForOwner(team.rootTaskId, owner),
+      this.executions.findWorkItemsByTeamRunId(team.id, owner),
+      this.executions.findWorkDependenciesByTeamRunId(team.id, owner),
+    ]);
+    const teamActorIds = new Set(members.map((member) => member.id));
+    if (!this.runs.hasNonterminalRunsForTeamMemberChildTasks)
+      throw new Error('All-Run Team member scheduling fence is unavailable.');
+    if (
+      taskRecords.some(
+        (record) =>
+          typeof record.task.teamMemberRunId === 'string' &&
+          teamActorIds.has(record.task.teamMemberRunId) &&
+          !terminalTaskStatuses.has(record.task.status),
+      )
+    )
+      return false;
+    if (
+      await this.runs.hasNonterminalRunsForTeamMemberChildTasks(
+        team.rootTaskId,
+        [...teamActorIds],
+        owner,
+      )
+    )
+      return false;
+    const workById = new Map(workItems.map((work) => [work.id, work]));
+    return attempts.every((attempt) => {
+      if (attempt.status === 'completed' || attempt.status === 'failed')
+        return true;
+      if (attempt.status !== 'queued') return false;
+      return dependencies
+        .filter((edge) => edge.workItemId === attempt.workItemId)
+        .some(
+          (edge) =>
+            workById.get(edge.dependsOnWorkItemId)?.status !== 'accepted',
+        );
+    });
   }
 
   private async materializeQueuedAttempts(
@@ -237,6 +387,7 @@ export class TeamDriver {
     owner: OwnerScope,
     prompt: string,
   ) {
+    if (team.controlState === 'lead_running') return;
     if (team.leadTurnCount >= LIMIT.maxLeadTurns) {
       await this.executions.failTeamRunAtomically({
         teamRunId: team.id,
@@ -244,6 +395,7 @@ export class TeamDriver {
         rootTaskId: team.rootTaskId,
         owner,
         updatedAt: this.now().toISOString(),
+        stopReason: 'lead_turn_limit',
         failure: {
           code: 'runtime_execution_failed',
           message: 'The Team reached its Lead turn limit without completing.',
@@ -251,41 +403,44 @@ export class TeamDriver {
       });
       return;
     }
-    let next: TeamRun;
     try {
-      next = await this.executions.advanceAgenticLead({
-        teamRunId: team.id,
-        expectedRevision: team.revision,
-        owner,
+      await this.admission.withTransaction(async (tx) => {
+        if (!tx.teamExecutions)
+          throw new Error(
+            'Transaction-scoped Team execution persistence is required.',
+          );
+        const lead = (
+          await tx.teamExecutions.findMembersByTeamRunId(team.id, owner)
+        ).find((member) => member.role === 'lead');
+        if (!lead) throw new Error('Agentic Team lead member is missing.');
+        const next = await tx.teamExecutions.advanceAgenticLead({
+          teamRunId: team.id,
+          expectedRevision: team.revision,
+          owner,
+        });
+        const task = this.child(
+          parent,
+          {
+            id: parent.parentRunId ?? team.rootRunId,
+            prompt: parent.inputSnapshotRef,
+          } as Run,
+          lead,
+          `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
+          `${prompt}\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
+          lead.agentVersionId,
+          'lead_turn',
+          next.leadTurnCount,
+        );
+        const run = createRun(prompt, { now: this.now });
+        await tx.tasks.save(task);
+        await tx.runs.save(run, { taskId: task.id, attempt: 1 });
+        await tx.enqueueRunDispatch(run.id, run.createdAt);
       });
     } catch (error) {
       if (error instanceof TeamExecutionError && error.code === 'stale_state')
         return;
       throw error;
     }
-    const lead = (
-      await this.executions.findMembersByTeamRunId(team.id, owner)
-    ).find((m) => m.role === 'lead');
-    if (!lead) throw new Error('Agentic Team lead member is missing.');
-    const task = this.child(
-      parent,
-      {
-        id: parent.parentRunId ?? team.rootRunId,
-        prompt: parent.inputSnapshotRef,
-      } as Run,
-      lead,
-      `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
-      `${prompt}\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
-      lead.agentVersionId,
-      'lead_turn',
-      next.leadTurnCount,
-    );
-    const run = createRun(prompt, { now: this.now });
-    await this.admission.withTransaction(async (tx) => {
-      await tx.tasks.save(task);
-      await tx.runs.save(run, { taskId: task.id, attempt: 1 });
-      await tx.enqueueRunDispatch(run.id, run.createdAt);
-    });
   }
 
   private child(
@@ -295,7 +450,7 @@ export class TeamDriver {
     key: string,
     prompt: string,
     agentVersionId: string,
-    kind: 'lead_turn' | 'work_attempt' = 'lead_turn',
+    kind: 'lead_turn' | 'work_attempt' | 'direct_message' = 'lead_turn',
     sequence = 0,
   ): Task {
     return createChildTask({

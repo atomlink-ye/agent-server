@@ -26,6 +26,50 @@ export class RunCompletionPersistenceError extends Error {
   }
 }
 
+export type RunPostPersistenceStage =
+  | 'task_reload'
+  | 'completion_notifier'
+  | 'task_projection'
+  | 'team_execution'
+  | 'team_phase'
+  | 'assistant_message'
+  | 'session_lane'
+  | 'run_output_event'
+  | 'run_terminal_event';
+
+/**
+ * A terminal Run has already been durably completed, but one of its follow-up
+ * projections or orchestration hooks failed. Keep the diagnostic fields safe:
+ * never retain or expose the original error object/message here.
+ */
+export class RunPostPersistenceError extends Error {
+  public readonly code = 'post_persistence_failed' as const;
+  public readonly cause = 'post_persistence_hook_failed' as const;
+
+  public constructor(
+    public readonly details: {
+      readonly runId: string;
+      readonly taskId: string;
+      readonly terminalStatus: Extract<
+        RunStatus,
+        'succeeded' | 'failed' | 'timed_out' | 'cancelled'
+      >;
+      readonly stage: RunPostPersistenceStage;
+      readonly errorName: string;
+    },
+  ) {
+    super(
+      'Run terminal persistence succeeded but a post-persistence hook failed.',
+    );
+    this.name = 'RunPostPersistenceError';
+  }
+}
+
+export function safePostPersistenceErrorName(error: unknown): string {
+  const name = error instanceof Error ? error.name : 'UnknownError';
+  return /^[A-Za-z0-9_.-]{1,128}$/u.test(name) ? name : 'UnknownError';
+}
+
 export class RuntimeMemoryPersistenceError extends Error {
   public readonly code = 'runtime_memory_persistence_failed' as const;
 

@@ -37,7 +37,8 @@ interface TaskFields {
   readonly memorySnapshotHash?: string | null;
   readonly teamMemberRunId?: string | null;
   readonly teamSequence?: number | null;
-  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
+  readonly teamTaskKind?:
+    'lead_turn' | 'work_attempt' | 'direct_message' | null;
 }
 
 export type Task = TaskFields & TaskOrigin;
@@ -62,7 +63,8 @@ interface CreateRootTaskFields {
   readonly now?: () => Date;
   readonly teamMemberRunId?: string | null;
   readonly teamSequence?: number | null;
-  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
+  readonly teamTaskKind?:
+    'lead_turn' | 'work_attempt' | 'direct_message' | null;
   readonly sourceMessageId?: string | null;
   readonly sourceTeamMessageId?: string | null;
   readonly inputTeamMessageIds?: readonly string[];
@@ -89,7 +91,8 @@ export interface CreateChildTaskOptions {
   readonly now?: () => Date;
   readonly teamMemberRunId?: string | null;
   readonly teamSequence?: number | null;
-  readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
+  readonly teamTaskKind?:
+    'lead_turn' | 'work_attempt' | 'direct_message' | null;
   readonly sourceTeamMessageId?: string | null;
   readonly inputTeamMessageIds?: readonly string[];
 }

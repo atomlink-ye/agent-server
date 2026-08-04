@@ -65,10 +65,12 @@
       TeamRun roster to a TeamMemberRun; return typed errors for ambiguity or absence.
       Never accept an internal member UUID or treat `assignee` as authorization.
 - [ ] Read existing RuntimeSession/providerAgentId continuation and grant symbols.
-      Reuse the stable RuntimeSession bearer/grant and providerAgentId across
-      Tasks; do not mint a new token per Task or rebuild Provider Agent/MCP session.
-      Stable fields are owner scope, TeamMemberRun, and RuntimeSession; Turn-boundary
-      refresh may atomically update taskId, runId, allowedTools, and contextEpoch.
+      Reuse the stable TeamMemberRun RuntimeSession bearer/grant and providerAgentId
+      for member Work and Direct continuations. Agentic Lead control Tasks are the
+      narrow exception: each gets a fresh task-scoped RuntimeSession, grant, and
+      Provider Agent/MCP session because a Paseo/OpenCode continuation retains its
+      initial MCP catalog. The durable task/board snapshot remains Lead context;
+      never give a stable continuation an all-tools grant.
 - [ ] Before refresh require old Run terminal, no in-flight Team tool, and no other
       active member Task; refresh before `runtime.execute(continue)`. Do not refresh
       only allowedTools while retaining stale Task/Run bindings.
@@ -456,9 +458,9 @@
 - [ ] Rename/converge the Phase 1/2 harness without changing redaction or retained
       evidence guarantees.
 - [ ] Create `make agent-teams-v2-smoke` invoking the new harness.
-- [ ] Debug stepwise with short timeouts and retained state, then run exactly one
-      full paid smoke with `PASEO_MODEL=opencode-go/deepseek-v4-flash` and the
-      authorized secret through the allowlist without printing it.
+- [x] Debugged stepwise with retained state, then accepted one full paid smoke with
+      `PASEO_MODEL=opencode-go/glm-5.2` through the authorized allowlist without
+      printing the secret; see the Phase 3 boundary artifact.
 - [ ] Observe stable TeamMemberRuns and RuntimeSessions, dependency claim,
       addressed wake, checkpoint/submit or Lead request-changes, minimum finish gate,
       terminal facts, safe Web projection, and refresh replay.
@@ -470,10 +472,28 @@
 
 ### Phase 3 boundary
 
-- [ ] Commit only at phase end after Tasks 3.1–3.3 and their observations:
+- [x] Accepted real-provider evidence is
+      `.local/agent-teams-v2-1785869240170-c8676f41/manifest.json`: the
+      `opencode-go/glm-5.2`/Paseo main flow passed in 156116ms with exit 0, no
+      deterministic substitution, empty stderr, 3 members, 2 accepted Work/Attempts,
+      3 messages including 1 delivered Direct Message, 4 Lead turns, 2 member Runs,
+      and four unique Lead create/send/provider bindings. It also covers dependency,
+      migration/replay, Direct, safe-projection, and completion-fence markers.
+- [x] Phase 3 implementation findings closed: fresh task-scoped Lead catalogs;
+      canonical fixture prompts and golden-path acceptance; stale Lead callback and
+      all-actor scheduling fences; mode-accurate post-checks; recursive safe
+      projection scanning; separate required control versus coordination commands;
+      explicit stale-worker completion fencing; bound session-message persistence;
+      schema-local migration 0025 constraint replay; and atomic later-Lead
+      CAS/Task/Run/dispatch admission with failure, retry, and stale replay coverage.
+- [x] Commit only at phase end after Tasks 3.1–3.3 and their observations:
       `git add src/infrastructure/postgres/migrations/0025_agent_team_work_dependencies.sql src/domain/teams/team-work-item.ts src/domain/teams/team-work-item-attempt.ts src/domain/teams/team-run.ts src/application/teams/team-command-service.ts src/application/teams/team-policy-evaluator.ts src/infrastructure/postgres/postgres-collaborative-team-repository.ts src/adapters/team-mcp/team-mcp-tools.ts src/contracts/teams.ts src/entrypoints/api/routes/team-runs.ts apps/web/lib/agentic-team-bff.ts apps/web/app/page.tsx apps/web/components/chat/conversation-sidebar.tsx apps/web/app/globals.css scripts/smoke/agent-teams-v2-main-flow.mjs package.json Makefile templates/self-learning-market-research/agents/lead.yaml templates/self-learning-market-research/agents/opportunity-analyst.yaml templates/self-learning-market-research/agents/analog-risk-reviewer.yaml && git commit -m "Close Agent Teams v2 collaboration flow"`.
 
 ## Phase 4 — destructive single-runtime cutover
+
+Phase 4 destructive cleanup remains gated. After Phase 3 final verification,
+review, and commit, begin only its non-destructive rewiring; complete the approved
+destructive-scope/no-reference Human Gate before deletions.
 
 ### Task 4.1 — Define and wire only the canonical v2 TeamVersion
 
@@ -571,6 +591,9 @@
       `git add -u -- src/application/tasks/execute-team-task.ts src/application/tasks/advance-team-execution.ts src/application/invokables/dag-team-compiler.ts src/application/invokables/sequential-team-compiler.ts src/infrastructure/postgres/postgres-team-execution-repository.ts src/application/teams/collaborative-team-executor.ts src/application/teams/agentic-team-executor.ts src/application/teams/team-phase-coordinator.ts src/adapters/demo-market/synthetic-team-evidence-provider.ts src/application/teams/team-tools.ts src/adapters/team-mcp/team-mcp-tools.ts src/bootstrap.ts src/contracts/teams.ts src/entrypoints/api/routes/teams.ts src/entrypoints/api/routes/team-runs.ts package.json Makefile README.md docs/features.md docs/contracts/agent-team-api.md && git add src/domain/teams/managed-team-package.ts src/infrastructure/postgres/postgres-invokable-repository.ts && git commit -m "Destructively cut over Agent Teams v2 runtime"`.
 
 ## Final verification and deferred ledger
+
+- [ ] Deferred, non-blocking: remove the literal `$1` that can remain in Direct
+      redaction body text; it contains no secret.
 
 - [ ] Under Node 24 run:
       `export NVM_DIR=/Users/fanye/.nvm; . "$NVM_DIR/nvm.sh"; nvm use 24; export PNPM_HOME=/Users/fanye/Library/pnpm; export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"; make check`.

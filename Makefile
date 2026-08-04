@@ -2,7 +2,7 @@
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
-	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native collaborative-team-smoke agent-project-phase1-smoke self-learning-team-phase2-smoke self-learning-team-phase3-smoke
+	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native collaborative-team-smoke agent-project-phase1-smoke self-learning-team-phase2-smoke self-learning-team-phase3-smoke agent-teams-v2-smoke
 
 setup:
 	docker compose build agent-server runner
@@ -88,6 +88,9 @@ self-learning-team-phase3-smoke:
 
 agentic-team-chat-smoke:
 	AGENTIC_TEAM_WEB_PORT="$${AGENTIC_TEAM_WEB_PORT:-43123}" AGENTIC_TEAM_SMOKE_RETAIN_FILE="$${AGENTIC_TEAM_SMOKE_RETAIN_FILE:-.agentic-team-chat-lead.log}" PASEO_MODEL="$${PASEO_MODEL:-opencode-go/deepseek-v4-flash}" ./scripts/dev/docker-run --postgres --publish "$${AGENTIC_TEAM_WEB_PORT:-43123}" --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env AGENTIC_TEAM_SMOKE_RETAIN_FILE --pass-env AGENTIC_TEAM_SMOKE_STAGE --pass-env AGENTIC_TEAM_SMOKE_STAGE_TIMEOUT_MS --pass-env COLLAB_SMOKE_POLL_MS --pass-env AGENTIC_TEAM_WEB_PORT -- pnpm smoke:agentic-team-chat
+
+agent-teams-v2-smoke:
+	PASEO_MODEL="$${PASEO_MODEL:-opencode-go/deepseek-v4-flash}" ./scripts/dev/docker-run --postgres --bind-local --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS -- pnpm smoke:agent-teams-v2
 
 clean:
 	docker compose down --remove-orphans

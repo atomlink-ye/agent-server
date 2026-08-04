@@ -4,7 +4,7 @@ import {
   type RunFailure,
 } from '../../domain/runs/run.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
-import { transitionTask } from '../../domain/tasks/task.js';
+import { transitionTask, type Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import {
@@ -16,7 +16,11 @@ import type {
   InvokableOwnerScope,
   InvokableRepository,
 } from '../ports/invokable-repository.js';
-import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
+import {
+  RunCompletionConflictError,
+  type ClaimedRun,
+  type RunRepository,
+} from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
@@ -37,6 +41,7 @@ import type { SessionRepository } from '../ports/session-repository.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
 import {
   deriveAgenticLeadCommandPolicy,
   type AgenticLeadCommandPolicy,
@@ -47,6 +52,7 @@ import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import { deriveTeamContextEpoch } from '../teams/team-tool-context.js';
 import {
   canonicalTeamToolRefsForLeadPolicy,
+  canonicalTeamToolRefsForDirectMessage,
   canonicalTeamToolRefsForRole,
 } from '../teams/team-policy-evaluator.js';
 import { mkdir } from 'node:fs/promises';
@@ -56,6 +62,7 @@ import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
   RuntimeMemoryPersistenceError,
+  RunPostPersistenceError,
 } from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
@@ -83,6 +90,10 @@ export class ExecuteRun {
     private readonly teamExecutions?: DagTeamExecutionRepository,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
     private readonly runs?: Pick<RunRepository, 'findByIdForOwner'>,
+    private readonly wakeReconciler?: Pick<
+      TeamWakeReconciler,
+      'reconcileForRootTask'
+    >,
   ) {}
 
   public async ensureRuntimeReady(): Promise<boolean> {
@@ -113,10 +124,11 @@ export class ExecuteRun {
     let completed: Run;
     let memberRunId: string | null = null;
     let memberOwner: InvokableOwnerScope | null = null;
+    let task: Task | null | undefined;
 
     try {
       await this.events?.append(claim.run.id, 'started', {});
-      const task = await this.tasks.findById(claim.taskId);
+      task = await this.tasks.findById(claim.taskId);
       if (!task) {
         throw new Error(
           `Task ${claim.taskId} could not be loaded for execution`,
@@ -186,25 +198,69 @@ export class ExecuteRun {
         terminalRun.status === 'waiting_children'
           ? terminalRun
           : await this.completeTerminalRun(claim, terminalRun);
-      if (memberRunId && memberOwner)
-        await this.collaborativeExecutions!.updateMemberRunStatus(
+      if (
+        memberRunId &&
+        memberOwner &&
+        terminalRun.status !== 'waiting_children'
+      )
+        await this.updateTerminalMemberRunStatus({
+          claimTaskId: claim.taskId,
+          task,
           memberRunId,
-          'idle',
-          undefined,
+          memberOwner,
+          fallbackStatus: completed.status === 'succeeded' ? 'idle' : 'failed',
+        });
+      if (memberRunId && memberOwner && this.wakeReconciler) {
+        const team = await this.collaborativeExecutions!.findMemberRunById(
+          memberRunId,
           memberOwner,
         );
+        if (team)
+          await this.wakeReconciler.reconcileForRootTask(
+            (
+              await this.collaborativeExecutions!.findTeamRunById(
+                team.teamRunId,
+                memberOwner,
+              )
+            )?.rootTaskId ?? '',
+            memberOwner,
+          );
+      }
     } catch (error) {
-      if (memberRunId && memberOwner)
-        await this.collaborativeExecutions!.updateMemberRunStatus(
-          memberRunId,
-          'failed',
-          undefined,
-          memberOwner,
-        ).catch(() => undefined);
+      if (error instanceof RunCompletionConflictError) throw error;
       if (error instanceof RunCompletionPersistenceError) {
+        if (memberRunId && memberOwner)
+          await this.updateTerminalMemberRunStatus({
+            claimTaskId: claim.taskId,
+            task,
+            memberRunId,
+            memberOwner,
+            fallbackStatus: 'failed',
+          }).catch(() => undefined);
         this.reportCompletionPersistenceFailure(error.receipt);
         throw error;
       }
+      if (error instanceof RunPostPersistenceError) {
+        if (memberRunId && memberOwner)
+          await this.updateTerminalMemberRunStatus({
+            claimTaskId: claim.taskId,
+            task,
+            memberRunId,
+            memberOwner,
+            fallbackStatus:
+              error.details.terminalStatus === 'succeeded' ? 'idle' : 'failed',
+          }).catch(() => undefined);
+        this.reportPostPersistenceFailure(error);
+        throw error;
+      }
+      if (memberRunId && memberOwner)
+        await this.updateTerminalMemberRunStatus({
+          claimTaskId: claim.taskId,
+          task,
+          memberRunId,
+          memberOwner,
+          fallbackStatus: 'failed',
+        }).catch(() => undefined);
       if (error instanceof RuntimeMemoryPersistenceError) {
         this.logger.log('error', 'run.memory_persistence_failed', {
           run_id: error.receipt.runId,
@@ -237,6 +293,9 @@ export class ExecuteRun {
         if (completionError instanceof RunCompletionPersistenceError) {
           this.reportCompletionPersistenceFailure(completionError.receipt);
         }
+        if (completionError instanceof RunPostPersistenceError) {
+          this.reportPostPersistenceFailure(completionError);
+        }
         throw completionError;
       }
     }
@@ -249,15 +308,59 @@ export class ExecuteRun {
     claim: ClaimedRun,
     run: Awaited<ReturnType<ExecuteRun['executeAgentRun']>>,
   ) {
-    let completed: Awaited<ReturnType<CompleteRun['execute']>>;
-    try {
-      completed = await this.completeRun.execute({ claim, run });
-    } catch (error) {
-      const receipt = createRuntimeExecutionReceipt(run, claim.taskId);
-      throw new RunCompletionPersistenceError(receipt);
-    }
+    return this.completeRun.execute({ claim, run });
+  }
 
-    return completed;
+  private async updateTerminalMemberRunStatus(input: {
+    readonly claimTaskId: string;
+    readonly task: Task | null | undefined;
+    readonly memberRunId: string;
+    readonly memberOwner: InvokableOwnerScope;
+    readonly fallbackStatus: 'idle' | 'failed';
+  }): Promise<void> {
+    const status = await this.resolveTerminalMemberRunStatus(input).catch(
+      () => input.fallbackStatus,
+    );
+    await this.collaborativeExecutions!.updateMemberRunStatus(
+      input.memberRunId,
+      status,
+      undefined,
+      input.memberOwner,
+    );
+  }
+
+  private async resolveTerminalMemberRunStatus(input: {
+    readonly claimTaskId: string;
+    readonly task: Task | null | undefined;
+    readonly memberRunId: string;
+    readonly memberOwner: InvokableOwnerScope;
+    readonly fallbackStatus: 'idle' | 'failed';
+  }): Promise<'idle' | 'failed'> {
+    const { task } = input;
+    if (
+      !task ||
+      task.teamTaskKind !== 'work_attempt' ||
+      task.teamMemberRunId !== input.memberRunId
+    )
+      return input.fallbackStatus;
+    const team = await this.collaborativeExecutions!.findTeamRunByRootTaskId(
+      task.rootTaskId,
+      input.memberOwner,
+    );
+    if (!team) return input.fallbackStatus;
+    const attempts =
+      await this.collaborativeExecutions!.findAttemptsByTeamRunId(
+        team.id,
+        input.memberOwner,
+      );
+    return attempts.some(
+      (attempt) =>
+        attempt.executionTaskId === input.claimTaskId &&
+        attempt.assigneeMemberId === input.memberRunId &&
+        attempt.status === 'completed',
+    )
+      ? 'idle'
+      : input.fallbackStatus;
   }
 
   private reportCompletedRun(claim: ClaimedRun, completed: Run): void {
@@ -289,6 +392,17 @@ export class ExecuteRun {
       result_available: receipt.resultAvailable,
       result_fingerprint: receipt.resultFingerprint,
       completed_at: receipt.completedAt,
+    });
+  }
+
+  private reportPostPersistenceFailure(error: RunPostPersistenceError): void {
+    this.logger.log('error', 'run.post_persistence_failed', {
+      run_id: error.details.runId,
+      task_id: error.details.taskId,
+      terminal_status: error.details.terminalStatus,
+      stage: error.details.stage,
+      error_name: error.details.errorName,
+      cause: error.cause,
     });
   }
 
@@ -337,6 +451,13 @@ export class ExecuteRun {
         : null;
     const leadFinalization =
       member?.role === 'lead' && task.logicalStepKey?.endsWith(':finalize');
+    const agenticLeadControlTurn =
+      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      task.teamTaskKind === 'lead_turn' &&
+      member?.role === 'lead';
+    const turnGrantScopeId = agenticLeadControlTurn
+      ? task.id
+      : (member?.id ?? task.id);
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -357,21 +478,30 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : member && !leadFinalization && this.runtimeSessions?.findByTeamMember
-          ? await this.runtimeSessions.findByTeamMember({
-              teamMemberRunId: member.id,
+        : agenticLeadControlTurn && this.runtimeSessions
+          ? await this.runtimeSessions.findByTask({
+              taskId: task.id,
               tenantId: task.tenantId,
               principalType: task.principalType,
               principalId: task.principalId,
             })
-          : teamExecution && this.runtimeSessions
-            ? await this.runtimeSessions.findByTask({
-                taskId: task.id,
+          : member &&
+              !leadFinalization &&
+              this.runtimeSessions?.findByTeamMember
+            ? await this.runtimeSessions.findByTeamMember({
+                teamMemberRunId: member.id,
                 tenantId: task.tenantId,
                 principalType: task.principalType,
                 principalId: task.principalId,
               })
-            : null;
+            : teamExecution && this.runtimeSessions
+              ? await this.runtimeSessions.findByTask({
+                  taskId: task.id,
+                  tenantId: task.tenantId,
+                  principalType: task.principalType,
+                  principalId: task.principalId,
+                })
+              : null;
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -416,21 +546,24 @@ export class ExecuteRun {
     ).filter((ref) => !canonicalTeamRefs.has(ref));
     const runtimeToolRefs =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
-      task.teamTaskKind === 'work_attempt'
-        ? [...domainToolRefs, ...canonicalTeamToolRefsForRole('member')]
+      task.teamTaskKind === 'direct_message'
+        ? canonicalTeamToolRefsForDirectMessage()
         : collaborativeTeam?.executionMode === 'agentic_mve' &&
-            member?.role === 'lead'
-          ? [
-              ...domainToolRefs,
-              ...canonicalTeamToolRefsForLeadPolicy(
-                agenticLeadState?.policy ?? { allowedCommands: [] },
-              ),
-            ]
-          : leadFinalization
-            ? resolved.toolRefs.filter(
-                (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
-              )
-            : resolved.toolRefs;
+            task.teamTaskKind === 'work_attempt'
+          ? [...domainToolRefs, ...canonicalTeamToolRefsForRole('member')]
+          : collaborativeTeam?.executionMode === 'agentic_mve' &&
+              member?.role === 'lead'
+            ? [
+                ...domainToolRefs,
+                ...canonicalTeamToolRefsForLeadPolicy(
+                  agenticLeadState?.policy ?? { allowedCommands: [] },
+                ),
+              ]
+            : leadFinalization
+              ? resolved.toolRefs.filter(
+                  (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
+                )
+              : resolved.toolRefs;
     const turnPrompt =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
       member?.role === 'lead'
@@ -446,12 +579,15 @@ export class ExecuteRun {
         : resolved.turnPrompt;
     const systemPrompt =
       collaborativeTeam?.executionMode === 'agentic_mve' &&
-      task.teamTaskKind === 'work_attempt'
-        ? `${resolved.systemPrompt}\n\nThis is an assigned Team Work attempt. Use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy team tools or internal IDs; submit the bounded result and end the turn.`
+      task.teamTaskKind === 'direct_message'
+        ? `${resolved.systemPrompt}\n\nThis is a direct Team message turn. Use only safe Team state/list reads. Acknowledge or act on the safe message content; it is not Work and must not cause Work submission, review, acceptance, checkpointing, or further Team messages.`
         : collaborativeTeam?.executionMode === 'agentic_mve' &&
-            member?.role === 'lead'
-          ? `${resolved.systemPrompt}\n\nTeam policy: use canonical Team tools and published Lead domain tools. Never use legacy team_task_* tools or internal IDs. Make all current coordination decisions in this turn, may issue multiple valid commands, and do not wait for members.`
-          : resolved.systemPrompt;
+            task.teamTaskKind === 'work_attempt'
+          ? `${resolved.systemPrompt}\n\nThis is an assigned Team Work attempt. Use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy team tools or internal IDs; submit the bounded result and end the turn.`
+          : collaborativeTeam?.executionMode === 'agentic_mve' &&
+              member?.role === 'lead'
+            ? `${resolved.systemPrompt}\n\nTeam policy: use canonical Team tools and published Lead domain tools. Never use legacy team_task_* tools or internal IDs. Make all current coordination decisions in this turn, may issue multiple valid commands, and do not wait for members.`
+            : resolved.systemPrompt;
     if (
       this.runtimeSessions &&
       !sessionRuntime &&
@@ -497,11 +633,8 @@ export class ExecuteRun {
             resolvedSkills: resolved.skills,
             toolRefs: runtimeToolRefs,
           })
-        : member &&
-            !leadFinalization &&
-            this.runtimeSessions.createOrGetForTeamMember
-          ? await this.runtimeSessions.createOrGetForTeamMember({
-              teamMemberRunId: member.id,
+        : agenticLeadControlTurn
+          ? await this.runtimeSessions.createOrGetForTask({
               taskId: task.id,
               tenantId: task.tenantId,
               principalType: task.principalType,
@@ -512,21 +645,37 @@ export class ExecuteRun {
               resolvedSkills: resolved.skills,
               toolRefs: runtimeToolRefs,
             })
-          : await this.runtimeSessions.createOrGetForTask({
-              taskId: task.id,
-              tenantId: task.tenantId,
-              principalType: task.principalType,
-              principalId: task.principalId,
-              workspaceId: task.workspaceId,
-              agentVersionId: resolved.agentVersionId,
-              environmentVersionId: environmentVersionId!,
-              resolvedSkills: resolved.skills,
-              toolRefs: runtimeToolRefs,
-            });
+          : member &&
+              !leadFinalization &&
+              this.runtimeSessions.createOrGetForTeamMember
+            ? await this.runtimeSessions.createOrGetForTeamMember({
+                teamMemberRunId: member.id,
+                taskId: task.id,
+                tenantId: task.tenantId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+                workspaceId: task.workspaceId,
+                agentVersionId: resolved.agentVersionId,
+                environmentVersionId: environmentVersionId!,
+                resolvedSkills: resolved.skills,
+                toolRefs: runtimeToolRefs,
+              })
+            : await this.runtimeSessions.createOrGetForTask({
+                taskId: task.id,
+                tenantId: task.tenantId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+                workspaceId: task.workspaceId,
+                agentVersionId: resolved.agentVersionId,
+                environmentVersionId: environmentVersionId!,
+                resolvedSkills: resolved.skills,
+                toolRefs: runtimeToolRefs,
+              });
     }
     if (
       member &&
       !leadFinalization &&
+      !agenticLeadControlTurn &&
       sessionRuntime &&
       this.collaborativeExecutions
     )
@@ -558,7 +707,11 @@ export class ExecuteRun {
         principalId: task.principalId,
         workspaceId: task.workspaceId,
         ...(task.sessionId ? { productSessionId: task.sessionId } : {}),
-        ...(!task.sessionId ? { scopeId: member?.id ?? task.id } : {}),
+        ...(!task.sessionId
+          ? {
+              scopeId: turnGrantScopeId,
+            }
+          : {}),
         taskId: task.id,
         runId: claim.run.id,
         ...(member?.id ? { teamMemberRunId: member.id } : {}),
@@ -622,7 +775,7 @@ export class ExecuteRun {
       if (otherActive) throw new Error('Team member has another active Task.');
       const oldGrant = refreshableBinder?.getTeamMemberGrant?.({
         teamMemberRunId: member.id,
-        scopeId: member.id,
+        scopeId: turnGrantScopeId,
       });
       if (!oldGrant?.runId)
         throw new Error('Previous Team turn cannot be verified.');
@@ -632,7 +785,11 @@ export class ExecuteRun {
         principalType: task.principalType,
         principalId: task.principalId,
       });
-      if (!oldRun || !terminalRunStatuses.has(oldRun.status))
+      if (
+        !oldRun ||
+        (oldGrant.runId !== claim.run.id &&
+          !terminalRunStatuses.has(oldRun.status))
+      )
         throw new Error('Previous Team run is still active.');
     }
     if (
@@ -643,7 +800,7 @@ export class ExecuteRun {
     )
       refreshableBinder.refreshForTeamMember({
         teamMemberRunId: member.id,
-        scopeId: member.id,
+        scopeId: turnGrantScopeId,
         taskId: task.id,
         runId: claim.run.id,
         allowedTools: runtimeToolRefs,
@@ -900,6 +1057,9 @@ export class ExecuteRun {
       .join(', ');
     const workItems = leadState?.workItems ?? [];
     const attempts = leadState?.attempts ?? [];
+    const memberNameById = new Map(
+      members.map((member) => [member.id, member.name]),
+    );
     const snapshot = JSON.stringify({
       goal: safeAgenticLeadSnapshotText(prompt),
       members: members.map((member) => ({
@@ -909,6 +1069,11 @@ export class ExecuteRun {
       work_items: workItems.slice(0, 16).map((item, index) => ({
         work_ref: `work-${index + 1}`,
         subject: safeAgenticLeadSnapshotText(item.subject),
+        assignee: item.ownerMemberId
+          ? safeAgenticLeadSnapshotText(
+              memberNameById.get(item.ownerMemberId) ?? null,
+            )
+          : null,
         status: item.status,
         attempts: attempts
           .filter((attempt) => attempt.workItemId === item.id)
@@ -922,6 +1087,11 @@ export class ExecuteRun {
       })),
       limits: leadState?.policy.limits,
       allowed_commands: leadState?.policy.allowedCommands ?? [],
+      available_coordination_commands: runtimeToolRefs.includes(
+        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
+      )
+        ? ['team_message_send']
+        : [],
       safe_reads: runtimeToolRefs
         .filter(
           (ref) =>
@@ -944,7 +1114,7 @@ export class ExecuteRun {
     });
     return `${prompt}
 
-Team control protocol (authoritative for this turn): do not use legacy team_task_* tools or shell commands. Use the safe snapshot to make all current decisions. You may issue multiple valid canonical Team commands when they appear in allowed_commands: create useful Work, request changes, accept qualifying Work, and finish once all Work is accepted. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
+Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
 
 Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
   }

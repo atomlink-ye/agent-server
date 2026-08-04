@@ -5,6 +5,7 @@ import {
   openProjectStream,
   validTeamUuid,
 } from '@/lib/agentic-team-bff';
+import { safeRunEventStream } from '@/lib/safe-run-events';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 type Context = { params: Promise<{ run_id: string }> };
@@ -19,7 +20,8 @@ export async function GET(request: Request, context: Context) {
       lastEventId: request.headers.get('last-event-id'),
       signal: request.signal,
     });
-    return new Response(upstream.body, {
+    if (!upstream.body) throw new AgentServerError(502, 'run_stream_empty');
+    return new Response(safeRunEventStream(upstream.body), {
       status: 200,
       headers: {
         'content-type':

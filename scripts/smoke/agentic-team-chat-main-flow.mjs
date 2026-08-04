@@ -47,18 +47,18 @@ const STAGES = new Set([
   'full',
 ]);
 const AGENTIC_COMMAND_RECEIPTS = new Set([
-  'team_work_create_and_assign',
-  'team_work_request_rework',
+  'team_work_create',
+  'team_work_request_changes',
   'team_work_accept',
-  'team_completion_request',
+  'team_finish',
 ]);
 const SAFE_TOOL_NAMES = new Set([
   'synthetic_stock_snapshot',
   'synthetic_event_batch',
-  'team_work_create_and_assign',
+  'team_work_create',
   'team_work_accept',
-  'team_work_request_rework',
-  'team_completion_request',
+  'team_work_request_changes',
+  'team_finish',
 ]);
 const SAFE_DETAIL_KINDS = new Set([
   'shell',
@@ -77,6 +77,12 @@ const SAFE_PERMISSION_KINDS = new Set([
   'mode',
   'other',
 ]);
+const SAFE_PERMISSION_STATUSES = new Set(['requested', 'resolved']);
+const SAFE_PERMISSION_DECISIONS = new Set(['allowed', 'denied']);
+const SAFE_PERMISSION_SUMMARIES = new Set([
+  'Permission activity is read-only.',
+]);
+const MAX_PERMISSION_EVENTS_PER_RUN = 4;
 const SAFE_ERROR_CODES = new Set([
   'runtime_execution_failed',
   'runtime_timed_out',
@@ -90,18 +96,43 @@ const SAFE_RUN_EVENT_TYPES = new Set([
   'failed',
   'cancelled',
 ]);
+const LEGACY_TEAM_TOOL_REFS = new Set([
+  'agent-server/team-members-list',
+  'agent-server/team-task-create',
+  'agent-server/team-task-list',
+  'agent-server/team-task-claim',
+  'agent-server/team-task-update',
+  'agent-server/team-complete',
+  'agent-server/team-work-create-and-assign',
+  'agent-server/team-work-accept',
+  'agent-server/team-work-request-rework',
+  'agent-server/team-completion-request',
+]);
+const CANONICAL_TEAM_TOOL_REFS = new Set([
+  'agent-server/team-state',
+  'agent-server/team-work-list',
+  'agent-server/team-work-create',
+  'agent-server/team-work-request-changes',
+  'agent-server/team-work-accept-v2',
+  'agent-server/team-finish',
+  'agent-server/team-work-checkpoint',
+  'agent-server/team-work-submit',
+]);
 const stage = process.env.AGENTIC_TEAM_SMOKE_STAGE ?? 'full';
 if (!STAGES.has(stage))
   throw new Error(`invalid_agentic_smoke_stage: ${stage}`);
 const stageTimeoutMs = Number(
-  process.env.AGENTIC_TEAM_SMOKE_STAGE_TIMEOUT_MS ?? 90_000,
+  process.env.AGENTIC_TEAM_SMOKE_STAGE_TIMEOUT_MS ??
+    (stage === 'attempt2_terminal' ? 720_000 : 90_000),
 );
 if (stage !== 'full')
-  process.env.PASEO_EXECUTION_TIMEOUT_MS ??= String(stageTimeoutMs);
+  process.env.PASEO_EXECUTION_TIMEOUT_MS ??= String(
+    Math.min(stageTimeoutMs, 600_000),
+  );
 class FocusedStageComplete extends Error {}
 const retainFile = process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE
   ? resolve(process.env.AGENTIC_TEAM_SMOKE_RETAIN_FILE)
-  : null;
+  : join(root, '.local', 'agentic-team-chat-lead.json');
 const timeline = [];
 let rootTaskId;
 let retained = false;
@@ -114,10 +145,19 @@ let apiUrl;
 let next;
 let webUrl;
 let bffProject;
+let failure;
+let failureSnapshot;
+let preCleanupArtifactWritten = false;
+const cleanupDiagnostics = [];
 const useOpenCodeGo = Boolean(process.env.OPENCODE_GO_API_KEY);
 if (useOpenCodeGo) {
   process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
     $schema: 'https://opencode.ai/config.json',
+    agent: {
+      build: {
+        permission: 'allow',
+      },
+    },
     provider: {
       'opencode-go': {
         npm: '@ai-sdk/openai-compatible',
@@ -369,7 +409,8 @@ try {
   console.log(`root_task_id: ${rootTaskId}`);
 
   if (stage !== 'full') {
-    await pollFocusedStage(rootTaskId, stage);
+    const focused = await pollFocusedStage(rootTaskId, stage);
+    await retainFocusedState(focused);
     console.log(JSON.stringify({ status: 'passed', stage }));
     throw new FocusedStageComplete();
   }
@@ -436,8 +477,8 @@ try {
   );
   console.log(`completed_work_items: ${completedItems.length}`);
   if (
-    workItems.length !== 1 ||
-    leadWorkItems.length !== 1 ||
+    workItems.length !== 2 ||
+    leadWorkItems.length !== 2 ||
     completedItems.length !== workItems.length
   )
     throw new Error(
@@ -449,9 +490,10 @@ try {
   const runtimeSessions = await db.query(
     `SELECT m.id AS member_id, m.name, m.role, m.status AS member_status,
             m.runtime_session_id, r.scope_kind,
-            r.provider_agent_id
+            r.provider_agent_id, sls.tool_refs AS grant_tool_refs
        FROM team_member_runs m
        LEFT JOIN runtime_sessions r ON r.id = m.runtime_session_id
+       LEFT JOIN session_launch_snapshots sls ON sls.id = r.launch_snapshot_id
       WHERE m.team_run_id=$1
       ORDER BY m.name`,
     [teamRunResult.id],
@@ -462,9 +504,9 @@ try {
   const linkedMemberRoles = linkedMembers.map((r) => r.role);
   if (
     runtimeSessions.rows.length !== 3 ||
-    linkedMembers.length !== 2 ||
+    linkedMembers.length !== 3 ||
     linkedMemberRoles.filter((role) => role === 'lead').length !== 1 ||
-    linkedMemberRoles.filter((role) => role === 'member').length !== 1 ||
+    linkedMemberRoles.filter((role) => role === 'member').length !== 2 ||
     linkedMembers.some(
       (r) =>
         r.scope_kind !== 'team_member' ||
@@ -473,14 +515,42 @@ try {
     )
   )
     throw new Error(
-      `expected_two_linked_team_member_runtime_sessions: total=${runtimeSessions.rows.length} linked=${linkedMembers.length}`,
+      `expected_three_linked_team_member_runtime_sessions: total=${runtimeSessions.rows.length} linked=${linkedMembers.length}`,
     );
-  if (new Set(linkedMembers.map((r) => r.provider_agent_id)).size !== 2)
-    throw new Error('expected_distinct_member_provider_bindings');
+  if (new Set(linkedMembers.map((r) => r.provider_agent_id)).size !== 3)
+    throw new Error('expected_distinct_team_member_provider_bindings');
+  const grantRefs = new Set(
+    linkedMembers.flatMap((row) => safeToolRefs(row.grant_tool_refs)),
+  );
+  if (
+    !grantRefs.size ||
+    [...grantRefs].some((ref) => !CANONICAL_TEAM_TOOL_REFS.has(ref))
+  )
+    throw new Error('team_grant_contains_non_canonical_tool');
+  if ([...grantRefs].some((ref) => LEGACY_TEAM_TOOL_REFS.has(ref)))
+    throw new Error('legacy_team_tool_grant_present');
+  const leadOnlyRefs = new Set([
+    'agent-server/team-work-create',
+    'agent-server/team-work-request-changes',
+    'agent-server/team-work-accept-v2',
+    'agent-server/team-finish',
+  ]);
+  if (
+    linkedMembers
+      .filter((row) => row.role === 'member')
+      .flatMap((row) => safeToolRefs(row.grant_tool_refs))
+      .some((ref) => leadOnlyRefs.has(ref))
+  )
+    throw new Error('member_grant_contains_lead_mutation');
+  console.log(
+    `team_grants: ${JSON.stringify({ canonical: [...grantRefs].sort(), member_has_lead_mutations: false })}`,
+  );
   const workAttemptTasks = await db.query(
-    `SELECT t.id,t.status AS task_status,t.team_member_run_id,r.status AS run_status
+    `SELECT t.id,t.status AS task_status,t.team_member_run_id,r.id AS run_id,r.status AS run_status,
+            rs.id AS runtime_session_id
        FROM tasks t
        JOIN runs r ON r.task_id=t.id
+       LEFT JOIN runtime_sessions rs ON rs.task_id=t.id
       WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt'
       ORDER BY t.created_at`,
     [rootTaskId],
@@ -492,15 +562,49 @@ try {
     workAttemptTasks.rows.map((row) => row.team_member_run_id),
   );
   if (
-    workAttemptTasks.rows.length !== 2 ||
-    attemptMemberIds.size !== 1 ||
-    !nonLeadMemberIds.has(workAttemptTasks.rows[0]?.team_member_run_id) ||
+    workAttemptTasks.rows.length !== 3 ||
+    attemptMemberIds.size !== 2 ||
+    workAttemptTasks.rows.some(
+      (row) => !nonLeadMemberIds.has(row.team_member_run_id),
+    ) ||
     workAttemptTasks.rows.some(
       (row) =>
         row.task_status !== 'completed' || row.run_status !== 'succeeded',
     )
   )
     throw new Error('work_attempt_tasks_not_sequentially_completed');
+  const checkpointEvents = await db.query(
+    `SELECT COUNT(*)::int AS count
+       FROM run_events
+      WHERE run_id = ANY($1::uuid[]) AND payload->>'kind'='team_checkpoint'`,
+    [workAttemptTasks.rows.map((row) => row.run_id).filter(Boolean)],
+  );
+  if (Number(checkpointEvents.rows[0]?.count ?? 0) < 3)
+    throw new Error('member_checkpoint_evidence_missing');
+  console.log(
+    `member_work_evidence: ${JSON.stringify({ checkpoints: Number(checkpointEvents.rows[0].count), submitted_attempts: workAttemptTasks.rows.length })}`,
+  );
+  const attemptCounts = new Map();
+  for (const row of workAttemptTasks.rows)
+    attemptCounts.set(
+      row.team_member_run_id,
+      (attemptCounts.get(row.team_member_run_id) ?? 0) + 1,
+    );
+  if ([...attemptCounts.values()].sort().join(',') !== '1,2')
+    throw new Error('expected_one_member_rework_and_one_member_submit');
+  const reworkedMemberId = [...attemptCounts.entries()].find(
+    ([, count]) => count === 2,
+  )?.[0];
+  const reworkedRows = workAttemptTasks.rows.filter(
+    (row) => row.team_member_run_id === reworkedMemberId,
+  );
+  if (
+    new Set(reworkedRows.map((row) => row.runtime_session_id)).size !== 1 ||
+    reworkedRows[0]?.runtime_session_id !==
+      linkedMembers.find((row) => row.member_id === reworkedMemberId)
+        ?.runtime_session_id
+  )
+    throw new Error('member_runtime_session_not_reused_for_rework');
   const attemptsForTasks = await db.query(
     `SELECT execution_task_id,COUNT(*) AS count
        FROM team_work_item_attempts
@@ -509,7 +613,7 @@ try {
     [teamRunResult.id],
   );
   if (
-    attemptsForTasks.rows.length !== 2 ||
+    attemptsForTasks.rows.length !== 3 ||
     attemptsForTasks.rows.some((row) => Number(row.count) !== 1) ||
     attemptsForTasks.rows.some(
       (row) =>
@@ -560,7 +664,7 @@ try {
        FROM team_command_receipts c
        JOIN runs r ON r.id=c.source_run_id
        JOIN tasks t ON t.id=r.task_id
-      WHERE c.command_name='team_completion_request' AND t.root_task_id=$1
+      WHERE c.command_name='team_finish' AND t.root_task_id=$1
       ORDER BY c.created_at DESC`,
     [rootTaskId],
   );
@@ -573,6 +677,20 @@ try {
   );
   if (!completionRun && !hasTeamFinalText)
     throw new Error('agentic_completion_text_missing');
+  const leadTurnReceipts = await db.query(
+    `SELECT c.source_run_id,COUNT(*) AS command_count
+       FROM team_command_receipts c
+       JOIN runs source_run ON source_run.id=c.source_run_id
+       JOIN tasks t ON t.id=source_run.task_id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+      GROUP BY c.source_run_id`,
+    [rootTaskId],
+  );
+  if (!leadTurnReceipts.rows.some((row) => Number(row.command_count) >= 2))
+    throw new Error('lead_did_not_issue_multiple_canonical_commands');
+  console.log(
+    `lead_multi_command_turn: ${JSON.stringify(leadTurnReceipts.rows.map((row) => ({ command_count: Number(row.command_count) })))}`,
+  );
   await request(`/api/v1/team-runs/${teamRunResult.id}`, {
     method: 'GET',
     status: 404,
@@ -590,9 +708,9 @@ try {
   const evidence = agenticEvidence.rows[0];
   if (Number(evidence.lead_turn_count) !== 4)
     throw new Error('agentic_lead_turn_count_mismatch');
-  if (Number(evidence.work_items) !== 1 || Number(evidence.attempts) !== 2)
+  if (Number(evidence.work_items) !== 2 || Number(evidence.attempts) !== 3)
     throw new Error('agentic_attempts_missing');
-  if (Number(evidence.rework_attempts) < 1)
+  if (Number(evidence.rework_attempts) !== 1)
     throw new Error('agentic_rework_missing');
   if (Number(evidence.completed_attempts) !== Number(evidence.attempts))
     throw new Error('agentic_attempt_not_completed');
@@ -712,32 +830,190 @@ try {
     }),
   );
 } catch (error) {
-  if (!(error instanceof FocusedStageComplete)) throw error;
+  if (!(error instanceof FocusedStageComplete)) {
+    failure = error;
+    throw error;
+  }
 } finally {
+  if (failure) await writeFailureArtifact(true);
   if (retained || process.env.PRESERVE_COLLAB_SMOKE === '1') {
     console.error(`preserved_db: ${dbName}`);
     console.error(`preserved_runtime_root: ${runtimeRoot}`);
     process.exitCode = 1;
   } else {
-    await (next ? stopProcessTree(next) : Promise.resolve()).catch(
-      () => undefined,
+    await cleanupStep('web_process', () =>
+      next ? stopProcessTree(next) : Promise.resolve(),
     );
-    await new Promise(
-      (resolveClose) => api?.close?.(() => resolveClose()) ?? resolveClose(),
-    ).catch(() => undefined);
-    await service?.close?.().catch(() => undefined);
-    await db?.end().catch(() => undefined);
-    await admin
-      ?.query(`DROP DATABASE IF EXISTS "${dbName.replaceAll('"', '""')}"`)
-      .catch(() => undefined);
-    await admin?.end().catch(() => undefined);
-    await (
-      paseo?.child ? stopProcessTree(paseo.child) : Promise.resolve()
-    ).catch(() => undefined);
-    await rm(runtimeRoot, { recursive: true, force: true }).catch(
-      () => undefined,
+    await cleanupStep(
+      'api_process',
+      () =>
+        new Promise(
+          (resolveClose) =>
+            api?.close?.(() => resolveClose()) ?? resolveClose(),
+        ),
     );
+    await cleanupStep('service', () => service?.close?.());
+    await cleanupStep('database_connection', () => db?.end());
+    await cleanupStep('database_drop', () =>
+      admin?.query(`DROP DATABASE IF EXISTS "${dbName.replaceAll('"', '""')}"`),
+    );
+    await cleanupStep('admin_connection', () => admin?.end());
+    await cleanupStep('paseo_process', () =>
+      paseo?.child ? stopProcessTree(paseo.child) : Promise.resolve(),
+    );
+    await cleanupStep('runtime_root', () =>
+      rm(runtimeRoot, { recursive: true, force: true }),
+    );
+    if (failure) await writeFailureArtifact(false);
   }
+}
+
+async function cleanupStep(name, operation) {
+  const state = { name, status: 'started', at: new Date().toISOString() };
+  cleanupDiagnostics.push(state);
+  try {
+    await operation();
+    state.status = 'succeeded';
+  } catch (error) {
+    state.status = 'failed';
+    state.error_code = safeErrorCode(error);
+    failure ??= error;
+  }
+}
+
+async function writeFailureArtifact(beforeCleanup) {
+  if (!retainFile) return;
+  if (beforeCleanup) preCleanupArtifactWritten = true;
+  if (!failureSnapshot) failureSnapshot = await diagnosticSnapshot();
+  const artifact = {
+    schema: 'agentic-team-chat/failure-diagnostic-v1',
+    status: 'failed',
+    stage,
+    failure: {
+      error_code: safeErrorCode(failure),
+      error_name: failure?.constructor?.name === 'Error' ? 'Error' : null,
+    },
+    identity: {
+      root_task_id: uuid(rootTaskId) ? rootTaskId : null,
+      db_name: safeDbName(dbName),
+    },
+    chronology: {
+      captured_at: new Date().toISOString(),
+      before_destructive_cleanup: beforeCleanup,
+      timeline: timeline.map((entry) => ({
+        at: entry.at,
+        root_status: safeState(entry.root_status),
+        latest_run_status: safeState(entry.latest_run_status),
+      })),
+      states: failureSnapshot,
+    },
+    cleanup: {
+      defaults_preserved: true,
+      pre_cleanup_artifact_written: preCleanupArtifactWritten,
+      steps: cleanupDiagnostics,
+      destructive_cleanup_pending: beforeCleanup,
+    },
+    log_metadata: {
+      captured_console_events: timeline.length,
+      raw_logs_retained: false,
+      prompts_retained: false,
+      provider_payloads_retained: false,
+      credentials_retained: false,
+    },
+  };
+  await mkdir(resolve(retainFile, '..'), { recursive: true });
+  const temp = `${retainFile}.tmp-${process.pid}`;
+  await writeFile(temp, `${JSON.stringify(artifact)}\n`, { mode: 0o600 });
+  await rename(temp, retainFile);
+}
+
+async function diagnosticSnapshot() {
+  if (!db || !rootTaskId) return { unavailable: true };
+  try {
+    const focused = await focusedSnapshot(rootTaskId);
+    const teamRun = await db.query(
+      `SELECT id,status,execution_mode,control_state,revision,lead_turn_count,phase,created_at,updated_at
+         FROM team_runs WHERE root_task_id=$1 ORDER BY created_at`,
+      [rootTaskId],
+    );
+    const members = await db.query(
+      `SELECT id,name,role,status,runtime_session_id,current_work_item_id,created_at,updated_at
+         FROM team_member_runs WHERE team_run_id IN (SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY created_at`,
+      [rootTaskId],
+    );
+    const work = await db.query(
+      `SELECT id,status,owner_member_id,created_by_member_id,execution_task_id,created_at,updated_at,completed_at
+         FROM team_work_items WHERE team_run_id IN (SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY created_at`,
+      [rootTaskId],
+    );
+    const attempts = await db.query(
+      `SELECT id,work_item_id,attempt_no,assignee_member_id,execution_task_id,status,created_at,updated_at,completed_at
+         FROM team_work_item_attempts WHERE team_run_id IN (SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY created_at`,
+      [rootTaskId],
+    );
+    const dispatches = await db.query(
+      `SELECT d.run_id,d.event_type,d.published_at,d.created_at
+         FROM run_dispatches d JOIN runs r ON r.id=d.run_id JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 ORDER BY d.created_at`,
+      [rootTaskId],
+    );
+    return {
+      team_runs: teamRun.rows.map(safeStateRow),
+      members: members.rows.map(safeStateRow),
+      work_items: work.rows.map(safeStateRow),
+      attempts: attempts.rows.map(safeStateRow),
+      dispatches: dispatches.rows.map(safeStateRow),
+      focused,
+      grants: focused.mcp_grant_refs,
+    };
+  } catch (error) {
+    return { unavailable: true, error_code: safeErrorCode(error) };
+  }
+}
+
+function safeStateRow(row) {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      key.endsWith('_at') ? safeTimestamp(value) : safeStateValue(key, value),
+    ]),
+  );
+}
+
+function safeStateValue(key, value) {
+  if (key.endsWith('_id') || key === 'id') return uuid(value) ? value : null;
+  if (key === 'revision' || key === 'lead_turn_count' || key === 'attempt_no')
+    return Number.isFinite(Number(value)) ? Number(value) : null;
+  return typeof value === 'string'
+    ? safeState(value)
+    : value === null
+      ? null
+      : Boolean(value);
+}
+
+function safeTimestamp(value) {
+  return value instanceof Date || typeof value === 'string'
+    ? new Date(value).toISOString()
+    : null;
+}
+
+function safeState(value) {
+  return typeof value === 'string' &&
+    /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(value)
+    ? value
+    : null;
+}
+
+function safeDbName(value) {
+  return typeof value === 'string' &&
+    /^agent_server_collab_[0-9a-z_-]+$/u.test(value)
+    ? value
+    : null;
+}
+
+function safeErrorCode(error) {
+  const value = error instanceof Error ? error.message.split(':', 1)[0] : '';
+  return safeState(value);
 }
 
 async function request(path, options) {
@@ -848,7 +1124,7 @@ function assertBffProject(project, reworkFeedback) {
   const memberTurns = members.map((session) => session.turns);
   if (
     memberTurns.filter((turns) => turns.length === 2).length !== 1 ||
-    memberTurns.filter((turns) => turns.length === 0).length !== 1 ||
+    memberTurns.filter((turns) => turns.length === 1).length !== 1 ||
     leadSession.turns.length !== 4
   )
     throw new Error('bff_project_turn_counts_invalid');
@@ -895,7 +1171,7 @@ function validatedPort(value) {
 
 async function poll(taskId) {
   const deadline =
-    Date.now() + Number(process.env.COLLAB_SMOKE_POLL_MS ?? 600_000);
+    Date.now() + Number(process.env.COLLAB_SMOKE_POLL_MS ?? 180_000);
   const startedAt = Date.now();
   let lastStatus;
   let lastLoggedAt = 0;
@@ -940,6 +1216,7 @@ async function pollFocusedStage(taskId, requestedStage) {
       return;
     }
     if (requestedStage === 'lead_command' && lastSnapshot.leadTerminal) {
+      await retainFocusedState(lastSnapshot);
       console.log(
         JSON.stringify({
           status: 'failed',
@@ -960,6 +1237,7 @@ async function pollFocusedStage(taskId, requestedStage) {
       snapshot: lastSnapshot ?? (await focusedSnapshot(taskId)),
     }),
   );
+  await retainFocusedState(lastSnapshot ?? (await focusedSnapshot(taskId)));
   throw new Error(`agentic_stage_timeout: ${requestedStage}`);
 }
 
@@ -1021,15 +1299,35 @@ async function focusedSnapshot(taskId) {
   );
   const events = leadRun
     ? await db.query(
-        `SELECT type,created_at,payload
+        `SELECT sequence,type,created_at,payload
            FROM run_events WHERE run_id=$1 ORDER BY sequence DESC LIMIT 10`,
         [leadRun.run_id],
       )
     : { rows: [] };
   const grantRefs = await readGrantRefs();
+  const permissionEvents = runIds.length
+    ? await db.query(
+        `SELECT run_id,sequence,type,created_at,payload
+           FROM (
+             SELECT run_id,sequence,type,created_at,payload,
+                    ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY sequence DESC) AS permission_rank
+               FROM run_events
+              WHERE run_id = ANY($1::uuid[]) AND payload->>'kind'='permission'
+           ) permission_events
+          WHERE permission_rank <= $2
+          ORDER BY run_id,sequence DESC`,
+        [runIds, MAX_PERMISSION_EVENTS_PER_RUN],
+      )
+    : { rows: [] };
+  const permissionEventsByRun = new Map();
+  for (const event of permissionEvents.rows) {
+    const existing = permissionEventsByRun.get(event.run_id) ?? [];
+    existing.push(safeRunEvent(event));
+    permissionEventsByRun.set(event.run_id, existing);
+  }
   const childEvents = runIds.length
     ? await db.query(
-        `SELECT run_id,type,created_at,payload
+        `SELECT run_id,sequence,type,created_at,payload
            FROM run_events WHERE run_id = ANY($1::uuid[])
           ORDER BY created_at DESC`,
         [runIds],
@@ -1050,7 +1348,10 @@ async function focusedSnapshot(taskId) {
     run_status: row.run_status,
     run_error_code: safeEnum(row.run_error_code, SAFE_ERROR_CODES),
     member_id: row.team_member_run_id,
-    last_10_events: eventsByRun.get(row.run_id) ?? [],
+    last_10_events: mergeSafeRunEvents(
+      eventsByRun.get(row.run_id) ?? [],
+      permissionEventsByRun.get(row.run_id) ?? [],
+    ),
     ...(row.team_task_kind === 'lead_turn' && row.run_id
       ? {
           command_receipts: safeCommandReceipts(
@@ -1089,12 +1390,7 @@ async function focusedSnapshot(taskId) {
     lead_run: leadRun
       ? {
           status: leadRun.run_status,
-          last_10_events: events.rows.reverse().map((row) => ({
-            type: row.type,
-            tool: safeString(row.payload?.tool_name),
-            status: safeString(row.payload?.status),
-            at: row.created_at,
-          })),
+          last_10_events: events.rows.reverse().map(safeRunEvent),
         }
       : null,
     mcp_grant_refs: grantRefs,
@@ -1121,23 +1417,85 @@ async function focusedSnapshot(taskId) {
   };
 }
 
+async function retainFocusedState(snapshot) {
+  if (!retainFile) return;
+  await mkdir(resolve(retainFile, '..'), { recursive: true });
+  const temp = `${retainFile}.tmp-${process.pid}`;
+  await writeFile(
+    temp,
+    `${JSON.stringify({
+      status: 'retained-ready',
+      stage,
+      root_task_id: rootTaskId,
+      db_name: dbName,
+      api_url: apiUrl,
+      runtime_root: '<runtime-root>',
+      snapshot,
+      timeline,
+    })}\n`,
+    { mode: 0o600 },
+  );
+  await rename(temp, retainFile);
+  retained = true;
+  console.log(
+    JSON.stringify({
+      status: 'retained-ready',
+      stage,
+      root_task_id: rootTaskId,
+    }),
+  );
+}
+
 function safeRunEvent(event) {
   const payload = event.payload ?? {};
+  const isPermission = payload.kind === 'permission';
   return {
+    sequence: safeSequence(event.sequence),
     type: safeEnum(event.type, SAFE_RUN_EVENT_TYPES),
     tool: safeEnum(payload.tool_name, SAFE_TOOL_NAMES),
-    status: safeString(payload.status),
+    status: safeState(payload.status),
     detail_kind: safeEnum(payload.detail_kind, SAFE_DETAIL_KINDS),
-    permission_kind:
-      event.type === 'permission'
-        ? safeEnum(
-            payload.permission_kind ?? payload.kind,
-            SAFE_PERMISSION_KINDS,
-          )
-        : null,
+    permission_category: isPermission
+      ? safeEnum(payload.category, SAFE_PERMISSION_KINDS)
+      : null,
+    permission_status: isPermission
+      ? safeEnum(payload.status, SAFE_PERMISSION_STATUSES)
+      : null,
+    permission_decision: isPermission
+      ? safeEnum(payload.decision, SAFE_PERMISSION_DECISIONS)
+      : null,
+    permission_summary: isPermission
+      ? safePermissionSummary(payload.summary)
+      : null,
     label: safeLabel(payload.label),
     at: event.created_at,
   };
+}
+
+function mergeSafeRunEvents(general, permissions) {
+  const byKey = new Map();
+  for (const event of [...general, ...permissions]) {
+    const key = `${event.sequence ?? 'unknown'}:${event.at ?? 'unknown'}`;
+    byKey.set(key, event);
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const sequenceDelta = (right.sequence ?? 0) - (left.sequence ?? 0);
+    return (
+      sequenceDelta ||
+      String(right.at ?? '').localeCompare(String(left.at ?? ''))
+    );
+  });
+}
+
+function safeSequence(value) {
+  const sequence = Number(value);
+  return Number.isSafeInteger(sequence) && sequence > 0 ? sequence : null;
+}
+
+function safePermissionSummary(value) {
+  return typeof value === 'string' && SAFE_PERMISSION_SUMMARIES.has(value)
+    ? value
+    : null;
 }
 
 function safeCommandReceipts(receipts) {
@@ -1175,7 +1533,7 @@ function safeToolRefs(value) {
           ? entry.ref
           : null,
     )
-    .filter(Boolean);
+    .filter((ref) => /^agent-server\/[a-z0-9-]+$/u.test(ref));
 }
 
 function safeString(value) {
@@ -1192,8 +1550,7 @@ async function readGrantRefs() {
         if (!file.endsWith('.json')) continue;
         const receipt = JSON.parse(await readFile(join(grants, file), 'utf8'));
         refs.push({
-          grant_id:
-            typeof receipt.grantId === 'string' ? receipt.grantId : null,
+          grant_id: uuid(receipt.grantId) ? receipt.grantId : null,
           allowed_tools: safeToolRefs(receipt.allowedTools),
         });
       }
@@ -1224,7 +1581,7 @@ function focusedStageSatisfied(requestedStage, snapshot) {
         row.attempt_no === 1 && row.status === 'completed' && row.has_result,
     );
   if (requestedStage === 'rework_command')
-    return receipts.has('team_work_request_rework');
+    return receipts.has('team_work_request_changes');
   if (requestedStage === 'attempt2_terminal')
     return attempts.some(
       (row) =>
@@ -1232,8 +1589,7 @@ function focusedStageSatisfied(requestedStage, snapshot) {
     );
   if (requestedStage === 'completion')
     return (
-      receipts.has('team_completion_request') ||
-      snapshot.team_run?.status === 'succeeded'
+      receipts.has('team_finish') || snapshot.team_run?.status === 'succeeded'
     );
   return false;
 }
@@ -1278,13 +1634,19 @@ async function pollCollaborativeChildren(rootTaskId) {
 function agentYaml(name) {
   const displayName =
     name === 'lead' ? 'Lead' : name === 'analyst' ? 'Analyst' : 'Verifier';
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: collab-smoke-${name}\nspec:\n  description: Collaborative team smoke ${displayName}\n  instructions: You are the ${displayName} in a collaborative team. ${
+  const teamTools =
     name === 'lead'
-      ? 'Use the agentic Team tools only. Make one current decision per turn, then immediately return a short decision text. Assign work based on the rubric and teammate capabilities; do not assume a fixed work topology. On review, require both a market snapshot and event evidence. Request exactly one bounded rework when the analyst lacks event evidence, then accept only completed attempts with results and request completion.'
+      ? '    - ref: agent-server/team-state\n      kind: tool\n    - ref: agent-server/team-work-list\n      kind: tool\n    - ref: agent-server/team-work-create\n      kind: tool\n    - ref: agent-server/team-work-request-changes\n      kind: tool\n    - ref: agent-server/team-work-accept-v2\n      kind: tool\n    - ref: agent-server/team-finish\n      kind: tool'
+      : '    - ref: agent-server/team-state\n      kind: tool\n    - ref: agent-server/team-work-list\n      kind: tool\n    - ref: agent-server/team-work-checkpoint\n      kind: tool\n    - ref: agent-server/team-work-submit\n      kind: tool';
+  const instructions =
+    name === 'lead'
+      ? 'Act directly as the Lead using only your canonical Lead Team tools: team-state, team-work-list, team-work-create, team-work-request-changes, team-work-accept-v2, and team-finish. Do not spawn or delegate to subagents in a Lead control turn, and never call member-only team_work_checkpoint or team_work_submit. In turn 1 immediately issue multiple commands: create exactly one Work item for analyst and exactly one for verifier, then return a short decision text. On review, require both a market snapshot and event evidence: request changes exactly once for the analyst Attempt 1 that lacks event evidence, and accept the qualifying verifier Work in the same turn. On the next turn accept the corrected analyst Attempt 2 only after both evidence categories are present, then finish. Never wait for running members or repeat a successful Team mutation.'
       : name === 'analyst'
-        ? 'Use the legacy work tools for the assigned item. On the first attempt, claim the item, call synthetic_stock_snapshot only, and complete it with a concise result that explicitly lacks event evidence. If the Lead requests rework, call synthetic_stock_snapshot and synthetic_event_batch, then complete the same item with both evidence categories. ONLY do ONE work item per attempt.'
-        : 'When assigned a work item, claim it with team_task_claim, call synthetic_stock_snapshot and synthetic_event_batch, then complete it with a concise result containing both evidence categories. ONLY do ONE work item.'
-  }\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n    - ref: agent-server/team-work-create-and-assign\n      kind: tool\n    - ref: agent-server/team-work-accept\n      kind: tool\n    - ref: agent-server/team-work-request-rework\n      kind: tool\n    - ref: agent-server/team-completion-request\n      kind: tool\n    - ref: agent-server/team-task-create\n      kind: tool\n    - ref: agent-server/team-task-list\n      kind: tool\n    - ref: agent-server/team-task-claim\n      kind: tool\n    - ref: agent-server/team-task-update\n      kind: tool\n    - ref: agent-server/team-members-list\n      kind: tool\n    - ref: agent-server/team-complete\n      kind: tool\n    - ref: agent-server/synthetic-stock-snapshot\n      kind: tool\n    - ref: agent-server/synthetic-event-batch\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+        ? 'Act as the outer Team member using only canonical Team tools and the named synthetic tools. You may delegate bounded domain research to subagents; descendants share your Team identity and MCP context and should return findings to you without repeating Team mutations. You must aggregate their findings and perform the canonical protocol yourself. For Attempt 1, obtain synthetic_stock_snapshot evidence exactly once and intentionally do not obtain synthetic_event_batch evidence; then call team_work_checkpoint exactly once and team_work_submit exactly once for the same Work. After Lead requests changes, for Attempt 2 obtain synthetic_stock_snapshot evidence exactly once and synthetic_event_batch evidence exactly once; then call team_work_checkpoint exactly once and team_work_submit exactly once. After a successful descendant or parent submit, stop all Team mutations. No domain output, plain text, or idle state completes Work: completion occurs only through canonical team_work_submit. Include ACME, data_as_of 2026-07-31, uncertainty and risk, and no investment advice.'
+        : 'Act as the outer Team member using only canonical Team tools and the named synthetic tools. You may delegate bounded domain research to subagents; descendants share your Team identity and MCP context and should return findings to you without repeating Team mutations. You must aggregate their findings, obtain synthetic_stock_snapshot evidence exactly once and synthetic_event_batch evidence exactly once, then call team_work_checkpoint exactly once and team_work_submit exactly once for the same Work. After a successful descendant or parent submit, stop all Team mutations. No domain output, plain text, or idle state completes Work: completion occurs only through canonical team_work_submit. Include ACME, data_as_of 2026-07-31, uncertainty and risk, and no investment advice.';
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: collab-smoke-${name}\nspec:\n  description: Collaborative team smoke ${displayName}\n  instructions: ${JSON.stringify(
+    instructions,
+  )}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${teamTools}\n    - ref: agent-server/synthetic-stock-snapshot\n      kind: tool\n    - ref: agent-server/synthetic-event-batch\n      kind: tool\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute your assigned role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 function environmentYaml() {

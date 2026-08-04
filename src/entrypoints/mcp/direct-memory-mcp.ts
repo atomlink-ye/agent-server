@@ -18,10 +18,12 @@ import {
 } from '../../application/agents/built-in-skills.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { canonicalTeamToolRefsForRole } from '../../application/teams/team-policy-evaluator.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   AGENT_SERVER_TEAM_TOOL_REFS,
+  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
@@ -51,7 +53,11 @@ type McpSession = Readonly<{
 export function createDirectMemoryMcpHandler(input: {
   readonly repository: MemoryApiRepository;
   readonly grants: RuntimeToolGrantService;
-  readonly teamTools?: { handler: TeamToolHandler };
+  readonly teamTools?: {
+    handler: TeamToolHandler;
+    contextResolver?: import('../../application/teams/team-tool-context.js').TeamToolContextResolver;
+    commands?: import('../../application/teams/team-command-service.js').TeamCommandService;
+  };
   readonly createLearningProposal?: CreateLearningProposal;
   readonly market?: SyntheticMarketAdapter;
   readonly logger?: Logger;
@@ -116,30 +122,48 @@ export function createDirectMemoryMcpHandler(input: {
       registerTools(server, grant, input.repository, input);
       if (
         input.teamTools &&
-        grant.allowedTools.some((tool) =>
-          AGENT_SERVER_TEAM_TOOL_REFS.includes(tool),
+        grant.allowedTools.some(
+          (tool) =>
+            AGENT_SERVER_TEAM_TOOL_REFS.includes(tool) ||
+            (
+              Object.values(
+                AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
+              ) as readonly string[]
+            ).includes(tool),
         )
       ) {
-        const actor = await input.teamTools.handler.actorForMemberRun(
-          grant.teamMemberRunId ?? grant.productSessionId,
-          {
-            tenantId: grant.tenantId,
-            workspaceId: grant.workspaceId,
-            principalType: grant.principalType,
-            principalId: grant.principalId,
-          },
-        );
+        const actor =
+          grant.teamMemberRunId && grant.taskId && grant.runId
+            ? await input.teamTools.handler.actorForMemberRun(
+                grant.teamMemberRunId,
+                {
+                  tenantId: grant.tenantId,
+                  workspaceId: grant.workspaceId,
+                  principalType: grant.principalType,
+                  principalId: grant.principalId,
+                },
+              )
+            : null;
         if (actor)
           registerTeamMcpTools(
             server,
             input.teamTools.handler,
             actor,
-            grant.allowedTools.some((tool) =>
-              AGENT_SERVER_TEAM_TOOL_REFS.slice(6).includes(tool),
-            )
-              ? AGENT_SERVER_TEAM_TOOL_REFS.slice(6)
-              : grant.allowedTools,
+            canonicalTeamToolRefsForRole(actor.role),
             (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
+            input.teamTools.contextResolver && input.teamTools.commands
+              ? {
+                  resolve: (currentGrant) =>
+                    input.teamTools!.contextResolver!.resolve(currentGrant),
+                  grantId: grant.grantId,
+                  currentGrant: () => input.grants.get(grant.grantId),
+                  begin: (grantId) => {
+                    input.grants.beginToolCall(grantId);
+                  },
+                  end: (grantId) => input.grants.endToolCall(grantId),
+                  commands: input.teamTools.commands,
+                }
+              : undefined,
           );
       }
     }

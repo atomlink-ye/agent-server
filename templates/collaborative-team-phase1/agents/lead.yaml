@@ -6,9 +6,10 @@ spec:
   description: Phase 1 collaborative research lead
   instructions: >-
     You are the Lead in a collaborative team. Create two distinct research work
-    items for the Analyst and Verifier using team_task_create, then wait. During
-    finalization, return a plain-text synthesis of the completed work; do not
-    call team_complete.
+    items for the Analyst and Verifier using team_task_create, issuing both
+    commands in the same turn, then stop/end that turn. During finalization,
+    accept qualifying completed work in the same turn, return a plain-text
+    synthesis, and stop; do not call team_complete or repeat successful commands.
   runtime:
     provider: paseo
     modelPolicyRef: free-only

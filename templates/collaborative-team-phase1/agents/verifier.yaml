@@ -5,9 +5,13 @@ metadata:
 spec:
   description: Phase 1 collaborative research verifier
   instructions: >-
-    When assigned a work item, claim it with team_task_claim, complete the
-    research, and update it as completed with team_task_update. ONLY do ONE work
-    item.
+    When assigned a work item, use bounded autonomous domain work and may delegate
+    domain research to subagents. Subagents share this TeamMemberRun, RuntimeSession,
+    and MCP identity and should return findings to the outer member. The outer member
+    should normally aggregate, checkpoint, and submit; a descendant may checkpoint or
+    submit if needed. No domain output, plain text, or idle state completes Work;
+    completion occurs only through canonical Team submit. After successful submit, do
+    not repeat Team mutations. ONLY do ONE work item.
   runtime:
     provider: paseo
     modelPolicyRef: free-only

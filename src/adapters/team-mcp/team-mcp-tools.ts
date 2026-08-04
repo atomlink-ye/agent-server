@@ -5,6 +5,12 @@ import type {
   TeamToolActor,
 } from '../../application/teams/team-tools.js';
 import { AGENT_SERVER_TEAM_TOOL_REFS } from '../../application/extensions/runtime-tool-grant-service.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../application/agents/built-in-skills.js';
+import type { TeamCommandService } from '../../application/teams/team-command-service.js';
+import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
+import type { RuntimeToolGrant } from '../../application/extensions/runtime-tool-grant-service.js';
+import { TeamContextError } from '../../application/teams/team-tool-context.js';
+import { TeamExecutionError } from '../../application/ports/team-execution-repository.js';
 
 export function registerTeamMcpTools(
   server: McpServer,
@@ -13,6 +19,16 @@ export function registerTeamMcpTools(
   allowedTools: readonly string[] = AGENT_SERVER_TEAM_TOOL_REFS,
   authorize: (toolRef: string) => boolean = (toolRef) =>
     allowedTools.includes(toolRef),
+  context?: {
+    readonly resolve: (
+      grant: RuntimeToolGrant,
+    ) => ReturnType<TeamToolContextResolver['resolve']>;
+    readonly grantId: string;
+    readonly currentGrant: () => RuntimeToolGrant | null;
+    readonly begin: (grantId: string) => void;
+    readonly end: (grantId: string) => void;
+    readonly commands: TeamCommandService;
+  },
 ): void {
   const id = z.string().uuid();
   const invoke = (toolRef: string, operation: () => Promise<unknown>) =>
@@ -228,6 +244,166 @@ export function registerTeamMcpTools(
           ),
         ),
     );
+  if (
+    context &&
+    Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS).some((ref) =>
+      allowedTools.includes(ref),
+    )
+  ) {
+    const bound = context;
+    const registerCanonical = (name: string, config: any, operation: any) => {
+      const registration = server.registerTool(name, config, operation);
+      const ref = canonicalRefForName(name);
+      if (!ref || !allowedTools.includes(ref)) registration.remove();
+    };
+    const current = (
+      ref: string,
+      operation: (
+        ctx: Awaited<ReturnType<typeof bound.resolve>>,
+      ) => Promise<unknown>,
+    ) => {
+      if (!authorize(ref)) return authorizationError();
+      return result(
+        (async () => {
+          try {
+            bound.begin(bound.grantId);
+          } catch {
+            throw new TeamContextError('stale_state');
+          }
+          try {
+            const grant = bound.currentGrant();
+            if (!grant) throw new TeamContextError('not_allowed');
+            return await operation(await bound.resolve(grant));
+          } finally {
+            bound.end(bound.grantId);
+          }
+        })(),
+      );
+    };
+    registerCanonical(
+      'team_state',
+      {
+        description: 'Read current Team state.',
+        inputSchema: {},
+        annotations: { readOnlyHint: true },
+      },
+      () =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state, (ctx) =>
+          bound.commands.state(ctx),
+        ),
+    );
+    registerCanonical(
+      'team_work_list',
+      {
+        description: 'List Team work.',
+        inputSchema: {},
+        annotations: { readOnlyHint: true },
+      },
+      () =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList, (ctx) =>
+          bound.commands.workList(ctx),
+        ),
+    );
+    registerCanonical(
+      'team_work_create',
+      {
+        description: 'Create Team work.',
+        inputSchema: {
+          subject: z.string().min(1),
+          description: z.string().optional(),
+          assignee: z.string().min(1),
+        },
+      },
+      (i: { subject: string; assignee: string; description?: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, (ctx) =>
+          bound.commands.createWork(ctx, {
+            subject: i.subject,
+            assignee: i.assignee,
+            ...(i.description === undefined
+              ? {}
+              : { description: i.description }),
+          }),
+        ),
+    );
+    registerCanonical(
+      'team_work_accept',
+      {
+        description: 'Accept submitted work.',
+        inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
+      },
+      (i: { work_ref: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept, (ctx) =>
+          bound.commands.accept(ctx, { workRef: i.work_ref }),
+        ),
+    );
+    registerCanonical(
+      'team_work_request_changes',
+      {
+        description: 'Request changes.',
+        inputSchema: {
+          work_ref: z.string().regex(/^work-\d+$/),
+          assignee: z.string().min(1),
+          feedback: z.string().min(1),
+        },
+      },
+      (i: { work_ref: string; assignee: string; feedback: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges, (ctx) =>
+          bound.commands.requestChanges(ctx, {
+            workRef: i.work_ref,
+            assignee: i.assignee,
+            feedback: i.feedback,
+          }),
+        ),
+    );
+    registerCanonical(
+      'team_finish',
+      {
+        description: 'Finish Team.',
+        inputSchema: {},
+      },
+      () =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish, (ctx) =>
+          bound.commands.finish(ctx, {}),
+        ),
+    );
+    registerCanonical(
+      'team_work_checkpoint',
+      {
+        description: 'Record a safe work checkpoint.',
+        inputSchema: { summary: z.string().min(1) },
+      },
+      (i: { summary: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint, (ctx) =>
+          bound.commands.checkpoint(ctx, i),
+        ),
+    );
+    registerCanonical(
+      'team_work_submit',
+      {
+        description: 'Submit the current work attempt.',
+        inputSchema: { summary: z.string().min(1) },
+      },
+      (i: { summary: string }) =>
+        current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit, (ctx) =>
+          bound.commands.submit(ctx, i),
+        ),
+    );
+  }
+}
+
+function canonicalRefForName(name: string): string | null {
+  const refs: Record<string, string> = {
+    team_state: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
+    team_work_list: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
+    team_work_create: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
+    team_work_accept: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
+    team_work_request_changes:
+      AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
+    team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
+    team_work_checkpoint: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
+    team_work_submit: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
+  };
+  return refs[name] ?? null;
 }
 
 async function result(value: Promise<unknown>) {
@@ -242,8 +418,13 @@ async function result(value: Promise<unknown>) {
       ],
       structuredContent,
     };
-  } catch {
-    const structuredContent = { error: 'internal_error' };
+  } catch (error) {
+    const structuredContent = {
+      error:
+        error instanceof TeamContextError || error instanceof TeamExecutionError
+          ? error.code
+          : 'internal_error',
+    };
     return {
       content: [
         { type: 'text' as const, text: JSON.stringify(structuredContent) },

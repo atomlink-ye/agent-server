@@ -14,18 +14,20 @@ import type {
   TeamExecutionRepository,
   OwnerScope,
 } from '../ports/team-execution-repository.js';
+import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
-import type { TeamEvidenceProvider } from '../ports/team-evidence-provider.js';
+const LIMIT = Object.freeze({
+  maxLeadTurns: 4,
+  maxWorkItems: 4,
+  maxAttempts: 2,
+});
 
-const LIMIT = 4;
-
-export class AgenticTeamExecutor {
+export class TeamDriver {
   public constructor(
     private readonly executions: TeamExecutionRepository,
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
-    private readonly evidence: TeamEvidenceProvider,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -69,13 +71,18 @@ export class AgenticTeamExecutor {
         now: this.now,
       }),
     );
+    const roster = spec.roster
+      .map((member) => `${member.name} (member)`)
+      .join(', ');
     const leadTask = this.child(
       root,
       claim.run,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `team_run_id: ${team.id}\n\nYou are the Lead. Review the objective and the empty WorkItem/Attempt snapshot below. Choose the single most valuable teammate for the next decision and call exactly one team_work_create_and_assign command. Then immediately return a short decision text and end this turn; do not inspect files, call another tool, or wait for members.\n\nObjective: ${claim.run.prompt}\n\nCurrent WorkItem/Attempt snapshot: empty.`,
+      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${LIMIT.maxWorkItems} Work items, max ${LIMIT.maxAttempts} attempts per Work item, max ${LIMIT.maxLeadTurns} Lead turns.`,
       lead.agentVersionId,
+      'lead_turn',
+      1,
     );
     const leadRun = createRun(claim.run.prompt, { now: this.now });
     await this.executions.createTeamRun(team);
@@ -111,12 +118,15 @@ export class AgenticTeamExecutor {
     if (input.task.teamTaskKind === 'work_attempt') {
       const attempt = attempts.find((a) => a.executionTaskId === input.task.id);
       if (!attempt) throw new Error('Agentic work attempt linkage is missing.');
-      await this.executions.updateAttemptStatus(
-        attempt.id,
-        input.run.status === 'succeeded' ? 'completed' : 'failed',
-        input.run.result?.text ?? null,
-        owner,
-      );
+      // A valid member/descendant submit is authoritative; runtime terminal
+      // failure only fails an unsubmitted running Attempt.
+      if (attempt.status !== 'completed' && attempt.status !== 'failed')
+        await this.executions.updateAttemptStatus(
+          attempt.id,
+          'failed',
+          null,
+          owner,
+        );
     } else if (input.run.status !== 'succeeded') {
       throw new Error('Agentic lead run failed.');
     }
@@ -142,11 +152,13 @@ export class AgenticTeamExecutor {
           owner,
         );
         if (after.some((a) => a.status !== 'completed')) return;
+        const finalText = input.run.result?.text?.trim();
+        if (!finalText) return;
         await this.executions.completeTeamRunAtomically({
           teamRunId: fresh.id,
           rootRunId: fresh.rootRunId,
           rootTaskId: fresh.rootTaskId,
-          finalText: input.run.result?.text ?? 'Team completed.',
+          finalText,
           owner,
           updatedAt: this.now().toISOString(),
           completionIntent: 'agentic',
@@ -175,7 +187,7 @@ export class AgenticTeamExecutor {
         fresh,
         input.task,
         owner,
-        'Review evidence. If any work lacks event evidence, request exactly one rework; otherwise accept all work and request completion.',
+        'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.',
       );
     } else if (
       currentAttempts.every(
@@ -200,6 +212,7 @@ export class AgenticTeamExecutor {
     parent: Task,
     attempts: readonly {
       id: string;
+      workItemId: string;
       executionTaskId: string | null;
       status: string;
       assigneeMemberId: string;
@@ -222,17 +235,13 @@ export class AgenticTeamExecutor {
         .replace(/\s+/gu, ' ')
         .trim()
         .slice(0, 512);
-      const attemptPrompt =
-        attempt.attemptNo === 1
-          ? 'This is attempt 1. The provided snapshot evidence intentionally excludes event evidence; report that gap explicitly.'
-          : feedback
-            ? `This is attempt ${attempt.attemptNo}. Lead feedback: ${feedback} The provided evidence adds the requested event evidence; report the completed evidence summary.`
-            : `This is attempt ${attempt.attemptNo}. No Lead feedback is available; return a concise report from the provided evidence.`;
-      const evidence = this.evidence.getWorkAttemptEvidence({
-        attemptNo: attempt.attemptNo,
-        feedback: feedback ?? null,
-      });
-      const task = this.child(
+      const item = await this.executions.findWorkItemById(
+        attempt.workItemId,
+        owner,
+      );
+      if (!item) throw new Error('Agentic work item is missing.');
+      const assignmentPrompt = `You are completing assigned Work. Subject: ${safeText(item.subject)}\nDescription: ${safeText(item.description)}\nAttempt number: ${attempt.attemptNo}\nLead feedback: ${feedback ?? '(none)'}\nUse the real domain tools available from your published agent profile. Checkpoint useful progress, then submit a concise result through the canonical team tool. Do not claim work outside this assignment.`;
+      const assignmentTask = this.child(
         parent,
         {
           id: parent.parentRunId ?? team.rootRunId,
@@ -240,17 +249,26 @@ export class AgenticTeamExecutor {
         } as Run,
         member,
         `member:${team.id}:${member.id}:work_attempt:${attempt.id}`,
-        `team_run_id: ${team.id}\n\nYou are completing assigned WorkItemAttempt ${attempt.attemptNo}. Lead feedback: ${feedback ?? '(none)'}\nProvided bounded synthetic evidence (use only this; do not call any tool, subagent, shell, search, read, write, or edit): ${JSON.stringify(evidence)}\n\n${attemptPrompt} Return a plain-text report based only on the provided evidence and immediately end the turn.`,
+        assignmentPrompt,
         member.agentVersionId,
         'work_attempt',
+        attempt.attemptNo,
       );
-      const run = createRun(`Work attempt ${attempt.id}`, { now: this.now });
+      const run = createRun(assignmentPrompt, { now: this.now });
       await this.admission.withTransaction(async (tx) => {
-        await tx.tasks.save(task);
-        await tx.runs.save(run, { taskId: task.id, attempt: 1 });
+        await tx.tasks.save(assignmentTask);
+        await tx.runs.save(run, { taskId: assignmentTask.id, attempt: 1 });
+      });
+      await this.executions.materializeAttempt({
+        attemptId: attempt.id,
+        executionTaskId: assignmentTask.id,
+        teamRunId: team.id,
+        assigneeMemberId: member.id,
+        owner,
+      });
+      await this.admission.withTransaction(async (tx) => {
         await tx.enqueueRunDispatch(run.id, run.createdAt);
       });
-      await this.executions.bindAttemptExecution(attempt.id, task.id, owner);
     }
   }
 
@@ -260,13 +278,32 @@ export class AgenticTeamExecutor {
     owner: OwnerScope,
     prompt: string,
   ) {
-    if (team.leadTurnCount >= LIMIT)
-      throw new Error('Agentic Team stopped: lead_turn_limit.');
-    const next = await this.executions.advanceAgenticLead({
-      teamRunId: team.id,
-      expectedRevision: team.revision,
-      owner,
-    });
+    if (team.leadTurnCount >= LIMIT.maxLeadTurns) {
+      await this.executions.failTeamRunAtomically({
+        teamRunId: team.id,
+        rootRunId: team.rootRunId,
+        rootTaskId: team.rootTaskId,
+        owner,
+        updatedAt: this.now().toISOString(),
+        failure: {
+          code: 'runtime_execution_failed',
+          message: 'The Team reached its Lead turn limit without completing.',
+        },
+      });
+      return;
+    }
+    let next: TeamRun;
+    try {
+      next = await this.executions.advanceAgenticLead({
+        teamRunId: team.id,
+        expectedRevision: team.revision,
+        owner,
+      });
+    } catch (error) {
+      if (error instanceof TeamExecutionError && error.code === 'stale_state')
+        return;
+      throw error;
+    }
     const lead = (
       await this.executions.findMembersByTeamRunId(team.id, owner)
     ).find((m) => m.role === 'lead');
@@ -279,9 +316,10 @@ export class AgenticTeamExecutor {
       } as Run,
       lead,
       `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
-      `team_run_id: ${team.id}\n\n${prompt}`,
+      `${prompt}\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
       lead.agentVersionId,
       'lead_turn',
+      next.leadTurnCount,
     );
     const run = createRun(prompt, { now: this.now });
     await this.admission.withTransaction(async (tx) => {
@@ -299,6 +337,7 @@ export class AgenticTeamExecutor {
     prompt: string,
     agentVersionId: string,
     kind: 'lead_turn' | 'work_attempt' = 'lead_turn',
+    sequence = 0,
   ): Task {
     return createChildTask({
       tenantId: parent.tenantId,
@@ -310,6 +349,7 @@ export class AgenticTeamExecutor {
       parentTaskId: parent.id,
       parentRunId: parentRun.id,
       teamMemberRunId: member.id,
+      teamSequence: sequence,
       invokableKind: 'agent',
       invokableVersionId: agentVersionId,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt }),
@@ -320,6 +360,13 @@ export class AgenticTeamExecutor {
       now: this.now,
     });
   }
+}
+function safeText(value: string | null | undefined): string {
+  return (value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 4096);
 }
 function ownerOf(t: Task): OwnerScope {
   return {

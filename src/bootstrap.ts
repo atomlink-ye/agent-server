@@ -84,11 +84,13 @@ import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/po
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
-import { SyntheticTeamEvidenceProvider } from './adapters/demo-market/synthetic-team-evidence-provider.js';
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
 import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
 import { TeamToolHandler } from './application/teams/team-tools.js';
-import { AgenticTeamExecutor } from './application/teams/agentic-team-executor.js';
+import { TeamToolContextResolver } from './application/teams/team-tool-context.js';
+import { TeamCommandService } from './application/teams/team-command-service.js';
+import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
+import { TeamDriver } from './application/teams/team-driver.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -240,7 +242,23 @@ export function createLarkOutboxWorker(
   });
 }
 
-export async function createService(config: AppConfig, logger: Logger) {
+export interface SingleRunDebugControl {
+  claimAndExecute(runId: string): Promise<{
+    readonly claimed: boolean;
+    readonly terminalStatus?: string;
+  }>;
+}
+
+export interface CreateServiceOptions {
+  /** Debug-only seam for retained, manually stepped fixtures. */
+  readonly singleRunDebug?: boolean;
+}
+
+export async function createService(
+  config: AppConfig,
+  logger: Logger,
+  options: CreateServiceOptions = {},
+) {
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   await registerSkill({
     registryRoot: config.skillRegistryRoot,
@@ -318,10 +336,21 @@ export async function createService(config: AppConfig, logger: Logger) {
       )
     : undefined;
   const events = new PostgresRunEventRepository(pool);
+  const teamPolicyEvaluator = new TeamPolicyEvaluator();
   const teamToolHandler = new TeamToolHandler(
     collaborativeTeamExecutions,
     runRepository,
     taskRepository,
+    events,
+  );
+  const teamToolContextResolver = new TeamToolContextResolver(
+    collaborativeTeamExecutions,
+    taskRepository,
+    runRepository,
+    teamPolicyEvaluator,
+  );
+  const teamCommandService = new TeamCommandService(
+    collaborativeTeamExecutions,
     events,
   );
   const runtimeMcpServer = new RuntimeMcpServer(
@@ -329,6 +358,8 @@ export async function createService(config: AppConfig, logger: Logger) {
     undefined,
     {
       handler: teamToolHandler,
+      contextResolver: teamToolContextResolver,
+      commands: teamCommandService,
     },
     createLearningProposal,
     new SyntheticMarketAdapter(),
@@ -397,12 +428,11 @@ export async function createService(config: AppConfig, logger: Logger) {
   const collaborativeExecutor = new CollaborativeTeamExecutor(
     collaborativeTeamExecutions,
   );
-  const agenticExecutor = new AgenticTeamExecutor(
+  const teamDriver = new TeamDriver(
     collaborativeTeamExecutions,
     taskRepository,
     runRepository,
     admissionRepository,
-    new SyntheticTeamEvidenceProvider(),
   );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
     collaborativeTeamExecutions,
@@ -410,7 +440,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     taskRepository,
     runRepository,
     admissionRepository,
-    agenticExecutor,
+    teamDriver,
   );
   const advanceTeamExecution = new AdvanceTeamExecution(
     teamExecutions,
@@ -442,7 +472,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     collaborativeExecutor,
     collaborativeTeamExecutions,
     runtimeSessions,
-    agenticExecutor,
+    teamDriver,
   );
   const executeRun = new ExecuteRun(
     completeRun,
@@ -463,6 +493,7 @@ export async function createService(config: AppConfig, logger: Logger) {
     config.paseo.runtimeCellRoot,
     teamExecutions,
     collaborativeTeamExecutions,
+    runRepository,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -579,19 +610,47 @@ export async function createService(config: AppConfig, logger: Logger) {
       updateMemory,
     },
   });
-  await startServiceResources({
-    dispatcher,
-    ...(larkWorker ? { larkWorker } : {}),
-    ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-    ...(larkReceiver ? { larkReceiver } : {}),
-    runtime,
-    runtimeMcpServer,
-    pool,
-  });
+  if (!options.singleRunDebug) {
+    await startServiceResources({
+      dispatcher,
+      ...(larkWorker ? { larkWorker } : {}),
+      ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+      ...(larkReceiver ? { larkReceiver } : {}),
+      runtime,
+      runtimeMcpServer,
+      pool,
+    });
+  }
+
+  const singleRunDebug: SingleRunDebugControl | undefined = options.singleRunDebug
+    ? {
+        claimAndExecute: async (runId) => {
+          const claimedAt = new Date();
+          const claim = await runRepository.claimQueuedById({
+            runId,
+            workerId,
+            activationId: randomUUID(),
+            claimedAt: claimedAt.toISOString(),
+            leaseExpiresAt: new Date(
+              claimedAt.getTime() +
+                Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+            ).toISOString(),
+          });
+          if (!claim) return { claimed: false };
+          await executeRun.execute(claim);
+          const terminal = await runRepository.findById(runId);
+          return {
+            claimed: true,
+            ...(terminal ? { terminalStatus: terminal.status } : {}),
+          };
+        },
+      }
+    : undefined;
 
   return {
     app,
     runtime,
+    ...(singleRunDebug ? { singleRunDebug } : {}),
     close: async () => {
       await closeServiceResources({
         dispatcher,

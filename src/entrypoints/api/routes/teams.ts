@@ -5,8 +5,8 @@ import type { InvokableRepository } from '../../../application/ports/invokable-r
 import type { EnvironmentRegistry } from '../../../application/ports/environment-registry.js';
 import { createTeamDefinition } from '../../../domain/invokables/team-definition.js';
 import {
-  createCollaborativeDraftTeamVersion,
-  publishCollaborativeTeamVersion,
+  createDraftTeamVersion,
+  publishTeamVersion,
 } from '../../../domain/invokables/team-version.js';
 import {
   validateAndCanonicalizeTeamPackage,
@@ -124,19 +124,15 @@ export function registerTeamRoutes(
         ...owner,
         name: parsed.package.metadata.name,
       });
-      const version = createCollaborativeDraftTeamVersion({
+      const version = createDraftTeamVersion({
         ...owner,
         definitionId: definition.id,
         name: definition.name,
-        collaborationSpec: {
+        spec: {
           lead: parsed.package.spec.lead,
           roster: parsed.package.spec.roster,
           environmentVersionId: parsed.package.spec.environmentVersionId,
         },
-        executionMode:
-          parsed.package.spec.coordination.mode === 'agentic_mve'
-            ? 'agentic_mve'
-            : 'collaborative_mve',
       });
       const atomicImport = d.invokableRepository.importTeamVersionAtomically
         ? await d.invokableRepository.importTeamVersionAtomically({
@@ -300,18 +296,9 @@ export function registerTeamRoutes(
         200,
       );
     }
-    if (
-      !['collaborative_mve', 'agentic_mve'].includes(version.executionMode) ||
-      !version.collaborationSpec
-    )
-      throw new HttpError(
-        400,
-        'invalid_team_package',
-        'The team version is not executable.',
-      );
     for (const ref of [
-      version.collaborationSpec.lead.agentVersionId,
-      ...version.collaborationSpec.roster.map((x) => x.agentVersionId),
+      version.spec.lead.agentVersionId,
+      ...version.spec.roster.map((x) => x.agentVersionId),
     ]) {
       const agent = await d.invokableRepository.findPublishedAgentVersionById(
         ref,
@@ -326,7 +313,7 @@ export function registerTeamRoutes(
     }
     const environment = await d.environmentRegistry.findVersion(
       owner,
-      version.collaborationSpec.environmentVersionId,
+      version.spec.environmentVersionId,
     );
     if (!environment || environment.status !== 'published')
       throw new HttpError(
@@ -334,7 +321,7 @@ export function registerTeamRoutes(
         'invalid_team_package',
         'The referenced environment version is not published in this owner scope.',
       );
-    const published = publishCollaborativeTeamVersion(version);
+    const published = publishTeamVersion(version);
     if (d.invokableRepository.publishTeamVersionAtomically)
       await d.invokableRepository
         .publishTeamVersionAtomically({
@@ -419,9 +406,8 @@ function versionResponse(v: any) {
     status: v.status,
     name: v.name,
     description: v.description,
-    execution_mode: v.executionMode,
     environment_version_id: v.environmentVersionId,
-    collaboration_spec: v.collaborationSpec,
+    spec: v.spec,
     created_at: v.createdAt,
     updated_at: v.updatedAt,
     published_at: v.publishedAt,

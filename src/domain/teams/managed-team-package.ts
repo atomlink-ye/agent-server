@@ -35,7 +35,6 @@ export interface RosterMemberSpec {
 }
 
 export interface CoordinationSpec {
-  readonly mode: 'collaborative' | 'agentic_mve';
   readonly taskAssignment: 'lead_or_self_claim';
 }
 
@@ -120,7 +119,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
   if (
     !metadata ||
     typeof metadata.name !== 'string' ||
-    metadata.name.length === 0
+    metadata.name.trim().length === 0
   ) {
     throw new TeamPackageValidationError(
       'invalid_metadata',
@@ -146,7 +145,6 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     'lead',
     'roster',
     'coordination',
-    'executionMode',
   ]);
   for (const key of Object.keys(spec)) {
     if (!allowedSpecKeys.has(key)) {
@@ -172,7 +170,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     !lead ||
     typeof lead !== 'object' ||
     typeof lead.name !== 'string' ||
-    lead.name.length === 0
+    lead.name.trim().length === 0
   ) {
     throw new TeamPackageValidationError(
       'invalid_lead',
@@ -196,6 +194,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       );
     }
   }
+  const leadName = lead.name.trim();
 
   const roster = spec.roster;
   if (!Array.isArray(roster) || roster.length !== 2) {
@@ -205,7 +204,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     );
   }
 
-  const names = new Set<string>();
+  const names = new Set<string>([leadName]);
   const rosterMembers: RosterMemberSpec[] = [];
   for (const member of roster) {
     if (typeof member !== 'object' || member === null) {
@@ -215,7 +214,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
       );
     }
     const m = member as Record<string, unknown>;
-    if (typeof m.name !== 'string' || m.name.length === 0) {
+    if (typeof m.name !== 'string' || m.name.trim().length === 0) {
       throw new TeamPackageValidationError(
         'invalid_roster',
         'Each roster member requires a non-empty name.',
@@ -238,25 +237,22 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
         );
       }
     }
-    if (names.has(m.name) || m.name === lead.name) {
+    const memberName = m.name.trim();
+    if (names.has(memberName)) {
       throw new TeamPackageValidationError(
         'duplicate_name',
-        `Duplicate member name: ${m.name}`,
+        `Duplicate member name: ${memberName}`,
       );
     }
-    names.add(m.name);
-    rosterMembers.push({ name: m.name, agentVersionId: m.agentVersionId });
+    names.add(memberName);
+    rosterMembers.push({ name: memberName, agentVersionId: m.agentVersionId });
   }
 
   const coordination = spec.coordination as Record<string, unknown> | undefined;
-  if (
-    !coordination ||
-    (coordination.mode !== 'collaborative' &&
-      coordination.mode !== 'agentic_mve')
-  ) {
+  if (!coordination) {
     throw new TeamPackageValidationError(
       'invalid_coordination',
-      'spec.coordination.mode must be collaborative.',
+      'spec.coordination is required.',
     );
   }
   if (coordination.taskAssignment !== 'lead_or_self_claim') {
@@ -266,7 +262,7 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
     );
   }
   for (const key of Object.keys(coordination)) {
-    if (!['mode', 'taskAssignment'].includes(key)) {
+    if (key !== 'taskAssignment') {
       throw new TeamPackageValidationError(
         'unknown_field',
         `Unknown coordination field: ${key}`,
@@ -277,16 +273,15 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
   const pkg: ManagedTeamPackage = {
     apiVersion: 'agent-server/v1alpha1',
     kind: 'ManagedTeam' as const,
-    metadata: { name: metadata.name },
+    metadata: { name: metadata.name.trim() },
     spec: {
       environmentVersionId: spec.environmentVersionId as string,
       lead: {
-        name: lead.name as string,
+        name: leadName,
         agentVersionId: lead.agentVersionId as string,
       },
       roster: rosterMembers,
       coordination: {
-        mode: coordination.mode as 'collaborative' | 'agentic_mve',
         taskAssignment: 'lead_or_self_claim' as const,
       },
     },

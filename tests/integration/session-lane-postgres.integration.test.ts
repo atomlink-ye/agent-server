@@ -144,7 +144,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         complete,
         tasks,
         invokables,
-        new ExecuteTeamTask(tasks, runs, invokables, runtime, complete),
+        new ExecuteTeamTask(invokables, {} as never),
         runtime,
         createLogger({
           service: 'session-lane-test',

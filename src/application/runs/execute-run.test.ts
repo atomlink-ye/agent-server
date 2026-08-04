@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createRun, transitionRun, type Run } from '../../domain/runs/run.js';
-import type { CompiledSequentialTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import {
   createChildTask,
@@ -136,7 +135,6 @@ describe('ExecuteRun', () => {
       rootRunId: 'root-run-1',
       teamVersionId: 'team-version-1',
       environmentVersionId: 'environment-version-1',
-      executionMode: 'agentic_mve',
       initialLeadTurn: true,
       now: () => new Date('2026-07-23T00:00:00.000Z'),
     });
@@ -214,7 +212,6 @@ describe('ExecuteRun', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       collaborativeExecutions as never,
       { findByIdForOwner: vi.fn(async () => claim.run) } as never,
     );
@@ -254,7 +251,6 @@ describe('ExecuteRun', () => {
         rootRunId: 'root-run-1',
         teamVersionId: 'team-version-1',
         environmentVersionId: 'environment-version-1',
-        executionMode: 'agentic_mve',
         initialLeadTurn: true,
         now,
       }),
@@ -467,7 +463,6 @@ describe('ExecuteRun', () => {
         rootRunId: 'root-run-schedule-atomic',
         teamVersionId: 'team-version-1',
         environmentVersionId: 'environment-version-1',
-        executionMode: 'agentic_mve',
         initialLeadTurn: true,
         now,
       }),
@@ -875,12 +870,18 @@ describe('ExecuteRun', () => {
       createRuntime(),
       { log: vi.fn() },
       () => new Date('2026-07-23T00:00:00.000Z'),
+      {
+        resolvePublished: vi.fn(async () => ({
+          instructions: 'Complete the assigned Team work.',
+          skills: [],
+          proposalLimit: 0,
+          toolRefs: [],
+        })),
+      } as never,
       undefined,
       undefined,
       undefined,
-      undefined,
-      undefined,
-      undefined,
+      { bind: vi.fn(async () => undefined) } as never,
       undefined,
       undefined,
       undefined,
@@ -970,130 +971,6 @@ describe('ExecuteRun', () => {
       'error',
       'run.completion_persistence_failed',
       expect.anything(),
-    );
-  });
-
-  it('preserves a failed child outcome when child completion persistence throws', async () => {
-    const claim = createClaim();
-    const task = createTask('team');
-    let savedChildRun: Run | undefined;
-    let savedChildTaskId: string | undefined;
-    const tasks = {
-      findById: vi.fn(async (id: string) =>
-        id === task.id ? task : undefined,
-      ),
-      save: vi.fn(async (savedTask: Task) => {
-        if (savedTask.parentTaskId) savedChildTaskId = savedTask.id;
-      }),
-    } as unknown as TaskRepository;
-    const completeRun = {
-      execute: vi.fn(
-        async ({ claim, run }: { claim: ClaimedRun; run: Run }) => {
-          throw new RunCompletionPersistenceError(
-            createRuntimeExecutionReceipt(run, claim.taskId),
-          );
-        },
-      ),
-    } as unknown as CompleteRun;
-    const runtime = createRuntime(new Error('child runtime exploded'));
-    const teamTask = new ExecuteTeamTask(
-      tasks,
-      {
-        save: vi.fn(async (run: Run, options?: { taskId?: string }) => {
-          savedChildRun = run;
-          savedChildTaskId = options?.taskId;
-        }),
-        claimQueuedById: vi.fn(async () => {
-          if (!savedChildRun) return null;
-          return {
-            ...claim,
-            taskId: savedChildTaskId ?? claim.taskId,
-            run: transitionRun(
-              savedChildRun,
-              'running',
-              {},
-              () => new Date('2026-07-23T00:00:00.000Z'),
-            ),
-          };
-        }),
-      } as never,
-      {
-        findPublishedTeamVersionById: vi.fn(async () => ({
-          compiledPlan: createTeamPlan(),
-        })),
-        findPublishedAgentVersionById: vi.fn(async () => ({
-          id: 'agent-version-1',
-          instructions: 'Be safe.',
-        })),
-      } as never,
-      runtime,
-      completeRun,
-      () => new Date('2026-07-23T00:00:00.000Z'),
-    );
-    const logger = { log: vi.fn() };
-    const executeRun = new ExecuteRun(
-      completeRun,
-      tasks,
-      {} as InvokableRepository,
-      teamTask,
-      runtime,
-      logger,
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      new ResolveAgentVersion(
-        { findVersion: vi.fn(async () => null) },
-        {
-          findPublishedAgentVersionById: vi.fn(async () => ({
-            id: 'agent-version-1',
-            instructions: 'Be safe.',
-          })),
-        } as never,
-        { resolve: vi.fn(async () => null) },
-      ),
-    );
-
-    const rejection = executeRun
-      .execute(claim)
-      .catch((error: unknown) => error);
-    await expect(rejection).resolves.toMatchObject({
-      name: 'RunCompletionPersistenceError',
-      receipt: {
-        runId: expect.any(String),
-        taskId: expect.any(String),
-        terminalStatus: 'failed',
-      },
-    });
-    const error = (await rejection) as {
-      readonly receipt: { readonly runId: string; readonly taskId?: string };
-    };
-    const childCall = (
-      completeRun.execute as unknown as {
-        mock: { calls: Array<Array<{ run: Run }>> };
-      }
-    ).mock.calls[0];
-    expect(error.receipt.runId).toBe(childCall?.[0]?.run.id);
-    expect(error.receipt.runId).not.toBe(claim.run.id);
-    expect(error.receipt.taskId).toEqual(expect.any(String));
-    expect(error.receipt.taskId).not.toBe(claim.taskId);
-    expect(runtime.execute).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(runtime.execute).mock.calls[0]?.[0]?.runId).not.toBe(
-      claim.run.id,
-    );
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-    expect(completeRun.execute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({ status: 'failed' }),
-      }),
-    );
-    expect(logger.log).toHaveBeenCalledTimes(2);
-    expect(
-      logger.log.mock.calls.filter(
-        (call: unknown[]) => call[1] === 'run.completion_persistence_failed',
-      ),
-    ).toHaveLength(1);
-    expect(logger.log).toHaveBeenCalledWith(
-      'error',
-      'run.completion_persistence_failed',
-      expect.objectContaining({ terminal_status: 'failed' }),
     );
   });
 
@@ -1505,23 +1382,4 @@ function createTask(
     sourceMessageId,
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });
-}
-
-function createTeamPlan(): CompiledSequentialTeamPlan {
-  return {
-    compilerVersion: 'sequential-mvp-v1',
-    teamVersionId: 'team-version-1',
-    entryNodeId: 'step-1',
-    finalOutputNodeId: 'step-1',
-    compiledAt: '2026-07-23T00:00:00.000Z',
-    steps: [
-      {
-        nodeId: 'step-1',
-        nodePath: 'step-1',
-        agentVersionId: 'agent-version-1',
-        order: 1,
-        output: 'final',
-      },
-    ],
-  };
 }

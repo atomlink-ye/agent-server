@@ -12,22 +12,14 @@ import {
   type AgentVersion,
 } from '../../domain/invokables/agent-version.js';
 import {
-  createCompiledDagTeamPlan,
-  createCompiledSequentialTeamPlan,
-  type CompiledSequentialTeamPlan,
-  type CompiledSequentialTeamStep,
-  type CompiledTeamPlan,
-} from '../../domain/invokables/compiled-team-plan.js';
-import {
   rehydrateTeamDefinition,
   type TeamDefinition,
 } from '../../domain/invokables/team-definition.js';
 import {
   rehydrateTeamVersion,
-  type TeamCollaborationSpec,
+  type TeamSpec,
   type TeamVersion,
 } from '../../domain/invokables/team-version.js';
-import { type TeamGraph } from '../../domain/invokables/team-graph.js';
 
 interface PostgresQueryable {
   query<Row = Record<string, unknown>>(
@@ -61,21 +53,9 @@ interface AgentVersionRow extends DefinitionRow {
 interface TeamVersionRow extends DefinitionRow {
   readonly definition_id: string;
   readonly status: TeamVersion['status'];
-  readonly graph: TeamGraph;
   readonly published_at: string | Date | null;
-  readonly environment_version_id: string | null;
-  readonly execution_mode: string;
-  readonly collaboration_spec: unknown;
-}
-
-interface CompiledPlanRow {
-  readonly team_version_id: string;
-  readonly compiler_version: string;
-  readonly entry_node_id: string;
-  readonly final_output_node_id: string;
-  readonly compiled_at: string | Date;
-  readonly steps: CompiledSequentialTeamStep[] | unknown[];
-  readonly environment_version_id: string | null;
+  readonly environment_version_id: string;
+  readonly spec: TeamSpec;
 }
 
 export class PostgresInvokableRepository implements InvokableRepository {
@@ -447,7 +427,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
     cursor: string | null = null,
   ): Promise<{ items: TeamVersion[]; nextCursor: string | null }> {
     const result = await this.database.query<TeamVersionRow>(
-      `SELECT id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, graph, execution_mode, collaboration_spec, environment_version_id, created_at, updated_at, published_at FROM team_versions WHERE definition_id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5 ORDER BY created_at,id LIMIT $6`,
+      `SELECT id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, spec, environment_version_id, created_at, updated_at, published_at FROM team_versions WHERE definition_id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5 ORDER BY created_at,id LIMIT $6`,
       [
         id,
         owner.tenantId,
@@ -460,14 +440,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
     const rows = result.rows ?? [];
     const selected = rows.slice(0, limit);
     return {
-      items: await Promise.all(
-        selected.map(async (row) =>
-          mapTeamVersionRow(
-            row,
-            await this.findCompiledTeamPlanByVersionId(row.id),
-          ),
-        ),
-      ),
+      items: selected.map(mapTeamVersionRow),
       nextCursor: rows.length > limit ? (selected.at(-1)?.id ?? null) : null,
     };
   }
@@ -477,153 +450,27 @@ export class PostgresInvokableRepository implements InvokableRepository {
     if (
       existing?.status === 'published' &&
       JSON.stringify(existing) !== JSON.stringify(version)
-    ) {
+    )
       throw new InvokableVersionImmutableError();
-    }
-
-    if (version.status === 'published') {
-      if (
-        version.executionMode === 'collaborative_mve' ||
-        version.executionMode === 'agentic_mve'
-      ) {
-        // Runtime-coordinated versions do not have compiled plans.
-        await this.database.query(
-          `
-            INSERT INTO team_versions (
-              id, definition_id, tenant_id, workspace_id, principal_type, principal_id,
-              status, name, description, graph, execution_mode, collaboration_spec,
-              environment_version_id, created_at, updated_at, published_at
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::jsonb, $13, $14, $15, $16
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              definition_id = EXCLUDED.definition_id,
-              tenant_id = EXCLUDED.tenant_id,
-              workspace_id = EXCLUDED.workspace_id,
-              principal_type = EXCLUDED.principal_type,
-              principal_id = EXCLUDED.principal_id,
-              status = EXCLUDED.status,
-              name = EXCLUDED.name,
-              description = EXCLUDED.description,
-              graph = EXCLUDED.graph,
-              execution_mode = EXCLUDED.execution_mode,
-              collaboration_spec = EXCLUDED.collaboration_spec,
-              environment_version_id = EXCLUDED.environment_version_id,
-              created_at = EXCLUDED.created_at,
-              updated_at = EXCLUDED.updated_at,
-              published_at = EXCLUDED.published_at
-          `,
-          teamVersionValues(version),
-        );
-        return;
-      }
-      const compiledPlan = version.compiledPlan;
-      if (!compiledPlan) {
-        throw new Error('Published team versions require a compiled plan');
-      }
-      await this.database.query(
-        `
-          WITH upserted_team_version AS (
-            INSERT INTO team_versions (
-              id, definition_id, tenant_id, workspace_id, principal_type,
-              principal_id, status, name, description, graph, execution_mode,
-              collaboration_spec, environment_version_id, created_at, updated_at,
-              published_at
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::jsonb,
-              $13, $14, $15, $16
-            )
-            ON CONFLICT (id) DO UPDATE SET
-              definition_id = EXCLUDED.definition_id,
-              tenant_id = EXCLUDED.tenant_id,
-              workspace_id = EXCLUDED.workspace_id,
-              principal_type = EXCLUDED.principal_type,
-              principal_id = EXCLUDED.principal_id,
-              status = EXCLUDED.status,
-              name = EXCLUDED.name,
-              description = EXCLUDED.description,
-              graph = EXCLUDED.graph,
-              execution_mode = EXCLUDED.execution_mode,
-              collaboration_spec = EXCLUDED.collaboration_spec,
-              environment_version_id = EXCLUDED.environment_version_id,
-              created_at = EXCLUDED.created_at,
-              updated_at = EXCLUDED.updated_at,
-              published_at = EXCLUDED.published_at
-            RETURNING id
-          )
-          INSERT INTO compiled_team_plans (
-            team_version_id, compiler_version, entry_node_id,
-            final_output_node_id, compiled_at, steps, environment_version_id
-          )
-          SELECT
-            upserted_team_version.id, $17, $18, $19, $20, $21::jsonb, $22
-          FROM upserted_team_version
-          ON CONFLICT (team_version_id) DO UPDATE SET
-            compiler_version = EXCLUDED.compiler_version,
-            entry_node_id = EXCLUDED.entry_node_id,
-            final_output_node_id = EXCLUDED.final_output_node_id,
-            compiled_at = EXCLUDED.compiled_at,
-            steps = EXCLUDED.steps,
-            environment_version_id = EXCLUDED.environment_version_id
-        `,
-        [
-          ...teamVersionValues(version),
-          compiledPlan.compilerVersion,
-          'entryNodeId' in compiledPlan
-            ? compiledPlan.entryNodeId
-            : compiledPlan.nodes[0]!.nodeId,
-          compiledPlan.finalOutputNodeId,
-          compiledPlan.compiledAt,
-          JSON.stringify(
-            'steps' in compiledPlan ? compiledPlan.steps : compiledPlan.nodes,
-          ),
-          'environmentVersionId' in compiledPlan
-            ? compiledPlan.environmentVersionId
-            : null,
-        ],
-      );
-      return;
-    }
-
     await this.database.query(
-      `
-        INSERT INTO team_versions (
-          id,
-          definition_id,
-          tenant_id,
-          workspace_id,
-          principal_type,
-          principal_id,
-          status,
-          name,
-          description,
-          graph,
-          execution_mode,
-          collaboration_spec,
-          environment_version_id,
-          created_at,
-          updated_at,
-          published_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::jsonb, $13, $14, $15, $16
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          definition_id = EXCLUDED.definition_id,
-          tenant_id = EXCLUDED.tenant_id,
-          workspace_id = EXCLUDED.workspace_id,
-          principal_type = EXCLUDED.principal_type,
-          principal_id = EXCLUDED.principal_id,
-          status = EXCLUDED.status,
-          name = EXCLUDED.name,
-          description = EXCLUDED.description,
-          graph = EXCLUDED.graph,
-          execution_mode = EXCLUDED.execution_mode,
-          collaboration_spec = EXCLUDED.collaboration_spec,
-          environment_version_id = EXCLUDED.environment_version_id,
-          created_at = EXCLUDED.created_at,
-          updated_at = EXCLUDED.updated_at,
-          published_at = EXCLUDED.published_at
-      `,
+      `INSERT INTO team_versions (
+        id,definition_id,tenant_id,workspace_id,principal_type,principal_id,
+        status,name,description,spec,environment_version_id,created_at,updated_at,published_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14)
+      ON CONFLICT (id) DO UPDATE SET
+        definition_id=EXCLUDED.definition_id,
+        tenant_id=EXCLUDED.tenant_id,
+        workspace_id=EXCLUDED.workspace_id,
+        principal_type=EXCLUDED.principal_type,
+        principal_id=EXCLUDED.principal_id,
+        status=EXCLUDED.status,
+        name=EXCLUDED.name,
+        description=EXCLUDED.description,
+        spec=EXCLUDED.spec,
+        environment_version_id=EXCLUDED.environment_version_id,
+        created_at=EXCLUDED.created_at,
+        updated_at=EXCLUDED.updated_at,
+        published_at=EXCLUDED.published_at`,
       teamVersionValues(version),
     );
   }
@@ -641,9 +488,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
           status,
           name,
           description,
-          graph,
-          execution_mode,
-          collaboration_spec,
+          spec,
           environment_version_id,
           created_at,
           updated_at,
@@ -671,9 +516,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
           status,
           name,
           description,
-          graph,
-          execution_mode,
-          collaboration_spec,
+          spec,
           environment_version_id,
           created_at,
           updated_at,
@@ -690,90 +533,6 @@ export class PostgresInvokableRepository implements InvokableRepository {
     );
   }
 
-  public async saveCompiledTeamPlan(plan: CompiledTeamPlan): Promise<void> {
-    const existing = await this.findCompiledTeamPlanByVersionId(
-      plan.teamVersionId,
-    );
-    if (existing && JSON.stringify(existing) !== JSON.stringify(plan)) {
-      throw new InvokableVersionImmutableError();
-    }
-
-    const teamVersionStatus = await this.loadTeamVersionStatus(
-      plan.teamVersionId,
-    );
-    if (teamVersionStatus !== 'published') {
-      throw new Error(
-        'Compiled team plans require a persisted published team version',
-      );
-    }
-
-    await this.database.query(
-      `
-        INSERT INTO compiled_team_plans (
-          team_version_id,
-          compiler_version,
-          entry_node_id,
-          final_output_node_id,
-          compiled_at,
-          steps,
-           environment_version_id
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6::jsonb, $7
-        )
-        ON CONFLICT (team_version_id) DO UPDATE SET
-          compiler_version = EXCLUDED.compiler_version,
-          entry_node_id = EXCLUDED.entry_node_id,
-          final_output_node_id = EXCLUDED.final_output_node_id,
-          compiled_at = EXCLUDED.compiled_at,
-          steps = EXCLUDED.steps,
-           environment_version_id = EXCLUDED.environment_version_id
-      `,
-      [
-        plan.teamVersionId,
-        plan.compilerVersion,
-        'entryNodeId' in plan ? plan.entryNodeId : plan.nodes[0]!.nodeId,
-        plan.finalOutputNodeId,
-        plan.compiledAt,
-        JSON.stringify('steps' in plan ? plan.steps : plan.nodes),
-        'environmentVersionId' in plan ? plan.environmentVersionId : null,
-      ],
-    );
-  }
-
-  public async findCompiledTeamPlanByVersionId(
-    teamVersionId: string,
-  ): Promise<CompiledTeamPlan | null> {
-    const result = await this.database.query<CompiledPlanRow>(
-      `
-        SELECT
-          team_version_id,
-          compiler_version,
-          entry_node_id,
-          final_output_node_id,
-          compiled_at,
-          steps,
-           environment_version_id
-        FROM compiled_team_plans
-        WHERE team_version_id = $1
-      `,
-      [teamVersionId],
-    );
-
-    const row = result.rows?.[0];
-    if (!row) return null;
-    const environment = await this.database.query<{
-      environment_version_id: string | null;
-    }>(
-      'SELECT environment_version_id FROM compiled_team_plans WHERE team_version_id = $1',
-      [teamVersionId],
-    );
-    return mapCompiledPlanRow({
-      ...row,
-      environment_version_id:
-        environment.rows?.[0]?.environment_version_id ?? null,
-    });
-  }
-
   private async findTeamVersionBySql(
     sql: string,
     values: readonly unknown[],
@@ -784,20 +543,7 @@ export class PostgresInvokableRepository implements InvokableRepository {
       return null;
     }
 
-    const environment = await this.database.query<{
-      environment_version_id: string | null;
-    }>('SELECT environment_version_id FROM team_versions WHERE id = $1', [
-      row.id,
-    ]);
-    const compiledPlan = await this.findCompiledTeamPlanByVersionId(row.id);
-    return mapTeamVersionRow(
-      {
-        ...row,
-        environment_version_id:
-          environment.rows?.[0]?.environment_version_id ?? null,
-      },
-      compiledPlan,
-    );
+    return mapTeamVersionRow(row);
   }
 
   private async loadTeamVersionStatus(
@@ -861,11 +607,7 @@ function teamVersionValues(version: TeamVersion): readonly unknown[] {
     version.status,
     version.name,
     version.description,
-    version.graph === null ? null : JSON.stringify(version.graph),
-    version.executionMode,
-    version.collaborationSpec
-      ? JSON.stringify(version.collaborationSpec)
-      : null,
+    JSON.stringify(version.spec),
     version.environmentVersionId,
     version.createdAt,
     version.updatedAt,
@@ -930,19 +672,7 @@ function mapAgentVersionRow(row: AgentVersionRow): AgentVersion {
   });
 }
 
-function mapTeamVersionRow(
-  row: TeamVersionRow,
-  compiledPlan: CompiledTeamPlan | null,
-): TeamVersion {
-  const executionMode: string =
-    typeof row.execution_mode === 'string'
-      ? row.execution_mode
-      : 'legacy_graph';
-  const collaborationSpec =
-    row.collaboration_spec != null
-      ? (row.collaboration_spec as Record<string, unknown>)
-      : null;
-
+function mapTeamVersionRow(row: TeamVersionRow): TeamVersion {
   return rehydrateTeamVersion({
     id: row.id,
     definitionId: row.definition_id,
@@ -953,45 +683,11 @@ function mapTeamVersionRow(
     status: row.status,
     name: row.name,
     description: row.description,
-    executionMode: executionMode as TeamVersion['executionMode'],
-    collaborationSpec: collaborationSpec
-      ? {
-          lead: (collaborationSpec.lead ?? {}) as TeamCollaborationSpec['lead'],
-          roster: (collaborationSpec.roster ??
-            []) as TeamCollaborationSpec['roster'],
-          environmentVersionId: String(
-            collaborationSpec.environmentVersionId ?? '',
-          ),
-        }
-      : null,
-    graph: row.graph,
-    environmentVersionId: row.environment_version_id ?? null,
-    compiledPlan,
+    spec: row.spec,
+    environmentVersionId: row.environment_version_id,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     publishedAt: row.published_at ? toIsoInstant(row.published_at) : null,
-  });
-}
-
-function mapCompiledPlanRow(row: CompiledPlanRow): CompiledTeamPlan {
-  if (row.compiler_version === 'dag-mve-v1') {
-    return createCompiledDagTeamPlan({
-      compilerVersion: 'dag-mve-v1',
-      teamVersionId: row.team_version_id,
-      environmentVersionId: row.environment_version_id ?? '',
-      finalOutputNodeId: row.final_output_node_id,
-      compiledAt: toIsoInstant(row.compiled_at),
-      nodes: row.steps as never,
-    });
-  }
-  return createCompiledSequentialTeamPlan({
-    compilerVersion:
-      row.compiler_version as CompiledSequentialTeamPlan['compilerVersion'],
-    teamVersionId: row.team_version_id,
-    entryNodeId: row.entry_node_id,
-    finalOutputNodeId: row.final_output_node_id,
-    compiledAt: toIsoInstant(row.compiled_at),
-    steps: row.steps as CompiledSequentialTeamStep[],
   });
 }
 

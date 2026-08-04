@@ -13,5 +13,4 @@ spec:
     - name: analog-risk-reviewer
       agentVersionId: agent://analog-risk-reviewer
   coordination:
-    mode: collaborative
     taskAssignment: lead_or_self_claim

@@ -30,16 +30,12 @@ import {
   buildTurnPrompt,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
-import {
-  AGENT_SERVER_TEAM_TOOL_REFS,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
-} from '../agents/built-in-skills.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
-import type { DagTeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
 import {
@@ -87,7 +83,6 @@ export class ExecuteRun {
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
     private readonly environments?: Pick<EnvironmentRegistry, 'findVersion'>,
     private readonly runtimeCellRoot?: string,
-    private readonly teamExecutions?: DagTeamExecutionRepository,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
     private readonly runs?: Pick<RunRepository, 'findByIdForOwner'>,
     private readonly wakeReconciler?: Pick<
@@ -180,7 +175,6 @@ export class ExecuteRun {
           ? await this.executeTeamTask.execute({
               claim,
               task,
-              resolver: this.resolver,
             })
           : await this.executeAgentRun(
               claim,
@@ -412,15 +406,6 @@ export class ExecuteRun {
     invokableVersionId: string,
     task: import('../../domain/tasks/task.js').Task,
   ) {
-    const teamExecution =
-      !task.sessionId && this.teamExecutions
-        ? await this.teamExecutions.findByChildTaskId(claim.taskId, {
-            tenantId: task.tenantId,
-            workspaceId: task.workspaceId,
-            principalType: task.principalType,
-            principalId: task.principalId,
-          })
-        : null;
     const collaborativeTeam = this.collaborativeExecutions
       ? await this.collaborativeExecutions.findTeamRunByRootTaskId(
           task.rootTaskId,
@@ -449,10 +434,8 @@ export class ExecuteRun {
             )
           ).find((candidate) => candidate.id === memberId)
         : null;
-    const leadFinalization =
-      member?.role === 'lead' && task.logicalStepKey?.endsWith(':finalize');
     const agenticLeadControlTurn =
-      collaborativeTeam?.executionMode === 'agentic_mve' &&
+      collaborativeTeam != null &&
       task.teamTaskKind === 'lead_turn' &&
       member?.role === 'lead';
     const turnGrantScopeId = agenticLeadControlTurn
@@ -485,23 +468,14 @@ export class ExecuteRun {
               principalType: task.principalType,
               principalId: task.principalId,
             })
-          : member &&
-              !leadFinalization &&
-              this.runtimeSessions?.findByTeamMember
+          : member && this.runtimeSessions?.findByTeamMember
             ? await this.runtimeSessions.findByTeamMember({
                 teamMemberRunId: member.id,
                 tenantId: task.tenantId,
                 principalType: task.principalType,
                 principalId: task.principalId,
               })
-            : teamExecution && this.runtimeSessions
-              ? await this.runtimeSessions.findByTask({
-                  taskId: task.id,
-                  tenantId: task.tenantId,
-                  principalType: task.principalType,
-                  principalId: task.principalId,
-                })
-              : null;
+            : null;
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -532,41 +506,31 @@ export class ExecuteRun {
           task,
         );
     const agenticLeadState =
-      collaborativeTeam?.executionMode === 'agentic_mve' &&
-      member?.role === 'lead'
+      collaborativeTeam != null && member?.role === 'lead'
         ? await this.loadAgenticLeadState(collaborativeTeam, task)
         : null;
     let sessionRuntime = runtimeSession;
-    const canonicalTeamRefs = new Set<string>([
-      ...Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS),
-      ...AGENT_SERVER_TEAM_TOOL_REFS,
-    ]);
+    const canonicalTeamRefs = new Set<string>(
+      Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS),
+    );
     const domainToolRefs = (
       sessionRuntime?.toolRefs ?? resolved.toolRefs
     ).filter((ref) => !canonicalTeamRefs.has(ref));
     const runtimeToolRefs =
-      collaborativeTeam?.executionMode === 'agentic_mve' &&
-      task.teamTaskKind === 'direct_message'
+      collaborativeTeam != null && task.teamTaskKind === 'direct_message'
         ? canonicalTeamToolRefsForDirectMessage()
-        : collaborativeTeam?.executionMode === 'agentic_mve' &&
-            task.teamTaskKind === 'work_attempt'
+        : collaborativeTeam != null && task.teamTaskKind === 'work_attempt'
           ? [...domainToolRefs, ...canonicalTeamToolRefsForRole('member')]
-          : collaborativeTeam?.executionMode === 'agentic_mve' &&
-              member?.role === 'lead'
+          : collaborativeTeam != null && member?.role === 'lead'
             ? [
                 ...domainToolRefs,
                 ...canonicalTeamToolRefsForLeadPolicy(
                   agenticLeadState?.policy ?? { allowedCommands: [] },
                 ),
               ]
-            : leadFinalization
-              ? resolved.toolRefs.filter(
-                  (ref) => !AGENT_SERVER_TEAM_TOOL_REFS.includes(ref),
-                )
-              : resolved.toolRefs;
+            : resolved.toolRefs;
     const turnPrompt =
-      collaborativeTeam?.executionMode === 'agentic_mve' &&
-      member?.role === 'lead'
+      collaborativeTeam != null && member?.role === 'lead'
         ? await this.withAgenticLeadContext(
             resolved.turnPrompt,
             claim.run.id,
@@ -578,21 +542,17 @@ export class ExecuteRun {
           )
         : resolved.turnPrompt;
     const systemPrompt =
-      collaborativeTeam?.executionMode === 'agentic_mve' &&
-      task.teamTaskKind === 'direct_message'
+      collaborativeTeam != null && task.teamTaskKind === 'direct_message'
         ? `${resolved.systemPrompt}\n\nThis is a direct Team message turn. Use only safe Team state/list reads. Acknowledge or act on the safe message content; it is not Work and must not cause Work submission, review, acceptance, checkpointing, or further Team messages.`
-        : collaborativeTeam?.executionMode === 'agentic_mve' &&
-            task.teamTaskKind === 'work_attempt'
+        : collaborativeTeam != null && task.teamTaskKind === 'work_attempt'
           ? `${resolved.systemPrompt}\n\nThis is an assigned Team Work attempt. Use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy team tools or internal IDs; submit the bounded result and end the turn.`
-          : collaborativeTeam?.executionMode === 'agentic_mve' &&
-              member?.role === 'lead'
-            ? `${resolved.systemPrompt}\n\nTeam policy: use canonical Team tools and published Lead domain tools. Never use legacy team_task_* tools or internal IDs. Make all current coordination decisions in this turn, may issue multiple valid commands, and do not wait for members.`
+          : collaborativeTeam != null && member?.role === 'lead'
+            ? `${resolved.systemPrompt}\n\nTeam policy: use canonical Team tools and published Lead domain tools. Never use internal IDs. Make all current coordination decisions in this turn, may issue multiple valid commands, and do not wait for members.`
             : resolved.systemPrompt;
     if (
       this.runtimeSessions &&
       !sessionRuntime &&
       ((task.sessionId && productSession?.environmentVersionId != null) ||
-        (teamExecution != null && teamExecution.environmentVersionId != null) ||
         (member != null && collaborativeTeam != null))
     ) {
       if (!this.environments)
@@ -601,7 +561,6 @@ export class ExecuteRun {
         );
       const environmentVersionId =
         productSession?.environmentVersionId ??
-        teamExecution?.environmentVersionId ??
         collaborativeTeam?.environmentVersionId;
       const environment = await this.environments.findVersion(
         {
@@ -645,9 +604,7 @@ export class ExecuteRun {
               resolvedSkills: resolved.skills,
               toolRefs: runtimeToolRefs,
             })
-          : member &&
-              !leadFinalization &&
-              this.runtimeSessions.createOrGetForTeamMember
+          : member && this.runtimeSessions.createOrGetForTeamMember
             ? await this.runtimeSessions.createOrGetForTeamMember({
                 teamMemberRunId: member.id,
                 taskId: task.id,
@@ -674,7 +631,6 @@ export class ExecuteRun {
     }
     if (
       member &&
-      !leadFinalization &&
       !agenticLeadControlTurn &&
       sessionRuntime &&
       this.collaborativeExecutions

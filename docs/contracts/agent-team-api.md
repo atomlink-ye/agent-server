@@ -1,114 +1,67 @@
-# Agent and Team registry contract
+# Agent Teams v2 API contract
 
-This phase implements durable owner-scoped Agent and Team registry records in PostgreSQL and their authenticated validate/import/read/list/publish routes. The current contract is the persisted Invokable model consumed by canonical Task admission and Team execution.
+Agent Teams v2 is the only current Team execution model. A published Team
+Version declares one Lead and a fixed roster. Task invocation activates the
+`TeamDriver`, which persists the Team's durable coordination state rather than
+compiling a graph or selecting an execution mode.
 
 ## Resource families
 
-- `AgentDefinition`: stable owner-scoped metadata (`id`, `name`, optional `description`, owner scope, timestamps)
-- `AgentVersion`: immutable executable version for one Agent definition (`draft|published`, `instructions`, timestamps, optional `publishedAt`)
-- `TeamDefinition`: stable owner-scoped metadata for a Team
-- `TeamVersion`: immutable Team graph version for one Team definition (`draft|published`, `graph`, timestamps, optional `publishedAt`)
-- `CompiledSequentialTeamPlan`: immutable publish-time IR attached to a published Team version
-- `CompiledDagTeamPlan`: immutable publish-time IR for the opt-in `dag-mve-v1` subset
+- `AgentDefinition` and immutable `AgentVersion` records describe leaf agents.
+- `TeamDefinition` and immutable published `TeamVersion` records describe the
+  fixed Lead, roster, and EnvironmentVersion used by a Team.
+- `TeamRun` is one durable activation of that Team Version for a root Task/Run.
+- `MemberRun` is the Lead or one roster member within a TeamRun.
+- `Work` is a bounded unit created, assigned, submitted, reviewed, accepted, or
+  returned for changes by the Team.
+- `TeamMessage` is a durable addressed wake, work update, or direct message.
 
-All resources are owner-scoped by `(tenantId, workspaceId, principalType, principalId)`. Published-version lookups used by Task invoke and Team execution stay inside that authenticated owner scope because this phase has no shared ACLs.
+All resources are owner-scoped by `(tenantId, workspaceId, principalType,
+principalId)`. Foreign and missing resources remain concealed. Published
+versions are immutable; draft/published registry reads and package
+validate/import/publish routes remain the supported definition-management
+surface.
 
-## Publish invariants
+## Invocation and lifecycle
 
-- Draft versions are mutable.
-- Published versions are immutable.
-- A published Agent version requires non-empty `instructions`.
-- A published Team version requires a compiled sequential Team plan whose `teamVersionId` matches the Team version.
-- Persisting a published Team version also persists its compiled plan in the same repository write so reads cannot observe a published Team version without that plan.
-- Database triggers reject mutation of published Agent versions, published Team versions, and compiled Team plans.
+`POST /api/v1/tasks:invoke` accepts a published Team Version through the
+standard invokable reference. The root Task/Run is the public entry point.
+`TeamDriver` creates the TeamRun, its fixed MemberRuns, and the first Lead Run.
+It then advances only durable Team state:
 
-## Sequential Team graph subset
+1. The Lead inspects Team state and creates or reviews Work.
+2. A roster member claims assigned Work and creates one bounded work attempt.
+3. Member checkpoint/submit updates Work state and wakes the Lead.
+4. The Lead accepts qualifying Work or requests changes; a direct TeamMessage
+   creates one addressed recipient continuation.
+5. The Lead finishes only after every Work item is accepted and no active
+   attempt remains.
 
-`TeamVersion.graph` is intentionally narrower than Team V1 in this phase:
+Every lead control turn, work attempt, and addressed continuation is a
+canonical child Task/Run linked to its TeamRun and MemberRun. Members retain
+independent runtime context; the Team does not imply a shared provider session.
+Command receipts, owner scope, revision fencing, and message deduplication are
+the mutating-operation boundaries.
 
-- every node is `kind: "invoke"`
-- every node references a published Agent version in the same owner scope
-- exactly one linear success chain is accepted by the compiler
-- no branching, fan-in, loops, joins, approvals, or dynamic delegation
-- exactly one terminal `output: "final"` node is required
+## Reads
 
-The compiler emits `compilerVersion: "sequential-mvp-v1"` plus ordered steps with stable `nodePath` values such as `step.0001`, `step.0002`, and so on.
+The authenticated owner can inspect the current Team state through:
 
-## Execution relationship
+- `GET /api/v1/tasks/{task_id}/team-run`
+- `GET /api/v1/team-runs/{id}`
+- `GET /api/v1/team-runs/{id}/members`
+- `GET /api/v1/team-runs/{id}/tasks`
+- `GET /api/v1/team-runs/{id}/direct-messages`
+- `GET /api/v1/team-runs:project?root_task_id={uuid}`
 
-Task invoke accepts an invokable reference:
+The project projection is bounded and safe for the same-origin Web BFF. It
+contains TeamRun, MemberRun, Work, attempt, turn, and safe status/report data;
+it excludes prompts, credentials, RuntimeSession identifiers, provider payloads,
+and raw upstream errors.
 
-```json
-{
-  "kind": "agent|team",
-  "version_id": "uuid"
-}
-```
+## Non-goals
 
-Published Agent versions execute as one leaf runtime call. Published Team versions execute in the control plane by materializing child Tasks and child Runs one sequential step at a time. Each child step executes a published Agent version through the same leaf runtime port. The next step input is derived from the previous child result text.
-
-The opt-in `dag-mve-v1` version materializes two independent leaf child
-Tasks/Runs in parallel. The root Run enters `waiting_children`; a durable join
-waits for both successes, then materializes a synthesizer child and completes
-the root. Child execution uses task-scoped RuntimeSessions/RuntimeCells and one
-shared EnvironmentVersion. Failure is fail-fast/deferred.
-
-## Collaborative Team MVE
-
-The published Team registry model contains one lead and a persisted roster.
-`POST /api/v1/tasks:invoke` creates the root Task/Run and a durable `TeamRun`;
-`GET /api/v1/tasks/{id}/team-run` plus the TeamRun member/task routes expose
-owner-scoped `TeamRun`, `MemberRun`, and `WorkItem` state. The lead kickoff
-prompt is generated from the stored roster names. Members use the team MCP
-tools (`team_members_list`, `team_task_list`, `team_task_create`,
-`team_task_claim`, `team_task_update`, and `team_complete`) through the runtime
-boundary. Each member has an independent RuntimeSession. Lead finalization uses
-a fresh task-scoped runtime execution/provider Agent while the lead member's
-canonical session remains the kickoff team_member session.
-
-Lead finalization requires exactly one completed, member-owned WorkItem per
-roster member, every member Task to be `completed`, and every member Task's
-latest/current Run to be `succeeded`. CAS phase transitions and owner scope
-remain enforcement boundaries.
-
-## Agentic Team MVE
-
-An `agentic_mve` Team has one fixed Lead and a fixed published roster. The Lead
-may issue only bounded semantic commands. The observed path creates one
-WorkItem and permits immutable attempts numbered 1 and 2; rework feedback is
-persisted on the second attempt. Each Lead turn and member attempt is a
-canonical Task/Run linked to its `TeamMemberRun`. Member Tasks reuse that
-member's internal RuntimeSession, which is never exposed by the Web contract.
-
-The Lead may request completion only after all WorkItems are accepted and no
-attempt is queued or running. In that terminal-ready state the only mutating
-Lead grant is the completion request. Completion is applied only after the
-requesting Lead Run succeeds. The MVE uses bounded limits of four Lead turns,
-four WorkItems, and two attempts per WorkItem. The fixed Verifier is part of the
-roster but was unused in the observed run; its Web status is therefore
-`queued`, with no fabricated result.
-
-The upstream safe Project projection is:
-
-```text
-GET /api/v1/team-runs:project?root_task_id=<uuid>
-```
-
-It is one owner-checked projection for a root Task and includes the Project,
-TeamRun, fixed TeamMemberRun sessions, bounded turns, WorkItems, attempts, and
-completion/report state needed by the Web BFF. General TeamRun listing,
-standalone attempt APIs, pagination, and richer recovery/history surfaces remain
-deferred.
-
-## Explicit non-goals
-
-This contract does not claim:
-
-- generalized Agent/Team CRUD beyond the implemented registry routes
-- generalized Team V1 parallel/join behavior beyond the observed `dag-mve-v1` subset
-- approvals, retry, reconcile, cancel propagation, or budget semantics
-- crash recovery, restart/resume, and production readiness
-- artifact lineage completion
-- OIDC users or shared Workspace ACL completion
-
-`/api/v1/runs` remains a compatibility API throughout this phase.
+This contract does not provide dynamic rosters, nested Teams, generalized graph
+execution, a separate public Team command API, shared ACLs, or production
+recovery/retry/cancellation guarantees. `/api/v1/runs` remains a compatibility
+API for prompt-only Runs; Team callers use Task invocation and TeamRun reads.

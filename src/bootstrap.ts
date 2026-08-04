@@ -26,7 +26,6 @@ import { AdmitRootTask } from './application/tasks/admit-root-task.js';
 import { GetTask } from './application/tasks/get-task.js';
 import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
-import { AdvanceTeamExecution } from './application/tasks/advance-team-execution.js';
 import { InvokeTask } from './application/tasks/invoke-task.js';
 import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
 import { createApp } from './entrypoints/api/app.js';
@@ -80,14 +79,10 @@ import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
-import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
-import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
-import { TeamPhaseCoordinator } from './application/teams/team-phase-coordinator.js';
-import { TeamToolHandler } from './application/teams/team-tools.js';
 import { TeamToolContextResolver } from './application/teams/team-tool-context.js';
 import { TeamCommandService } from './application/teams/team-command-service.js';
 import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
@@ -325,7 +320,6 @@ export async function createService(
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
-  const teamExecutions = new PostgresDagTeamExecutionRepository(pool);
   const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
   const teamMessages = new PostgresTeamMessageRepository(pool);
   const environmentRegistry = new PostgresEnvironmentRegistry(pool);
@@ -352,12 +346,6 @@ export async function createService(
     : undefined;
   const events = new PostgresRunEventRepository(pool);
   const teamPolicyEvaluator = new TeamPolicyEvaluator();
-  const teamToolHandler = new TeamToolHandler(
-    collaborativeTeamExecutions,
-    runRepository,
-    taskRepository,
-    events,
-  );
   const teamToolContextResolver = new TeamToolContextResolver(
     collaborativeTeamExecutions,
     taskRepository,
@@ -380,7 +368,6 @@ export async function createService(
     memoryApiRepository,
     undefined,
     {
-      handler: teamToolHandler,
       contextResolver: teamToolContextResolver,
       commands: teamCommandService,
     },
@@ -450,9 +437,6 @@ export async function createService(
     process.env.LARK_CLI_PROFILE ?? 'agent-test',
   );
   const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
-  const collaborativeExecutor = new CollaborativeTeamExecutor(
-    collaborativeTeamExecutions,
-  );
   const terminalWakeReconciler = options.deferTeamWakeReconcile
     ? {
         reconcileForRootTask: async () => 0,
@@ -466,21 +450,6 @@ export async function createService(
     teamMessages,
     terminalWakeReconciler,
   );
-  const teamPhaseCoordinator = new TeamPhaseCoordinator(
-    collaborativeTeamExecutions,
-    collaborativeExecutor,
-    taskRepository,
-    runRepository,
-    admissionRepository,
-    teamDriver,
-  );
-  const advanceTeamExecution = new AdvanceTeamExecution(
-    teamExecutions,
-    taskRepository,
-    runRepository,
-    invokableRepository,
-    admissionRepository,
-  );
   const completeRun = new CompleteRun(
     runRepository,
     taskRepository,
@@ -489,23 +458,22 @@ export async function createService(
     memoryReviewSurface
       ? { notifySucceeded: (input) => memoryReviewSurface.execute(input) }
       : undefined,
-    advanceTeamExecution,
-    teamPhaseCoordinator,
+    {
+      handleTerminalRun: async ({ run, task }) => {
+        const team = await collaborativeTeamExecutions.findTeamRunByRootTaskId(
+          task.rootTaskId,
+          {
+            tenantId: task.tenantId,
+            workspaceId: task.workspaceId,
+            principalType: task.principalType,
+            principalId: task.principalId,
+          },
+        );
+        if (team) await teamDriver.handleTerminalRun({ team, task, run });
+      },
+    },
   );
-  const executeTeamTask = new ExecuteTeamTask(
-    taskRepository,
-    runRepository,
-    invokableRepository,
-    runtime,
-    completeRun,
-    undefined,
-    admissionRepository,
-    teamExecutions,
-    collaborativeExecutor,
-    collaborativeTeamExecutions,
-    runtimeSessions,
-    teamDriver,
-  );
+  const executeTeamTask = new ExecuteTeamTask(invokableRepository, teamDriver);
   const executeRun = new ExecuteRun(
     completeRun,
     taskRepository,
@@ -523,7 +491,6 @@ export async function createService(
     sessions,
     environmentRegistry,
     config.paseo.runtimeCellRoot,
-    teamExecutions,
     collaborativeTeamExecutions,
     runRepository,
     terminalWakeReconciler,

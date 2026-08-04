@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 export type TeamRunStatus = 'active' | 'waiting' | 'succeeded' | 'failed';
-export type TeamExecutionMode = 'collaborative_mve' | 'agentic_mve';
 export type AgenticTeamControlState =
   'lead_ready' | 'lead_running' | 'member_work_running' | 'terminal';
 export type TeamRunPhase =
@@ -18,7 +17,6 @@ export interface TeamRun {
   readonly teamVersionId: string;
   readonly environmentVersionId: string;
   readonly status: TeamRunStatus;
-  readonly executionMode: TeamExecutionMode;
   readonly controlState: AgenticTeamControlState | null;
   readonly revision: number;
   readonly leadTurnCount: number;
@@ -40,7 +38,6 @@ export interface CreateTeamRunOptions {
   readonly rootRunId: string;
   readonly teamVersionId: string;
   readonly environmentVersionId: string;
-  readonly executionMode?: TeamExecutionMode;
   /** Set when activation admits the initial Agentic lead task in this path. */
   readonly initialLeadTurn?: boolean;
   readonly now?: () => Date;
@@ -48,8 +45,7 @@ export interface CreateTeamRunOptions {
 
 export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
   const timestamp = (options.now ?? (() => new Date()))().toISOString();
-  const initialAgenticLead =
-    options.executionMode === 'agentic_mve' && options.initialLeadTurn === true;
+  const initialAgenticLead = options.initialLeadTurn === true;
   return Object.freeze({
     id: options.id ?? randomUUID(),
     tenantId: options.tenantId,
@@ -61,13 +57,7 @@ export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
     teamVersionId: options.teamVersionId,
     environmentVersionId: options.environmentVersionId,
     status: 'active' as const,
-    executionMode: options.executionMode ?? 'collaborative_mve',
-    controlState:
-      options.executionMode === 'agentic_mve'
-        ? initialAgenticLead
-          ? 'lead_running'
-          : 'lead_ready'
-        : null,
+    controlState: initialAgenticLead ? 'lead_running' : 'lead_ready',
     revision: initialAgenticLead ? 1 : 0,
     leadTurnCount: initialAgenticLead ? 1 : 0,
     stopReason: null,
@@ -84,8 +74,6 @@ export function transitionAgenticControlState(
   expectedRevision: number,
   to: AgenticTeamControlState,
 ): TeamRun {
-  if (run.executionMode !== 'agentic_mve')
-    throw new Error('Not an agentic team run.');
   if (run.revision !== expectedRevision)
     throw new Error('Team run revision conflict.');
   return Object.freeze({

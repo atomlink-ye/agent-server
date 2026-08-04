@@ -1,8 +1,8 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-03
-updated_at: 2026-08-04
+updated_at: 2026-08-05
 authority: execution-plan
 ---
 
@@ -13,6 +13,13 @@ durable addressed wake, dependency-aware Work Board collaboration, narrow gates,
 safe Web projection, and destructive removal of the old Team modes.
 
 ## Current status
+
+**Phase 4 accepted:** the destructive cutover removes the old executors,
+compilers, graph/compiled-plan domain, legacy Team tools, templates, smokes, and
+debug surfaces. Migration 0026 preserves valid published v2 rows, removes old
+runtime state, restores immutability, and enforces the canonical spec shape. The
+final scripted and paid GLM 5.2 main flows both passed with four Lead turns and
+two member attempts; the independent final review reported no blocker.
 
 **Current Phase 1 evidence:** Phase 1 is committed at `76ef014` on
 `agent/agent-teams-v2`. Its retained single-Run path reached Attempt 2 terminal,
@@ -114,12 +121,12 @@ security boundaries, migrations, and core dependencies.
       Direct Message, Team Overview, and Web projection are proven by the accepted
       real-provider main flow; permission framework and graceful shutdown remain
       deferred.
-- [ ] Phase 4: after the v2 main-chain E2E, destructively remove old executors,
+- [x] Phase 4: after the v2 main-chain E2E, destructively remove old executors,
       compilers, repositories, routes, contracts, templates, smokes, tools, and
       documentation claims.
-- [ ] Resolve durable-state, public-contract, security, migration, and core
+- [x] Resolve durable-state, public-contract, security, migration, and core
       dependency Human Gates before the affected phase is accepted.
-- [ ] Obtain implementation-time artifact review for the required TeamMessage
+- [x] Obtain implementation-time artifact review for the required TeamMessage
       migration and public Direct Message route; no new user question is needed
       unless an invariant materially changes.
 
@@ -154,11 +161,11 @@ security boundaries, migrations, and core dependencies.
 
 ## Documentation impact
 
-- [ ] Product/Feature — update only when implementation evidence changes the
+- [x] Product/Feature — update only when implementation evidence changes the
       capability ledger.
-- [ ] Component/Contract — resolve Team, runtime, message, gate, and safe BFF
+- [x] Component/Contract — resolve Team, runtime, message, gate, and safe BFF
       contract impact at the relevant Human Gate.
-- [ ] ADR/Runbook — add or update only when migration, recovery, security, or
+- [x] ADR/Runbook — add or update only when migration, recovery, security, or
       operational behavior is actually implemented.
 
 ## Decisions and discoveries
@@ -304,35 +311,28 @@ because its captured Lead Task/Run were queued instead of active/running. Its
 different-TeamRun evidence remains retained at
 `.local/phase2-bounded-scenario-cd.json` and is not used for acceptance.
 
-- [ ] Four phase commits exist on one branch and no unrelated production changes
+- [x] Four phase commits exist on one branch and no unrelated production changes
       are present.
-- [ ] Real main-flow smoke evidence covers inner loop, durable wake, collaboration,
+- [x] Real main-flow smoke evidence covers inner loop, durable wake, collaboration,
       safe Web replay, and destructive no-reference cleanup.
-- [ ] Existing focused checks, if run, are reported exactly as supporting evidence.
-- [ ] Human Gates and documentation impact are resolved.
-- [ ] This plan is moved to `docs/exec-plans/completed/`, marked completed, and has
+- [x] Existing focused checks, if run, are reported exactly as supporting evidence.
+- [x] Human Gates and documentation impact are resolved.
+- [x] This plan is moved to `docs/exec-plans/completed/`, marked completed, and has
       no unchecked items only after all work is actually complete.
 
 ## Current blocker
 
-No Phase 3 product or provider blocker remains. The accepted GLM artifact also
-proves dependency/migration/replay, Direct delivery, safe projection, the
-completion fence, and mode-accurate member completion evidence. Key fixes retained
-by the implementation are fresh task-scoped Lead catalogs, canonical fixture
-prompts, stale-Lead/all-actor scheduling fences, recursive projection scanning, and
-the split between durable Lead commands and exposed coordination commands. Final
-verification also retained explicit stale-worker fencing, preserved the bound
-session-message receiver, made migration 0025 constraint replay schema-local, and
-made every later Lead CAS/Task/Run/dispatch admission one atomic transaction.
+None. Phase 4 removed the old runtime/compiler/tool surfaces and retained only the
+canonical TeamDriver path. Fresh and replayed PostgreSQL migration checks, scripted
+E2E, and the paid GLM 5.2 E2E all pass.
 
 Deferred, non-blocking: Direct redaction body text may retain the literal `$1`; it
 contains no secret and can be cleaned up later.
 
 ## Next exact command
 
-Begin Phase 4 Task 4.1 with the approved non-destructive canonical-v2 rewiring and
-reference scan. Destructive cleanup remains separately gated by the approved Phase
-4 scope and no-reference review. Do not push, merge, reset, or clean.
+Complete the independent final review, commit the Phase 4 boundary, and do not
+push, merge, reset, or clean.
 
 ## Cleanup state
 

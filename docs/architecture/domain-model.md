@@ -25,15 +25,13 @@ Agent Version and Team Version implement one immutable Invokable Version referen
 
 A Run is one attempt for that Task. Waiting for a child or approval resumes the same Run through a new Activation; retry after a terminal attempt creates a new Run. There is no persistent `NodeInvocation` or provider session that competes with Task as identity.
 
-The Collaborative Team MVE adds a durable TeamRun coordination record with
-MemberRuns and WorkItems; these records do not replace Task/Run identity.
-Each member Task has an independent RuntimeSession; lead finalization uses a
-fresh task-scoped RuntimeSession/provider Agent while the lead member's
-canonical session remains the kickoff team_member session. Exactly one completed,
-member-owned WorkItem per roster member, completed member Tasks, and succeeded
-latest Runs are required before bounded lead finalization. The older
-sequential Team and opt-in DAG records remain transitional compatibility
-paths.
+Agent Teams v2 adds durable TeamRun, MemberRun, Work, and TeamMessage
+coordination records; they do not replace Task/Run identity. `TeamDriver`
+creates one Lead and fixed roster, then materializes bounded Lead turns, Work
+attempts, and addressed message continuations as child Tasks/Runs. Each member
+Task has an independent RuntimeSession. The Lead can finish only after every
+Work item is accepted and no attempt is active. Dynamic rosters, nested Teams,
+generalized graph execution, and recovery are deferred.
 
 ## Session boundaries
 

@@ -727,7 +727,7 @@ function environmentYaml() {
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
 function teamYaml(lead, member, environment) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${member}\n  coordination:\n    mode: agentic_mve\n    taskAssignment: lead_or_self_claim\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${member}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 }
 async function expectSqlState(query, values, code) {
   try {
@@ -1567,7 +1567,6 @@ try {
       await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
     ).rows[0].revision,
     owner,
-    executionMode: 'v2',
   });
   marker('FINISH_RECEIPT_REPLAYED');
   const projection = await request(

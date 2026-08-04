@@ -48,9 +48,7 @@ export class TeamDriver {
     claim: ClaimedRun,
     root: Task,
   ): Promise<Run> {
-    const spec = version.collaborationSpec;
-    if (!spec)
-      throw new Error('Agentic Team version has no collaboration spec.');
+    const spec = version.spec;
     const owner = ownerOf(root);
     const team = createTeamRun({
       ...owner,
@@ -58,7 +56,6 @@ export class TeamDriver {
       rootRunId: claim.run.id,
       teamVersionId: version.id,
       environmentVersionId: spec.environmentVersionId,
-      executionMode: 'agentic_mve',
       initialLeadTurn: true,
       now: this.now,
     });
@@ -116,7 +113,6 @@ export class TeamDriver {
     task: Task;
     run: Run;
   }): Promise<void> {
-    if (input.team.executionMode !== 'agentic_mve') return;
     const owner = ownerOf(input.task);
     if (
       input.task.teamTaskKind !== 'lead_turn' &&
@@ -269,8 +265,6 @@ export class TeamDriver {
           finalText,
           owner,
           updatedAt: this.now().toISOString(),
-          completionIntent: 'agentic',
-          executionMode: 'agentic_mve',
           leadRunId: input.run.id,
         });
         return;

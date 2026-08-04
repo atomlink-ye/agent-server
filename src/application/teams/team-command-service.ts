@@ -136,7 +136,6 @@ export class TeamCommandService {
       commandHash: hash('team_work_create', input),
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
-      executionMode: 'v2',
     });
     return {
       work_ref: await this.workRef(context, result.item.id),
@@ -158,7 +157,6 @@ export class TeamCommandService {
       commandHash: hash('team_work_accept', input),
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
-      executionMode: 'v2',
     });
     return { work_ref: input.workRef, status: result.status };
   }
@@ -184,7 +182,6 @@ export class TeamCommandService {
       commandHash: hash('team_work_request_changes', input),
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
-      executionMode: 'v2',
     });
     return {
       work_ref: input.workRef,
@@ -207,7 +204,6 @@ export class TeamCommandService {
       commandHash: hash('team_finish', {}),
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
-      executionMode: 'v2',
     });
     return { requested: true };
   }

@@ -12,7 +12,7 @@ The current walking skeleton contains:
 - compatibility Run submit/get/claim/complete use cases under [`src/application/runs`](../../src/application/runs/);
 - public `POST /api/v1/tasks:invoke`, `GET /api/v1/tasks/{id}`, and `GET /api/v1/tasks/{id}/tree` routes under [`src/entrypoints/api/routes/tasks.ts`](../../src/entrypoints/api/routes/tasks.ts);
 - PostgreSQL-backed Task, Run, admission, and migration infrastructure under [`src/infrastructure/postgres`](../../src/infrastructure/postgres/);
-- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts) with lease/activation/fence metadata behind the repository boundary; the opt-in `dag-mve-v1` path also durably advances child/join state;
+- an in-process [`PostgresRunDispatcher`](../../src/infrastructure/postgres/postgres-run-dispatcher.ts) that claims queued Runs and executes published Agent work through `AgentRuntimePort` or published Team work through [`ExecuteTeamTask`](../../src/application/tasks/execute-team-task.ts), which delegates Team activation and terminal progression to `TeamDriver` with lease/activation/fence metadata behind the repository boundary;
 - the unchanged public `/api/v1/runs` compatibility surface.
 - the authenticated API-first Memory Store/Memory routes composed beside the
   existing Task/Run kernel; Memory Version append and current-pointer CAS are
@@ -23,19 +23,15 @@ Admission first creates or replays through a transaction-scoped repository. The 
 
 When runtime work succeeds but terminal persistence fails, the kernel preserves the distinction with `RunCompletionPersistenceError` and a safe `RuntimeExecutionReceipt`; it does not relabel the outcome as `runtime_execution_failed`. Receipt durability and reconciliation remain deferred to later recovery work.
 
-The observed `dag-mve-v1` path starts two parallel leaf child Tasks/Runs, transitions the root Run to `waiting_children` without retaining its lease, durably joins both successes, then starts a synthesizer child and completes the root. Each child gets task-scoped RuntimeSession/RuntimeCell state while the Team uses one shared EnvironmentVersion. `sequential-mvp-v1` remains unchanged. Crash recovery, restart/resume, retries, cancellation propagation, generalized reconciliation, approvals, budget propagation, and artifact/evidence orchestration remain out of scope.
-
-The Collaborative Team MVE is the separate managed Team path: registry/API
-submission creates a TeamRun with one lead and its persisted roster. TeamRun,
-MemberRun, and WorkItem reads are owner-scoped. The lead kickoff prompt is
-roster-driven, members use the team MCP tools, and each member runs in an
-independent RuntimeSession. Lead finalization uses a fresh task-scoped runtime
-execution/provider Agent while the lead member's canonical session remains the
-kickoff team_member session.
-Lead finalization requires exactly one completed, member-owned WorkItem per
-roster member, every member Task to be completed, and every latest/current Run
-to be succeeded. Retry, recovery, cancellation, migration, and production
-readiness remain deferred.
+Agent Teams v2 creates a TeamRun with one Lead and fixed persisted roster.
+`TeamDriver` is the sole Team coordination path: its durable Work and
+TeamMessage state drives bounded Lead turns, member work attempts, and
+addressed wakes. TeamRun, MemberRun, Work, and direct-message reads are
+owner-scoped. Members use the Team MCP tools and run in independent
+RuntimeSessions. The Lead may finish only after all Work is accepted and no
+attempt is active. Crash recovery, restart/resume, retries, cancellation,
+generalized reconciliation, approvals, budget propagation, and artifact/evidence
+orchestration remain out of scope.
 
 ## Minimum Phase D interaction
 
@@ -78,13 +74,10 @@ Agent a Memory HTTP capability. Continuation sends only the current turn.
 
 ## Team boundary
 
-Agent and Team are both Invokable versions. Collaborative Team uses the
-managed Team registry/API and durable TeamRun/MemberRun/WorkItem records;
-`sequential-mvp-v1` remains compiled sequential compatibility IR. Opt-in
-`dag-mve-v1` creates two parallel leaf child Tasks/Runs, waits for their
-durable join, then creates a synthesizer child. Leaf Agent Runs alone cross
-the Runtime Port. Public callers invoke through Task routes and inspect
-owner-scoped TeamRun reads.
+Agent and Team are both Invokable versions. Agent Teams v2 uses the managed
+Team registry/API plus durable TeamRun, MemberRun, Work, and TeamMessage
+records. Leaf Agent Runs alone cross the Runtime Port. Public callers invoke
+through Task routes and inspect owner-scoped TeamRun reads.
 
 ## Completion evidence
 

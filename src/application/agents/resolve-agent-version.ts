@@ -6,7 +6,6 @@ import type {
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  AGENT_SERVER_TEAM_TOOL_REFS,
   SUPPORTED_MANAGED_AGENT_TOOL_REFS,
 } from './built-in-skills.js';
 import type {

@@ -204,7 +204,6 @@ function run(v: any) {
     status: v.status,
     phase: v.phase,
     final_text: v.finalText,
-    execution_mode: v.executionMode,
     control_state: v.controlState,
     revision: v.revision,
     lead_turn_count: v.leadTurnCount,

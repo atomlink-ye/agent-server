@@ -216,7 +216,7 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
       await client.query('BEGIN');
       const team = await client.query<{ id: string; root_task_id: string }>(
         `SELECT id,root_task_id FROM team_runs
-          WHERE id=$1 AND execution_mode='agentic_mve' AND status='active'
+          WHERE id=$1 AND status='active'
             AND revision=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
       );

@@ -7,9 +7,10 @@
 
 ## Decision summary
 
-Agent Teams v2 uses one control-plane runtime. The final TeamVersion has only the
-v2 fixed roster, Lead, policy definition, Work specifications, dependency edges,
-and final-output definition required by the TeamDriver. Old DAG, Sequential,
+Agent Teams v2 uses one control-plane runtime. The final TeamVersion selects only
+the v2 fixed roster, Lead, and Environment; TeamDriver owns the one fixed policy,
+dynamic Work/dependency protocol, and final-output gate rather than accepting
+caller-selectable variants. Old DAG, Sequential,
 Collaborative MVE, and Agentic MVE shapes are not accepted by new invocation and
 have no runtime or API read path. There is one branch and one eventual
 PR, with four independent phase commits.
@@ -331,7 +332,7 @@ columns, and constraints.
 The final TeamVersion has no legacy `execution_mode` driver selection and no
 `compiled_plan` policy for old no-Lead DAGs. Remove mode branches and the old
 graph/compiled-plan execution contract; retain only the v2 fixed roster, Lead,
-policy, Work, dependency, and final-output definition.
+Environment, and the server-owned v2 policy/Work/dependency/final-output rules.
 
 `src/application/tasks/execute-team-task.ts` is retained as the canonical root
 Task entry and calls only TeamDriver. `src/application/runs/execute-run.ts` stays

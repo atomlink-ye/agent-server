@@ -319,13 +319,7 @@ export async function createTestApp(
     runtime,
     events,
   );
-  const executeTeamTask = new ExecuteTeamTask(
-    taskRepository,
-    runRepository,
-    invokableRepository,
-    runtime,
-    completeRun,
-  );
+  const executeTeamTask = new ExecuteTeamTask(invokableRepository, {} as never);
   const executeRun = new ExecuteRun(
     completeRun,
     taskRepository,

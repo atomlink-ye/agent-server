@@ -491,9 +491,9 @@
 
 ## Phase 4 — destructive single-runtime cutover
 
-Phase 4 destructive cleanup remains gated. After Phase 3 final verification,
-review, and commit, begin only its non-destructive rewiring; complete the approved
-destructive-scope/no-reference Human Gate before deletions.
+The user approved the destructive Human Gate on 2026-08-05. The cutover is now
+implemented and verified; immutable historical migrations remain as the only old
+mode references.
 
 ### Task 4.1 — Define and wire only the canonical v2 TeamVersion
 
@@ -512,18 +512,18 @@ destructive-scope/no-reference Human Gate before deletions.
 
 **Steps**
 
-- [ ] Read current TeamVersion admission, registry, route, and bootstrap symbols;
+- [x] Read current TeamVersion admission, registry, route, and bootstrap symbols;
       then make the v2 fixed roster/Lead/policy/Work/dependency/final-output shape the
       only accepted invocation contract.
-- [ ] Remove `execution_mode` driver selection, graph/compiled-plan execution
+- [x] Remove `execution_mode` driver selection, graph/compiled-plan execution
       contracts, and all mode branches. Do not add a `compiled_plan` policy for an old
       no-Lead DAG.
-- [ ] Run a reference scan before deleting anything else; record every runtime,
+- [x] Run a reference scan before deleting anything else; record every runtime,
       route, contract, template, smoke, and documentation reference to old modes.
 
 **Focused checks and observation**
 
-- [ ] Use the old smoke scripts only as behavior reference while implementing;
+- [x] Use the old smoke scripts only as behavior reference while implementing;
       they are not gates and are not required to pass.
 
 ### Task 4.2 — Delete old runtime, surface, and claims
@@ -562,32 +562,33 @@ destructive-scope/no-reference Human Gate before deletions.
 
 **Steps**
 
-- [ ] Confirm the new v2 real E2E has passed before each destructive deletion.
-- [ ] Confirm `src/application/tasks/execute-team-task.ts` remains the canonical
+- [x] Confirm the new v2 real E2E has passed before each destructive deletion.
+- [x] Confirm `src/application/tasks/execute-team-task.ts` remains the canonical
       root Task entry and calls only `src/application/teams/team-driver.ts`; do not
       delete it.
-- [ ] Keep migrations `0003`, `0019`, `0020`, and `0023` only as immutable
+- [x] Keep migrations `0003`, `0019`, `0020`, and `0023` only as immutable
       migration-chain records; they do not preserve old runtime or reads.
-- [ ] Add `src/infrastructure/postgres/migrations/0026_agent-teams-v2-cutover.sql`
+- [x] Add `src/infrastructure/postgres/migrations/0026_agent-teams-v2-cutover.sql`
       only if schema cleanup is required; it is forward-only and approved by the
       destructive-scope Human Gate.
-- [ ] Run the post-delete no-reference scan and remove every old runtime
+- [x] Run the post-delete no-reference scan and remove every old runtime
       reference. Development DB/fixtures may be rebuilt.
-- [ ] Update `README.md`, `docs/features.md`, and
+- [x] Update `README.md`, `docs/features.md`, and
       `docs/contracts/agent-team-api.md` so the documented product surface contains
       only the v2 TeamVersion, TeamDriver, canonical tools, TeamRun/MemberRun, Work,
       and TeamMessage; remove old mode claims.
 
 **Focused checks and observation**
 
-- [ ] Run `make agent-teams-v2-smoke`; observe the v2 main chain succeeds.
-- [ ] Run the no-reference scan; observe no old executor/compiler/repository,
+- [x] Run `make agent-teams-v2-smoke`; observe both scripted and paid GLM 5.2
+      main chains succeed with four Lead turns and two member attempts.
+- [x] Run the no-reference scan; observe no old executor/compiler/repository,
       route, contract, template, smoke, tool registration, mode branch, or
       documentation claim remains.
 
 ### Phase 4 boundary
 
-- [ ] Commit only at phase end after Tasks 4.1–4.2 and their observations:
+- [x] Commit only at phase end after Tasks 4.1–4.2 and their observations:
       `git add -u -- src/application/tasks/execute-team-task.ts src/application/tasks/advance-team-execution.ts src/application/invokables/dag-team-compiler.ts src/application/invokables/sequential-team-compiler.ts src/infrastructure/postgres/postgres-team-execution-repository.ts src/application/teams/collaborative-team-executor.ts src/application/teams/agentic-team-executor.ts src/application/teams/team-phase-coordinator.ts src/adapters/demo-market/synthetic-team-evidence-provider.ts src/application/teams/team-tools.ts src/adapters/team-mcp/team-mcp-tools.ts src/bootstrap.ts src/contracts/teams.ts src/entrypoints/api/routes/teams.ts src/entrypoints/api/routes/team-runs.ts package.json Makefile README.md docs/features.md docs/contracts/agent-team-api.md && git add src/domain/teams/managed-team-package.ts src/infrastructure/postgres/postgres-invokable-repository.ts && git commit -m "Destructively cut over Agent Teams v2 runtime"`.
 
 ## Final verification and deferred ledger
@@ -595,13 +596,13 @@ destructive-scope/no-reference Human Gate before deletions.
 - [ ] Deferred, non-blocking: remove the literal `$1` that can remain in Direct
       redaction body text; it contains no secret.
 
-- [ ] Under Node 24 run:
+- [x] Under Node 24 run:
       `export NVM_DIR=/Users/fanye/.nvm; . "$NVM_DIR/nvm.sh"; nvm use 24; export PNPM_HOME=/Users/fanye/Library/pnpm; export PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"; make check`.
-- [ ] Run `git diff --check`; observe zero whitespace errors.
-- [ ] Inspect only the three plan/design files for wrong paths, stale status,
+- [x] Run `git diff --check`; observe zero whitespace errors.
+- [x] Inspect only the three plan/design files for wrong paths, stale status,
       unresolved placeholders, contradictory smoke commands, and forbidden new-test
       instructions; observe none.
-- [ ] Record existing focused command results exactly; do not author new tests.
+- [x] Record existing focused command results exactly; do not author new tests.
 
 Deferred: generic permission frameworks, graceful shutdown, dynamic rosters, nested Teams, general workflow authoring, a second
 generic queue, generalized retry, multi-node leadership, advanced accounting,

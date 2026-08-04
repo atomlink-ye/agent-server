@@ -2,7 +2,6 @@ import { createServer, type Server } from 'node:http';
 import { createDirectMemoryMcpHandler } from '../../entrypoints/mcp/direct-memory-mcp.js';
 import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
-import type { TeamToolHandler } from '../../application/teams/team-tools.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import type { TeamCommandService } from '../../application/teams/team-command-service.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
@@ -21,7 +20,6 @@ export class RuntimeMcpServer {
     repository: MemoryApiRepository,
     grants = new RuntimeToolGrantService(),
     private readonly teamTools?: {
-      handler: TeamToolHandler;
       contextResolver: TeamToolContextResolver;
       commands: TeamCommandService;
     },

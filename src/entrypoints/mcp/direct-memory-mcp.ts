@@ -7,7 +7,8 @@ import {
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
-import type { TeamToolHandler } from '../../application/teams/team-tools.js';
+import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
+import type { TeamCommandService } from '../../application/teams/team-command-service.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
 import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
 import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
@@ -55,9 +56,8 @@ export function createDirectMemoryMcpHandler(input: {
   readonly repository: MemoryApiRepository;
   readonly grants: RuntimeToolGrantService;
   readonly teamTools?: {
-    handler: TeamToolHandler;
-    contextResolver?: import('../../application/teams/team-tool-context.js').TeamToolContextResolver;
-    commands?: import('../../application/teams/team-command-service.js').TeamCommandService;
+    contextResolver: TeamToolContextResolver;
+    commands: TeamCommandService;
   };
   readonly createLearningProposal?: CreateLearningProposal;
   readonly market?: SyntheticMarketAdapter;
@@ -150,36 +150,22 @@ export function createDirectMemoryMcpHandler(input: {
         grant.taskId &&
         grant.runId
       ) {
-        const actor = await input.teamTools.handler.actorForMemberRun(
-          grant.teamMemberRunId,
+        refreshTeamTools = registerTeamMcpTools(
+          server,
+          grant.allowedTools,
+          (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
           {
-            tenantId: grant.tenantId,
-            workspaceId: grant.workspaceId,
-            principalType: grant.principalType,
-            principalId: grant.principalId,
+            resolve: (currentGrant) =>
+              input.teamTools!.contextResolver!.resolve(currentGrant),
+            grantId: grant.grantId,
+            currentGrant: () => input.grants.get(grant.grantId),
+            begin: (grantId) => {
+              input.grants.beginToolCall(grantId);
+            },
+            end: (grantId) => input.grants.endToolCall(grantId),
+            commands: input.teamTools.commands,
           },
         );
-        if (actor)
-          refreshTeamTools = registerTeamMcpTools(
-            server,
-            input.teamTools.handler,
-            actor,
-            grant.allowedTools,
-            (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
-            input.teamTools.contextResolver && input.teamTools.commands
-              ? {
-                  resolve: (currentGrant) =>
-                    input.teamTools!.contextResolver!.resolve(currentGrant),
-                  grantId: grant.grantId,
-                  currentGrant: () => input.grants.get(grant.grantId),
-                  begin: (grantId) => {
-                    input.grants.beginToolCall(grantId);
-                  },
-                  end: (grantId) => input.grants.endToolCall(grantId),
-                  commands: input.teamTools.commands,
-                }
-              : undefined,
-          );
       }
       refreshTools = (allowedTools) => {
         refreshRegisteredTools(allowedTools);
@@ -221,7 +207,10 @@ function registerTools(
   repository: MemoryApiRepository,
   input: {
     readonly createLearningProposal?: CreateLearningProposal;
-    readonly teamTools?: { handler: TeamToolHandler };
+    readonly teamTools?: {
+      contextResolver: TeamToolContextResolver;
+      commands: TeamCommandService;
+    };
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
   },
@@ -422,7 +411,7 @@ async function createProposal(
   grant: RuntimeToolGrant,
   repository: MemoryApiRepository,
   create: CreateLearningProposal,
-  teamTools?: { handler: TeamToolHandler },
+  teamTools?: { contextResolver: TeamToolContextResolver },
 ) {
   if (!grant.taskId || !grant.runId || !grant.teamMemberRunId || !teamTools)
     return notFound();
@@ -433,11 +422,7 @@ async function createProposal(
     principalId: grant.principalId,
   };
   try {
-    const actor = await teamTools.handler.actorForMemberRun(
-      grant.teamMemberRunId,
-      owner,
-    );
-    if (!actor) return notFound();
+    const actor = await teamTools.contextResolver.resolve(grant);
     const store = await repository.getStore(args.memory_store_id, owner);
     if (!store || store.owner.workspaceId !== grant.workspaceId)
       return notFound();
@@ -447,7 +432,7 @@ async function createProposal(
     );
     if (!memory) return notFound();
     const proposal = await create.execute({
-      sourceTeamRunId: actor.teamRunId,
+      sourceTeamRunId: actor.teamRun.id,
       sourceTaskId: grant.taskId,
       sourceRunId: grant.runId,
       targetMemoryStoreId: args.memory_store_id,

@@ -24,13 +24,33 @@ export const TeamVersionResponseSchema = z
     status: z.enum(['draft', 'published']),
     name: z.string(),
     description: z.string().nullable(),
-    execution_mode: z.enum([
-      'legacy_graph',
-      'collaborative_mve',
-      'agentic_mve',
-    ]),
-    environment_version_id: uuid.nullable(),
-    collaboration_spec: z.unknown().nullable(),
+    environment_version_id: uuid,
+    spec: z
+      .object({
+        lead: z
+          .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+          .strict(),
+        roster: z
+          .array(
+            z
+              .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+              .strict(),
+          )
+          .length(2),
+        environmentVersionId: uuid,
+      })
+      .strict()
+      .superRefine((spec, context) => {
+        const names = [
+          spec.lead.name,
+          ...spec.roster.map((member) => member.name),
+        ];
+        if (new Set(names).size !== names.length)
+          context.addIssue({
+            code: 'custom',
+            message: 'Team member names must be unique',
+          });
+      }),
     created_at: timestamp,
     updated_at: timestamp,
     published_at: timestamp.nullable(),
@@ -62,7 +82,6 @@ export const TeamRunResponseSchema = z
     final_text: z.string().nullable(),
     created_at: timestamp,
     updated_at: timestamp,
-    execution_mode: z.enum(['collaborative_mve', 'agentic_mve']).nullable(),
     control_state: z
       .enum(['lead_ready', 'lead_running', 'member_work_running', 'terminal'])
       .nullable(),

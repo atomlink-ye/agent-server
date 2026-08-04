@@ -11,8 +11,6 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { Task } from '../../domain/tasks/task.js';
-import type { AdvanceTeamExecution } from '../tasks/advance-team-execution.js';
-import type { TeamPhaseCoordinator } from '../teams/team-phase-coordinator.js';
 import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
@@ -38,8 +36,12 @@ export class CompleteRun {
         readonly task: Task;
       }): Promise<void>;
     },
-    private readonly advanceTeamExecution?: AdvanceTeamExecution,
-    private readonly teamPhaseCoordinator?: TeamPhaseCoordinator,
+    private readonly teamTerminalHandler?: {
+      handleTerminalRun(input: {
+        readonly run: Run;
+        readonly task: Task;
+      }): Promise<void>;
+    },
   ) {}
 
   public async execute(input: CompleteRunInput): Promise<Run> {
@@ -109,18 +111,18 @@ export class CompleteRun {
       );
     }
 
-    await this.postPersistence(
-      completedRun,
-      input.claim.taskId,
-      'team_execution',
-      () => this.advanceTeamExecution?.execute(input),
-    );
-    await this.postPersistence(
-      completedRun,
-      input.claim.taskId,
-      'team_phase',
-      () => this.teamPhaseCoordinator?.execute({ run: completedRun, task }),
-    );
+    if (task.teamTaskKind) {
+      await this.postPersistence(
+        completedRun,
+        input.claim.taskId,
+        'team_execution',
+        () =>
+          this.teamTerminalHandler?.handleTerminalRun({
+            run: completedRun,
+            task,
+          }),
+      );
+    }
 
     const sessions = this.sessions;
     if (

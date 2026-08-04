@@ -36,7 +36,6 @@ type TeamRunRow = Omit<TeamRun, never> & {
   root_run_id: string;
   team_version_id: string;
   environment_version_id: string;
-  execution_mode: TeamRun['executionMode'];
   control_state: TeamRun['controlState'];
   revision: number;
   lead_turn_count: number;
@@ -97,7 +96,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   ) {}
   public async createTeamRun(run: TeamRun): Promise<void> {
     await this.database.query(
-      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,execution_mode,control_state,revision,lead_turn_count,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,control_state,revision,lead_turn_count,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         run.id,
         run.tenantId,
@@ -111,7 +110,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         run.status,
         run.phase,
         run.finalText,
-        run.executionMode,
         run.controlState,
         run.revision,
         run.leadTurnCount,
@@ -136,9 +134,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope,
     rootTaskId?: string,
   ): Promise<TeamRun | null> {
-    const predicate = rootTaskId
-      ? "root_task_id = $1 AND execution_mode = 'agentic_mve'"
-      : "execution_mode = 'agentic_mve'";
+    const predicate = rootTaskId ? 'root_task_id = $1' : 'TRUE';
     const values = rootTaskId
       ? [rootTaskId, ...ownerValues(owner)]
       : ownerValues(owner);
@@ -192,8 +188,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     readonly finalText: string;
     readonly owner: OwnerScope;
     readonly updatedAt: string;
-    readonly completionIntent?: 'legacy_lead_finalize' | 'agentic';
-    readonly executionMode?: TeamRun['executionMode'];
     readonly leadRunId?: string;
   }): Promise<TeamRun> {
     const normalizedFinalText = normalizeTeamRunFinalText(input.finalText);
@@ -224,48 +218,25 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         await client.query('COMMIT');
         return mapRun(team);
       }
-      if (team.execution_mode === 'agentic_mve') {
-        if (
-          input.completionIntent !== 'agentic' ||
-          input.executionMode !== 'agentic_mve' ||
-          !input.leadRunId ||
-          !team.completion_requested_by_run_id
-        )
-          throw new Error(
-            'Agentic Team completion intent or fence is invalid.',
-          );
-        const lead = await client.query(
-          `SELECT 1 FROM runs WHERE id=$1 AND status='succeeded'`,
-          [input.leadRunId],
-        );
-        if (!lead.rows?.[0])
-          throw new Error('Agentic Lead Run was not succeeded.');
-        const unsettled = await client.query(
-          `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND (status <> 'completed' OR result_summary IS NULL) LIMIT 1`,
-          [input.teamRunId],
-        );
-        if (unsettled.rows?.[0])
-          throw new Error('Agentic Team has unsettled work attempts.');
-        const unaccepted = await client.query(
-          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' LIMIT 1`,
-          [input.teamRunId],
-        );
-        if (unaccepted.rows?.[0])
-          throw new Error('Agentic Team has unaccepted work.');
-      } else {
-        if (
-          input.completionIntent !== 'legacy_lead_finalize' ||
-          input.executionMode === 'agentic_mve' ||
-          team.phase !== 'lead_finalize'
-        )
-          throw new Error('Team can only be completed during lead_finalize.');
-        const unfinished = await client.query(
-          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('completed','accepted') LIMIT 1`,
-          [input.teamRunId],
-        );
-        if (unfinished.rows?.[0])
-          throw new Error('Team has unfinished work items.');
-      }
+      if (!input.leadRunId || !team.completion_requested_by_run_id)
+        throw new TeamExecutionError('invalid_transition');
+      const lead = await client.query(
+        `SELECT 1 FROM runs WHERE id=$1 AND status='succeeded'`,
+        [input.leadRunId],
+      );
+      if (!lead.rows?.[0]) throw new TeamExecutionError('invalid_transition');
+      const unsettled = await client.query(
+        `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND (status <> 'completed' OR result_summary IS NULL) LIMIT 1`,
+        [input.teamRunId],
+      );
+      if (unsettled.rows?.[0])
+        throw new TeamExecutionError('invalid_transition');
+      const unaccepted = await client.query(
+        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' LIMIT 1`,
+        [input.teamRunId],
+      );
+      if (unaccepted.rows?.[0])
+        throw new TeamExecutionError('invalid_transition');
       const updated = await client.query<TeamRunRow>(
         `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
@@ -711,7 +682,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     memberId: string;
     resultSummary: string;
     owner: OwnerScope;
-    executionMode?: TeamRun['executionMode'] | 'v2';
   }): Promise<TeamWorkItemAttempt> {
     const client = this.database.connect
       ? await this.database.connect()
@@ -780,7 +750,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     commandHash: string;
     expectedRevision: number;
     owner: OwnerScope;
-    executionMode?: TeamRun['executionMode'] | 'v2';
   }): Promise<{ item: TeamWorkItem; attempt: TeamWorkItemAttempt }> {
     const client = this.database.connect
       ? await this.database.connect()
@@ -793,37 +762,23 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       if (existing.rows?.[0]) {
         await client.query('COMMIT');
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('conflict');
-        throw new Error(
-          'Idempotent command replay must be handled by the caller.',
-        );
+        throw new TeamExecutionError('conflict');
       }
-      const teamFence =
-        input.executionMode === 'v2'
-          ? "status NOT IN ('succeeded','failed','cancelled')"
-          : "execution_mode='agentic_mve'";
       const team = await client.query<TeamRunRow>(
-        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND ${teamFence} AND ${ownerSql('', 3)} FOR UPDATE`,
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
       );
-      if (!team.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('stale_state');
-        throw new Error('Agentic Team run fence or revision is stale.');
-      }
-      if (input.executionMode === 'v2')
-        if (!input.leadTaskId) throw new TeamExecutionError('stale_state');
-      if (input.executionMode === 'v2')
-        await assertV2Source(
-          client,
-          input.sourceRunId,
-          input.teamRunId,
-          input.leadTaskId,
-          team.rows[0].root_task_id,
-          input.owner,
-        );
-      if (input.executionMode === 'v2') {
+      if (!team.rows?.[0]) throw new TeamExecutionError('stale_state');
+      if (!input.leadTaskId) throw new TeamExecutionError('stale_state');
+      await assertV2Source(
+        client,
+        input.sourceRunId,
+        input.teamRunId,
+        input.leadTaskId,
+        team.rows[0].root_task_id,
+        input.owner,
+      );
+      {
         const assignee = await client.query<{
           status: TeamMemberRun['status'];
         }>(
@@ -985,7 +940,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     commandHash: string;
     expectedRevision: number;
     owner: OwnerScope;
-    executionMode?: TeamRun['executionMode'] | 'v2';
   }): Promise<TeamWorkItem> {
     const client = this.database.connect
       ? await this.database.connect()
@@ -1011,61 +965,39 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         await client.query('COMMIT');
         return mapWork(replay.rows[0]);
       }
-      const teamFence =
-        input.executionMode === 'v2'
-          ? "status NOT IN ('succeeded','failed','cancelled')"
-          : "execution_mode='agentic_mve'";
       const team = await client.query<TeamRunRow>(
-        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND ${teamFence} AND ${ownerSql('', 3)} FOR UPDATE`,
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
       );
-      if (!team.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('stale_state');
-        throw new Error('Agentic Team run fence or revision is stale.');
-      }
-      if (input.executionMode === 'v2' && !input.leadTaskId)
-        throw new TeamExecutionError('stale_state');
-      if (input.executionMode === 'v2')
-        await assertV2Source(
-          client,
-          input.sourceRunId,
-          input.teamRunId,
-          input.leadTaskId,
-          team.rows[0].root_task_id,
-          input.owner,
-        );
+      if (!team.rows?.[0]) throw new TeamExecutionError('stale_state');
+      if (!input.leadTaskId) throw new TeamExecutionError('stale_state');
+      await assertV2Source(
+        client,
+        input.sourceRunId,
+        input.teamRunId,
+        input.leadTaskId,
+        team.rows[0].root_task_id,
+        input.owner,
+      );
       const item = await client.query<WorkRow>(
         `SELECT * FROM team_work_items WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
       );
-      if (!item.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('not_found');
-        throw new Error('Work item was not found.');
-      }
+      if (!item.rows?.[0]) throw new TeamExecutionError('not_found');
       const latest = await client.query<AttemptRow>(
         `SELECT a.* FROM team_work_item_attempts a JOIN team_work_items w ON w.id=a.work_item_id WHERE a.work_item_id=$1 AND a.team_run_id=$2 AND w.team_run_id=$2 AND ${ownerSql('a', 3)} AND ${ownerSql('w', 3)} ORDER BY a.attempt_no DESC LIMIT 1 FOR UPDATE`,
         [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
       );
       const attempt = latest.rows?.[0];
       if (!attempt || attempt.status !== 'completed' || !attempt.result_summary)
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('invalid_transition');
-        else
-          throw new Error(
-            'Work can only be accepted after its latest attempt completed with a result.',
-          );
+        throw new TeamExecutionError('invalid_transition');
       const now = new Date().toISOString();
       const updated = await client.query<WorkRow>(
         `UPDATE team_work_items SET status='accepted',updated_at=$3 WHERE id=$1 AND team_run_id=$2 AND status='in_progress' AND ${ownerSql('', 4)} RETURNING *`,
         [input.workItemId, input.teamRunId, now, ...ownerValues(input.owner)],
       );
-      if (!updated.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('invalid_transition');
-        throw new Error('Work item was not found.');
-      }
+      if (!updated.rows?.[0])
+        throw new TeamExecutionError('invalid_transition');
       await client.query(
         `UPDATE team_runs SET revision=revision+1,control_state='lead_ready',updated_at=$2 WHERE id=$1`,
         [input.teamRunId, now],
@@ -1099,7 +1031,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     commandHash: string;
     expectedRevision: number;
     owner: OwnerScope;
-    executionMode?: TeamRun['executionMode'] | 'v2';
   }): Promise<TeamWorkItemAttempt> {
     const client = this.database.connect
       ? await this.database.connect()
@@ -1125,38 +1056,25 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         await client.query('COMMIT');
         return mapAttempt(replay.rows[0]);
       }
-      const teamFence =
-        input.executionMode === 'v2'
-          ? "status NOT IN ('succeeded','failed','cancelled')"
-          : "execution_mode='agentic_mve'";
       const team = await client.query<TeamRunRow>(
-        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND ${teamFence} AND ${ownerSql('', 3)} FOR UPDATE`,
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
       );
-      if (!team.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('stale_state');
-        throw new Error('Agentic Team run fence or revision is stale.');
-      }
-      if (input.executionMode === 'v2')
-        await assertV2Source(
-          client,
-          input.sourceRunId,
-          input.teamRunId,
-          input.leadTaskId,
-          team.rows[0].root_task_id,
-          input.owner,
-        );
+      if (!team.rows?.[0]) throw new TeamExecutionError('stale_state');
+      await assertV2Source(
+        client,
+        input.sourceRunId,
+        input.teamRunId,
+        input.leadTaskId,
+        team.rows[0].root_task_id,
+        input.owner,
+      );
       const work = await client.query<WorkRow>(
         `SELECT * FROM team_work_items WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
       );
-      if (!work.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('not_found');
-        throw new Error('Work item was not found.');
-      }
-      if (input.executionMode === 'v2') {
+      if (!work.rows?.[0]) throw new TeamExecutionError('not_found');
+      {
         if (input.assigneeMemberId !== work.rows[0].owner_member_id)
           throw new TeamExecutionError('invalid_transition');
         const assignee = await client.query<{
@@ -1211,10 +1129,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         previous.status !== 'completed' ||
         !previous.result_summary
       )
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('invalid_transition');
-        else
-          throw new Error('Rework requires a completed attempt with a result.');
+        throw new TeamExecutionError('invalid_transition');
       const now = new Date().toISOString();
       const id = randomUUID();
       await client.query(
@@ -1294,18 +1209,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     commandHash: string;
     expectedRevision: number;
     owner: OwnerScope;
-    executionMode?: TeamRun['executionMode'] | 'v2';
   }): Promise<{ requested: true }> {
     const client = this.database.connect
       ? await this.database.connect()
       : this.database;
     try {
       await client.query('BEGIN');
-      const teamFence =
-        input.executionMode === 'v2'
-          ? "status NOT IN ('succeeded','failed','cancelled')"
-          : "execution_mode='agentic_mve'";
-      if (input.executionMode === 'v2') {
+      {
         const team = await client.query<TeamRunRow>(
           `SELECT * FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)} FOR UPDATE`,
           [input.teamRunId, ...ownerValues(input.owner)],
@@ -1377,22 +1287,12 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         );
         if (nonterminalMemberChild.rows?.[0])
           throw new TeamExecutionError('invalid_transition');
-      } else {
-        const receipt = await client.query<{ result_json: unknown }>(
-          'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
-          [input.sourceRunId, input.commandHash],
-        );
-        if (receipt.rows?.[0]) {
-          await client.query('COMMIT');
-          return { requested: true };
-        }
       }
       const r = await client.query(
-        'UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now() WHERE id=$1 AND revision=$3 AND ' +
-          teamFence +
-          ' AND ' +
-          ownerSql('', 4) +
-          ' RETURNING id',
+        `UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now()
+          WHERE id=$1 AND revision=$3
+            AND status NOT IN ('succeeded','failed','cancelled')
+            AND ${ownerSql('', 4)} RETURNING id`,
         [
           input.teamRunId,
           input.sourceRunId,
@@ -1400,11 +1300,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           ...ownerValues(input.owner),
         ],
       );
-      if (!r.rows?.[0]) {
-        if (input.executionMode === 'v2')
-          throw new TeamExecutionError('stale_state');
-        throw new Error('Agentic Team run fence or revision is stale.');
-      }
+      if (!r.rows?.[0]) throw new TeamExecutionError('stale_state');
       await client.query(
         `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_finish','{"requested":true}'::jsonb,now())`,
         [input.sourceRunId, input.commandHash],
@@ -1594,7 +1490,6 @@ function mapRun(r: TeamRunRow): TeamRun {
     teamVersionId: r.team_version_id,
     environmentVersionId: r.environment_version_id,
     finalText: r.final_text,
-    executionMode: r.execution_mode,
     controlState: r.control_state,
     revision: r.revision,
     leadTurnCount: r.lead_turn_count,

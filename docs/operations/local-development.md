@@ -80,83 +80,21 @@ of a production credential lifecycle.
 The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
 root beneath its runtime root.
 
-The Collaborative Team smoke uses the same disposable PostgreSQL setup:
+The Agent Teams v2 smoke uses the same disposable PostgreSQL setup and pinned
+Node `24.18.0` / pnpm `11.7.0` toolchain:
 
 ```bash
-make collaborative-team-smoke
+make agent-teams-v2-smoke
 ```
 
-The target forwards only `PASEO_MODEL`, `OPENCODE_GO_API_KEY`, and
-`COLLAB_SMOKE_POLL_MS`. It uses a zero-credential free-model default when no
-key is present. For an authenticated diagnostic, load the key from a local
-mode-0600 environment file, then use the Go model ID and optional short poll:
-
-```bash
-PASEO_MODEL=opencode-go/deepseek-v4-flash \
-COLLAB_SMOKE_POLL_MS=120000 \
-make collaborative-team-smoke
-```
-
-The key is copied only into the isolated Paseo process and is never logged.
-The smoke removes its temporary database and runtime root unless explicitly
-run in a retained diagnostic mode.
-
-The Agentic Team Chat smoke uses the same Docker/PostgreSQL
-prerequisites and pinned Node `24.18.0` / pnpm `11.7.0` toolchain:
-
-```bash
-make agentic-team-chat-smoke
-```
-
-An optional paid-model run uses a local mode-`0600` `OPENCODE_GO_API_KEY` and
-the explicitly selected model; never print or commit the key:
-
-```bash
-PASEO_MODEL=opencode-go/deepseek-v4-flash \
-make agentic-team-chat-smoke
-```
-
-Without the key, the target uses the explicitly free model default. The smoke
-is local/single-operator evidence only. Its Agentic Web loopback port defaults
-to `43123`; set `AGENTIC_TEAM_WEB_PORT` to override it. Set
-`AGENTIC_TEAM_SMOKE_RETAIN_FILE` to keep the local API, Paseo, Web service, and
-database for visual evidence and reload inspection; retained mode is not
-production deployment or a persistence, multi-user, or authentication
-guarantee. Stop only verified child processes and remove ignored retained state
-after inspection.
-
-For browser inspection, use the persistent `playwright-shared` CDP workflow at
-a high level: start or reuse the retained smoke, connect Playwright to the
-shared CDP endpoint, inspect Project/Lead/member/refresh/mobile and storage or
-network gates, then close only the pages created for the check. Do not assume a
-machine-specific path or start a second competing browser session.
-
-The Team DAG MVE smoke uses the same disposable setup and the opt-in
-`dag-mve-v1` Team path:
-
-```bash
-POSTGRES_ADMIN_URL=<retained-local-admin-url> \
-PASEO_MODEL=opencode/deepseek-v4-flash-free \
-pnpm smoke:team-dag
-```
-
-It is evidence for the observed two-leaf join/synthesizer flow only, not a
-claim of production recovery or restart/resume.
-
-For operator inspection, run the retained variant:
-
-```bash
-POSTGRES_ADMIN_URL=<retained-local-admin-url> \
-PASEO_MODEL=opencode/deepseek-v4-flash-free \
-pnpm smoke:team-dag:inspect
-```
-
-Unlike the canonical smoke, this command intentionally keeps its unique
-database, Agent Server API, Paseo daemon, task-scoped RuntimeCells, Workspaces,
-logs, manifest, and milestone snapshots available. Its bearer token and database
-URL are written only to a mode-`0600` `inspect.env` under the ignored
-`.local/team-dag-inspect/<run-id>/` directory. Stop the retained process and
-remove its database/runtime directory manually only after inspection.
+It proves the fixed TeamDriver path: TeamRun activation, Lead Work control,
+member submission, acceptance, an addressed TeamMessage continuation, and
+terminal finish. An authenticated diagnostic may select a supported
+`opencode-go` model by loading `OPENCODE_GO_API_KEY` from a local mode-`0600`
+environment file; never print or commit the key. The smoke writes redacted,
+task-specific evidence under ignored `.local` paths and is local/single-operator
+evidence only. It is not a production deployment, persistence, multi-user, or
+authentication guarantee.
 
 ## Generated state
 

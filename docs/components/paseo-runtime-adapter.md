@@ -73,10 +73,10 @@ provider/parent correlations or unsafe detail are quarantined rather than
 forwarded. This is a local streaming projection seam, not durable stream
 recovery, multi-writer ordering, or production backpressure.
 
-In the observed opt-in `dag-mve-v1` Team flow, each leaf and the synthesizer
-receive task-scoped RuntimeSession/RuntimeCell state. The Team shares one
-EnvironmentVersion for immutable configuration only; it does not share a
-Paseo Agent, Workspace, or runtime session across child Tasks.
+In Agent Teams v2, each Lead turn, Work attempt, and addressed continuation
+receives task-scoped RuntimeSession/RuntimeCell state. The Team's immutable
+configuration does not imply a shared Paseo Agent, Workspace, or runtime
+session across child Tasks.
 
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`

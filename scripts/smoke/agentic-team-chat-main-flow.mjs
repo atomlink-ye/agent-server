@@ -38,6 +38,7 @@ const runtimeRoot = join(
 const projectCwd = join(runtimeRoot, 'project');
 const cellRoot = join(runtimeRoot, 'cells');
 const STAGES = new Set([
+  'phase2_durable_wake',
   'lead_command',
   'attempt1_materialized',
   'attempt1_terminal',
@@ -175,6 +176,10 @@ if (useOpenCodeGo) {
 }
 
 try {
+  if (stage === 'phase2_durable_wake') {
+    await import('./agent-teams-v2-phase2-main-flow.mjs');
+    throw new FocusedStageComplete();
+  }
   if (!adminUrl) throw new Error('missing_POSTGRES_ADMIN_URL');
   const adminParsed = new URL(adminUrl);
   if (!['postgres:', 'postgresql:'].includes(adminParsed.protocol))

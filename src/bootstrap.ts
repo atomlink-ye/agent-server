@@ -82,6 +82,7 @@ import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-r
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresDagTeamExecutionRepository } from './infrastructure/postgres/postgres-team-execution-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
+import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
 import { CollaborativeTeamExecutor } from './application/teams/collaborative-team-executor.js';
@@ -91,6 +92,7 @@ import { TeamToolContextResolver } from './application/teams/team-tool-context.j
 import { TeamCommandService } from './application/teams/team-command-service.js';
 import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
 import { TeamDriver } from './application/teams/team-driver.js';
+import { TeamWakeReconciler } from './application/teams/team-wake-reconciler.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -247,11 +249,18 @@ export interface SingleRunDebugControl {
     readonly claimed: boolean;
     readonly terminalStatus?: string;
   }>;
+  rebuildQueuedTeamWakes(): Promise<number>;
+  startDispatcher(): void;
+  stopDispatcher(): Promise<void>;
 }
 
 export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
+  /** Debug-only runtime substitute; production composition always uses Paseo. */
+  readonly debugRuntime?: AgentRuntimePort;
+  /** Keep terminal Team wakes durable until the debug control resumes them. */
+  readonly deferTeamWakeReconcile?: boolean;
 }
 
 export async function createService(
@@ -259,6 +268,11 @@ export async function createService(
   logger: Logger,
   options: CreateServiceOptions = {},
 ) {
+  if (
+    (options.debugRuntime || options.deferTeamWakeReconcile) &&
+    !options.singleRunDebug
+  )
+    throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   await registerSkill({
     registryRoot: config.skillRegistryRoot,
@@ -313,6 +327,7 @@ export async function createService(
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
   const teamExecutions = new PostgresDagTeamExecutionRepository(pool);
   const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
+  const teamMessages = new PostgresTeamMessageRepository(pool);
   const environmentRegistry = new PostgresEnvironmentRegistry(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
@@ -375,17 +390,19 @@ export async function createService(
     invokableRepository,
     skillCatalog,
   );
-  const runtime = new PaseoRuntimeAdapter(
-    {
-      wsUrl: config.paseo.wsUrl,
-      cwd: config.paseo.agentCwd,
-      workspaceTitle: config.paseo.workspaceTitle,
-      ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
-      connectTimeoutMs: config.paseo.connectTimeoutMs,
-      executionTimeoutMs: config.paseo.executionTimeoutMs,
-    },
-    logger,
-  );
+  const runtime =
+    options.debugRuntime ??
+    new PaseoRuntimeAdapter(
+      {
+        wsUrl: config.paseo.wsUrl,
+        cwd: config.paseo.agentCwd,
+        workspaceTitle: config.paseo.workspaceTitle,
+        ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
+        connectTimeoutMs: config.paseo.connectTimeoutMs,
+        executionTimeoutMs: config.paseo.executionTimeoutMs,
+      },
+      logger,
+    );
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
   const cancelTask = new CancelTask(
     taskRepository,
@@ -428,11 +445,23 @@ export async function createService(
   const collaborativeExecutor = new CollaborativeTeamExecutor(
     collaborativeTeamExecutions,
   );
+  const teamWakeReconciler = new TeamWakeReconciler(
+    teamMessages,
+    collaborativeTeamExecutions,
+    taskRepository,
+    admissionRepository,
+  );
+  const terminalWakeReconciler = options.deferTeamWakeReconcile
+    ? {
+        reconcileForRootTask: async () => 0,
+      }
+    : teamWakeReconciler;
   const teamDriver = new TeamDriver(
     collaborativeTeamExecutions,
     taskRepository,
     runRepository,
     admissionRepository,
+    terminalWakeReconciler,
   );
   const teamPhaseCoordinator = new TeamPhaseCoordinator(
     collaborativeTeamExecutions,
@@ -611,6 +640,7 @@ export async function createService(
     },
   });
   if (!options.singleRunDebug) {
+    await teamWakeReconciler.reconcileQueuedWakeRoots();
     await startServiceResources({
       dispatcher,
       ...(larkWorker ? { larkWorker } : {}),
@@ -622,30 +652,40 @@ export async function createService(
     });
   }
 
-  const singleRunDebug: SingleRunDebugControl | undefined = options.singleRunDebug
-    ? {
-        claimAndExecute: async (runId) => {
-          const claimedAt = new Date();
-          const claim = await runRepository.claimQueuedById({
-            runId,
-            workerId,
-            activationId: randomUUID(),
-            claimedAt: claimedAt.toISOString(),
-            leaseExpiresAt: new Date(
-              claimedAt.getTime() +
-                Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
-            ).toISOString(),
-          });
-          if (!claim) return { claimed: false };
-          await executeRun.execute(claim);
-          const terminal = await runRepository.findById(runId);
-          return {
-            claimed: true,
-            ...(terminal ? { terminalStatus: terminal.status } : {}),
-          };
-        },
-      }
-    : undefined;
+  const singleRunDebug: SingleRunDebugControl | undefined =
+    options.singleRunDebug
+      ? {
+          claimAndExecute: async (runId) => {
+            const claimedAt = new Date();
+            const claim = await runRepository.claimQueuedById({
+              runId,
+              workerId,
+              activationId: randomUUID(),
+              claimedAt: claimedAt.toISOString(),
+              leaseExpiresAt: new Date(
+                claimedAt.getTime() +
+                  Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+              ).toISOString(),
+            });
+            if (!claim) return { claimed: false };
+            await executeRun.execute(claim);
+            const terminal = await runRepository.findById(runId);
+            return {
+              claimed: true,
+              ...(terminal ? { terminalStatus: terminal.status } : {}),
+            };
+          },
+          rebuildQueuedTeamWakes: () =>
+            new TeamWakeReconciler(
+              new PostgresTeamMessageRepository(pool),
+              new PostgresTeamExecutionRepository(pool),
+              new PostgresTaskRepository(pool),
+              new PostgresAdmissionRepository(pool),
+            ).reconcileQueuedWakeRoots(),
+          startDispatcher: () => dispatcher.start(),
+          stopDispatcher: () => dispatcher.stop(),
+        }
+      : undefined;
 
   return {
     app,

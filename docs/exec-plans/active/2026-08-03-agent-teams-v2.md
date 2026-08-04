@@ -14,11 +14,20 @@ safe Web projection, and destructive removal of the old Team modes.
 
 ## Current status
 
-**Current Phase 1 evidence:** the retained single-Run path reached Attempt 2
-terminal, and the effective focused `attempt2_terminal` smoke passed in 133223ms
-(recorded in `.local/phase1-attempt2-terminal-720s-configured-fix.log`). Phase 1
-implementation remains dirty and uncommitted; `completion` and `full` remain
-prohibited and have not been run.
+**Current Phase 1 evidence:** Phase 1 is committed at `76ef014` on
+`agent/agent-teams-v2`. Its retained single-Run path reached Attempt 2 terminal,
+and the effective focused `attempt2_terminal` smoke passed in 133223ms (recorded
+in `.local/phase1-attempt2-terminal-720s-configured-fix.log`).
+
+**Current Phase 2 accepted evidence:** one Node `v24.18.0` retained
+real-server/Postgres flow passed in 5336ms with outer timeout 180s and exit 0. It used `createService`,
+a real TCP Hono server, canonical HTTP import/publish/invoke, real Runtime MCP
+bearer/grant resolution, and `PostgresRunDispatcher`; the provider runtime driver
+and model decisions were deterministic substitutes, with no provider or Paseo use.
+The authoritative redacted artifact is
+`.local/phase2-server-1785843608320-eae1b3ac/manifest.json`. Independent
+specification and migration/security reviews accepted the implementation; Phase 2
+remains uncommitted only until the applicable existing checks finish.
 
 The required effective focused smoke ran with the authorized environment loaded
 before Make invokes `docker-run`. The earlier `OpenCodeModelUnavailableError` was
@@ -41,6 +50,29 @@ its Run persisted `failed` with `runtime_execution_failed`, no
 RuntimeSession/provider agent was materialized for continuation, and no unique
 next queued Run existed. That lifecycle diagnosis was superseded by the retained
 long-lived-service proof and the current focused-smoke evidence above.
+
+## Phase 2 acceptance evidence (exact)
+
+The Phase 2 MVE is accepted only when one retained real-server/Postgres flow records
+all of these linked facts for the same owner-scoped TeamRun and member:
+
+1. `team_messages`: an addressed `queued` Message with sender/recipient, safe kind,
+   dedup key, and immutable body; duplicate wake insertion is a no-op.
+2. One reconciler pass consumes that Message by atomically creating exactly one
+   canonical queued child Task and binding `consumed_by_task_id` plus immutable
+   input Message IDs; a second pass creates no second active Task.
+3. The existing `run_dispatches` row is claimed by `PostgresRunDispatcher`, and the
+   child Task/Run reaches terminal state through the canonical Task/Run path.
+4. The durable Message is `consumed` only after Task binding; if materialization is
+   rejected it remains `queued`. The proof is DB/API state, never provider delivery.
+5. The scheduler/reconciler pause/resume log shows rebuild from durable queued
+   Message state and a single addressed wake path; no second queue or
+   `TeamTurnRequest` exists.
+
+Required retained evidence IDs/paths: the smoke's redacted manifest, the database
+query snapshot containing Message/Task/Run/run_dispatches IDs and states, the
+reconciler pause/resume log, and the command exit result. Credentials, prompts,
+provider payloads, and local secret paths must not appear in evidence.
 
 ## Context and authority
 
@@ -73,10 +105,10 @@ security boundaries, migrations, and core dependencies.
 
 ## Work breakdown
 
-- [ ] Phase 1: implement and prove the loose inner loop with context-bound tools,
+- [x] Phase 1: implement and prove the loose inner loop with context-bound tools,
       same-member continuation, TeamDriver in-process sequencing, and no
       message/durable-outer-scheduler/migration.
-- [ ] Phase 2: implement and prove TeamMessage, canonical queued wake, one
+- [x] Phase 2: implement and prove TeamMessage, canonical queued wake, one
       scheduler/reconciler, terminal facts, and context projection.
 - [ ] Phase 3: implement and prove dependencies, atomic claims, gates, graceful
       finish semantics, Direct Message, Team Overview, and Web projection; permission
@@ -92,20 +124,21 @@ security boundaries, migrations, and core dependencies.
 
 ## Verification
 
-- [ ] `git diff --check` — expected boundary: zero whitespace errors.
-- [ ] Inspect only the three created docs for unresolved placeholder
+- [x] `git diff --check` — zero whitespace errors at the Phase 2 boundary.
+- [x] Inspect only the three created docs for unresolved placeholder
       contradictions — expected boundary: none; future unchecked work boxes remain
       intentional execution tracking.
-- [ ] Run the Phase 1 real smoke with short timeout and retained state — expected:
+- [x] Run the Phase 1 real smoke with short timeout and retained state — expected:
       TeamDriver root activation, member checkpoint/submit, Lead request-changes, and
       same-member continuation.
-- [ ] Run the Phase 2 retained flow — expected: addressed TeamMessage, canonical
+- [x] Run the Phase 2 retained flow — expected: addressed TeamMessage, canonical
       queued Task wake, one reconciler, and durable pause/resume evidence.
 - [ ] Run `PASEO_MODEL=opencode-go/deepseek-v4-flash make agent-teams-v2-smoke`
       with the authorized environment secret through the safe allowlist — expected:
       terminal Team and safe replay; secret is not printed.
-- [ ] Run only applicable existing focused checks — expected: exact command/result
-      recorded as supporting evidence, with no new tests authored.
+- [x] Run only applicable existing focused checks — `make check` passed and the
+      existing focused ProductSession provenance test passed 1/1 (4 skipped); no
+      new test was authored.
 
 ## Documentation impact
 
@@ -198,16 +231,63 @@ security boundaries, migrations, and core dependencies.
 
 ## Validation evidence
 
-Current implementation validation: under Node 24 (`v24.18.0`) and pnpm 11.7.0,
-`pnpm exec tsc --noEmit` passed after the retained single-Run debugger and Exec
-Plan updates. `git diff --check` also passed with zero whitespace errors. The
-current real-path evidence is the retained single-Run proof through Attempt 2
-terminal and the focused `attempt2_terminal` smoke pass in 133223ms recorded in
-`.local/phase1-attempt2-terminal-720s-configured-fix.log`. Historical
-documentation-only `make check` evidence is superseded and is not a claim about
-the current dirty implementation.
+### Authoritative Phase 2 retained flow
 
-## Completion checklist
+The accepted artifact is
+`.local/phase2-server-1785843608320-eae1b3ac/manifest.json` with retained database
+`agent_server_phase2_server_1785843608320_eae1b3ac`. It records TeamRun
+`8db96226-4981-48b9-bf6d-80899c414363` and member
+`6126830e-bedd-4635-9476-cd66ef5ae4e8` across both attempts. Attempt 1 bound
+Message `fbb54d72-8ecd-4b87-9e8d-0a9f7d92c1ec` to Task
+`76efb992-472c-4581-8ad7-dc34f6721069` and Run
+`2e53f4fc-0709-4031-bfc5-a9b778b4fef4`. Attempt 2 replay preserved Message
+`87acf595-f6cb-4da9-9601-73c753484616`, dedup key, queued status, and body hash
+with cardinality Message=1/Task=0/Run=0/dispatch=0 before materialization.
+
+A deliberate same-member active-Task conflict caused admission rollback with the
+Message still queued and Task/Run/dispatch still zero. After the fault was
+restored, a fresh Reconciler instance produced exactly one Task
+`7b37c21d-c315-42f4-92e8-b9dc065493df`, Run
+`0652b093-65c5-4fba-a63e-efa7893d0697`, and `run.enqueue`; the second reconcile
+returned zero. The real dispatcher published both dispatches, both attempts and
+their Tasks/Runs reached terminal success, the member returned idle with zero
+active Tasks, and Lead turns separately performed request-changes, accept, then
+finish. The Team, root Task, and root Run reached `succeeded/completed/succeeded`.
+The Team control state advanced through `member_work_running`,
+`member_work_running`, `lead_ready`, `lead_running`, then `terminal`.
+Task Team provenance is exact and ProductSession provenance remains null; no
+`TeamTurnRequest` relation exists. Evidence directory mode is 0700, manifest/log
+files are 0600, stderr is empty, and the retained evidence files contain no
+credential, prompt, provider payload, or local path.
+
+Independent reviewers returned `PHASE2_SPEC_ACCEPTED`,
+`PHASE2_QUALITY_APPROVED`, and a durable-state/migration/security Human Gate pass.
+The plan's separately named scheduler/context-projector responsibilities are
+implemented equivalently by `TeamWakeReconciler`, the existing
+`CompleteRun`/`TeamPhaseCoordinator`/`TeamDriver` composition, and
+`TeamToolContextResolver`/`ProjectAgenticTeam`; Direct Message remains Phase 3.
+
+The supporting production-component rebuild artifact is
+`.local/phase2-cd-1785842428909-d935dda1/manifest.json`. It independently closes
+the exact pre/post replay fields and fresh-pool component rebuild boundary. It is
+supporting evidence only; the real-server artifact above is authoritative.
+
+### Superseded Phase 2 investigations
+
+The earlier `.local/phase2-production-wiring.json` contains only a retained-ready
+`lead_command` checkpoint, despite an intermediate prose claim that it represented
+a passed full flow. It and `.local/phase2-production-lead.log` are historical
+diagnostics only and are explicitly excluded from acceptance.
+
+The older stepwise repository harness used directly seeded prerequisites and
+different TeamRuns for its wake observations. It helped locate the durable path
+but did not prove the current exact same-flow contract; it is superseded by the
+two authoritative/supporting artifacts above.
+
+Superseded bounded-contract result: the earlier candidate stopped before Scenario C
+because its captured Lead Task/Run were queued instead of active/running. Its
+different-TeamRun evidence remains retained at
+`.local/phase2-bounded-scenario-cd.json` and is not used for acceptance.
 
 - [ ] Four phase commits exist on one branch and no unrelated production changes
       are present.
@@ -220,17 +300,15 @@ the current dirty implementation.
 
 ## Current blocker
 
-none for the Phase 1 `attempt2_terminal` acceptance boundary. A non-blocking
-operational requirement remains: invoke the Docker focused smoke from a process
-that has loaded the authorized org `.local/.env`, so `docker-run --pass-env
-OPENCODE_GO_API_KEY` can forward the credential and the smoke can register its
-non-sensitive `OPENCODE_CONFIG_CONTENT` model descriptor. The previous unavailable-model
-run was preflight-only; the effective run below is the sole valid smoke evidence.
+No known Phase 2 product, evidence, specification, migration, security, or check
+blocker. Phase 3 implementation is next.
 
 ## Next exact command
 
-Stop Phase 1 acceptance work here. Do not run `completion` or `full`; preserve
-retained evidence and await the next authorized phase instruction.
+Create the approved Phase 2 boundary commit, inspect the Phase 3 Golden Path gaps
+against the accepted design, and implement the smallest real dependency/claim,
+Direct Message, and safe Team Overview vertical slice. Do not push, merge, reset,
+or clean.
 
 ## Cleanup state
 

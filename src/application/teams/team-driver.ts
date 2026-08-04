@@ -15,6 +15,7 @@ import type {
   OwnerScope,
 } from '../ports/team-execution-repository.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
+import type { TeamWakeReconciler } from './team-wake-reconciler.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 const LIMIT = Object.freeze({
   maxLeadTurns: 4,
@@ -28,6 +29,10 @@ export class TeamDriver {
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
+    private readonly reconciler?: Pick<
+      TeamWakeReconciler,
+      'reconcileForRootTask'
+    >,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -118,8 +123,6 @@ export class TeamDriver {
     if (input.task.teamTaskKind === 'work_attempt') {
       const attempt = attempts.find((a) => a.executionTaskId === input.task.id);
       if (!attempt) throw new Error('Agentic work attempt linkage is missing.');
-      // A valid member/descendant submit is authoritative; runtime terminal
-      // failure only fails an unsubmitted running Attempt.
       if (attempt.status !== 'completed' && attempt.status !== 'failed')
         await this.executions.updateAttemptStatus(
           attempt.id,
@@ -221,55 +224,11 @@ export class TeamDriver {
     }[],
     owner: OwnerScope,
   ) {
-    const members = await this.executions.findMembersByTeamRunId(
-      team.id,
-      owner,
-    );
-    for (const attempt of attempts.filter(
-      (a) => a.status === 'queued' && !a.executionTaskId,
-    )) {
-      const member = members.find((m) => m.id === attempt.assigneeMemberId);
-      if (!member) throw new Error('Agentic attempt assignee is missing.');
-      const feedback = attempt.feedback
-        ?.replace(/[\u0000-\u001f\u007f]/gu, ' ')
-        .replace(/\s+/gu, ' ')
-        .trim()
-        .slice(0, 512);
-      const item = await this.executions.findWorkItemById(
-        attempt.workItemId,
-        owner,
-      );
-      if (!item) throw new Error('Agentic work item is missing.');
-      const assignmentPrompt = `You are completing assigned Work. Subject: ${safeText(item.subject)}\nDescription: ${safeText(item.description)}\nAttempt number: ${attempt.attemptNo}\nLead feedback: ${feedback ?? '(none)'}\nUse the real domain tools available from your published agent profile. Checkpoint useful progress, then submit a concise result through the canonical team tool. Do not claim work outside this assignment.`;
-      const assignmentTask = this.child(
-        parent,
-        {
-          id: parent.parentRunId ?? team.rootRunId,
-          prompt: parent.inputSnapshotRef,
-        } as Run,
-        member,
-        `member:${team.id}:${member.id}:work_attempt:${attempt.id}`,
-        assignmentPrompt,
-        member.agentVersionId,
-        'work_attempt',
-        attempt.attemptNo,
-      );
-      const run = createRun(assignmentPrompt, { now: this.now });
-      await this.admission.withTransaction(async (tx) => {
-        await tx.tasks.save(assignmentTask);
-        await tx.runs.save(run, { taskId: assignmentTask.id, attempt: 1 });
-      });
-      await this.executions.materializeAttempt({
-        attemptId: attempt.id,
-        executionTaskId: assignmentTask.id,
-        teamRunId: team.id,
-        assigneeMemberId: member.id,
-        owner,
-      });
-      await this.admission.withTransaction(async (tx) => {
-        await tx.enqueueRunDispatch(run.id, run.createdAt);
-      });
+    if (this.reconciler) {
+      await this.reconciler.reconcileForRootTask(team.rootTaskId, owner);
+      return;
     }
+    throw new Error('Durable Team wake reconciler is required.');
   }
 
   private async scheduleLead(

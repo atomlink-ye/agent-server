@@ -54,6 +54,7 @@ const durableKernelMigrationFileNames = [
   '0021_web_chat_streaming_mve.sql',
   '0022_learning_proposal_mve.sql',
   '0023_agentic_team_chat_mve.sql',
+  '0024_agent_team_messages.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

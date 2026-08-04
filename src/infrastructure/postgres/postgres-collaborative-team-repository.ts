@@ -265,7 +265,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           throw new Error('Team has unfinished work items.');
       }
       const updated = await client.query<TeamRunRow>(
-        `UPDATE team_runs SET status='succeeded', phase='done', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
+        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
       );
       const run = await client.query(
@@ -359,7 +359,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         return mapRun(team);
       }
       await client.query(
-        `UPDATE team_runs SET status='failed', phase='done', stop_reason=$2, updated_at=$3 WHERE id=$1`,
+        `UPDATE team_runs SET status='failed', phase='done', control_state='terminal', stop_reason=$2, updated_at=$3 WHERE id=$1`,
         [input.teamRunId, 'lead_turn_limit', input.updatedAt],
       );
       const error = JSON.stringify(input.failure);
@@ -585,6 +585,15 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     assigneeMemberId: string;
     owner: OwnerScope;
   }): Promise<TeamWorkItemAttempt> {
+    const member = await this.database.query<{ id: string }>(
+      `SELECT id FROM team_member_runs
+        WHERE id=$1 AND team_run_id=$2 AND role='member'
+          AND ${ownerSql('', 3)}
+        FOR UPDATE`,
+      [input.assigneeMemberId, input.teamRunId, ...ownerValues(input.owner)],
+    );
+    if (!member.rows?.[0])
+      throw new Error('Work attempt assignee was not available.');
     const r = await this.database.query<AttemptRow>(
       `UPDATE team_work_item_attempts a
          SET execution_task_id=$2, status='running', updated_at=now()
@@ -594,6 +603,22 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
          AND m.id=$4 AND m.team_run_id=t.id AND m.role='member'
          AND a.status='queued' AND a.execution_task_id IS NULL
          AND w.status='pending' AND t.status IN ('active','waiting')
+         AND NOT EXISTS (
+           SELECT 1 FROM team_work_item_attempts active_attempt
+            WHERE active_attempt.team_run_id=$3
+              AND active_attempt.assignee_member_id=$4
+              AND active_attempt.id<>a.id
+              AND active_attempt.status IN ('queued','running')
+              AND ${ownerSql('active_attempt', 5)}
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM tasks active_task
+            WHERE active_task.root_task_id=t.root_task_id
+              AND active_task.team_member_run_id=$4
+              AND active_task.id<>$2
+              AND active_task.status NOT IN ('completed','failed','cancelled')
+              AND ${ownerSql('active_task', 5)}
+         )
          AND ${ownerSql('a', 5)} AND ${ownerSql('w', 5)}
          AND ${ownerSql('t', 5)} AND ${ownerSql('m', 5)}
        RETURNING a.*`,
@@ -834,11 +859,32 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         [attemptId],
       );
       await client.query(
-        'INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,$3,$4::jsonb,$5)',
+        `INSERT INTO team_messages
+           (id,team_run_id,tenant_id,workspace_id,principal_type,principal_id,sequence,
+            sender_member_run_id,recipient_member_run_id,work_item_id,attempt_id,kind,
+            dedup_key,body,status,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,
+           (SELECT COALESCE(MAX(sequence),0)+1 FROM team_messages WHERE team_run_id=$2),
+           (SELECT id FROM team_member_runs WHERE team_run_id=$2 AND role='lead' LIMIT 1),
+           $7,$8,$9,'wake',$10,$11,'queued',$12)
+         ON CONFLICT (team_run_id,dedup_key) DO NOTHING`,
+        [
+          randomUUID(),
+          input.teamRunId,
+          ...ownerValues(input.owner),
+          input.assigneeMemberId,
+          itemId,
+          attemptId,
+          `member:${input.assigneeMemberId}:wake:work:${attemptId}`,
+          'assigned_work',
+          now,
+        ],
+      );
+      await client.query(
+        `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_work_create',$3::jsonb,$4)`,
         [
           input.sourceRunId,
           input.commandHash,
-          'team_work_create',
           JSON.stringify({ item_id: itemId, attempt_id: attemptId }),
           now,
         ],
@@ -946,7 +992,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         throw new Error('Work item was not found.');
       }
       await client.query(
-        `UPDATE team_runs SET revision=revision+1,updated_at=$2 WHERE id=$1`,
+        `UPDATE team_runs SET revision=revision+1,control_state='lead_ready',updated_at=$2 WHERE id=$1`,
         [input.teamRunId, now],
       );
       await client.query(
@@ -1116,9 +1162,32 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         [input.workItemId, now, input.teamRunId, ...ownerValues(input.owner)],
       );
       await client.query(
-        'UPDATE team_runs SET revision=revision+1,updated_at=$2 WHERE id=$1',
+        "UPDATE team_runs SET revision=revision+1,control_state='member_work_running',updated_at=$2 WHERE id=$1",
         [input.teamRunId, now],
       );
+      await client.query(
+        `INSERT INTO team_messages
+           (id,team_run_id,tenant_id,workspace_id,principal_type,principal_id,sequence,
+            sender_member_run_id,recipient_member_run_id,work_item_id,attempt_id,kind,
+            dedup_key,body,status,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,
+           (SELECT COALESCE(MAX(sequence),0)+1 FROM team_messages WHERE team_run_id=$2),
+           (SELECT id FROM team_member_runs WHERE team_run_id=$2 AND role='lead' LIMIT 1),
+           $7,$8,$9,'wake',$10,$11,'queued',$12)
+         ON CONFLICT (team_run_id,dedup_key) DO NOTHING`,
+        [
+          randomUUID(),
+          input.teamRunId,
+          ...ownerValues(input.owner),
+          input.assigneeMemberId,
+          input.workItemId,
+          id,
+          `member:${input.assigneeMemberId}:wake:rework:${id}`,
+          input.feedback,
+          now,
+        ],
+      );
+
       await client.query(
         `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_work_request_changes',$3::jsonb,$4)`,
         [
@@ -1128,6 +1197,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           now,
         ],
       );
+
       const result = await client.query<AttemptRow>(
         'SELECT * FROM team_work_item_attempts WHERE id=$1',
         [id],

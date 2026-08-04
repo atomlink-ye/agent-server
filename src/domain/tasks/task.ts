@@ -28,6 +28,8 @@ interface TaskFields {
   readonly updatedAt: string;
   readonly sessionId?: string | null;
   readonly sourceMessageId?: string | null;
+  readonly sourceTeamMessageId?: string | null;
+  readonly inputTeamMessageIds?: readonly string[];
   readonly generation?: number | null;
   readonly laneSequence?: number | null;
   readonly failureDetail?: string | null;
@@ -62,6 +64,8 @@ interface CreateRootTaskFields {
   readonly teamSequence?: number | null;
   readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
   readonly sourceMessageId?: string | null;
+  readonly sourceTeamMessageId?: string | null;
+  readonly inputTeamMessageIds?: readonly string[];
 }
 
 export type CreateRootTaskOptions = CreateRootTaskFields & TaskOrigin;
@@ -86,6 +90,8 @@ export interface CreateChildTaskOptions {
   readonly teamMemberRunId?: string | null;
   readonly teamSequence?: number | null;
   readonly teamTaskKind?: 'lead_turn' | 'work_attempt' | null;
+  readonly sourceTeamMessageId?: string | null;
+  readonly inputTeamMessageIds?: readonly string[];
 }
 
 const ROOT_TASK_DEPTH = 0;
@@ -127,6 +133,8 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     teamSequence: options.teamSequence ?? null,
     teamTaskKind: options.teamTaskKind ?? null,
     sourceMessageId: options.sourceMessageId ?? null,
+    sourceTeamMessageId: options.sourceTeamMessageId ?? null,
+    inputTeamMessageIds: options.inputTeamMessageIds ?? [],
   });
 }
 
@@ -158,6 +166,8 @@ export function createChildTask(options: CreateChildTaskOptions): Task {
     teamMemberRunId: options.teamMemberRunId ?? null,
     teamSequence: options.teamSequence ?? null,
     teamTaskKind: options.teamTaskKind ?? null,
+    sourceTeamMessageId: options.sourceTeamMessageId ?? null,
+    inputTeamMessageIds: options.inputTeamMessageIds ?? [],
   });
 }
 

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { stringify } from 'yaml';
@@ -36,6 +35,12 @@ import {
   canonicalizeManifest,
   fingerprintProject,
 } from '../../domain/projects/project-canonicalization.js';
+import {
+  bareSha256,
+  canonicalizeYaml,
+  compareStrings,
+  sha256,
+} from '../../domain/projects/yaml-canonical.js';
 import type {
   LocalToolProfile,
   NormalizedLocalToolProfile,
@@ -791,9 +796,7 @@ async function readProjectSource(
     defaults,
   );
   return {
-    source: canonicalizeSource(
-      stringify(sortYamlValue(envelope), { lineWidth: 0 }),
-    ),
+    source: canonicalizeSource(canonicalizeYaml(envelope)),
   };
 }
 
@@ -840,18 +843,7 @@ function mergeDefaults(value: RecordValue, defaults: RecordValue): RecordValue {
 
 function canonicalizeSource(source: string): string {
   const raw = parseYaml(source);
-  return stringify(sortYamlValue(raw), { lineWidth: 0 });
-}
-
-function sortYamlValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortYamlValue);
-  if (obj(value))
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort(compareStrings)
-        .map((key) => [key, sortYamlValue(value[key])]),
-    );
-  return value;
+  return canonicalizeYaml(raw);
 }
 
 function virtualPath(
@@ -1039,17 +1031,8 @@ async function enumerateDirectory(
 function relativePath(root: string, path: string): string {
   return relative(root, path).split(sep).join('/');
 }
-function sha256(value: string | Buffer): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
-}
-function bareSha256(value: string | Buffer): string {
-  return createHash('sha256').update(value).digest('hex');
-}
 function compareTuple(a: SourceTuple, b: SourceTuple): number {
   return `${a.type}\0${a.name}\0${a.path}` < `${b.type}\0${b.name}\0${b.path}`
     ? -1
     : 1;
-}
-function compareStrings(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

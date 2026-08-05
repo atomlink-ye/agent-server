@@ -2,11 +2,11 @@
 
 ## Outcome
 
-**FAIL — Human Gate triggered.** Paseo/OpenCode did not refresh the provider Agent's MCP tool catalog on continuation when the stable server-side grant changed. Server-side revocation remained effective.
+**FAIL — Human Gate triggered by the corrected notification probe.** Paseo/OpenCode did not refresh the provider Agent's MCP tool catalog on continuation after the stable server-side grant changed and the MCP server called `sendToolListChanged()`. Server-side revocation remained effective.
 
 This evidence blocks the persistent Lead RuntimeSession implementation described in `DESIGN-DRAFT-2026-08-05-persistent-lead-runtime-session.md` section 6.3. No ownership implementation was started after this result.
 
-## Run
+## Initial run — non-decisive
 
 - Local date: 2026-08-06 (Asia/Shanghai)
 - UTC interval: 2026-08-05T16:19:43.227Z to 2026-08-05T16:20:05.418Z
@@ -34,12 +34,48 @@ Observed `tools/list` epochs: `[1]`. No `tools/list` request arrived during epoc
 
 The provider timeline contained three user turns on the same Agent. Turn 1 contained a successful `tool_call`; turns 2 and 3 contained reasoning and assistant messages but no tool call.
 
+The Manager correctly identified that this run did not emit `notifications/tools/list_changed`. A compliant client was not required to poll spontaneously, so this initial negative result alone did not decide whether OpenCode supports dynamic catalog refresh.
+
+## Corrected notification run — decisive
+
+- Local date: 2026-08-06 (Asia/Shanghai)
+- UTC interval: 2026-08-05T16:26:12.962Z to 2026-08-05T16:26:29.194Z
+- Branch/starting HEAD: `agent/team-ergonomics` / `b827ce70fe5a7420d4c8023fafba20c0141eb4f9`
+- Model: `opencode-go/deepseek-v4-flash`
+- Paseo: `0.1.110`
+- OpenCode: `1.18.4`
+- MCP SDK: `1.30.0`
+- Provider Agent ID: `41ca9dec-d997-4964-9a63-b7973ef82665`
+- Paseo Workspace ID: `wks_b44084140eb35083`
+- MCP session ID: `654dd3f8-6adc-4224-905b-1895b0a6600e`
+- Stable bearer: yes; the value was not logged
+- Provider Agent distinct count: 1
+- Process exit code: `2`, the intended probe-gate failure code
+- Raw local artifact: `.local/probe/persistent-lead-tool-refresh-notified-2026-08-05T16-26-12-962Z-15092/evidence.json`
+- Raw artifact SHA-256: `31926c62f033c811625b4b092fb43fa4de2216857fec6cdbf3793ec4c60e63e7`
+
+The corrected run changed the protocol experiment in exactly one respect: immediately after each atomic grant/registration switch, it called `McpServer.sendToolListChanged()` on the existing server/session before the next `sendAgentMessage`. Cleanup used the installed `DaemonClient.close()` method.
+
+Machine-written evidence markers:
+
+- `"passed": false`
+- `"providerAgentDistinctCount": 1`
+- `"bearerStable": true`
+- two `notificationLog` records whose `method` is `notifications/tools/list_changed`, at epochs 2 and 3 on the same MCP session
+- `"listEpochs": [1]`
+- `"successfulModelCalls": ["1:team_work_create"]`
+- revoked epoch-2 create call: `"rejected": true` and `"sameProviderMcpSession": true`
+
+Despite both notifications, no `tools/list` request arrived after epoch 1. The model successfully called `team_work_create` in epoch 1, then explicitly reported that only `team_work_create` remained visible in epochs 2 and 3. It did not call `team_work_accept` or `team_finish`.
+
 ## Gate conclusion
 
-The server correctly re-authorizes every request and rejects revoked tools, but Paseo/OpenCode retains the initial MCP catalog across `sendAgentMessage` continuation. Therefore the section 6.3 requirement that newly authorized review and finish tools become visible is not met.
+The corrected probe distinguishes the two proposed outcomes: the server emitted the specified MCP catalog-change notifications, but OpenCode did not refresh the catalog. Paseo/OpenCode retains the initial MCP catalog across `sendAgentMessage` continuation. Therefore the section 6.3 requirement that newly authorized review and finish tools become visible is not met.
 
 Per the approved slice gate, this result does not authorize a refresh/reconnect mechanism, Paseo/OpenCode upgrade, new runtime port, or ownership implementation. Manager direction is required before proceeding.
 
 ## Harness note
 
-The evidence file was written before a probe-only cleanup call used a nonexistent `DaemonClient.disconnect()` method and caused process exit 1 instead of the intended gate-specific exit 2. This occurred after all three turns, timeline fetch, assertions, and evidence persistence. The exact Paseo process started by the probe was then terminated and verified absent. The cleanup defect does not change the recorded protocol observations.
+The initial evidence file was written before a probe-only cleanup call used a nonexistent `DaemonClient.disconnect()` method and caused process exit 1 instead of the intended gate-specific exit 2. This occurred after all three turns, timeline fetch, assertions, and evidence persistence. The exact Paseo process started by the initial probe was then terminated and verified absent.
+
+The corrected rerun used `DaemonClient.close()`, returned the intended exit code `2`, and left no managed probe process running.

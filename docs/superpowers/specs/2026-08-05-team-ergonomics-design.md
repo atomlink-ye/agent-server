@@ -73,12 +73,14 @@ not rebuild it.
 **Safely-defaultable fields (category b) — ~8 total**, e.g.
 `runtime.mode` → `isolated`, `permissions.network` → `none`,
 `permissions.filesystem` → `none`, `skills` → `[]`, `memoryStores` → `{}`.
+At the project-manifest level, absent `toolProfiles`, `skills`, and
+`memoryStores` sections normalize to empty maps; an empty map grants nothing.
 
 **Genuine author intent (category c)** — `description`, `instructions`,
 `input.prompt`/`input.schema`, roster names and agent bindings, workspace
-name, skill directories. These stay mandatory. Reducing ceremony must not
-reduce the amount of _thinking_ the author does; `instructions` is where all
-behavior lives.
+name, skill directories, and `completion.command`. These stay mandatory.
+Reducing ceremony must not reduce the amount of _thinking_ the author does;
+`instructions` is where all behavior lives.
 
 **Inline sections are already precedented.** `skills` and `memoryStores` are
 parsed inline from the manifest

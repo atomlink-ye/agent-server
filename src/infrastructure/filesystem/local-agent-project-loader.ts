@@ -8,8 +8,14 @@ import {
   MAX_COLLECTION_SIZE,
   MAX_SCALAR_LENGTH,
 } from '../../domain/agents/managed-agent-yaml.js';
-import { parseManagedAgentPackage } from '../../domain/agents/managed-agent-package.js';
-import { parseManagedEnvironmentPackage } from '../../domain/environments/managed-environment-package.js';
+import {
+  ManagedAgentPackageError,
+  parseManagedAgentPackage,
+} from '../../domain/agents/managed-agent-package.js';
+import {
+  ManagedEnvironmentPackageError,
+  parseManagedEnvironmentPackage,
+} from '../../domain/environments/managed-environment-package.js';
 import { digestSkillFiles } from '../../application/extensions/skill-package-digest.js';
 import {
   MAX_SKILL_FILE_BYTES,
@@ -36,6 +42,8 @@ import type {
 } from '../../domain/projects/local-tool-profile.js';
 import { isSafeNativeRef } from '../../domain/projects/safe-ref.js';
 import { renderProjectTeam } from '../../application/projects/render-project-team.js';
+import { ProjectTeamRenderError } from '../../application/projects/render-project-team.js';
+import { TeamPackageValidationError } from '../../domain/teams/managed-team-package.js';
 import { canonicalTeamToolRefsForRole } from '../../domain/teams/canonical-team-role-tools.js';
 import type { AgentProjectSectionEntry } from '../../domain/projects/agent-project.js';
 
@@ -43,15 +51,16 @@ export class LocalAgentProjectLoaderError extends Error {
   public constructor(
     readonly code: string,
     readonly path = '$',
+    message = `${code} at ${path}`,
   ) {
-    super(code);
+    super(message);
     this.name = 'LocalAgentProjectLoaderError';
   }
 }
 
 type RecordValue = Record<string, unknown>;
-const fail = (code: string, path?: string): never => {
-  throw new LocalAgentProjectLoaderError(code, path);
+const fail = (code: string, path?: string, message?: string): never => {
+  throw new LocalAgentProjectLoaderError(code, path, message);
 };
 const obj = (value: unknown): value is RecordValue =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -119,14 +128,21 @@ async function loadLocalAgentProjectUnsafe(
       `$.spec.toolProfiles.${name}.file`,
     );
     const ref = logicalRef('tool-profile', name);
-    const canonicalSource = canonicalizeSource(source);
+    let canonicalSource: string;
+    let profile: LocalToolProfile;
+    try {
+      canonicalSource = canonicalizeSource(source);
+      profile = parseToolProfile(canonicalSource, name);
+    } catch (error) {
+      rethrowResourceError(error, `$.spec.toolProfiles.${name}`);
+    }
     toolProfiles.set(ref, {
       ref,
       name,
       source: canonicalSource,
       path: virtualPath('tool-profile', name),
       sourceFingerprint: sha256(canonicalSource),
-      profile: parseToolProfile(canonicalSource, name),
+      profile,
     } satisfies NormalizedLocalToolProfile);
     tuples.push({
       type: 'tool-profile',
@@ -178,8 +194,13 @@ async function loadLocalAgentProjectUnsafe(
     string,
     any,
   ][]) {
-    const item = await readProjectSource(root, spec, name, 'environment');
-    parseManagedEnvironmentPackage(item.source);
+    let item: Awaited<ReturnType<typeof readProjectSource>>;
+    try {
+      item = await readProjectSource(root, spec, name, 'environment');
+      parseManagedEnvironmentPackage(item.source);
+    } catch (error) {
+      rethrowResourceError(error, `$.spec.environments.${name}`);
+    }
     environments.set(logicalRef('environment', name), {
       name,
       path: virtualPath('environment', name),
@@ -197,8 +218,13 @@ async function loadLocalAgentProjectUnsafe(
     string,
     any,
   ][]) {
-    const item = await readProjectSource(root, spec, name, 'agent');
-    parseManagedAgentPackage(item.source);
+    let item: Awaited<ReturnType<typeof readProjectSource>>;
+    try {
+      item = await readProjectSource(root, spec, name, 'agent');
+      parseManagedAgentPackage(item.source);
+    } catch (error) {
+      rethrowResourceError(error, `$.spec.agents.${name}`);
+    }
     agents.set(logicalRef('agent', name), {
       name,
       path: virtualPath('agent', name),
@@ -241,14 +267,19 @@ async function loadLocalAgentProjectUnsafe(
     string,
     any,
   ][]) {
-    const item = await readProjectSource(root, spec, name, 'team');
-    parseProjectNativeEnvelope(
-      item.source,
-      'ManagedTeam',
-      `source.team.${name}`,
-      environments,
-      agents,
-    );
+    let item: Awaited<ReturnType<typeof readProjectSource>>;
+    try {
+      item = await readProjectSource(root, spec, name, 'team');
+      parseProjectNativeEnvelope(
+        item.source,
+        'ManagedTeam',
+        `source.team.${name}`,
+        environments,
+        agents,
+      );
+    } catch (error) {
+      rethrowResourceError(error, `$.spec.teams.${name}`);
+    }
     teams.set(logicalRef('team', name), {
       name,
       path: virtualPath('team', name),
@@ -373,12 +404,16 @@ async function loadLocalAgentProjectUnsafe(
     canonicalManifest: canonicalizeManifest(normalizedManifest),
     fingerprint: fingerprintProject(normalizedManifest, tuples),
   };
-  for (const ref of teams.keys()) {
-    renderProjectTeam({
-      project: candidate,
-      team: ref as `team://${string}`,
-      mode: 'plan',
-    });
+  for (const name of Object.keys(manifest.spec.teams)) {
+    try {
+      renderProjectTeam({
+        project: candidate,
+        team: logicalRef('team', name),
+        mode: 'plan',
+      });
+    } catch (error) {
+      rethrowResourceError(error, `$.spec.teams.${name}`);
+    }
   }
   return Object.freeze(candidate);
 }
@@ -438,7 +473,12 @@ function parseManifest(input: unknown): AgentProjectManifest {
     'teams',
     'memoryStores',
   ]) {
-    if (section === 'memoryStores' && raw.spec[section] === undefined) {
+    if (
+      (section === 'toolProfiles' ||
+        section === 'skills' ||
+        section === 'memoryStores') &&
+      raw.spec[section] === undefined
+    ) {
       maps[section] = {};
       continue;
     }
@@ -632,6 +672,41 @@ function parseProjectNativeEnvelope(
     );
 }
 
+function rethrowResourceError(error: unknown, prefix: string): never {
+  if (
+    error instanceof LocalAgentProjectLoaderError ||
+    error instanceof ManagedAgentPackageError ||
+    error instanceof ManagedEnvironmentPackageError ||
+    error instanceof ProjectTeamRenderError ||
+    error instanceof TeamPackageValidationError
+  ) {
+    const code = error.code;
+    const path = qualifyResourcePath(
+      prefix,
+      'path' in error ? error.path : '$',
+    );
+    const original = error instanceof Error ? error.message : code;
+    const generatedMessage =
+      original === code || original.startsWith(`${code} at `);
+    const message = generatedMessage ? `${code} at ${path}` : original;
+    throw new LocalAgentProjectLoaderError(code, path, message);
+  }
+  throw error;
+}
+
+function qualifyResourcePath(prefix: string, path: unknown): string {
+  if (typeof path !== 'string' || path === '$') return prefix;
+  if (path.startsWith('$.spec'))
+    return `${prefix}${path.slice('$.spec'.length)}`;
+  if (path.startsWith('source.')) {
+    let suffix = path.split('.').slice(3).join('.');
+    if (suffix.startsWith('spec.')) suffix = suffix.slice('spec.'.length);
+    return suffix ? `${prefix}.${suffix}` : prefix;
+  }
+  if (path.startsWith('$.')) return `${prefix}${path.slice(1)}`;
+  return prefix;
+}
+
 function validateLogicalTeamSpec(
   spec: RecordValue,
   path: string,
@@ -746,7 +821,7 @@ function defaultsFor(kind: 'environment' | 'agent' | 'team'): RecordValue {
     },
     memory: { policy: 'workspace_snapshot', proposalLimit: 0 },
     permissions: { network: 'none', filesystem: 'none' },
-    completion: { type: 'executable', command: 'done' },
+    completion: { type: 'executable' },
   };
 }
 

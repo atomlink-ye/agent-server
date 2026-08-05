@@ -5,7 +5,7 @@ import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 
 export const AGENTIC_TEAM_LIMITS = Object.freeze({
-  maxLeadTurns: 4,
+  maxLeadTurns: 8,
   maxWorkItems: 4,
   maxAttemptsPerItem: 2,
 });
@@ -33,11 +33,17 @@ export function deriveAgenticLeadCommandPolicy(
   attempts: readonly TeamWorkItemAttempt[],
 ): AgenticLeadCommandPolicy {
   const limits = {
-    maxLeadTurns: 4,
-    remainingLeadTurns: Math.max(0, 4 - team.leadTurnCount),
-    maxWorkItems: 4,
-    remainingWorkItems: Math.max(0, 4 - workItems.length),
-    maxAttemptsPerItem: 2,
+    maxLeadTurns: AGENTIC_TEAM_LIMITS.maxLeadTurns,
+    remainingLeadTurns: Math.max(
+      0,
+      AGENTIC_TEAM_LIMITS.maxLeadTurns - team.leadTurnCount,
+    ),
+    maxWorkItems: AGENTIC_TEAM_LIMITS.maxWorkItems,
+    remainingWorkItems: Math.max(
+      0,
+      AGENTIC_TEAM_LIMITS.maxWorkItems - workItems.length,
+    ),
+    maxAttemptsPerItem: AGENTIC_TEAM_LIMITS.maxAttemptsPerItem,
   };
   const none = () => ({
     allowedCommands: [] as const,
@@ -72,7 +78,8 @@ export function deriveAgenticLeadCommandPolicy(
     if (!latest || latest.status !== 'completed' || !latest.resultSummary)
       continue;
     accept.push(item.id);
-    if (latest.attemptNo < 2) rework.push(item.id);
+    if (latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem)
+      rework.push(item.id);
   }
   const allowed: AgenticLeadCommand[] = [];
   if (accept.length) allowed.push('team_work_accept');

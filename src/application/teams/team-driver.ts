@@ -19,12 +19,10 @@ import type { TeamWakeReconciler } from './team-wake-reconciler.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
-import { deriveAgenticLeadCommandPolicy } from './team-policy-evaluator.js';
-const LIMIT = Object.freeze({
-  maxLeadTurns: 4,
-  maxWorkItems: 4,
-  maxAttempts: 2,
-});
+import {
+  AGENTIC_TEAM_LIMITS,
+  deriveAgenticLeadCommandPolicy,
+} from './team-policy-evaluator.js';
 
 export class TeamDriver {
   public constructor(
@@ -88,7 +86,7 @@ export class TeamDriver {
       claim.run,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${LIMIT.maxWorkItems} Work items, max ${LIMIT.maxAttempts} attempts per Work item, max ${LIMIT.maxLeadTurns} Lead turns.`,
+      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
       lead.agentVersionId,
       'lead_turn',
       1,
@@ -382,7 +380,7 @@ export class TeamDriver {
     prompt: string,
   ) {
     if (team.controlState === 'lead_running') return;
-    if (team.leadTurnCount >= LIMIT.maxLeadTurns) {
+    if (team.leadTurnCount >= AGENTIC_TEAM_LIMITS.maxLeadTurns) {
       await this.executions.failTeamRunAtomically({
         teamRunId: team.id,
         rootRunId: team.rootRunId,

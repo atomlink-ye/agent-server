@@ -136,6 +136,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0024_agent_team_messages' },
       { version: '0025_agent_team_work_dependencies' },
       { version: '0026_agent-teams-v2-cutover' },
+      { version: '0027_agent-team-roster-limits' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -187,6 +188,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0024_agent_team_messages' },
       { version: '0025_agent_team_work_dependencies' },
       { version: '0026_agent-teams-v2-cutover' },
+      { version: '0027_agent-team-roster-limits' },
     ]);
   });
 

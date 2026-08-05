@@ -197,10 +197,10 @@ export function validateAndCanonicalizeTeamPackage(source: string): {
   const leadName = lead.name.trim();
 
   const roster = spec.roster;
-  if (!Array.isArray(roster) || roster.length !== 2) {
+  if (!Array.isArray(roster) || roster.length < 1) {
     throw new TeamPackageValidationError(
       'invalid_roster',
-      'spec.roster must contain exactly two members.',
+      'spec.roster must contain at least one member.',
     );
   }
 

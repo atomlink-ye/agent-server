@@ -13,6 +13,7 @@ import {
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import { AGENTIC_TEAM_LIMITS } from '../../application/teams/team-policy-evaluator.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -799,7 +800,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)}`,
           [input.teamRunId, ...ownerValues(input.owner)],
         );
-        if (Number(count.rows?.[0]?.count ?? 0) >= 4)
+        if (
+          Number(count.rows?.[0]?.count ?? 0) >=
+          AGENTIC_TEAM_LIMITS.maxWorkItems
+        )
           throw new TeamExecutionError('limit_exceeded');
         const activeAttempt = await client.query(
           `SELECT 1 FROM team_work_item_attempts a
@@ -1125,7 +1129,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const previous = rows.rows?.[0];
       if (
         !previous ||
-        previous.attempt_no >= 2 ||
+        previous.attempt_no >= AGENTIC_TEAM_LIMITS.maxAttemptsPerItem ||
         previous.status !== 'completed' ||
         !previous.result_summary
       )
@@ -1321,8 +1325,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope;
   }): Promise<TeamRun> {
     const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND control_state <> 'lead_running' AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < 4 AND ${ownerSql('', 3)} RETURNING *`,
-      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND control_state <> 'lead_running' AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < $7 AND ${ownerSql('', 3)} RETURNING *`,
+      [
+        input.teamRunId,
+        input.expectedRevision,
+        ...ownerValues(input.owner),
+        AGENTIC_TEAM_LIMITS.maxLeadTurns,
+      ],
     );
     if (!r.rows?.[0]) {
       const current = await this.database.query<{
@@ -1337,7 +1346,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         input.expectedRevision
       )
         throw new TeamExecutionError('stale_state');
-      if ((current.rows?.[0]?.lead_turn_count ?? 0) >= 4)
+      if (
+        (current.rows?.[0]?.lead_turn_count ?? 0) >=
+        AGENTIC_TEAM_LIMITS.maxLeadTurns
+      )
         throw new TeamExecutionError('limit_exceeded');
       throw new TeamExecutionError('stale_state');
     }

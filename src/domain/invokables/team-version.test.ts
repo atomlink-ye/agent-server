@@ -51,14 +51,14 @@ describe('team version', () => {
     expect(() => publishTeamVersion(published)).toThrow(/immutable/i);
   });
 
-  it('requires exactly two roster members', () => {
+  it('rejects an empty roster', () => {
     expect(() =>
       createDraftTeamVersion({
         definitionId: '00000000-0000-4000-8000-000000000002',
         ...ownerScope,
         name: 'Invalid Team',
-        spec: { ...spec, roster: [spec.roster[0]] },
+        spec: { ...spec, roster: [] },
       }),
-    ).toThrow(/exactly two/i);
+    ).toThrow(/at least one/i);
   });
 });

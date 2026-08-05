@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: agent/team-ergonomics
 created_at: 2026-08-05
 updated_at: 2026-08-05
@@ -46,7 +46,7 @@ Let independent declared Team members execute concurrently and wake the Lead inc
 - [x] Review the complete diff and have the Oracle inspect the R1/R2/R4 implementation before real execution.
 - [x] Run cheap static and deterministic checks, then the existing parallel smoke repeatedly against a fast real model.
 - [x] Record the accepted `opencode-go/deepseek-v4-flash` evidence; the Manager explicitly removed the obsolete `glm-5.2` run.
-- [ ] Run final repository checks, update evidence truthfully, and commit locally without push or PR.
+- [x] Run final repository checks, update evidence truthfully, and commit locally without push or PR.
 
 ## Verification
 
@@ -90,15 +90,16 @@ The primary risk is two interleaved Lead turns: `control_state` changes during a
 - `2026-08-05`: under the revised gate, counted repetitions 1-5 passed all strict invariants and demonstrated incremental acceptance. The next run reached legitimate Team review policy: Lead turn 2 called `team_work_request_changes` for work-1, a second attempt completed, later Lead turns accepted both Work items and finished the Team. The old smoke conflated exact-two attempt cardinality with terminality, so this run is recorded as inconclusive rather than a product failure and does not count.
 - `2026-08-05`: after correcting attempt cardinality/terminality diagnostics, counted repetitions 6-10 also passed every strict invariant and demonstrated incremental acceptance. Final gate ledger: 10/10 strict passes, 10/10 incremental demonstrations, one inconclusive successful request-changes trajectory, one infrastructure retry, and zero product failures.
 - `2026-08-05`: final `make check` passed types, formatting, docs, and Exec Plan validation; `make test-integration` passed 12 files / 141 tests with 7 files / 36 tests skipped by their normal environment gates; `make test-real-pg` passed 6 files / 74 tests with no skips.
+- `2026-08-05`: implementation and evidence were committed locally on `agent/team-ergonomics` as `652cdf3`; nothing was pushed and no PR was opened.
 
 ## Current blocker
 
-None. The real-model gate and required repository checks are complete. Only the local commit and plan archival remain.
+None.
 
 ## Next exact command
 
-Review the final scoped diff, commit locally without push or PR, then archive this completed Exec Plan.
+None; implementation, verification, local commit, and plan archival are complete.
 
 ## Cleanup state
 
-The user-authored design authority remains untracked for inclusion in this slice. Unrelated untracked `src/adapters/in-memory/in-memory-runtime-adapter.ts` is preserved and excluded.
+The design authority is committed with this slice. Unrelated untracked `src/adapters/in-memory/in-memory-runtime-adapter.ts` is preserved and excluded.

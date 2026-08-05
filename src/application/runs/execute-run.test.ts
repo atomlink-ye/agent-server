@@ -303,11 +303,32 @@ describe('ExecuteRun', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => []),
       failTeamRunAtomically,
     };
+    const admission = {
+      withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) =>
+        work({
+          teamExecutions: {
+            findMembersByTeamRunId: vi.fn(async () => [
+              {
+                id: 'lead-member',
+                role: 'lead',
+                agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+              },
+            ]),
+            advanceAgenticLead: vi.fn(async () => {
+              throw new TeamExecutionError('stale_state');
+            }),
+          },
+          tasks: {
+            findByRootTaskIdForOwner: vi.fn(async () => []),
+          },
+        }),
+      ),
+    };
     const driver = new TeamDriver(
       executions as never,
       {} as never,
       {} as never,
-      {} as never,
+      admission as never,
       undefined,
       undefined,
       now,
@@ -500,7 +521,16 @@ describe('ExecuteRun', () => {
         throw new TeamExecutionError('stale_state');
       return next;
     });
-    const txTasks = { save: vi.fn(async (_task: Task) => undefined) };
+    const committedLeadTasks: Task[] = [];
+    let pendingLeadTasks: Task[] = [];
+    const txTasks = {
+      save: vi.fn(async (task: Task) => {
+        pendingLeadTasks.push(task);
+      }),
+      findByRootTaskIdForOwner: vi.fn(async () =>
+        committedLeadTasks.map((task) => ({ task, latestRun: null })),
+      ),
+    };
     const txRuns = {
       save: vi.fn(async (_run: Run, _options: { taskId: string }) => undefined),
     };
@@ -509,16 +539,22 @@ describe('ExecuteRun', () => {
     });
     const admission = {
       withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) => {
-        await work({
-          teamExecutions: {
-            findMembersByTeamRunId: vi.fn(async () => [lead]),
-            advanceAgenticLead: txAdvance,
-          },
-          tasks: txTasks,
-          runs: txRuns,
-          enqueueRunDispatch,
-        });
-        committedControlState = next.controlState;
+        pendingLeadTasks = [];
+        try {
+          await work({
+            teamExecutions: {
+              findMembersByTeamRunId: vi.fn(async () => [lead]),
+              advanceAgenticLead: txAdvance,
+            },
+            tasks: txTasks,
+            runs: txRuns,
+            enqueueRunDispatch,
+          });
+          committedLeadTasks.push(...pendingLeadTasks);
+          committedControlState = next.controlState;
+        } finally {
+          pendingLeadTasks = [];
+        }
       }),
     };
     const driver = new TeamDriver(
@@ -568,7 +604,7 @@ describe('ExecuteRun', () => {
     await expect(
       driverWithSchedule.scheduleLead(team, parent, owner, 'review'),
     ).resolves.toBeUndefined();
-    expect(txAdvance).toHaveBeenCalledTimes(3);
+    expect(txAdvance).toHaveBeenCalledTimes(2);
     expect(txTasks.save).toHaveBeenCalledTimes(2);
     expect(txRuns.save).toHaveBeenCalledTimes(2);
     expect(enqueueRunDispatch).toHaveBeenCalledTimes(2);

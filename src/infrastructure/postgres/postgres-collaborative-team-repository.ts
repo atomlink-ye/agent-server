@@ -1325,7 +1325,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope;
   }): Promise<TeamRun> {
     const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND control_state <> 'lead_running' AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < $7 AND ${ownerSql('', 3)} RETURNING *`,
+      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < $7 AND ${ownerSql('', 3)} RETURNING *`,
       [
         input.teamRunId,
         input.expectedRevision,

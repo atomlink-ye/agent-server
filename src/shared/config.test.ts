@@ -13,6 +13,9 @@ describe('loadConfig', () => {
       serviceAccounts: [],
       larkCanary: { enabled: false },
       skillRegistryRoot: '/repo/.local/skill-registry',
+      dispatcher: {
+        concurrency: 4,
+      },
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
         agentCwd: '/repo/.local/agent-workspace',
@@ -26,6 +29,13 @@ describe('loadConfig', () => {
 
   it('parses an explicitly configured port', () => {
     expect(loadConfig({ PORT: '4100' }).port).toBe(4_100);
+  });
+
+  it('parses dispatcher concurrency from the environment', () => {
+    expect(
+      loadConfig({ AGENT_SERVER_DISPATCHER_CONCURRENCY: '7' }).dispatcher
+        ?.concurrency,
+    ).toBe(7);
   });
 
   it('fails before startup when configuration is invalid', () => {

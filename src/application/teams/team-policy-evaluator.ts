@@ -62,12 +62,7 @@ export function deriveAgenticLeadCommandPolicy(
   if (
     team.status !== 'active' ||
     team.controlState === 'terminal' ||
-    team.completionRequestedByRunId !== null ||
-    attempts.some(
-      (a) =>
-        a.status === 'running' ||
-        (a.status === 'queued' && a.executionTaskId !== null),
-    )
+    team.completionRequestedByRunId !== null
   )
     return none();
   if (limits.remainingLeadTurns === 0 && team.controlState !== 'lead_running')

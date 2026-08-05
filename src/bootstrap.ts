@@ -357,6 +357,8 @@ export async function createService(
     collaborativeTeamExecutions,
     taskRepository,
     admissionRepository,
+    undefined,
+    logger,
   );
   const teamCommandService = new TeamCommandService(
     collaborativeTeamExecutions,
@@ -502,7 +504,7 @@ export async function createService(
     }),
     executeRun,
     logger,
-    { concurrency: 2 },
+    { concurrency: config.dispatcher?.concurrency ?? 4 },
   );
   let larkWorker: LarkIngressWorker | undefined;
   let larkOutboxWorker: LarkOutboxWorker | undefined;
@@ -653,6 +655,8 @@ export async function createService(
               new PostgresTeamExecutionRepository(pool),
               new PostgresTaskRepository(pool),
               new PostgresAdmissionRepository(pool),
+              undefined,
+              logger,
             ).reconcileQueuedWakeRoots(),
           startDispatcher: () => dispatcher.start(),
           stopDispatcher: () => dispatcher.stop(),

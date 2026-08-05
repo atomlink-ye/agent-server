@@ -68,6 +68,7 @@ let apiUrl;
 let rootTaskId;
 let teamRunId;
 let databaseUrl;
+let failureDiagnostic;
 
 function assert(condition, code) {
   if (!condition) throw new Error(code);
@@ -161,7 +162,7 @@ function safe(value) {
   if (typeof value !== 'string') return value;
   return value
     .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
-    .replace(/\/(?:Users|Volumes)\/[^\s"']+/gu, '[path]')
+    .replace(/\/(?:Users|Volumes|tmp|workspace|app)\/[^\s"']+/gu, '[path]')
     .replace(/[\u0000-\u001f\u007f]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim()
@@ -176,15 +177,47 @@ function failureCode(error) {
     candidates.find(
       (candidate) =>
         typeof candidate === 'string' &&
-        /^[A-Za-z][A-Za-z0-9_]{0,127}$/u.test(candidate),
+        /^(?:[A-Za-z][A-Za-z0-9_]{0,127}|[0-9]{5})$/u.test(candidate),
     ) ?? 'unexpected_failure'
   );
 }
+function sanitizedErrorDetail(error) {
+  const source = error && typeof error === 'object' ? error : undefined;
+  const code =
+    typeof source?.code === 'string' &&
+    /^(?:[A-Za-z][A-Za-z0-9_]{0,127}|[0-9]{5})$/u.test(source.code)
+      ? source.code
+      : failureCode(error);
+  const name =
+    typeof source?.name === 'string'
+      ? source.name.replace(/[^A-Za-z0-9_.-]/gu, '_').slice(0, 96)
+      : 'Error';
+  const message = String(
+    source?.message ??
+      (typeof error === 'string' ? error : 'unexpected failure'),
+  )
+    .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
+    .replace(
+      /\b(?:credential|token|password|secret|api[_ -]?key)\s*[:=]\s*\S+/giu,
+      '[redacted]',
+    )
+    .replace(/https?:\/\/[^\s"']+/giu, '[url]')
+    .replace(/\/(?:Users|Volumes|tmp|workspace|app)\/[^\s"']+/gu, '[path]')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 256);
+  return { code, name, message };
+}
 function smokeFailure(error) {
-  const code = failureCode(error);
-  return new Error(`SMOKE_MAIN_FLOW_FAILED:${code}`, {
-    cause: new Error(code),
-  });
+  const detail = sanitizedErrorDetail(error);
+  return Object.assign(
+    new Error(
+      `SMOKE_MAIN_FLOW_FAILED:${detail.code}:${detail.name}:${detail.message}`,
+      { cause: error },
+    ),
+    { code: detail.code, detail },
+  );
 }
 function marker(name, fields = {}) {
   const entry = safe({ marker: name, at: new Date().toISOString(), ...fields });
@@ -192,7 +225,10 @@ function marker(name, fields = {}) {
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 }
 async function evidence(result, error) {
-  if (error) stderr.push(JSON.stringify({ error_code: failureCode(error) }));
+  if (error)
+    stderr.push(
+      JSON.stringify({ error: error.detail ?? sanitizedErrorDetail(error) }),
+    );
   const manifest = safe({
     schema: 'agent-teams-v2-real-server-v1',
     result,
@@ -221,6 +257,7 @@ async function evidence(result, error) {
     },
     markers,
     runtime_calls: runtimeCalls,
+    ...(failureDiagnostic ? { failure_diagnostic: failureDiagnostic } : {}),
     credentials: scriptedRuntime ? '[absent]' : '[provided-redacted]',
     prompts: '[absent]',
     stderr_empty: stderr.length === 0,
@@ -243,6 +280,102 @@ async function evidence(result, error) {
     await rename(temp, target);
     await chmod(target, 0o600);
   }
+}
+async function collectFailureDiagnostic(failure) {
+  const detail = failure?.detail ?? sanitizedErrorDetail(failure);
+  const diagnostic = {
+    error: detail,
+    ...(rootTaskId ? { root_task_ref: rootTaskId } : {}),
+    ...(teamRunId ? { team_run_ref: teamRunId } : {}),
+  };
+  if (!db || !rootTaskId) {
+    failureDiagnostic = diagnostic;
+    marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
+    return;
+  }
+  try {
+    const team = teamRunId
+      ? (
+          await db.query(
+            `SELECT status,phase,control_state,revision,lead_turn_count,stop_reason
+               FROM team_runs WHERE id=$1`,
+            [teamRunId],
+          )
+        ).rows[0]
+      : undefined;
+    const rootRun = (
+      await db.query(
+        `SELECT r.id,r.status,r.error->>'code' AS error_code,r.error->>'message' AS error_message
+           FROM runs r JOIN tasks t ON t.id=r.task_id
+          WHERE t.id=$1`,
+        [rootTaskId],
+      )
+    ).rows[0];
+    const tasksAndRuns = (
+      await db.query(
+        `SELECT t.id AS task_id,t.team_task_kind,t.team_sequence,t.status AS task_status,
+                t.updated_at AS task_updated_at,r.id AS run_id,r.status AS run_status,
+                r.updated_at AS run_updated_at,r.error->>'code' AS error_code,
+                r.error->>'message' AS error_message
+           FROM tasks t
+           LEFT JOIN runs r ON r.task_id=t.id
+          WHERE t.root_task_id=$1
+          ORDER BY GREATEST(t.updated_at,COALESCE(r.updated_at,t.updated_at)) DESC
+          LIMIT 32`,
+        [rootTaskId],
+      )
+    ).rows.map((row) => ({
+      task_ref: row.task_id,
+      ...(row.run_id ? { run_ref: row.run_id } : {}),
+      ...(row.team_task_kind ? { task_kind: row.team_task_kind } : {}),
+      ...(row.team_sequence === null || row.team_sequence === undefined
+        ? {}
+        : { sequence: row.team_sequence }),
+      task_status: row.task_status,
+      run_status: row.run_status ?? null,
+      updated_at: row.run_updated_at ?? row.task_updated_at,
+      ...(row.error_code || row.error_message
+        ? {
+            error: sanitizedErrorDetail({
+              code: row.error_code ?? 'runtime_error',
+              name: 'RunError',
+              message: row.error_message ?? row.error_code ?? 'run failed',
+            }),
+          }
+        : {}),
+    }));
+    failureDiagnostic = {
+      ...diagnostic,
+      ...(team ? { team } : {}),
+      ...(rootRun
+        ? {
+            root_run: {
+              run_ref: rootRun.id,
+              status: rootRun.status,
+              ...(rootRun.error_code || rootRun.error_message
+                ? {
+                    error: sanitizedErrorDetail({
+                      code: rootRun.error_code ?? 'runtime_error',
+                      name: 'RunError',
+                      message:
+                        rootRun.error_message ??
+                        rootRun.error_code ??
+                        'run failed',
+                    }),
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      tasks_and_runs: tasksAndRuns,
+    };
+  } catch (diagnosticError) {
+    failureDiagnostic = {
+      ...diagnostic,
+      diagnostic_query_error: sanitizedErrorDetail(diagnosticError),
+    };
+  }
+  marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
 }
 function value(result) {
   const output = result?.structuredContent;
@@ -402,7 +535,8 @@ class ScriptedRuntime {
             name: 'team_work_create',
             arguments: {
               subject: 'A',
-              description: 'bounded A',
+              description:
+                'Immediately collect and submit the required canonical snapshot evidence without creating a child subagent.',
               assignee: 'member',
             },
           }),
@@ -412,16 +546,16 @@ class ScriptedRuntime {
             name: 'team_work_create',
             arguments: {
               subject: 'B',
-              description: 'bounded B',
+              description:
+                'Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence.',
               assignee: 'observer',
-              dependency_refs: ['work-1'],
             },
           }),
         );
         runtimeCalls.push({
           role: 'lead',
           turn: 1,
-          tools: ['create_A', 'create_B_dependency'],
+          tools: ['create_A', 'create_B_independent'],
           zero_work_finish_absent: true,
         });
       } else if (this.#leadTurns === 2) {
@@ -566,6 +700,16 @@ class ScriptedRuntime {
         'member_canonical_snapshot_args_missing',
       );
       this.#memberTurns += 1;
+      const memberState = value(
+        await session.client.callTool({ name: 'team_state', arguments: {} }),
+      );
+      const memberTurn = memberState.member?.name === 'observer' ? 2 : 1;
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          memberState.member?.name === 'observer' ? 1_000 : 200,
+        ),
+      );
       value(
         await session.client.callTool({
           name: 'synthetic_stock_snapshot',
@@ -575,7 +719,7 @@ class ScriptedRuntime {
           },
         }),
       );
-      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${this.#memberTurns}`;
+      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}`;
       value(
         await session.client.callTool({
           name: 'team_work_checkpoint',
@@ -635,11 +779,14 @@ class ScriptedRuntime {
       };
       runtimeCalls.push({
         role: 'member',
-        turn: this.#memberTurns,
+        turn: memberTurn,
         tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
         post_submit_rejections: postSubmitRejections,
       });
-      if (!this.#submittedTimeoutInjected && this.#memberTurns === 1) {
+      if (
+        !this.#submittedTimeoutInjected &&
+        memberState.member?.name === 'member'
+      ) {
         this.#submittedTimeoutInjected = true;
         const { RuntimeTimedOutError } =
           await import('../../src/application/ports/agent-runtime.ts');
@@ -702,9 +849,10 @@ async function queued(kind) {
 }
 function agentYaml(name) {
   const lead = name === 'lead';
+  const observer = name === 'observer';
   const instructions = lead
-    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member; then create Work B assigned to observer with dependency_refs ["work-1"]; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On a later turn, when both Work items are accepted and the direct message is delivered, call team_finish exactly once and stop. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
-    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. Only the original outer member may create at most one bounded domain child subagent. If you are any descendant, do not create another subagent; return findings to the original outer member. All descendants share this Team identity and context. The outer member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. A descendant may submit only if the outer member cannot. After the first successful submit, the whole tree must stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to observer with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
   const refs = lead
     ? [
         'team-state',
@@ -726,8 +874,8 @@ function agentYaml(name) {
 function environmentYaml() {
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
-function teamYaml(lead, member, environment) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${member}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+function teamYaml(lead, member, observer, environment) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${observer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 }
 async function expectSqlState(query, values, code) {
   try {
@@ -878,7 +1026,7 @@ try {
     [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
   );
   const agents = {};
-  for (const name of ['lead', 'member']) {
+  for (const name of ['lead', 'member', 'observer']) {
     const imported = await request('/api/v1/agents:import', {
       method: 'POST',
       body: { source: agentYaml(name) },
@@ -902,7 +1050,12 @@ try {
   const imported = await request('/api/v1/teams:import', {
     method: 'POST',
     body: {
-      source: teamYaml(agents.lead, agents.member, environment.version.id),
+      source: teamYaml(
+        agents.lead,
+        agents.member,
+        agents.observer,
+        environment.version.id,
+      ),
     },
     status: 201,
   });
@@ -1411,23 +1564,88 @@ try {
   marker('TERMINAL_TASK_NONTERMINAL_RUN_FENCES_ENFORCED');
   const blocked = await service.singleRunDebug.rebuildQueuedTeamWakes();
   const blockedAgain = await service.singleRunDebug.rebuildQueuedTeamWakes();
-  assert(blocked === 1 && blockedAgain === 0, 'dependency_reconcile_invalid');
+  marker('INDEPENDENT_RECONCILE_COUNTS', {
+    blocked,
+    blocked_again: blockedAgain,
+  });
+  assert(blocked === 2 && blockedAgain === 0, 'independent_reconcile_invalid');
   const b = await db.query(
     'SELECT a.status,a.execution_task_id,m.status AS message_status FROM team_work_item_attempts a JOIN team_messages m ON m.attempt_id=a.id WHERE a.team_run_id=$1 AND a.attempt_no=1 AND a.assignee_member_id=$2',
     [teamRunId, observer.id],
   );
   assert(
     b.rowCount === 1 &&
-      b.rows[0].status === 'queued' &&
-      b.rows[0].execution_task_id === null &&
-      b.rows[0].message_status === 'queued',
-    'dependency_blocked_not_queued',
+      b.rows[0].status === 'running' &&
+      b.rows[0].execution_task_id &&
+      b.rows[0].message_status === 'consumed',
+    'independent_attempt_not_materialized',
   );
-  marker('DEPENDENCY_BLOCKED_ZERO_WRITE');
+  marker('INDEPENDENT_ATTEMPTS_MATERIALIZED');
+  const workProof = (
+    await db.query(
+      'SELECT id FROM team_work_items WHERE team_run_id=$1 ORDER BY created_at,id',
+      [teamRunId],
+    )
+  ).rows;
+  assert(workProof.length === 2, 'parallel_work_proof_missing');
+  let maxNonterminalLeadTurns = 0;
+  let observedMemberOverlap = false;
+  let observedIncrementalAcceptance = false;
+  const pollParallelism = async () => {
+    const leadCount = Number(
+      (
+        await db.query(
+          `SELECT count(*)::int AS count FROM tasks
+             WHERE root_task_id=$1 AND team_task_kind='lead_turn'
+               AND status NOT IN ('completed','failed','cancelled')`,
+          [rootTaskId],
+        )
+      ).rows[0]?.count ?? 0,
+    );
+    maxNonterminalLeadTurns = Math.max(maxNonterminalLeadTurns, leadCount);
+    assert(leadCount <= 1, 'live_lead_turn_mutex_exceeded');
+    const memberRuns = (
+      await db.query(
+        `SELECT a.work_item_id,r.status,
+                min(e.created_at) FILTER (WHERE e.type='started') AS started_at,
+                max(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed','cancelled')) AS terminal_at
+           FROM team_work_item_attempts a
+           JOIN tasks t ON t.id=a.execution_task_id
+           JOIN runs r ON r.task_id=t.id
+           LEFT JOIN run_events e ON e.run_id=r.id
+          WHERE a.team_run_id=$1 GROUP BY a.work_item_id,r.id,r.status`,
+        [teamRunId],
+      )
+    ).rows;
+    if (memberRuns.filter((row) => row.status === 'running').length >= 2)
+      observedMemberOverlap = true;
+    const accept = (
+      await db.query(
+        `SELECT c.created_at FROM team_command_receipts c
+          JOIN runs r ON r.id=c.source_run_id
+          JOIN tasks t ON t.id=r.task_id
+          WHERE t.root_task_id=$1 AND command_name='team_work_accept'
+            AND result_json->>'work_item_id'=$2
+          ORDER BY c.created_at LIMIT 1`,
+        [rootTaskId, workProof[0].id],
+      )
+    ).rows[0];
+    const work2 = memberRuns.find(
+      (row) => row.work_item_id === workProof[1].id,
+    );
+    if (
+      accept &&
+      work2?.status &&
+      !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(work2.status)
+    )
+      observedIncrementalAcceptance = true;
+  };
+  await pollParallelism();
   service.singleRunDebug.startDispatcher();
   const terminal = await waitFor(
     async () => {
       await service.singleRunDebug.rebuildQueuedTeamWakes();
+      await pollParallelism();
       const row = (
         await db.query('SELECT status,phase FROM team_runs WHERE id=$1', [
           teamRunId,
@@ -1449,18 +1667,107 @@ try {
     'team_terminal_timeout',
   );
   await service.singleRunDebug.stopDispatcher();
+  await pollParallelism();
   assert(terminal.phase === 'done', 'team_phase_not_done');
   const attempts = await db.query(
     'SELECT status,execution_task_id FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY created_at',
     [teamRunId],
   );
+  const terminalAttemptStatuses = new Set(['completed', 'failed']);
+  assert(attempts.rowCount >= 2, 'attempt_count_invalid');
   assert(
-    attempts.rowCount === 2 &&
-      attempts.rows.every(
-        (row) => row.status === 'completed' && row.execution_task_id,
-      ),
-    'attempts_not_terminal',
+    attempts.rows.every((row) => row.execution_task_id),
+    'attempt_execution_task_missing',
   );
+  assert(
+    attempts.rows.every((row) => terminalAttemptStatuses.has(row.status)),
+    'attempt_status_not_terminal',
+  );
+  const durableMemberIntervals = (
+    await db.query(
+      `SELECT a.work_item_id,
+              min(e.created_at) FILTER (WHERE e.type='started') AS started_at,
+              max(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed','cancelled')) AS terminal_at
+         FROM team_work_item_attempts a
+         JOIN tasks t ON t.id=a.execution_task_id
+         JOIN runs r ON r.task_id=t.id
+         JOIN run_events e ON e.run_id=r.id
+        WHERE a.team_run_id=$1 GROUP BY a.work_item_id`,
+      [teamRunId],
+    )
+  ).rows;
+  const intervalA = durableMemberIntervals.find(
+    (row) => row.work_item_id === workProof[0].id,
+  );
+  const intervalB = durableMemberIntervals.find(
+    (row) => row.work_item_id === workProof[1].id,
+  );
+  assert(
+    intervalA?.started_at &&
+      intervalA.terminal_at &&
+      intervalB?.started_at &&
+      intervalB.terminal_at &&
+      new Date(intervalA.started_at) < new Date(intervalB.terminal_at) &&
+      new Date(intervalB.started_at) < new Date(intervalA.terminal_at),
+    'durable_member_intervals_do_not_overlap',
+  );
+  const durableLeadIntervals = (
+    await db.query(
+      `SELECT t.team_sequence,t.created_at,t.updated_at
+         FROM tasks t
+        WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+        ORDER BY t.team_sequence`,
+      [rootTaskId],
+    )
+  ).rows;
+  for (let index = 1; index < durableLeadIntervals.length; index += 1)
+    assert(
+      new Date(durableLeadIntervals[index - 1].updated_at) <=
+        new Date(durableLeadIntervals[index].created_at),
+      'historical_lead_turn_intervals_overlap',
+    );
+  const acceptA = (
+    await db.query(
+      `SELECT c.created_at FROM team_command_receipts c
+        JOIN runs r ON r.id=c.source_run_id
+        JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND command_name='team_work_accept'
+          AND result_json->>'work_item_id'=$2
+        ORDER BY c.created_at LIMIT 1`,
+      [rootTaskId, workProof[0].id],
+    )
+  ).rows[0];
+  marker('PARALLEL_INCREMENTAL_DIAGNOSTICS', {
+    interval_a: intervalA,
+    interval_b: intervalB,
+    accept_a_at: acceptA?.created_at,
+    observed_member_overlap: observedMemberOverlap,
+    observed_incremental_acceptance: observedIncrementalAcceptance,
+    max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+  });
+  assert(maxNonterminalLeadTurns <= 1, 'lead_turn_mutex_history_invalid');
+  const incrementalAcceptanceTiming = Boolean(
+    acceptA &&
+    intervalB?.started_at &&
+    intervalB.terminal_at &&
+    new Date(intervalB.started_at) < new Date(acceptA.created_at) &&
+    new Date(acceptA.created_at) < new Date(intervalB.terminal_at),
+  );
+  if (observedIncrementalAcceptance && incrementalAcceptanceTiming) {
+    marker('PARALLEL_INCREMENTAL_LEAD_PROVEN', {
+      max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+      member_intervals_overlap: true,
+      accepted_work_1_while_work_2_running: true,
+    });
+  } else {
+    marker('PARALLEL_INCREMENTAL_ACCEPTANCE_NOT_OBSERVED', {
+      available_timing: Boolean(
+        acceptA && intervalB?.started_at && intervalB.terminal_at,
+      ),
+      observed_incremental_acceptance: observedIncrementalAcceptance,
+      timing_match: incrementalAcceptanceTiming,
+    });
+  }
   const memberSubmittedAttempt = await db.query(
     `SELECT a.status AS attempt_status,r.status AS run_status,m.status AS member_status
        FROM team_work_item_attempts a
@@ -1507,10 +1814,18 @@ try {
     [teamRunId, work.rows[0].id],
     '23514',
   );
+  await db.query(
+    'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$3,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
+    [teamRunId, work.rows[1].id, work.rows[0].id],
+  );
   await expectSqlState(
     'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$3,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
     [teamRunId, work.rows[1].id, work.rows[0].id],
     '23505',
+  );
+  await db.query(
+    'DELETE FROM team_work_item_dependencies WHERE team_run_id=$1 AND work_item_id=$2 AND depends_on_work_item_id=$3',
+    [teamRunId, work.rows[1].id, work.rows[0].id],
   );
   await expectSqlState(
     'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
@@ -1886,6 +2201,7 @@ try {
 } catch (error) {
   const failure = smokeFailure(error);
   try {
+    await collectFailureDiagnostic(failure);
     await evidence('blocked', failure);
   } catch {
     process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');

@@ -2,10 +2,6 @@ import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import type {
-  TeamExecution,
-  TeamNodeExecution,
-} from '../../domain/invokables/team-execution.js';
 
 export interface OwnerScope {
   readonly tenantId: string;
@@ -14,38 +10,49 @@ export interface OwnerScope {
   readonly principalId: string;
 }
 
-// -- DAG execution repository (legacy) --
-export interface DagTeamExecutionRepository {
-  create(execution: TeamExecution): Promise<void>;
-  findByChildTaskId(
-    childTaskId: string,
-    owner: OwnerScope,
-  ): Promise<TeamExecution | null>;
-  recordNodeResult(input: RecordNodeResultInput): Promise<TeamExecution>;
-  setStatus(
-    id: string,
-    owner: OwnerScope,
-    status: TeamExecution['status'],
-    result: string | null,
-    failureDetail?: string | null,
-  ): Promise<void>;
+export interface TeamWorkDependency {
+  readonly workItemId: string;
+  readonly dependsOnWorkItemId: string;
 }
 
-export interface RecordNodeResultInput {
-  readonly teamExecutionId: string;
-  readonly nodeId: string;
-  readonly status: TeamNodeExecution['status'];
-  readonly childTaskId?: string | null;
-  readonly childRunId?: string | null;
-  readonly result?: string | null;
-  readonly failureDetail?: string | null;
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
+export type TeamExecutionErrorCode =
+  | 'stale_state'
+  | 'not_allowed'
+  | 'not_found'
+  | 'conflict'
+  | 'invalid_transition'
+  | 'limit_exceeded'
+  | 'team_terminal';
+
+export class TeamExecutionError extends Error {
+  public constructor(public readonly code: TeamExecutionErrorCode) {
+    super(code);
+    this.name = 'TeamExecutionError';
+  }
 }
 
-// -- Collaborative team execution repository (new) --
+export type FailTeamRunInput = Readonly<{
+  teamRunId: string;
+  rootRunId: string;
+  rootTaskId: string;
+  owner: OwnerScope;
+  updatedAt: string;
+  failure: {
+    readonly code: 'runtime_execution_failed';
+    readonly message: string;
+  };
+}> &
+  (
+    | Readonly<{
+        stopReason: 'lead_no_progress';
+        expectedRevision: number;
+      }>
+    | Readonly<{
+        stopReason: 'lead_turn_limit' | 'lead_run_failed';
+        expectedRevision?: never;
+      }>
+  );
+
 export interface TeamExecutionRepository {
   createTeamRun(run: TeamRun): Promise<void>;
   findTeamRunById(id: string, owner: OwnerScope): Promise<TeamRun | null>;
@@ -82,10 +89,9 @@ export interface TeamExecutionRepository {
     readonly finalText: string;
     readonly owner: OwnerScope;
     readonly updatedAt: string;
-    readonly completionIntent?: 'legacy_lead_finalize' | 'agentic';
-    readonly executionMode?: TeamRun['executionMode'];
     readonly leadRunId?: string;
   }): Promise<TeamRun>;
+  failTeamRunAtomically(input: FailTeamRunInput): Promise<TeamRun>;
 
   createMemberRun(member: TeamMemberRun): Promise<void>;
   findMembersByTeamRunId(
@@ -114,6 +120,10 @@ export interface TeamExecutionRepository {
     owner: OwnerScope,
   ): Promise<TeamWorkItem[]>;
   findWorkItemById(id: string, owner: OwnerScope): Promise<TeamWorkItem | null>;
+  findWorkDependenciesByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<readonly TeamWorkDependency[]>;
   atomicClaimWorkItem(
     id: string,
     ownerMemberId: string,
@@ -138,12 +148,28 @@ export interface TeamExecutionRepository {
     executionTaskId: string,
     owner: OwnerScope,
   ): Promise<TeamWorkItemAttempt>;
+  materializeAttempt(input: {
+    readonly attemptId: string;
+    readonly executionTaskId: string;
+    readonly teamRunId: string;
+    readonly assigneeMemberId: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<TeamWorkItemAttempt>;
   updateAttemptStatus(
     attemptId: string,
     status: TeamWorkItemAttempt['status'],
     resultSummary: string | null,
     owner: OwnerScope,
   ): Promise<TeamWorkItemAttempt>;
+  submitCurrentAttempt(input: {
+    readonly teamRunId: string;
+    readonly executionTaskId: string;
+    readonly currentRunId: string;
+    readonly memberId: string;
+    readonly resultSummary: string;
+    readonly owner: OwnerScope;
+  }): Promise<TeamWorkItemAttempt>;
 
   createAssignedWork(input: {
     readonly teamRunId: string;
@@ -152,6 +178,7 @@ export interface TeamExecutionRepository {
     readonly assigneeMemberId: string;
     readonly subject: string;
     readonly description: string | null;
+    readonly dependsOnWorkItemIds?: readonly string[];
     readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
@@ -160,6 +187,7 @@ export interface TeamExecutionRepository {
     readonly teamRunId: string;
     readonly workItemId: string;
     readonly sourceRunId: string;
+    readonly leadTaskId?: string;
     readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
@@ -178,6 +206,7 @@ export interface TeamExecutionRepository {
   requestCompletion(input: {
     readonly teamRunId: string;
     readonly sourceRunId: string;
+    readonly leadTaskId?: string;
     readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;

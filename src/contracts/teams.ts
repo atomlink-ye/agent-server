@@ -24,13 +24,33 @@ export const TeamVersionResponseSchema = z
     status: z.enum(['draft', 'published']),
     name: z.string(),
     description: z.string().nullable(),
-    execution_mode: z.enum([
-      'legacy_graph',
-      'collaborative_mve',
-      'agentic_mve',
-    ]),
-    environment_version_id: uuid.nullable(),
-    collaboration_spec: z.unknown().nullable(),
+    environment_version_id: uuid,
+    spec: z
+      .object({
+        lead: z
+          .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+          .strict(),
+        roster: z
+          .array(
+            z
+              .object({ name: z.string().trim().min(1), agentVersionId: uuid })
+              .strict(),
+          )
+          .length(2),
+        environmentVersionId: uuid,
+      })
+      .strict()
+      .superRefine((spec, context) => {
+        const names = [
+          spec.lead.name,
+          ...spec.roster.map((member) => member.name),
+        ];
+        if (new Set(names).size !== names.length)
+          context.addIssue({
+            code: 'custom',
+            message: 'Team member names must be unique',
+          });
+      }),
     created_at: timestamp,
     updated_at: timestamp,
     published_at: timestamp.nullable(),
@@ -62,7 +82,6 @@ export const TeamRunResponseSchema = z
     final_text: z.string().nullable(),
     created_at: timestamp,
     updated_at: timestamp,
-    execution_mode: z.enum(['collaborative_mve', 'agentic_mve']).nullable(),
     control_state: z
       .enum(['lead_ready', 'lead_running', 'member_work_running', 'terminal'])
       .nullable(),
@@ -133,7 +152,7 @@ export const AgenticTeamProjectTurnSchema = z
     task_id: uuid,
     run_id: uuid,
     sequence: z.number().int(),
-    kind: z.enum(['lead_turn', 'work_attempt']),
+    kind: z.enum(['lead_turn', 'work_attempt', 'direct_message']),
     status: z.enum(['queued', 'running', 'completed', 'failed']),
     context: z.string(),
     result_text: z.string().nullable(),
@@ -163,12 +182,63 @@ export const AgenticTeamProjectResponseSchema = z
         team_run_id: uuid,
         team_version_id: uuid,
         status: z.enum(['active', 'waiting', 'succeeded', 'failed']),
+        phase: z.enum(['lead_kickoff', 'member_work', 'lead_finalize', 'done']),
         final_text: z.string().nullable(),
         created_at: timestamp,
         updated_at: timestamp,
       })
       .strict()
       .nullable(),
-    sessions: z.array(AgenticTeamProjectSessionSchema).optional(),
+    work_items: z.array(
+      z
+        .object({
+          work_ref: z.string().regex(/^work-\d+$/),
+          subject: z.string(),
+          status: TeamWorkItemResponseSchema.shape.status,
+          assignee_name: z.string().nullable(),
+          dependency_refs: z.array(z.string().regex(/^work-\d+$/)),
+          latest_attempt: z
+            .object({
+              attempt_no: z.number().int(),
+              status: z.enum(['queued', 'running', 'completed', 'failed']),
+              feedback_summary: z.string().nullable(),
+              result_summary: z.string().nullable(),
+            })
+            .nullable(),
+        })
+        .strict(),
+    ),
+    gates: z
+      .object({
+        finish_ready: z.boolean(),
+        all_work_accepted: z.boolean(),
+        no_active_attempts: z.boolean(),
+        all_members_idle: z.boolean(),
+      })
+      .strict(),
+    direct_messages: z.array(
+      z
+        .object({
+          sequence: z.number().int().positive(),
+          sender_name: z.string(),
+          recipient_name: z.string(),
+          summary: z.string(),
+          status: z.enum(['delivered', 'read']),
+          created_at: timestamp,
+        })
+        .strict(),
+    ),
+    sessions: z.array(AgenticTeamProjectSessionSchema),
+  })
+  .strict();
+
+export const TeamDirectMessageResponseSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    sender_name: z.string(),
+    recipient_name: z.string(),
+    summary: z.string(),
+    status: z.enum(['delivered', 'read']),
+    created_at: timestamp,
   })
   .strict();

@@ -242,14 +242,6 @@ class PublishedInvokableRepository implements InvokableRepository {
   ): Promise<null> {
     return null;
   }
-
-  public async saveCompiledTeamPlan(): Promise<void> {
-    throw new Error('Not implemented in invoke-task tests');
-  }
-
-  public async findCompiledTeamPlanByVersionId(): Promise<null> {
-    return null;
-  }
 }
 
 class InMemoryTaskRepository implements TaskRepository {

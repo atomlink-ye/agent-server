@@ -106,52 +106,21 @@ Stop the isolated processes, preserve a sanitized path/timestamp, revoke any rea
 
 The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
 
-## Team DAG MVE smoke
+## Agent Teams v2 smoke
 
-The observed opt-in `dag-mve-v1` main flow is verified with a fresh isolated
-database and real free-only Paseo/OpenCode execution:
-
-```bash
-POSTGRES_ADMIN_URL=<retained-local-admin-url> \
-PASEO_MODEL=opencode/deepseek-v4-flash-free \
-pnpm smoke:team-dag
-```
-
-The passing sanitized result reported `root_task: sanitized`, three child
-Tasks, `environment_version: shared`, and task-scoped runtime sessions. The
-flow proves two parallel leaves, root `waiting_children`, a durable join,
-synthesizer execution after both successes, and root completion. Failure is
-fail-fast/deferred; do not infer crash recovery, restart/resume, retries, or
-cancellation propagation from this smoke.
-
-## Agentic Team Project-in-Web-Chat baseline
-
-The standalone Self-learning Project Lab was retired after the replacement
-Agentic Team Project-in-Web-Chat E2E passed. The canonical smoke requires the
-local Docker/PostgreSQL environment and pinned Node `24.18.0` / pnpm `11.7.0`
-toolchain:
+The canonical Team verification runs against a fresh isolated database:
 
 ```bash
-make agentic-team-chat-smoke
+make agent-teams-v2-smoke
 ```
 
-The smoke uses an explicitly free model by default. For the optional paid-model
-diagnostic, load a local mode-`0600` `OPENCODE_GO_API_KEY` without printing its
-value:
-
-```bash
-PASEO_MODEL=opencode-go/deepseek-v4-flash \
-make agentic-team-chat-smoke
-```
-
-Set `AGENTIC_TEAM_SMOKE_RETAIN_FILE` to retain the local API, Paseo, Web service,
-and database for the browser flow. Connect Playwright through the shared CDP
-workflow and verify Project/Lead/member selection, refresh, mobile layout, and
-storage/network token boundaries; close only pages created for the check. The
-retained flow is local/single-operator evidence, not a deployment, persistence,
-multi-user, or authentication guarantee. Stop only verified child processes and
-remove ignored retained state after inspection. Do not record tokens, prompts,
-disposable IDs, raw logs, or local paths.
+The smoke proves one fixed-roster `TeamDriver` lifecycle: TeamRun activation,
+Lead Work control, member submission, Work acceptance, an addressed direct
+TeamMessage continuation, and terminal finish. It retains redacted local
+evidence only. Do not infer dynamic rosters, generalized graphs, crash recovery,
+restart/resume, retries, cancellation propagation, or production readiness from
+this smoke. Do not record tokens, prompts, disposable IDs, raw logs, or local
+paths.
 
 ## Managed Agent registry operations
 

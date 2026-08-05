@@ -52,7 +52,7 @@ Authorization: Bearer configured-token
 }
 ```
 
-Status is `queued|running|waiting_children|succeeded|failed|timed_out|cancelled`. `waiting_children` is used by the observed opt-in `dag-mve-v1` root Run while two child Runs complete; it has no active lease/activation during the wait. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
+Status is `queued|running|waiting_children|succeeded|failed|timed_out|cancelled`. `waiting_children` is reserved for a Run paused on durable child work; Agent Teams v2 uses canonical child Runs for bounded Lead turns, Work attempts, and addressed continuations. Runtime/result/usage/error are nullable. The prompt is never returned. Reads are owner-scoped to the authenticated service account binding; mismatched owner scope returns `404 run_not_found`. Runtime failures use stable codes and safe messages.
 
 ## Events and cancellation (minimum Phase D)
 
@@ -82,8 +82,8 @@ Relevant codes are `unauthorized`, `invalid_json`, `invalid_request`, `request_t
 
 `/api/v1/tasks:invoke` is now the canonical public invocation route and returns `task_id` plus Task read links. `/api/v1/runs` is preserved for compatibility callers that still submit prompt-only work and poll by `run_id`. Both paths share the same owner-scoped admission model and persist the same canonical Task/Run state underneath. Compatibility-admitted root Tasks use a reserved UUID invokable-version sentinel so the stored Task shape remains representable by the Task API contract.
 
-Team callers do not use a new Run or Team endpoint: they invoke through
-`/api/v1/tasks:invoke` and inspect the Task tree/status. The DAG MVE's durable
-join and synthesizer progression is visible through those existing Task/Run
-reads. Crash recovery, restart/resume, retries, and cancellation propagation
-are not claimed.
+Team callers invoke through `/api/v1/tasks:invoke` and inspect the Task tree,
+status, and owner-scoped TeamRun reads. Agent Teams v2's TeamDriver materializes
+bounded child Runs for Lead turns, Work attempts, and addressed continuations.
+Crash recovery, restart/resume, retries, and cancellation propagation are not
+claimed.

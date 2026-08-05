@@ -80,13 +80,7 @@ describeRealPostgres('managed single-agent minimum fault evidence', () => {
         write: () => undefined,
       });
       const complete = new CompleteRun(runs, tasks);
-      const team = new ExecuteTeamTask(
-        tasks,
-        runs,
-        invokables,
-        runtime,
-        complete,
-      );
+      const team = new ExecuteTeamTask(invokables, {} as never);
       const execute = new ExecuteRun(
         complete,
         tasks,

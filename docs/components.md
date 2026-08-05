@@ -2,15 +2,15 @@
 
 Components are ownership and contract boundaries, not deployment promises. The baseline is a modular monolith with a separate Paseo process; future services may be extracted only when durability, security, or scaling evidence requires it.
 
-| Component                                                                  | Responsibility                                  | Current status                            |
-| -------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------- |
-| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                                   |
-| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline                         |
-| [Paseo Runtime Adapter](components/paseo-runtime-adapter.md)               | Leaf-agent provider translation                 | Implemented baseline                      |
-| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                                   |
-| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline                  |
-| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agentic Team Project-in-Web-Chat baseline |
-| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline                          |
+| Component                                                                  | Responsibility                                  | Current status              |
+| -------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------- |
+| [Control Plane](components/control-plane.md)                               | Definitions, policy, admission, review          | Planned                     |
+| [Orchestration Kernel](components/orchestration-kernel.md)                 | Task/Run lifecycle, Team coordination, recovery | Run seam baseline           |
+| [Paseo Runtime Adapter](components/paseo-runtime-adapter.md)               | Leaf-agent provider translation                 | Implemented baseline        |
+| [Credential and Tool Gateway](components/credential-and-tool-gateway.md)   | Secret-safe tool authorization and receipts     | Planned                     |
+| [Workspace and Artifact Store](components/workspace-and-artifact-store.md) | Sources, scoped files, artifacts, evidence      | Paseo workspace baseline    |
+| [Channel, API, and Console](components/channel-api-console.md)             | Ingress, delivery, inspection                   | Agent Teams v2 project view |
+| [Data and Operations](components/data-and-operations.md)                   | Durable storage, queue, audit, observability    | Logging baseline            |
 
 Dependencies point inward: entrypoints and adapters depend on application ports; application depends on domain; domain imports neither frameworks nor Paseo.
 
@@ -103,9 +103,9 @@ convergence. This is a local fresh-session MVE, not production identity, ACL,
 cancel, old-session restart recovery, backpressure, or broader console
 functionality.
 
-## Agentic Team Project and Agent Session boundary
+## Agent Teams v2 Project and Agent Session boundary
 
-The Agentic Team Project is a thin observer/launcher over the fixed Team. Its
+The Agent Teams v2 Project is a thin observer/launcher over the fixed Team. Its
 Next.js same-origin BFF owns the server-side Agent Server bearer and binds the
 flow to `WEB_WORKSPACE_ID`, `WEB_AGENTIC_TEAM_VERSION_ID`, and
 `WEB_ENVIRONMENT_VERSION_ID`. It exposes launch, one owner-checked Project

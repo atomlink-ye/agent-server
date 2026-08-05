@@ -15,7 +15,47 @@ export type TeamProject = {
   readonly team_run_id: string;
   readonly name: string;
   readonly status: 'working' | 'completed' | 'failed';
+  readonly phase: 'planning' | 'working' | 'review' | 'completed' | 'failed';
+  readonly final_text: string | null;
+  readonly work_items: readonly TeamWorkItem[];
+  readonly gates: TeamGates;
+  readonly direct_messages: readonly TeamDirectMessage[];
   readonly sessions: readonly TeamSession[];
+};
+
+export type TeamWorkItem = {
+  readonly work_ref: string;
+  readonly subject: string;
+  readonly status:
+    | 'pending'
+    | 'ready'
+    | 'in_progress'
+    | 'submitted'
+    | 'accepted'
+    | 'changes_requested'
+    | 'blocked';
+  readonly assignee_name: string | null;
+  readonly dependency_refs: readonly string[];
+  readonly latest_attempt: {
+    readonly attempt_no: number;
+    readonly status: 'queued' | 'running' | 'completed' | 'failed';
+    readonly feedback_summary: string | null;
+    readonly result_summary: string | null;
+  } | null;
+};
+export type TeamGates = {
+  readonly finish_ready: boolean;
+  readonly all_work_accepted: boolean;
+  readonly no_active_attempts: boolean;
+  readonly all_members_idle: boolean;
+};
+export type TeamDirectMessage = {
+  readonly sequence: number;
+  readonly sender_name: string;
+  readonly recipient_name: string;
+  readonly summary: string;
+  readonly status: 'delivered' | 'read';
+  readonly created_at: string;
 };
 
 export type TeamSession = {
@@ -30,12 +70,14 @@ type ConversationSidebarProps = {
   readonly chats: readonly ChatSummary[];
   readonly project?: TeamProject;
   readonly selectedTeamSessionId?: string;
+  readonly selectedProjectRootTaskId?: string;
   readonly selectedSessionId?: string;
   readonly disabled: boolean;
   readonly mobileOpen: boolean;
   readonly onNewChat: () => void;
   readonly onSelect: (sessionId: string) => void;
   readonly onSelectTeam: (session: TeamSession) => void;
+  readonly onSelectProject: () => void;
   readonly onCloseMobile: () => void;
 };
 
@@ -43,12 +85,14 @@ export function ConversationSidebar({
   chats,
   project,
   selectedTeamSessionId,
+  selectedProjectRootTaskId,
   selectedSessionId,
   disabled,
   mobileOpen,
   onNewChat,
   onSelect,
   onSelectTeam,
+  onSelectProject,
   onCloseMobile,
 }: ConversationSidebarProps) {
   const firstControlRef = useRef<HTMLButtonElement>(null);
@@ -99,17 +143,10 @@ export function ConversationSidebar({
             <button
               type="button"
               className="project-directory-heading"
-              onClick={() => {
-                const lead = project.sessions.find(
-                  (session) => session.role === 'lead',
-                );
-                if (lead) onSelectTeam(lead);
-              }}
+              onClick={onSelectProject}
               disabled={disabled}
               aria-current={
-                selectedTeamSessionId ===
-                project.sessions.find((session) => session.role === 'lead')
-                  ?.agent_session_id
+                selectedProjectRootTaskId === project.root_task_id
                   ? 'page'
                   : undefined
               }

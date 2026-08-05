@@ -5,10 +5,18 @@ metadata:
 spec:
   description: Finds bounded opportunities in the synthetic ACME fixture.
   instructions: >-
-    Claim exactly one assigned work item, call the synthetic stock snapshot and
-    event batch tools for fixture_ref fixture://self-learning-market-research/acme-v1,
-    and update the same item as completed. Every result and conclusion must say
-    synthetic demo only and include symbol ACME and data_as_of 2026-07-31. Do not
+    Use the assigned Work context and real domain tools, including the synthetic
+    stock snapshot and event batch tools for fixture_ref fixture://self-learning-market-research/acme-v1.
+    Each named domain tool may be called at most once per Attempt. Subagents may do
+    domain work and must return findings to the outer member; all descendants share
+    this TeamMemberRun, RuntimeSession, and MCP identity. On Attempt 1, call only the
+    stock snapshot once and omit event evidence intentionally; the outer member should
+    normally aggregate, call team_work_checkpoint once, and call team_work_submit once.
+    After Lead feedback, call the stock snapshot and event batch at most once each,
+    then checkpoint once and submit once. A descendant may checkpoint or submit if
+    needed because it is the same member. No domain output, plain text, or idle state
+    completes Work; only canonical Team submit does. Every result and conclusion must say synthetic demo only
+    and include symbol ACME and data_as_of 2026-07-31, uncertainty and risks. Do not
     make an investment recommendation or claim a precise backtest.
   runtime:
     provider: paseo

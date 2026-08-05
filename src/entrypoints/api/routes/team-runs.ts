@@ -9,6 +9,7 @@ import {
   TeamRunResponseSchema,
   TeamMemberResponseSchema,
   TeamWorkItemResponseSchema,
+  TeamDirectMessageResponseSchema,
 } from '../../../contracts/teams.js';
 import {
   getAuthenticatedAccessContext,
@@ -40,7 +41,22 @@ export function registerTeamRunRoutes(
         'The root task ID is invalid.',
       );
     const projection = await d.projectAgenticTeam.execute(owner(c), rootTaskId);
-    if (!projection) return c.json({ project: null }, 200);
+    if (!projection)
+      return c.json(
+        AgenticTeamProjectResponseSchema.parse({
+          project: null,
+          work_items: [],
+          gates: {
+            finish_ready: false,
+            all_work_accepted: false,
+            no_active_attempts: true,
+            all_members_idle: true,
+          },
+          direct_messages: [],
+          sessions: [],
+        }),
+        200,
+      );
     return c.json(
       AgenticTeamProjectResponseSchema.parse({
         project: {
@@ -48,10 +64,40 @@ export function registerTeamRunRoutes(
           team_run_id: projection.project.teamRunId,
           team_version_id: projection.project.teamVersionId,
           status: projection.project.status,
+          phase: projection.project.phase,
           final_text: projection.project.finalText,
           created_at: projection.project.createdAt,
           updated_at: projection.project.updatedAt,
         },
+        work_items: projection.workItems.map((work) => ({
+          work_ref: work.workRef,
+          subject: work.subject,
+          status: work.status,
+          assignee_name: work.assigneeName,
+          dependency_refs: work.dependencyRefs,
+          latest_attempt: work.latestAttempt
+            ? {
+                attempt_no: work.latestAttempt.attemptNo,
+                status: work.latestAttempt.status,
+                feedback_summary: work.latestAttempt.feedbackSummary,
+                result_summary: work.latestAttempt.resultSummary,
+              }
+            : null,
+        })),
+        gates: {
+          finish_ready: projection.gates.finishReady,
+          all_work_accepted: projection.gates.allWorkAccepted,
+          no_active_attempts: projection.gates.noActiveAttempts,
+          all_members_idle: projection.gates.allMembersIdle,
+        },
+        direct_messages: projection.directMessages.map((message) => ({
+          sequence: message.sequence,
+          sender_name: message.senderName,
+          recipient_name: message.recipientName,
+          summary: message.summary,
+          status: message.status,
+          created_at: message.createdAt,
+        })),
         sessions: projection.sessions.map((session) => ({
           team_member_run_id: session.teamMemberRunId,
           name: session.name,
@@ -117,6 +163,27 @@ export function registerTeamRunRoutes(
       200,
     );
   });
+  app.get('/api/v1/team-runs/:id/direct-messages', async (c) => {
+    const projection = await d.projectAgenticTeam.project(
+      c.req.param('id'),
+      owner(c),
+    );
+    if (!projection)
+      throw new HttpError(404, 'team_not_found', 'The team run was not found.');
+    return c.json(
+      projection.directMessages.map((message) =>
+        TeamDirectMessageResponseSchema.parse({
+          sequence: message.sequence,
+          sender_name: message.senderName,
+          recipient_name: message.recipientName,
+          summary: message.summary,
+          status: message.status,
+          created_at: message.createdAt,
+        }),
+      ),
+      200,
+    );
+  });
 }
 function owner(c: any): OwnerScope {
   const a = getAuthenticatedAccessContext(c);
@@ -137,7 +204,6 @@ function run(v: any) {
     status: v.status,
     phase: v.phase,
     final_text: v.finalText,
-    execution_mode: v.executionMode,
     control_state: v.controlState,
     revision: v.revision,
     lead_turn_count: v.leadTurnCount,

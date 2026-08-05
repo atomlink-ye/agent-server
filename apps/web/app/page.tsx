@@ -38,8 +38,8 @@ type TeamTurn = {
   task_id: string;
   run_id: string;
   sequence: number;
-  context: string;
-  result_text: string | null;
+  assignment_summary: string;
+  result_summary: string | null;
   status: 'queued' | 'running' | 'completed' | 'failed';
 };
 type TeamSessionResponse = {
@@ -52,6 +52,7 @@ type TeamSessionResponse = {
 };
 type ChatSelection =
   | { kind: 'product_session'; sessionId: string }
+  | { kind: 'team_overview'; rootTaskId: string; teamRunId: string }
   | {
       kind: 'team_agent_session';
       rootTaskId: string;
@@ -59,6 +60,10 @@ type ChatSelection =
       memberRunId: string;
     };
 type ReplayStatus = 'loading' | 'ready' | 'unavailable';
+type ReplayProjections = {
+  readonly projections: Readonly<Record<string, StreamProjection>>;
+  readonly statuses: Readonly<Record<string, ReplayStatus>>;
+};
 type RunTracking = {
   taskId: string;
   runId: string;
@@ -78,14 +83,15 @@ const TEAM_ROOT_TASK_PARAM = 'rootTaskId';
 const TEAM_MEMBER_RUN_PARAM = 'memberRunId';
 
 function readTeamUrlSelection():
-  { rootTaskId: string; memberRunId: string } | undefined {
+  { rootTaskId: string; memberRunId?: string } | undefined {
   if (typeof window === 'undefined') return undefined;
   const params = new URLSearchParams(window.location.search);
   const rootTaskId = params.get(TEAM_ROOT_TASK_PARAM);
   const memberRunId = params.get(TEAM_MEMBER_RUN_PARAM);
   if (!rootTaskId && !memberRunId) return undefined;
-  if (!isUuid(rootTaskId) || !isUuid(memberRunId)) return undefined;
-  return { rootTaskId, memberRunId };
+  if (!isUuid(rootTaskId) || (memberRunId !== null && !isUuid(memberRunId)))
+    return undefined;
+  return memberRunId ? { rootTaskId, memberRunId } : { rootTaskId };
 }
 
 function hasTeamUrlSelection(): boolean {
@@ -189,10 +195,11 @@ export default function HomePage() {
   }, []);
 
   const updateTeamUrl = useCallback(
-    (rootTaskId: string, memberRunId: string) => {
+    (rootTaskId: string, memberRunId?: string) => {
       const url = new URL(window.location.href);
       url.searchParams.set(TEAM_ROOT_TASK_PARAM, rootTaskId);
-      url.searchParams.set(TEAM_MEMBER_RUN_PARAM, memberRunId);
+      if (memberRunId) url.searchParams.set(TEAM_MEMBER_RUN_PARAM, memberRunId);
+      else url.searchParams.delete(TEAM_MEMBER_RUN_PARAM);
       window.history.replaceState(
         {},
         '',
@@ -244,7 +251,7 @@ export default function HomePage() {
       selectedId: string,
       nextMessages: Message[],
       epoch: number,
-    ): Promise<Readonly<Record<string, StreamProjection>>> => {
+    ): Promise<ReplayProjections> => {
       const runIds = [
         ...new Set(
           nextMessages
@@ -252,8 +259,9 @@ export default function HomePage() {
             .filter((value): value is string => Boolean(value)),
         ),
       ];
-      if (runIds.length === 0) return {};
+      if (runIds.length === 0) return { projections: {}, statuses: {} };
       const results: Record<string, StreamProjection> = {};
+      const statuses: Record<string, ReplayStatus> = {};
       await Promise.all(
         runIds.map(async (runId) => {
           try {
@@ -279,12 +287,13 @@ export default function HomePage() {
               projection = reduceRunStreamEvent(projection, event);
             if (selectionEpochRef.current === epoch)
               results[runId] = projection;
+            statuses[runId] = 'ready';
           } catch {
-            /* Replay unavailable — leave the projection empty for this run. */
+            statuses[runId] = 'unavailable';
           }
         }),
       );
-      return results;
+      return { projections: results, statuses };
     },
     [],
   );
@@ -298,7 +307,7 @@ export default function HomePage() {
       eventSourceRef.current = null;
       runTrackingRef.current = null;
       setSseConnected(false);
-      const projections = await buildReplayProjections(
+      const replay = await buildReplayProjections(
         session.session_id,
         nextMessages,
         epoch,
@@ -309,7 +318,7 @@ export default function HomePage() {
       setSelection({ kind: 'product_session', sessionId: session.session_id });
       setTeamSession(undefined);
       setMessages(nextMessages);
-      setProjections(projections);
+      setProjections(replay.projections);
       setReplayStatus(
         Object.fromEntries(
           nextMessages
@@ -317,9 +326,7 @@ export default function HomePage() {
             .filter((value): value is string => Boolean(value))
             .map((runId) => [
               runId,
-              projections[runId]
-                ? ('ready' as const)
-                : ('unavailable' as const),
+              replay.statuses[runId] ?? ('unavailable' as const),
             ]),
         ),
       );
@@ -371,6 +378,10 @@ export default function HomePage() {
           requestedTeam &&
           project?.root_task_id === requestedTeam.rootTaskId
         ) {
+          if (!requestedTeam.memberRunId) {
+            await selectTeamOverview(project, operation);
+            return;
+          }
           const teamSession = project.sessions.find(
             (session) => session.agent_session_id === requestedTeam.memberRunId,
           );
@@ -468,7 +479,7 @@ export default function HomePage() {
           selectionEpochRef.current,
         );
         if (!isCurrent()) return;
-        const replay = results[capturedRunId];
+        const replay = results.projections[capturedRunId];
         if (!replay) return;
         setProjections((current) => ({
           ...current,
@@ -476,7 +487,7 @@ export default function HomePage() {
         }));
         setReplayStatus((current) => ({
           ...current,
-          [capturedRunId]: 'ready',
+          [capturedRunId]: results.statuses[capturedRunId] ?? 'unavailable',
         }));
         if (replay.assistantText !== null)
           setTransientAssistantText(replay.assistantText);
@@ -746,6 +757,8 @@ export default function HomePage() {
     setError(undefined);
     setStatus('loading');
     setSessionId(undefined);
+    runTrackingRef.current = null;
+    setSseConnected(false);
     setSelection(nextSelection);
     setTeamSession(undefined);
     setMessages([]);
@@ -753,6 +766,8 @@ export default function HomePage() {
     setReplayStatus({});
     setActiveTaskId(undefined);
     setActiveRunId(undefined);
+    setRunDetails({});
+    setTransientAssistantText(undefined);
     try {
       const response = await fetch(
         `/api/team-project/sessions/${encodeURIComponent(session.agent_session_id)}?task=${encodeURIComponent(project.root_task_id)}`,
@@ -780,16 +795,26 @@ export default function HomePage() {
               const parsed = parseRunStreamEvent(JSON.stringify(event));
               if (parsed) projection = reduceRunStreamEvent(projection, parsed);
             }
-            return [turn.run_id, projection] as const;
+            return [turn.run_id, projection, 'ready' as const] as const;
           } catch {
-            return [turn.run_id, initialStreamProjection] as const;
+            return [
+              turn.run_id,
+              initialStreamProjection,
+              'unavailable' as const,
+            ] as const;
           }
         }),
       );
       setTeamSession(data);
-      setProjections(Object.fromEntries(eventResults));
+      setProjections(
+        Object.fromEntries(
+          eventResults.map(([runId, projection]) => [runId, projection]),
+        ),
+      );
       setReplayStatus(
-        Object.fromEntries(data.turns.map((turn) => [turn.run_id, 'ready'])),
+        Object.fromEntries(
+          eventResults.map(([runId, , replay]) => [runId, replay]),
+        ),
       );
       setRunDetails({
         taskId: data.turns.at(-1)?.task_id,
@@ -807,6 +832,51 @@ export default function HomePage() {
       setMobileSidebarOpen(false);
       if (existingOperation === undefined) finishNavigation(operation);
     }
+  }
+
+  async function selectTeamOverview(
+    projectOverride?: TeamProject,
+    existingOperation?: number,
+  ) {
+    const project = projectOverride ?? teamProject;
+    if (
+      !project ||
+      (navigationPendingRef.current && existingOperation === undefined)
+    )
+      return;
+    const operation = existingOperation ?? beginNavigation();
+    if (operation === null) return;
+    updateTeamUrl(project.root_task_id);
+    selectionEpochRef.current += 1;
+    runEpochRef.current += 1;
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    setSessionId(undefined);
+    setSelection({
+      kind: 'team_overview',
+      rootTaskId: project.root_task_id,
+      teamRunId: project.team_run_id,
+    });
+    setTeamSession(undefined);
+    setMessages([]);
+    setProjections({});
+    setReplayStatus({});
+    setActiveTaskId(undefined);
+    setActiveRunId(undefined);
+    setRunDetails({});
+    setTransientAssistantText(undefined);
+    runTrackingRef.current = null;
+    setSseConnected(false);
+    setError(undefined);
+    setStatus(
+      project.status === 'failed'
+        ? 'failed'
+        : project.status === 'completed'
+          ? 'completed'
+          : 'running',
+    );
+    setMobileSidebarOpen(false);
+    if (existingOperation === undefined) finishNavigation(operation);
   }
 
   selectTeamSessionRef.current = selectTeamSession;
@@ -938,6 +1008,7 @@ export default function HomePage() {
       : chat,
   );
   const selectedTeam = selection?.kind === 'team_agent_session';
+  const selectedOverview = selection?.kind === 'team_overview';
 
   return (
     <main className="page-shell">
@@ -949,15 +1020,20 @@ export default function HomePage() {
           selectedTeamSessionId={
             selectedTeam ? selection.memberRunId : undefined
           }
+          selectedProjectRootTaskId={
+            selectedOverview ? selection.rootTaskId : undefined
+          }
           disabled={
             (status === 'running' &&
-              selection?.kind !== 'team_agent_session') ||
+              selection?.kind !== 'team_agent_session' &&
+              selection?.kind !== 'team_overview') ||
             navigationPending
           }
           mobileOpen={mobileSidebarOpen}
           onNewChat={() => void createChat()}
           onSelect={(id) => void selectChat(id)}
           onSelectTeam={(session) => void selectTeamSession(session)}
+          onSelectProject={() => void selectTeamOverview()}
           onCloseMobile={() => setMobileSidebarOpen(false)}
         />
         <section className="chat-main">
@@ -977,14 +1053,18 @@ export default function HomePage() {
               </span>
               <div>
                 <p className="eyebrow">
-                  {selectedTeam
-                    ? 'Selected Agent Session'
-                    : 'Selected ProductSession'}
+                  {selectedOverview
+                    ? 'Team Overview'
+                    : selectedTeam
+                      ? 'Selected Agent Session'
+                      : 'Selected ProductSession'}
                 </p>
                 <h1>
-                  {selectedTeam
-                    ? (teamSession?.name ?? 'Agent Session')
-                    : 'Research Desk'}
+                  {selectedOverview
+                    ? (teamProject?.name ?? 'Team Project')
+                    : selectedTeam
+                      ? (teamSession?.name ?? 'Agent Session')
+                      : 'Research Desk'}
                 </h1>
               </div>
             </div>
@@ -993,12 +1073,14 @@ export default function HomePage() {
                 {statusLabel(status)}
               </span>
               <span className="state-detail">
-                {selectedTeam
-                  ? `${teamSession?.role === 'lead' ? 'Lead' : 'Member'} · read-only transcript`
-                  : 'Same Agent · same runtime context'}
+                {selectedOverview
+                  ? 'Shared Work Board · read-only'
+                  : selectedTeam
+                    ? `${teamSession?.role === 'lead' ? 'Lead' : 'Member'} · read-only transcript`
+                    : 'Same Agent · same runtime context'}
               </span>
             </div>
-            {!selectedTeam ? (
+            {!selectedTeam && !selectedOverview ? (
               <details className="run-details-disclosure">
                 <summary>Details</summary>
                 <RunDetails
@@ -1022,11 +1104,18 @@ export default function HomePage() {
                 className="message-list"
                 aria-live={activeRunId ? 'polite' : undefined}
               >
-                {!selectedTeam && !messages.length && status !== 'loading' ? (
+                {selectedOverview && teamProject ? (
+                  <TeamOverview project={teamProject} />
+                ) : null}
+                {!selectedTeam &&
+                !selectedOverview &&
+                !messages.length &&
+                status !== 'loading' ? (
                   <EmptyState onPrompt={setText} />
                 ) : null}
                 {status === 'loading' ? <LoadingState /> : null}
                 {!selectedTeam &&
+                  !selectedOverview &&
                   turns.map((turn) => (
                     <TurnView
                       key={turn.taskId}
@@ -1059,6 +1148,10 @@ export default function HomePage() {
               {selectedTeam ? (
                 <div className="read-only-session">
                   This Agent Session is read-only.
+                </div>
+              ) : selectedOverview ? (
+                <div className="read-only-session">
+                  This Team Overview is read-only.
                 </div>
               ) : (
                 <Composer
@@ -1146,7 +1239,7 @@ function TeamTranscript({
         <div className="team-turn" key={`${turn.task_id}-${turn.sequence}`}>
           <div className="team-context-block">
             <span>Assignment context</span>
-            <p>{turn.context || 'No additional context.'}</p>
+            <p>{turn.assignment_summary}</p>
           </div>
           <ActivityPanel
             projection={projections[turn.run_id] ?? initialStreamProjection}
@@ -1154,13 +1247,13 @@ function TeamTranscript({
             replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
             replayLoading={replayStatus[turn.run_id] === 'loading'}
           />
-          {turn.result_text ? (
+          {turn.result_summary ? (
             <article className="message assistant">
               <p className="message-label">
                 {session.role === 'lead' ? 'Lead' : session.name}
               </p>
               <div className="assistant-surface">
-                <AssistantMarkdown text={turn.result_text} />
+                <AssistantMarkdown text={turn.result_summary} />
               </div>
               <p className="message-meta">
                 {turn.status === 'failed' ? 'Turn failed' : 'Saved response'}
@@ -1177,6 +1270,162 @@ function TeamTranscript({
       ))}
     </div>
   );
+}
+
+function TeamOverview({ project }: { readonly project: TeamProject }) {
+  const gates = [
+    ['Finish ready', project.gates.finish_ready],
+    ['All work accepted', project.gates.all_work_accepted],
+    ['No active attempts', project.gates.no_active_attempts],
+    ['All members idle', project.gates.all_members_idle],
+  ] as const;
+  return (
+    <section className="team-overview" aria-label="Team Overview">
+      <div className="team-overview-heading">
+        <div>
+          <p className="section-kicker">Team Overview</p>
+          <h2>{phaseLabel(project.phase)}</h2>
+        </div>
+        <span className={`project-status ${project.status}`}>
+          {statusLabel(
+            project.status === 'working' ? 'running' : project.status,
+          )}
+        </span>
+      </div>
+      <section
+        className="team-overview-section"
+        aria-labelledby="team-gates-heading"
+      >
+        <div className="team-section-heading">
+          <p className="section-kicker" id="team-gates-heading">
+            Gates
+          </p>
+          <span>
+            {project.gates.finish_ready ? 'Ready to finish' : 'Waiting'}
+          </span>
+        </div>
+        <ul className="team-gates-list">
+          {gates.map(([label, passed]) => (
+            <li key={label} className={passed ? 'is-passed' : 'is-pending'}>
+              <span aria-hidden="true">{passed ? '✓' : '○'}</span>
+              {label}
+              <small>{passed ? 'Passed' : 'Pending'}</small>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section
+        className="team-overview-section"
+        aria-labelledby="work-board-heading"
+      >
+        <div className="team-section-heading">
+          <p className="section-kicker" id="work-board-heading">
+            Work Board
+          </p>
+          <span>{project.work_items.length} items</span>
+        </div>
+        {project.work_items.length ? (
+          <div className="work-board-list">
+            {project.work_items.map((item) => (
+              <article className="work-board-item" key={item.work_ref}>
+                <div className="work-board-title">
+                  <span className="work-ref">{item.work_ref}</span>
+                  <strong>{item.subject}</strong>
+                  <span className={`work-status ${item.status}`}>
+                    {item.status.replaceAll('_', ' ')}
+                  </span>
+                </div>
+                <p>
+                  {item.assignee_name
+                    ? `Assigned to ${item.assignee_name}`
+                    : 'Unassigned'}
+                  {item.dependency_refs.length
+                    ? ` · Depends on ${item.dependency_refs.join(', ')}`
+                    : ''}
+                </p>
+                {item.latest_attempt ? (
+                  <p className="work-attempt">
+                    Attempt {item.latest_attempt.attempt_no} ·{' '}
+                    {item.latest_attempt.status}
+                    {item.latest_attempt.feedback_summary
+                      ? ` · ${item.latest_attempt.feedback_summary}`
+                      : item.latest_attempt.result_summary
+                        ? ` · ${item.latest_attempt.result_summary}`
+                        : ''}
+                  </p>
+                ) : (
+                  <p className="work-attempt">No attempt recorded.</p>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="team-empty-state">
+            No work items have been recorded yet.
+          </p>
+        )}
+      </section>
+      <section
+        className="team-overview-section"
+        aria-labelledby="direct-messages-heading"
+      >
+        <div className="team-section-heading">
+          <p className="section-kicker" id="direct-messages-heading">
+            Direct Messages
+          </p>
+          <span>Safe summaries</span>
+        </div>
+        {project.direct_messages.length ? (
+          <ol className="direct-message-list">
+            {project.direct_messages.map((message) => (
+              <li key={message.sequence}>
+                <div>
+                  <strong>{message.sender_name}</strong>
+                  <span aria-hidden="true">→</span>
+                  <strong>{message.recipient_name}</strong>
+                  <small>{message.status}</small>
+                </div>
+                <p>{message.summary}</p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="team-empty-state">
+            No Direct Messages have been recorded yet.
+          </p>
+        )}
+      </section>
+      <section
+        className="team-overview-section final-report"
+        aria-labelledby="final-report-heading"
+      >
+        <div className="team-section-heading">
+          <p className="section-kicker" id="final-report-heading">
+            Final Report
+          </p>
+        </div>
+        {project.final_text ? (
+          <AssistantMarkdown text={project.final_text} />
+        ) : (
+          <p className="team-empty-state">
+            The final report will appear when the Team completes its review.
+          </p>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function phaseLabel(phase: TeamProject['phase']) {
+  return phase === 'planning'
+    ? 'Planning'
+    : phase === 'working'
+      ? 'Work in progress'
+      : phase === 'review'
+        ? 'Lead review'
+        : phase === 'completed'
+          ? 'Completed'
+          : 'Failed';
 }
 
 function groupTurns(messages: Message[]): Turn[] {

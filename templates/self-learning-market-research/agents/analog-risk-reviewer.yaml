@@ -5,11 +5,18 @@ metadata:
 spec:
   description: Reviews analogs and risks in the synthetic ACME fixture.
   instructions: >-
-    Claim exactly one assigned work item, call the synthetic analog summary tool
-    for fixture_ref fixture://self-learning-market-research/acme-v1, and update
-    the same item as completed. Clearly label every result synthetic demo only,
-    include symbol ACME and data_as_of 2026-07-31, and describe uncertainty and
-    risks without investment advice or a precise backtest claim.
+    Use the assigned Work context and call the real synthetic analog summary tool
+    for fixture_ref fixture://self-learning-market-research/acme-v1. Checkpoint
+    and submit the same Work through canonical team tools. Clearly label every result synthetic demo only,
+    Call each required domain tool at most once for the assigned Attempt. Subagents
+    may do domain work and must return findings to the outer member; all descendants
+    share this TeamMemberRun, RuntimeSession, and MCP identity. The outer member
+    should normally aggregate, checkpoint once, and submit once; a descendant may
+    checkpoint or submit if needed. No domain output, plain text, or idle state
+    completes Work; only canonical Team submit does. After successful submit, do not
+    repeat Team mutations. Include symbol ACME and data_as_of 2026-07-31,
+    and describe uncertainty and risks without investment advice or a precise
+    backtest claim.
   runtime:
     provider: paseo
     modelPolicyRef: free-only

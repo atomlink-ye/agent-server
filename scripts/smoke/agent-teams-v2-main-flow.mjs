@@ -1,0 +1,1905 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { chmod, mkdir, rename, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { register as registerTsx } from 'tsx/esm/api';
+
+registerTsx();
+
+import { serve } from '@hono/node-server';
+import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { Client as PostgresClient } from 'pg';
+import {
+  getAvailablePort,
+  startPaseo,
+  stopProcessTree,
+  waitForHttp,
+} from '../dev/paseo-process.mjs';
+
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const adminUrl = process.env.POSTGRES_ADMIN_URL;
+const timeoutSeconds = Number(
+  process.env.AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS ?? '180',
+);
+const runtimeTimeoutSeconds = Number(
+  process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS ?? '150',
+);
+const timeoutReserveSeconds = timeoutSeconds - runtimeTimeoutSeconds;
+const scriptedRuntime = process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
+const supportedPaidSmokeModels = new Set([
+  'opencode-go/deepseek-v4-flash',
+  'opencode-go/mimo-v2.5',
+  'opencode-go/glm-5.2',
+]);
+const requestedModel =
+  process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
+const startedAt = Date.now();
+const suffix = randomUUID().slice(0, 8);
+const databaseName = `agent_teams_v2_${startedAt}_${suffix}`;
+const evidenceRoot = join(
+  root,
+  '.local',
+  `agent-teams-v2-${startedAt}-${suffix}`,
+);
+const runtimeRoot = join(
+  root,
+  '.local',
+  `agent-teams-v2-runtime-${startedAt}-${suffix}`,
+);
+const token = `agent-teams-v2-${randomUUID()}`;
+const foreignToken = `agent-teams-v2-foreign-${randomUUID()}`;
+const tenantId = 'tenant_agent_teams_v2';
+const principalId = 'svc_agent_teams_v2';
+const workspaceId = randomUUID();
+const canonicalSnapshotInvocation =
+  'synthetic_stock_snapshot({fixture_ref:"fixture://self-learning-market-research/acme-v1",symbol:"ACME"})';
+const markers = [];
+const stderr = [];
+const runtimeCalls = [];
+const runtimeTrace = [];
+let admin;
+let db;
+let service;
+let api;
+let paseo;
+let apiUrl;
+let rootTaskId;
+let teamRunId;
+let databaseUrl;
+
+function assert(condition, code) {
+  if (!condition) throw new Error(code);
+}
+function hash(value) {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+function normalizedProjectionKey(key) {
+  return key.replace(/[^a-z0-9]/giu, '').toLowerCase();
+}
+function assertSafeProjection(value, path = 'projection') {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertSafeProjection(entry, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      const normalized = normalizedProjectionKey(key);
+      assert(
+        ![
+          'runtimesessionid',
+          'provideragentid',
+          'provider',
+          'owner',
+          'prompt',
+          'credential',
+        ].includes(normalized),
+        `forbidden_projection_key_${normalized}`,
+      );
+      assertSafeProjection(entry, `${path}.${key}`);
+    }
+    return;
+  }
+  if (typeof value !== 'string') return;
+  assert(
+    !/\bbearer\s+(?!\[redacted(?: path)?\])\S+/iu.test(value),
+    `forbidden_projection_bearer_${path}`,
+  );
+  assert(
+    !/\b(?:credential|token|password|secret|api[_ -]?key)\s*[:=]\s*(?!\[redacted(?: path)?\])\S+/iu.test(
+      value,
+    ),
+    `forbidden_projection_key_value_${path}`,
+  );
+  assert(
+    !/(?:\/(?:Users|Volumes)\/|~\/|(?:^|[\s"'([{])[A-Za-z]:[\\/])/u.test(value),
+    `forbidden_projection_path_${path}`,
+  );
+  assert(
+    !/canary-secret|\/Users\/canary/iu.test(value),
+    `forbidden_projection_canary_${path}`,
+  );
+}
+function assertProjectionScannerSelfCheck() {
+  assertSafeProjection({
+    narration:
+      'Lead redacted the credential/path fragments; Bearer [redacted]; [redacted path].',
+  });
+  for (const [label, value] of [
+    ['camel_key', { runtimeSessionId: 'x' }],
+    ['snake_key', { runtime_session_id: 'x' }],
+    ['bearer', { note: 'Bearer leaked-value' }],
+    ['key_value', { note: 'token=leaked-value' }],
+    ['path', { note: '/Volumes/private' }],
+    ['canary', { note: 'canary-secret' }],
+  ]) {
+    let rejected = false;
+    try {
+      assertSafeProjection(value, `self_check.${label}`);
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, `projection_scanner_self_check_${label}`);
+  }
+}
+function safe(value) {
+  if (Array.isArray(value)) return value.map(safe);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        /(?:token|secret|password|credential|api.?key|prompt|body|content|owner|runtime_session|provider|path|id)$/iu.test(
+          key,
+        )
+          ? '[redacted]'
+          : safe(entry),
+      ]),
+    );
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
+    .replace(/\/(?:Users|Volumes)\/[^\s"']+/gu, '[path]')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 1024);
+}
+function failureCode(error) {
+  const candidates = [
+    error && typeof error === 'object' ? error.code : undefined,
+    error instanceof Error ? error.message : undefined,
+  ];
+  return (
+    candidates.find(
+      (candidate) =>
+        typeof candidate === 'string' &&
+        /^[A-Za-z][A-Za-z0-9_]{0,127}$/u.test(candidate),
+    ) ?? 'unexpected_failure'
+  );
+}
+function smokeFailure(error) {
+  const code = failureCode(error);
+  return new Error(`SMOKE_MAIN_FLOW_FAILED:${code}`, {
+    cause: new Error(code),
+  });
+}
+function marker(name, fields = {}) {
+  const entry = safe({ marker: name, at: new Date().toISOString(), ...fields });
+  markers.push(entry);
+  process.stdout.write(`${JSON.stringify(entry)}\n`);
+}
+async function evidence(result, error) {
+  if (error) stderr.push(JSON.stringify({ error_code: failureCode(error) }));
+  const manifest = safe({
+    schema: 'agent-teams-v2-real-server-v1',
+    result,
+    node_version: process.version,
+    execution: {
+      command: 'pnpm smoke:agent-teams-v2',
+      timeout_seconds: timeoutSeconds,
+      runtime_timeout_seconds: runtimeTimeoutSeconds,
+      paseo_execution_timeout_ms: runtimeTimeoutSeconds * 1_000,
+      timeout_reserve_seconds: timeoutReserveSeconds,
+      elapsed_ms: Date.now() - startedAt,
+      process_exit_code: result === 'passed' ? 0 : 1,
+    },
+    composition: {
+      create_service: true,
+      tcp_http_server: true,
+      canonical_api_setup_and_invoke: true,
+      runtime_mcp_http: true,
+      postgres_run_dispatcher: true,
+      provider_used: !scriptedRuntime,
+      paseo_used: !scriptedRuntime,
+      model: scriptedRuntime ? 'scripted' : requestedModel,
+      deterministic_substitution_scope: scriptedRuntime
+        ? 'provider runtime driver and model decisions'
+        : 'none',
+    },
+    markers,
+    runtime_calls: runtimeCalls,
+    credentials: scriptedRuntime ? '[absent]' : '[provided-redacted]',
+    prompts: '[absent]',
+    stderr_empty: stderr.length === 0,
+  });
+  const paths = {
+    manifest: join(evidenceRoot, 'manifest.json'),
+    stdout: join(evidenceRoot, 'stdout.ndjson'),
+    stderr: join(evidenceRoot, 'stderr.ndjson'),
+  };
+  await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
+  await chmod(evidenceRoot, 0o700);
+  for (const [key, content] of Object.entries({
+    manifest: JSON.stringify(manifest, null, 2),
+    stdout: markers.map((entry) => JSON.stringify(entry)).join('\n'),
+    stderr: stderr.join('\n'),
+  })) {
+    const target = paths[key];
+    const temp = `${target}.tmp-${process.pid}-${randomUUID()}`;
+    await writeFile(temp, `${content}\n`, { mode: 0o600 });
+    await rename(temp, target);
+    await chmod(target, 0o600);
+  }
+}
+function value(result) {
+  const output = result?.structuredContent;
+  assert(
+    output && typeof output === 'object' && !output.error,
+    `mcp_${output?.error ?? 'invalid'}`,
+  );
+  return output;
+}
+
+class ScriptedRuntime {
+  #sessions = new Map();
+  #leadTurns = 0;
+  #leadProviderBindings = new Set();
+  #memberTurns = 0;
+  #submittedTimeoutInjected = false;
+  async initialize() {}
+  async health() {
+    return {
+      ready: true,
+      provider: 'deterministic',
+      model: 'scripted',
+      checks: [],
+    };
+  }
+  async execute(input) {
+    let providerAgentId = input.providerAgentId;
+    let session;
+    if (input.operation === 'create') {
+      const extension = input.extensions?.mcpServers?.[0];
+      assert(
+        extension?.url && extension.headers?.Authorization,
+        'runtime_mcp_missing',
+      );
+      const client = new McpClient({
+        name: 'agent-teams-v2-smoke',
+        version: '1.0.0',
+      });
+      const transport = new StreamableHTTPClientTransport(
+        new URL(extension.url),
+        { requestInit: { headers: extension.headers } },
+      );
+      await client.connect(transport);
+      providerAgentId = `scripted-${randomUUID()}`;
+      session = {
+        client,
+        transport,
+        workspaceId: `scripted-workspace-${randomUUID()}`,
+      };
+      this.#sessions.set(providerAgentId, session);
+    } else {
+      session = this.#sessions.get(providerAgentId);
+      assert(session, 'runtime_session_missing');
+    }
+    const tools = new Set(
+      (await session.client.listTools()).tools.map((tool) => tool.name),
+    );
+    const directOnlyTools = new Set(['team_state', 'team_work_list']);
+    const directTurn =
+      tools.has('team_state') &&
+      tools.has('team_work_list') &&
+      [...tools].every((tool) => directOnlyTools.has(tool)) &&
+      ![
+        'team_finish',
+        'team_work_accept',
+        'team_work_request_changes',
+        'team_work_create',
+        'team_work_checkpoint',
+        'team_work_submit',
+      ].some((tool) => tools.has(tool));
+    runtimeCalls.push({
+      kind: 'runtime_binding',
+      role: directTurn
+        ? 'direct'
+        : tools.has('team_work_submit')
+          ? 'member'
+          : 'lead',
+      operation: input.operation,
+      provider_binding_hash: hash(providerAgentId),
+    });
+    if (directTurn) {
+      assert(
+        input.prompt.includes('phase3-direct-sentinel'),
+        'direct_sentinel_not_observed',
+      );
+      assert(
+        !tools.has('team_work_checkpoint') && !tools.has('team_work_submit'),
+        'direct_turn_work_tools_granted',
+      );
+      assert(
+        !tools.has('team_message_send'),
+        'direct_turn_message_send_listed',
+      );
+      assert(
+        !tools.has('synthetic_stock_snapshot'),
+        'direct_turn_domain_tool_listed',
+      );
+      let domainDenied = false;
+      try {
+        const attempted = await session.client.callTool({
+          name: 'synthetic_stock_snapshot',
+          arguments: {
+            fixture_ref: 'fixture://self-learning-market-research/acme-v1',
+            symbol: 'ACME',
+          },
+        });
+        domainDenied =
+          attempted.isError === true ||
+          Boolean(attempted.structuredContent?.error);
+      } catch {
+        domainDenied = true;
+      }
+      assert(domainDenied, 'direct_turn_domain_tool_not_denied');
+      runtimeCalls.push({
+        role: 'direct',
+        observed_sentinel: true,
+        acknowledged: true,
+        domain_tool_denied: true,
+        tools: ['team_state', 'team_work_list'],
+      });
+    } else if (!tools.has('team_work_submit')) {
+      this.#leadTurns += 1;
+      assert(
+        input.operation === 'create',
+        `lead_turn_${this.#leadTurns}_not_fresh_runtime`,
+      );
+      assert(
+        !this.#leadProviderBindings.has(providerAgentId),
+        `lead_turn_${this.#leadTurns}_provider_binding_reused`,
+      );
+      this.#leadProviderBindings.add(providerAgentId);
+      assert(
+        input.prompt.includes(
+          'Lead control turns must not spawn, delegate to, or use provider subagents',
+        ) &&
+          input.prompt.includes(
+            'A plain-text response or no-op is not control progress',
+          ),
+        'lead_control_protocol_missing',
+      );
+      assert(
+        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+          input.systemPrompt.includes('Golden-path review rubric'),
+        'lead_canonical_snapshot_accept_rubric_missing',
+      );
+      if (this.#leadTurns === 1)
+        assert(tools.has('team_work_create'), 'lead_turn_1_create_missing');
+      else
+        assert(
+          !tools.has('team_work_create'),
+          `lead_turn_${this.#leadTurns}_create_granted`,
+        );
+      if (this.#leadTurns === 1) {
+        assert(!tools.has('team_finish'), 'finish_granted_on_empty_board');
+        value(
+          await session.client.callTool({
+            name: 'team_work_create',
+            arguments: {
+              subject: 'A',
+              description: 'bounded A',
+              assignee: 'member',
+            },
+          }),
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_create',
+            arguments: {
+              subject: 'B',
+              description: 'bounded B',
+              assignee: 'observer',
+              dependency_refs: ['work-1'],
+            },
+          }),
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 1,
+          tools: ['create_A', 'create_B_dependency'],
+          zero_work_finish_absent: true,
+        });
+      } else if (this.#leadTurns === 2) {
+        assert(
+          input.prompt.includes('"assignee":"member"'),
+          'lead_work_1_assignee_missing',
+        );
+        assert(
+          tools.has('team_work_accept') &&
+            tools.has('team_work_request_changes') &&
+            !tools.has('team_work_create'),
+          'lead_review_tools_not_exact',
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-1' },
+          }),
+        );
+        runtimeCalls.push({ role: 'lead', turn: 2, tool: 'accept_A' });
+      } else if (this.#leadTurns === 3) {
+        assert(
+          input.prompt.includes('"assignee":"observer"'),
+          'lead_work_2_assignee_missing',
+        );
+        assert(
+          input.prompt.includes(
+            '"allowed_commands":["team_work_accept","team_work_request_changes"]',
+          ) &&
+            input.prompt.includes(
+              '"available_coordination_commands":["team_message_send"]',
+            ),
+          'lead_review_coordination_contract_missing',
+        );
+        assert(!tools.has('team_finish'), 'finish_granted_before_B_accept');
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-2' },
+          }),
+        );
+        const message = value(
+          await session.client.callTool({
+            name: 'team_message_send',
+            arguments: {
+              recipient: 'observer',
+              summary:
+                'phase3-direct-sentinel observer coordination Bearer canary-secret /Users/canary',
+            },
+          }),
+        );
+        const replay = value(
+          await session.client.callTool({
+            name: 'team_message_send',
+            arguments: {
+              recipient: 'observer',
+              summary:
+                'phase3-direct-sentinel observer coordination Bearer canary-secret /Users/canary',
+            },
+          }),
+        );
+        assert(
+          JSON.stringify(message) === JSON.stringify(replay),
+          'direct_message_equal_replay_invalid',
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 3,
+          tools: ['accept_B', 'direct_message'],
+          direct_hash: hash(JSON.stringify(message)),
+          direct_replay_equal: true,
+          finish_absent: true,
+        });
+      } else {
+        await waitFor(
+          async () =>
+            (
+              await db.query(
+                "SELECT status FROM team_messages WHERE team_run_id=$1 AND kind='direct'",
+                [teamRunId],
+              )
+            ).rows[0]?.status,
+          (status) => status === 'delivered',
+          'direct_delivery_before_finish',
+        );
+        let finished;
+        try {
+          finished = await session.client.callTool({
+            name: 'team_finish',
+            arguments: {},
+          });
+        } catch (error) {
+          const detail =
+            error && typeof error === 'object'
+              ? error
+              : { name: 'UnknownError', message: 'unknown' };
+          marker('DIRECT_LEAD4_FINISH_THROWN', {
+            error_name:
+              typeof detail.name === 'string'
+                ? detail.name.slice(0, 96)
+                : 'UnknownError',
+            ...(typeof detail.code === 'string'
+              ? { error_code: detail.code.slice(0, 96) }
+              : {}),
+            error_message: String(detail.message ?? 'unknown')
+              .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
+              .replace(
+                /\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/giu,
+                '[id]',
+              )
+              .replace(/\/(?:Users|Volumes)\/[^\s"']+/gu, '[path]')
+              .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+              .replace(/\s+/gu, ' ')
+              .trim()
+              .slice(0, 256),
+          });
+          throw error;
+        }
+        if (finished.structuredContent?.error) {
+          marker('DIRECT_FINISH_FAILURE', {
+            error: finished.structuredContent.error,
+          });
+          throw new Error(`direct_finish_${finished.structuredContent.error}`);
+        }
+        value(finished);
+        runtimeCalls.push({
+          role: 'lead',
+          turn: this.#leadTurns,
+          tool: 'finish_after_direct_delivery',
+        });
+      }
+    } else {
+      assert(tools.has('team_work_submit'), 'member_tools_missing');
+      assert(!tools.has('team_message_send'), 'member_message_send_listed');
+      assert(
+        tools.has('synthetic_stock_snapshot'),
+        'member_domain_tool_missing',
+      );
+      assert(
+        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+          input.systemPrompt.includes('Never guess fixture_ref'),
+        'member_canonical_snapshot_args_missing',
+      );
+      this.#memberTurns += 1;
+      value(
+        await session.client.callTool({
+          name: 'synthetic_stock_snapshot',
+          arguments: {
+            fixture_ref: 'fixture://self-learning-market-research/acme-v1',
+            symbol: 'ACME',
+          },
+        }),
+      );
+      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${this.#memberTurns}`;
+      value(
+        await session.client.callTool({
+          name: 'team_work_checkpoint',
+          arguments: { summary },
+        }),
+      );
+      value(
+        await session.client.callTool({
+          name: 'team_work_submit',
+          arguments: { summary },
+        }),
+      );
+      const rejectedAfterSubmit = async (
+        name,
+        args,
+        { allowMissingTool = false } = {},
+      ) => {
+        let response;
+        try {
+          response = await session.client.callTool({
+            name,
+            arguments: args,
+          });
+        } catch (error) {
+          if (
+            allowMissingTool &&
+            error instanceof McpError &&
+            error.code === ErrorCode.MethodNotFound
+          )
+            return 'method_not_found';
+          throw error;
+        }
+        const code = response.structuredContent?.error;
+        assert(
+          response.isError === true ||
+            code === 'not_allowed' ||
+            code === 'stale_state',
+          `post_submit_${name}_not_rejected`,
+        );
+        return code ?? 'mcp_error';
+      };
+      const postSubmitRejections = {
+        checkpoint: await rejectedAfterSubmit('team_work_checkpoint', {
+          summary: `${summary} repeated checkpoint`,
+        }),
+        submit: await rejectedAfterSubmit('team_work_submit', {
+          summary: `${summary} repeated submit`,
+        }),
+        message: await rejectedAfterSubmit(
+          'team_message_send',
+          {
+            recipient: 'lead',
+            summary: `${summary} forbidden member message`,
+          },
+          { allowMissingTool: true },
+        ),
+      };
+      runtimeCalls.push({
+        role: 'member',
+        turn: this.#memberTurns,
+        tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
+        post_submit_rejections: postSubmitRejections,
+      });
+      if (!this.#submittedTimeoutInjected && this.#memberTurns === 1) {
+        this.#submittedTimeoutInjected = true;
+        const { RuntimeTimedOutError } =
+          await import('../../src/application/ports/agent-runtime.ts');
+        throw new RuntimeTimedOutError();
+      }
+    }
+    return {
+      provider: 'deterministic',
+      model: 'scripted',
+      providerAgentId,
+      paseoWorkspaceId: session.workspaceId,
+      text: 'bounded turn completed',
+      usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
+    };
+  }
+  async close() {
+    for (const entry of this.#sessions.values())
+      await entry.client.close().catch(() => undefined);
+    this.#sessions.clear();
+  }
+}
+
+async function request(
+  path,
+  { method = 'GET', body, status = 200, authToken = token } = {},
+) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${authToken}`,
+      'content-type': 'application/json',
+      'idempotency-key': randomUUID(),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const json = await response.json().catch(() => null);
+  assert(
+    response.status === status,
+    `http_${response.status}_expected_${status}`,
+  );
+  return json;
+}
+async function waitFor(load, predicate, code, ms = timeoutSeconds * 1000) {
+  const deadline = Date.now() + ms;
+  let current;
+  while (Date.now() < deadline) {
+    current = await load();
+    if (predicate(current)) return current;
+    await new Promise((done) => setTimeout(done, 25));
+  }
+  throw new Error(code);
+}
+async function queued(kind) {
+  const rows = await db.query(
+    `SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id JOIN run_dispatches d ON d.run_id=r.id WHERE t.root_task_id=$1 AND r.status='queued' AND d.published_at IS NULL AND ($2::text IS NULL OR t.team_task_kind=$2) ORDER BY d.id LIMIT 1`,
+    [rootTaskId, kind ?? null],
+  );
+  assert(rows.rowCount === 1, `queued_${kind ?? 'root'}_missing`);
+  return rows.rows[0].id;
+}
+function agentYaml(name) {
+  const lead = name === 'lead';
+  const instructions = lead
+    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member; then create Work B assigned to observer with dependency_refs ["work-1"]; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On a later turn, when both Work items are accepted and the direct message is delivered, call team_finish exactly once and stop. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. Only the original outer member may create at most one bounded domain child subagent. If you are any descendant, do not create another subagent; return findings to the original outer member. All descendants share this Team identity and context. The outer member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. A descendant may submit only if the outer member cannot. After the first successful submit, the whole tree must stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+  const refs = lead
+    ? [
+        'team-state',
+        'team-work-list',
+        'team-work-create',
+        'team-work-accept-v2',
+        'team-finish',
+        'team-message-send',
+      ]
+    : [
+        'team-state',
+        'team-work-list',
+        'team-work-checkpoint',
+        'team-work-submit',
+        'synthetic-stock-snapshot',
+      ];
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+}
+function environmentYaml() {
+  return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
+}
+function teamYaml(lead, member, environment) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${member}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+}
+async function expectSqlState(query, values, code) {
+  try {
+    await db.query(query, values);
+  } catch (error) {
+    assert(error?.code === code, `sql_state_${error?.code}_expected_${code}`);
+    return;
+  }
+  throw new Error(`sql_constraint_missing_${code}`);
+}
+
+try {
+  assert(
+    Number.isInteger(timeoutSeconds) && timeoutSeconds >= 30,
+    'invalid_timeout',
+  );
+  assert(
+    Number.isInteger(runtimeTimeoutSeconds) && runtimeTimeoutSeconds >= 1,
+    'invalid_runtime_timeout',
+  );
+  assert(timeoutReserveSeconds >= 20, 'invalid_timeout_reserve');
+  process.env.PASEO_EXECUTION_TIMEOUT_MS = String(
+    runtimeTimeoutSeconds * 1_000,
+  );
+  marker('EXECUTION_BUDGETS_CONFIGURED', {
+    timeout_seconds: timeoutSeconds,
+    runtime_timeout_seconds: runtimeTimeoutSeconds,
+    paseo_execution_timeout_ms: runtimeTimeoutSeconds * 1_000,
+    timeout_reserve_seconds: timeoutReserveSeconds,
+  });
+  assert(adminUrl, 'missing_POSTGRES_ADMIN_URL');
+  if (!scriptedRuntime) {
+    assert(
+      supportedPaidSmokeModels.has(requestedModel),
+      'unsupported_paid_smoke_model',
+    );
+    assert(process.env.OPENCODE_GO_API_KEY, 'missing_OPENCODE_GO_API_KEY');
+    const [providerId, modelId] = requestedModel.split('/');
+    process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      $schema: 'https://opencode.ai/config.json',
+      agent: { build: { permission: 'allow' } },
+      provider: {
+        [providerId]: {
+          npm: '@ai-sdk/openai-compatible',
+          name: 'OpenCode Go',
+          options: {
+            baseURL: 'https://opencode.ai/zen/go/v1',
+            apiKey: '{env:OPENCODE_GO_API_KEY}',
+          },
+          models: {
+            [modelId]: { name: modelId },
+          },
+        },
+      },
+    });
+  }
+  await Promise.all([
+    mkdir(evidenceRoot, { recursive: true }),
+    mkdir(join(runtimeRoot, 'project'), { recursive: true }),
+    mkdir(join(runtimeRoot, 'cells'), { recursive: true }),
+    mkdir(join(runtimeRoot, 'skills'), { recursive: true }),
+  ]);
+  await chmod(evidenceRoot, 0o700);
+  admin = new PostgresClient({ connectionString: adminUrl });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE "${databaseName.replaceAll('"', '""')}"`);
+  databaseUrl = new URL(adminUrl);
+  databaseUrl.pathname = `/${databaseName}`;
+  db = new PostgresClient({ connectionString: databaseUrl.toString() });
+  await db.connect();
+  if (!scriptedRuntime) {
+    const paseoPort = await getAvailablePort();
+    paseo = await startPaseo({
+      repositoryRoot: root,
+      runtimeRoot,
+      port: paseoPort,
+      environmentVariableNames: [
+        'OPENCODE_GO_API_KEY',
+        'OPENCODE_CONFIG_CONTENT',
+      ],
+    });
+  }
+  const apiPort = await getAvailablePort();
+  Object.assign(process.env, {
+    NODE_ENV: 'test',
+    HOST: '127.0.0.1',
+    PORT: String(apiPort),
+    DATABASE_URL: databaseUrl.toString(),
+    POSTGRES_URL: databaseUrl.toString(),
+    PASEO_WS_URL: paseo?.wsUrl ?? 'ws://127.0.0.1:1',
+    PASEO_MODEL: requestedModel,
+    PASEO_AGENT_CWD: join(runtimeRoot, 'project'),
+    PASEO_RUNTIME_CELL_ROOT: join(runtimeRoot, 'cells'),
+    AGENT_SERVER_SKILL_REGISTRY_ROOT: join(runtimeRoot, 'skills'),
+    SERVICE_ACCOUNTS_JSON: JSON.stringify([
+      {
+        serviceAccountId: principalId,
+        token,
+        tenantId,
+        workspaceId,
+        policyVersion: 'v2',
+      },
+      {
+        serviceAccountId: `${principalId}_foreign`,
+        token: foreignToken,
+        tenantId: 'foreign',
+        workspaceId: randomUUID(),
+        policyVersion: 'v2',
+      },
+    ]),
+  });
+  const { loadConfig } = await import('../../src/shared/config.ts');
+  const { createLogger } =
+    await import('../../src/shared/observability/logger.ts');
+  const { createService } = await import('../../src/bootstrap.ts');
+  service = await createService(
+    loadConfig(),
+    createLogger({
+      service: 'agent-teams-v2-smoke',
+      minimumLevel: 'info',
+      write: (line) => {
+        const event = JSON.parse(line);
+        if (
+          typeof event.event === 'string' &&
+          (event.event.startsWith('runtime.agent.create.') ||
+            event.event.startsWith('runtime.message.send.'))
+        )
+          runtimeTrace.push({ event: event.event, runId: event.run_id });
+      },
+    }),
+    {
+      singleRunDebug: true,
+      ...(scriptedRuntime ? { debugRuntime: new ScriptedRuntime() } : {}),
+      deferTeamWakeReconcile: true,
+    },
+  );
+  await service.runtime.initialize();
+  api = serve({
+    fetch: service.app.fetch,
+    hostname: '127.0.0.1',
+    port: apiPort,
+  });
+  apiUrl = `http://127.0.0.1:${apiPort}`;
+  await waitForHttp(`${apiUrl}/health/ready`, 10_000);
+  marker('REAL_SERVER_READY');
+  await db.query(
+    'INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,now(),now())',
+    [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
+  );
+  const agents = {};
+  for (const name of ['lead', 'member']) {
+    const imported = await request('/api/v1/agents:import', {
+      method: 'POST',
+      body: { source: agentYaml(name) },
+      status: 201,
+    });
+    await request(`/api/v1/agent-versions/${imported.version.id}:publish`, {
+      method: 'POST',
+      body: {},
+    });
+    agents[name] = imported.version.id;
+  }
+  const environment = await request('/api/v1/environments:import', {
+    method: 'POST',
+    body: { source: environmentYaml() },
+    status: 201,
+  });
+  await request(
+    `/api/v1/environment-versions/${environment.version.id}:publish`,
+    { method: 'POST', body: {} },
+  );
+  const imported = await request('/api/v1/teams:import', {
+    method: 'POST',
+    body: {
+      source: teamYaml(agents.lead, agents.member, environment.version.id),
+    },
+    status: 201,
+  });
+  const published = await request(
+    `/api/v1/team-versions/${imported.version.id}:publish`,
+    { method: 'POST', body: {} },
+  );
+  const invoked = await request('/api/v1/tasks:invoke', {
+    method: 'POST',
+    status: 202,
+    body: {
+      invokable: { kind: 'team', version_id: published.id },
+      input: { text: 'bounded v2 retained smoke' },
+    },
+  });
+  rootTaskId = invoked.task_id;
+  marker('CANONICAL_API_INVOKED');
+  const rootRun = await queued();
+  assert(
+    (await service.singleRunDebug.claimAndExecute(rootRun)).claimed,
+    'root_not_claimed',
+  );
+  teamRunId = (
+    await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+      rootTaskId,
+    ])
+  ).rows[0]?.id;
+  assert(teamRunId, 'team_missing');
+  const roster = await db.query(
+    'SELECT id,name,role,agent_version_id FROM team_member_runs WHERE team_run_id=$1',
+    [teamRunId],
+  );
+  const lead = roster.rows.find((row) => row.name === 'lead');
+  const member = roster.rows.find((row) => row.name === 'member');
+  const observer = roster.rows.find((row) => row.name === 'observer');
+  assert(lead && member && observer, 'roster_missing');
+  const owner = {
+    tenantId,
+    workspaceId,
+    principalType: 'service_account',
+    principalId,
+  };
+  const queryOnly = (client) => ({ query: client.query.bind(client) });
+  await service.singleRunDebug.claimAndExecute(await queued('lead_turn'));
+  const { PostgresAdmissionRepository } =
+    await import('../../src/infrastructure/postgres/postgres-admission-repository.ts');
+  const { PostgresTaskRepository } =
+    await import('../../src/infrastructure/postgres/postgres-task-repository.ts');
+  const { PostgresRunRepository } =
+    await import('../../src/infrastructure/postgres/postgres-run-repository.ts');
+  const { PostgresTeamExecutionRepository: FixtureTeamExecutionRepository } =
+    await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+  const { PostgresTeamMessageRepository: FixtureTeamMessageRepository } =
+    await import('../../src/infrastructure/postgres/postgres-team-message-repository.ts');
+  const { createChildTask } = await import('../../src/domain/tasks/task.ts');
+  const { createRun } = await import('../../src/domain/runs/run.ts');
+  const { createTeamMemberRun, activateMemberRun } =
+    await import('../../src/domain/teams/team-member-run.ts');
+  const { createTeamWorkItem } =
+    await import('../../src/domain/teams/team-work-item.ts');
+  const { createTeamMessage } =
+    await import('../../src/domain/teams/team-message.ts');
+  const rootTask = await new PostgresTaskRepository(queryOnly(db)).findById(
+    rootTaskId,
+  );
+  const staleWake = (
+    await db.query(
+      `SELECT m.id AS message_id,
+              a.id AS attempt_id,
+              a.attempt_no,
+              a.status AS attempt_status,
+              a.execution_task_id AS attempt_execution_task_id,
+              m.status AS message_status,
+              m.consumed_by_task_id AS message_task_id
+         FROM team_messages m
+         JOIN team_work_item_attempts a ON a.id=m.attempt_id
+        WHERE m.team_run_id=$1 AND m.recipient_member_run_id=$2
+          AND m.kind='wake'
+        ORDER BY m.sequence DESC
+        LIMIT 1`,
+      [teamRunId, member.id],
+    )
+  ).rows[0];
+  const currentRevision = (
+    await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
+  ).rows[0]?.revision;
+  assert(
+    rootTask && staleWake && Number.isInteger(currentRevision),
+    'stale_materialization_fixture_missing',
+  );
+  const staleWakeBefore = {
+    attemptStatus: staleWake.attempt_status,
+    attemptExecutionTaskId: staleWake.attempt_execution_task_id,
+    messageStatus: staleWake.message_status,
+    messageTaskId: staleWake.message_task_id,
+  };
+  const staleTask = createChildTask({
+    tenantId,
+    workspaceId,
+    principalType: 'service_account',
+    principalId,
+    policySnapshotVersion: rootTask.policySnapshotVersion,
+    rootTaskId: rootTask.id,
+    parentTaskId: rootTask.id,
+    parentRunId: (
+      await db.query('SELECT root_run_id FROM team_runs WHERE id=$1', [
+        teamRunId,
+      ])
+    ).rows[0].root_run_id,
+    invokableKind: 'agent',
+    invokableVersionId: member.agent_version_id ?? agents.member,
+    inputSnapshotRef: rootTask.inputSnapshotRef,
+    inputFingerprint: rootTask.inputFingerprint,
+    logicalStepKey: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
+    nodePath: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
+    teamMemberRunId: member.id,
+    teamSequence: staleWake.attempt_no,
+    teamTaskKind: 'work_attempt',
+    sourceTeamMessageId: staleWake.message_id,
+    inputTeamMessageIds: [staleWake.message_id],
+  });
+  const staleRun = createRun('stale revision materialization smoke');
+  let staleRejected = false;
+  try {
+    await new PostgresAdmissionRepository(queryOnly(db)).withTransaction(
+      async (tx) => {
+        await tx.tasks.save(staleTask);
+        await tx.runs.save(staleRun, { taskId: staleTask.id, attempt: 1 });
+        await tx.teamExecutions.materializeAttempt({
+          attemptId: staleWake.attempt_id,
+          executionTaskId: staleTask.id,
+          teamRunId,
+          assigneeMemberId: member.id,
+          expectedRevision: currentRevision - 1,
+          owner,
+        });
+        await tx.teamMessages.bindToTask({
+          messageIds: [staleWake.message_id],
+          taskId: staleTask.id,
+          owner,
+        });
+        await tx.enqueueRunDispatch(staleRun.id, staleRun.createdAt);
+      },
+    );
+  } catch (error) {
+    staleRejected = error?.code === 'stale_state';
+  }
+  assert(staleRejected, 'stale_materialization_not_rejected');
+  const staleRollback = (
+    await db.query(
+      `SELECT
+         (SELECT count(*)::int FROM tasks WHERE id=$1) AS tasks,
+         (SELECT count(*)::int FROM runs WHERE id=$2) AS runs,
+         (SELECT count(*)::int FROM run_dispatches WHERE run_id=$2) AS dispatches`,
+      [staleTask.id, staleRun.id],
+    )
+  ).rows[0];
+  const staleWakeAfter = (
+    await db.query(
+      `SELECT a.status AS attempt_status,
+              a.execution_task_id AS attempt_execution_task_id,
+              m.status AS message_status,
+              m.consumed_by_task_id AS message_task_id
+         FROM team_work_item_attempts a
+         JOIN team_messages m ON m.id=$2 AND m.attempt_id=a.id
+        WHERE a.id=$1`,
+      [staleWake.attempt_id, staleWake.message_id],
+    )
+  ).rows[0];
+  assert(
+    staleRollback.tasks === 0 &&
+      staleRollback.runs === 0 &&
+      staleRollback.dispatches === 0 &&
+      staleWakeAfter?.attempt_status === staleWakeBefore.attemptStatus &&
+      staleWakeAfter?.attempt_execution_task_id ===
+        staleWakeBefore.attemptExecutionTaskId &&
+      staleWakeAfter?.message_status === staleWakeBefore.messageStatus &&
+      staleWakeAfter?.message_task_id === staleWakeBefore.messageTaskId,
+    'stale_materialization_rollback_invalid',
+  );
+  marker('STALE_REVISION_MATERIALIZATION_ROLLED_BACK');
+  const fixtureExecutions = new FixtureTeamExecutionRepository(queryOnly(db));
+  const fixtureMessages = new FixtureTeamMessageRepository(queryOnly(db));
+  const memberRunFenceMember = activateMemberRun(
+    createTeamMemberRun({
+      teamRunId,
+      name: `member-run-fence-${suffix}`,
+      role: 'member',
+      agentVersionId: member.agent_version_id ?? agents.member,
+      ...owner,
+    }),
+  );
+  await fixtureExecutions.createMemberRun(memberRunFenceMember);
+  const memberRunFenceWork = createTeamWorkItem({
+    teamRunId,
+    subject: 'terminal task nonterminal run fence fixture',
+    description: 'isolated queued wake fixture',
+    createdByMemberId: lead.id,
+    ...owner,
+  });
+  await fixtureExecutions.createWorkItem(memberRunFenceWork);
+  const leadTaskId = (
+    await db.query(
+      `SELECT id FROM tasks
+        WHERE root_task_id=$1 AND team_member_run_id=$2
+          AND team_task_kind='lead_turn'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [rootTaskId, lead.id],
+    )
+  ).rows[0]?.id;
+  assert(leadTaskId, 'member_run_fence_lead_task_missing');
+  const memberRunFenceAttemptId = randomUUID();
+  const memberRunFenceCreatedAt = new Date().toISOString();
+  await db.query(
+    `INSERT INTO team_work_item_attempts
+       (id,work_item_id,team_run_id,attempt_no,assignee_member_id,
+        requested_by_lead_task_id,status,tenant_id,workspace_id,
+        principal_type,principal_id,created_at,updated_at)
+     VALUES ($1,$2,$3,1,$4,$5,'queued',$6,$7,$8,$9,$10,$10)`,
+    [
+      memberRunFenceAttemptId,
+      memberRunFenceWork.id,
+      teamRunId,
+      memberRunFenceMember.id,
+      leadTaskId,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      memberRunFenceCreatedAt,
+    ],
+  );
+  const memberRunFenceWake = await fixtureMessages.create(
+    createTeamMessage({
+      teamRunId,
+      recipientMemberRunId: memberRunFenceMember.id,
+      workItemId: memberRunFenceWork.id,
+      attemptId: memberRunFenceAttemptId,
+      kind: 'wake',
+      dedupKey: `member-run-fence:${memberRunFenceAttemptId}`,
+      body: 'isolated terminal task nonterminal run fence wake',
+      ...owner,
+    }),
+  );
+  const memberRunFenceTask = createChildTask({
+    tenantId,
+    workspaceId,
+    principalType: 'service_account',
+    principalId,
+    policySnapshotVersion: rootTask.policySnapshotVersion,
+    rootTaskId: rootTask.id,
+    parentTaskId: rootTask.id,
+    parentRunId: (
+      await db.query('SELECT root_run_id FROM team_runs WHERE id=$1', [
+        teamRunId,
+      ])
+    ).rows[0].root_run_id,
+    invokableKind: 'agent',
+    invokableVersionId: memberRunFenceMember.agentVersionId,
+    inputSnapshotRef: rootTask.inputSnapshotRef,
+    inputFingerprint: rootTask.inputFingerprint,
+    logicalStepKey: `member:${teamRunId}:${memberRunFenceMember.id}:all-run-fence`,
+    nodePath: `member:${teamRunId}:${memberRunFenceMember.id}:all-run-fence`,
+    teamMemberRunId: memberRunFenceMember.id,
+  });
+  const memberRunFenceRun = createRun('all-run member fence smoke');
+  const runRepository = new PostgresRunRepository(queryOnly(db));
+  await new PostgresTaskRepository(queryOnly(db)).save(memberRunFenceTask);
+  await runRepository.save(memberRunFenceRun, {
+    taskId: memberRunFenceTask.id,
+    attempt: 1,
+  });
+  await db.query(
+    "UPDATE tasks SET status='completed',updated_at=now() WHERE id=$1",
+    [memberRunFenceTask.id],
+  );
+  const memberRunFenceInitial = (
+    await db.query(
+      `SELECT w.status AS work_status,
+              a.status AS attempt_status,
+              a.execution_task_id AS attempt_execution_task_id,
+              m.status AS message_status,
+              m.consumed_by_task_id AS message_task_id,
+              (SELECT count(*)::int
+                 FROM team_work_item_dependencies d
+                WHERE d.team_run_id=$1 AND d.work_item_id=w.id) AS dependencies,
+              (SELECT count(*)::int
+                 FROM team_work_item_attempts competing
+                WHERE competing.team_run_id=$1
+                  AND competing.assignee_member_id=$2
+                  AND competing.id<>a.id
+                  AND competing.status IN ('queued','running')) AS competing_attempts,
+              (SELECT count(*)::int
+                 FROM tasks task
+                 JOIN runs run ON run.task_id=task.id
+                WHERE task.id=$3 AND task.status='completed'
+                  AND run.id=$4
+                  AND run.status NOT IN ('succeeded','failed','timed_out','cancelled')) AS nonterminal_runs
+         FROM team_work_items w
+         JOIN team_work_item_attempts a ON a.work_item_id=w.id
+         JOIN team_messages m ON m.id=$5 AND m.attempt_id=a.id
+        WHERE w.id=$6 AND a.id=$7`,
+      [
+        teamRunId,
+        memberRunFenceMember.id,
+        memberRunFenceTask.id,
+        memberRunFenceRun.id,
+        memberRunFenceWake.id,
+        memberRunFenceWork.id,
+        memberRunFenceAttemptId,
+      ],
+    )
+  ).rows[0];
+  assert(
+    memberRunFenceInitial?.work_status === 'pending' &&
+      memberRunFenceInitial.attempt_status === 'queued' &&
+      memberRunFenceInitial.attempt_execution_task_id === null &&
+      memberRunFenceInitial.message_status === 'queued' &&
+      memberRunFenceInitial.message_task_id === null &&
+      memberRunFenceInitial.dependencies === 0 &&
+      memberRunFenceInitial.competing_attempts === 0 &&
+      memberRunFenceInitial.nonterminal_runs === 1,
+    'terminal_task_nonterminal_run_fixture_invalid',
+  );
+  assert(
+    await runRepository.hasNonterminalRunsForTeamMemberChildTasks(
+      rootTaskId,
+      [memberRunFenceMember.id],
+      owner,
+    ),
+    'scheduler_all_run_projection_missed_nonterminal_run',
+  );
+  const memberRunFenceRevision = (
+    await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
+  ).rows[0]?.revision;
+  assert(
+    Number.isInteger(memberRunFenceRevision),
+    'terminal_task_nonterminal_run_revision_missing',
+  );
+  const memberRunFenceCandidateTask = createChildTask({
+    tenantId,
+    workspaceId,
+    principalType: 'service_account',
+    principalId,
+    policySnapshotVersion: rootTask.policySnapshotVersion,
+    rootTaskId: rootTask.id,
+    parentTaskId: rootTask.id,
+    parentRunId: (
+      await db.query('SELECT root_run_id FROM team_runs WHERE id=$1', [
+        teamRunId,
+      ])
+    ).rows[0].root_run_id,
+    invokableKind: 'agent',
+    invokableVersionId: memberRunFenceMember.agentVersionId,
+    inputSnapshotRef: rootTask.inputSnapshotRef,
+    inputFingerprint: rootTask.inputFingerprint,
+    logicalStepKey: `member:${teamRunId}:${memberRunFenceMember.id}:wake:${memberRunFenceAttemptId}`,
+    nodePath: `member:${teamRunId}:${memberRunFenceMember.id}:wake:${memberRunFenceAttemptId}`,
+    teamMemberRunId: memberRunFenceMember.id,
+    teamSequence: 1,
+    teamTaskKind: 'work_attempt',
+    sourceTeamMessageId: memberRunFenceWake.id,
+    inputTeamMessageIds: [memberRunFenceWake.id],
+  });
+  const memberRunFenceCandidateRun = createRun(
+    'terminal task nonterminal run fence candidate',
+  );
+  let memberRunFenceRejected = false;
+  try {
+    await new PostgresAdmissionRepository(queryOnly(db)).withTransaction(
+      async (tx) => {
+        await tx.tasks.save(memberRunFenceCandidateTask);
+        await tx.runs.save(memberRunFenceCandidateRun, {
+          taskId: memberRunFenceCandidateTask.id,
+          attempt: 1,
+        });
+        await tx.teamExecutions.materializeAttempt({
+          attemptId: memberRunFenceAttemptId,
+          executionTaskId: memberRunFenceCandidateTask.id,
+          teamRunId,
+          assigneeMemberId: memberRunFenceMember.id,
+          expectedRevision: memberRunFenceRevision,
+          owner,
+        });
+        await tx.teamMessages.bindToTask({
+          messageIds: [memberRunFenceWake.id],
+          taskId: memberRunFenceCandidateTask.id,
+          owner,
+        });
+        await tx.enqueueRunDispatch(
+          memberRunFenceCandidateRun.id,
+          memberRunFenceCandidateRun.createdAt,
+        );
+      },
+    );
+  } catch (error) {
+    memberRunFenceRejected = error?.code === 'invalid_transition';
+  }
+  const memberRunFenceRollback = (
+    await db.query(
+      `SELECT
+         (SELECT count(*)::int FROM tasks WHERE id=$1) AS tasks,
+         (SELECT count(*)::int FROM runs WHERE id=$2) AS runs,
+         (SELECT count(*)::int FROM run_dispatches WHERE run_id=$2) AS dispatches,
+         a.status AS attempt_status,
+         a.execution_task_id AS attempt_execution_task_id,
+         m.status AS message_status,
+         m.consumed_by_task_id AS message_task_id
+         FROM team_work_item_attempts a
+         JOIN team_messages m ON m.id=$4 AND m.attempt_id=a.id
+        WHERE a.id=$3`,
+      [
+        memberRunFenceCandidateTask.id,
+        memberRunFenceCandidateRun.id,
+        memberRunFenceAttemptId,
+        memberRunFenceWake.id,
+      ],
+    )
+  ).rows[0];
+  assert(
+    memberRunFenceRejected &&
+      memberRunFenceRollback.tasks === 0 &&
+      memberRunFenceRollback.runs === 0 &&
+      memberRunFenceRollback.dispatches === 0 &&
+      memberRunFenceRollback.attempt_status ===
+        memberRunFenceInitial.attempt_status &&
+      memberRunFenceRollback.attempt_execution_task_id ===
+        memberRunFenceInitial.attempt_execution_task_id &&
+      memberRunFenceRollback.message_status ===
+        memberRunFenceInitial.message_status &&
+      memberRunFenceRollback.message_task_id ===
+        memberRunFenceInitial.message_task_id,
+    'terminal_task_nonterminal_run_admission_fence_invalid',
+  );
+  await db.query(
+    "UPDATE runs SET status='succeeded',fencing_token=1,result=$2::jsonb,updated_at=now() WHERE id=$1",
+    [
+      memberRunFenceRun.id,
+      JSON.stringify({ text: 'all-run member fence terminal' }),
+    ],
+  );
+  assert(
+    !(await runRepository.hasNonterminalRunsForTeamMemberChildTasks(
+      rootTaskId,
+      [memberRunFenceMember.id],
+      owner,
+    )),
+    'scheduler_all_run_projection_remained_nonterminal',
+  );
+  await db.query('BEGIN');
+  try {
+    await db.query('DELETE FROM run_dispatches WHERE run_id=$1', [
+      memberRunFenceRun.id,
+    ]);
+    await db.query('DELETE FROM run_events WHERE run_id=$1', [
+      memberRunFenceRun.id,
+    ]);
+    await db.query('DELETE FROM runs WHERE id=$1', [memberRunFenceRun.id]);
+    await db.query('DELETE FROM tasks WHERE id=$1', [memberRunFenceTask.id]);
+    await db.query('DELETE FROM team_messages WHERE id=$1', [
+      memberRunFenceWake.id,
+    ]);
+    await db.query('DELETE FROM team_work_item_attempts WHERE id=$1', [
+      memberRunFenceAttemptId,
+    ]);
+    await db.query('DELETE FROM team_work_items WHERE id=$1', [
+      memberRunFenceWork.id,
+    ]);
+    await db.query('DELETE FROM team_member_runs WHERE id=$1', [
+      memberRunFenceMember.id,
+    ]);
+    await db.query('COMMIT');
+  } catch (error) {
+    await db.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+  const memberRunFenceCleanup = (
+    await db.query(
+      `SELECT
+         (SELECT count(*)::int FROM team_member_runs WHERE id=$1) AS members,
+         (SELECT count(*)::int FROM team_work_items WHERE id=$2) AS work_items,
+         (SELECT count(*)::int FROM team_work_item_attempts WHERE id=$3) AS attempts,
+         (SELECT count(*)::int FROM team_messages WHERE id=$4) AS messages,
+         (SELECT count(*)::int FROM tasks WHERE id=$5) AS tasks,
+         (SELECT count(*)::int FROM runs WHERE id=$6) AS runs`,
+      [
+        memberRunFenceMember.id,
+        memberRunFenceWork.id,
+        memberRunFenceAttemptId,
+        memberRunFenceWake.id,
+        memberRunFenceTask.id,
+        memberRunFenceRun.id,
+      ],
+    )
+  ).rows[0];
+  assert(
+    memberRunFenceCleanup.members === 0 &&
+      memberRunFenceCleanup.work_items === 0 &&
+      memberRunFenceCleanup.attempts === 0 &&
+      memberRunFenceCleanup.messages === 0 &&
+      memberRunFenceCleanup.tasks === 0 &&
+      memberRunFenceCleanup.runs === 0,
+    'terminal_task_nonterminal_run_fixture_cleanup_invalid',
+  );
+  marker('TERMINAL_TASK_NONTERMINAL_RUN_FENCES_ENFORCED');
+  const blocked = await service.singleRunDebug.rebuildQueuedTeamWakes();
+  const blockedAgain = await service.singleRunDebug.rebuildQueuedTeamWakes();
+  assert(blocked === 1 && blockedAgain === 0, 'dependency_reconcile_invalid');
+  const b = await db.query(
+    'SELECT a.status,a.execution_task_id,m.status AS message_status FROM team_work_item_attempts a JOIN team_messages m ON m.attempt_id=a.id WHERE a.team_run_id=$1 AND a.attempt_no=1 AND a.assignee_member_id=$2',
+    [teamRunId, observer.id],
+  );
+  assert(
+    b.rowCount === 1 &&
+      b.rows[0].status === 'queued' &&
+      b.rows[0].execution_task_id === null &&
+      b.rows[0].message_status === 'queued',
+    'dependency_blocked_not_queued',
+  );
+  marker('DEPENDENCY_BLOCKED_ZERO_WRITE');
+  service.singleRunDebug.startDispatcher();
+  const terminal = await waitFor(
+    async () => {
+      await service.singleRunDebug.rebuildQueuedTeamWakes();
+      const row = (
+        await db.query('SELECT status,phase FROM team_runs WHERE id=$1', [
+          teamRunId,
+        ])
+      ).rows[0];
+      if (row?.status === 'failed') throw new Error('team_terminal_failed');
+      if (row?.status === 'cancelled')
+        throw new Error('team_terminal_cancelled');
+      if (
+        row &&
+        row.status !== 'active' &&
+        row.status !== 'waiting' &&
+        row.status !== 'succeeded'
+      )
+        throw new Error('team_terminal_unsuccessful');
+      return row;
+    },
+    (row) => row?.status === 'succeeded',
+    'team_terminal_timeout',
+  );
+  await service.singleRunDebug.stopDispatcher();
+  assert(terminal.phase === 'done', 'team_phase_not_done');
+  const attempts = await db.query(
+    'SELECT status,execution_task_id FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY created_at',
+    [teamRunId],
+  );
+  assert(
+    attempts.rowCount === 2 &&
+      attempts.rows.every(
+        (row) => row.status === 'completed' && row.execution_task_id,
+      ),
+    'attempts_not_terminal',
+  );
+  const memberSubmittedAttempt = await db.query(
+    `SELECT a.status AS attempt_status,r.status AS run_status,m.status AS member_status
+       FROM team_work_item_attempts a
+       JOIN tasks t ON t.id=a.execution_task_id
+       JOIN runs r ON r.task_id=t.id
+       JOIN team_member_runs m ON m.id=a.assignee_member_id
+      WHERE a.team_run_id=$1 AND a.assignee_member_id=$2`,
+    [teamRunId, member.id],
+  );
+  if (scriptedRuntime) {
+    assert(
+      memberSubmittedAttempt.rowCount === 1 &&
+        memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
+        memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
+        memberSubmittedAttempt.rows[0].member_status === 'idle',
+      'submitted_timeout_member_not_idle',
+    );
+    marker('SUBMITTED_TIMEOUT_ATTEMPT_PRESERVED');
+  } else {
+    assert(
+      memberSubmittedAttempt.rowCount === 1 &&
+        memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
+        memberSubmittedAttempt.rows[0].run_status === 'succeeded' &&
+        memberSubmittedAttempt.rows[0].member_status === 'idle',
+      'paid_member_attempt_not_completed',
+    );
+    marker('PAID_MEMBER_ATTEMPT_COMPLETED');
+  }
+  const bCardinality = await db.query(
+    "SELECT count(*)::int AS tasks FROM tasks WHERE root_task_id=$1 AND team_member_run_id=$2 AND team_task_kind='work_attempt'",
+    [rootTaskId, observer.id],
+  );
+  assert(
+    bCardinality.rows[0].tasks === 1,
+    'dependency_attempt_cardinality_invalid',
+  );
+  const work = await db.query(
+    'SELECT id FROM team_work_items WHERE team_run_id=$1 ORDER BY created_at',
+    [teamRunId],
+  );
+  assert(work.rowCount === 2, 'work_count_invalid');
+  await expectSqlState(
+    'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$2,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
+    [teamRunId, work.rows[0].id],
+    '23514',
+  );
+  await expectSqlState(
+    'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$3,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
+    [teamRunId, work.rows[1].id, work.rows[0].id],
+    '23505',
+  );
+  await expectSqlState(
+    'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
+    [
+      teamRunId,
+      work.rows[0].id,
+      work.rows[1].id,
+      'foreign',
+      workspaceId,
+      'service_account',
+      principalId,
+    ],
+    '23503',
+  );
+  marker('DEPENDENCY_CONSTRAINTS_ENFORCED');
+  const { applyDurableKernelMigrations, durableKernelMigrationFilePaths } =
+    await import('../../src/infrastructure/postgres/postgres.ts');
+  const migration0025 = durableKernelMigrationFilePaths.find((filePath) =>
+    filePath.endsWith('0025_agent_team_work_dependencies.sql'),
+  );
+  assert(migration0025, 'migration_0025_path_missing');
+  await db.query(
+    "DELETE FROM durable_kernel_schema_migrations WHERE version='0025_agent_team_work_dependencies'",
+  );
+  await applyDurableKernelMigrations(
+    { query: (sql, values) => db.query(sql, values) },
+    [migration0025],
+  );
+  const migrationReplay = await db.query(
+    "SELECT count(*)::int AS count FROM durable_kernel_schema_migrations WHERE version='0025_agent_team_work_dependencies'",
+  );
+  assert(migrationReplay.rows[0].count === 1, 'migration_0025_replay_invalid');
+  marker('MIGRATION_0025_CRASH_WINDOW_REPLAYED');
+  const { PostgresTeamExecutionRepository } =
+    await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+  const finishSource = (
+    await db.query(
+      `SELECT t.completion_requested_by_run_id,r.task_id
+         FROM team_runs t JOIN runs r ON r.id=t.completion_requested_by_run_id
+        WHERE t.id=$1`,
+      [teamRunId],
+    )
+  ).rows[0];
+  assert(
+    finishSource?.completion_requested_by_run_id && finishSource.task_id,
+    'finish_source_missing',
+  );
+  await new PostgresTeamExecutionRepository(queryOnly(db)).requestCompletion({
+    teamRunId,
+    sourceRunId: finishSource.completion_requested_by_run_id,
+    leadTaskId: finishSource.task_id,
+    commandHash: hash(JSON.stringify(['team_finish', {}])),
+    expectedRevision: (
+      await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
+    ).rows[0].revision,
+    owner,
+  });
+  marker('FINISH_RECEIPT_REPLAYED');
+  const projection = await request(
+    `/api/v1/team-runs:project?root_task_id=${rootTaskId}`,
+  );
+  const direct = await request(
+    `/api/v1/team-runs/${teamRunId}/direct-messages`,
+  );
+  const memberOriginDirect = await db.query(
+    `SELECT count(*)::int AS count FROM team_messages
+      WHERE team_run_id=$1 AND kind='direct'
+        AND sender_member_run_id=ANY($2::uuid[])`,
+    [teamRunId, [member.id, observer.id]],
+  );
+  assert(
+    memberOriginDirect.rows[0].count === 0,
+    'member_origin_direct_message_persisted',
+  );
+  await request(`/api/v1/team-runs/${teamRunId}/direct-messages`, {
+    status: 404,
+    authToken: foreignToken,
+  });
+  await request(`/api/v1/team-runs/${teamRunId}`, {
+    status: 404,
+    authToken: foreignToken,
+  });
+  const replay = await request(
+    `/api/v1/team-runs:project?root_task_id=${rootTaskId}`,
+  );
+  assert(
+    projection.project?.phase === 'done' &&
+      projection.work_items?.length === 2 &&
+      projection.gates?.finish_ready === true &&
+      projection.sessions?.find((session) => session.name === 'member')
+        ?.status === 'idle' &&
+      direct.length === 1 &&
+      JSON.stringify(projection) === JSON.stringify(replay),
+    'safe_projection_or_replay_invalid',
+  );
+  assertProjectionScannerSelfCheck();
+  assertSafeProjection(projection);
+  assert(Array.isArray(projection.sessions), 'sessions_projection_missing');
+  const runtimeSessions = await db.query(
+    `SELECT id,name,role,runtime_session_id
+       FROM team_member_runs WHERE team_run_id=$1 ORDER BY name`,
+    [teamRunId],
+  );
+  assert(
+    runtimeSessions.rowCount === 3 &&
+      runtimeSessions.rows
+        .filter((row) => row.role !== 'lead')
+        .every((row) => row.runtime_session_id) &&
+      runtimeSessions.rows.find((row) => row.role === 'lead')
+        ?.runtime_session_id === null,
+    'runtime_session_link_missing',
+  );
+  const leadTaskBindings = await db.query(
+    `SELECT rs.id,rs.provider_agent_id
+       FROM runtime_sessions rs
+       JOIN tasks t ON t.id=rs.task_id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+        AND rs.scope_kind='task'
+      ORDER BY t.team_sequence`,
+    [rootTaskId],
+  );
+  assert(
+    leadTaskBindings.rowCount === 4 &&
+      leadTaskBindings.rows.every((row) => row.provider_agent_id) &&
+      new Set(leadTaskBindings.rows.map((row) => row.provider_agent_id))
+        .size === 4,
+    'lead_task_provider_bindings_invalid',
+  );
+  const teamChildRuns = await db.query(
+    `SELECT r.id,t.team_task_kind,t.team_member_run_id
+       FROM tasks t JOIN runs r ON r.task_id=t.id
+      WHERE t.root_task_id=$1 AND t.team_task_kind IN ('lead_turn','work_attempt')`,
+    [rootTaskId],
+  );
+  const leadRunIds = new Set(
+    teamChildRuns.rows
+      .filter((row) => row.team_task_kind === 'lead_turn')
+      .map((row) => row.id),
+  );
+  const memberRunIds = new Set(
+    teamChildRuns.rows
+      .filter((row) => row.team_task_kind === 'work_attempt')
+      .map((row) => row.id),
+  );
+  const leadControlProgress = await db.query(
+    `SELECT t.team_sequence,array_agg(c.command_name ORDER BY c.created_at,c.command_name) AS commands
+       FROM tasks t
+       JOIN runs r ON r.task_id=t.id
+       JOIN team_command_receipts c ON c.source_run_id=r.id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+        AND c.command_name=ANY($2::text[])
+      GROUP BY t.team_sequence ORDER BY t.team_sequence`,
+    [
+      rootTaskId,
+      [
+        'team_work_create',
+        'team_work_accept',
+        'team_work_request_changes',
+        'team_finish',
+      ],
+    ],
+  );
+  assert(
+    leadControlProgress.rowCount === 4 &&
+      JSON.stringify(
+        leadControlProgress.rows.map((row) => row.team_sequence),
+      ) === JSON.stringify([1, 2, 3, 4]) &&
+      leadControlProgress.rows[0].commands.filter(
+        (command) => command === 'team_work_create',
+      ).length === 2 &&
+      leadControlProgress.rows[1].commands.includes('team_work_accept') &&
+      leadControlProgress.rows[2].commands.includes('team_work_accept') &&
+      leadControlProgress.rows[3].commands.includes('team_finish'),
+    'lead_canonical_progress_receipts_invalid',
+  );
+  marker('LEAD_CANONICAL_PROGRESS_PROVEN');
+  const directRunIds = new Set(
+    (
+      await db.query(
+        `SELECT r.id FROM tasks t JOIN runs r ON r.task_id=t.id
+          WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
+        [rootTaskId],
+      )
+    ).rows.map((row) => row.id),
+  );
+  const directTask = await db.query(
+    `SELECT t.id AS task_id,r.id AS run_id,r.updated_at AS run_updated_at,t.team_task_kind,t.team_member_run_id,
+            t.source_team_message_id,t.input_team_message_ids,t.team_sequence,
+            r.status AS run_status,m.status AS message_status,m.body
+       FROM tasks t
+       JOIN runs r ON r.task_id=t.id
+       JOIN team_messages m ON m.id=t.source_team_message_id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
+    [rootTaskId],
+  );
+  assert(
+    directTask.rowCount === 1 &&
+      directTask.rows[0].team_member_run_id === observer.id &&
+      directTask.rows[0].team_task_kind === 'direct_message' &&
+      directTask.rows[0].message_status === 'delivered' &&
+      directTask.rows[0].input_team_message_ids?.length === 1 &&
+      String(directTask.rows[0].body).includes('phase3-direct-sentinel') &&
+      !String(directTask.rows[0].body).includes('canary-secret') &&
+      !String(directTask.rows[0].body).includes('/Users/canary'),
+    'direct_production_reconcile_invalid',
+  );
+  marker('DIRECT_MCP_QUEUED_AND_PRODUCTION_RECONCILED');
+  const leadAfterDirect = await db.query(
+    `SELECT created_at FROM tasks
+      WHERE root_task_id=$1 AND team_task_kind='lead_turn' AND team_sequence=4`,
+    [rootTaskId],
+  );
+  assert(
+    leadAfterDirect.rowCount === 1 &&
+      Date.parse(leadAfterDirect.rows[0].created_at) >=
+        Date.parse(directTask.rows[0].run_updated_at),
+    'lead_scheduled_before_direct_terminal',
+  );
+  marker('DIRECT_LEAD_DEFERRED_UNTIL_DELIVERED');
+  assert(
+    leadRunIds.size === 4 && memberRunIds.size === 2,
+    'team_child_run_cardinality_invalid',
+  );
+  let paidLeadRuntimeEvidence = {};
+  if (scriptedRuntime) {
+    const bindings = runtimeCalls.filter(
+      (call) => call.kind === 'runtime_binding',
+    );
+    const leadBindings = bindings.filter((call) => call.role === 'lead');
+    assert(
+      leadBindings.length === 4 &&
+        leadBindings.every((call) => call.operation === 'create') &&
+        new Set(leadBindings.map((call) => call.provider_binding_hash)).size ===
+          4,
+      'scripted_lead_task_runtime_not_fresh',
+    );
+    const directBindings = bindings.filter((call) => call.role === 'direct');
+    const observerBindings = bindings.filter(
+      (call) => call.role === 'member' && call.operation === 'create',
+    );
+    assert(
+      directBindings.length === 1 &&
+        directBindings[0].operation === 'continue' &&
+        runtimeCalls.some(
+          (call) =>
+            call.role === 'direct' &&
+            call.observed_sentinel &&
+            call.acknowledged,
+        ) &&
+        observerBindings.length >= 1 &&
+        observerBindings.some(
+          (call) =>
+            call.provider_binding_hash ===
+            directBindings[0].provider_binding_hash,
+        ),
+      'direct_runtime_session_not_continued',
+    );
+    const scriptedLeadTurns = runtimeCalls.filter(
+      (call) => call.role === 'lead' && Number.isInteger(call.turn),
+    );
+    const scriptedMemberTurns = runtimeCalls.filter(
+      (call) => call.role === 'member' && Number.isInteger(call.turn),
+    );
+    assert(
+      scriptedLeadTurns.length === 4 &&
+        scriptedMemberTurns.length === 2 &&
+        scriptedLeadTurns.every((call, index) => call.turn === index + 1) &&
+        scriptedMemberTurns.every((call, index) => call.turn === index + 1),
+      'scripted_golden_path_turn_cardinality_invalid',
+    );
+  } else {
+    const created = runtimeTrace.filter(
+      (event) => event.event === 'runtime.agent.create.completed',
+    );
+    const sent = runtimeTrace.filter(
+      (event) => event.event === 'runtime.message.send.completed',
+    );
+    const leadCreates = created.filter((event) => leadRunIds.has(event.runId));
+    const leadPromptSends = sent.filter((event) => leadRunIds.has(event.runId));
+    assert(
+      leadCreates.length === 4 &&
+        leadPromptSends.length === 4 &&
+        created.filter((event) => memberRunIds.has(event.runId)).length === 2 &&
+        sent.filter((event) => memberRunIds.has(event.runId)).length === 2,
+      'paid_lead_task_runtime_evidence_invalid',
+    );
+    paidLeadRuntimeEvidence = {
+      lead_provider_create_executions: leadCreates.length,
+      lead_provider_prompt_send_completions: leadPromptSends.length,
+      lead_persisted_provider_bindings: new Set(
+        leadTaskBindings.rows.map((row) => row.provider_agent_id),
+      ).size,
+    };
+  }
+  marker('SAFE_PROJECTION_AND_RUNTIME_BINDINGS', {
+    member_binding_hashes: runtimeSessions.rows
+      .filter((row) => row.role !== 'lead')
+      .map((row) => hash(row.runtime_session_id)),
+    lead_binding_hashes: leadTaskBindings.rows.map((row) =>
+      hash(row.provider_agent_id),
+    ),
+    ...paidLeadRuntimeEvidence,
+    lead_turns: leadRunIds.size,
+    member_attempt_runs: memberRunIds.size,
+  });
+  const deliveredDirect = await db.query(
+    `SELECT m.status,m.consumed_by_task_id,t.id AS task_id,r.id AS run_id,r.status AS run_status
+       FROM team_messages m
+       JOIN tasks t ON t.id=m.consumed_by_task_id
+       JOIN runs r ON r.task_id=t.id
+      WHERE m.team_run_id=$1 AND m.kind='direct'`,
+    [teamRunId],
+  );
+  assert(
+    deliveredDirect.rowCount === 1 &&
+      deliveredDirect.rows[0].status === 'delivered' &&
+      deliveredDirect.rows[0].task_id === directTask.rows[0].task_id &&
+      deliveredDirect.rows[0].run_status === 'succeeded' &&
+      directRunIds.has(deliveredDirect.rows[0].run_id ?? ''),
+    'direct_delivery_linkage_invalid',
+  );
+  marker('DIRECT_DELIVERED_AND_CONTINUED');
+  const rootRunState = await db.query(
+    'SELECT t.status AS task_status,r.status AS run_status FROM tasks t JOIN runs r ON r.task_id=t.id WHERE t.id=$1',
+    [rootTaskId],
+  );
+  assert(
+    rootRunState.rows[0].task_status === 'completed' &&
+      rootRunState.rows[0].run_status === 'succeeded',
+    'root_not_terminal',
+  );
+  const nonterminalMemberChildren = await db.query(
+    `SELECT count(*)::int AS count
+       FROM tasks task
+       JOIN team_member_runs member
+         ON member.id=task.team_member_run_id
+        AND member.team_run_id=$1 AND member.role='member'
+       LEFT JOIN runs run ON run.task_id=task.id
+      WHERE task.root_task_id=$2
+        AND (
+          task.status NOT IN ('completed','failed','cancelled')
+          OR (run.id IS NOT NULL AND run.status NOT IN ('succeeded','failed','timed_out','cancelled'))
+        )`,
+    [teamRunId, rootTaskId],
+  );
+  assert(
+    nonterminalMemberChildren.rows[0].count === 0,
+    'nonterminal_member_child_remaining',
+  );
+  marker('COMPLETION_MEMBER_CHILD_FENCE_ENFORCED');
+  const finalMessageFacts = (
+    await db.query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE kind='direct')::int AS direct
+         FROM team_messages WHERE team_run_id=$1`,
+      [teamRunId],
+    )
+  ).rows[0];
+  marker('RESULT_PASS', {
+    expected: { terminal: true, direct: true, dependency: true, replay: true },
+    actual: { terminal: true, direct: true, dependency: true, replay: true },
+    durable_cardinality: {
+      team_members: roster.rowCount,
+      work_items: work.rowCount,
+      attempts: attempts.rowCount,
+      team_messages: finalMessageFacts.total,
+      direct_messages: finalMessageFacts.direct,
+      lead_turns: leadRunIds.size,
+      member_attempt_runs: memberRunIds.size,
+    },
+  });
+  await evidence('passed');
+} catch (error) {
+  const failure = smokeFailure(error);
+  try {
+    await evidence('blocked', failure);
+  } catch {
+    process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
+  }
+  throw failure;
+} finally {
+  await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
+  await new Promise((done) => api?.close?.(() => done()) ?? done()).catch(
+    () => undefined,
+  );
+  await service?.close?.().catch(() => undefined);
+  await (paseo?.child ? stopProcessTree(paseo.child) : Promise.resolve()).catch(
+    () => undefined,
+  );
+  await db?.end?.().catch(() => undefined);
+  await admin?.end?.().catch(() => undefined);
+}

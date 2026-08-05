@@ -1,6 +1,6 @@
-# Agentic Team Project Web API contract
+# Agent Teams v2 Project Web API contract
 
-This is the fixed local/single-operator Agentic Team Project BFF contract. The
+This is the fixed local/single-operator Agent Teams v2 Project BFF contract. The
 Next.js service is same-origin and server-only: it owns the Agent Server bearer
 and the browser receives no upstream authentication material. The BFF binds
 every flow to `WEB_WORKSPACE_ID`, `WEB_AGENTIC_TEAM_VERSION_ID`, and
@@ -20,7 +20,7 @@ All responses include `Cache-Control: no-store`. Mutating routes require an
 | `GET`  | `/api/team-project/sessions/{teamMemberRunId}/runs/{runId}/events?task=<rootTaskId>` | `200`   | Owner-checked session Run                 | Historical safe Run event replay           |
 | `GET`  | `/api/team-project/runs/{runId}/events?task=<rootTaskId>`                            | `200`   | Owner-checked Project Run                 | Project Run SSE stream                     |
 
-Launch returns only the root Task ID. It invokes the fixed-roster Team with
+Launch returns only the root Task ID. It invokes the fixed-roster Agent Teams v2 Team with
 server-configured Workspace, TeamVersion, EnvironmentVersion, and fixture
 inputs; callers cannot choose Project, Team, workspace, model, prompt, or
 provider. Without `task`, the Project route returns the latest owner-scoped

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  createDraftTeamVersion,
-  publishTeamVersion,
-  reviseDraftTeamVersion,
-} from './team-version.js';
+import { createDraftTeamVersion, publishTeamVersion } from './team-version.js';
 
 const ownerScope = {
   tenantId: 'tenant_alpha',
@@ -13,77 +9,56 @@ const ownerScope = {
   principalId: 'svc_alpha',
 };
 
+const spec = {
+  lead: {
+    name: 'Lead',
+    agentVersionId: '00000000-0000-4000-8000-000000001001',
+  },
+  roster: [
+    {
+      name: 'Analyst',
+      agentVersionId: '00000000-0000-4000-8000-000000001003',
+    },
+    {
+      name: 'Researcher',
+      agentVersionId: '00000000-0000-4000-8000-000000001002',
+    },
+  ],
+  environmentVersionId: '00000000-0000-4000-8000-000000002001',
+} as const;
+
 describe('team version', () => {
-  it('publishes a sequential team with its compiled plan attached', () => {
+  it('publishes the canonical fixed-roster Team spec immutably', () => {
     const draft = createDraftTeamVersion({
       id: '00000000-0000-4000-8000-000000000201',
       definitionId: '00000000-0000-4000-8000-000000000002',
       ...ownerScope,
-      name: 'Sequential Research Team',
-      description: 'Collects, analyzes, and summarizes',
-      graph: {
-        nodes: [
-          {
-            id: 'collect',
-            kind: 'invoke',
-            agentVersionId: '00000000-0000-4000-8000-000000001001',
-            successNodeId: 'analyze',
-            output: 'step',
-          },
-          {
-            id: 'analyze',
-            kind: 'invoke',
-            agentVersionId: '00000000-0000-4000-8000-000000001002',
-            successNodeId: null,
-            output: 'final',
-          },
-        ],
-      },
+      name: 'Research Team',
+      description: 'Collects and summarizes',
+      spec,
       now: () => new Date('2026-07-22T12:00:00.000Z'),
     });
 
-    const revised = reviseDraftTeamVersion(
-      draft,
-      {
-        description: 'Collects, analyzes, and emits the final output',
-      },
-      () => new Date('2026-07-22T12:05:00.000Z'),
-    );
     const published = publishTeamVersion(
-      revised,
-      {
-        compilerVersion: 'sequential-mvp-v1',
-        teamVersionId: revised.id,
-        entryNodeId: 'collect',
-        finalOutputNodeId: 'analyze',
-        compiledAt: '2026-07-22T12:10:00.000Z',
-        steps: [
-          {
-            nodeId: 'collect',
-            nodePath: 'step.0001',
-            agentVersionId: '00000000-0000-4000-8000-000000001001',
-            order: 1,
-            output: 'step',
-          },
-          {
-            nodeId: 'analyze',
-            nodePath: 'step.0002',
-            agentVersionId: '00000000-0000-4000-8000-000000001002',
-            order: 2,
-            output: 'final',
-          },
-        ],
-      },
+      draft,
       () => new Date('2026-07-22T12:10:00.000Z'),
     );
 
     expect(published.status).toBe('published');
     expect(published.publishedAt).toBe('2026-07-22T12:10:00.000Z');
-    expect(published.compiledPlan?.finalOutputNodeId).toBe('analyze');
+    expect(published.spec).toEqual(spec);
+    expect(published.environmentVersionId).toBe(spec.environmentVersionId);
+    expect(() => publishTeamVersion(published)).toThrow(/immutable/i);
+  });
+
+  it('requires exactly two roster members', () => {
     expect(() =>
-      reviseDraftTeamVersion(published, {
-        name: 'Mutated Team',
+      createDraftTeamVersion({
+        definitionId: '00000000-0000-4000-8000-000000000002',
+        ...ownerScope,
+        name: 'Invalid Team',
+        spec: { ...spec, roster: [spec.roster[0]] },
       }),
-    ).toThrow(/published/i);
+    ).toThrow(/exactly two/i);
   });
 });

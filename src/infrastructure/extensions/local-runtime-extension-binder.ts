@@ -12,6 +12,7 @@ import type { RuntimeExtensionBinder } from '../../application/extensions/runtim
 import type { RuntimeExtensionBinding } from '../../application/ports/agent-runtime.js';
 import { materializeOpenCodeSkill } from '../filesystem/opencode-skill-materializer.js';
 import { RuntimeMcpServer } from './runtime-mcp-server.js';
+import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 
 export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   readonly #agentCwd: string;
@@ -58,6 +59,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       ...(input.teamMemberRunId
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
+      ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
       allowedTools: input.toolRefs,
     });
     let ownedReceipt = false;
@@ -125,6 +127,19 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     ttlMs?: number,
   ): void {
     this.#mcp.grants.refreshForSession(productSessionId, allowedTools, ttlMs);
+  }
+
+  public refreshForTeamMember(
+    input: Parameters<RuntimeToolGrantService['refreshForTeamMember']>[0],
+  ) {
+    return this.#mcp.grants.refreshForTeamMember(input);
+  }
+
+  public getTeamMemberGrant(input: {
+    readonly teamMemberRunId: string;
+    readonly scopeId: string;
+  }) {
+    return this.#mcp.grants.getForTeamMember(input);
   }
 }
 

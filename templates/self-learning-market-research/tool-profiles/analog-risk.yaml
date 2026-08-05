@@ -4,11 +4,13 @@ metadata:
   name: analog-risk
 spec:
   tools:
-    - ref: agent-server/team-task-list
+    - ref: agent-server/team-state
       kind: tool
-    - ref: agent-server/team-task-claim
+    - ref: agent-server/team-work-list
       kind: tool
-    - ref: agent-server/team-task-update
+    - ref: agent-server/team-work-checkpoint
+      kind: tool
+    - ref: agent-server/team-work-submit
       kind: tool
     - ref: agent-server/synthetic-analog-summary
       kind: tool

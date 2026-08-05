@@ -113,7 +113,7 @@ Authorization: Bearer configured-token
 }
 ```
 
-The response contains the root Task plus all descendants visible to the authenticated owner. Results are ordered root first, then descendants by stored `nodePath` and creation order. In both Team paths, child Tasks are read-only lineage records created by the control-plane coordinator. The observed `dag-mve-v1` tree includes two parallel leaf children and, after both succeed, a synthesizer child.
+The response contains the root Task plus all descendants visible to the authenticated owner. Results are ordered root first, then descendants by stored `nodePath` and creation order. Agent Teams v2 child Tasks are read-only lineage records created by `TeamDriver` for Lead turns, Work attempts, and addressed message continuations.
 
 ## Errors
 
@@ -121,4 +121,4 @@ Relevant codes are `unauthorized`, `invalid_json`, `invalid_request`, `request_t
 
 ## Team execution boundary
 
-Task invoke can target either a published `agent` version or a published `team` version. `sequential-mvp-v1` remains invoke-only, linear, and sequential. The opt-in `dag-mve-v1` subset adds two parallel leaf children, root Run status `waiting_children`, a durable join, and a synthesizer child after both leaves succeed. Public callers still use this Task route and Task reads; no public Team CRUD/API was added. No generalized recovery, restart/resume, retry, or cancellation-propagation contract is claimed.
+Task invoke can target either a published `agent` version or a published `team` version. A Team Version activates Agent Teams v2's fixed-roster `TeamDriver` flow. Public callers use this Task route, Task reads, and owner-scoped TeamRun reads; no public Team command API is added. No dynamic roster, nested Team, generalized graph, recovery, restart/resume, retry, or cancellation-propagation contract is claimed.

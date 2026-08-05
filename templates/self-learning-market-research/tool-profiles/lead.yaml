@@ -4,11 +4,19 @@ metadata:
   name: lead
 spec:
   tools:
-    - ref: agent-server/team-members-list
+    - ref: agent-server/team-state
       kind: tool
-    - ref: agent-server/team-task-create
+    - ref: agent-server/team-work-list
       kind: tool
-    - ref: agent-server/team-task-list
+    - ref: agent-server/team-work-create
+      kind: tool
+    - ref: agent-server/team-work-request-changes
+      kind: tool
+    - ref: agent-server/team-work-accept-v2
+      kind: tool
+    - ref: agent-server/team-finish
+      kind: tool
+    - ref: agent-server/team-message-send
       kind: tool
     - ref: agent-server/learning-proposal-create
       kind: tool

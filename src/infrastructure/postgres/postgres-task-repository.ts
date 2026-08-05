@@ -51,10 +51,12 @@ export class PostgresTaskRepository implements TaskRepository {
            team_member_run_id,
            team_sequence,
            team_task_kind,
+           source_team_message_id,
+           input_team_message_ids,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -80,6 +82,15 @@ export class PostgresTaskRepository implements TaskRepository {
            team_member_run_id = EXCLUDED.team_member_run_id,
            team_sequence = EXCLUDED.team_sequence,
            team_task_kind = EXCLUDED.team_task_kind,
+          source_team_message_id = COALESCE(
+            tasks.source_team_message_id,
+            EXCLUDED.source_team_message_id
+          ),
+          input_team_message_ids = CASE
+            WHEN COALESCE(cardinality(tasks.input_team_message_ids), 0) > 0
+              THEN tasks.input_team_message_ids
+            ELSE EXCLUDED.input_team_message_ids
+          END,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at
       `,
@@ -108,6 +119,8 @@ export class PostgresTaskRepository implements TaskRepository {
         task.teamMemberRunId ?? null,
         task.teamSequence ?? null,
         task.teamTaskKind ?? null,
+        task.sourceTeamMessageId ?? null,
+        task.inputTeamMessageIds ?? [],
         task.createdAt,
         task.updatedAt,
       ],
@@ -233,7 +246,10 @@ interface TaskRow {
   readonly memory_snapshot_hash: string | null;
   readonly team_member_run_id: string | null;
   readonly team_sequence: number | null;
-  readonly team_task_kind: 'lead_turn' | 'work_attempt' | null;
+  readonly team_task_kind:
+    'lead_turn' | 'work_attempt' | 'direct_message' | null;
+  readonly source_team_message_id: string | null;
+  readonly input_team_message_ids: readonly string[] | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly session_id: string | null;
@@ -276,6 +292,8 @@ const TASK_SELECT_SQL = `
     tasks.team_member_run_id,
     tasks.team_sequence,
     tasks.team_task_kind,
+    tasks.source_team_message_id,
+    tasks.input_team_message_ids,
     tasks.created_at,
     tasks.updated_at,
     tasks.session_id,
@@ -341,6 +359,8 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     teamMemberRunId: row.team_member_run_id,
     teamSequence: row.team_sequence === null ? null : Number(row.team_sequence),
     teamTaskKind: row.team_task_kind,
+    sourceTeamMessageId: row.source_team_message_id,
+    inputTeamMessageIds: row.input_team_message_ids ?? [],
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     sessionId: row.session_id,

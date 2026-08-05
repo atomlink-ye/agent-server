@@ -62,6 +62,11 @@ export interface RunRepository {
   findById(id: string): Promise<Run | null>;
   findByIdForOwner(id: string, ownerScope: RunOwnerScope): Promise<Run | null>;
   findByTaskId(taskId: string): Promise<Run | null>;
+  hasNonterminalRunsForTeamMemberChildTasks?(
+    rootTaskId: string,
+    teamMemberRunIds: readonly string[],
+    ownerScope: RunOwnerScope,
+  ): Promise<boolean>;
   requestCancellation(
     taskId: string,
     requestedAt: string,

@@ -7,9 +7,8 @@ This component supplies durable storage, queue/outbox integration, audit, teleme
 ## Baseline state
 
 - PostgreSQL migrations plus durable Task, Run, admission, and dispatch tables.
-- PostgreSQL durable Team execution and node-execution state for the observed
-  `dag-mve-v1` join path: root waiting, two leaf completions, and synthesizer
-  release.
+- PostgreSQL durable Agent Teams v2 execution state: TeamRun, MemberRun, Work,
+  Work attempts, TeamMessage, command receipts, and child Task/Run linkage.
 - Structured JSON log records with request and Run identifiers.
 - Separate liveness and dependency readiness.
 - Deterministic CI plus a manually/scheduled external smoke.
@@ -17,10 +16,9 @@ This component supplies durable storage, queue/outbox integration, audit, teleme
 
 There is no external queue service, durable event log beyond the current enqueue table, metrics backend, tracing backend, service-level objective, backup, or production deployment.
 
-The DAG MVE uses one shared immutable EnvironmentVersion and task-scoped
-RuntimeSession/RuntimeCell records for each child. Failure handling is
-fail-fast/deferred; this does not establish crash recovery, restart/resume,
-retries, cancellation propagation, or production durability.
+Agent Teams v2 uses one immutable TeamVersion and task-scoped RuntimeSessions
+for Lead/member child Runs. It does not establish crash recovery,
+restart/resume, retries, cancellation propagation, or production durability.
 
 ## V1 direction
 

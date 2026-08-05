@@ -1,6 +1,5 @@
 import type { AgentDefinition } from '../../domain/invokables/agent-definition.js';
 import type { AgentVersion } from '../../domain/invokables/agent-version.js';
-import type { CompiledTeamPlan } from '../../domain/invokables/compiled-team-plan.js';
 import type { InvokableOwnerScope } from '../../domain/invokables/invokable.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
@@ -59,10 +58,6 @@ export interface InvokableRepository {
     idempotencyKey: string;
     requestFingerprint: string;
   }): Promise<TeamVersion>;
-  saveCompiledTeamPlan(plan: CompiledTeamPlan): Promise<void>;
-  findCompiledTeamPlanByVersionId(
-    teamVersionId: string,
-  ): Promise<CompiledTeamPlan | null>;
 }
 
 export class InvokableVersionImmutableError extends Error {

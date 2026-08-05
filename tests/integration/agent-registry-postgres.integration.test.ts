@@ -235,6 +235,9 @@ describe('managed agent registry migration', () => {
       '0021_web_chat_streaming_mve',
       '0022_learning_proposal_mve',
       '0023_agentic_team_chat_mve',
+      '0024_agent_team_messages',
+      '0025_agent_team_work_dependencies',
+      '0026_agent-teams-v2-cutover',
     ]);
   });
 

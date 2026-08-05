@@ -66,37 +66,3 @@ export function activateMemberRun(
     updatedAt: now().toISOString(),
   });
 }
-
-export function idleMemberRun(
-  member: TeamMemberRun,
-  now: () => Date = () => new Date(),
-): TeamMemberRun {
-  return Object.freeze({
-    ...member,
-    status: 'idle' as const,
-    currentWorkItemId: null,
-    updatedAt: now().toISOString(),
-  });
-}
-
-export function stopMemberRun(
-  member: TeamMemberRun,
-  now: () => Date = () => new Date(),
-): TeamMemberRun {
-  return Object.freeze({
-    ...member,
-    status: 'stopped' as const,
-    updatedAt: now().toISOString(),
-  });
-}
-
-export function failMemberRun(
-  member: TeamMemberRun,
-  now: () => Date = () => new Date(),
-): TeamMemberRun {
-  return Object.freeze({
-    ...member,
-    status: 'failed' as const,
-    updatedAt: now().toISOString(),
-  });
-}

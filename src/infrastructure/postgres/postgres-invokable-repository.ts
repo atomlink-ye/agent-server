@@ -550,21 +550,6 @@ export class PostgresInvokableRepository implements InvokableRepository {
 
     return mapTeamVersionRow(row);
   }
-
-  private async loadTeamVersionStatus(
-    id: string,
-  ): Promise<TeamVersion['status'] | null> {
-    const result = await this.database.query<Pick<TeamVersionRow, 'status'>>(
-      `
-        SELECT status
-        FROM team_versions
-        WHERE id = $1
-      `,
-      [id],
-    );
-
-    return result.rows?.[0]?.status ?? null;
-  }
 }
 
 function definitionValues(

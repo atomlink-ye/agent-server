@@ -146,42 +146,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     );
     return r.rows?.[0] ? mapRun(r.rows[0]) : null;
   }
-  public async updateTeamRunPhase(
-    id: string,
-    phase: TeamRun['phase'],
-    owner: OwnerScope,
-    expectedPhase?: TeamRun['phase'],
-  ): Promise<TeamRun> {
-    return this.updateRun(
-      'phase = $1',
-      [phase, id, ...ownerValues(owner), expectedPhase],
-      expectedPhase ? ' AND phase=$7' : undefined,
-    );
-  }
-  public async updateTeamRunPhaseIfCurrent(
-    id: string,
-    phase: TeamRun['phase'],
-    owner: OwnerScope,
-    expectedPhase: TeamRun['phase'],
-  ): Promise<TeamRun | null> {
-    const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET phase=$1, updated_at=now() WHERE id=$2 AND ${ownerSql('', 3)} AND phase=$7 RETURNING *`,
-      [phase, id, ...ownerValues(owner), expectedPhase],
-    );
-    return r.rows?.[0] ? mapRun(r.rows[0]) : null;
-  }
-  public async updateTeamRunStatus(
-    id: string,
-    status: TeamRun['status'],
-    finalText: string | null,
-    owner: OwnerScope,
-  ): Promise<TeamRun> {
-    return this.updateRun(
-      "status = $1, phase = 'done', final_text = $2",
-      [status, finalText, id, ...ownerValues(owner), 'lead_finalize'],
-      ' AND phase=$7',
-    );
-  }
   public async completeTeamRunAtomically(input: {
     readonly teamRunId: string;
     readonly rootRunId: string;
@@ -705,29 +669,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   ): Promise<TeamMemberRun> {
     return this.updateMember(id, undefined, runtimeSessionId, owner);
   }
-  public async createWorkItem(item: TeamWorkItem): Promise<void> {
-    await this.database.query(
-      `INSERT INTO team_work_items (id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,completion_summary,execution_task_id,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-      [
-        item.id,
-        item.teamRunId,
-        item.subject,
-        item.description,
-        item.status,
-        item.ownerMemberId,
-        item.createdByMemberId,
-        item.completionSummary,
-        item.executionTaskId,
-        item.tenantId,
-        item.workspaceId,
-        item.principalType,
-        item.principalId,
-        item.createdAt,
-        item.updatedAt,
-        item.completedAt,
-      ],
-    );
-  }
   public async findWorkItemsByTeamRunId(
     id: string,
     owner: OwnerScope,
@@ -769,50 +710,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       }),
     );
   }
-  public async atomicClaimWorkItem(
-    id: string,
-    ownerMemberId: string,
-    teamRunId: string,
-    owner: OwnerScope,
-  ): Promise<TeamWorkItem> {
-    let r;
-    try {
-      r = await this.database.query<WorkRow>(
-        `UPDATE team_work_items SET status='in_progress', owner_member_id=$2, updated_at=now() WHERE id=$1 AND team_run_id=$3 AND status='pending' AND ${ownerSql('', 4)} AND NOT EXISTS (SELECT 1 FROM team_work_items active WHERE active.team_run_id=$3 AND active.owner_member_id=$2 AND active.status='in_progress') RETURNING *`,
-        [id, ownerMemberId, teamRunId, ...ownerValues(owner)],
-      );
-    } catch (error) {
-      if ((error as { code?: string }).code === '23505')
-        throw new Error('Member already has an in-progress work item.');
-      throw error;
-    }
-    if (!r.rows?.[0])
-      throw new Error('Work item was not found or already claimed.');
-    return mapWork(r.rows[0]);
-  }
-  public async updateWorkItemStatus(
-    id: string,
-    status: TeamWorkItem['status'],
-    completionSummary: string | null,
-    owner: OwnerScope & {
-      readonly memberId?: string;
-      readonly role?: 'lead' | 'member';
-    },
-  ): Promise<TeamWorkItem> {
-    const r = await this.database.query<WorkRow>(
-      `UPDATE team_work_items SET status=$2, completion_summary=$3, completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END, updated_at=now() WHERE id=$1 AND ${ownerSql('', 4)} AND ($9='lead' OR owner_member_id=$8) RETURNING *`,
-      [
-        id,
-        status,
-        completionSummary,
-        ...ownerValues(owner),
-        owner.memberId ?? null,
-        owner.role ?? 'member',
-      ],
-    );
-    if (!r.rows?.[0]) throw new Error('Work item was not found.');
-    return mapWork(r.rows[0]);
-  }
   public async findAttemptsByTeamRunId(
     teamRunId: string,
     owner: OwnerScope,
@@ -822,23 +719,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       [teamRunId, ...ownerValues(owner)],
     );
     return (r.rows ?? []).map(mapAttempt);
-  }
-  public async bindAttemptExecution(
-    attemptId: string,
-    executionTaskId: string,
-    owner: OwnerScope,
-  ): Promise<TeamWorkItemAttempt> {
-    const r = await this.database.query<AttemptRow>(
-      `UPDATE team_work_item_attempts SET execution_task_id=$2 WHERE id=$1 AND ${ownerSql('', 3)} AND execution_task_id IS NULL RETURNING *`,
-      [attemptId, executionTaskId, ...ownerValues(owner)],
-    );
-    if (r.rows?.[0]) return mapAttempt(r.rows[0]);
-    const existing = await this.database.query<AttemptRow>(
-      `SELECT * FROM team_work_item_attempts WHERE id=$1 AND ${ownerSql('', 2)}`,
-      [attemptId, ...ownerValues(owner)],
-    );
-    if (!existing.rows?.[0]) throw new Error('Work attempt was not found.');
-    return mapAttempt(existing.rows[0]);
   }
   public async materializeAttempt(input: {
     attemptId: string;
@@ -1632,18 +1512,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       values,
     );
     return r.rows?.[0] ? mapRun(r.rows[0]) : null;
-  }
-  private async updateRun(
-    set: string,
-    values: readonly unknown[],
-    suffix = '',
-  ): Promise<TeamRun> {
-    const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET ${set}, updated_at=now() WHERE id=$${set.startsWith('status') ? '3' : '2'} AND ${ownerSql('', set.startsWith('status') ? 4 : 3)}${suffix} RETURNING *`,
-      values,
-    );
-    if (!r.rows?.[0]) throw new Error('Team run was not found.');
-    return mapRun(r.rows[0]);
   }
   private async updateMember(
     id: string,

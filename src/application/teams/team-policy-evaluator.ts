@@ -1,4 +1,12 @@
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
+import {
+  canonicalTeamToolRefsForDirectMessage,
+  canonicalTeamToolRefsForRole,
+} from '../../domain/teams/canonical-team-role-tools.js';
+export {
+  canonicalTeamToolRefsForDirectMessage,
+  canonicalTeamToolRefsForRole,
+} from '../../domain/teams/canonical-team-role-tools.js';
 import type { TeamToolContext } from './team-tool-context.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
@@ -98,34 +106,7 @@ export function deriveAgenticLeadCommandPolicy(
 
 export type TeamPolicy = Readonly<{ allowedTools: readonly string[] }>;
 
-const canonicalTeamSafeReadToolRefs = Object.freeze([
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
-]);
-
-export function canonicalTeamToolRefsForRole(
-  role: 'lead' | 'member',
-): readonly string[] {
-  const read = [...canonicalTeamSafeReadToolRefs];
-  const actions =
-    role === 'lead'
-      ? [
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
-        ]
-      : [
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
-        ];
-  return Object.freeze([...read, ...actions]);
-}
-
-export function canonicalTeamToolRefsForDirectMessage(): readonly string[] {
-  return canonicalTeamSafeReadToolRefs;
-}
+const canonicalTeamSafeReadToolRefs = canonicalTeamToolRefsForDirectMessage();
 
 export function canonicalTeamToolRefsForLeadPolicy(
   policy: Pick<AgenticLeadCommandPolicy, 'allowedCommands'>,

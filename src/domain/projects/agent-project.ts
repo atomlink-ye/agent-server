@@ -10,6 +10,9 @@ import type {
 import type { NormalizedLocalToolProfile } from './local-tool-profile.js';
 import type { Sha256Fingerprint } from './project-canonicalization.js';
 
+export type AgentProjectSectionEntry =
+  { readonly file: string } | Readonly<Record<string, unknown>>;
+
 export interface AgentProjectManifest {
   readonly apiVersion: 'agent-server/v1alpha1';
   readonly kind: 'AgentProject';
@@ -26,9 +29,9 @@ export interface AgentProjectManifest {
         }
       >
     >;
-    readonly environments: Readonly<Record<string, { readonly file: string }>>;
-    readonly agents: Readonly<Record<string, { readonly file: string }>>;
-    readonly teams: Readonly<Record<string, { readonly file: string }>>;
+    readonly environments: Readonly<Record<string, AgentProjectSectionEntry>>;
+    readonly agents: Readonly<Record<string, AgentProjectSectionEntry>>;
+    readonly teams: Readonly<Record<string, AgentProjectSectionEntry>>;
     readonly memoryStores: Readonly<
       Record<
         string,

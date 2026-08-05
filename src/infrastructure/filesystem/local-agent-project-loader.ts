@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
+import { stringify } from 'yaml';
 import {
   parseManagedAgentYaml,
   ManagedAgentYamlError,
@@ -34,6 +35,9 @@ import type {
   NormalizedLocalToolProfile,
 } from '../../domain/projects/local-tool-profile.js';
 import { isSafeNativeRef } from '../../domain/projects/safe-ref.js';
+import { renderProjectTeam } from '../../application/projects/render-project-team.js';
+import { canonicalTeamToolRefsForRole } from '../../domain/teams/canonical-team-role-tools.js';
+import type { AgentProjectSectionEntry } from '../../domain/projects/agent-project.js';
 
 export class LocalAgentProjectLoaderError extends Error {
   public constructor(
@@ -114,21 +118,21 @@ async function loadLocalAgentProjectUnsafe(
       root,
       `$.spec.toolProfiles.${name}.file`,
     );
-    const profile = parseToolProfile(source, name);
     const ref = logicalRef('tool-profile', name);
+    const canonicalSource = canonicalizeSource(source);
     toolProfiles.set(ref, {
       ref,
       name,
-      source,
-      path: relativePath(root, path),
-      sourceFingerprint: sha256(source),
-      profile,
+      source: canonicalSource,
+      path: virtualPath('tool-profile', name),
+      sourceFingerprint: sha256(canonicalSource),
+      profile: parseToolProfile(canonicalSource, name),
     } satisfies NormalizedLocalToolProfile);
     tuples.push({
       type: 'tool-profile',
       name,
-      path: relativePath(root, path),
-      digest: bareSha256(source),
+      path: virtualPath('tool-profile', name),
+      digest: bareSha256(canonicalSource),
     });
   }
   for (const [name, spec] of Object.entries(manifest.spec.skills) as [
@@ -174,18 +178,18 @@ async function loadLocalAgentProjectUnsafe(
     string,
     any,
   ][]) {
-    const item = await readNative(root, spec.file, name, 'environment');
+    const item = await readProjectSource(root, spec, name, 'environment');
     parseManagedEnvironmentPackage(item.source);
     environments.set(logicalRef('environment', name), {
       name,
-      path: item.relativePath,
+      path: virtualPath('environment', name),
       source: item.source,
       sourceFingerprint: sha256(item.source),
     });
     tuples.push({
       type: 'environment',
       name,
-      path: item.relativePath,
+      path: virtualPath('environment', name),
       digest: bareSha256(item.source),
     });
   }
@@ -193,41 +197,68 @@ async function loadLocalAgentProjectUnsafe(
     string,
     any,
   ][]) {
-    const item = await readNative(root, spec.file, name, 'agent');
+    const item = await readProjectSource(root, spec, name, 'agent');
     parseManagedAgentPackage(item.source);
     agents.set(logicalRef('agent', name), {
       name,
-      path: item.relativePath,
+      path: virtualPath('agent', name),
       source: item.source,
       sourceFingerprint: sha256(item.source),
     });
     tuples.push({
       type: 'agent',
       name,
-      path: item.relativePath,
+      path: virtualPath('agent', name),
       digest: bareSha256(item.source),
     });
+    for (const role of ['lead', 'member'] as const) {
+      if (!agentDeclaresToolProfile(item.source, `tool-profile://team-${role}`))
+        continue;
+      const profileName = `team-${role}`;
+      const ref = logicalRef('tool-profile', profileName);
+      if (toolProfiles.has(ref)) continue;
+      const profile = builtinToolProfile(profileName, role);
+      const profileSource = canonicalizeSource(
+        stringify(profile, { lineWidth: 0 }),
+      );
+      toolProfiles.set(ref, {
+        ref,
+        name: profileName,
+        source: profileSource,
+        path: virtualPath('tool-profile', profileName),
+        sourceFingerprint: sha256(profileSource),
+        profile: parseToolProfile(profileSource, profileName),
+      });
+      tuples.push({
+        type: 'tool-profile',
+        name: profileName,
+        path: virtualPath('tool-profile', profileName),
+        digest: bareSha256(profileSource),
+      });
+    }
   }
   for (const [name, spec] of Object.entries(manifest.spec.teams) as [
     string,
     any,
   ][]) {
-    const item = await readNative(root, spec.file, name, 'team');
+    const item = await readProjectSource(root, spec, name, 'team');
     parseProjectNativeEnvelope(
       item.source,
       'ManagedTeam',
       `source.team.${name}`,
+      environments,
+      agents,
     );
     teams.set(logicalRef('team', name), {
       name,
-      path: item.relativePath,
+      path: virtualPath('team', name),
       source: item.source,
       sourceFingerprint: sha256(item.source),
     });
     tuples.push({
       type: 'team',
       name,
-      path: item.relativePath,
+      path: virtualPath('team', name),
       digest: bareSha256(item.source),
     });
   }
@@ -289,6 +320,30 @@ async function loadLocalAgentProjectUnsafe(
           },
         ]),
       ),
+      toolProfiles: Object.fromEntries(
+        [...toolProfiles.keys()]
+          .map((ref) => ref.slice('tool-profile://'.length))
+          .sort(compareStrings)
+          .map((name) => [name, { file: virtualPath('tool-profile', name) }]),
+      ),
+      environments: Object.fromEntries(
+        Object.keys(manifest.spec.environments).map((name) => [
+          name,
+          { file: virtualPath('environment', name) },
+        ]),
+      ),
+      agents: Object.fromEntries(
+        Object.keys(manifest.spec.agents).map((name) => [
+          name,
+          { file: virtualPath('agent', name) },
+        ]),
+      ),
+      teams: Object.fromEntries(
+        Object.keys(manifest.spec.teams).map((name) => [
+          name,
+          { file: virtualPath('team', name) },
+        ]),
+      ),
       memoryStores: Object.fromEntries(
         Object.entries(manifest.spec.memoryStores).map(([name, spec]) => [
           name,
@@ -303,7 +358,7 @@ async function loadLocalAgentProjectUnsafe(
       entrypoints: [...manifest.spec.entrypoints].sort(compareStrings),
     },
   };
-  return Object.freeze({
+  const candidate: NormalizedAgentProject = {
     manifest: normalizedManifest,
     workspace: 'workspace://default',
     toolProfiles,
@@ -317,7 +372,15 @@ async function loadLocalAgentProjectUnsafe(
     sourceTuples: tuples.sort(compareTuple),
     canonicalManifest: canonicalizeManifest(normalizedManifest),
     fingerprint: fingerprintProject(normalizedManifest, tuples),
-  });
+  };
+  for (const ref of teams.keys()) {
+    renderProjectTeam({
+      project: candidate,
+      team: ref as `team://${string}`,
+      mode: 'plan',
+    });
+  }
+  return Object.freeze(candidate);
 }
 
 export class LocalAgentProjectLoader {
@@ -375,6 +438,10 @@ function parseManifest(input: unknown): AgentProjectManifest {
     'teams',
     'memoryStores',
   ]) {
+    if (section === 'memoryStores' && raw.spec[section] === undefined) {
+      maps[section] = {};
+      continue;
+    }
     if (!obj(raw.spec[section])) fail('invalid_section', `$.spec.${section}`);
     maps[section] = raw.spec[section];
     for (const name of Object.keys(maps[section]))
@@ -386,6 +453,8 @@ function parseManifest(input: unknown): AgentProjectManifest {
     any,
   ][]) {
     if (!obj(value)) fail('invalid_entry');
+    if (name === 'team-lead' || name === 'team-member')
+      fail('reserved_tool_profile_name', `$.spec.toolProfiles.${name}`);
     keys(value, ['file'], '$.spec.toolProfiles');
     toolProfiles[name] = { file: text(value.file, '$.file') };
   }
@@ -413,15 +482,21 @@ function parseManifest(input: unknown): AgentProjectManifest {
       requiredTools,
     };
   }
-  const simple = (section: string): Record<string, { file: string }> => {
-    const result: Record<string, { file: string }> = {};
+  const simple = (
+    section: string,
+  ): Record<string, AgentProjectSectionEntry> => {
+    const result: Record<string, AgentProjectSectionEntry> = {};
     for (const [name, value] of Object.entries(maps[section]!) as [
       string,
       any,
     ][]) {
       if (!obj(value)) fail('invalid_entry');
-      keys(value, ['file'], `$.spec.${section}`);
-      result[name] = { file: text(value.file, '$.file') };
+      if (Object.prototype.hasOwnProperty.call(value, 'file')) {
+        keys(value, ['file'], `$.spec.${section}`);
+        result[name] = { file: text(value.file, '$.file') };
+      } else {
+        result[name] = { ...value };
+      }
     }
     return result;
   };
@@ -537,6 +612,8 @@ function parseProjectNativeEnvelope(
   source: string,
   kind: string,
   path: string,
+  environments?: ReadonlyMap<string, unknown>,
+  agents?: ReadonlyMap<string, unknown>,
 ): void {
   const raw = parseYaml(source);
   if (!obj(raw)) fail('invalid_native_package', path);
@@ -546,6 +623,192 @@ function parseProjectNativeEnvelope(
   if (!obj(envelope.metadata) || !kebab(envelope.metadata.name))
     fail('invalid_native_package', path);
   if (!obj(envelope.spec)) fail('invalid_native_package', path);
+  if (kind === 'ManagedTeam')
+    validateLogicalTeamSpec(
+      envelope.spec as RecordValue,
+      path,
+      environments,
+      agents,
+    );
+}
+
+function validateLogicalTeamSpec(
+  spec: RecordValue,
+  path: string,
+  environments?: ReadonlyMap<string, unknown>,
+  agents?: ReadonlyMap<string, unknown>,
+): void {
+  const check = (
+    value: unknown,
+    prefix: string,
+    kind: 'environment' | 'agent',
+  ) => {
+    if (typeof value !== 'string' || !value.includes('://')) return;
+    let ref = '';
+    try {
+      ref = parseLogicalRef(value);
+    } catch {
+      fail('invalid_reference', prefix);
+    }
+    if (!ref.startsWith(`${kind}://`)) fail('invalid_reference', prefix);
+    const exists =
+      kind === 'environment' ? environments?.has(ref) : agents?.has(ref);
+    if (exists === false) fail('missing_reference', prefix);
+  };
+  check(
+    spec.environmentVersionId,
+    `${path}.spec.environmentVersionId`,
+    'environment',
+  );
+  if (obj(spec.lead))
+    check(
+      spec.lead.agentVersionId,
+      `${path}.spec.lead.agentVersionId`,
+      'agent',
+    );
+  if (Array.isArray(spec.roster))
+    spec.roster.forEach((member, index) => {
+      if (obj(member))
+        check(
+          member.agentVersionId,
+          `${path}.spec.roster[${index}].agentVersionId`,
+          'agent',
+        );
+    });
+}
+
+async function readProjectSource(
+  root: string,
+  spec: AgentProjectSectionEntry,
+  name: string,
+  kind: 'environment' | 'agent' | 'team',
+): Promise<{ source: string; relativePath?: string }> {
+  let raw: unknown;
+  const fileBacked = obj(spec) && typeof spec.file === 'string';
+  if (fileBacked) {
+    const path = await safePath(
+      root,
+      spec.file,
+      false,
+      `source.${kind}.${name}`,
+    );
+    raw = parseYaml(
+      await readRegularFile(path, root, `source.${kind}.${name}`),
+    );
+  } else
+    raw = {
+      apiVersion: 'agent-server/v1alpha1',
+      kind:
+        kind === 'environment'
+          ? 'ManagedEnvironment'
+          : kind === 'agent'
+            ? 'ManagedAgent'
+            : 'ManagedTeam',
+      metadata: { name },
+      spec: spec as RecordValue,
+    };
+  if (!obj(raw)) fail('invalid_native_package', `source.${kind}.${name}`);
+  const envelope = { ...(raw as RecordValue) } as RecordValue;
+  const defaults = defaultsFor(kind);
+  if (!fileBacked) envelope.metadata = { name };
+  envelope.spec = mergeDefaults(
+    obj(envelope.spec) ? envelope.spec : {},
+    defaults,
+  );
+  return {
+    source: canonicalizeSource(
+      stringify(sortYamlValue(envelope), { lineWidth: 0 }),
+    ),
+  };
+}
+
+function defaultsFor(kind: 'environment' | 'agent' | 'team'): RecordValue {
+  if (kind === 'environment')
+    return {
+      adapter: 'paseo',
+      provider: 'opencode',
+      modelPolicyRef: 'free-only',
+      runtimeCellPolicy: 'per_runtime_session',
+    };
+  if (kind === 'team')
+    return { coordination: { taskAssignment: 'lead_or_self_claim' } };
+  return {
+    runtime: {
+      provider: 'paseo',
+      modelPolicyRef: 'free-only',
+      mode: 'isolated',
+    },
+    skills: [],
+    session: {
+      invocation: 'fresh_per_invocation',
+      followUps: 'queued',
+      binding: 'reusable',
+    },
+    memory: { policy: 'workspace_snapshot', proposalLimit: 0 },
+    permissions: { network: 'none', filesystem: 'none' },
+    completion: { type: 'executable', command: 'done' },
+  };
+}
+
+function mergeDefaults(value: RecordValue, defaults: RecordValue): RecordValue {
+  const result: RecordValue = { ...value };
+  for (const [key, defaultValue] of Object.entries(defaults)) {
+    if (!(key in result)) result[key] = defaultValue;
+    else if (obj(defaultValue) && obj(result[key]))
+      result[key] = mergeDefaults(
+        result[key] as RecordValue,
+        defaultValue as RecordValue,
+      );
+  }
+  return result;
+}
+
+function canonicalizeSource(source: string): string {
+  const raw = parseYaml(source);
+  return stringify(sortYamlValue(raw), { lineWidth: 0 });
+}
+
+function sortYamlValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortYamlValue);
+  if (obj(value))
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort(compareStrings)
+        .map((key) => [key, sortYamlValue(value[key])]),
+    );
+  return value;
+}
+
+function virtualPath(
+  type: 'tool-profile' | 'environment' | 'agent' | 'team',
+  name: string,
+): string {
+  const directory = type === 'tool-profile' ? 'tool-profiles' : `${type}s`;
+  return `${directory}/${name}.yaml`;
+}
+
+function agentDeclaresToolProfile(source: string, ref: string): boolean {
+  const raw = parseYaml(source);
+  if (!obj(raw) || !obj(raw.spec) || !Array.isArray(raw.spec.tools))
+    return false;
+  return raw.spec.tools.some((tool) => obj(tool) && tool.ref === ref);
+}
+
+function builtinToolProfile(
+  name: string,
+  role: 'lead' | 'member',
+): RecordValue {
+  return {
+    apiVersion: 'agent-server/v1alpha1',
+    kind: 'LocalToolProfile',
+    metadata: { name },
+    spec: {
+      tools: canonicalTeamToolRefsForRole(role).map((ref) => ({
+        ref,
+        kind: 'tool',
+      })),
+    },
+  };
 }
 
 function normalizeSeedPath(value: string, path: string): string {

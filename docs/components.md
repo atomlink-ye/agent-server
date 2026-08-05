@@ -105,6 +105,18 @@ functionality.
 
 ## Agent Teams v2 Project and Agent Session boundary
 
+AgentProject remains the authoritative versioned Team boundary. Its filesystem
+loader accepts either file-backed or inline Agent, Environment, and Team specs,
+applies the approved constant and safe defaults before canonicalization, and
+materializes reserved `tool-profile://team-lead` and
+`tool-profile://team-member` profiles only when an Agent explicitly declares
+the corresponding ref. For Agent, Environment, Team, and tool-profile
+resources, logical paths and canonical native package bytes—not inline/file
+authoring form or source-file location—feed project fingerprints, apply
+payloads, and lock convergence. Existing skill-directory and memory-seed
+locator semantics are unchanged. Runtime invocation cannot define or expand
+the roster, tools, skills, or environment.
+
 The Agent Teams v2 Project is a thin observer/launcher over the fixed Team. Its
 Next.js same-origin BFF owns the server-side Agent Server bearer and binds the
 flow to `WEB_WORKSPACE_ID`, `WEB_AGENTIC_TEAM_VERSION_ID`, and

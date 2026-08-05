@@ -27,13 +27,20 @@ const runtimeTimeoutSeconds = Number(
   process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS ?? '150',
 );
 const timeoutReserveSeconds = timeoutSeconds - runtimeTimeoutSeconds;
-const scriptedRuntime = process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
+const requestedScriptedRuntime =
+  process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
 const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
+const expiredLeaseRecovery =
+  process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
+const scriptedRuntime =
+  requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
 const supportedPaidSmokeModels = new Set([
   'opencode-go/deepseek-v4-flash',
   'opencode-go/mimo-v2.5',
   'opencode-go/glm-5.2',
 ]);
+if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
+  throw new Error('invalid_expired_lease_recovery');
 const requestedModel =
   process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
 const startedAt = Date.now();
@@ -70,6 +77,7 @@ let rootTaskId;
 let teamRunId;
 let databaseUrl;
 let failureDiagnostic;
+class RecoveryComplete extends Error {}
 let scriptedRuntimeInstance;
 
 function assert(condition, code) {
@@ -1190,6 +1198,291 @@ try {
     principalId,
   };
   const queryOnly = (client) => ({ query: client.query.bind(client) });
+  if (expiredLeaseRecovery === 'members') {
+    const { PostgresRunRepository } =
+      await import('../../src/infrastructure/postgres/postgres-run-repository.ts');
+    const { PostgresTeamExecutionRepository } =
+      await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+    const runsRepository = new PostgresRunRepository(queryOnly(db));
+    const teamRepository = new PostgresTeamExecutionRepository(queryOnly(db));
+    await service.singleRunDebug.claimAndExecute(await queued('lead_turn'));
+    const materializedWakes =
+      await service.singleRunDebug.rebuildQueuedTeamWakes();
+    assert(materializedWakes === 2, 'expired_member_wakes_not_materialized');
+    const workRuns = await db.query(
+      `SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt' AND r.status='queued' ORDER BY r.id`,
+      [rootTaskId],
+    );
+    assert(workRuns.rowCount === 2, 'expired_member_work_runs_missing');
+    const claimedMembers = [];
+    for (const row of workRuns.rows) {
+      const claimed = await runsRepository.claimQueuedById({
+        runId: row.id,
+        workerId: 'expired-member-recovery',
+        activationId: randomUUID(),
+        claimedAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+      });
+      assert(claimed, 'expired_member_claim_missing');
+      claimedMembers.push(claimed);
+    }
+    const running = await db.query(
+      `SELECT count(*)::int AS runs,
+              count(*) FILTER (WHERE a.status='running')::int AS attempts
+         FROM runs r JOIN tasks t ON t.id=r.task_id
+         LEFT JOIN team_work_item_attempts a ON a.execution_task_id=t.id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt' AND r.status='running'`,
+      [rootTaskId],
+    );
+    assert(
+      running.rows[0].runs === 2 && running.rows[0].attempts === 2,
+      'expired_member_fixture_precondition_invalid',
+    );
+    marker('EXPIRED_CONCURRENT_MEMBER_LEASE_FIXTURE_ARMED', {
+      shape: 'members_two_running_leased',
+      process_restart_plumbing_covered: false,
+    });
+    const fixedNow = new Date(Date.now() + 600_000).toISOString();
+    const expiredAt = new Date(Date.parse(fixedNow) - 60_000).toISOString();
+    await db.query(
+      `UPDATE runs SET lease_expires_at=$1::timestamptz WHERE id=ANY($2::uuid[])`,
+      [expiredAt, claimedMembers.map((claim) => claim.run.id)],
+    );
+    const recovered = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    marker('EXPIRED_MEMBER_RECOVERY_RETURN', {
+      count: recovered.length,
+      affected: recovered.map((item) => item.affectedChildRunCount),
+      kinds: recovered.map((item) => item.teamTaskKind),
+    });
+    assert(
+      recovered.length === 1 &&
+        recovered[0].teamTaskKind === 'work_attempt' &&
+        recovered[0].affectedChildRunCount === 2,
+      'expired_member_recovery_invalid',
+    );
+    const replay = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(replay.length === 0, 'expired_member_recovery_not_idempotent');
+    const facts = (
+      await db.query(
+        `SELECT team.status AS team_status,team.stop_reason,root_t.status AS root_task_status,root_r.status AS root_run_status FROM team_runs team JOIN tasks root_t ON root_t.id=team.root_task_id JOIN runs root_r ON root_r.task_id=root_t.id WHERE team.id=$1`,
+        [teamRunId],
+      )
+    ).rows[0];
+    const childTasks = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL AND status NOT IN ('completed','failed','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childRuns = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL ORDER BY id`,
+        [rootTaskId],
+      )
+    ).rows;
+    const activeAttempts = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM team_work_item_attempts a JOIN tasks t ON t.id=a.execution_task_id WHERE t.root_task_id=$1 AND a.status IN ('queued','running')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const triggerRunId = recovered[0].childRunId;
+    const siblingRunId = claimedMembers.find(
+      (claim) => claim.run.id !== triggerRunId,
+    ).run.id;
+    const memberStatuses = (
+      await db.query(`SELECT id,status FROM runs WHERE id=ANY($1)`, [
+        [triggerRunId, siblingRunId],
+      ])
+    ).rows;
+    const triggerStatus = memberStatuses.find(
+      (row) => row.id === triggerRunId,
+    )?.status;
+    const siblingStatus = memberStatuses.find(
+      (row) => row.id === siblingRunId,
+    )?.status;
+    const memberAttemptStatuses = (
+      await db.query(
+        `SELECT execution_task_id,status FROM team_work_item_attempts WHERE execution_task_id=ANY($1)`,
+        [claimedMembers.map((claim) => claim.taskId)],
+      )
+    ).rows;
+    const recoveredChildTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE id=ANY($1) ORDER BY id`,
+        [claimedMembers.map((claim) => claim.taskId)],
+      )
+    ).rows;
+    assert(
+      facts.team_status === 'failed' &&
+        facts.root_task_status === 'failed' &&
+        facts.root_run_status === 'failed' &&
+        facts.stop_reason === 'turn_lease_expired' &&
+        childTasks === 0 &&
+        childRuns === 0 &&
+        activeAttempts === 0 &&
+        childTaskStatuses.length > 0 &&
+        childTaskStatuses.every((row) =>
+          ['completed', 'failed', 'cancelled'].includes(row.status),
+        ) &&
+        recoveredChildTaskStatuses.length === 2 &&
+        recoveredChildTaskStatuses.every((row) => row.status === 'failed') &&
+        triggerStatus === 'timed_out' &&
+        siblingStatus === 'failed' &&
+        memberAttemptStatuses.length === 2 &&
+        memberAttemptStatuses.every((row) => row.status === 'failed'),
+      'expired_member_terminal_state_invalid',
+    );
+    marker('EXPIRED_CONCURRENT_MEMBER_LEASE_RECOVERY_PROVEN', {
+      trigger_status: triggerStatus,
+      sibling_status: siblingStatus,
+      attempt_statuses: memberAttemptStatuses.map((row) => row.status),
+      root_task_status: facts.root_task_status,
+      root_run_status: facts.root_run_status,
+      team_status: facts.team_status,
+      stop_reason: facts.stop_reason,
+      child_task_statuses: childTaskStatuses.map((row) => row.status),
+      recovered_child_task_statuses: recoveredChildTaskStatuses.map(
+        (row) => row.status,
+      ),
+      affected_count: recovered[0].affectedChildRunCount,
+      nonterminal_task_count: childTasks,
+      nonterminal_run_count: childRuns,
+      nonterminal_attempt_count: activeAttempts,
+      replay_recovery_count: replay.length,
+    });
+    marker('EXPIRED_LEASE_RECOVERY_IN_PROCESS_PROVEN', {
+      mode: 'members',
+      process_restart_plumbing_covered: false,
+    });
+    throw new RecoveryComplete();
+  }
+  if (expiredLeaseRecovery === 'lead') {
+    const { PostgresRunRepository } =
+      await import('../../src/infrastructure/postgres/postgres-run-repository.ts');
+    const { PostgresTeamExecutionRepository } =
+      await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+    const runsRepository = new PostgresRunRepository(queryOnly(db));
+    const teamRepository = new PostgresTeamExecutionRepository(queryOnly(db));
+    const leadRunId = await queued('lead_turn');
+    const claimed = await runsRepository.claimQueuedById({
+      runId: leadRunId,
+      workerId: 'expired-lease-recovery',
+      activationId: randomUUID(),
+      claimedAt: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+    });
+    assert(claimed, 'expired_lead_claim_missing');
+    const precondition = await db.query(
+      `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn' AND r.status='running' AND r.lease_expires_at IS NOT NULL`,
+      [rootTaskId],
+    );
+    assert(
+      precondition.rows[0].count === 1,
+      'expired_lead_fixture_precondition_invalid',
+    );
+    marker('EXPIRED_LEAD_LEASE_FIXTURE_ARMED', {
+      shape: 'lead_one_running_leased',
+      process_restart_plumbing_covered: false,
+    });
+    const fixedNow = new Date(Date.now() + 600_000).toISOString();
+    const expiredAt = new Date(Date.parse(fixedNow) - 60_000).toISOString();
+    await db.query(
+      `UPDATE runs SET lease_expires_at=$1::timestamptz WHERE id=$2`,
+      [expiredAt, leadRunId],
+    );
+    const recovered = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(
+      recovered.length === 1 &&
+        recovered[0].teamTaskKind === 'lead_turn' &&
+        recovered[0].affectedChildRunCount === 1,
+      'expired_lead_recovery_invalid',
+    );
+    const replay = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(replay.length === 0, 'expired_lead_recovery_not_idempotent');
+    const facts = (
+      await db.query(
+        `SELECT team.status AS team_status,team.stop_reason,root_t.status AS root_task_status,root_r.status AS root_run_status FROM team_runs team JOIN tasks root_t ON root_t.id=team.root_task_id JOIN runs root_r ON root_r.task_id=root_t.id WHERE team.id=$1`,
+        [teamRunId],
+      )
+    ).rows[0];
+    const childTasks = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL AND status NOT IN ('completed','failed','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childRuns = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL ORDER BY id`,
+        [rootTaskId],
+      )
+    ).rows;
+    const activeAttempts = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM team_work_item_attempts a JOIN tasks t ON t.id=a.execution_task_id WHERE t.root_task_id=$1 AND a.status IN ('queued','running')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const leadTriggerStatus = (
+      await db.query(`SELECT status FROM runs WHERE id=$1`, [
+        recovered[0].childRunId,
+      ])
+    ).rows[0]?.status;
+    const leadSiblingStatuses = (
+      await db.query(
+        `SELECT r.status FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn' AND r.id<>$2 ORDER BY r.id`,
+        [rootTaskId, recovered[0].childRunId],
+      )
+    ).rows.map((row) => row.status);
+    assert(
+      facts.team_status === 'failed' &&
+        facts.root_task_status === 'failed' &&
+        facts.root_run_status === 'failed' &&
+        facts.stop_reason === 'turn_lease_expired' &&
+        childTasks === 0 &&
+        childRuns === 0 &&
+        activeAttempts === 0 &&
+        childTaskStatuses.length > 0 &&
+        childTaskStatuses.every((row) => row.status === 'failed') &&
+        leadTriggerStatus === 'timed_out' &&
+        leadSiblingStatuses.every((status) => status === 'failed'),
+      'expired_lead_terminal_state_invalid',
+    );
+    marker('EXPIRED_LEAD_LEASE_RECOVERY_PROVEN', {
+      trigger_status: leadTriggerStatus,
+      sibling_status: leadSiblingStatuses,
+      root_task_status: facts.root_task_status,
+      root_run_status: facts.root_run_status,
+      team_status: facts.team_status,
+      stop_reason: facts.stop_reason,
+      child_task_statuses: childTaskStatuses.map((row) => row.status),
+      affected_count: recovered[0].affectedChildRunCount,
+      nonterminal_task_count: childTasks,
+      nonterminal_run_count: childRuns,
+      nonterminal_attempt_count: activeAttempts,
+      replay_recovery_count: replay.length,
+    });
+    marker('EXPIRED_LEASE_RECOVERY_IN_PROCESS_PROVEN', {
+      mode: 'lead',
+      process_restart_plumbing_covered: false,
+    });
+    throw new RecoveryComplete();
+  }
   await service.singleRunDebug.claimAndExecute(await queued('lead_turn'));
   const { PostgresAdmissionRepository } =
     await import('../../src/infrastructure/postgres/postgres-admission-repository.ts');
@@ -2345,16 +2638,21 @@ try {
   if (scriptedRuntime) await scriptedRuntimeInstance.assertLeadIdle();
   await evidence('passed');
 } catch (error) {
-  const failure = smokeFailure(error);
-  try {
-    await collectFailureDiagnostic(failure);
-    await evidence('blocked', failure);
-  } catch {
-    process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
+  if (error instanceof RecoveryComplete) {
+    await evidence('passed');
+  } else {
+    const failure = smokeFailure(error);
+    try {
+      await collectFailureDiagnostic(failure);
+      await evidence('blocked', failure);
+    } catch {
+      process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
+    }
+    throw failure;
   }
-  throw failure;
 } finally {
-  await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
+  if (!expiredLeaseRecovery)
+    await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
   await new Promise((done) => api?.close?.(() => done()) ?? done()).catch(
     () => undefined,
   );

@@ -2,9 +2,9 @@
 
 ## Outcome
 
-**FAIL — Human Gate triggered by the corrected notification probe.** Paseo/OpenCode did not refresh the provider Agent's MCP tool catalog on continuation after the stable server-side grant changed and the MCP server called `sendToolListChanged()`. Server-side revocation remained effective.
+**Dynamic-catalog design failed; static-catalog/dynamic-grant variant passed.** Paseo/OpenCode did not refresh the provider Agent's MCP tool catalog on continuation after the stable server-side grant changed and the MCP server called `sendToolListChanged()`. A third real probe then registered the full canonical Lead catalog at creation and proved that server-side grants can safely vary call authority across continued turns.
 
-This evidence blocks the persistent Lead RuntimeSession implementation described in `DESIGN-DRAFT-2026-08-05-persistent-lead-runtime-session.md` section 6.3. No ownership implementation was started after this result.
+This evidence blocks Solution A exactly as drafted and supports a differently shaped static-envelope variant. No ownership implementation was started; Manager re-scope remains required.
 
 ## Initial run — non-decisive
 
@@ -68,14 +68,59 @@ Machine-written evidence markers:
 
 Despite both notifications, no `tools/list` request arrived after epoch 1. The model successfully called `team_work_create` in epoch 1, then explicitly reported that only `team_work_create` remained visible in epochs 2 and 3. It did not call `team_work_accept` or `team_finish`.
 
+## Standalone provider limitation
+
+Paseo `0.1.110` with OpenCode `1.18.4` does not re-list MCP tools on a continued provider Agent, even when its live MCP session receives a spec-compliant `notifications/tools/list_changed` notification from `@modelcontextprotocol/sdk` `1.30.0`. Designs using continuation must treat the creation-time MCP catalog as immutable.
+
+This is a catalog limitation, not an authorization limitation: MCP tool handlers on the same provider session still enforce the current server-side grant for every call.
+
+## Variant 3 — static full Lead catalog, dynamic grant
+
+- Local date: 2026-08-06 (Asia/Shanghai)
+- UTC interval: 2026-08-05T16:31:23.812Z to 2026-08-05T16:31:46.755Z
+- Branch/starting HEAD: `agent/team-ergonomics` / `0225671224a25abd2a7c2aa75c084441e19e2047`
+- Model: `opencode-go/deepseek-v4-flash`
+- Paseo: `0.1.110`
+- OpenCode: `1.18.4`
+- MCP SDK: `1.30.0`
+- Provider Agent ID: `feac706f-5ba2-45ef-ad13-bbe1b5507370`
+- Paseo Workspace ID: `wks_25145e9972a12e33`
+- MCP session ID: `ee9974f9-9ed3-4bc2-bea7-47b45244135a`
+- Stable bearer: yes; the value was not logged
+- Provider Agent distinct count: 1
+- Process exit code: `0`
+- Raw local artifact: `.local/probe/persistent-lead-static-catalog-2026-08-05T16-31-23-812Z-18086/evidence.json`
+- Raw artifact SHA-256: `98da1d629e74548d92e607d2ec803a18daba432d2cac120486519663bcf3feed`
+
+The creation-time catalog contained the full seven-tool Lead envelope: `team_state`, `team_work_list`, `team_message_send`, `team_work_create`, `team_work_request_changes`, `team_work_accept`, and `team_finish`. Registrations stayed enabled and the provider listed them only at epoch 1. Only the server-side grant changed:
+
+1. Epoch 1 allowed create. The model successfully called `team_work_create`, then deliberately called unauthorized `team_finish` and received `{"error":"not_allowed","command":"team_finish","epoch":1}` with `isError: true`.
+2. Epoch 2 allowed accept/request-changes. The model successfully called `team_work_accept`, then deliberately called unauthorized `team_work_create` and received `{"error":"not_allowed","command":"team_work_create","epoch":2}` with `isError: true`.
+3. Epoch 3 allowed finish. The model successfully called `team_finish`.
+
+Machine-written evidence markers:
+
+- `"passed": true`
+- `"providerAgentDistinctCount": 1`
+- `"bearerStable": true`
+- `"listEpochs": [1]`
+- `"successfulModelCalls": ["1:team_work_create", "2:team_work_accept", "3:team_finish"]`
+- `"rejectedModelCalls": ["1:team_finish", "2:team_work_create"]`
+- `"wastedTurnsRetryingRejectedTools": false`
+- `"rejectedRetryCounts": {"1:team_finish": 1, "2:team_work_create": 1}`
+
+The model reacted sensibly to both authorization errors: it reported each rejection accurately, did not retry, did not loop, and completed the required authorized action in every turn.
+
 ## Gate conclusion
 
-The corrected probe distinguishes the two proposed outcomes: the server emitted the specified MCP catalog-change notifications, but OpenCode did not refresh the catalog. Paseo/OpenCode retains the initial MCP catalog across `sendAgentMessage` continuation. Therefore the section 6.3 requirement that newly authorized review and finish tools become visible is not met.
+The corrected notification probe establishes that Paseo/OpenCode retains the initial MCP catalog across `sendAgentMessage` continuation. Therefore the draft's dynamic-catalog form is not viable.
 
-Per the approved slice gate, this result does not authorize a refresh/reconnect mechanism, Paseo/OpenCode upgrade, new runtime port, or ownership implementation. Manager direction is required before proceeding.
+Variant 3 establishes that a static full Lead catalog plus a per-turn server-side grant preserves dynamic authority on one continued Agent. This passes the requested feasibility probe but does not authorize ownership implementation. The launch snapshot, zero-tool inter-turn grant invariant, and remaining implementation gates require Manager re-scope first.
 
 ## Harness note
 
 The initial evidence file was written before a probe-only cleanup call used a nonexistent `DaemonClient.disconnect()` method and caused process exit 1 instead of the intended gate-specific exit 2. This occurred after all three turns, timeline fetch, assertions, and evidence persistence. The exact Paseo process started by the initial probe was then terminated and verified absent.
 
 The corrected rerun used `DaemonClient.close()`, returned the intended exit code `2`, and left no managed probe process running.
+
+Variant 3 also used `DaemonClient.close()`, returned exit code `0`, and left no managed probe process running.

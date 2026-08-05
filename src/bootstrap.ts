@@ -55,6 +55,7 @@ import { LarkIngressWorker } from './entrypoints/lark/worker.js';
 import { LarkOutboxWorker } from './entrypoints/lark/outbox-worker.js';
 import { createLarkWebsocketReceiver } from './adapters/lark/lark-websocket-receiver.js';
 import { createLarkDeliveryAdapter } from './adapters/lark/lark-delivery-adapter.js';
+import { larkMemoryReviewCardRenderer } from './adapters/lark/lark-memory-card.js';
 import { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
 import { PublishMemoryReviewSurface } from './application/channels/publish-memory-review-surface.js';
 import { SynthesizeMemoryDocument } from './application/channels/synthesize-memory-document.js';
@@ -560,6 +561,7 @@ export async function createService(
         reviewMemoryProposal,
         managedMemory,
         larkConfig,
+        larkMemoryReviewCardRenderer,
         memoryDocument,
         synthesizeMemoryDocument,
         acceptMemoryFromDocument,
@@ -581,6 +583,7 @@ export async function createService(
         createLarkDeliveryAdapter(larkConfig),
         channelRepository,
         {
+          cards: larkMemoryReviewCardRenderer,
           tokenDeriver: reviewTokenDeriver!,
           validateCardPublication: (input) =>
             reviewSurfaceRepository.validateCardPublication(input),

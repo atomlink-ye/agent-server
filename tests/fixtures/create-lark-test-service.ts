@@ -24,6 +24,7 @@ import { FakeAgentRuntime } from './fake-agent-runtime.js';
 import type { FakeRuntimeOptions } from './fake-agent-runtime.js';
 import { createLarkMemoryDocumentAdapter } from '../../src/adapters/lark/lark-memory-document.js';
 import { SynthesizeMemoryDocument } from '../../src/application/channels/synthesize-memory-document.js';
+import { larkMemoryReviewCardRenderer } from '../../src/adapters/lark/lark-memory-card.js';
 
 /** Deterministic stateful Docx double used by Task 11/12 flows. */
 export class FakeLarkDocumentProvider {
@@ -267,6 +268,7 @@ export async function createLarkTestService(
       memoryReviewControl.review!,
       memoryReviewControl.managedMemory!,
       config,
+      larkMemoryReviewCardRenderer,
       documents,
       new SynthesizeMemoryDocument(runtime),
     ),
@@ -301,6 +303,7 @@ export async function createLarkTestService(
     },
     channel,
     {
+      cards: larkMemoryReviewCardRenderer,
       tokenDeriver: createMemoryReviewActionTokenDeriver(config.appSecret),
       validateCardPublication: (input) =>
         new PostgresLarkReviewSurfaceRepository(

@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: implementing-orchestrator
 created_at: 2026-08-06
 updated_at: 2026-08-06
@@ -23,7 +23,7 @@ durable state, tenancy, dependency, and migration changes remain Human Gates.
 - [x] T1: repair Team Version cursor pagination and verify it through real HTTP.
 - [x] T6.5: centralize YAML canonicalization without changing fingerprints.
 - [x] T2: remove only dead code proven unused on the current baseline.
-- [ ] T4: repair the five approved layering violations and unify the four named
+- [x] T4: repair the five approved layering violations and unify the four named
       OwnerScope definitions.
 
 ## Non-goals
@@ -38,8 +38,8 @@ durable state, tenancy, dependency, and migration changes remain Human Gates.
 - [x] Re-verify all four themes against `b827ce7` and record stale claims.
 - [x] Commit T1 separately as `7879f5a`.
 - [x] Commit T6.5 separately as `4855d55`.
-- [ ] Commit the manager-approved reduced T2 scope separately.
-- [ ] Commit T4 separately after pre-move Oracle approval.
+- [x] Commit the manager-approved reduced T2 scope separately as `cdbe82f`.
+- [x] Commit T4 separately after pre-move Oracle approval.
 
 ## Verification
 
@@ -51,8 +51,8 @@ durable state, tenancy, dependency, and migration changes remain Human Gates.
       `sha256:4738e84e980fa9a2306db93da7f5e113f4bc4136fdcbeb31fc4ad0e483f13115`.
 - [x] T2 `make check`, applicable existing integration checks, and zero-reference
       grep.
-- [ ] T4 `make check` and forbidden-import grep.
-- [ ] Final branch-wide diff and worktree-state verification.
+- [x] T4 `make check` and forbidden-import grep.
+- [x] Final branch-wide diff and worktree-state verification.
 
 ## Documentation impact
 
@@ -99,23 +99,32 @@ safe recovery points are baseline `b827ce7`, T1 `7879f5a`, and T6.5 `4855d55`.
   with 7 files and 36 tests skipped by their existing environment gates.
 - T2 exact-symbol grep across `src`, `tests`, and `e2e` returned zero references;
   protected-file diff grep returned no paths.
+- T4 pre-move and post-correction reviews reused the same Oracle session. The
+  final diff was approved after an application-local card-renderer test fake
+  removed the last test-only application-to-adapter value imports.
+- T4 `make check` passed. Unfiltered adapter-import grep under
+  `src/application` and application-import grep under `src/domain` returned no
+  matches. The four named scope declarations resolve to the single canonical
+  `domain/tenancy/OwnerScope`; protected-file diff grep returned no paths.
+- The preserved idempotency vector produced
+  `agent-project-4a068291b4b436eee6467c73c8b17cebc0586ce69706ee92925883f930771073`.
 
 ## Completion checklist
 
-- [ ] All accepted theme changes are committed separately.
-- [ ] All required acceptance evidence is fresh and recorded.
-- [ ] No temporary evidence, debug output, or unintended files remain.
-- [ ] Plan is moved to `completed/` with no unchecked items.
+- [x] All accepted theme changes are committed separately.
+- [x] All required acceptance evidence is fresh and recorded.
+- [x] No temporary evidence, debug output, or unintended files remain.
+- [x] Plan is moved to `completed/` with no unchecked items.
 
 ## Current blocker
 
 None. The T2 Human Gate was resolved by deferring public/durable compatibility
-changes.
+changes, and all four authorized themes are complete.
 
 ## Next exact command
 
-Review the final T2 diff and commit the reduced T2 code plus this defer record as
-one separate theme commit.
+Commit the approved T4 diff and this completed plan as the fourth separate theme
+commit. Do not push or open a PR.
 
 ## Cleanup state
 

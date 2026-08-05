@@ -8,6 +8,7 @@ import {
 import type { ChannelIngress } from './domain/channels/channel-event.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
+import { larkMemoryReviewCardRenderer } from './adapters/lark/lark-memory-card.js';
 
 describe('closeServiceResources', () => {
   it('E2 bootstraps a claimed Card ingress into the Card control path', async () => {
@@ -74,6 +75,7 @@ describe('closeServiceResources', () => {
         publishedAgentVersionId: 'agent',
         policyVersion: 'policy',
       },
+      larkMemoryReviewCardRenderer,
     );
     const processor = new ProcessLarkIngress(message, command, control);
     const claimIngress = vi

@@ -1,4 +1,5 @@
 import type { Run } from '../../domain/runs/run.js';
+import type { OwnerScope } from '../../domain/tenancy/owner-scope.js';
 
 export interface SaveRunOptions {
   readonly taskId?: string;
@@ -50,12 +51,7 @@ export interface CancellationRequestResult {
   readonly outcome: CancellationOutcome;
 }
 
-export interface RunOwnerScope {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-}
+export type RunOwnerScope = OwnerScope;
 
 export interface RunRepository {
   save(run: Run, options?: SaveRunOptions): Promise<void>;

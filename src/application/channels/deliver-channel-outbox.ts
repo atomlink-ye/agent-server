@@ -7,10 +7,7 @@ import type {
 import type { ChannelOutbox } from '../../domain/channels/channel-delivery.js';
 import type { LarkReviewSurfaceRepository } from '../ports/lark-review-surface-repository.js';
 import type { MemoryReviewActionTokenDeriver } from './memory-review-action-token.js';
-import {
-  renderPendingMemoryCard,
-  renderCardWithDocControls,
-} from '../../adapters/lark/lark-memory-card.js';
+import type { MemoryReviewCardRenderer } from '../ports/memory-review-card-renderer.js';
 import {
   parseMemoryReviewCardPublicationDescriptor,
   parseMemoryReviewDocCardPublicationDescriptor,
@@ -115,6 +112,10 @@ export class DeliverChannelOutbox {
 
 type CardPublication = { readonly surfaceId: string; readonly version: number };
 type CardPublicationDependencies = {
+  readonly cards: Pick<
+    MemoryReviewCardRenderer,
+    'renderPending' | 'renderWithDocumentControls'
+  >;
   readonly tokenDeriver: MemoryReviewActionTokenDeriver;
   readonly validateCardPublication: LarkReviewSurfaceRepository['validateCardPublication'];
   readonly finalizeCardDelivery: LarkReviewSurfaceRepository['finalizeCardDelivery'];
@@ -156,7 +157,7 @@ async function prepareCardPublication(
       targetId: outbox.targetId,
       cardJson: JSON.stringify(
         descriptor.type === 'lark_memory_doc_card_v1'
-          ? renderCardWithDocControls({
+          ? dependencies.cards.renderWithDocumentControls({
               category: descriptor.category,
               excerpt: descriptor.excerpt,
               docStatus: 'Ready',
@@ -164,7 +165,7 @@ async function prepareCardPublication(
               token,
               previewed: false,
             })
-          : renderPendingMemoryCard({
+          : dependencies.cards.renderPending({
               category: descriptor.category,
               content: descriptor.content,
               token,
@@ -221,7 +222,7 @@ function deliveryInput(
       surfaceId: descriptor.surfaceId,
       version: descriptor.version,
     });
-    const card = renderCardWithDocControls({
+    const card = dependencies.cards.renderWithDocumentControls({
       category: descriptor.category,
       excerpt: descriptor.excerpt,
       docStatus: descriptor.docStatus,

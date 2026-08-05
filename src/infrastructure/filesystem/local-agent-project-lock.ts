@@ -3,14 +3,8 @@ import { createHash } from 'node:crypto';
 import { lstat, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { AgentProjectLock } from '../../domain/projects/agent-project-lock.js';
+import type { AgentProjectLockStore } from '../../application/ports/agent-project-lock-store.js';
 import { normalizeMemoryPath } from '../../domain/memory-api/memory-api.js';
-
-export interface AgentProjectLockStore {
-  read(): Promise<AgentProjectLock | null>;
-  write(
-    lock: AgentProjectLock,
-  ): Promise<{ outcome: 'Create' | 'Update' | 'NoOp'; fingerprint: string }>;
-}
 
 export class LocalAgentProjectLock implements AgentProjectLockStore {
   private readonly path: string;

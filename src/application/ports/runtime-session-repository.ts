@@ -7,6 +7,7 @@ export interface RuntimeSession {
   readonly productSessionId: string | null;
   readonly taskId: string | null;
   readonly launchSnapshotId: string;
+  readonly workspaceId: string;
   readonly agentVersionId: string;
   readonly environmentVersionId: string;
   readonly resolvedSkills: readonly Pick<
@@ -36,6 +37,7 @@ export interface RuntimeSessionRepository {
   findByTeamMember?(input: {
     teamMemberRunId: string;
     tenantId: string;
+    workspaceId: string;
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;

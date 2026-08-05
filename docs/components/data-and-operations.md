@@ -16,8 +16,14 @@ This component supplies durable storage, queue/outbox integration, audit, teleme
 
 There is no external queue service, durable event log beyond the current enqueue table, metrics backend, tracing backend, service-level objective, backup, or production deployment.
 
-Agent Teams v2 uses one immutable TeamVersion and task-scoped RuntimeSessions
-for Lead/member child Runs. It does not establish general restart/resume,
+Agent Teams v2 uses one immutable TeamVersion and member-scoped RuntimeSessions
+for Lead/member child Runs. `task_id` on a runtime session is the creating
+task only; continuation Tasks reuse the member scope under a keyed mutex. The
+launch snapshot and immutable catalog are checked against workspace, agent,
+and environment ownership on every turn, while dynamic allowed tools are a
+policy subset. Lead grants are narrowed to zero immediately after execution,
+before provider/event/memory/completion persistence, and fail closed on revoke
+or refresh errors. It does not establish general restart/resume,
 retries, cancellation propagation, or production durability. The bounded
 fail-closed recovery path terminalizes an expired running Team child Run and its
 Team/root projection after locking the Team first; it does not resume a provider

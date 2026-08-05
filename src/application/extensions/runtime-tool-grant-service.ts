@@ -26,6 +26,7 @@ export type RuntimeToolGrant = Readonly<{
   readonly runId?: string;
   readonly teamMemberRunId?: string;
   readonly allowedTools: readonly string[];
+  readonly catalogTools: readonly string[];
   readonly contextEpoch?: string;
   readonly expiresAt: string;
 }>;
@@ -59,6 +60,7 @@ export class RuntimeToolGrantService {
     readonly runId?: string;
     readonly teamMemberRunId?: string;
     readonly allowedTools?: readonly string[];
+    readonly catalogTools?: readonly string[];
     readonly contextEpoch?: string;
     readonly ttlMs?: number;
   }): RuntimeToolGrantIssue {
@@ -66,9 +68,17 @@ export class RuntimeToolGrantService {
     const allowedTools = input.allowedTools ?? [
       AGENT_SERVER_MEMORY_READ_TOOL_REF,
     ];
+    const catalogTools = input.catalogTools ?? allowedTools;
     if (
       new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
+      allowedTools.some(
+        (tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool),
+      ) ||
+      new Set(catalogTools).size !== catalogTools.length ||
+      catalogTools.some(
+        (tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool),
+      ) ||
+      allowedTools.some((tool) => !catalogTools.includes(tool))
     )
       throw new Error('Unsupported or duplicate runtime tool ref.');
     const token = randomBytes(32).toString('base64url');
@@ -88,6 +98,7 @@ export class RuntimeToolGrantService {
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
       allowedTools: Object.freeze([...allowedTools]),
+      catalogTools: Object.freeze([...catalogTools]),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
       expiresAt,
       tokenHash: hashToken(token),
@@ -201,6 +212,8 @@ export class RuntimeToolGrantService {
     if (this.activeToolCalls(grant.grantId) > 0)
       throw new Error('Runtime turn refresh fence is active.');
     validateTools(input.allowedTools);
+    if (input.allowedTools.some((tool) => !grant.catalogTools.includes(tool)))
+      throw new Error('Runtime grant allowed tools exceed catalog.');
     const updated: StoredGrant = {
       ...grant,
       taskId: input.taskId,

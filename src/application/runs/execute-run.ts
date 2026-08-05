@@ -62,6 +62,10 @@ import {
 } from './runtime-execution-receipt.js';
 
 export class ExecuteRun {
+  private readonly teamMemberMutexes = new Map<
+    string,
+    { tail: Promise<void>; queued: number }
+  >();
   public constructor(
     private readonly completeRun: CompleteRun,
     private readonly tasks: TaskRepository,
@@ -109,6 +113,22 @@ export class ExecuteRun {
   }
 
   public async execute(claim: ClaimedRun) {
+    if (this.collaborativeExecutions) {
+      const task = await this.tasks.findById(claim.taskId);
+      const memberId = task?.teamMemberRunId;
+      if (memberId) {
+        const release = await this.acquireTeamMemberMutex(memberId);
+        try {
+          return await this.executeUnlocked(claim);
+        } finally {
+          release();
+        }
+      }
+    }
+    return this.executeUnlocked(claim);
+  }
+
+  private async executeUnlocked(claim: ClaimedRun) {
     this.logger.log('info', 'run.started', {
       run_id: claim.run.id,
       worker_id: claim.workerId,
@@ -122,41 +142,65 @@ export class ExecuteRun {
     let task: Task | null | undefined;
 
     try {
-      await this.events?.append(claim.run.id, 'started', {});
       task = await this.tasks.findById(claim.taskId);
       if (!task) {
         throw new Error(
           `Task ${claim.taskId} could not be loaded for execution`,
         );
       }
+      if (
+        ['lead_turn', 'work_attempt', 'direct_message'].includes(
+          task.teamTaskKind ?? '',
+        ) &&
+        !task.teamMemberRunId
+      )
+        throw new Error('Team task is missing member identity.');
 
-      if (this.collaborativeExecutions && task.logicalStepKey) {
-        const memberId = task.logicalStepKey.match(
-          /^(?:member|lead):[^:]+:([^:]+)/,
-        )?.[1];
-        if (memberId) {
-          const owner = {
-            tenantId: task.tenantId,
-            workspaceId: task.workspaceId,
-            principalType: task.principalType,
-            principalId: task.principalId,
-          };
-          const member = await this.collaborativeExecutions.findMemberRunById(
-            memberId,
+      if (task.teamMemberRunId) {
+        if (!this.collaborativeExecutions)
+          throw new Error('Team member task requires TeamRun execution.');
+        const owner = {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        };
+        const [member, team] = await Promise.all([
+          this.collaborativeExecutions.findMemberRunById(
+            task.teamMemberRunId,
             owner,
-          );
-          if (member) {
-            memberRunId = member.id;
-            memberOwner = owner;
-            await this.collaborativeExecutions.updateMemberRunStatus(
-              member.id,
-              'active',
-              undefined,
-              owner,
-            );
-          }
-        }
+          ),
+          this.collaborativeExecutions.findTeamRunByRootTaskId(
+            task.rootTaskId,
+            owner,
+          ),
+        ]);
+        if (
+          !team ||
+          !member ||
+          member.teamRunId !== team.id ||
+          !['lead_turn', 'work_attempt', 'direct_message'].includes(
+            task.teamTaskKind ?? '',
+          ) ||
+          (task.teamTaskKind === 'lead_turn' && member.role !== 'lead') ||
+          ((task.teamTaskKind === 'work_attempt' ||
+            task.teamTaskKind === 'direct_message') &&
+            member.role !== 'member') ||
+          member.agentVersionId !== task.invokableVersionId
+        )
+          throw new Error('Team member task identity is invalid.');
+        memberRunId = member.id;
+        memberOwner = owner;
       }
+
+      await this.events?.append(claim.run.id, 'started', {});
+      if (memberRunId && memberOwner)
+        await this.collaborativeExecutions!.updateMemberRunStatus(
+          memberRunId,
+          'active',
+          undefined,
+          memberOwner,
+        );
 
       await this.events?.bind({
         runId: claim.run.id,
@@ -417,9 +461,7 @@ export class ExecuteRun {
           },
         )
       : null;
-    const memberId = task.logicalStepKey?.match(
-      /^(?:member|lead):[^:]+:([^:]+)/,
-    )?.[1];
+    const memberId = task.teamMemberRunId;
     const member =
       collaborativeTeam && memberId && this.collaborativeExecutions
         ? (
@@ -434,13 +476,27 @@ export class ExecuteRun {
             )
           ).find((candidate) => candidate.id === memberId)
         : null;
-    const agenticLeadControlTurn =
-      collaborativeTeam != null &&
-      task.teamTaskKind === 'lead_turn' &&
-      member?.role === 'lead';
-    const turnGrantScopeId = agenticLeadControlTurn
-      ? task.id
-      : (member?.id ?? task.id);
+    const supportedTeamKind = [
+      'lead_turn',
+      'work_attempt',
+      'direct_message',
+    ].includes(task.teamTaskKind ?? '');
+    if (task.teamMemberRunId || task.teamTaskKind) {
+      if (
+        !supportedTeamKind ||
+        !task.teamMemberRunId ||
+        !collaborativeTeam ||
+        !member ||
+        member.teamRunId !== collaborativeTeam.id ||
+        member.agentVersionId !== task.invokableVersionId ||
+        (task.teamTaskKind === 'lead_turn' && member.role !== 'lead') ||
+        ((task.teamTaskKind === 'work_attempt' ||
+          task.teamTaskKind === 'direct_message') &&
+          member.role !== 'member')
+      )
+        throw new Error('Team member task identity is invalid.');
+    }
+    const turnGrantScopeId = member?.id ?? task.id;
     const productSession =
       task.sessionId && this.sessions
         ? await this.sessions.getSession(task.sessionId, {
@@ -461,21 +517,22 @@ export class ExecuteRun {
             principalType: task.principalType,
             principalId: task.principalId,
           })
-        : agenticLeadControlTurn && this.runtimeSessions
-          ? await this.runtimeSessions.findByTask({
-              taskId: task.id,
+        : member && this.runtimeSessions?.findByTeamMember
+          ? await this.runtimeSessions.findByTeamMember({
+              teamMemberRunId: member.id,
               tenantId: task.tenantId,
+              workspaceId: task.workspaceId,
               principalType: task.principalType,
               principalId: task.principalId,
             })
-          : member && this.runtimeSessions?.findByTeamMember
-            ? await this.runtimeSessions.findByTeamMember({
-                teamMemberRunId: member.id,
-                tenantId: task.tenantId,
-                principalType: task.principalType,
-                principalId: task.principalId,
-              })
-            : null;
+          : null;
+    if (
+      member &&
+      runtimeSession &&
+      (runtimeSession.providerAgentId === null) !==
+        (runtimeSession.paseoWorkspaceId === null)
+    )
+      throw new Error('Runtime session provider binding is partial.');
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -484,14 +541,83 @@ export class ExecuteRun {
       this.events?.findLatestProviderAgentBySessionId
         ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
         : null;
-    const priorProviderAgentId =
-      runtimeSession?.providerAgentId ??
-      legacyProviderAgentId ??
-      (!this.runtimeSessions &&
-      task.sessionId &&
-      this.events?.findLatestProviderAgentBySessionId
-        ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
-        : null);
+    if (
+      runtimeSession &&
+      member &&
+      (runtimeSession.scopeKind !== 'team_member' ||
+        runtimeSession.scopeId !== member.id)
+    )
+      throw new Error('Team member runtime session scope is invalid.');
+    if (
+      runtimeSession &&
+      (runtimeSession.agentVersionId !== task.invokableVersionId ||
+        runtimeSession.workspaceId !== task.workspaceId ||
+        runtimeSession.environmentVersionId !==
+          collaborativeTeam?.environmentVersionId)
+    )
+      throw new Error('Runtime session snapshot is invalid.');
+    const priorProviderAgentId = member
+      ? (runtimeSession?.providerAgentId ?? null)
+      : (runtimeSession?.providerAgentId ??
+        legacyProviderAgentId ??
+        (!this.runtimeSessions &&
+        task.sessionId &&
+        this.events?.findLatestProviderAgentBySessionId
+          ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+          : null));
+    if (priorProviderAgentId && member?.role === 'lead' && collaborativeTeam) {
+      const fenceBinder = this
+        .runtimeExtensionBinder as RuntimeExtensionBinder & {
+        getTeamMemberGrant?: RuntimeExtensionBinder['getTeamMemberGrant'];
+        activeToolCalls?: (grantId: string) => number;
+      };
+      const previous = fenceBinder.getTeamMemberGrant?.({
+        teamMemberRunId: member.id,
+        scopeId: turnGrantScopeId,
+      });
+      if (
+        !previous?.runId ||
+        previous.runId === claim.run.id ||
+        previous.allowedTools.length !== 0 ||
+        !this.tasks.findByRootTaskIdForOwner ||
+        !this.runs ||
+        (runtimeSession &&
+          !sameToolRefs(previous.catalogTools, runtimeSession.toolRefs))
+      )
+        throw new Error('Previous Team turn cannot be verified.');
+      const previousRun = await this.runs.findByIdForOwner(previous.runId, {
+        tenantId: task.tenantId,
+        workspaceId: task.workspaceId,
+        principalType: task.principalType,
+        principalId: task.principalId,
+      });
+      if (!previousRun || !terminalRunStatuses.has(previousRun.status))
+        throw new Error('Previous Team run is still active.');
+      const records = await this.tasks.findByRootTaskIdForOwner(
+        collaborativeTeam.rootTaskId,
+        {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        },
+      );
+      if (
+        records.some(
+          (record) =>
+            record.task.teamMemberRunId === member.id &&
+            record.task.id !== task.id &&
+            record.latestRun !== null &&
+            !terminalRunStatuses.has(record.latestRun.status),
+        )
+      )
+        throw new Error('Team member has another active Task.');
+      if (
+        !fenceBinder.activeToolCalls ||
+        fenceBinder.activeToolCalls(previous.grantId) !== 0
+      )
+        throw new Error('Previous Team turn cannot be verified.');
+    }
     const resolved = priorProviderAgentId
       ? await this.resolveContinuationPrompt(
           claim.run.prompt,
@@ -510,12 +636,25 @@ export class ExecuteRun {
         ? await this.loadAgenticLeadState(collaborativeTeam, task)
         : null;
     let sessionRuntime = runtimeSession;
+    let createdRuntimeSession = false;
     const canonicalTeamRefs = new Set<string>(
       Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS),
     );
     const domainToolRefs = (
       sessionRuntime?.toolRefs ?? resolved.toolRefs
     ).filter((ref) => !canonicalTeamRefs.has(ref));
+    const leadCatalogToolRefs = [
+      ...domainToolRefs,
+      ...canonicalTeamToolRefsForRole('lead'),
+    ];
+    if (member?.role === 'lead' && sessionRuntime) {
+      const persistedCanonical = sessionRuntime.toolRefs.filter((ref) =>
+        canonicalTeamRefs.has(ref),
+      );
+      const expectedCanonical = canonicalTeamToolRefsForRole('lead');
+      if (!sameToolRefs(persistedCanonical, expectedCanonical))
+        throw new Error('Lead runtime session catalog is invalid.');
+    }
     const runtimeToolRefs =
       collaborativeTeam != null && task.teamTaskKind === 'direct_message'
         ? canonicalTeamToolRefsForDirectMessage()
@@ -592,8 +731,9 @@ export class ExecuteRun {
             resolvedSkills: resolved.skills,
             toolRefs: runtimeToolRefs,
           })
-        : agenticLeadControlTurn
-          ? await this.runtimeSessions.createOrGetForTask({
+        : member && this.runtimeSessions.createOrGetForTeamMember
+          ? await this.runtimeSessions.createOrGetForTeamMember({
+              teamMemberRunId: member.id,
               taskId: task.id,
               tenantId: task.tenantId,
               principalType: task.principalType,
@@ -602,39 +742,40 @@ export class ExecuteRun {
               agentVersionId: resolved.agentVersionId,
               environmentVersionId: environmentVersionId!,
               resolvedSkills: resolved.skills,
-              toolRefs: runtimeToolRefs,
+              toolRefs:
+                member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
             })
-          : member && this.runtimeSessions.createOrGetForTeamMember
-            ? await this.runtimeSessions.createOrGetForTeamMember({
-                teamMemberRunId: member.id,
-                taskId: task.id,
-                tenantId: task.tenantId,
-                principalType: task.principalType,
-                principalId: task.principalId,
-                workspaceId: task.workspaceId,
-                agentVersionId: resolved.agentVersionId,
-                environmentVersionId: environmentVersionId!,
-                resolvedSkills: resolved.skills,
-                toolRefs: runtimeToolRefs,
-              })
-            : await this.runtimeSessions.createOrGetForTask({
-                taskId: task.id,
-                tenantId: task.tenantId,
-                principalType: task.principalType,
-                principalId: task.principalId,
-                workspaceId: task.workspaceId,
-                agentVersionId: resolved.agentVersionId,
-                environmentVersionId: environmentVersionId!,
-                resolvedSkills: resolved.skills,
-                toolRefs: runtimeToolRefs,
-              });
+          : null;
+      if (!sessionRuntime)
+        throw new Error('Team member runtime session unavailable.');
+      createdRuntimeSession = true;
     }
     if (
-      member &&
-      !agenticLeadControlTurn &&
-      sessionRuntime &&
-      this.collaborativeExecutions
+      createdRuntimeSession &&
+      (!sessionRuntime ||
+        sessionRuntime.scopeKind !== 'team_member' ||
+        sessionRuntime.scopeId !== member?.id ||
+        sessionRuntime.taskId !== task.id ||
+        sessionRuntime.workspaceId !== task.workspaceId ||
+        sessionRuntime.agentVersionId !== task.invokableVersionId ||
+        sessionRuntime.environmentVersionId !==
+          collaborativeTeam?.environmentVersionId ||
+        !sameToolRefs(
+          sessionRuntime.toolRefs,
+          member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
+        ) ||
+        sessionRuntime.providerAgentId !== null ||
+        sessionRuntime.paseoWorkspaceId !== null)
     )
+      throw new Error('New Team member runtime session is already bound.');
+    if (
+      member &&
+      sessionRuntime &&
+      !createdRuntimeSession &&
+      !sessionRuntime.providerAgentId
+    )
+      throw new Error('Loaded Team member runtime session is unbound.');
+    if (member && sessionRuntime && this.collaborativeExecutions)
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
         sessionRuntime.id,
@@ -650,6 +791,22 @@ export class ExecuteRun {
         ? join(this.runtimeCellRoot, sessionRuntime.id)
         : undefined;
     if (cellCwd) await mkdir(cellCwd, { recursive: true });
+    if (member?.role === 'lead') {
+      const capabilityBinder = this.runtimeExtensionBinder as
+        | (RuntimeExtensionBinder & {
+            revoke?: (grantId: string) => void;
+            activeToolCalls?: (grantId: string) => number;
+          })
+        | undefined;
+      if (
+        !capabilityBinder?.bind ||
+        !capabilityBinder.getTeamMemberGrant ||
+        !capabilityBinder.refreshForTeamMember ||
+        !capabilityBinder.activeToolCalls ||
+        !capabilityBinder.revoke
+      )
+        throw new Error('Lead runtime grant capabilities are unavailable.');
+    }
     let extensions;
     if (
       !priorProviderAgentId &&
@@ -678,6 +835,10 @@ export class ExecuteRun {
           : {}),
         skills: resolved.skills,
         toolRefs: runtimeToolRefs,
+        catalogTools:
+          collaborativeTeam && member?.role === 'lead'
+            ? leadCatalogToolRefs
+            : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
     }
@@ -689,6 +850,7 @@ export class ExecuteRun {
             ttlMs?: number,
           ) => void;
           refreshForTeamMember?: (input: {
+            readonly grantId?: string;
             readonly teamMemberRunId: string;
             readonly scopeId: string;
             readonly taskId: string;
@@ -702,9 +864,31 @@ export class ExecuteRun {
           }) =>
             | import('../extensions/runtime-tool-grant-service.js').RuntimeToolGrant
             | null;
+          activeToolCalls?: (grantId: string) => number;
         })
       | undefined;
-    if (priorProviderAgentId && member && collaborativeTeam) {
+    let exactLeadGrantId: string | undefined;
+    if (member?.role === 'lead') {
+      if (!refreshableBinder?.getTeamMemberGrant)
+        throw new Error('Lead runtime grant is unavailable.');
+      const issued = refreshableBinder.getTeamMemberGrant({
+        teamMemberRunId: member.id,
+        scopeId: turnGrantScopeId,
+      });
+      if (!issued) throw new Error('Lead runtime grant is unavailable.');
+      if (
+        sessionRuntime &&
+        !sameToolRefs(issued.catalogTools, sessionRuntime.toolRefs)
+      )
+        throw new Error('Lead runtime grant catalog is invalid.');
+      exactLeadGrantId = issued.grantId;
+    }
+    if (
+      priorProviderAgentId &&
+      member &&
+      member.role !== 'lead' &&
+      collaborativeTeam
+    ) {
       if (
         !this.tasks.findByRootTaskIdForOwner ||
         !this.runs ||
@@ -712,6 +896,28 @@ export class ExecuteRun {
         !refreshableBinder.refreshForTeamMember
       )
         throw new Error('Previous Team turn cannot be verified.');
+      const oldGrant = refreshableBinder.getTeamMemberGrant({
+        teamMemberRunId: member.id,
+        scopeId: turnGrantScopeId,
+      });
+      if (
+        !oldGrant?.runId ||
+        oldGrant.runId === claim.run.id ||
+        oldGrant.allowedTools.length !== 0 ||
+        !refreshableBinder.activeToolCalls ||
+        refreshableBinder.activeToolCalls(oldGrant.grantId) !== 0 ||
+        (sessionRuntime &&
+          !sameToolRefs(oldGrant.catalogTools, sessionRuntime.toolRefs))
+      )
+        throw new Error('Previous Team turn cannot be verified.');
+      const oldRun = await this.runs.findByIdForOwner(oldGrant.runId, {
+        tenantId: task.tenantId,
+        workspaceId: task.workspaceId,
+        principalType: task.principalType,
+        principalId: task.principalId,
+      });
+      if (!oldRun || !terminalRunStatuses.has(oldRun.status))
+        throw new Error('Previous Team run is still active.');
       const records = await this.tasks.findByRootTaskIdForOwner(
         collaborativeTeam.rootTaskId,
         {
@@ -729,32 +935,15 @@ export class ExecuteRun {
           !terminalRunStatuses.has(record.latestRun.status),
       );
       if (otherActive) throw new Error('Team member has another active Task.');
-      const oldGrant = refreshableBinder?.getTeamMemberGrant?.({
-        teamMemberRunId: member.id,
-        scopeId: turnGrantScopeId,
-      });
-      if (!oldGrant?.runId)
-        throw new Error('Previous Team turn cannot be verified.');
-      const oldRun = await this.runs.findByIdForOwner(oldGrant.runId, {
-        tenantId: task.tenantId,
-        workspaceId: task.workspaceId,
-        principalType: task.principalType,
-        principalId: task.principalId,
-      });
-      if (
-        !oldRun ||
-        (oldGrant.runId !== claim.run.id &&
-          !terminalRunStatuses.has(oldRun.status))
-      )
-        throw new Error('Previous Team run is still active.');
     }
     if (
       priorProviderAgentId &&
       member &&
       collaborativeTeam &&
       refreshableBinder?.refreshForTeamMember
-    )
-      refreshableBinder.refreshForTeamMember({
+    ) {
+      const refreshed = refreshableBinder.refreshForTeamMember({
+        ...(exactLeadGrantId ? { grantId: exactLeadGrantId } : {}),
         teamMemberRunId: member.id,
         scopeId: turnGrantScopeId,
         taskId: task.id,
@@ -762,6 +951,8 @@ export class ExecuteRun {
         allowedTools: runtimeToolRefs,
         contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
       });
+      exactLeadGrantId = refreshed.grantId;
+    }
     if (
       priorProviderAgentId &&
       !member &&
@@ -782,36 +973,93 @@ export class ExecuteRun {
           },
         }
       : undefined;
-    const execution = await this.runtime.execute(
-      priorProviderAgentId
-        ? {
-            operation: 'continue',
-            ...(sessionRuntime?.paseoWorkspaceId
-              ? { paseoWorkspaceId: sessionRuntime.paseoWorkspaceId }
-              : {}),
-            ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
-            ...(cellCwd ? { cellCwd } : {}),
+    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>>;
+    try {
+      execution = await this.runtime.execute(
+        priorProviderAgentId
+          ? {
+              operation: 'continue',
+              ...(sessionRuntime?.paseoWorkspaceId
+                ? { paseoWorkspaceId: sessionRuntime.paseoWorkspaceId }
+                : {}),
+              ...(sessionRuntime
+                ? { runtimeSessionId: sessionRuntime.id }
+                : {}),
+              ...(cellCwd ? { cellCwd } : {}),
+              runId: claim.run.id,
+              prompt: turnPrompt,
+              providerAgentId: priorProviderAgentId,
+              ...(resolved.proposalLimit > 0
+                ? {
+                    memoryCandidates: { proposalLimit: resolved.proposalLimit },
+                  }
+                : {}),
+            }
+          : {
+              operation: 'create',
+              ...(sessionRuntime
+                ? { runtimeSessionId: sessionRuntime.id }
+                : {}),
+              ...(cellCwd ? { cellCwd } : {}),
+              runId: claim.run.id,
+              prompt: turnPrompt,
+              systemPrompt,
+              ...(extensions ? { extensions } : {}),
+              ...(resolved.proposalLimit > 0
+                ? {
+                    memoryCandidates: { proposalLimit: resolved.proposalLimit },
+                  }
+                : {}),
+            },
+        runtimeEventSink,
+      );
+    } finally {
+      if (member?.role === 'lead') {
+        if (!exactLeadGrantId || !refreshableBinder?.refreshForTeamMember)
+          throw new Error('Lead runtime grant could not be narrowed.');
+        try {
+          const narrowed = refreshableBinder.refreshForTeamMember({
+            grantId: exactLeadGrantId,
+            teamMemberRunId: member.id,
+            scopeId: turnGrantScopeId,
+            taskId: task.id,
             runId: claim.run.id,
-            prompt: turnPrompt,
-            providerAgentId: priorProviderAgentId,
-            ...(resolved.proposalLimit > 0
-              ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
-              : {}),
+            allowedTools: [],
+            contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
+          });
+          if (narrowed.allowedTools.length !== 0)
+            throw new Error('Lead runtime grant did not narrow to zero.');
+        } catch (error) {
+          refreshableBinder.revoke?.(exactLeadGrantId);
+          throw error;
+        }
+      } else if (
+        member &&
+        refreshableBinder?.getTeamMemberGrant &&
+        refreshableBinder.refreshForTeamMember
+      ) {
+        const grant = refreshableBinder.getTeamMemberGrant({
+          teamMemberRunId: member.id,
+          scopeId: turnGrantScopeId,
+        });
+        if (grant) {
+          try {
+            refreshableBinder.refreshForTeamMember({
+              grantId: grant.grantId,
+              teamMemberRunId: member.id,
+              scopeId: turnGrantScopeId,
+              taskId: task.id,
+              runId: claim.run.id,
+              allowedTools: [],
+              contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
+            });
+          } catch (error) {
+            refreshableBinder.revoke?.(grant.grantId);
+            throw error;
           }
-        : {
-            operation: 'create',
-            ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
-            ...(cellCwd ? { cellCwd } : {}),
-            runId: claim.run.id,
-            prompt: turnPrompt,
-            systemPrompt,
-            ...(extensions ? { extensions } : {}),
-            ...(resolved.proposalLimit > 0
-              ? { memoryCandidates: { proposalLimit: resolved.proposalLimit } }
-              : {}),
-          },
-      runtimeEventSink,
-    );
+        }
+      }
+    }
     if (
       sessionRuntime &&
       !sessionRuntime.providerAgentId &&
@@ -900,6 +1148,33 @@ export class ExecuteRun {
       this.now,
     );
     return succeeded;
+  }
+
+  private async acquireTeamMemberMutex(
+    teamMemberRunId: string,
+  ): Promise<() => void> {
+    let entry = this.teamMemberMutexes.get(teamMemberRunId);
+    if (!entry) {
+      entry = { tail: Promise.resolve(), queued: 0 };
+      this.teamMemberMutexes.set(teamMemberRunId, entry);
+    }
+    const prior = entry.tail;
+    let releaseWaiter!: () => void;
+    const current = new Promise<void>((resolve) => {
+      releaseWaiter = resolve;
+    });
+    entry.tail = current;
+    entry.queued += 1;
+    await prior;
+    entry.queued -= 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      releaseWaiter();
+      if (entry && entry.tail === current && entry.queued === 0)
+        this.teamMemberMutexes.delete(teamMemberRunId);
+    };
   }
 
   private async resolveAgentPrompt(
@@ -1231,6 +1506,20 @@ const safeRuntimeToolNames = new Set([
   'agent_server_memory_read',
 ]);
 const runtimeMcpToolPrefix = 'agent-server-memory-api_';
+
+function sameToolRefs(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === left.length &&
+    rightSet.size === right.length &&
+    [...leftSet].every((ref) => rightSet.has(ref))
+  );
+}
 
 function safeRuntimeToolNamePayload(toolName: string | undefined) {
   if (!toolName) return {};

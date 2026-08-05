@@ -70,12 +70,23 @@ let rootTaskId;
 let teamRunId;
 let databaseUrl;
 let failureDiagnostic;
+let scriptedRuntimeInstance;
 
 function assert(condition, code) {
   if (!condition) throw new Error(code);
 }
 function hash(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+function sameUniqueRefs(left, right) {
+  return (
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    new Set(left).size === left.length &&
+    new Set(right).size === right.length &&
+    right.every((ref) => left.includes(ref))
+  );
 }
 function normalizedProjectionKey(key) {
   return key.replace(/[^a-z0-9]/giu, '').toLowerCase();
@@ -397,6 +408,54 @@ class ScriptedRuntime {
   #leadProviderBindings = new Set();
   #memberTurns = 0;
   #submittedTimeoutInjected = false;
+  #pendingLeadIdle = [];
+  async assertLeadIdle() {
+    await Promise.all(this.#pendingLeadIdle.splice(0));
+  }
+  scheduleLeadIdle(client, turn) {
+    this.#pendingLeadIdle.push(
+      new Promise((resolve, reject) => {
+        setImmediate(async () => {
+          try {
+            const listed = await client.listTools();
+            assert(
+              listed.tools.some((tool) => tool.name === 'team_state'),
+              `lead_turn_${turn}_catalog_disappeared`,
+            );
+            const response = await client.callTool({
+              name: 'team_state',
+              arguments: {},
+            });
+            assert(
+              response.structuredContent?.error === 'unauthorized',
+              `lead_turn_${turn}_idle_authority_not_narrowed`,
+            );
+            const mutation = await client.callTool({
+              name: 'team_work_create',
+              arguments: { subject: 'old-turn-forbidden', assignee: 'member' },
+            });
+            assert(
+              mutation.structuredContent?.error === 'unauthorized',
+              `lead_turn_${turn}_old_mutation_not_rejected`,
+            );
+            runtimeCalls.push({
+              role: 'lead',
+              turn,
+              idle_same_client_rejected: true,
+              old_turn_mutation_rejected: true,
+            });
+            marker('LEAD_IDLE_REJECTED', {
+              turn,
+              old_turn_mutation_rejected: true,
+            });
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }),
+    );
+  }
   async initialize() {}
   async health() {
     return {
@@ -407,6 +466,7 @@ class ScriptedRuntime {
     };
   }
   async execute(input) {
+    await this.assertLeadIdle();
     let providerAgentId = input.providerAgentId;
     let session;
     if (input.operation === 'create') {
@@ -438,19 +498,22 @@ class ScriptedRuntime {
     const tools = new Set(
       (await session.client.listTools()).tools.map((tool) => tool.name),
     );
-    const directOnlyTools = new Set(['team_state', 'team_work_list']);
-    const directTurn =
-      tools.has('team_state') &&
-      tools.has('team_work_list') &&
-      [...tools].every((tool) => directOnlyTools.has(tool)) &&
-      ![
-        'team_finish',
-        'team_work_accept',
-        'team_work_request_changes',
-        'team_work_create',
-        'team_work_checkpoint',
-        'team_work_submit',
-      ].some((tool) => tools.has(tool));
+    const assertForbidden = async (name, args, code) => {
+      const response = await session.client.callTool({ name, arguments: args });
+      marker('SCRIPTED_FORBIDDEN_RESPONSE', {
+        turn: this.#leadTurns,
+        tool: name,
+        response: safe(response.structuredContent ?? null),
+      });
+      assert(response.structuredContent?.error === 'unauthorized', code);
+      runtimeCalls.push({
+        role: 'lead',
+        turn: this.#leadTurns,
+        forbidden_rejected: true,
+        forbidden_tool: name,
+      });
+    };
+    const directTurn = input.prompt.includes('phase3-direct-sentinel');
     runtimeCalls.push({
       kind: 'runtime_binding',
       role: directTurn
@@ -467,16 +530,8 @@ class ScriptedRuntime {
         'direct_sentinel_not_observed',
       );
       assert(
-        !tools.has('team_work_checkpoint') && !tools.has('team_work_submit'),
-        'direct_turn_work_tools_granted',
-      );
-      assert(
-        !tools.has('team_message_send'),
-        'direct_turn_message_send_listed',
-      );
-      assert(
-        !tools.has('synthetic_stock_snapshot'),
-        'direct_turn_domain_tool_listed',
+        tools.has('team_state') && tools.has('team_work_list'),
+        'direct_turn_safe_reads_missing',
       );
       let domainDenied = false;
       try {
@@ -503,14 +558,25 @@ class ScriptedRuntime {
       });
     } else if (!tools.has('team_work_submit')) {
       this.#leadTurns += 1;
+      const expectedLeadCatalog = new Set([
+        'team_state',
+        'team_work_list',
+        'team_work_create',
+        'team_work_accept',
+        'team_work_request_changes',
+        'team_finish',
+        'team_message_send',
+      ]);
       assert(
-        input.operation === 'create',
-        `lead_turn_${this.#leadTurns}_not_fresh_runtime`,
+        expectedLeadCatalog.size === tools.size &&
+          [...expectedLeadCatalog].every((name) => tools.has(name)),
+        `lead_turn_${this.#leadTurns}_catalog_invalid`,
       );
-      assert(
-        !this.#leadProviderBindings.has(providerAgentId),
-        `lead_turn_${this.#leadTurns}_provider_binding_reused`,
-      );
+      if (this.#leadProviderBindings.size)
+        assert(
+          this.#leadProviderBindings.has(providerAgentId),
+          `lead_turn_${this.#leadTurns}_provider_binding_changed`,
+        );
       this.#leadProviderBindings.add(providerAgentId);
       assert(
         input.prompt.includes(
@@ -521,20 +587,25 @@ class ScriptedRuntime {
           ),
         'lead_control_protocol_missing',
       );
-      assert(
-        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
-          input.systemPrompt.includes('Golden-path review rubric'),
-        'lead_canonical_snapshot_accept_rubric_missing',
-      );
+      if (this.#leadTurns === 1)
+        assert(
+          input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+            input.systemPrompt.includes('Golden-path review rubric'),
+          'lead_canonical_snapshot_accept_rubric_missing',
+        );
       if (this.#leadTurns === 1)
         assert(tools.has('team_work_create'), 'lead_turn_1_create_missing');
       else
         assert(
-          !tools.has('team_work_create'),
-          `lead_turn_${this.#leadTurns}_create_granted`,
+          tools.has('team_work_create'),
+          `lead_turn_${this.#leadTurns}_catalog_missing_create`,
         );
       if (this.#leadTurns === 1) {
-        assert(!tools.has('team_finish'), 'finish_granted_on_empty_board');
+        await assertForbidden(
+          'team_finish',
+          {},
+          'finish_granted_on_empty_board',
+        );
         value(
           await session.client.callTool({
             name: 'team_work_create',
@@ -571,8 +642,13 @@ class ScriptedRuntime {
         assert(
           tools.has('team_work_accept') &&
             tools.has('team_work_request_changes') &&
-            !tools.has('team_work_create'),
+            tools.has('team_work_create'),
           'lead_review_tools_not_exact',
+        );
+        await assertForbidden(
+          'team_work_create',
+          { subject: 'forbidden', assignee: 'member' },
+          'lead_create_not_denied',
         );
         value(
           await session.client.callTool({
@@ -595,7 +671,11 @@ class ScriptedRuntime {
             ),
           'lead_review_coordination_contract_missing',
         );
-        assert(!tools.has('team_finish'), 'finish_granted_before_B_accept');
+        await assertForbidden(
+          'team_finish',
+          {},
+          'finish_granted_before_B_accept',
+        );
         value(
           await session.client.callTool({
             name: 'team_work_accept',
@@ -692,6 +772,7 @@ class ScriptedRuntime {
           tool: 'finish_after_direct_delivery',
         });
       }
+      this.scheduleLeadIdle(session.client, this.#leadTurns);
     } else {
       assert(tools.has('team_work_submit'), 'member_tools_missing');
       assert(!tools.has('team_message_send'), 'member_message_send_listed');
@@ -866,6 +947,7 @@ function agentYaml(name) {
         'team-work-accept-v2',
         'team-finish',
         'team-message-send',
+        'team-work-request-changes',
       ]
     : [
         'team-state',
@@ -1013,7 +1095,11 @@ try {
     }),
     {
       singleRunDebug: true,
-      ...(scriptedRuntime ? { debugRuntime: new ScriptedRuntime() } : {}),
+      ...(scriptedRuntime
+        ? {
+            debugRuntime: (scriptedRuntimeInstance = new ScriptedRuntime()),
+          }
+        : {}),
       deferTeamWakeReconcile: true,
     },
   );
@@ -1940,27 +2026,23 @@ try {
   );
   assert(
     runtimeSessions.rowCount === 3 &&
-      runtimeSessions.rows
-        .filter((row) => row.role !== 'lead')
-        .every((row) => row.runtime_session_id) &&
-      runtimeSessions.rows.find((row) => row.role === 'lead')
-        ?.runtime_session_id === null,
+      runtimeSessions.rows.every((row) => row.runtime_session_id),
     'runtime_session_link_missing',
   );
   const leadTaskBindings = await db.query(
-    `SELECT rs.id,rs.provider_agent_id
+    `SELECT DISTINCT rs.id,rs.provider_agent_id,rs.paseo_workspace_id,rs.task_id,
+            sls.workspace_id,sls.tool_refs
        FROM runtime_sessions rs
        JOIN tasks t ON t.id=rs.task_id
+       JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
       WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
-        AND rs.scope_kind='task'
-      ORDER BY t.team_sequence`,
-    [rootTaskId],
+        AND rs.scope_kind='team_member' AND rs.scope_id=$2`,
+    [rootTaskId, lead.id],
   );
   assert(
-    leadTaskBindings.rowCount === 4 &&
-      leadTaskBindings.rows.every((row) => row.provider_agent_id) &&
-      new Set(leadTaskBindings.rows.map((row) => row.provider_agent_id))
-        .size === 4,
+    leadTaskBindings.rowCount === 1 &&
+      leadTaskBindings.rows[0].provider_agent_id &&
+      leadTaskBindings.rows[0].paseo_workspace_id,
     'lead_task_provider_bindings_invalid',
   );
   const teamChildRuns = await db.query(
@@ -2066,10 +2148,11 @@ try {
     const leadBindings = bindings.filter((call) => call.role === 'lead');
     assert(
       leadBindings.length === 4 &&
-        leadBindings.every((call) => call.operation === 'create') &&
+        leadBindings[0].operation === 'create' &&
+        leadBindings.slice(1).every((call) => call.operation === 'continue') &&
         new Set(leadBindings.map((call) => call.provider_binding_hash)).size ===
-          4,
-      'scripted_lead_task_runtime_not_fresh',
+          1,
+      'scripted_lead_member_runtime_not_reused',
     );
     const directBindings = bindings.filter((call) => call.role === 'direct');
     const observerBindings = bindings.filter(
@@ -2093,7 +2176,11 @@ try {
       'direct_runtime_session_not_continued',
     );
     const scriptedLeadTurns = runtimeCalls.filter(
-      (call) => call.role === 'lead' && Number.isInteger(call.turn),
+      (call) =>
+        call.role === 'lead' &&
+        Number.isInteger(call.turn) &&
+        !call.idle_same_client_rejected &&
+        !call.forbidden_rejected,
     );
     const scriptedMemberTurns = runtimeCalls.filter(
       (call) => call.role === 'member' && Number.isInteger(call.turn),
@@ -2115,7 +2202,7 @@ try {
     const leadCreates = created.filter((event) => leadRunIds.has(event.runId));
     const leadPromptSends = sent.filter((event) => leadRunIds.has(event.runId));
     assert(
-      leadCreates.length === 4 &&
+      leadCreates.length === 1 &&
         leadPromptSends.length === 4 &&
         created.filter((event) => memberRunIds.has(event.runId)).length === 2 &&
         sent.filter((event) => memberRunIds.has(event.runId)).length === 2,
@@ -2139,6 +2226,55 @@ try {
     ...paidLeadRuntimeEvidence,
     lead_turns: leadRunIds.size,
     member_attempt_runs: memberRunIds.size,
+  });
+  const leadRows = await db.query(
+    `SELECT t.id AS task_id,r.id AS run_id,r.status,t.team_sequence
+       FROM tasks t JOIN runs r ON r.task_id=t.id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+      ORDER BY t.team_sequence`,
+    [rootTaskId],
+  );
+  assert(leadRows.rowCount === 4, 'lead_task_run_count_invalid');
+  const leadTaskHashes = leadRows.rows.map((row) => hash(row.task_id));
+  const leadRunHashes = leadRows.rows.map((row) => hash(row.run_id));
+  const contextEpochHashes = leadRows.rows.map((row) =>
+    hash(`${row.task_id}:${row.run_id}`),
+  );
+  assert(
+    new Set(leadTaskHashes).size === 4 &&
+      new Set(leadRunHashes).size === 4 &&
+      new Set(contextEpochHashes).size === 4,
+    'lead_task_run_context_epoch_distinct_invalid',
+  );
+  const leadSession = leadTaskBindings.rows[0];
+  const canonicalLeadRefs = [
+    'agent-server/team-state',
+    'agent-server/team-work-list',
+    'agent-server/team-message-send',
+    'agent-server/team-work-create',
+    'agent-server/team-work-accept-v2',
+    'agent-server/team-work-request-changes',
+    'agent-server/team-finish',
+  ];
+  assert(
+    leadSession.task_id === leadRows.rows[0].task_id &&
+      sameUniqueRefs(leadSession.tool_refs, canonicalLeadRefs),
+    'lead_session_creating_task_or_catalog_invalid',
+  );
+  marker('PERSISTENT_LEAD_ACCEPTANCE', {
+    lead_runtime_session_distinct: 1,
+    lead_provider_agent_distinct: 1,
+    lead_paseo_workspace_distinct: 1,
+    lead_task_count: leadRows.rowCount,
+    lead_run_count: new Set(leadRunHashes).size,
+    lead_context_epoch_count: new Set(contextEpochHashes).size,
+    max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+    lead_provider_create: scriptedRuntime
+      ? 1
+      : paidLeadRuntimeEvidence.lead_provider_create_executions,
+    lead_prompt_sends_or_continues: 4,
+    lead_creating_task_matches_first: true,
+    lead_catalog_exact_seven: true,
   });
   const deliveredDirect = await db.query(
     `SELECT m.status,m.consumed_by_task_id,t.id AS task_id,r.id AS run_id,r.status AS run_status
@@ -2206,6 +2342,7 @@ try {
       member_attempt_runs: memberRunIds.size,
     },
   });
+  if (scriptedRuntime) await scriptedRuntimeInstance.assertLeadIdle();
   await evidence('passed');
 } catch (error) {
   const failure = smokeFailure(error);

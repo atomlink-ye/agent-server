@@ -61,6 +61,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         : {}),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
       allowedTools: input.toolRefs,
+      catalogTools: input.catalogTools ?? input.toolRefs,
     });
     let ownedReceipt = false;
     let receiptPath: string | undefined;
@@ -140,6 +141,14 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     readonly scopeId: string;
   }) {
     return this.#mcp.grants.getForTeamMember(input);
+  }
+
+  public revoke(grantId: string): void {
+    this.#mcp.grants.revoke(grantId);
+  }
+
+  public activeToolCalls(grantId: string): number {
+    return this.#mcp.grants.activeToolCalls(grantId);
   }
 }
 

@@ -79,10 +79,15 @@ provider/parent correlations or unsafe detail are quarantined rather than
 forwarded. This is a local streaming projection seam, not durable stream
 recovery, multi-writer ordering, or production backpressure.
 
-In Agent Teams v2, each Lead turn, Work attempt, and addressed continuation
-receives task-scoped RuntimeSession/RuntimeCell state. The Team's immutable
-configuration does not imply a shared Paseo Agent, Workspace, or runtime
-session across child Tasks.
+In Agent Teams v2, a Team member owns one member-scoped RuntimeSession and
+RuntimeCell across Lead continuations and Work attempts. The creating task is
+recorded as `runtime_sessions.task_id`; later Tasks never create a second
+session. The launch snapshot pins workspace, environment, agent version,
+resolved skills, and an immutable catalog (Lead exposes exactly seven
+canonical Team refs); each turn narrows dynamic grants to current policy.
+When a Lead turn returns, its grant is synchronously narrowed to zero tools
+before any persistence, so an idle bearer/client cannot invoke MCP until the
+next fenced continuation refreshes it.
 
 Direct Doc Accept uses the exact source Run+Session provider binding and fails
 closed when it is missing or belongs to the wrong Session. Paseo `0.1.110`

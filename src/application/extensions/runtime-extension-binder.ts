@@ -16,6 +16,7 @@ export interface RuntimeExtensionBinder {
     readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];
+    readonly catalogTools?: readonly string[];
   }): Promise<RuntimeExtensionBinding | undefined>;
 
   refreshForTeamMember?(input: {
@@ -27,10 +28,12 @@ export interface RuntimeExtensionBinder {
     readonly allowedTools: readonly string[];
     readonly contextEpoch: string;
     readonly ttlMs?: number;
-  }): unknown;
+  }): import('./runtime-tool-grant-service.js').RuntimeToolGrant;
 
   getTeamMemberGrant?(input: {
     readonly teamMemberRunId: string;
     readonly scopeId: string;
   }): import('./runtime-tool-grant-service.js').RuntimeToolGrant | null;
+  revoke?(grantId: string): void;
+  activeToolCalls?(grantId: string): number;
 }

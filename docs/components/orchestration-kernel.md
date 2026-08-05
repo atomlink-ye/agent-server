@@ -29,9 +29,13 @@ TeamMessage state drives bounded Lead turns, member work attempts, and
 addressed wakes. TeamRun, MemberRun, Work, and direct-message reads are
 owner-scoped. Members use the Team MCP tools and run in independent
 RuntimeSessions. The Lead may finish only after all Work is accepted and no
-attempt is active. Crash recovery, restart/resume, retries, cancellation,
-generalized reconciliation, approvals, budget propagation, and artifact/evidence
-orchestration remain out of scope.
+attempt is active. Dispatcher-idle maintenance periodically repairs queued Team
+wakes (sharing one in-flight callback across worker loops). If an active Team
+child Run lease expires, recovery locks the Team first and atomically fails the
+child and Team projection with stop reason `turn_lease_expired`; the expired Run
+is never reclaimed or re-executed.
+Successful in-flight resume, durable runtime grants, provider cancellation,
+retries, and generalized reconciliation remain deferred.
 
 ## Minimum Phase D interaction
 

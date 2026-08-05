@@ -61,6 +61,12 @@ Final Timeline catch-up reconciles delayed assistant, reasoning, child, and
 Tool tails. Tool and permission state moves monotonically, and sink writes are
 serialized and drained before execution returns.
 
+Nested provider-subagent activity is projected primarily from the existing
+agent-stream and provider-subagent update subscriptions. A wakeable five-second
+best-effort RPC reconcile repairs missed events; terminal execution wakes and
+joins that fallback before one final reconcile, so normal turns do not busy-poll
+the Paseo API.
+
 Only allowlisted scalar fields cross the boundary. Reasoning text is bounded and
 sanitized as cumulative display text; Tool detail is limited to safe kind/text
 and exit code; child rows are limited to assistant, Thinking, and Tool content.

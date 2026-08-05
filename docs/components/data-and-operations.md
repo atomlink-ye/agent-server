@@ -17,8 +17,11 @@ This component supplies durable storage, queue/outbox integration, audit, teleme
 There is no external queue service, durable event log beyond the current enqueue table, metrics backend, tracing backend, service-level objective, backup, or production deployment.
 
 Agent Teams v2 uses one immutable TeamVersion and task-scoped RuntimeSessions
-for Lead/member child Runs. It does not establish crash recovery,
-restart/resume, retries, cancellation propagation, or production durability.
+for Lead/member child Runs. It does not establish general restart/resume,
+retries, cancellation propagation, or production durability. The bounded
+fail-closed recovery path terminalizes an expired running Team child Run and its
+Team/root projection after locking the Team first; it does not resume a provider
+turn whose durable runtime grant cannot be reconstructed.
 
 ## V1 direction
 

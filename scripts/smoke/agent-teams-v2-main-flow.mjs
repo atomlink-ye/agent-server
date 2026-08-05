@@ -28,6 +28,7 @@ const runtimeTimeoutSeconds = Number(
 );
 const timeoutReserveSeconds = timeoutSeconds - runtimeTimeoutSeconds;
 const scriptedRuntime = process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
+const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
 const supportedPaidSmokeModels = new Set([
   'opencode-go/deepseek-v4-flash',
   'opencode-go/mimo-v2.5',
@@ -297,82 +298,86 @@ async function collectFailureDiagnostic(failure) {
     const team = teamRunId
       ? (
           await db.query(
-            `SELECT status,phase,control_state,revision,lead_turn_count,stop_reason
+            `SELECT id AS team_ref,status,phase,control_state,revision,lead_turn_count,stop_reason
                FROM team_runs WHERE id=$1`,
             [teamRunId],
           )
         ).rows[0]
       : undefined;
-    const rootRun = (
+    const members = (
       await db.query(
-        `SELECT r.id,r.status,r.error->>'code' AS error_code,r.error->>'message' AS error_message
-           FROM runs r JOIN tasks t ON t.id=r.task_id
-          WHERE t.id=$1`,
-        [rootTaskId],
+        `SELECT id AS member_ref,status,current_work_item_id AS work_ref
+           FROM team_member_runs WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
       )
-    ).rows[0];
+    ).rows;
+    const work = (
+      await db.query(
+        `SELECT id AS work_ref,status,execution_task_id AS task_ref
+           FROM team_work_items WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
+    const attempts = (
+      await db.query(
+        `SELECT id AS attempt_ref,status,work_item_id AS work_ref,assignee_member_id AS member_ref,
+                execution_task_id AS task_ref
+           FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
     const tasksAndRuns = (
       await db.query(
-        `SELECT t.id AS task_id,t.team_task_kind,t.team_sequence,t.status AS task_status,
-                t.updated_at AS task_updated_at,r.id AS run_id,r.status AS run_status,
-                r.updated_at AS run_updated_at,r.error->>'code' AS error_code,
-                r.error->>'message' AS error_message
+        `SELECT t.id AS task_ref,t.team_task_kind,t.status AS task_status,
+                r.id AS run_ref,r.status AS run_status,
+                (r.lease_owner IS NOT NULL) AS lease_present,
+                r.lease_expires_at,r.fencing_token,
+                (d.published_at IS NOT NULL) AS dispatch_published
            FROM tasks t
            LEFT JOIN runs r ON r.task_id=t.id
+           LEFT JOIN run_dispatches d ON d.run_id=r.id AND d.event_type='run.enqueue'
           WHERE t.root_task_id=$1
-          ORDER BY GREATEST(t.updated_at,COALESCE(r.updated_at,t.updated_at)) DESC
+          ORDER BY t.id,r.id
           LIMIT 32`,
         [rootTaskId],
       )
     ).rows.map((row) => ({
-      task_ref: row.task_id,
-      ...(row.run_id ? { run_ref: row.run_id } : {}),
+      task_ref: row.task_ref,
+      ...(row.run_ref ? { run_ref: row.run_ref } : {}),
       ...(row.team_task_kind ? { task_kind: row.team_task_kind } : {}),
-      ...(row.team_sequence === null || row.team_sequence === undefined
-        ? {}
-        : { sequence: row.team_sequence }),
       task_status: row.task_status,
       run_status: row.run_status ?? null,
-      updated_at: row.run_updated_at ?? row.task_updated_at,
-      ...(row.error_code || row.error_message
-        ? {
-            error: sanitizedErrorDetail({
-              code: row.error_code ?? 'runtime_error',
-              name: 'RunError',
-              message: row.error_message ?? row.error_code ?? 'run failed',
-            }),
-          }
-        : {}),
+      lease_present: row.lease_present ?? false,
+      lease_expires_at:
+        row.lease_expires_at instanceof Date
+          ? row.lease_expires_at.toISOString()
+          : row.lease_expires_at === null || row.lease_expires_at === undefined
+            ? null
+            : String(row.lease_expires_at),
+      activation_fence: row.fencing_token ?? null,
+      dispatch_published: row.dispatch_published ?? null,
     }));
+    const queuedMessages = (
+      await db.query(
+        `SELECT id AS message_ref,kind,status,consumed_by_task_id AS consumed_task_ref
+           FROM team_messages WHERE team_run_id=$1 AND status='queued' ORDER BY id
+           LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
     failureDiagnostic = {
       ...diagnostic,
       ...(team ? { team } : {}),
-      ...(rootRun
-        ? {
-            root_run: {
-              run_ref: rootRun.id,
-              status: rootRun.status,
-              ...(rootRun.error_code || rootRun.error_message
-                ? {
-                    error: sanitizedErrorDetail({
-                      code: rootRun.error_code ?? 'runtime_error',
-                      name: 'RunError',
-                      message:
-                        rootRun.error_message ??
-                        rootRun.error_code ??
-                        'run failed',
-                    }),
-                  }
-                : {}),
-            },
-          }
-        : {}),
+      members,
+      work,
+      attempts,
       tasks_and_runs: tasksAndRuns,
+      queued_messages: queuedMessages,
     };
   } catch (diagnosticError) {
     failureDiagnostic = {
       ...diagnostic,
-      diagnostic_query_error: sanitizedErrorDetail(diagnosticError),
+      diagnostic_query_failed: true,
     };
   }
   marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
@@ -1641,7 +1646,11 @@ try {
       observedIncrementalAcceptance = true;
   };
   await pollParallelism();
-  service.singleRunDebug.startDispatcher();
+  if (forceStall) {
+    marker('FORCED_STALL_DISPATCHER_SKIPPED');
+  } else {
+    service.singleRunDebug.startDispatcher();
+  }
   const terminal = await waitFor(
     async () => {
       await service.singleRunDebug.rebuildQueuedTeamWakes();

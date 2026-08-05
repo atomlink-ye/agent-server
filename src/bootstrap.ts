@@ -504,7 +504,36 @@ export async function createService(
     }),
     executeRun,
     logger,
-    { concurrency: config.dispatcher?.concurrency ?? 4 },
+    {
+      concurrency: config.dispatcher?.concurrency ?? 4,
+      onIdleMaintenance: async () => {
+        try {
+          const recovered =
+            await collaborativeTeamExecutions.recoverExpiredTeamRuns(
+              new Date().toISOString(),
+            );
+          for (const item of recovered) {
+            logger.log('warn', 'team.recovery.fail_closed', {
+              team_run_id: item.teamRunId,
+              child_run_id: item.childRunId,
+              team_task_kind: item.teamTaskKind,
+              affected_child_run_count: item.affectedChildRunCount,
+            });
+          }
+        } catch (error) {
+          logger.log('error', 'team.recovery.fail_closed_failed', {
+            error_name: error instanceof Error ? error.name : 'UnknownError',
+          });
+        }
+        try {
+          await teamWakeReconciler.reconcileQueuedWakeRoots();
+        } catch (error) {
+          logger.log('error', 'team.wake_reconcile_failed', {
+            error_name: error instanceof Error ? error.name : 'UnknownError',
+          });
+        }
+      },
+    },
   );
   let larkWorker: LarkIngressWorker | undefined;
   let larkOutboxWorker: LarkOutboxWorker | undefined;

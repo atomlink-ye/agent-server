@@ -4,6 +4,7 @@ import type {
   PaseoFinishedAgent,
 } from '../../src/adapters/paseo/paseo-client-port.js';
 import type { PaseoModelDescriptor } from '../../src/adapters/paseo/model-selector.js';
+import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
 export class FakePaseoClient implements PaseoClientPort {
   public connectCalls = 0;
@@ -45,7 +46,10 @@ export class FakePaseoClient implements PaseoClientPort {
     this.titleCalls += 1;
   }
 
-  public async listOpenCodeModels(): Promise<readonly PaseoModelDescriptor[]> {
+  public async listModels(
+    _provider: ManagedEnvironmentProvider,
+    _cwd: string,
+  ): Promise<readonly PaseoModelDescriptor[]> {
     this.listModelsCalls += 1;
     if (this.listModelsError) {
       throw this.listModelsError;
@@ -53,7 +57,9 @@ export class FakePaseoClient implements PaseoClientPort {
     return this.models;
   }
 
-  public async createOpenCodeAgent(): Promise<PaseoCreatedAgent> {
+  public async createAgent(_input: {
+    readonly provider: ManagedEnvironmentProvider;
+  }): Promise<PaseoCreatedAgent> {
     this.createAgentCalls += 1;
     return {
       id: 'agent-1',

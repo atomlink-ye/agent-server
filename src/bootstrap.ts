@@ -397,6 +397,7 @@ export async function createService(
     new PaseoRuntimeAdapter(
       {
         wsUrl: config.paseo.wsUrl,
+        provider: config.paseo.provider,
         cwd: config.paseo.agentCwd,
         workspaceTitle: config.paseo.workspaceTitle,
         ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),

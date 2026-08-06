@@ -2,6 +2,10 @@ import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+  MANAGED_ENVIRONMENT_PROVIDERS,
+  type ManagedEnvironmentProvider,
+} from '../domain/environments/managed-environment-package.js';
 import type { ServiceAccountRecord } from '../application/control-plane/service-account-authenticator.js';
 
 export type LarkCanaryEnabledConfig = Readonly<{
@@ -123,6 +127,7 @@ const ConfigSchema = z
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     SERVICE_NAME: z.string().min(1).default('agent-server'),
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
+    PASEO_PROVIDER: z.enum(MANAGED_ENVIRONMENT_PROVIDERS).default('opencode'),
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
     PASEO_RUNTIME_CELL_ROOT: z.string().min(1).default('.local/runtime-cells'),
     AGENT_SERVER_SKILL_REGISTRY_ROOT: z
@@ -250,6 +255,7 @@ export type AppConfig = Readonly<{
   };
   paseo: {
     wsUrl: string;
+    provider: ManagedEnvironmentProvider;
     agentCwd: string;
     runtimeCellRoot?: string;
     workspaceTitle: string;
@@ -330,6 +336,7 @@ export function loadConfig(
     },
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
+      provider: parsed.data.PASEO_PROVIDER,
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),
       runtimeCellRoot: resolve(
         workingDirectory,

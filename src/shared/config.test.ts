@@ -18,6 +18,7 @@ describe('loadConfig', () => {
       },
       paseo: {
         wsUrl: 'ws://127.0.0.1:6767/ws',
+        provider: 'opencode',
         agentCwd: '/repo/.local/agent-workspace',
         runtimeCellRoot: '/repo/.local/runtime-cells',
         workspaceTitle: 'Agent Server Baseline',

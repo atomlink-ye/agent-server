@@ -21,8 +21,20 @@ spec:
 ```
 
 Unknown fields and invalid values are rejected. The server canonicalizes the
-package and returns a SHA-256 fingerprint. The package fixes Paseo/OpenCode,
-the free-only model policy, and one Runtime Cell per RuntimeSession.
+package and returns a SHA-256 fingerprint. The package fixes the Paseo adapter,
+declared provider and free-only model policy, and one Runtime Cell per
+RuntimeSession.
+
+`spec.provider` is a closed union: `opencode|claude|codex`. The declared
+provider is package metadata; the effective runtime provider is the
+process-global deployment setting `PASEO_PROVIDER`, not an authoritative
+per-package or per-run choice. A declared provider may therefore differ from
+`PASEO_PROVIDER`; rejecting that mismatch requires additional plumbing and is a
+known limitation of this MVE.
+
+`modelPolicyRef: free-only` is a naming inaccuracy when an operator pins a paid
+provider through `PASEO_MODEL`. The operator pin is authoritative, and HTTP
+callers cannot choose models.
 
 ## Routes
 

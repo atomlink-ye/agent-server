@@ -7,13 +7,26 @@ import {
 } from '../agents/managed-agent-yaml.js';
 import { normalizeManagedAgentName } from '../agents/managed-agent-owner.js';
 
+export const MANAGED_ENVIRONMENT_PROVIDERS = [
+  'opencode',
+  'claude',
+  'codex',
+] as const;
+export type ManagedEnvironmentProvider =
+  (typeof MANAGED_ENVIRONMENT_PROVIDERS)[number];
+export const isManagedEnvironmentProvider = (
+  v: unknown,
+): v is ManagedEnvironmentProvider =>
+  typeof v === 'string' &&
+  (MANAGED_ENVIRONMENT_PROVIDERS as readonly string[]).includes(v);
+
 export interface ManagedEnvironmentPackage {
   readonly apiVersion: 'agent-server/v1alpha1';
   readonly kind: 'ManagedEnvironment';
   readonly metadata: { readonly name: string };
   readonly spec: {
     readonly adapter: 'paseo';
-    readonly provider: 'opencode';
+    readonly provider: ManagedEnvironmentProvider;
     readonly modelPolicyRef: 'free-only';
     readonly runtimeCellPolicy: 'per_runtime_session';
   };
@@ -89,7 +102,7 @@ export function parseManagedEnvironmentPackage(
     '$.spec',
   );
   if (raw.spec.adapter !== 'paseo') fail('invalid_adapter', '$.spec.adapter');
-  if (raw.spec.provider !== 'opencode')
+  if (!isManagedEnvironmentProvider(raw.spec.provider))
     fail('invalid_provider', '$.spec.provider');
   if (raw.spec.modelPolicyRef !== 'free-only')
     fail('model_policy_not_allowed', '$.spec.modelPolicyRef');

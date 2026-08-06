@@ -11,6 +11,7 @@ import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgr
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
 import type { PaseoClientPort } from '../../src/adapters/paseo/paseo-client-port.js';
+import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
 const owner = {
   tenantId: 'tenant-1',
@@ -88,8 +89,13 @@ describe('runtime memory PostgreSQL materialization', () => {
       connectionStatus: () => 'connected',
       openWorkspace: async () => 'workspace-1',
       setWorkspaceTitle: async () => undefined,
-      listOpenCodeModels: async () => [{ id: 'free/model', label: 'free' }],
-      createOpenCodeAgent: async () => {
+      listModels: async (
+        _provider: ManagedEnvironmentProvider,
+        _cwd: string,
+      ) => [{ id: 'free/model', label: 'free' }],
+      createAgent: async (_input: {
+        readonly provider: ManagedEnvironmentProvider;
+      }) => {
         creates += 1;
         return {
           id: 'agent-session-1',
@@ -111,6 +117,7 @@ describe('runtime memory PostgreSQL materialization', () => {
       {
         wsUrl: 'ws://test',
         cwd: '/tmp/runtime-memory-pglite',
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,

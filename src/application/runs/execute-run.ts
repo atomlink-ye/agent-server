@@ -5,6 +5,7 @@ import {
 } from '../../domain/runs/run.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import { transitionTask, type Task } from '../../domain/tasks/task.js';
+import { isManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import {
@@ -772,7 +773,7 @@ export class ExecuteRun {
         !environment ||
         environment.status !== 'published' ||
         spec?.adapter !== 'paseo' ||
-        spec.provider !== 'opencode' ||
+        !isManagedEnvironmentProvider(spec.provider) ||
         spec.modelPolicyRef !== 'free-only' ||
         spec.runtimeCellPolicy !== 'per_runtime_session'
       )

@@ -12,6 +12,7 @@ const baseConfig: AppConfig = {
   paseo: {
     wsUrl: 'ws://127.0.0.1:6767/ws',
     agentCwd: '/tmp/agent-server-test',
+    provider: 'opencode',
     workspaceTitle: 'test',
     connectTimeoutMs: 100,
     executionTimeoutMs: 1000,

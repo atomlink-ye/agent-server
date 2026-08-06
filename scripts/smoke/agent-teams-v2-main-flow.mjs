@@ -780,10 +780,14 @@ class ScriptedRuntime {
           marker('REWORK_TURN3_LIST_FAILED', sanitizedErrorDetail(error));
           throw error;
         }
-        const correctedWork = listedWork.find(
+        const workItems = Array.isArray(listedWork?.items)
+          ? listedWork.items
+          : [];
+        const correctedWork = workItems.find(
           (item) => item.work_ref === 'work-1',
         );
         marker('REWORK_TURN3_LISTED', {
+          work_list_items_shape: Array.isArray(listedWork?.items),
           work_found: Boolean(correctedWork),
           work_status: correctedWork?.status ?? null,
           latest_attempt_status: correctedWork?.latest_attempt?.status ?? null,

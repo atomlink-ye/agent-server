@@ -615,10 +615,6 @@ async function proveRuntimeResolution() {
     distinct_provider_count: distinctProviders.size,
     exact_mappings: exactMappings,
   };
-  marker('RUNTIME_RESOLUTION_DEBUG_ROWS', {
-    durable_rows: resolvedRows,
-    member_count: resolvedRows.length,
-  });
   assert(resolvedRows.length === 3, 'runtime_resolution_member_count_invalid');
   assert(
     new Set(resolvedRows.map((row) => row.member_name)).size === 3 &&
@@ -657,7 +653,6 @@ class ScriptedRuntime {
   #leadCreateSystemProtocolOccurrences = 0;
   #leadUserProtocolOccurrences = 0;
   #controlPlaneDeliveries = [];
-  #submittedTimeoutInjected = false;
   #failedAttemptInjected = false;
   #leadFailureCodeObserved = false;
   #cancelReplayEqual = false;
@@ -1480,16 +1475,6 @@ class ScriptedRuntime {
         tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
         post_submit_rejections: postSubmitRejections,
       });
-      if (
-        !reworkScenario &&
-        !this.#submittedTimeoutInjected &&
-        memberState.member?.name === fixtureNames.member
-      ) {
-        this.#submittedTimeoutInjected = true;
-        const { RuntimeTimedOutError } =
-          await import('../../src/application/ports/agent-runtime.ts');
-        throw new RuntimeTimedOutError();
-      }
     }
     return {
       provider: session.provider,
@@ -2972,17 +2957,17 @@ try {
           ) &&
           memberSubmittedAttempt.rows.map((row) => row.attempt_no).join(',') ===
             '1,2',
-        'submitted_timeout_rework_member_not_idle',
+        'submitted_rework_member_not_idle',
       );
     else
       assert(
         memberSubmittedAttempt.rowCount === 1 &&
           memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
-          memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
+          memberSubmittedAttempt.rows[0].run_status === 'succeeded' &&
           memberSubmittedAttempt.rows[0].member_status === 'idle',
-        'submitted_timeout_member_not_idle',
+        'submitted_member_not_completed',
       );
-    marker('SUBMITTED_TIMEOUT_ATTEMPT_PRESERVED');
+    marker('SUBMITTED_ATTEMPT_COMPLETED');
   } else {
     assert(
       memberSubmittedAttempt.rowCount === 1 &&

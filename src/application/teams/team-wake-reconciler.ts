@@ -11,6 +11,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TeamMessage } from '../../domain/teams/team-message.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import { formatTeamDeliveryPrompt } from '../context/runtime-prompts.js';
 
 export class TeamWakeReconciler {
   public constructor(
@@ -102,7 +103,12 @@ export class TeamWakeReconciler {
               )
             : undefined;
           if (!sender) continue;
-          const prompt = this.directPrompt(sender.name, message);
+          const prompt = this.directPrompt(
+            team.id,
+            member.name,
+            sender.name,
+            message,
+          );
           const task = createChildTask({
             tenantId: owner.tenantId,
             workspaceId: owner.workspaceId,
@@ -180,7 +186,19 @@ export class TeamWakeReconciler {
           continue;
         const rootTask = await this.tasks.findById(team.rootTaskId);
         if (!rootTask) throw new Error('Team root task is missing.');
-        const prompt = this.assignmentPrompt(message, attempt.attemptNo);
+        const sender = message.senderMemberRunId
+          ? members.find(
+              (candidate) => candidate.id === message.senderMemberRunId,
+            )
+          : undefined;
+        if (!sender) continue;
+        const prompt = this.assignmentPrompt(
+          team.id,
+          member.name,
+          sender.name,
+          message,
+          attempt.attemptNo,
+        );
         const task = createChildTask({
           tenantId: owner.tenantId,
           workspaceId: owner.workspaceId,
@@ -239,15 +257,33 @@ export class TeamWakeReconciler {
     }
   }
 
-  private assignmentPrompt(message: TeamMessage, attemptNo: number): string {
+  private assignmentPrompt(
+    teamId: string,
+    recipientName: string,
+    senderName: string,
+    message: TeamMessage,
+    attemptNo: number,
+  ): string {
     const body = message.body
       .replace(/[\u0000-\u001f\u007f]/gu, ' ')
       .trim()
       .slice(0, 512);
-    return `You are completing assigned Team work. Wake: ${body}. Attempt number: ${attemptNo}. Use the canonical Team tools to checkpoint and submit a concise result.`;
+    return formatTeamDeliveryPrompt({
+      teamId: teamId.slice(0, 8),
+      to: recipientName,
+      kind: attemptNo > 1 ? 'rework' : 'wake',
+      from: senderName,
+      sequence: message.sequence,
+      body: `You are completing assigned Team work. Wake: ${body}. Attempt number: ${attemptNo}. Use the canonical Team tools to checkpoint and submit a concise result.`,
+    });
   }
 
-  private directPrompt(senderName: string, message: TeamMessage): string {
+  private directPrompt(
+    teamId: string,
+    recipientName: string,
+    senderName: string,
+    message: TeamMessage,
+  ): string {
     const sender = senderName
       .replace(/[\u0000-\u001f\u007f]/gu, ' ')
       .replace(/\s+/gu, ' ')
@@ -258,7 +294,14 @@ export class TeamWakeReconciler {
       .replace(/\s+/gu, ' ')
       .trim()
       .slice(0, 512);
-    return `You received a direct Team message from ${sender}: ${body}\n\nAcknowledge or act on this message as appropriate. This delivery is not assigned Work: do not submit, review, accept, or otherwise change Work merely because of this message.`;
+    return formatTeamDeliveryPrompt({
+      teamId: teamId.slice(0, 8),
+      to: recipientName,
+      kind: 'direct',
+      from: senderName,
+      sequence: message.sequence,
+      body: `You received a direct Team message from ${sender}: ${body}\n\nAcknowledge or act on this message as appropriate. This delivery is not assigned Work: do not submit, review, accept, or otherwise change Work merely because of this message.`,
+    });
   }
 
   private logLostClaim(

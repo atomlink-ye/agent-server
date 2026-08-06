@@ -285,14 +285,12 @@ export function parseManagedAgentPackage(
   )
     fail('invalid_permissions');
   const completion = s.completion;
-  if (!isObject(completion)) fail('invalid_completion');
+  if (!isObject(completion)) fail('invalid_completion', '$.spec.completion');
   keys(completion, ['type', 'command'], '$.spec.completion');
-  if (
-    completion.type !== 'executable' ||
-    typeof completion.command !== 'string' ||
-    !completion.command.trim()
-  )
-    fail('invalid_completion');
+  if (completion.type !== 'executable')
+    fail('invalid_completion', '$.spec.completion.type');
+  if (typeof completion.command !== 'string' || !completion.command.trim())
+    fail('invalid_completion', '$.spec.completion.command');
   const packageValue: any = {
     apiVersion: raw.apiVersion,
     kind: raw.kind,

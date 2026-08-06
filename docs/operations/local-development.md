@@ -52,17 +52,18 @@ volumes and are never taken from host `node_modules` or host runtime homes.
 For deliberate host diagnostics, use an explicit `*-native` target. Configure
 an existing native daemon through `.env` or environment variables:
 
-| Variable                     | Default                       |
-| ---------------------------- | ----------------------------- |
-| `HOST`                       | `127.0.0.1`                   |
-| `PORT`                       | `3000`                        |
-| `PASEO_WS_URL`               | `ws://127.0.0.1:6767/ws`      |
-| `PASEO_AGENT_CWD`            | `.local/agent-workspace`      |
-| `PASEO_WORKSPACE_TITLE`      | `Agent Server Baseline`       |
-| `PASEO_MODEL`                | unset; free catalog selection |
-| `PASEO_CONNECT_TIMEOUT_MS`   | `10000`                       |
-| `PASEO_EXECUTION_TIMEOUT_MS` | `120000`                      |
-| `PASEO_RUNTIME_CELL_ROOT`    | `.local/runtime-cells`        |
+| Variable                              | Default                       |
+| ------------------------------------- | ----------------------------- |
+| `HOST`                                | `127.0.0.1`                   |
+| `PORT`                                | `3000`                        |
+| `PASEO_WS_URL`                        | `ws://127.0.0.1:6767/ws`      |
+| `PASEO_AGENT_CWD`                     | `.local/agent-workspace`      |
+| `PASEO_WORKSPACE_TITLE`               | `Agent Server Baseline`       |
+| `PASEO_MODEL`                         | unset; free catalog selection |
+| `PASEO_CONNECT_TIMEOUT_MS`            | `10000`                       |
+| `PASEO_EXECUTION_TIMEOUT_MS`          | `120000`                      |
+| `AGENT_SERVER_DISPATCHER_CONCURRENCY` | `4`                           |
+| `PASEO_RUNTIME_CELL_ROOT`             | `.local/runtime-cells`        |
 
 Never put provider or business credentials in `.env` for the baseline smoke. The external smoke is explicitly zero-model-credential.
 

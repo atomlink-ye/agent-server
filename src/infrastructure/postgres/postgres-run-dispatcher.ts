@@ -6,18 +6,25 @@ import type { Logger } from '../../shared/observability/logger.js';
 export interface PostgresRunDispatcherOptions {
   readonly pollIntervalMs?: number;
   readonly concurrency?: number;
+  readonly idleMaintenanceIntervalMs?: number;
+  readonly onIdleMaintenance?: () => Promise<void>;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 50;
+const DEFAULT_IDLE_MAINTENANCE_INTERVAL_MS = 5_000;
 
 export class PostgresRunDispatcher implements RunDispatcher {
   readonly #pollIntervalMs: number;
   readonly #concurrency: number;
+  readonly #idleMaintenanceIntervalMs: number;
+  readonly #onIdleMaintenance: (() => Promise<void>) | undefined;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #resolveDelays = new Set<() => void>();
   #running = false;
   #stopping = false;
   #loops: Promise<void>[] = [];
+  #maintenanceAt = 0;
+  #maintenanceInFlight: Promise<void> | null = null;
 
   public constructor(
     private readonly claimNextRun: ClaimNextRun,
@@ -27,8 +34,19 @@ export class PostgresRunDispatcher implements RunDispatcher {
   ) {
     this.#pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.#concurrency = options.concurrency ?? 1;
+    this.#idleMaintenanceIntervalMs =
+      options.idleMaintenanceIntervalMs ?? DEFAULT_IDLE_MAINTENANCE_INTERVAL_MS;
+    this.#onIdleMaintenance = options.onIdleMaintenance;
     if (!Number.isInteger(this.#concurrency) || this.#concurrency < 1) {
       throw new Error('Dispatcher concurrency must be a positive integer');
+    }
+    if (
+      !Number.isFinite(this.#idleMaintenanceIntervalMs) ||
+      this.#idleMaintenanceIntervalMs <= 0
+    ) {
+      throw new Error(
+        'Dispatcher idle maintenance interval must be a positive number',
+      );
     }
   }
 
@@ -39,6 +57,7 @@ export class PostgresRunDispatcher implements RunDispatcher {
 
     this.#running = true;
     this.#stopping = false;
+    this.#maintenanceAt = Date.now();
     this.#loops = Array.from({ length: this.#concurrency }, () =>
       this.runLoop(),
     );
@@ -53,6 +72,7 @@ export class PostgresRunDispatcher implements RunDispatcher {
     this.#resolveDelays.clear();
 
     await Promise.all(this.#loops);
+    if (this.#maintenanceInFlight) await this.#maintenanceInFlight;
     this.#loops = [];
   }
 
@@ -61,8 +81,36 @@ export class PostgresRunDispatcher implements RunDispatcher {
       const dispatched = await this.dispatchOnce();
 
       if (!dispatched && !this.#stopping) {
+        await this.runIdleMaintenance();
         await this.delay(this.#pollIntervalMs);
       }
+    }
+  }
+
+  private async runIdleMaintenance(): Promise<void> {
+    if (!this.#onIdleMaintenance) return;
+    const now = Date.now();
+    if (
+      this.#maintenanceInFlight ||
+      now - this.#maintenanceAt < this.#idleMaintenanceIntervalMs
+    )
+      return;
+    this.#maintenanceAt = now;
+    const maintenance = (async () => {
+      try {
+        await this.#onIdleMaintenance!();
+      } catch (error) {
+        this.logger.log('error', 'run.dispatch.idle_maintenance_failed', {
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      }
+    })();
+    this.#maintenanceInFlight = maintenance;
+    try {
+      await maintenance;
+    } finally {
+      if (this.#maintenanceInFlight === maintenance)
+        this.#maintenanceInFlight = null;
     }
   }
 

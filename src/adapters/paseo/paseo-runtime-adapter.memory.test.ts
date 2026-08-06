@@ -2,9 +2,13 @@ import { access, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PaseoRuntimeAdapter } from './paseo-runtime-adapter.js';
-import type { PaseoClientPort } from './paseo-client-port.js';
+import type {
+  PaseoAgentStreamEvent,
+  PaseoClientPort,
+  PaseoProviderSubagentUpdate,
+} from './paseo-client-port.js';
 import {
   RuntimeExecutionError,
   RuntimeTimedOutError,
@@ -175,6 +179,181 @@ describe('Paseo runtime same-agent continuation', () => {
       expect(creates).toBe(0);
     },
   );
+});
+
+describe('Paseo runtime nested provider telemetry', () => {
+  it('uses push updates without an eager fallback reconcile', async () => {
+    vi.useFakeTimers();
+    try {
+      let streamListener: ((event: PaseoAgentStreamEvent) => void) | undefined;
+      let providerListener:
+        ((update: PaseoProviderSubagentUpdate) => void) | undefined;
+      let resolveSend: (() => void) | undefined;
+      let resolveFinish:
+        | ((result: {
+            status: 'idle';
+            error: null;
+            lastMessage: string;
+          }) => void)
+        | undefined;
+      let listCalls = 0;
+      let fetchCalls = 0;
+      const finished = new Promise<{
+        status: 'idle';
+        error: null;
+        lastMessage: string;
+      }>((resolve) => {
+        resolveFinish = resolve;
+      });
+      const sent = new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      });
+      const events: unknown[] = [];
+      const runtime = new PaseoRuntimeAdapter(
+        {
+          wsUrl: 'ws://test',
+          cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+          workspaceTitle: 'test',
+          connectTimeoutMs: 1,
+          executionTimeoutMs: 30_000,
+        },
+        logger,
+        {
+          ...client(),
+          subscribeAgentStream: (listener) => {
+            streamListener = listener;
+            return () => undefined;
+          },
+          subscribeProviderSubagentUpdates: (listener) => {
+            providerListener = listener;
+            return () => undefined;
+          },
+          fetchAgentTimeline: async () => ({
+            epoch: 'epoch-1',
+            startCursor: null,
+            endCursor: null,
+            window: { minSeq: 0, maxSeq: 0, nextSeq: 1 },
+            entries: [],
+          }),
+          listProviderSubagents: async () => {
+            listCalls += 1;
+            return listCalls === 1
+              ? []
+              : [
+                  {
+                    id: 'child-1',
+                    parentAgentId: 'agent-1',
+                    status: 'running',
+                    title: 'Verify nested work',
+                    description: null,
+                    toolCallId: 'parent-call',
+                  },
+                ];
+          },
+          fetchProviderSubagentTimeline: async () => {
+            fetchCalls += 1;
+            return {
+              parentAgentId: 'agent-1',
+              subagentId: 'child-1',
+              epoch: 'epoch-1',
+              direction: 'tail',
+              rows: [
+                {
+                  item: {
+                    timelineItemType: 'assistant_message',
+                    assistantText: 'nested result',
+                  },
+                  timestamp: new Date().toISOString(),
+                  seq: 2,
+                },
+              ],
+              hasOlder: false,
+            };
+          },
+          sendAgentMessage: async () => {
+            resolveSend?.();
+          },
+          waitForFinish: async () => finished,
+        },
+      );
+      const execution = runtime.execute(
+        {
+          operation: 'create',
+          runId: 'nested-push',
+          prompt: 'run',
+          systemPrompt: '',
+        },
+        {
+          emit: (event) => {
+            events.push(event);
+          },
+        },
+      );
+
+      await sent;
+      expect(listCalls).toBe(1);
+      expect(fetchCalls).toBe(0);
+      streamListener?.({
+        agentId: 'agent-1',
+        eventType: 'timeline',
+        timestamp: new Date().toISOString(),
+        seq: 1,
+        epoch: 'epoch-1',
+        timelineItemType: 'tool',
+        toolCall: {
+          callId: 'parent-call',
+          name: 'delegate',
+          status: 'running',
+          input: { subAgentType: 'verifier' },
+        },
+      });
+      providerListener?.({
+        kind: 'upsert',
+        subagent: {
+          id: 'child-1',
+          parentAgentId: 'agent-1',
+          status: 'running',
+          title: 'Verify nested work',
+          description: null,
+          toolCallId: 'parent-call',
+        },
+      });
+      providerListener?.({
+        kind: 'timeline',
+        parentAgentId: 'agent-1',
+        subagentId: 'child-1',
+        epoch: 'epoch-1',
+        timestamp: new Date().toISOString(),
+        seq: 1,
+        item: {
+          timelineItemType: 'assistant_message',
+          assistantText: 'nested result',
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(listCalls).toBe(1);
+      expect(fetchCalls).toBe(0);
+
+      resolveFinish?.({ status: 'idle', error: null, lastMessage: 'done' });
+      await execution;
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_status',
+            category: 'subagent',
+            activityId: expect.any(String),
+            label: 'Sub-agent task: Verify nested work',
+          }),
+        ]),
+      );
+      expect(listCalls).toBe(2);
+      expect(fetchCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 const logger = { log: () => undefined };

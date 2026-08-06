@@ -24,6 +24,7 @@ import { TeamDriver } from '../teams/team-driver.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import { canonicalTeamToolRefsForRole } from '../teams/team-policy-evaluator.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
   createRuntimeExecutionReceipt,
@@ -81,7 +82,7 @@ describe('ExecuteRun', () => {
       { bind: binder } as never,
     );
 
-    await executeRun.execute(claim);
+    const out = await executeRun.execute(claim);
 
     expect(runtime.execute).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,7 +102,7 @@ describe('ExecuteRun', () => {
       expect.objectContaining({ providerAgentId: 'agent-prior' }),
     );
   });
-  it('recovers an agentic Lead turn with its task-scoped current-Run grant', async () => {
+  it('recovers an agentic Lead turn with its member-scoped current-Run grant', async () => {
     const claim = createClaim();
     const task = createChildTask({
       id: claim.taskId,
@@ -150,8 +151,19 @@ describe('ExecuteRun', () => {
       principalId: task.principalId,
       now: () => new Date('2026-07-23T00:00:00.000Z'),
     });
-    const getTeamMemberGrant = vi.fn(() => ({ runId: claim.run.id }));
-    const refreshForTeamMember = vi.fn();
+    const getTeamMemberGrant = vi.fn(() => ({
+      grantId: 'grant-1',
+      runId: 'prior-run-id',
+      allowedTools: [],
+      catalogTools: canonicalTeamToolRefsForRole('lead'),
+    }));
+    const refreshForTeamMember = vi.fn(() => ({
+      grantId: 'grant-1',
+      runId: claim.run.id,
+      allowedTools: [],
+      catalogTools: canonicalTeamToolRefsForRole('lead'),
+    }));
+    const activeToolCalls = vi.fn(() => 0);
     const runtime = createRuntimeWithCandidates('agent-prior');
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
@@ -164,6 +176,7 @@ describe('ExecuteRun', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => []),
       findAttemptsByTeamRunId: vi.fn(async () => []),
       updateMemberRunStatus: vi.fn(async () => lead),
+      updateMemberRuntimeSession: vi.fn(async () => lead),
     };
     const executeRun = new ExecuteRun(
       completeRun,
@@ -190,19 +203,22 @@ describe('ExecuteRun', () => {
         bind: vi.fn(),
         getTeamMemberGrant,
         refreshForTeamMember,
+        activeToolCalls,
+        revoke: vi.fn(),
       } as never,
       {
-        findByTask: vi.fn(async () => ({
+        findByTeamMember: vi.fn(async () => ({
           id: 'runtime-lead-1',
-          scopeKind: 'task',
-          scopeId: task.id,
+          scopeKind: 'team_member',
+          scopeId: lead.id,
           productSessionId: null,
           taskId: task.id,
           launchSnapshotId: 'launch-1',
+          workspaceId: task.workspaceId,
           agentVersionId: task.invokableVersionId,
           environmentVersionId: team.environmentVersionId,
           resolvedSkills: [],
-          toolRefs: [],
+          toolRefs: canonicalTeamToolRefsForRole('lead'),
           paseoWorkspaceId: 'workspace-provider-1',
           providerAgentId: 'agent-prior',
           createdAt: task.createdAt,
@@ -213,19 +229,25 @@ describe('ExecuteRun', () => {
       undefined,
       undefined,
       collaborativeExecutions as never,
-      { findByIdForOwner: vi.fn(async () => claim.run) } as never,
+      {
+        findByIdForOwner: vi.fn(async () => ({
+          ...claim.run,
+          id: 'prior-run-id',
+          status: 'succeeded',
+        })),
+      } as never,
     );
 
-    await executeRun.execute(claim);
+    const out = await executeRun.execute(claim);
 
     expect(getTeamMemberGrant).toHaveBeenCalledWith({
       teamMemberRunId: lead.id,
-      scopeId: task.id,
+      scopeId: lead.id,
     });
     expect(refreshForTeamMember).toHaveBeenCalledWith(
       expect.objectContaining({
         teamMemberRunId: lead.id,
-        scopeId: task.id,
+        scopeId: lead.id,
         taskId: task.id,
         runId: claim.run.id,
       }),
@@ -303,11 +325,32 @@ describe('ExecuteRun', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => []),
       failTeamRunAtomically,
     };
+    const admission = {
+      withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) =>
+        work({
+          teamExecutions: {
+            findMembersByTeamRunId: vi.fn(async () => [
+              {
+                id: 'lead-member',
+                role: 'lead',
+                agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+              },
+            ]),
+            advanceAgenticLead: vi.fn(async () => {
+              throw new TeamExecutionError('stale_state');
+            }),
+          },
+          tasks: {
+            findByRootTaskIdForOwner: vi.fn(async () => []),
+          },
+        }),
+      ),
+    };
     const driver = new TeamDriver(
       executions as never,
       {} as never,
       {} as never,
-      {} as never,
+      admission as never,
       undefined,
       undefined,
       now,
@@ -500,7 +543,16 @@ describe('ExecuteRun', () => {
         throw new TeamExecutionError('stale_state');
       return next;
     });
-    const txTasks = { save: vi.fn(async (_task: Task) => undefined) };
+    const committedLeadTasks: Task[] = [];
+    let pendingLeadTasks: Task[] = [];
+    const txTasks = {
+      save: vi.fn(async (task: Task) => {
+        pendingLeadTasks.push(task);
+      }),
+      findByRootTaskIdForOwner: vi.fn(async () =>
+        committedLeadTasks.map((task) => ({ task, latestRun: null })),
+      ),
+    };
     const txRuns = {
       save: vi.fn(async (_run: Run, _options: { taskId: string }) => undefined),
     };
@@ -509,16 +561,22 @@ describe('ExecuteRun', () => {
     });
     const admission = {
       withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) => {
-        await work({
-          teamExecutions: {
-            findMembersByTeamRunId: vi.fn(async () => [lead]),
-            advanceAgenticLead: txAdvance,
-          },
-          tasks: txTasks,
-          runs: txRuns,
-          enqueueRunDispatch,
-        });
-        committedControlState = next.controlState;
+        pendingLeadTasks = [];
+        try {
+          await work({
+            teamExecutions: {
+              findMembersByTeamRunId: vi.fn(async () => [lead]),
+              advanceAgenticLead: txAdvance,
+            },
+            tasks: txTasks,
+            runs: txRuns,
+            enqueueRunDispatch,
+          });
+          committedLeadTasks.push(...pendingLeadTasks);
+          committedControlState = next.controlState;
+        } finally {
+          pendingLeadTasks = [];
+        }
       }),
     };
     const driver = new TeamDriver(
@@ -568,7 +626,7 @@ describe('ExecuteRun', () => {
     await expect(
       driverWithSchedule.scheduleLead(team, parent, owner, 'review'),
     ).resolves.toBeUndefined();
-    expect(txAdvance).toHaveBeenCalledTimes(3);
+    expect(txAdvance).toHaveBeenCalledTimes(2);
     expect(txTasks.save).toHaveBeenCalledTimes(2);
     expect(txRuns.save).toHaveBeenCalledTimes(2);
     expect(enqueueRunDispatch).toHaveBeenCalledTimes(2);

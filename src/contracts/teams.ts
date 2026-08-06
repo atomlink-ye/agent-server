@@ -36,7 +36,7 @@ export const TeamVersionResponseSchema = z
               .object({ name: z.string().trim().min(1), agentVersionId: uuid })
               .strict(),
           )
-          .length(2),
+          .min(1),
         environmentVersionId: uuid,
       })
       .strict()

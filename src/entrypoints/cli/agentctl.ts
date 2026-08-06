@@ -21,6 +21,7 @@ import { planAgentProject } from '../../application/projects/plan-agent-project.
 import type { ProjectControlPlane } from '../../application/projects/project-control-plane.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import { AgentProjectApplyError } from '../../application/projects/apply-agent-project.js';
+import { LocalAgentProjectLoaderError } from '../../infrastructure/filesystem/local-agent-project-loader.js';
 
 const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_TEMPLATE_FILES = 1_000;
@@ -522,8 +523,15 @@ try {
           : 'CLI_FAILURE';
   const completed =
     error instanceof AgentProjectApplyError ? error.completed : undefined;
+  const details =
+    error instanceof LocalAgentProjectLoaderError
+      ? {
+          path: error.path,
+          message: error.message,
+        }
+      : {};
   process.stderr.write(
-    `${JSON.stringify({ error: { code }, ...(completed ? { completed } : {}) })}\n`,
+    `${JSON.stringify({ error: { code, ...details }, ...(completed ? { completed } : {}) })}\n`,
   );
   process.exitCode = 1;
 }

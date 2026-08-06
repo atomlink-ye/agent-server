@@ -1,11 +1,19 @@
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
+import {
+  canonicalTeamToolRefsForDirectMessage,
+  canonicalTeamToolRefsForRole,
+} from '../../domain/teams/canonical-team-role-tools.js';
+export {
+  canonicalTeamToolRefsForDirectMessage,
+  canonicalTeamToolRefsForRole,
+} from '../../domain/teams/canonical-team-role-tools.js';
 import type { TeamToolContext } from './team-tool-context.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 
 export const AGENTIC_TEAM_LIMITS = Object.freeze({
-  maxLeadTurns: 4,
+  maxLeadTurns: 8,
   maxWorkItems: 4,
   maxAttemptsPerItem: 2,
 });
@@ -33,11 +41,17 @@ export function deriveAgenticLeadCommandPolicy(
   attempts: readonly TeamWorkItemAttempt[],
 ): AgenticLeadCommandPolicy {
   const limits = {
-    maxLeadTurns: 4,
-    remainingLeadTurns: Math.max(0, 4 - team.leadTurnCount),
-    maxWorkItems: 4,
-    remainingWorkItems: Math.max(0, 4 - workItems.length),
-    maxAttemptsPerItem: 2,
+    maxLeadTurns: AGENTIC_TEAM_LIMITS.maxLeadTurns,
+    remainingLeadTurns: Math.max(
+      0,
+      AGENTIC_TEAM_LIMITS.maxLeadTurns - team.leadTurnCount,
+    ),
+    maxWorkItems: AGENTIC_TEAM_LIMITS.maxWorkItems,
+    remainingWorkItems: Math.max(
+      0,
+      AGENTIC_TEAM_LIMITS.maxWorkItems - workItems.length,
+    ),
+    maxAttemptsPerItem: AGENTIC_TEAM_LIMITS.maxAttemptsPerItem,
   };
   const none = () => ({
     allowedCommands: [] as const,
@@ -48,12 +62,7 @@ export function deriveAgenticLeadCommandPolicy(
   if (
     team.status !== 'active' ||
     team.controlState === 'terminal' ||
-    team.completionRequestedByRunId !== null ||
-    attempts.some(
-      (a) =>
-        a.status === 'running' ||
-        (a.status === 'queued' && a.executionTaskId !== null),
-    )
+    team.completionRequestedByRunId !== null
   )
     return none();
   if (limits.remainingLeadTurns === 0 && team.controlState !== 'lead_running')
@@ -72,7 +81,8 @@ export function deriveAgenticLeadCommandPolicy(
     if (!latest || latest.status !== 'completed' || !latest.resultSummary)
       continue;
     accept.push(item.id);
-    if (latest.attemptNo < 2) rework.push(item.id);
+    if (latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem)
+      rework.push(item.id);
   }
   const allowed: AgenticLeadCommand[] = [];
   if (accept.length) allowed.push('team_work_accept');
@@ -91,34 +101,7 @@ export function deriveAgenticLeadCommandPolicy(
 
 export type TeamPolicy = Readonly<{ allowedTools: readonly string[] }>;
 
-const canonicalTeamSafeReadToolRefs = Object.freeze([
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
-]);
-
-export function canonicalTeamToolRefsForRole(
-  role: 'lead' | 'member',
-): readonly string[] {
-  const read = [...canonicalTeamSafeReadToolRefs];
-  const actions =
-    role === 'lead'
-      ? [
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
-        ]
-      : [
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
-          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
-        ];
-  return Object.freeze([...read, ...actions]);
-}
-
-export function canonicalTeamToolRefsForDirectMessage(): readonly string[] {
-  return canonicalTeamSafeReadToolRefs;
-}
+const canonicalTeamSafeReadToolRefs = canonicalTeamToolRefsForDirectMessage();
 
 export function canonicalTeamToolRefsForLeadPolicy(
   policy: Pick<AgenticLeadCommandPolicy, 'allowedCommands'>,

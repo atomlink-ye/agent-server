@@ -27,12 +27,20 @@ const runtimeTimeoutSeconds = Number(
   process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS ?? '150',
 );
 const timeoutReserveSeconds = timeoutSeconds - runtimeTimeoutSeconds;
-const scriptedRuntime = process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
+const requestedScriptedRuntime =
+  process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
+const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
+const expiredLeaseRecovery =
+  process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
+const scriptedRuntime =
+  requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
 const supportedPaidSmokeModels = new Set([
   'opencode-go/deepseek-v4-flash',
   'opencode-go/mimo-v2.5',
   'opencode-go/glm-5.2',
 ]);
+if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
+  throw new Error('invalid_expired_lease_recovery');
 const requestedModel =
   process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
 const startedAt = Date.now();
@@ -68,12 +76,25 @@ let apiUrl;
 let rootTaskId;
 let teamRunId;
 let databaseUrl;
+let failureDiagnostic;
+class RecoveryComplete extends Error {}
+let scriptedRuntimeInstance;
 
 function assert(condition, code) {
   if (!condition) throw new Error(code);
 }
 function hash(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+function sameUniqueRefs(left, right) {
+  return (
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    new Set(left).size === left.length &&
+    new Set(right).size === right.length &&
+    right.every((ref) => left.includes(ref))
+  );
 }
 function normalizedProjectionKey(key) {
   return key.replace(/[^a-z0-9]/giu, '').toLowerCase();
@@ -161,7 +182,7 @@ function safe(value) {
   if (typeof value !== 'string') return value;
   return value
     .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
-    .replace(/\/(?:Users|Volumes)\/[^\s"']+/gu, '[path]')
+    .replace(/\/(?:Users|Volumes|tmp|workspace|app)\/[^\s"']+/gu, '[path]')
     .replace(/[\u0000-\u001f\u007f]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim()
@@ -176,15 +197,47 @@ function failureCode(error) {
     candidates.find(
       (candidate) =>
         typeof candidate === 'string' &&
-        /^[A-Za-z][A-Za-z0-9_]{0,127}$/u.test(candidate),
+        /^(?:[A-Za-z][A-Za-z0-9_]{0,127}|[0-9]{5})$/u.test(candidate),
     ) ?? 'unexpected_failure'
   );
 }
+function sanitizedErrorDetail(error) {
+  const source = error && typeof error === 'object' ? error : undefined;
+  const code =
+    typeof source?.code === 'string' &&
+    /^(?:[A-Za-z][A-Za-z0-9_]{0,127}|[0-9]{5})$/u.test(source.code)
+      ? source.code
+      : failureCode(error);
+  const name =
+    typeof source?.name === 'string'
+      ? source.name.replace(/[^A-Za-z0-9_.-]/gu, '_').slice(0, 96)
+      : 'Error';
+  const message = String(
+    source?.message ??
+      (typeof error === 'string' ? error : 'unexpected failure'),
+  )
+    .replace(/bearer\s+\S+/giu, 'bearer [redacted]')
+    .replace(
+      /\b(?:credential|token|password|secret|api[_ -]?key)\s*[:=]\s*\S+/giu,
+      '[redacted]',
+    )
+    .replace(/https?:\/\/[^\s"']+/giu, '[url]')
+    .replace(/\/(?:Users|Volumes|tmp|workspace|app)\/[^\s"']+/gu, '[path]')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 256);
+  return { code, name, message };
+}
 function smokeFailure(error) {
-  const code = failureCode(error);
-  return new Error(`SMOKE_MAIN_FLOW_FAILED:${code}`, {
-    cause: new Error(code),
-  });
+  const detail = sanitizedErrorDetail(error);
+  return Object.assign(
+    new Error(
+      `SMOKE_MAIN_FLOW_FAILED:${detail.code}:${detail.name}:${detail.message}`,
+      { cause: error },
+    ),
+    { code: detail.code, detail },
+  );
 }
 function marker(name, fields = {}) {
   const entry = safe({ marker: name, at: new Date().toISOString(), ...fields });
@@ -192,7 +245,10 @@ function marker(name, fields = {}) {
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 }
 async function evidence(result, error) {
-  if (error) stderr.push(JSON.stringify({ error_code: failureCode(error) }));
+  if (error)
+    stderr.push(
+      JSON.stringify({ error: error.detail ?? sanitizedErrorDetail(error) }),
+    );
   const manifest = safe({
     schema: 'agent-teams-v2-real-server-v1',
     result,
@@ -221,6 +277,7 @@ async function evidence(result, error) {
     },
     markers,
     runtime_calls: runtimeCalls,
+    ...(failureDiagnostic ? { failure_diagnostic: failureDiagnostic } : {}),
     credentials: scriptedRuntime ? '[absent]' : '[provided-redacted]',
     prompts: '[absent]',
     stderr_empty: stderr.length === 0,
@@ -244,6 +301,106 @@ async function evidence(result, error) {
     await chmod(target, 0o600);
   }
 }
+async function collectFailureDiagnostic(failure) {
+  const detail = failure?.detail ?? sanitizedErrorDetail(failure);
+  const diagnostic = {
+    error: detail,
+    ...(rootTaskId ? { root_task_ref: rootTaskId } : {}),
+    ...(teamRunId ? { team_run_ref: teamRunId } : {}),
+  };
+  if (!db || !rootTaskId) {
+    failureDiagnostic = diagnostic;
+    marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
+    return;
+  }
+  try {
+    const team = teamRunId
+      ? (
+          await db.query(
+            `SELECT id AS team_ref,status,phase,control_state,revision,lead_turn_count,stop_reason
+               FROM team_runs WHERE id=$1`,
+            [teamRunId],
+          )
+        ).rows[0]
+      : undefined;
+    const members = (
+      await db.query(
+        `SELECT id AS member_ref,status,current_work_item_id AS work_ref
+           FROM team_member_runs WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
+    const work = (
+      await db.query(
+        `SELECT id AS work_ref,status,execution_task_id AS task_ref
+           FROM team_work_items WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
+    const attempts = (
+      await db.query(
+        `SELECT id AS attempt_ref,status,work_item_id AS work_ref,assignee_member_id AS member_ref,
+                execution_task_id AS task_ref
+           FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY id LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
+    const tasksAndRuns = (
+      await db.query(
+        `SELECT t.id AS task_ref,t.team_task_kind,t.status AS task_status,
+                r.id AS run_ref,r.status AS run_status,
+                (r.lease_owner IS NOT NULL) AS lease_present,
+                r.lease_expires_at,r.fencing_token,
+                (d.published_at IS NOT NULL) AS dispatch_published
+           FROM tasks t
+           LEFT JOIN runs r ON r.task_id=t.id
+           LEFT JOIN run_dispatches d ON d.run_id=r.id AND d.event_type='run.enqueue'
+          WHERE t.root_task_id=$1
+          ORDER BY t.id,r.id
+          LIMIT 32`,
+        [rootTaskId],
+      )
+    ).rows.map((row) => ({
+      task_ref: row.task_ref,
+      ...(row.run_ref ? { run_ref: row.run_ref } : {}),
+      ...(row.team_task_kind ? { task_kind: row.team_task_kind } : {}),
+      task_status: row.task_status,
+      run_status: row.run_status ?? null,
+      lease_present: row.lease_present ?? false,
+      lease_expires_at:
+        row.lease_expires_at instanceof Date
+          ? row.lease_expires_at.toISOString()
+          : row.lease_expires_at === null || row.lease_expires_at === undefined
+            ? null
+            : String(row.lease_expires_at),
+      activation_fence: row.fencing_token ?? null,
+      dispatch_published: row.dispatch_published ?? null,
+    }));
+    const queuedMessages = (
+      await db.query(
+        `SELECT id AS message_ref,kind,status,consumed_by_task_id AS consumed_task_ref
+           FROM team_messages WHERE team_run_id=$1 AND status='queued' ORDER BY id
+           LIMIT 64`,
+        [teamRunId],
+      )
+    ).rows;
+    failureDiagnostic = {
+      ...diagnostic,
+      ...(team ? { team } : {}),
+      members,
+      work,
+      attempts,
+      tasks_and_runs: tasksAndRuns,
+      queued_messages: queuedMessages,
+    };
+  } catch (diagnosticError) {
+    failureDiagnostic = {
+      ...diagnostic,
+      diagnostic_query_failed: true,
+    };
+  }
+  marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
+}
 function value(result) {
   const output = result?.structuredContent;
   assert(
@@ -259,6 +416,54 @@ class ScriptedRuntime {
   #leadProviderBindings = new Set();
   #memberTurns = 0;
   #submittedTimeoutInjected = false;
+  #pendingLeadIdle = [];
+  async assertLeadIdle() {
+    await Promise.all(this.#pendingLeadIdle.splice(0));
+  }
+  scheduleLeadIdle(client, turn) {
+    this.#pendingLeadIdle.push(
+      new Promise((resolve, reject) => {
+        setImmediate(async () => {
+          try {
+            const listed = await client.listTools();
+            assert(
+              listed.tools.some((tool) => tool.name === 'team_state'),
+              `lead_turn_${turn}_catalog_disappeared`,
+            );
+            const response = await client.callTool({
+              name: 'team_state',
+              arguments: {},
+            });
+            assert(
+              response.structuredContent?.error === 'unauthorized',
+              `lead_turn_${turn}_idle_authority_not_narrowed`,
+            );
+            const mutation = await client.callTool({
+              name: 'team_work_create',
+              arguments: { subject: 'old-turn-forbidden', assignee: 'member' },
+            });
+            assert(
+              mutation.structuredContent?.error === 'unauthorized',
+              `lead_turn_${turn}_old_mutation_not_rejected`,
+            );
+            runtimeCalls.push({
+              role: 'lead',
+              turn,
+              idle_same_client_rejected: true,
+              old_turn_mutation_rejected: true,
+            });
+            marker('LEAD_IDLE_REJECTED', {
+              turn,
+              old_turn_mutation_rejected: true,
+            });
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }),
+    );
+  }
   async initialize() {}
   async health() {
     return {
@@ -269,6 +474,7 @@ class ScriptedRuntime {
     };
   }
   async execute(input) {
+    await this.assertLeadIdle();
     let providerAgentId = input.providerAgentId;
     let session;
     if (input.operation === 'create') {
@@ -300,19 +506,22 @@ class ScriptedRuntime {
     const tools = new Set(
       (await session.client.listTools()).tools.map((tool) => tool.name),
     );
-    const directOnlyTools = new Set(['team_state', 'team_work_list']);
-    const directTurn =
-      tools.has('team_state') &&
-      tools.has('team_work_list') &&
-      [...tools].every((tool) => directOnlyTools.has(tool)) &&
-      ![
-        'team_finish',
-        'team_work_accept',
-        'team_work_request_changes',
-        'team_work_create',
-        'team_work_checkpoint',
-        'team_work_submit',
-      ].some((tool) => tools.has(tool));
+    const assertForbidden = async (name, args, code) => {
+      const response = await session.client.callTool({ name, arguments: args });
+      marker('SCRIPTED_FORBIDDEN_RESPONSE', {
+        turn: this.#leadTurns,
+        tool: name,
+        response: safe(response.structuredContent ?? null),
+      });
+      assert(response.structuredContent?.error === 'unauthorized', code);
+      runtimeCalls.push({
+        role: 'lead',
+        turn: this.#leadTurns,
+        forbidden_rejected: true,
+        forbidden_tool: name,
+      });
+    };
+    const directTurn = input.prompt.includes('phase3-direct-sentinel');
     runtimeCalls.push({
       kind: 'runtime_binding',
       role: directTurn
@@ -329,16 +538,8 @@ class ScriptedRuntime {
         'direct_sentinel_not_observed',
       );
       assert(
-        !tools.has('team_work_checkpoint') && !tools.has('team_work_submit'),
-        'direct_turn_work_tools_granted',
-      );
-      assert(
-        !tools.has('team_message_send'),
-        'direct_turn_message_send_listed',
-      );
-      assert(
-        !tools.has('synthetic_stock_snapshot'),
-        'direct_turn_domain_tool_listed',
+        tools.has('team_state') && tools.has('team_work_list'),
+        'direct_turn_safe_reads_missing',
       );
       let domainDenied = false;
       try {
@@ -365,14 +566,25 @@ class ScriptedRuntime {
       });
     } else if (!tools.has('team_work_submit')) {
       this.#leadTurns += 1;
+      const expectedLeadCatalog = new Set([
+        'team_state',
+        'team_work_list',
+        'team_work_create',
+        'team_work_accept',
+        'team_work_request_changes',
+        'team_finish',
+        'team_message_send',
+      ]);
       assert(
-        input.operation === 'create',
-        `lead_turn_${this.#leadTurns}_not_fresh_runtime`,
+        expectedLeadCatalog.size === tools.size &&
+          [...expectedLeadCatalog].every((name) => tools.has(name)),
+        `lead_turn_${this.#leadTurns}_catalog_invalid`,
       );
-      assert(
-        !this.#leadProviderBindings.has(providerAgentId),
-        `lead_turn_${this.#leadTurns}_provider_binding_reused`,
-      );
+      if (this.#leadProviderBindings.size)
+        assert(
+          this.#leadProviderBindings.has(providerAgentId),
+          `lead_turn_${this.#leadTurns}_provider_binding_changed`,
+        );
       this.#leadProviderBindings.add(providerAgentId);
       assert(
         input.prompt.includes(
@@ -383,26 +595,32 @@ class ScriptedRuntime {
           ),
         'lead_control_protocol_missing',
       );
-      assert(
-        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
-          input.systemPrompt.includes('Golden-path review rubric'),
-        'lead_canonical_snapshot_accept_rubric_missing',
-      );
+      if (this.#leadTurns === 1)
+        assert(
+          input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+            input.systemPrompt.includes('Golden-path review rubric'),
+          'lead_canonical_snapshot_accept_rubric_missing',
+        );
       if (this.#leadTurns === 1)
         assert(tools.has('team_work_create'), 'lead_turn_1_create_missing');
       else
         assert(
-          !tools.has('team_work_create'),
-          `lead_turn_${this.#leadTurns}_create_granted`,
+          tools.has('team_work_create'),
+          `lead_turn_${this.#leadTurns}_catalog_missing_create`,
         );
       if (this.#leadTurns === 1) {
-        assert(!tools.has('team_finish'), 'finish_granted_on_empty_board');
+        await assertForbidden(
+          'team_finish',
+          {},
+          'finish_granted_on_empty_board',
+        );
         value(
           await session.client.callTool({
             name: 'team_work_create',
             arguments: {
               subject: 'A',
-              description: 'bounded A',
+              description:
+                'Immediately collect and submit the required canonical snapshot evidence without creating a child subagent.',
               assignee: 'member',
             },
           }),
@@ -412,16 +630,16 @@ class ScriptedRuntime {
             name: 'team_work_create',
             arguments: {
               subject: 'B',
-              description: 'bounded B',
+              description:
+                'Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence.',
               assignee: 'observer',
-              dependency_refs: ['work-1'],
             },
           }),
         );
         runtimeCalls.push({
           role: 'lead',
           turn: 1,
-          tools: ['create_A', 'create_B_dependency'],
+          tools: ['create_A', 'create_B_independent'],
           zero_work_finish_absent: true,
         });
       } else if (this.#leadTurns === 2) {
@@ -432,8 +650,13 @@ class ScriptedRuntime {
         assert(
           tools.has('team_work_accept') &&
             tools.has('team_work_request_changes') &&
-            !tools.has('team_work_create'),
+            tools.has('team_work_create'),
           'lead_review_tools_not_exact',
+        );
+        await assertForbidden(
+          'team_work_create',
+          { subject: 'forbidden', assignee: 'member' },
+          'lead_create_not_denied',
         );
         value(
           await session.client.callTool({
@@ -456,7 +679,11 @@ class ScriptedRuntime {
             ),
           'lead_review_coordination_contract_missing',
         );
-        assert(!tools.has('team_finish'), 'finish_granted_before_B_accept');
+        await assertForbidden(
+          'team_finish',
+          {},
+          'finish_granted_before_B_accept',
+        );
         value(
           await session.client.callTool({
             name: 'team_work_accept',
@@ -553,6 +780,7 @@ class ScriptedRuntime {
           tool: 'finish_after_direct_delivery',
         });
       }
+      this.scheduleLeadIdle(session.client, this.#leadTurns);
     } else {
       assert(tools.has('team_work_submit'), 'member_tools_missing');
       assert(!tools.has('team_message_send'), 'member_message_send_listed');
@@ -566,6 +794,16 @@ class ScriptedRuntime {
         'member_canonical_snapshot_args_missing',
       );
       this.#memberTurns += 1;
+      const memberState = value(
+        await session.client.callTool({ name: 'team_state', arguments: {} }),
+      );
+      const memberTurn = memberState.member?.name === 'observer' ? 2 : 1;
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          memberState.member?.name === 'observer' ? 1_000 : 200,
+        ),
+      );
       value(
         await session.client.callTool({
           name: 'synthetic_stock_snapshot',
@@ -575,7 +813,7 @@ class ScriptedRuntime {
           },
         }),
       );
-      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${this.#memberTurns}`;
+      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}`;
       value(
         await session.client.callTool({
           name: 'team_work_checkpoint',
@@ -635,11 +873,14 @@ class ScriptedRuntime {
       };
       runtimeCalls.push({
         role: 'member',
-        turn: this.#memberTurns,
+        turn: memberTurn,
         tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
         post_submit_rejections: postSubmitRejections,
       });
-      if (!this.#submittedTimeoutInjected && this.#memberTurns === 1) {
+      if (
+        !this.#submittedTimeoutInjected &&
+        memberState.member?.name === 'member'
+      ) {
         this.#submittedTimeoutInjected = true;
         const { RuntimeTimedOutError } =
           await import('../../src/application/ports/agent-runtime.ts');
@@ -702,9 +943,10 @@ async function queued(kind) {
 }
 function agentYaml(name) {
   const lead = name === 'lead';
+  const observer = name === 'observer';
   const instructions = lead
-    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member; then create Work B assigned to observer with dependency_refs ["work-1"]; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On a later turn, when both Work items are accepted and the direct message is delivered, call team_finish exactly once and stop. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
-    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. Only the original outer member may create at most one bounded domain child subagent. If you are any descendant, do not create another subagent; return findings to the original outer member. All descendants share this Team identity and context. The outer member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. A descendant may submit only if the outer member cannot. After the first successful submit, the whole tree must stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to observer with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
   const refs = lead
     ? [
         'team-state',
@@ -713,6 +955,7 @@ function agentYaml(name) {
         'team-work-accept-v2',
         'team-finish',
         'team-message-send',
+        'team-work-request-changes',
       ]
     : [
         'team-state',
@@ -726,8 +969,8 @@ function agentYaml(name) {
 function environmentYaml() {
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
-function teamYaml(lead, member, environment) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${member}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+function teamYaml(lead, member, observer, environment) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${observer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 }
 async function expectSqlState(query, values, code) {
   try {
@@ -860,7 +1103,11 @@ try {
     }),
     {
       singleRunDebug: true,
-      ...(scriptedRuntime ? { debugRuntime: new ScriptedRuntime() } : {}),
+      ...(scriptedRuntime
+        ? {
+            debugRuntime: (scriptedRuntimeInstance = new ScriptedRuntime()),
+          }
+        : {}),
       deferTeamWakeReconcile: true,
     },
   );
@@ -878,7 +1125,7 @@ try {
     [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
   );
   const agents = {};
-  for (const name of ['lead', 'member']) {
+  for (const name of ['lead', 'member', 'observer']) {
     const imported = await request('/api/v1/agents:import', {
       method: 'POST',
       body: { source: agentYaml(name) },
@@ -902,7 +1149,12 @@ try {
   const imported = await request('/api/v1/teams:import', {
     method: 'POST',
     body: {
-      source: teamYaml(agents.lead, agents.member, environment.version.id),
+      source: teamYaml(
+        agents.lead,
+        agents.member,
+        agents.observer,
+        environment.version.id,
+      ),
     },
     status: 201,
   });
@@ -946,6 +1198,291 @@ try {
     principalId,
   };
   const queryOnly = (client) => ({ query: client.query.bind(client) });
+  if (expiredLeaseRecovery === 'members') {
+    const { PostgresRunRepository } =
+      await import('../../src/infrastructure/postgres/postgres-run-repository.ts');
+    const { PostgresTeamExecutionRepository } =
+      await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+    const runsRepository = new PostgresRunRepository(queryOnly(db));
+    const teamRepository = new PostgresTeamExecutionRepository(queryOnly(db));
+    await service.singleRunDebug.claimAndExecute(await queued('lead_turn'));
+    const materializedWakes =
+      await service.singleRunDebug.rebuildQueuedTeamWakes();
+    assert(materializedWakes === 2, 'expired_member_wakes_not_materialized');
+    const workRuns = await db.query(
+      `SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt' AND r.status='queued' ORDER BY r.id`,
+      [rootTaskId],
+    );
+    assert(workRuns.rowCount === 2, 'expired_member_work_runs_missing');
+    const claimedMembers = [];
+    for (const row of workRuns.rows) {
+      const claimed = await runsRepository.claimQueuedById({
+        runId: row.id,
+        workerId: 'expired-member-recovery',
+        activationId: randomUUID(),
+        claimedAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+      });
+      assert(claimed, 'expired_member_claim_missing');
+      claimedMembers.push(claimed);
+    }
+    const running = await db.query(
+      `SELECT count(*)::int AS runs,
+              count(*) FILTER (WHERE a.status='running')::int AS attempts
+         FROM runs r JOIN tasks t ON t.id=r.task_id
+         LEFT JOIN team_work_item_attempts a ON a.execution_task_id=t.id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='work_attempt' AND r.status='running'`,
+      [rootTaskId],
+    );
+    assert(
+      running.rows[0].runs === 2 && running.rows[0].attempts === 2,
+      'expired_member_fixture_precondition_invalid',
+    );
+    marker('EXPIRED_CONCURRENT_MEMBER_LEASE_FIXTURE_ARMED', {
+      shape: 'members_two_running_leased',
+      process_restart_plumbing_covered: false,
+    });
+    const fixedNow = new Date(Date.now() + 600_000).toISOString();
+    const expiredAt = new Date(Date.parse(fixedNow) - 60_000).toISOString();
+    await db.query(
+      `UPDATE runs SET lease_expires_at=$1::timestamptz WHERE id=ANY($2::uuid[])`,
+      [expiredAt, claimedMembers.map((claim) => claim.run.id)],
+    );
+    const recovered = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    marker('EXPIRED_MEMBER_RECOVERY_RETURN', {
+      count: recovered.length,
+      affected: recovered.map((item) => item.affectedChildRunCount),
+      kinds: recovered.map((item) => item.teamTaskKind),
+    });
+    assert(
+      recovered.length === 1 &&
+        recovered[0].teamTaskKind === 'work_attempt' &&
+        recovered[0].affectedChildRunCount === 2,
+      'expired_member_recovery_invalid',
+    );
+    const replay = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(replay.length === 0, 'expired_member_recovery_not_idempotent');
+    const facts = (
+      await db.query(
+        `SELECT team.status AS team_status,team.stop_reason,root_t.status AS root_task_status,root_r.status AS root_run_status FROM team_runs team JOIN tasks root_t ON root_t.id=team.root_task_id JOIN runs root_r ON root_r.task_id=root_t.id WHERE team.id=$1`,
+        [teamRunId],
+      )
+    ).rows[0];
+    const childTasks = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL AND status NOT IN ('completed','failed','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childRuns = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL ORDER BY id`,
+        [rootTaskId],
+      )
+    ).rows;
+    const activeAttempts = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM team_work_item_attempts a JOIN tasks t ON t.id=a.execution_task_id WHERE t.root_task_id=$1 AND a.status IN ('queued','running')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const triggerRunId = recovered[0].childRunId;
+    const siblingRunId = claimedMembers.find(
+      (claim) => claim.run.id !== triggerRunId,
+    ).run.id;
+    const memberStatuses = (
+      await db.query(`SELECT id,status FROM runs WHERE id=ANY($1)`, [
+        [triggerRunId, siblingRunId],
+      ])
+    ).rows;
+    const triggerStatus = memberStatuses.find(
+      (row) => row.id === triggerRunId,
+    )?.status;
+    const siblingStatus = memberStatuses.find(
+      (row) => row.id === siblingRunId,
+    )?.status;
+    const memberAttemptStatuses = (
+      await db.query(
+        `SELECT execution_task_id,status FROM team_work_item_attempts WHERE execution_task_id=ANY($1)`,
+        [claimedMembers.map((claim) => claim.taskId)],
+      )
+    ).rows;
+    const recoveredChildTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE id=ANY($1) ORDER BY id`,
+        [claimedMembers.map((claim) => claim.taskId)],
+      )
+    ).rows;
+    assert(
+      facts.team_status === 'failed' &&
+        facts.root_task_status === 'failed' &&
+        facts.root_run_status === 'failed' &&
+        facts.stop_reason === 'turn_lease_expired' &&
+        childTasks === 0 &&
+        childRuns === 0 &&
+        activeAttempts === 0 &&
+        childTaskStatuses.length > 0 &&
+        childTaskStatuses.every((row) =>
+          ['completed', 'failed', 'cancelled'].includes(row.status),
+        ) &&
+        recoveredChildTaskStatuses.length === 2 &&
+        recoveredChildTaskStatuses.every((row) => row.status === 'failed') &&
+        triggerStatus === 'timed_out' &&
+        siblingStatus === 'failed' &&
+        memberAttemptStatuses.length === 2 &&
+        memberAttemptStatuses.every((row) => row.status === 'failed'),
+      'expired_member_terminal_state_invalid',
+    );
+    marker('EXPIRED_CONCURRENT_MEMBER_LEASE_RECOVERY_PROVEN', {
+      trigger_status: triggerStatus,
+      sibling_status: siblingStatus,
+      attempt_statuses: memberAttemptStatuses.map((row) => row.status),
+      root_task_status: facts.root_task_status,
+      root_run_status: facts.root_run_status,
+      team_status: facts.team_status,
+      stop_reason: facts.stop_reason,
+      child_task_statuses: childTaskStatuses.map((row) => row.status),
+      recovered_child_task_statuses: recoveredChildTaskStatuses.map(
+        (row) => row.status,
+      ),
+      affected_count: recovered[0].affectedChildRunCount,
+      nonterminal_task_count: childTasks,
+      nonterminal_run_count: childRuns,
+      nonterminal_attempt_count: activeAttempts,
+      replay_recovery_count: replay.length,
+    });
+    marker('EXPIRED_LEASE_RECOVERY_IN_PROCESS_PROVEN', {
+      mode: 'members',
+      process_restart_plumbing_covered: false,
+    });
+    throw new RecoveryComplete();
+  }
+  if (expiredLeaseRecovery === 'lead') {
+    const { PostgresRunRepository } =
+      await import('../../src/infrastructure/postgres/postgres-run-repository.ts');
+    const { PostgresTeamExecutionRepository } =
+      await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+    const runsRepository = new PostgresRunRepository(queryOnly(db));
+    const teamRepository = new PostgresTeamExecutionRepository(queryOnly(db));
+    const leadRunId = await queued('lead_turn');
+    const claimed = await runsRepository.claimQueuedById({
+      runId: leadRunId,
+      workerId: 'expired-lease-recovery',
+      activationId: randomUUID(),
+      claimedAt: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+    });
+    assert(claimed, 'expired_lead_claim_missing');
+    const precondition = await db.query(
+      `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn' AND r.status='running' AND r.lease_expires_at IS NOT NULL`,
+      [rootTaskId],
+    );
+    assert(
+      precondition.rows[0].count === 1,
+      'expired_lead_fixture_precondition_invalid',
+    );
+    marker('EXPIRED_LEAD_LEASE_FIXTURE_ARMED', {
+      shape: 'lead_one_running_leased',
+      process_restart_plumbing_covered: false,
+    });
+    const fixedNow = new Date(Date.now() + 600_000).toISOString();
+    const expiredAt = new Date(Date.parse(fixedNow) - 60_000).toISOString();
+    await db.query(
+      `UPDATE runs SET lease_expires_at=$1::timestamptz WHERE id=$2`,
+      [expiredAt, leadRunId],
+    );
+    const recovered = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(
+      recovered.length === 1 &&
+        recovered[0].teamTaskKind === 'lead_turn' &&
+        recovered[0].affectedChildRunCount === 1,
+      'expired_lead_recovery_invalid',
+    );
+    const replay = await teamRepository.recoverExpiredTeamRuns(fixedNow);
+    assert(replay.length === 0, 'expired_lead_recovery_not_idempotent');
+    const facts = (
+      await db.query(
+        `SELECT team.status AS team_status,team.stop_reason,root_t.status AS root_task_status,root_r.status AS root_run_status FROM team_runs team JOIN tasks root_t ON root_t.id=team.root_task_id JOIN runs root_r ON root_r.task_id=root_t.id WHERE team.id=$1`,
+        [teamRunId],
+      )
+    ).rows[0];
+    const childTasks = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL AND status NOT IN ('completed','failed','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childRuns = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const childTaskStatuses = (
+      await db.query(
+        `SELECT id,status FROM tasks WHERE root_task_id=$1 AND team_task_kind IS NOT NULL ORDER BY id`,
+        [rootTaskId],
+      )
+    ).rows;
+    const activeAttempts = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM team_work_item_attempts a JOIN tasks t ON t.id=a.execution_task_id WHERE t.root_task_id=$1 AND a.status IN ('queued','running')`,
+        [rootTaskId],
+      )
+    ).rows[0].count;
+    const leadTriggerStatus = (
+      await db.query(`SELECT status FROM runs WHERE id=$1`, [
+        recovered[0].childRunId,
+      ])
+    ).rows[0]?.status;
+    const leadSiblingStatuses = (
+      await db.query(
+        `SELECT r.status FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn' AND r.id<>$2 ORDER BY r.id`,
+        [rootTaskId, recovered[0].childRunId],
+      )
+    ).rows.map((row) => row.status);
+    assert(
+      facts.team_status === 'failed' &&
+        facts.root_task_status === 'failed' &&
+        facts.root_run_status === 'failed' &&
+        facts.stop_reason === 'turn_lease_expired' &&
+        childTasks === 0 &&
+        childRuns === 0 &&
+        activeAttempts === 0 &&
+        childTaskStatuses.length > 0 &&
+        childTaskStatuses.every((row) => row.status === 'failed') &&
+        leadTriggerStatus === 'timed_out' &&
+        leadSiblingStatuses.every((status) => status === 'failed'),
+      'expired_lead_terminal_state_invalid',
+    );
+    marker('EXPIRED_LEAD_LEASE_RECOVERY_PROVEN', {
+      trigger_status: leadTriggerStatus,
+      sibling_status: leadSiblingStatuses,
+      root_task_status: facts.root_task_status,
+      root_run_status: facts.root_run_status,
+      team_status: facts.team_status,
+      stop_reason: facts.stop_reason,
+      child_task_statuses: childTaskStatuses.map((row) => row.status),
+      affected_count: recovered[0].affectedChildRunCount,
+      nonterminal_task_count: childTasks,
+      nonterminal_run_count: childRuns,
+      nonterminal_attempt_count: activeAttempts,
+      replay_recovery_count: replay.length,
+    });
+    marker('EXPIRED_LEASE_RECOVERY_IN_PROCESS_PROVEN', {
+      mode: 'lead',
+      process_restart_plumbing_covered: false,
+    });
+    throw new RecoveryComplete();
+  }
   await service.singleRunDebug.claimAndExecute(await queued('lead_turn'));
   const { PostgresAdmissionRepository } =
     await import('../../src/infrastructure/postgres/postgres-admission-repository.ts');
@@ -1411,23 +1948,92 @@ try {
   marker('TERMINAL_TASK_NONTERMINAL_RUN_FENCES_ENFORCED');
   const blocked = await service.singleRunDebug.rebuildQueuedTeamWakes();
   const blockedAgain = await service.singleRunDebug.rebuildQueuedTeamWakes();
-  assert(blocked === 1 && blockedAgain === 0, 'dependency_reconcile_invalid');
+  marker('INDEPENDENT_RECONCILE_COUNTS', {
+    blocked,
+    blocked_again: blockedAgain,
+  });
+  assert(blocked === 2 && blockedAgain === 0, 'independent_reconcile_invalid');
   const b = await db.query(
     'SELECT a.status,a.execution_task_id,m.status AS message_status FROM team_work_item_attempts a JOIN team_messages m ON m.attempt_id=a.id WHERE a.team_run_id=$1 AND a.attempt_no=1 AND a.assignee_member_id=$2',
     [teamRunId, observer.id],
   );
   assert(
     b.rowCount === 1 &&
-      b.rows[0].status === 'queued' &&
-      b.rows[0].execution_task_id === null &&
-      b.rows[0].message_status === 'queued',
-    'dependency_blocked_not_queued',
+      b.rows[0].status === 'running' &&
+      b.rows[0].execution_task_id &&
+      b.rows[0].message_status === 'consumed',
+    'independent_attempt_not_materialized',
   );
-  marker('DEPENDENCY_BLOCKED_ZERO_WRITE');
-  service.singleRunDebug.startDispatcher();
+  marker('INDEPENDENT_ATTEMPTS_MATERIALIZED');
+  const workProof = (
+    await db.query(
+      'SELECT id FROM team_work_items WHERE team_run_id=$1 ORDER BY created_at,id',
+      [teamRunId],
+    )
+  ).rows;
+  assert(workProof.length === 2, 'parallel_work_proof_missing');
+  let maxNonterminalLeadTurns = 0;
+  let observedMemberOverlap = false;
+  let observedIncrementalAcceptance = false;
+  const pollParallelism = async () => {
+    const leadCount = Number(
+      (
+        await db.query(
+          `SELECT count(*)::int AS count FROM tasks
+             WHERE root_task_id=$1 AND team_task_kind='lead_turn'
+               AND status NOT IN ('completed','failed','cancelled')`,
+          [rootTaskId],
+        )
+      ).rows[0]?.count ?? 0,
+    );
+    maxNonterminalLeadTurns = Math.max(maxNonterminalLeadTurns, leadCount);
+    assert(leadCount <= 1, 'live_lead_turn_mutex_exceeded');
+    const memberRuns = (
+      await db.query(
+        `SELECT a.work_item_id,r.status,
+                min(e.created_at) FILTER (WHERE e.type='started') AS started_at,
+                max(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed','cancelled')) AS terminal_at
+           FROM team_work_item_attempts a
+           JOIN tasks t ON t.id=a.execution_task_id
+           JOIN runs r ON r.task_id=t.id
+           LEFT JOIN run_events e ON e.run_id=r.id
+          WHERE a.team_run_id=$1 GROUP BY a.work_item_id,r.id,r.status`,
+        [teamRunId],
+      )
+    ).rows;
+    if (memberRuns.filter((row) => row.status === 'running').length >= 2)
+      observedMemberOverlap = true;
+    const accept = (
+      await db.query(
+        `SELECT c.created_at FROM team_command_receipts c
+          JOIN runs r ON r.id=c.source_run_id
+          JOIN tasks t ON t.id=r.task_id
+          WHERE t.root_task_id=$1 AND command_name='team_work_accept'
+            AND result_json->>'work_item_id'=$2
+          ORDER BY c.created_at LIMIT 1`,
+        [rootTaskId, workProof[0].id],
+      )
+    ).rows[0];
+    const work2 = memberRuns.find(
+      (row) => row.work_item_id === workProof[1].id,
+    );
+    if (
+      accept &&
+      work2?.status &&
+      !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(work2.status)
+    )
+      observedIncrementalAcceptance = true;
+  };
+  await pollParallelism();
+  if (forceStall) {
+    marker('FORCED_STALL_DISPATCHER_SKIPPED');
+  } else {
+    service.singleRunDebug.startDispatcher();
+  }
   const terminal = await waitFor(
     async () => {
       await service.singleRunDebug.rebuildQueuedTeamWakes();
+      await pollParallelism();
       const row = (
         await db.query('SELECT status,phase FROM team_runs WHERE id=$1', [
           teamRunId,
@@ -1449,18 +2055,107 @@ try {
     'team_terminal_timeout',
   );
   await service.singleRunDebug.stopDispatcher();
+  await pollParallelism();
   assert(terminal.phase === 'done', 'team_phase_not_done');
   const attempts = await db.query(
     'SELECT status,execution_task_id FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY created_at',
     [teamRunId],
   );
+  const terminalAttemptStatuses = new Set(['completed', 'failed']);
+  assert(attempts.rowCount >= 2, 'attempt_count_invalid');
   assert(
-    attempts.rowCount === 2 &&
-      attempts.rows.every(
-        (row) => row.status === 'completed' && row.execution_task_id,
-      ),
-    'attempts_not_terminal',
+    attempts.rows.every((row) => row.execution_task_id),
+    'attempt_execution_task_missing',
   );
+  assert(
+    attempts.rows.every((row) => terminalAttemptStatuses.has(row.status)),
+    'attempt_status_not_terminal',
+  );
+  const durableMemberIntervals = (
+    await db.query(
+      `SELECT a.work_item_id,
+              min(e.created_at) FILTER (WHERE e.type='started') AS started_at,
+              max(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed','cancelled')) AS terminal_at
+         FROM team_work_item_attempts a
+         JOIN tasks t ON t.id=a.execution_task_id
+         JOIN runs r ON r.task_id=t.id
+         JOIN run_events e ON e.run_id=r.id
+        WHERE a.team_run_id=$1 GROUP BY a.work_item_id`,
+      [teamRunId],
+    )
+  ).rows;
+  const intervalA = durableMemberIntervals.find(
+    (row) => row.work_item_id === workProof[0].id,
+  );
+  const intervalB = durableMemberIntervals.find(
+    (row) => row.work_item_id === workProof[1].id,
+  );
+  assert(
+    intervalA?.started_at &&
+      intervalA.terminal_at &&
+      intervalB?.started_at &&
+      intervalB.terminal_at &&
+      new Date(intervalA.started_at) < new Date(intervalB.terminal_at) &&
+      new Date(intervalB.started_at) < new Date(intervalA.terminal_at),
+    'durable_member_intervals_do_not_overlap',
+  );
+  const durableLeadIntervals = (
+    await db.query(
+      `SELECT t.team_sequence,t.created_at,t.updated_at
+         FROM tasks t
+        WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+        ORDER BY t.team_sequence`,
+      [rootTaskId],
+    )
+  ).rows;
+  for (let index = 1; index < durableLeadIntervals.length; index += 1)
+    assert(
+      new Date(durableLeadIntervals[index - 1].updated_at) <=
+        new Date(durableLeadIntervals[index].created_at),
+      'historical_lead_turn_intervals_overlap',
+    );
+  const acceptA = (
+    await db.query(
+      `SELECT c.created_at FROM team_command_receipts c
+        JOIN runs r ON r.id=c.source_run_id
+        JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1 AND command_name='team_work_accept'
+          AND result_json->>'work_item_id'=$2
+        ORDER BY c.created_at LIMIT 1`,
+      [rootTaskId, workProof[0].id],
+    )
+  ).rows[0];
+  marker('PARALLEL_INCREMENTAL_DIAGNOSTICS', {
+    interval_a: intervalA,
+    interval_b: intervalB,
+    accept_a_at: acceptA?.created_at,
+    observed_member_overlap: observedMemberOverlap,
+    observed_incremental_acceptance: observedIncrementalAcceptance,
+    max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+  });
+  assert(maxNonterminalLeadTurns <= 1, 'lead_turn_mutex_history_invalid');
+  const incrementalAcceptanceTiming = Boolean(
+    acceptA &&
+    intervalB?.started_at &&
+    intervalB.terminal_at &&
+    new Date(intervalB.started_at) < new Date(acceptA.created_at) &&
+    new Date(acceptA.created_at) < new Date(intervalB.terminal_at),
+  );
+  if (observedIncrementalAcceptance && incrementalAcceptanceTiming) {
+    marker('PARALLEL_INCREMENTAL_LEAD_PROVEN', {
+      max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+      member_intervals_overlap: true,
+      accepted_work_1_while_work_2_running: true,
+    });
+  } else {
+    marker('PARALLEL_INCREMENTAL_ACCEPTANCE_NOT_OBSERVED', {
+      available_timing: Boolean(
+        acceptA && intervalB?.started_at && intervalB.terminal_at,
+      ),
+      observed_incremental_acceptance: observedIncrementalAcceptance,
+      timing_match: incrementalAcceptanceTiming,
+    });
+  }
   const memberSubmittedAttempt = await db.query(
     `SELECT a.status AS attempt_status,r.status AS run_status,m.status AS member_status
        FROM team_work_item_attempts a
@@ -1507,10 +2202,18 @@ try {
     [teamRunId, work.rows[0].id],
     '23514',
   );
+  await db.query(
+    'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$3,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
+    [teamRunId, work.rows[1].id, work.rows[0].id],
+  );
   await expectSqlState(
     'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) SELECT $1,$2,$3,tenant_id,workspace_id,principal_type,principal_id FROM team_runs WHERE id=$1',
     [teamRunId, work.rows[1].id, work.rows[0].id],
     '23505',
+  );
+  await db.query(
+    'DELETE FROM team_work_item_dependencies WHERE team_run_id=$1 AND work_item_id=$2 AND depends_on_work_item_id=$3',
+    [teamRunId, work.rows[1].id, work.rows[0].id],
   );
   await expectSqlState(
     'INSERT INTO team_work_item_dependencies(team_run_id,work_item_id,depends_on_work_item_id,tenant_id,workspace_id,principal_type,principal_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
@@ -1616,27 +2319,23 @@ try {
   );
   assert(
     runtimeSessions.rowCount === 3 &&
-      runtimeSessions.rows
-        .filter((row) => row.role !== 'lead')
-        .every((row) => row.runtime_session_id) &&
-      runtimeSessions.rows.find((row) => row.role === 'lead')
-        ?.runtime_session_id === null,
+      runtimeSessions.rows.every((row) => row.runtime_session_id),
     'runtime_session_link_missing',
   );
   const leadTaskBindings = await db.query(
-    `SELECT rs.id,rs.provider_agent_id
+    `SELECT DISTINCT rs.id,rs.provider_agent_id,rs.paseo_workspace_id,rs.task_id,
+            sls.workspace_id,sls.tool_refs
        FROM runtime_sessions rs
        JOIN tasks t ON t.id=rs.task_id
+       JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
       WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
-        AND rs.scope_kind='task'
-      ORDER BY t.team_sequence`,
-    [rootTaskId],
+        AND rs.scope_kind='team_member' AND rs.scope_id=$2`,
+    [rootTaskId, lead.id],
   );
   assert(
-    leadTaskBindings.rowCount === 4 &&
-      leadTaskBindings.rows.every((row) => row.provider_agent_id) &&
-      new Set(leadTaskBindings.rows.map((row) => row.provider_agent_id))
-        .size === 4,
+    leadTaskBindings.rowCount === 1 &&
+      leadTaskBindings.rows[0].provider_agent_id &&
+      leadTaskBindings.rows[0].paseo_workspace_id,
     'lead_task_provider_bindings_invalid',
   );
   const teamChildRuns = await db.query(
@@ -1742,10 +2441,11 @@ try {
     const leadBindings = bindings.filter((call) => call.role === 'lead');
     assert(
       leadBindings.length === 4 &&
-        leadBindings.every((call) => call.operation === 'create') &&
+        leadBindings[0].operation === 'create' &&
+        leadBindings.slice(1).every((call) => call.operation === 'continue') &&
         new Set(leadBindings.map((call) => call.provider_binding_hash)).size ===
-          4,
-      'scripted_lead_task_runtime_not_fresh',
+          1,
+      'scripted_lead_member_runtime_not_reused',
     );
     const directBindings = bindings.filter((call) => call.role === 'direct');
     const observerBindings = bindings.filter(
@@ -1769,7 +2469,11 @@ try {
       'direct_runtime_session_not_continued',
     );
     const scriptedLeadTurns = runtimeCalls.filter(
-      (call) => call.role === 'lead' && Number.isInteger(call.turn),
+      (call) =>
+        call.role === 'lead' &&
+        Number.isInteger(call.turn) &&
+        !call.idle_same_client_rejected &&
+        !call.forbidden_rejected,
     );
     const scriptedMemberTurns = runtimeCalls.filter(
       (call) => call.role === 'member' && Number.isInteger(call.turn),
@@ -1791,7 +2495,7 @@ try {
     const leadCreates = created.filter((event) => leadRunIds.has(event.runId));
     const leadPromptSends = sent.filter((event) => leadRunIds.has(event.runId));
     assert(
-      leadCreates.length === 4 &&
+      leadCreates.length === 1 &&
         leadPromptSends.length === 4 &&
         created.filter((event) => memberRunIds.has(event.runId)).length === 2 &&
         sent.filter((event) => memberRunIds.has(event.runId)).length === 2,
@@ -1815,6 +2519,55 @@ try {
     ...paidLeadRuntimeEvidence,
     lead_turns: leadRunIds.size,
     member_attempt_runs: memberRunIds.size,
+  });
+  const leadRows = await db.query(
+    `SELECT t.id AS task_id,r.id AS run_id,r.status,t.team_sequence
+       FROM tasks t JOIN runs r ON r.task_id=t.id
+      WHERE t.root_task_id=$1 AND t.team_task_kind='lead_turn'
+      ORDER BY t.team_sequence`,
+    [rootTaskId],
+  );
+  assert(leadRows.rowCount === 4, 'lead_task_run_count_invalid');
+  const leadTaskHashes = leadRows.rows.map((row) => hash(row.task_id));
+  const leadRunHashes = leadRows.rows.map((row) => hash(row.run_id));
+  const contextEpochHashes = leadRows.rows.map((row) =>
+    hash(`${row.task_id}:${row.run_id}`),
+  );
+  assert(
+    new Set(leadTaskHashes).size === 4 &&
+      new Set(leadRunHashes).size === 4 &&
+      new Set(contextEpochHashes).size === 4,
+    'lead_task_run_context_epoch_distinct_invalid',
+  );
+  const leadSession = leadTaskBindings.rows[0];
+  const canonicalLeadRefs = [
+    'agent-server/team-state',
+    'agent-server/team-work-list',
+    'agent-server/team-message-send',
+    'agent-server/team-work-create',
+    'agent-server/team-work-accept-v2',
+    'agent-server/team-work-request-changes',
+    'agent-server/team-finish',
+  ];
+  assert(
+    leadSession.task_id === leadRows.rows[0].task_id &&
+      sameUniqueRefs(leadSession.tool_refs, canonicalLeadRefs),
+    'lead_session_creating_task_or_catalog_invalid',
+  );
+  marker('PERSISTENT_LEAD_ACCEPTANCE', {
+    lead_runtime_session_distinct: 1,
+    lead_provider_agent_distinct: 1,
+    lead_paseo_workspace_distinct: 1,
+    lead_task_count: leadRows.rowCount,
+    lead_run_count: new Set(leadRunHashes).size,
+    lead_context_epoch_count: new Set(contextEpochHashes).size,
+    max_nonterminal_lead_turns: maxNonterminalLeadTurns,
+    lead_provider_create: scriptedRuntime
+      ? 1
+      : paidLeadRuntimeEvidence.lead_provider_create_executions,
+    lead_prompt_sends_or_continues: 4,
+    lead_creating_task_matches_first: true,
+    lead_catalog_exact_seven: true,
   });
   const deliveredDirect = await db.query(
     `SELECT m.status,m.consumed_by_task_id,t.id AS task_id,r.id AS run_id,r.status AS run_status
@@ -1882,17 +2635,24 @@ try {
       member_attempt_runs: memberRunIds.size,
     },
   });
+  if (scriptedRuntime) await scriptedRuntimeInstance.assertLeadIdle();
   await evidence('passed');
 } catch (error) {
-  const failure = smokeFailure(error);
-  try {
-    await evidence('blocked', failure);
-  } catch {
-    process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
+  if (error instanceof RecoveryComplete) {
+    await evidence('passed');
+  } else {
+    const failure = smokeFailure(error);
+    try {
+      await collectFailureDiagnostic(failure);
+      await evidence('blocked', failure);
+    } catch {
+      process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
+    }
+    throw failure;
   }
-  throw failure;
 } finally {
-  await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
+  if (!expiredLeaseRecovery)
+    await service?.singleRunDebug?.stopDispatcher?.().catch(() => undefined);
   await new Promise((done) => api?.close?.(() => done()) ?? done()).catch(
     () => undefined,
   );

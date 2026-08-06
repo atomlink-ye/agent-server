@@ -134,14 +134,8 @@ export function createDirectMemoryMcpHandler(input: {
         input,
         input.grants,
       );
-      const refreshRegisteredTools = (allowedTools: readonly string[]) => {
-        for (const [toolRef, registration] of registeredTools) {
-          const shouldEnable = allowedTools.includes(toolRef);
-          if (registration.enabled === shouldEnable) continue;
-          if (shouldEnable) registration.enable();
-          else registration.disable();
-        }
-      };
+      const refreshRegisteredTools = (_allowedTools: readonly string[]) =>
+        undefined;
       let refreshTeamTools: (allowedTools: readonly string[]) => void = () =>
         undefined;
       if (
@@ -152,7 +146,7 @@ export function createDirectMemoryMcpHandler(input: {
       ) {
         refreshTeamTools = registerTeamMcpTools(
           server,
-          grant.allowedTools,
+          grant.catalogTools,
           (toolRef) => input.grants.isToolAllowed(grant.grantId, toolRef),
           {
             resolve: (currentGrant) =>
@@ -168,8 +162,7 @@ export function createDirectMemoryMcpHandler(input: {
         );
       }
       refreshTools = (allowedTools) => {
-        refreshRegisteredTools(allowedTools);
-        refreshTeamTools(allowedTools);
+        void allowedTools;
       };
     }
     const newSession = !existing;
@@ -185,7 +178,6 @@ export function createDirectMemoryMcpHandler(input: {
         await server.connect(
           transport as unknown as Parameters<typeof server.connect>[0],
         );
-      refreshTools(grant.allowedTools);
       await transport.handleRequest(req, res, body);
     } catch {
       if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });
@@ -216,27 +208,25 @@ function registerTools(
   },
   grants: RuntimeToolGrantService,
 ): Map<string, RegisteredTool> {
-  const registrations = new Map<string, RegisteredTool>();
   const register = (
     toolRef: string,
     name: string,
     config: any,
     operation: (args: any, currentGrant: RuntimeToolGrant) => unknown,
   ) => {
-    registrations.set(
-      toolRef,
-      (server.registerTool as any)(name, config, async (args: any) => {
-        const currentGrant = grants.get(grant.grantId);
-        if (
-          !currentGrant ||
-          !grants.isToolAllowed(currentGrant.grantId, toolRef)
-        )
-          return notFound();
-        return operation(args, currentGrant);
-      }),
-    );
+    (server.registerTool as any)(name, config, async (args: any) => {
+      const currentGrant = grants.get(grant.grantId);
+      if (!currentGrant || !grants.isToolAllowed(currentGrant.grantId, toolRef))
+        return notFound();
+      grants.beginToolCall(currentGrant.grantId);
+      try {
+        return await operation(args, currentGrant);
+      } finally {
+        grants.endToolCall(currentGrant.grantId);
+      }
+    });
   };
-  if (grant.allowedTools.includes(AGENT_SERVER_MEMORY_READ_TOOL_REF)) {
+  if (grant.catalogTools.includes(AGENT_SERVER_MEMORY_READ_TOOL_REF)) {
     register(
       AGENT_SERVER_MEMORY_READ_TOOL_REF,
       AGENT_SERVER_MEMORY_READ_MCP_NAME,
@@ -251,7 +241,7 @@ function registerTools(
   }
   const market = input.market ?? new SyntheticMarketAdapter();
   if (
-    grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF)
+    grant.catalogTools.includes(AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF)
   )
     register(
       AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
@@ -267,7 +257,7 @@ function registerTools(
           input.logger,
         ),
     );
-  if (grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
+  if (grant.catalogTools.includes(AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF))
     register(
       AGENT_SERVER_SYNTHETIC_EVENT_BATCH_TOOL_REF,
       'synthetic_event_batch',
@@ -283,7 +273,7 @@ function registerTools(
         ),
     );
   if (
-    grant.allowedTools.includes(AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF)
+    grant.catalogTools.includes(AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF)
   )
     register(
       AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,
@@ -300,7 +290,7 @@ function registerTools(
         ),
     );
   if (
-    grant.allowedTools.includes(
+    grant.catalogTools.includes(
       AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
     ) &&
     input.createLearningProposal
@@ -321,7 +311,7 @@ function registerTools(
           input.teamTools,
         ),
     );
-  return registrations;
+  return new Map();
 }
 
 async function readMemory(

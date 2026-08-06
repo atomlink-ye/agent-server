@@ -103,8 +103,8 @@ export function rehydrateTeamVersion(snapshot: TeamVersion): TeamVersion {
     snapshot.spec.lead.agentVersionId,
     'Team version',
   );
-  if (snapshot.spec.roster.length !== 2)
-    throw new Error('Team version roster must contain exactly two members');
+  if (snapshot.spec.roster.length < 1)
+    throw new Error('Team version roster must contain at least one member');
   const memberNames = new Set([snapshot.spec.lead.name]);
   for (const [index, member] of snapshot.spec.roster.entries()) {
     assertNonEmptyString(`roster[${index}].name`, member.name, 'Team version');

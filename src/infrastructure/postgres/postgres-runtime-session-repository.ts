@@ -53,8 +53,14 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
       ],
     );
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2`,
-      [input.teamMemberRunId, input.tenantId],
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND sls.workspace_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
+      [
+        input.teamMemberRunId,
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+      ],
     );
     if (!result.rows?.[0])
       throw new Error('Team member runtime session could not be created.');
@@ -67,10 +73,11 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     >[0],
   ): Promise<RuntimeSession | null> {
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='team_member' AND rs.scope_id=$1 AND rs.tenant_id=$2 AND sls.workspace_id=$3 AND rs.principal_type=$4 AND rs.principal_id=$5`,
       [
         input.teamMemberRunId,
         input.tenantId,
+        input.workspaceId,
         input.principalType,
         input.principalId,
       ],
@@ -85,7 +92,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
   ): Promise<RuntimeSession> {
     const now = new Date().toISOString();
     const existing = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [
         input.productSessionId,
         input.tenantId,
@@ -126,7 +133,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
       ],
     );
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [
         input.productSessionId,
         input.tenantId,
@@ -143,7 +150,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     input: Parameters<RuntimeSessionRepository['findByProductSession']>[0],
   ) {
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.scope_kind='product_session' AND rs.product_session_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [
         input.productSessionId,
         input.tenantId,
@@ -159,7 +166,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
   ): Promise<RuntimeSession> {
     const now = new Date().toISOString();
     const existing = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
        FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
        WHERE rs.scope_kind='task' AND rs.task_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [input.taskId, input.tenantId, input.principalType, input.principalId],
@@ -200,7 +207,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
       ],
     );
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
        FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
        WHERE rs.scope_kind='task' AND rs.task_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [input.taskId, input.tenantId, input.principalType, input.principalId],
@@ -214,7 +221,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     input: Parameters<RuntimeSessionRepository['findByTask']>[0],
   ): Promise<RuntimeSession | null> {
     const result = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs
        FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
        WHERE rs.scope_kind='task' AND rs.task_id=$1 AND rs.tenant_id=$2 AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [input.taskId, input.tenantId, input.principalType, input.principalId],
@@ -226,7 +233,7 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     input: Parameters<RuntimeSessionRepository['bindProvider']>[0],
   ) {
     const result = await this.db.query(
-      `UPDATE runtime_sessions SET paseo_workspace_id=$2, provider_agent_id=$3, updated_at=$4 WHERE id=$1 RETURNING *`,
+      `UPDATE runtime_sessions SET paseo_workspace_id=$2, provider_agent_id=$3, updated_at=$4 WHERE id=$1 AND paseo_workspace_id IS NULL AND provider_agent_id IS NULL RETURNING *`,
       [
         input.id,
         input.paseoWorkspaceId,
@@ -234,10 +241,21 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
         new Date().toISOString(),
       ],
     );
-    if (!result.rows?.[0])
-      throw new Error('Runtime session could not be bound.');
+    if (!result.rows?.[0]) {
+      const existing = await this.db.query(
+        `SELECT paseo_workspace_id, provider_agent_id FROM runtime_sessions WHERE id=$1`,
+        [input.id],
+      );
+      const row = existing.rows?.[0];
+      if (
+        !row ||
+        row.paseo_workspace_id !== input.paseoWorkspaceId ||
+        row.provider_agent_id !== input.providerAgentId
+      )
+        throw new Error('Runtime session binding conflict.');
+    }
     const joined = await this.db.query(
-      `SELECT rs.*, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.id=$1`,
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id, sls.environment_version_id, sls.resolved_skills, sls.tool_refs FROM runtime_sessions rs JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id WHERE rs.id=$1`,
       [input.id],
     );
     if (!joined.rows?.[0])
@@ -250,6 +268,7 @@ function map(row: any): RuntimeSession {
   return {
     id: row.id,
     scopeKind: row.scope_kind,
+    workspaceId: row.workspace_id,
     scopeId:
       row.scope_kind === 'task'
         ? row.task_id

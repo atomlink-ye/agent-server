@@ -27,27 +27,14 @@ export function registerTeamMcpTools(
   authorize: (toolRef: string) => boolean,
   context: CanonicalTeamToolContext,
 ): (allowedTools: readonly string[]) => void {
-  const registrations = new Map<string, RegisteredTool>();
+  const catalog = new Set(allowedTools);
   const register = <Input extends z.ZodRawShape>(
     ref: string,
     name: string,
     config: { inputSchema: Input } & Record<string, unknown>,
     operation: (args: z.infer<z.ZodObject<Input>>) => unknown,
   ) => {
-    const registration = (server.registerTool as any)(
-      name,
-      config,
-      operation,
-    ) as RegisteredTool;
-    registrations.set(ref, registration);
-  };
-  const refresh = (currentAllowedTools: readonly string[]) => {
-    for (const [ref, registration] of registrations) {
-      const shouldEnable = currentAllowedTools.includes(ref);
-      if (registration.enabled === shouldEnable) continue;
-      if (shouldEnable) registration.enable();
-      else registration.disable();
-    }
+    (server.registerTool as any)(name, config, operation) as RegisteredTool;
   };
   const current = (
     ref: string,
@@ -74,7 +61,7 @@ export function registerTeamMcpTools(
     );
   };
   const canonical = (ref: string, name: string, config: any, operation: any) =>
-    register(ref, name, config, operation);
+    catalog.has(ref) && register(ref, name, config, operation);
 
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
@@ -216,8 +203,7 @@ export function registerTeamMcpTools(
         context.commands.submit(ctx, input),
       ),
   );
-  refresh(allowedTools);
-  return refresh;
+  return () => undefined;
 }
 
 async function result(value: Promise<unknown>) {

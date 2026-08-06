@@ -1098,10 +1098,33 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         }
       }
     };
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    let wakeFallback: (() => void) | undefined;
+    const waitForFallback = async (): Promise<void> => {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+            fallbackTimer = undefined;
+          }
+          if (wakeFallback === finish) wakeFallback = undefined;
+          resolve();
+        };
+        wakeFallback = finish;
+        fallbackTimer = setTimeout(finish, 5_000);
+        fallbackTimer.unref?.();
+      });
+    };
     const pollNestedActivity = async (): Promise<void> => {
+      // Push subscriptions are the primary telemetry path. The slow fallback
+      // starts with a full interval so a normal turn does not issue an eager RPC.
       while (nestedPolling && acceptingTurnActivity) {
+        await waitForFallback();
+        if (!nestedPolling || !acceptingTurnActivity) break;
         await reconcileNestedActivity(false);
-        await delay(250);
       }
     };
     const isAfterBaseline = (
@@ -1355,6 +1378,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         nestedPolling = false;
         streamReady = false;
         deferParentTerminals = true;
+        wakeFallback?.();
         await nestedPollPromise;
         await reconcileNestedActivity(true);
         flushDeferredParentTerminals();
@@ -1369,6 +1393,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       nestedPolling = false;
       streamReady = false;
       deferParentTerminals = true;
+      wakeFallback?.();
       await nestedPollPromise;
       await reconcileNestedActivity(true);
       if (this.#client.fetchAgentTimeline) {

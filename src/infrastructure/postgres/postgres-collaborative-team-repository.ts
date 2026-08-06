@@ -13,6 +13,7 @@ import {
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import { AGENTIC_TEAM_LIMITS } from '../../application/teams/team-policy-evaluator.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -379,6 +380,274 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       if ('release' in client && typeof client.release === 'function')
         client.release();
     }
+  }
+  public async recoverExpiredTeamRuns(now: string): Promise<
+    readonly {
+      readonly teamRunId: string;
+      readonly childRunId: string;
+      readonly teamTaskKind: 'lead_turn' | 'work_attempt';
+      readonly affectedChildRunCount: number;
+    }[]
+  > {
+    const candidates = await this.database.query<{
+      team_run_id: string;
+      child_run_id: string;
+      team_task_kind: 'lead_turn' | 'work_attempt';
+      tenant_id: string;
+      workspace_id: string;
+      principal_type: string;
+      principal_id: string;
+    }>(
+      `SELECT team.id AS team_run_id, r.id AS child_run_id, t.team_task_kind,
+              team.tenant_id,team.workspace_id,team.principal_type,team.principal_id
+         FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+         JOIN team_runs team ON team.root_task_id=t.root_task_id
+        WHERE team.status='active'
+          AND t.team_task_kind IN ('lead_turn','work_attempt')
+          AND r.status='running'
+          AND r.lease_expires_at <= $1::timestamptz
+        ORDER BY r.lease_expires_at ASC, r.id ASC
+        LIMIT 32`,
+      [now],
+    );
+    const recovered: {
+      teamRunId: string;
+      childRunId: string;
+      teamTaskKind: 'lead_turn' | 'work_attempt';
+      affectedChildRunCount: number;
+    }[] = [];
+    for (const candidate of candidates.rows ?? []) {
+      const owner: OwnerScope = {
+        tenantId: candidate.tenant_id,
+        workspaceId: candidate.workspace_id,
+        principalType: candidate.principal_type,
+        principalId: candidate.principal_id,
+      };
+      const client = this.database.connect
+        ? await this.database.connect()
+        : this.database;
+      try {
+        await client.query('BEGIN');
+        const locked = await client.query<{
+          id: string;
+          status: TeamRun['status'];
+          root_run_id: string;
+          root_task_id: string;
+        }>(
+          `SELECT id,status,root_run_id,root_task_id
+             FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)} FOR UPDATE`,
+          [candidate.team_run_id, ...ownerValues(owner)],
+        );
+        const team = locked.rows?.[0];
+        if (!team || team.status !== 'active') {
+          await client.query('COMMIT');
+          continue;
+        }
+        const child = await client.query(
+          `UPDATE runs
+              SET status='timed_out', lease_owner=NULL, activation_id=NULL,
+                  lease_expires_at=NULL,
+                  error='{"code":"runtime_timed_out","message":"The runtime exceeded the configured timeout."}'::jsonb,
+                  result=NULL, updated_at=$2
+            WHERE id=$1 AND status='running' AND lease_expires_at <= $2::timestamptz
+              AND EXISTS (
+                SELECT 1 FROM tasks scoped_task
+                 WHERE scoped_task.id=runs.task_id
+                   AND ${ownerSql('scoped_task', 3)}
+              )
+            RETURNING id,task_id`,
+          [candidate.child_run_id, now, ...ownerValues(owner)],
+        );
+        if (!child.rows?.[0]) {
+          await client.query('COMMIT');
+          continue;
+        }
+        const siblingRuns = await client.query<{ id: string; task_id: string }>(
+          `UPDATE runs
+              SET status='failed', lease_owner=NULL, activation_id=NULL,
+                  lease_expires_at=NULL, result=NULL,
+                  fencing_token=GREATEST(fencing_token,1),
+                  error='{"code":"runtime_execution_failed","message":"The Team could not recover an expired turn."}'::jsonb,
+                  updated_at=$2
+            WHERE task_id IN (
+              SELECT scoped_task.id FROM tasks scoped_task
+               WHERE scoped_task.root_task_id=$3
+                 AND scoped_task.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+                 AND ${ownerSql('scoped_task', 4)}
+            )
+              AND id <> $1
+              AND EXISTS (
+                SELECT 1 FROM team_runs scoped_team
+                 WHERE scoped_team.id=$8 AND ${ownerSql('scoped_team', 9)}
+              )
+              AND status NOT IN ('succeeded','failed','timed_out','cancelled')
+            RETURNING id,task_id`,
+          [
+            candidate.child_run_id,
+            now,
+            team.root_task_id,
+            ...ownerValues(owner),
+            team.id,
+            ...ownerValues(owner),
+          ],
+        );
+        await client.query(
+          `UPDATE tasks SET status='failed', updated_at=$2
+             WHERE root_task_id=$1
+               AND team_task_kind IN ('lead_turn','work_attempt','direct_message')
+               AND ${ownerSql('', 3)}
+               AND EXISTS (
+                 SELECT 1 FROM team_runs scoped_team
+                  WHERE scoped_team.id=$7 AND ${ownerSql('scoped_team', 8)}
+               )
+               AND status NOT IN ('completed','failed','cancelled')`,
+          [
+            team.root_task_id,
+            now,
+            ...ownerValues(owner),
+            team.id,
+            ...ownerValues(owner),
+          ],
+        );
+        await client.query(
+          `UPDATE team_work_item_attempts
+              SET status='failed', result_summary=NULL, completed_at=$2, updated_at=$2
+            WHERE team_run_id=$1 AND ${ownerSql('', 3)} AND status IN ('queued','running')`,
+          [team.id, now, ...ownerValues(owner)],
+        );
+        await client.query(
+          `UPDATE team_work_items
+              SET status='cancelled', updated_at=$2, completed_at=NULL
+            WHERE team_run_id=$1 AND ${ownerSql('', 3)} AND status NOT IN ('accepted','cancelled')`,
+          [team.id, now, ...ownerValues(owner)],
+        );
+        await client.query(
+          `UPDATE team_member_runs
+              SET status='failed', current_work_item_id=NULL, updated_at=$2
+            WHERE team_run_id=$1 AND ${ownerSql('', 3)} AND status IN ('starting','active')`,
+          [team.id, now, ...ownerValues(owner)],
+        );
+        for (const childRun of [
+          { id: candidate.child_run_id, status: 'timed_out' },
+          ...(siblingRuns.rows ?? []).map((row) => ({
+            id: row.id,
+            status: 'failed',
+          })),
+        ]) {
+          await client.query(
+            `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at)
+               SELECT $1,$2,COALESCE(MAX(sequence),0)+1,'failed',$3::jsonb,$4
+                 FROM run_events
+                 JOIN runs scoped_run ON scoped_run.id=run_events.run_id
+                 JOIN tasks scoped_task ON scoped_task.id=scoped_run.task_id
+                WHERE run_events.run_id=$2 AND ${ownerSql('scoped_task', 5)}`,
+            [
+              randomUUID(),
+              childRun.id,
+              JSON.stringify({
+                code:
+                  childRun.status === 'timed_out'
+                    ? 'runtime_timed_out'
+                    : 'runtime_execution_failed',
+                message:
+                  childRun.status === 'timed_out'
+                    ? 'The runtime exceeded the configured timeout.'
+                    : 'The Team could not recover an expired turn.',
+              }),
+              now,
+              ...ownerValues(owner),
+            ],
+          );
+        }
+        const rootError = JSON.stringify({
+          code: 'runtime_execution_failed',
+          message: 'The Team could not recover an expired turn.',
+        });
+        await client.query(
+          `UPDATE team_runs
+              SET status='failed', phase='done', control_state='terminal',
+                  stop_reason='turn_lease_expired', updated_at=$2
+            WHERE id=$1 AND status='active' AND ${ownerSql('', 3)}`,
+          [team.id, now, ...ownerValues(owner)],
+        );
+        const rootRun = await client.query(
+          `UPDATE runs SET status='failed', lease_owner=NULL, activation_id=NULL,
+                  lease_expires_at=NULL, result=NULL, error=$3::jsonb, updated_at=$4
+            WHERE id=$1 AND task_id=$2 AND status='waiting_children'
+              AND EXISTS (
+                SELECT 1 FROM tasks scoped_task
+                 WHERE scoped_task.id=$2 AND ${ownerSql('scoped_task', 5)}
+              )
+            RETURNING id`,
+          [
+            team.root_run_id,
+            team.root_task_id,
+            rootError,
+            now,
+            ...ownerValues(owner),
+          ],
+        );
+        if (!rootRun.rows?.[0]) {
+          const existingRootRun = await client.query<{ status: string }>(
+            `SELECT r.status FROM runs r
+               JOIN tasks scoped_task ON scoped_task.id=r.task_id
+              WHERE r.id=$1 AND r.task_id=$2 AND ${ownerSql('scoped_task', 3)}`,
+            [team.root_run_id, team.root_task_id, ...ownerValues(owner)],
+          );
+          if (existingRootRun.rows?.[0]?.status !== 'failed')
+            throw new Error('Team root run was not waiting or already failed.');
+        }
+        const rootTask = await client.query(
+          `UPDATE tasks SET status='failed', updated_at=$2
+             WHERE id=$1 AND ${ownerSql('', 3)}
+               AND status NOT IN ('completed','failed','cancelled')
+             RETURNING id`,
+          [team.root_task_id, now, ...ownerValues(owner)],
+        );
+        if (!rootTask.rows?.[0]) {
+          const existingRootTask = await client.query<{ status: string }>(
+            `SELECT status FROM tasks
+              WHERE id=$1 AND ${ownerSql('', 2)}`,
+            [team.root_task_id, ...ownerValues(owner)],
+          );
+          if (existingRootTask.rows?.[0]?.status !== 'failed')
+            throw new Error('Team root task was not active or already failed.');
+        }
+        if (rootRun.rows?.[0]) {
+          await client.query(
+            `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at)
+               SELECT $1,$2,COALESCE(MAX(sequence),0)+1,'failed',$3::jsonb,$4
+                 FROM run_events
+                 JOIN runs scoped_run ON scoped_run.id=run_events.run_id
+                 JOIN tasks scoped_task ON scoped_task.id=scoped_run.task_id
+                WHERE run_events.run_id=$2 AND ${ownerSql('scoped_task', 5)}`,
+            [
+              randomUUID(),
+              team.root_run_id,
+              rootError,
+              now,
+              ...ownerValues(owner),
+            ],
+          );
+        }
+        await client.query('COMMIT');
+        recovered.push({
+          teamRunId: team.id,
+          childRunId: candidate.child_run_id,
+          teamTaskKind: candidate.team_task_kind,
+          affectedChildRunCount:
+            1 + (siblingRuns.rowCount ?? siblingRuns.rows?.length ?? 0),
+        });
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        if ('release' in client && typeof client.release === 'function')
+          client.release();
+      }
+    }
+    return recovered;
   }
   public async createMemberRun(member: TeamMemberRun): Promise<void> {
     await this.database.query(
@@ -799,7 +1068,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)}`,
           [input.teamRunId, ...ownerValues(input.owner)],
         );
-        if (Number(count.rows?.[0]?.count ?? 0) >= 4)
+        if (
+          Number(count.rows?.[0]?.count ?? 0) >=
+          AGENTIC_TEAM_LIMITS.maxWorkItems
+        )
           throw new TeamExecutionError('limit_exceeded');
         const activeAttempt = await client.query(
           `SELECT 1 FROM team_work_item_attempts a
@@ -1125,7 +1397,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const previous = rows.rows?.[0];
       if (
         !previous ||
-        previous.attempt_no >= 2 ||
+        previous.attempt_no >= AGENTIC_TEAM_LIMITS.maxAttemptsPerItem ||
         previous.status !== 'completed' ||
         !previous.result_summary
       )
@@ -1321,8 +1593,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope;
   }): Promise<TeamRun> {
     const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND control_state <> 'lead_running' AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < 4 AND ${ownerSql('', 3)} RETURNING *`,
-      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < $7 AND ${ownerSql('', 3)} RETURNING *`,
+      [
+        input.teamRunId,
+        input.expectedRevision,
+        ...ownerValues(input.owner),
+        AGENTIC_TEAM_LIMITS.maxLeadTurns,
+      ],
     );
     if (!r.rows?.[0]) {
       const current = await this.database.query<{
@@ -1337,7 +1614,10 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         input.expectedRevision
       )
         throw new TeamExecutionError('stale_state');
-      if ((current.rows?.[0]?.lead_turn_count ?? 0) >= 4)
+      if (
+        (current.rows?.[0]?.lead_turn_count ?? 0) >=
+        AGENTIC_TEAM_LIMITS.maxLeadTurns
+      )
         throw new TeamExecutionError('limit_exceeded');
       throw new TeamExecutionError('stale_state');
     }

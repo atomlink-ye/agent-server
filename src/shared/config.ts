@@ -143,6 +143,11 @@ const ConfigSchema = z
       .min(1_000)
       .max(600_000)
       .default(120_000),
+    AGENT_SERVER_DISPATCHER_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(4),
     SERVICE_ACCOUNTS_JSON: ServiceAccountsEnvironmentSchema,
     LARK_CANARY_ENABLED: BooleanEnvironment.default(false),
     LARK_CANARY_CONNECTION_KEY: OptionalConfigString,
@@ -240,6 +245,9 @@ export type AppConfig = Readonly<{
   serviceAccounts?: readonly ServiceAccountRecord[];
   larkCanary?: LarkCanaryConfig;
   skillRegistryRoot: string;
+  dispatcher?: {
+    concurrency: number;
+  };
   paseo: {
     wsUrl: string;
     agentCwd: string;
@@ -317,6 +325,9 @@ export function loadConfig(
       workingDirectory,
       parsed.data.AGENT_SERVER_SKILL_REGISTRY_ROOT,
     ),
+    dispatcher: {
+      concurrency: parsed.data.AGENT_SERVER_DISPATCHER_CONCURRENCY,
+    },
     paseo: {
       wsUrl: parsed.data.PASEO_WS_URL,
       agentCwd: resolve(workingDirectory, parsed.data.PASEO_AGENT_CWD),

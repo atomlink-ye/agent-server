@@ -6,9 +6,11 @@ import type {
   OwnerScope,
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
+import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TeamMessage } from '../../domain/teams/team-message.js';
+import type { Logger } from '../../shared/observability/logger.js';
 
 export class TeamWakeReconciler {
   public constructor(
@@ -17,6 +19,7 @@ export class TeamWakeReconciler {
     private readonly tasks: TaskRepository,
     private readonly admission: AdmissionRepository,
     private readonly now: () => Date = () => new Date(),
+    private readonly logger?: Logger,
   ) {}
 
   public async reconcileQueuedWakeRoots(): Promise<number> {
@@ -34,11 +37,35 @@ export class TeamWakeReconciler {
     rootTaskId: string,
     owner: OwnerScope,
   ): Promise<number> {
+    let materialized = 0;
+    for (let pass = 0; pass < 2; pass += 1) {
+      try {
+        await this.reconcileForRootTaskPass(rootTaskId, owner, () => {
+          materialized += 1;
+        });
+        return materialized;
+      } catch (error) {
+        if (
+          !(error instanceof TeamExecutionError) ||
+          error.code !== 'stale_state' ||
+          pass > 0
+        )
+          throw error;
+      }
+    }
+    return materialized;
+  }
+
+  private async reconcileForRootTaskPass(
+    rootTaskId: string,
+    owner: OwnerScope,
+    onMaterialized: () => void,
+  ): Promise<void> {
     const team = await this.executions.findTeamRunByRootTaskId(
       rootTaskId,
       owner,
     );
-    if (!team || team.status !== 'active') return 0;
+    if (!team || team.status !== 'active') return;
     const members = await this.executions.findMembersByTeamRunId(
       team.id,
       owner,
@@ -56,7 +83,6 @@ export class TeamWakeReconciler {
       owner,
     );
     const workById = new Map(workItems.map((work) => [work.id, work]));
-    let materialized = 0;
     for (const member of members.filter(
       (candidate) => candidate.role === 'member',
     )) {
@@ -126,9 +152,13 @@ export class TeamWakeReconciler {
               (error as { code?: string }).code === 'invalid_transition'
             )
               break;
+            if (isBenignLostClaim(error)) {
+              this.logLostClaim('direct', team, task);
+              break;
+            }
             throw error;
           }
-          materialized += 1;
+          onMaterialized();
           break;
         }
         const attempt = message.attemptId
@@ -174,32 +204,39 @@ export class TeamWakeReconciler {
           now: this.now,
         });
         const run = createRun(prompt, { now: this.now });
-        await this.admission.withTransaction(async (tx) => {
-          if (!tx.teamMessages || !tx.teamExecutions)
-            throw new Error(
-              'Team wake transaction dependencies are unavailable.',
-            );
-          await tx.tasks.save(task);
-          await tx.runs.save(run, { taskId: task.id, attempt: 1 });
-          await tx.teamExecutions.materializeAttempt({
-            attemptId: attempt.id,
-            executionTaskId: task.id,
-            teamRunId: team.id,
-            assigneeMemberId: member.id,
-            expectedRevision: team.revision,
-            owner,
+        try {
+          await this.admission.withTransaction(async (tx) => {
+            if (!tx.teamMessages || !tx.teamExecutions)
+              throw new Error(
+                'Team wake transaction dependencies are unavailable.',
+              );
+            await tx.tasks.save(task);
+            await tx.runs.save(run, { taskId: task.id, attempt: 1 });
+            await tx.teamExecutions.materializeAttempt({
+              attemptId: attempt.id,
+              executionTaskId: task.id,
+              teamRunId: team.id,
+              assigneeMemberId: member.id,
+              expectedRevision: team.revision,
+              owner,
+            });
+            await tx.teamMessages.bindToTask({
+              messageIds: [message.id],
+              taskId: task.id,
+              owner,
+            });
+            await tx.enqueueRunDispatch(run.id, run.createdAt);
           });
-          await tx.teamMessages.bindToTask({
-            messageIds: [message.id],
-            taskId: task.id,
-            owner,
-          });
-          await tx.enqueueRunDispatch(run.id, run.createdAt);
-        });
-        materialized += 1;
+        } catch (error) {
+          if (isBenignLostClaim(error)) {
+            this.logLostClaim('work', team, task, attempt.id);
+            break;
+          }
+          throw error;
+        }
+        onMaterialized();
       }
     }
-    return materialized;
   }
 
   private assignmentPrompt(message: TeamMessage, attemptNo: number): string {
@@ -223,4 +260,36 @@ export class TeamWakeReconciler {
       .slice(0, 512);
     return `You received a direct Team message from ${sender}: ${body}\n\nAcknowledge or act on this message as appropriate. This delivery is not assigned Work: do not submit, review, accept, or otherwise change Work merely because of this message.`;
   }
+
+  private logLostClaim(
+    kind: 'direct' | 'work',
+    team: { id: string; rootTaskId: string },
+    task: {
+      id: string;
+      logicalStepKey: string | null;
+      teamTaskKind?: string | null;
+    },
+    attemptId?: string,
+  ) {
+    this.logger?.log('info', `team.wake_reconcile.${kind}_claim_lost`, {
+      team_run_id: team.id,
+      root_task_id: team.rootTaskId,
+      attempted_task_id: task.id,
+      logical_step_key: task.logicalStepKey,
+      team_task_kind: task.teamTaskKind,
+      ...(attemptId ? { attempt_id: attemptId } : {}),
+    });
+  }
+}
+
+function isBenignLostClaim(error: unknown): error is {
+  code: '23505';
+  constraint: 'tasks_root_logical_step_key_unique';
+} {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; constraint?: unknown };
+  return (
+    candidate.code === '23505' &&
+    candidate.constraint === 'tasks_root_logical_step_key_unique'
+  );
 }

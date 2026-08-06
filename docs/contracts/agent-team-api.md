@@ -22,6 +22,36 @@ versions are immutable; draft/published registry reads and package
 validate/import/publish routes remain the supported definition-management
 surface.
 
+## AgentProject authoring contract
+
+AgentProject is the authoritative declaration boundary. Environment, Agent,
+and Team map entries may contain either a `file` locator or the native package
+spec inline. Inline metadata names derive from their manifest keys. The loader
+fills only the approved single-value and safe defaults before validating and
+canonicalizing native packages; a wrong explicit value remains invalid.
+
+The reserved `tool-profile://team-lead` and
+`tool-profile://team-member` refs expand to the canonical tools for those
+roles. They are materialized only when an Agent explicitly includes the ref,
+so shortening a declaration never grants tools implicitly. Reserved profiles
+cannot be overridden by project tool-profile entries.
+
+The `toolProfiles`, `skills`, and `memoryStores` manifest sections may be
+omitted when empty; omission normalizes to `{}` and grants no tool or skill.
+Agent `completion.command`, input schema/prompt, instructions, and declared
+resource bindings remain explicit author intent.
+
+`agentctl` authoring failures emit an error `code`, resource-qualified `path`,
+and usable `message`. Native package and project-reference validation retain
+their original reason while unknown filesystem failures remain
+`filesystem_error`; validation is not relaxed.
+
+Equivalent inline/defaulted and file-backed/explicit declarations normalize to
+the same logical resource paths, native package bytes, project fingerprint,
+apply payloads, and lock identities. `agentctl run` continues to launch only a
+published Team selected from the lock and declared entrypoints; invocation
+does not define Agents, tools, environments, skills, or roster membership.
+
 ## Invocation and lifecycle
 
 `POST /api/v1/tasks:invoke` accepts a published Team Version through the

@@ -92,6 +92,14 @@ export interface TeamExecutionRepository {
     readonly leadRunId?: string;
   }): Promise<TeamRun>;
   failTeamRunAtomically(input: FailTeamRunInput): Promise<TeamRun>;
+  recoverExpiredTeamRuns(now: string): Promise<
+    readonly {
+      readonly teamRunId: string;
+      readonly childRunId: string;
+      readonly teamTaskKind: 'lead_turn' | 'work_attempt';
+      readonly affectedChildRunCount: number;
+    }[]
+  >;
 
   createMemberRun(member: TeamMemberRun): Promise<void>;
   findMembersByTeamRunId(

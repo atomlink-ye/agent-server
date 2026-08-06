@@ -7,6 +7,7 @@ import {
   type TeamMemberRun,
 } from '../../domain/teams/team-member-run.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
+import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { AdmissionRepository } from '../ports/admission-repository.js';
@@ -19,12 +20,10 @@ import type { TeamWakeReconciler } from './team-wake-reconciler.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
-import { deriveAgenticLeadCommandPolicy } from './team-policy-evaluator.js';
-const LIMIT = Object.freeze({
-  maxLeadTurns: 4,
-  maxWorkItems: 4,
-  maxAttempts: 2,
-});
+import {
+  AGENTIC_TEAM_LIMITS,
+  deriveAgenticLeadCommandPolicy,
+} from './team-policy-evaluator.js';
 
 export class TeamDriver {
   public constructor(
@@ -88,7 +87,7 @@ export class TeamDriver {
       claim.run,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${LIMIT.maxWorkItems} Work items, max ${LIMIT.maxAttempts} attempts per Work item, max ${LIMIT.maxLeadTurns} Lead turns.`,
+      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
       lead.agentVersionId,
       'lead_turn',
       1,
@@ -245,12 +244,7 @@ export class TeamDriver {
         // A completion request may arrive in the same Lead turn as the final
         // assignments. Materialize those queued attempts before deciding that
         // the Team is complete; otherwise the request can strand work forever.
-        await this.materializeQueuedAttempts(
-          fresh,
-          input.task,
-          currentAttempts,
-          owner,
-        );
+        await this.materializeQueuedAttempts(fresh, owner);
         const after = await this.executions.findAttemptsByTeamRunId(
           fresh.id,
           owner,
@@ -269,22 +263,11 @@ export class TeamDriver {
         });
         return;
       }
-      await this.materializeQueuedAttempts(
-        fresh,
-        input.task,
-        currentAttempts,
-        owner,
-      );
+      await this.materializeQueuedAttempts(fresh, owner);
       const after = await this.executions.findAttemptsByTeamRunId(
         fresh.id,
         owner,
       );
-      if (after.some((a) => a.status === 'queued' && a.executionTaskId)) return;
-      if (
-        after.length &&
-        after.some((a) => a.status !== 'completed' && a.status !== 'failed')
-      )
-        return;
       if (!(await this.readyForLeadReview(fresh, after, owner))) return;
       await this.scheduleLead(
         fresh,
@@ -308,10 +291,7 @@ export class TeamDriver {
 
   private async readyForLeadReview(
     team: TeamRun,
-    attempts: readonly {
-      workItemId: string;
-      status: string;
-    }[],
+    attempts: readonly TeamWorkItemAttempt[],
     owner: OwnerScope,
   ): Promise<boolean> {
     const [members, taskRecords, workItems, dependencies] = await Promise.all([
@@ -320,54 +300,77 @@ export class TeamDriver {
       this.executions.findWorkItemsByTeamRunId(team.id, owner),
       this.executions.findWorkDependenciesByTeamRunId(team.id, owner),
     ]);
-    const teamActorIds = new Set(members.map((member) => member.id));
-    if (!this.runs.hasNonterminalRunsForTeamMemberChildTasks)
-      throw new Error('All-Run Team member scheduling fence is unavailable.');
+    const lead = members.find((member) => member.role === 'lead');
+    if (!lead) throw new Error('Agentic Team lead member is missing.');
     if (
       taskRecords.some(
         (record) =>
-          typeof record.task.teamMemberRunId === 'string' &&
-          teamActorIds.has(record.task.teamMemberRunId) &&
+          record.task.teamMemberRunId === lead.id &&
+          record.task.teamTaskKind === 'lead_turn' &&
           !terminalTaskStatuses.has(record.task.status),
       )
     )
       return false;
+    const workById = new Map(workItems.map((work) => [work.id, work]));
+    const latestByWorkItem = new Map<string, (typeof attempts)[number]>();
+    for (const attempt of attempts) {
+      const previous = latestByWorkItem.get(attempt.workItemId);
+      if (!previous || attempt.attemptNo > previous.attemptNo)
+        latestByWorkItem.set(attempt.workItemId, attempt);
+    }
+    const completedUnreviewed = [...latestByWorkItem.values()].some(
+      (attempt) =>
+        attempt.status === 'completed' &&
+        Boolean(attempt.resultSummary?.trim()) &&
+        workById.get(attempt.workItemId)?.status !== 'accepted',
+    );
+    const emptyBoard = workItems.length === 0;
+    const allAccepted =
+      workItems.length > 0 &&
+      workItems.every((work) => work.status === 'accepted');
+    const queuedAwaitingReconcile = attempts.some(
+      (attempt) =>
+        attempt.status === 'queued' &&
+        !attempt.executionTaskId &&
+        dependencies
+          .filter((edge) => edge.workItemId === attempt.workItemId)
+          .every(
+            (edge) =>
+              workById.get(edge.dependsOnWorkItemId)?.status === 'accepted',
+          ),
+    );
     if (
-      await this.runs.hasNonterminalRunsForTeamMemberChildTasks(
-        team.rootTaskId,
-        [...teamActorIds],
-        owner,
-      )
+      queuedAwaitingReconcile ||
+      (!completedUnreviewed && !emptyBoard && !allAccepted)
     )
       return false;
-    const workById = new Map(workItems.map((work) => [work.id, work]));
-    return attempts.every((attempt) => {
-      if (attempt.status === 'completed' || attempt.status === 'failed')
-        return true;
-      if (attempt.status !== 'queued') return false;
-      return dependencies
-        .filter((edge) => edge.workItemId === attempt.workItemId)
-        .some(
-          (edge) =>
-            workById.get(edge.dependsOnWorkItemId)?.status !== 'accepted',
-        );
-    });
+    if (allAccepted) {
+      const directTasks = taskRecords.filter(
+        (record) =>
+          record.task.teamTaskKind === 'direct_message' &&
+          typeof record.task.teamMemberRunId === 'string',
+      );
+      if (
+        directTasks.some(
+          (record) => !terminalTaskStatuses.has(record.task.status),
+        )
+      )
+        return false;
+      if (
+        directTasks.some(
+          (record) =>
+            record.latestRun !== null &&
+            !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
+              record.latestRun.status,
+            ),
+        )
+      )
+        return false;
+    }
+    return true;
   }
 
-  private async materializeQueuedAttempts(
-    team: TeamRun,
-    parent: Task,
-    attempts: readonly {
-      id: string;
-      workItemId: string;
-      executionTaskId: string | null;
-      status: string;
-      assigneeMemberId: string;
-      attemptNo: number;
-      feedback: string | null;
-    }[],
-    owner: OwnerScope,
-  ) {
+  private async materializeQueuedAttempts(team: TeamRun, owner: OwnerScope) {
     if (this.reconciler) {
       await this.reconciler.reconcileForRootTask(team.rootTaskId, owner);
       return;
@@ -381,8 +384,7 @@ export class TeamDriver {
     owner: OwnerScope,
     prompt: string,
   ) {
-    if (team.controlState === 'lead_running') return;
-    if (team.leadTurnCount >= LIMIT.maxLeadTurns) {
+    if (team.leadTurnCount >= AGENTIC_TEAM_LIMITS.maxLeadTurns) {
       await this.executions.failTeamRunAtomically({
         teamRunId: team.id,
         rootRunId: team.rootRunId,
@@ -407,6 +409,19 @@ export class TeamDriver {
           await tx.teamExecutions.findMembersByTeamRunId(team.id, owner)
         ).find((member) => member.role === 'lead');
         if (!lead) throw new Error('Agentic Team lead member is missing.');
+        const teamTasks = await tx.tasks.findByRootTaskIdForOwner(
+          team.rootTaskId,
+          owner,
+        );
+        if (
+          teamTasks.some(
+            (record) =>
+              record.task.teamMemberRunId === lead.id &&
+              record.task.teamTaskKind === 'lead_turn' &&
+              !terminalTaskStatuses.has(record.task.status),
+          )
+        )
+          return;
         const next = await tx.teamExecutions.advanceAgenticLead({
           teamRunId: team.id,
           expectedRevision: team.revision,

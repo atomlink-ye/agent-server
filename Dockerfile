@@ -8,15 +8,17 @@ ENV COREPACK_HOME=/tmp/corepack \
     PNPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false \
     NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
-    PATH=/pnpm:$PATH \
-    OPENCODE_BIN=/opt/opencode/bin/opencode
+    PATH=/pnpm:/opt/providers/bin:/opt/opencode/bin:$PATH \
+    OPENCODE_BIN=/opt/opencode/bin/opencode \
+    CLAUDE_CODE_BIN=/opt/providers/bin/claude \
+    CODEX_BIN=/opt/providers/bin/codex
 
 WORKDIR /workspace
 
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin \
-    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin /opt/providers/bin \
+    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode /opt/providers
 
 USER node
 
@@ -34,6 +36,18 @@ RUN set -eu; \
     npm install --prefix /opt/opencode --no-save --ignore-scripts "$opencode_package@$opencode_version"; \
     ln -sfn "../node_modules/$opencode_package/bin/opencode" /opt/opencode/bin/opencode; \
     /opt/opencode/bin/opencode --version
+# Claude Code and Codex CLIs. Paseo spawns the provider binary from inside this
+# image, so a mixed-provider Team needs all three present, not just opencode.
+# Versions are ARGs so a build can pin them; the check below fails the build if a
+# binary did not land, because a missing provider otherwise surfaces much later
+# as "Provider <name> is not available" at Team runtime.
+ARG CLAUDE_CODE_VERSION=2.1.223
+ARG CODEX_VERSION=0.146.1
+RUN set -eu; \
+    npm install -g --prefix /opt/providers \
+      "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" "@openai/codex@$CODEX_VERSION"; \
+    /opt/providers/bin/claude --version; \
+    /opt/providers/bin/codex --version
 RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
     && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
 RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"

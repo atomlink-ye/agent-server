@@ -762,9 +762,17 @@ class ScriptedRuntime {
           tools: ['request_changes_A', 'accept_B'],
         });
       } else if (reworkScenario && this.#leadTurns === 3) {
+        const correctedWork = value(
+          await session.client.callTool({
+            name: 'team_work_list',
+            arguments: {},
+          }),
+        ).find((item) => item.work_ref === 'work-1');
         assert(
-          input.prompt.includes('"attempt_no":2') &&
-            input.prompt.includes(canonicalSnapshotInvocation),
+          correctedWork?.latest_attempt?.status === 'completed' &&
+            String(correctedWork.latest_attempt.summary).includes(
+              canonicalSnapshotInvocation,
+            ),
           'lead_corrected_submission_missing',
         );
         value(

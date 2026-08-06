@@ -1288,10 +1288,10 @@ try {
     };
     const { ExecuteRun } =
       await import('../../src/application/runs/execute-run.ts');
-    const executeRun = ExecuteRun.prototype.execute;
-    ExecuteRun.prototype.execute = async function (claim) {
+    const executeAgentRun = ExecuteRun.prototype.executeAgentRun;
+    ExecuteRun.prototype.executeAgentRun = async function (...args) {
       try {
-        return await executeRun.call(this, claim);
+        return await executeAgentRun.apply(this, args);
       } catch (error) {
         marker('REWORK_EXECUTE_FAILURE', {
           error_message:

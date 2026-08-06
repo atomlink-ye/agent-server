@@ -192,18 +192,24 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       input.operation === 'continue'
         ? this.#agentBindings.get(input.providerAgentId)
         : undefined;
+    if (input.operation === 'continue' && !continuationBinding)
+      throw new RuntimeExecutionError(
+        'Paseo continuation provenance is unavailable.',
+      );
     const createProvider: ManagedEnvironmentProvider =
       input.operation === 'create' && input.provider !== undefined
         ? input.provider
         : this.#options.provider;
     const effectiveProvider =
       input.operation === 'continue'
-        ? (continuationBinding?.provider ?? this.#options.provider)
+        ? continuationBinding!.provider
         : createProvider;
     const effectiveModel =
       input.operation === 'create' && input.model !== undefined
         ? input.model
-        : (continuationBinding?.model ?? this.#model.id);
+        : input.operation === 'continue'
+          ? continuationBinding!.model
+          : this.#model.id;
 
     const artifactRelativePath = join(
       'scratchpad',

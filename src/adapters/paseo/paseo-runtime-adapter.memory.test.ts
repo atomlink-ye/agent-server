@@ -9,11 +9,6 @@ import type {
   PaseoClientPort,
   PaseoProviderSubagentUpdate,
 } from './paseo-client-port.js';
-import {
-  RuntimeExecutionError,
-  RuntimeTimedOutError,
-} from '../../application/ports/agent-runtime.js';
-
 function client(onFinish?: () => Promise<void>): PaseoClientPort {
   return {
     connect: async () => undefined,
@@ -61,15 +56,15 @@ describe('Paseo runtime same-agent continuation', () => {
       },
     );
 
-    const result = await runtime.execute({
-      operation: 'continue',
-      runId: 'run-follow-up',
-      prompt: 'continue',
-      providerAgentId: 'agent-existing',
-    });
-
-    expect(sent).toEqual(['agent-existing:continue']);
-    expect(result.providerAgentId).toBe('agent-existing');
+    await expect(
+      runtime.execute({
+        operation: 'continue',
+        runId: 'run-follow-up',
+        prompt: 'continue',
+        providerAgentId: 'agent-existing',
+      }),
+    ).rejects.toThrow('Paseo continuation provenance is unavailable.');
+    expect(sent).toEqual([]);
   });
 
   it('does not create a replacement Agent when continuation fails', async () => {
@@ -103,7 +98,7 @@ describe('Paseo runtime same-agent continuation', () => {
         prompt: 'continue',
         providerAgentId: 'agent-closed',
       }),
-    ).rejects.toThrow('closed');
+    ).rejects.toThrow('Paseo continuation provenance is unavailable.');
   });
 
   it.each([
@@ -172,13 +167,9 @@ describe('Paseo runtime same-agent continuation', () => {
         prompt: 'continue',
         providerAgentId: 'agent-existing',
       });
-      if (_label === 'wait timeout status') {
-        await expect(failure).rejects.toBeInstanceOf(RuntimeTimedOutError);
-      } else if (_label === 'wait error status') {
-        await expect(failure).rejects.toBeInstanceOf(RuntimeExecutionError);
-      } else {
-        await expect(failure).rejects.toThrow();
-      }
+      await expect(failure).rejects.toThrow(
+        'Paseo continuation provenance is unavailable.',
+      );
       expect(creates).toBe(0);
     },
   );

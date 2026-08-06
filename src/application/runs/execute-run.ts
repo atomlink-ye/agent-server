@@ -7,7 +7,11 @@ import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/c
 import { transitionTask, type Task } from '../../domain/tasks/task.js';
 import { isManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
+import {
+  ResolveAgentVersion,
+  type ResolvedAgentVersion,
+} from '../agents/resolve-agent-version.js';
+import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import {
   AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
   type AgentRuntimePort,
@@ -656,6 +660,9 @@ export class ExecuteRun {
           invokableVersionId,
           task,
         );
+    const runtimeModelPolicy = resolveRuntimeModelPolicy(
+      resolved.modelPolicyRef,
+    );
     const agenticLeadState =
       collaborativeTeam != null && member?.role === 'lead'
         ? await this.loadAgenticLeadState(collaborativeTeam, task)
@@ -1091,6 +1098,12 @@ export class ExecuteRun {
             }
           : {
               operation: 'create',
+              ...(runtimeModelPolicy
+                ? {
+                    provider: runtimeModelPolicy.provider,
+                    model: runtimeModelPolicy.model,
+                  }
+                : {}),
               ...(sessionRuntime
                 ? { runtimeSessionId: sessionRuntime.id }
                 : {}),
@@ -1319,6 +1332,7 @@ export class ExecuteRun {
     readonly turnPrompt: string;
     readonly proposalLimit: number;
     readonly agentVersionId: string;
+    readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];
   }> {
@@ -1328,6 +1342,7 @@ export class ExecuteRun {
         turnPrompt: prompt,
         proposalLimit: 0,
         agentVersionId: invokableVersionId,
+        modelPolicyRef: 'free-only',
         skills: [],
         toolRefs: [],
       };
@@ -1352,6 +1367,7 @@ export class ExecuteRun {
       turnPrompt: buildTurnPrompt({ taskInput: prompt, memory }),
       proposalLimit: agentVersion.proposalLimit ?? 0,
       agentVersionId: invokableVersionId,
+      modelPolicyRef: agentVersion.modelPolicyRef,
       skills: agentVersion.skills,
       toolRefs: agentVersion.toolRefs,
     };
@@ -1367,12 +1383,13 @@ export class ExecuteRun {
     readonly turnPrompt: string;
     readonly proposalLimit: number;
     readonly agentVersionId: string;
+    readonly modelPolicyRef: ResolvedAgentVersion['modelPolicyRef'];
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];
   }> {
     const metadata =
       invokableVersionId === RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID
-        ? { proposalLimit: 0 }
+        ? { proposalLimit: 0, modelPolicyRef: 'free-only' as const }
         : await this.resolver.resolvePublished(invokableVersionId, ownerScope, {
             resolveExtensions: false,
           });
@@ -1388,6 +1405,7 @@ export class ExecuteRun {
       }),
       proposalLimit: metadata.proposalLimit ?? 0,
       agentVersionId: invokableVersionId,
+      modelPolicyRef: metadata.modelPolicyRef,
       skills: [],
       toolRefs: [],
     };

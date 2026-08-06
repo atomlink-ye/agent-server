@@ -546,28 +546,28 @@ async function collectFailureDiagnostic(failure) {
 async function proveRuntimeResolution() {
   const rows = (
     await db.query(
-      `SELECT r.runtime->>'provider' AS provider,
+      `SELECT m.name AS member_name,
+              m.role,
+              m.agent_version_id::text AS agent_version_ref,
+              av.policy_snapshot->>'modelPolicyRef' AS model_policy_ref,
+              r.runtime->>'provider' AS provider,
               r.runtime->>'model' AS model,
-              r.status,
-              t.team_task_kind
-         FROM runs r
-         JOIN tasks t ON t.id=r.task_id
-        WHERE t.root_task_id=$1
-          AND t.team_task_kind IN ('lead_turn','work_attempt','direct_message')
-          AND r.status IN ('succeeded','failed','timed_out')
-        ORDER BY t.team_task_kind,r.id`,
-      [rootTaskId],
+              count(*)::int AS run_count
+         FROM team_runs tr
+         JOIN team_member_runs m ON m.team_run_id=tr.id
+         JOIN agent_versions av ON av.id=m.agent_version_id
+         JOIN tasks t
+           ON t.team_member_run_id=m.id
+          AND t.root_task_id=tr.root_task_id
+         JOIN runs r ON r.task_id=t.id
+        WHERE tr.id=$1
+          AND r.status='succeeded'
+        GROUP BY m.name,m.role,m.agent_version_id,av.policy_snapshot,
+                 r.runtime->>'provider',r.runtime->>'model'
+        ORDER BY m.name,r.runtime->>'provider',r.runtime->>'model'`,
+      [teamRunId],
     )
   ).rows;
-  const allowedStatuses = new Set([
-    'queued',
-    'running',
-    'succeeded',
-    'failed',
-    'timed_out',
-    'cancelled',
-  ]);
-  const allowedKinds = new Set(['lead_turn', 'work_attempt', 'direct_message']);
   const normalizeRuntimeValue = (value) => {
     if (value === null || value === undefined) return null;
     return String(value)
@@ -578,52 +578,61 @@ async function proveRuntimeResolution() {
     const provider = normalizeRuntimeValue(row.provider);
     const model = normalizeRuntimeValue(row.model);
     return {
+      member_name: normalizeRuntimeValue(row.member_name),
+      role: normalizeRuntimeValue(row.role),
+      agent_version_ref: normalizeRuntimeValue(row.agent_version_ref),
+      model_policy_ref: normalizeRuntimeValue(row.model_policy_ref),
       provider,
       model,
-      status: allowedStatuses.has(row.status) ? row.status : 'invalid',
-      kind: allowedKinds.has(row.team_task_kind)
-        ? row.team_task_kind
-        : 'invalid',
+      run_count: Number(row.run_count),
     };
   });
-  const uniquePairs = [
-    ...new Map(
-      resolvedRows.map((row) => [
-        `${row.provider}\u0000${row.model}`,
-        { provider: row.provider, model: row.model },
-      ]),
-    ).values(),
-  ];
-  const countBy = (key) =>
-    Object.fromEntries(
-      [...new Set(resolvedRows.map((row) => row[key]))].map((value) => [
-        value,
-        resolvedRows.filter((row) => row[key] === value).length,
-      ]),
-    );
-  const equalityAssertion =
-    rows.length > 0 &&
-    resolvedRows.every(
-      (row) =>
-        row.provider === requestedProvider && row.model === requestedModel,
-    );
+  const byName = new Map(resolvedRows.map((row) => [row.member_name, row]));
+  const lead = byName.get(fixtureNames.lead);
+  const member = byName.get(fixtureNames.member);
+  const observer = byName.get(fixtureNames.observer);
+  const distinctProviders = new Set(resolvedRows.map((row) => row.provider));
+  const exactMappings =
+    lead?.role === 'lead' &&
+    lead.model_policy_ref === 'free-only' &&
+    lead.provider === requestedProvider &&
+    lead.model === requestedModel &&
+    member?.role === 'member' &&
+    member.model_policy_ref === 'claude/deepseek-v4-flash' &&
+    member.provider === 'claude' &&
+    member.model === 'deepseek-v4-flash' &&
+    observer?.role === 'member' &&
+    observer.model_policy_ref === 'codex/deepseek-v4-flash' &&
+    observer.provider === 'codex' &&
+    observer.model === 'deepseek-v4-flash';
   runtimeResolutionEvidence = {
-    schema: 'agent-teams-v2-runtime-resolution-v1',
+    schema: 'agent-teams-v2-runtime-resolution-v2',
+    durable_query: true,
+    durable_rows: resolvedRows,
     requested_provider: requestedProvider,
     requested_model: requestedModel,
-    resolved_unique_pairs: uniquePairs,
-    row_count: rows.length,
-    status_counts: countBy('status'),
-    kind_counts: countBy('kind'),
-    equality_assertion: equalityAssertion,
+    member_count: resolvedRows.length,
+    distinct_provider_count: distinctProviders.size,
+    exact_mappings: exactMappings,
   };
-  assert(rows.length > 0, 'runtime_resolution_missing');
-  assert(equalityAssertion, 'runtime_resolution_mismatch');
-  const resolved = uniquePairs[0];
+  assert(resolvedRows.length === 3, 'runtime_resolution_member_count_invalid');
+  assert(
+    new Set(resolvedRows.map((row) => row.member_name)).size === 3 &&
+      resolvedRows.every(
+        (row) => Number.isInteger(row.run_count) && row.run_count > 0,
+      ),
+    'runtime_resolution_member_cardinality_invalid',
+  );
+  assert(
+    distinctProviders.size === 3,
+    'runtime_resolution_provider_count_invalid',
+  );
+  assert(exactMappings, 'runtime_resolution_mismatch');
   marker('RUNTIME_RESOLUTION_PROVEN', {
-    runtime_backend: resolved.provider,
-    runtime_model: resolved.model,
-    runtime_resolution_count: rows.length,
+    durable_query: true,
+    durable_rows: resolvedRows,
+    member_count: resolvedRows.length,
+    distinct_provider_count: distinctProviders.size,
     runtime_resolution_equal: true,
   });
 }
@@ -790,8 +799,8 @@ class ScriptedRuntime {
   async health() {
     return {
       ready: true,
-      provider: 'deterministic',
-      model: 'scripted',
+      provider: requestedProvider,
+      model: requestedModel,
       checks: [],
     };
   }
@@ -815,11 +824,23 @@ class ScriptedRuntime {
       );
       await client.connect(transport);
       providerAgentId = `scripted-${randomUUID()}`;
+      const provider = input.provider ?? requestedProvider;
+      const model = input.model ?? requestedModel;
+      assert(
+        runtimeResolutionProviders.has(provider),
+        'scripted_runtime_provider_invalid',
+      );
+      assert(
+        supportedSmokeModels[provider]?.has(model),
+        'scripted_runtime_model_invalid',
+      );
       session = {
         client,
         transport,
         workspaceId:
           input.paseoWorkspaceId ?? `scripted-workspace-${randomUUID()}`,
+        provider,
+        model,
       };
       this.#sessions.set(providerAgentId, session);
       await input.onProviderBinding?.({
@@ -1256,8 +1277,8 @@ class ScriptedRuntime {
           });
           this.scheduleLeadIdle(session.client, this.#leadTurns);
           return {
-            provider: 'deterministic',
-            model: 'scripted',
+            provider: session.provider,
+            model: session.model,
             providerAgentId,
             paseoWorkspaceId: session.workspaceId,
             text: 'bounded turn completed',
@@ -1467,8 +1488,8 @@ class ScriptedRuntime {
       }
     }
     return {
-      provider: 'deterministic',
-      model: 'scripted',
+      provider: session.provider,
+      model: session.model,
       providerAgentId,
       paseoWorkspaceId: session.workspaceId,
       text: 'bounded turn completed',
@@ -1523,6 +1544,11 @@ async function queued(kind) {
 function agentYaml(name) {
   const lead = name === fixtureNames.lead;
   const observer = name === fixtureNames.observer;
+  const modelPolicyRef = lead
+    ? 'free-only'
+    : observer
+      ? 'codex/deepseek-v4-flash'
+      : 'claude/deepseek-v4-flash';
   const instructions = lead
     ? reworkScenario
       ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Review rubric: both first attempts must complete before review. Work A is inadequate when its result omits the canonical ${canonicalSnapshotInvocation}, symbol ACME, or data_as_of 2026-07-31 evidence; request changes exactly once with substantive feedback while accepting qualifying Work B in the same control cycle. Accept corrected Work A only when all canonical evidence is present, then finish after both Work items are accepted. On the empty board create exactly Work A assigned to ${fixtureNames.member} and Work B assigned to ${fixtureNames.observer}, then stop. Never send a direct message, never invent refs, and never repeat a successful mutation.`
@@ -1553,7 +1579,7 @@ function agentYaml(name) {
         'team-work-submit',
         'synthetic-stock-snapshot',
       ];
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(readableInstructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(readableInstructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: ${modelPolicyRef}\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 function environmentYaml() {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: ${requestedProvider}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
@@ -3438,7 +3464,7 @@ try {
     'nonterminal_member_child_remaining',
   );
   marker('COMPLETION_MEMBER_CHILD_FENCE_ENFORCED');
-  if (!scriptedRuntime) await proveRuntimeResolution();
+  await proveRuntimeResolution();
   const finalMessageFacts = (
     await db.query(
       `SELECT count(*)::int AS total,

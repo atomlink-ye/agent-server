@@ -89,6 +89,10 @@ import { TeamCommandService } from './application/teams/team-command-service.js'
 import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
 import { TeamDriver } from './application/teams/team-driver.js';
 import { TeamWakeReconciler } from './application/teams/team-wake-reconciler.js';
+import {
+  revokeForRecoveredTeamRuns,
+  revokeForTerminalTeamRun,
+} from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -472,7 +476,24 @@ export async function createService(
             principalId: task.principalId,
           },
         );
-        if (team) await teamDriver.handleTerminalRun({ team, task, run });
+        if (team) {
+          await teamDriver.handleTerminalRun({ team, task, run });
+          const terminal = await collaborativeTeamExecutions.findTeamRunById(
+            team.id,
+            {
+              tenantId: task.tenantId,
+              workspaceId: task.workspaceId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+            },
+          );
+          revokeForTerminalTeamRun({
+            teamRunId: team.id,
+            status: terminal?.status,
+            revokeForTeamRun: (teamRunId) =>
+              runtimeExtensionBinder.revokeForTeamRun(teamRunId),
+          });
+        }
       },
     },
   );
@@ -513,6 +534,9 @@ export async function createService(
             await collaborativeTeamExecutions.recoverExpiredTeamRuns(
               new Date().toISOString(),
             );
+          revokeForRecoveredTeamRuns(recovered, (teamRunId) =>
+            runtimeExtensionBinder.revokeForTeamRun(teamRunId),
+          );
           for (const item of recovered) {
             logger.log('warn', 'team.recovery.fail_closed', {
               team_run_id: item.teamRunId,

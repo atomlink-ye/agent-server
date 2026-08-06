@@ -64,3 +64,18 @@ export function createTeamWorkItem(
     completedAt: null,
   });
 }
+
+export function cancelWorkItem(
+  item: TeamWorkItem,
+  now: () => Date = () => new Date(),
+): TeamWorkItem {
+  if (item.status !== 'in_progress') {
+    throw new Error('Only in-progress work items can be cancelled.');
+  }
+  const updatedAt = now().toISOString();
+  return Object.freeze({
+    ...item,
+    status: 'cancelled' as const,
+    updatedAt,
+  });
+}

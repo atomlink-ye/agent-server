@@ -171,6 +171,18 @@ export function registerTeamMcpTools(
       ),
   );
   canonical(
+    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
+    'team_work_cancel',
+    {
+      description: 'Abandon failed work.',
+      inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
+    },
+    (input: { work_ref: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, (ctx) =>
+        context.commands.cancel(ctx, { workRef: input.work_ref }),
+      ),
+  );
+  canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
     'team_finish',
     { description: 'Finish Team.', inputSchema: {} },

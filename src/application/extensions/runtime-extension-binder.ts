@@ -12,6 +12,7 @@ export interface RuntimeExtensionBinder {
     readonly taskId?: string;
     readonly runId?: string;
     readonly teamMemberRunId?: string;
+    readonly teamRunId?: string;
     readonly contextEpoch?: string;
     readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
@@ -35,5 +36,6 @@ export interface RuntimeExtensionBinder {
     readonly scopeId: string;
   }): import('./runtime-tool-grant-service.js').RuntimeToolGrant | null;
   revoke?(grantId: string): void;
+  revokeForTeamRun?(teamRunId: string): void;
   activeToolCalls?(grantId: string): number;
 }

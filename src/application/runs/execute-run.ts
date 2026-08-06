@@ -418,6 +418,24 @@ export class ExecuteRun {
     );
   }
 
+  private revokeGrantSafely(
+    binder: RuntimeExtensionBinder,
+    grantId: string,
+  ): void {
+    try {
+      binder.revoke?.(grantId);
+    } catch (error) {
+      try {
+        this.logger.log('warn', 'run.runtime_grant_revoke_failed', {
+          grant_id: grantId,
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      } catch {
+        // Secondary logging failure must not mask the primary runtime error.
+      }
+    }
+  }
+
   private reportCompletionPersistenceFailure(
     receipt: ReturnType<typeof createRuntimeExecutionReceipt>,
   ): void {
@@ -768,13 +786,6 @@ export class ExecuteRun {
         sessionRuntime.paseoWorkspaceId !== null)
     )
       throw new Error('New Team member runtime session is already bound.');
-    if (
-      member &&
-      sessionRuntime &&
-      !createdRuntimeSession &&
-      !sessionRuntime.providerAgentId
-    )
-      throw new Error('Loaded Team member runtime session is unbound.');
     if (member && sessionRuntime && this.collaborativeExecutions)
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
@@ -828,6 +839,9 @@ export class ExecuteRun {
         taskId: task.id,
         runId: claim.run.id,
         ...(member?.id ? { teamMemberRunId: member.id } : {}),
+        ...(collaborativeTeam && member
+          ? { teamRunId: collaborativeTeam.id }
+          : {}),
         ...(collaborativeTeam && member
           ? {
               contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
@@ -973,7 +987,9 @@ export class ExecuteRun {
           },
         }
       : undefined;
-    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>>;
+    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>> | undefined;
+    let executionFailed = false;
+    let executionError: unknown;
     try {
       execution = await this.runtime.execute(
         priorProviderAgentId
@@ -1013,7 +1029,12 @@ export class ExecuteRun {
             },
         runtimeEventSink,
       );
-    } finally {
+    } catch (error) {
+      executionFailed = true;
+      executionError = error;
+    }
+    let narrowingError: unknown;
+    try {
       if (member?.role === 'lead') {
         if (!exactLeadGrantId || !refreshableBinder?.refreshForTeamMember)
           throw new Error('Lead runtime grant could not be narrowed.');
@@ -1030,7 +1051,7 @@ export class ExecuteRun {
           if (narrowed.allowedTools.length !== 0)
             throw new Error('Lead runtime grant did not narrow to zero.');
         } catch (error) {
-          refreshableBinder.revoke?.(exactLeadGrantId);
+          this.revokeGrantSafely(refreshableBinder, exactLeadGrantId);
           throw error;
         }
       } else if (
@@ -1054,12 +1075,17 @@ export class ExecuteRun {
               contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
             });
           } catch (error) {
-            refreshableBinder.revoke?.(grant.grantId);
+            this.revokeGrantSafely(refreshableBinder, grant.grantId);
             throw error;
           }
         }
       }
+    } catch (error) {
+      narrowingError = error;
     }
+    if (executionFailed) throw executionError;
+    if (narrowingError) throw narrowingError;
+    if (!execution) throw new Error('Runtime execution returned no result.');
     if (
       sessionRuntime &&
       !sessionRuntime.providerAgentId &&
@@ -1288,6 +1314,41 @@ export class ExecuteRun {
       .join(', ');
     const workItems = leadState?.workItems ?? [];
     const attempts = leadState?.attempts ?? [];
+    const latestAttemptByWorkItem = new Map<string, TeamWorkItemAttempt>();
+    for (const attempt of attempts) {
+      const previous = latestAttemptByWorkItem.get(attempt.workItemId);
+      if (!previous || attempt.attemptNo > previous.attemptNo)
+        latestAttemptByWorkItem.set(attempt.workItemId, attempt);
+    }
+    const failureCodeByAttempt = new Map<string, string>();
+    if (this.tasks.findByIdForOwner) {
+      await Promise.all(
+        attempts.map(async (attempt) => {
+          if (
+            attempt.status !== 'failed' ||
+            latestAttemptByWorkItem.get(attempt.workItemId)?.id !==
+              attempt.id ||
+            !attempt.executionTaskId
+          )
+            return;
+          const record = await this.tasks.findByIdForOwner(
+            attempt.executionTaskId,
+            {
+              tenantId: task.tenantId,
+              workspaceId: task.workspaceId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+            },
+          );
+          const code = record?.latestRun?.error?.code;
+          if (
+            code === 'runtime_timed_out' ||
+            code === 'runtime_execution_failed'
+          )
+            failureCodeByAttempt.set(attempt.id, code);
+        }),
+      );
+    }
     const memberNameById = new Map(
       members.map((member) => [member.id, member.name]),
     );
@@ -1313,6 +1374,9 @@ export class ExecuteRun {
             attempt_no: attempt.attemptNo,
             status: attempt.status,
             result_summary: safeAgenticLeadSnapshotText(attempt.resultSummary),
+            ...(failureCodeByAttempt.has(attempt.id)
+              ? { failure_code: failureCodeByAttempt.get(attempt.id) }
+              : {}),
             feedback: safeAgenticLeadSnapshotText(attempt.feedback),
           })),
       })),
@@ -1336,6 +1400,11 @@ export class ExecuteRun {
             (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
           )
           .filter((ref) => ref !== 'work-0'),
+        cancel: leadState?.policy.eligibleCancelWorkItemIds
+          .map(
+            (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
+          )
+          .filter((ref) => ref !== 'work-0'),
         rework: leadState?.policy.eligibleReworkWorkItemIds
           .map(
             (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
@@ -1345,7 +1414,7 @@ export class ExecuteRun {
     });
     return `${prompt}
 
-Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
+Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.cancel is non-empty and team_work_cancel is allowed, call team_work_cancel({work_ref}) for each failed Work ref with a typed runtime failure. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
 
 Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
   }

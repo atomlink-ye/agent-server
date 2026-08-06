@@ -39,6 +39,8 @@ runtime sessions resolved to three different providers.
 - Centralize the mapping from the published policy reference to provider,
   operator-pinned model, and the already-established provider mode.
 - Preserve `free-only` as the existing process-config fallback.
+- Widen only the `modelPolicyRef` accepting predicate to a closed exported tuple,
+  derived type, and guard. Do not change its field, ordering, or serialization.
 - Extend only the `create` branch of `AgentRuntimeExecuteInput` with optional
   per-call provider/model values and forward them through the Paseo adapter.
 - Keep continuation bound to the provider Agent created for that member.
@@ -58,8 +60,13 @@ runtime sessions resolved to three different providers.
 
 ## Work breakdown
 
-- [ ] Resolve the Human Gate described in `Current blocker` before any product
-      code change.
+- [x] Resolve the Human Gate described in `Current blocker` before any product
+      code change. On 2026-08-07 the owner explicitly authorized the minimum
+      closed-set ManagedAgent predicate widening because no existing field can
+      express mixed per-member providers.
+- [ ] Widen `BUILT_IN_MODEL_POLICY_REFS` only with the exact Claude and Codex
+      policy values needed by this slice; export the tuple-derived type and
+      guard following PR #29's approved provider-union shape.
 - [ ] Add one application-owned runtime-policy resolver whose input is the
       persisted published Agent `modelPolicyRef`; make unknown/unconfigured paid
       policies fail closed and retain `free-only` process fallback.
@@ -101,6 +108,9 @@ runtime sessions resolved to three different providers.
 - [ ] Capture the smoke's machine-written durable query output showing the
       three bound runtime sessions in one TeamRun resolve to distinct
       `opencode`, `claude`, and `codex` providers. Runtime logs are not evidence.
+- [ ] Prove an unchanged `free-only` package canonicalizes byte-identically and
+      retains its pinned fingerprint across the predicate widening. If any
+      existing pinned digest moves, stop before further implementation.
 - [ ] Run `make paseo-smoke`; expect `PASEO_OPENCODE_BASELINE_OK` or record the
       exact external prerequisite that prevents it.
 
@@ -133,13 +143,23 @@ runtime sessions resolved to three different providers.
   Claude/Codex policy ref can be imported and published today.
 - `docs/contracts.md` also publishes the closed behavior: "The built-in runtime
   model policy is `free-only`; callers cannot select a concrete or paid model."
+- Human Gate crossed on 2026-08-07 under delegated owner authority. The owner
+  determined there is no no-gate path: `spec.runtime.provider` is only the
+  `paseo` adapter, TeamSpec's environment is team-wide, and process-global
+  `PASEO_PROVIDER` cannot represent a mixed TeamRun. Authorization is limited to
+  widening the accepted `modelPolicyRef` values as a closed set, following PR
+  #29, with no key/field/serialization change and no existing fingerprint churn.
+- The design of record contains the incorrect premise that `modelPolicyRef` is
+  an open string validated only by type. The owner will correct that design; the
+  current code, contract, this gate decision, and this plan govern execution.
 
 ## Risks and recovery
 
-- Widening or relaxing `BUILT_IN_MODEL_POLICY_REFS` changes the accepted
-  published ManagedAgent package contract. `AGENTS.md` classifies a public
-  contract/schema change as a Human Gate, so no product code may be changed
-  until the owner resolves the authority conflict.
+- Widening `BUILT_IN_MODEL_POLICY_REFS` changes the accepted published
+  ManagedAgent package contract. The Human Gate authorizes only the smallest
+  closed-set accepting-predicate change. An open string, field/key change,
+  migration, or existing fingerprint change exceeds that authority and stops
+  execution.
 - A literal provider/model grammar would let a package publisher name arbitrary
   paid models. Prefer an operator-controlled named-policy mapping if the Human
   Gate authorizes new refs; unknown refs must fail closed.
@@ -156,11 +176,12 @@ runtime sessions resolved to three different providers.
   the design baseline `97d9c15` and required baseline `0fc832b`.
 - `runs.runtime` is existing durable JSONB state and contains the normalized
   execution `{provider, model}` pair; no migration is needed for acceptance.
-- No product code, schema, migration, fixture, or test has been changed.
+- Before the gate decision, no product code, schema, migration, fixture, or test
+  had been changed; only the committed Active Exec Plan existed.
 
 ## Completion checklist
 
-- [ ] Human Gate resolved in writing.
+- [x] Human Gate resolved in writing.
 - [ ] All implementation and verification items are complete or explicitly
       transferred.
 - [ ] No request-selected provider/model path, migration, published Team schema
@@ -171,22 +192,19 @@ runtime sessions resolved to three different providers.
 
 ## Current blocker
 
-Human Gate: the brief's required extension point is not open on the required
-baseline. Publishing any non-`free-only` Agent package requires changing the
-accepted ManagedAgent package contract in
-`src/domain/agents/managed-agent-package.ts`. The owner must either explicitly
-authorize that published-contract change and choose the permitted policy-ref
-semantics, or revise the brief to provide a different already-published source
-of per-member provider/model policy.
+None. The ManagedAgent published-contract Human Gate was explicitly crossed on
+2026-08-07 under delegated owner authority, within the closed-predicate and
+fingerprint-invariance limits recorded above.
 
 ## Next exact command
 
-After written Human Gate resolution, re-read the decision, update this plan's
-scope and blocker, then dispatch a fixer with explicit ownership of the approved
-runtime-policy resolver files and its smallest required check. Until then, make
-no product-code command.
+Dispatch a fixer with explicit ownership of the closed policy tuple/guard and
+runtime-policy resolver files. Its first required check is canonical JSON plus
+fingerprint equality for the unchanged `free-only` fixture before runtime wiring
+begins.
 
 ## Cleanup state
 
-Clean linked worktree on `agent/per-member-provider`; only this Active Exec Plan
-is intentionally added and committed. No temporary files or generated evidence.
+Clean linked worktree on `agent/per-member-provider`; the initial Active Exec
+Plan is committed and this gate-decision update is the only pending change. No
+temporary files or generated evidence.

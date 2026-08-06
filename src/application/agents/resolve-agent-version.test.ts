@@ -19,7 +19,14 @@ function managed(
     principalType: scope.principalType,
     principalId: scope.principalId,
     status,
-    package: { spec: { instructions, tools: [], skills: [] } },
+    package: {
+      spec: {
+        instructions,
+        tools: [],
+        skills: [],
+        runtime: { modelPolicyRef: 'free-only' },
+      },
+    },
   } as never;
 }
 
@@ -60,6 +67,7 @@ describe('ResolveAgentVersion', () => {
       source: 'managed',
       id: 'version-1',
       instructions: 'managed',
+      modelPolicyRef: 'free-only',
       proposalLimit: 0,
       skills: [],
       toolRefs: [],
@@ -84,6 +92,7 @@ describe('ResolveAgentVersion', () => {
       source: 'legacy',
       id: 'version-1',
       instructions: 'legacy',
+      modelPolicyRef: 'free-only',
       proposalLimit: 0,
       skills: [],
       toolRefs: [],

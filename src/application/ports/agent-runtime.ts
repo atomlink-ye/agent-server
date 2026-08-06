@@ -1,4 +1,5 @@
 import type { RunUsage } from '../../domain/runs/run.js';
+import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 
 export const AGENT_SERVER_RUNTIME_MCP_SERVER_NAME = 'agent-server';
 
@@ -103,7 +104,7 @@ export interface RuntimeEventSink {
 }
 
 export type AgentRuntimeExecuteInput =
-  | {
+  | ({
       readonly operation: 'create';
       readonly runId: string;
       readonly runtimeSessionId?: string;
@@ -123,7 +124,17 @@ export type AgentRuntimeExecuteInput =
         readonly maxCandidates?: number;
         readonly proposalLimit?: number;
       };
-    }
+    } & (
+      | {
+          readonly provider?: undefined;
+          readonly model?: undefined;
+        }
+      | {
+          readonly provider: ManagedEnvironmentProvider;
+          /** Non-empty when supplied by trusted internal model-policy resolution. */
+          readonly model: string;
+        }
+    ))
   | {
       readonly operation: 'continue';
       readonly runId: string;

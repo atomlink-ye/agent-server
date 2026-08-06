@@ -62,6 +62,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   #generation = 0;
   #connectedGeneration: number | null = null;
   readonly #agents = new Map<string, string>();
+  readonly #agentBindings = new Map<
+    string,
+    { readonly provider: string; readonly model: string }
+  >();
   readonly #sessionWorkspaces = new Map<string, string>();
 
   public constructor(
@@ -184,6 +188,29 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       throw new RuntimeExecutionError('Paseo runtime is not initialized.');
     }
 
+    const continuationBinding =
+      input.operation === 'continue'
+        ? this.#agentBindings.get(input.providerAgentId)
+        : undefined;
+    if (input.operation === 'continue' && !continuationBinding)
+      throw new RuntimeExecutionError(
+        'Paseo continuation provenance is unavailable.',
+      );
+    const createProvider: ManagedEnvironmentProvider =
+      input.operation === 'create' && input.provider !== undefined
+        ? input.provider
+        : this.#options.provider;
+    const effectiveProvider =
+      input.operation === 'continue'
+        ? continuationBinding!.provider
+        : createProvider;
+    const effectiveModel =
+      input.operation === 'create' && input.model !== undefined
+        ? input.model
+        : input.operation === 'continue'
+          ? continuationBinding!.model
+          : this.#model.id;
+
     const artifactRelativePath = join(
       'scratchpad',
       'runs',
@@ -235,14 +262,14 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         run_id: input.runId,
         managed_cell: managedCellExecution,
         has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
-        model_id: this.#model.id,
+        model_id: effectiveModel,
       });
       workspaceId = await this.#client.createIndependentWorkspace(cwd);
       this.#logger.log('info', 'runtime.workspace.create.completed', {
         run_id: input.runId,
         managed_cell: managedCellExecution,
         has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
-        model_id: this.#model.id,
+        model_id: effectiveModel,
         elapsed_ms: Date.now() - workspaceStartedAt,
       });
       await this.#client.setWorkspaceTitle(
@@ -1280,13 +1307,13 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     let nestedPollPromise: Promise<void> | null = null;
 
     try {
-      const modelId = this.#model.id;
+      const modelId = effectiveModel;
       const agent =
         input.operation === 'continue'
           ? {
               id: input.providerAgentId,
-              provider: this.#options.provider,
-              model: this.#model.id,
+              provider: effectiveProvider,
+              model: effectiveModel,
             }
           : await (async () => {
               const agentStartedAt = Date.now();
@@ -1297,7 +1324,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
                 model_id: modelId,
               });
               const created = await this.#client.createAgent({
-                provider: this.#options.provider,
+                provider: createProvider,
                 cwd: input.cellCwd ?? this.#options.cwd,
                 workspaceId,
                 model: modelId,
@@ -1317,10 +1344,19 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
                 model_id: modelId,
                 elapsed_ms: Date.now() - agentStartedAt,
               });
-              return created;
+              return {
+                ...created,
+                provider: created.provider || createProvider,
+                model: created.model ?? effectiveModel,
+              };
             })();
       activeAgentId = agent.id;
       this.#agents.set(input.runId, agent.id);
+      if (input.operation === 'create')
+        this.#agentBindings.set(agent.id, {
+          provider: agent.provider,
+          model: agent.model,
+        });
       if (input.operation === 'create' && input.onProviderBinding)
         await input.onProviderBinding({
           providerAgentId: agent.id,
@@ -1488,8 +1524,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         ? await this.#readMemoryCandidates(artifact, executionCwd)
         : {};
       return {
-        provider: agent.provider || this.#options.provider,
-        model: agent.model ?? this.#model.id,
+        provider: agent.provider || effectiveProvider,
+        model: agent.model ?? effectiveModel,
         text: finished.lastMessage,
         providerAgentId: agent.id,
         paseoWorkspaceId: workspaceId,
@@ -1644,6 +1680,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       });
     } finally {
       this.#agents.delete(input.runId);
+      this.#agentBindings.delete(agentId);
     }
   }
 
@@ -1683,6 +1720,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#workspaceId = null;
     this.#model = null;
     this.#agents.clear();
+    this.#agentBindings.clear();
     this.#sessionWorkspaces.clear();
     this.#initialization = null;
     await this.#client.close();

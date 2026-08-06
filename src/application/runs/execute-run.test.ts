@@ -54,6 +54,7 @@ describe('ExecuteRun', () => {
               instructions: 'managed instructions',
               tools: [],
               skills: [{ ref: 'custom/skill' }],
+              runtime: { modelPolicyRef: 'free-only' },
               memory: { proposalLimit: 1 },
             },
           },
@@ -642,7 +643,12 @@ describe('ExecuteRun', () => {
       id: 'managed-version-1',
       status: 'published',
       package: {
-        spec: { instructions: 'managed instructions', tools: [], skills: [] },
+        spec: {
+          instructions: 'managed instructions',
+          tools: [],
+          skills: [],
+          runtime: { modelPolicyRef: 'free-only' },
+        },
       },
     })) as never;
     const findLegacy = vi.fn(async () => null);
@@ -708,6 +714,7 @@ describe('ExecuteRun', () => {
               instructions: 'managed instructions',
               tools: [],
               skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
               memory: { proposalLimit: 1 },
             },
           },
@@ -1123,6 +1130,7 @@ describe('ExecuteRun', () => {
               instructions: 'instructions',
               tools: [],
               skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
               memory: { proposalLimit: 1 },
             },
           },
@@ -1188,6 +1196,7 @@ describe('ExecuteRun', () => {
               instructions: 'instructions',
               tools: [],
               skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
               memory: { proposalLimit: 2 },
             },
           },
@@ -1267,6 +1276,7 @@ describe('ExecuteRun', () => {
               instructions: 'instructions',
               tools: [],
               skills: [],
+              runtime: { modelPolicyRef: 'free-only' },
               memory: { proposalLimit: id === 'managed-low' ? 1 : 3 },
             },
           },

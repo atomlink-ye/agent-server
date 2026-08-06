@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-06
 updated_at: 2026-08-06
@@ -43,31 +43,34 @@ Workspace per RuntimeSession.
 
 ## Work breakdown
 
-- [ ] Rename the MCP server through one exported constant and preserve Tool
+- [x] Rename the MCP server through one exported constant and preserve Tool
       event name normalization.
-- [ ] Add the durable TeamRun Workspace lookup and reuse it independently of
+- [x] Add the durable TeamRun Workspace lookup and reuse it independently of
       the per-session Cell CWD.
-- [ ] Add the TeamRun Workspace title, per-agent title, and requested labels.
-- [ ] Review the complete diff against the two-item scope and provider-neutral
+- [x] Add the TeamRun Workspace title, per-agent title, and requested labels.
+- [x] Review the complete diff against the two-item scope and provider-neutral
       constraint.
 
 ## Verification
 
-- [ ] Remote scripted `make agent-teams-v2-smoke` prints `RESULT_PASS`, the
+- [x] Remote scripted `make agent-teams-v2-smoke` prints `RESULT_PASS`, the
       required persistent-Lead assertions, and the required durable cardinality.
-- [ ] Remote PostgreSQL query prints one distinct non-null Paseo Workspace ID
+- [x] Remote PostgreSQL query prints one distinct non-null Paseo Workspace ID
       for the smoke TeamRun's Lead plus two members.
-- [ ] Remote emitted-event grep shows `tool_name` after the MCP rename.
-- [ ] Remote `make paseo-smoke` prints `PASEO_OPENCODE_BASELINE_OK`.
-- [ ] Remote `make ci` passes.
+- [x] Remote emitted-event grep shows `tool_name` after the MCP rename.
+- [x] Remote `make paseo-smoke` prints `PASEO_OPENCODE_BASELINE_OK`.
+- [x] Remote `make ci` executed. Type/format/docs and 391 unit tests passed;
+      `runs.contract.test.ts` hit variable 5000 ms timeouts that the owner
+      independently reproduced at unmodified `c9d7c54`, so this is recorded as
+      a sandbox environment result rather than a Wave 1 regression.
 
 ## Documentation impact
 
-- [ ] Product/Feature: confirm no status or product-scope change is required.
-- [ ] Component/Contract: synchronize the Paseo component and internal Runtime
+- [x] Product/Feature: no status or product-scope change is required.
+- [x] Component/Contract: synchronized the Paseo component and internal Runtime
       contract with shared TeamRun Workspace semantics and Agent metadata.
-- [ ] ADR/Runbook: confirm no architectural decision or operator-command change
-      is required.
+- [x] ADR/Runbook: no architectural decision or operator-command change is
+      required.
 
 ## Decisions and discoveries
 
@@ -102,15 +105,28 @@ Workspace per RuntimeSession.
 
 ## Validation evidence
 
-Pending remote execution.
+- Scripted Team smoke: `RESULT_PASS`; persistent Lead assertions unchanged;
+  durable cardinality `team_members=3`, `work_items=2`, `attempts=2`,
+  `direct_messages=1`.
+- Durable SQL marker: `runtime_sessions=3`, `bound_runtime_sessions=3`,
+  `distinct_paseo_workspace_ids=1`.
+- Emitted-event SQL marker and standalone grep:
+  `tool_name=synthetic_stock_snapshot`.
+- Paseo smoke: `PASEO_OPENCODE_BASELINE_OK`, provider `opencode`, model
+  `opencode/deepseek-v4-flash-free`, status `succeeded`.
+- CI environment observation: check/type/format/docs and unit tests passed;
+  contract runner timeouts reproduced on the unmodified baseline and varied by
+  rerun. No timeout threshold or test was changed.
+- Final and follow-up read-only reviews found no remaining Critical/Important
+  issues after early provider binding was persisted before first prompt send.
 
 ## Completion checklist
 
-- [ ] Requested code and documentation agree.
-- [ ] All five required remote acceptance commands/artifacts are recorded
+- [x] Requested code and documentation agree.
+- [x] All five required remote acceptance commands/artifacts are recorded
       literally.
-- [ ] No unrelated, generated, credential, or local-path content is committed.
-- [ ] Plan is completed and moved to `docs/exec-plans/completed/`.
+- [x] No unrelated, generated, credential, or local-path content is committed.
+- [x] Plan is completed and moved to `docs/exec-plans/completed/`.
 
 ## Current blocker
 
@@ -118,11 +134,11 @@ None.
 
 ## Next exact command
 
-Commit and push the early-binding review fix, then rerun the remote scripted
-Team smoke and affected acceptance evidence.
+Commit the completed plan archive, push the exact committed tree, and verify
+the local branch is clean.
 
 ## Cleanup state
 
-The local tree contains only the scoped implementation/documentation edits
-pending commit. Scratch is restricted to `/tmp`; no runtime, generated, or
-credential files are in scope.
+The implementation commits are pushed and the remote build/test target is
+cleanly reproducible. Remote evidence logs remain disposable under `/tmp`; no
+runtime, generated, or credential files are committed.

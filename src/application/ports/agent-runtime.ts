@@ -1,5 +1,7 @@
 import type { RunUsage } from '../../domain/runs/run.js';
 
+export const AGENT_SERVER_RUNTIME_MCP_SERVER_NAME = 'agent-server';
+
 export interface RuntimeHealthCheck {
   readonly name: string;
   readonly ready: boolean;
@@ -106,6 +108,14 @@ export type AgentRuntimeExecuteInput =
       readonly runId: string;
       readonly runtimeSessionId?: string;
       readonly cellCwd?: string;
+      readonly paseoWorkspaceId?: string;
+      readonly workspaceTitle?: string;
+      readonly agentTitle?: string;
+      readonly agentLabels?: Readonly<Record<string, string>>;
+      readonly onProviderBinding?: (binding: {
+        readonly providerAgentId: string;
+        readonly paseoWorkspaceId: string;
+      }) => Promise<void> | void;
       readonly prompt: string;
       readonly systemPrompt: string;
       readonly extensions?: RuntimeExtensionBinding;

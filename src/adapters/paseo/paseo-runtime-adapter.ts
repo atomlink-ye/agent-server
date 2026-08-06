@@ -213,13 +213,14 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       Boolean(input.cellCwd) ||
       (input.operation === 'continue' && Boolean(input.paseoWorkspaceId));
     let workspaceId =
-      (input.operation === 'continue' ? input.paseoWorkspaceId : undefined) ??
+      input.paseoWorkspaceId ??
       (runtimeSessionId
         ? this.#sessionWorkspaces.get(runtimeSessionId)
         : undefined);
-    if (input.operation === 'create' && managedCellExecution) {
+    if (input.operation === 'create' && managedCellExecution)
+      await mkdir(input.cellCwd ?? this.#options.cwd, { recursive: true });
+    if (input.operation === 'create' && managedCellExecution && !workspaceId) {
       const cwd = input.cellCwd ?? this.#options.cwd;
-      await mkdir(cwd, { recursive: true });
       if (!this.#client.createIndependentWorkspace)
         throw new RuntimeExecutionError(
           'Paseo independent workspace creation is unavailable.',
@@ -241,11 +242,11 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       });
       await this.#client.setWorkspaceTitle(
         workspaceId,
-        this.#options.workspaceTitle,
+        input.workspaceTitle ?? this.#options.workspaceTitle,
       );
-      if (runtimeSessionId)
-        this.#sessionWorkspaces.set(runtimeSessionId, workspaceId);
     }
+    if (runtimeSessionId && workspaceId)
+      this.#sessionWorkspaces.set(runtimeSessionId, workspaceId);
     if (!workspaceId && !managedCellExecution)
       workspaceId = this.#workspaceId ?? undefined;
     if (!workspaceId)
@@ -1297,6 +1298,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
                 systemPrompt: input.systemPrompt,
                 initialPrompt: prompt,
                 runId: input.runId,
+                ...(input.agentTitle ? { title: input.agentTitle } : {}),
+                ...(input.agentLabels ? { labels: input.agentLabels } : {}),
                 ...(input.extensions?.mcpServers
                   ? { mcpServers: input.extensions.mcpServers }
                   : {}),
@@ -1312,6 +1315,11 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             })();
       activeAgentId = agent.id;
       this.#agents.set(input.runId, agent.id);
+      if (input.operation === 'create' && input.onProviderBinding)
+        await input.onProviderBinding({
+          providerAgentId: agent.id,
+          paseoWorkspaceId: workspaceId,
+        });
 
       if (this.#client.fetchAgentTimeline) {
         baseline = await this.#client.fetchAgentTimeline(agent.id, {

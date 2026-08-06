@@ -80,7 +80,11 @@ forwarded. This is a local streaming projection seam, not durable stream
 recovery, multi-writer ordering, or production backpressure.
 
 In Agent Teams v2, a Team member owns one member-scoped RuntimeSession and
-RuntimeCell across Lead continuations and Work attempts. The creating task is
+RuntimeCell across Lead continuations and Work attempts. All member-scoped
+RuntimeSessions in one TeamRun persist the same Paseo Workspace ID while each
+Agent keeps its own RuntimeCell CWD. The TeamRun Workspace has a TeamRun-derived
+title; each Paseo Agent has a member/role title and non-secret Team labels. The
+creating task is
 recorded as `runtime_sessions.task_id`; later Tasks never create a second
 session. The launch snapshot pins workspace, environment, agent version,
 resolved skills, and an immutable catalog (Lead exposes exactly seven

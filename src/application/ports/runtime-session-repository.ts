@@ -41,6 +41,13 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
+  findPaseoWorkspaceByTeamRun?(input: {
+    teamRunId: string;
+    tenantId: string;
+    workspaceId: string;
+    principalType: string;
+    principalId: string;
+  }): Promise<string | null>;
   createOrGetForProductSession(input: {
     productSessionId: string;
     tenantId: string;

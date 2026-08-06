@@ -220,7 +220,8 @@ export class RuntimeToolGrantService {
         candidate.teamMemberRunId === input.teamMemberRunId &&
         candidate.productSessionId === input.scopeId,
     );
-    if (matches.length !== 1)
+    if (matches.length === 0) throw new Error('Runtime grant scope not found.');
+    if (matches.length > 1)
       throw new Error('Runtime grant scope is ambiguous.');
     const grant = input.grantId
       ? matches.find((candidate) => candidate.grantId === input.grantId)
@@ -283,7 +284,8 @@ export class RuntimeToolGrantService {
     const now = Date.now();
     for (const [grantId, grant] of this.#grants) {
       if (Date.parse(grant.expiresAt) > now) continue;
-      if ((this.#activeCalls.get(grantId) ?? 0) > 0) continue;
+      if ((this.#activeCalls.get(grantId) ?? 0) > 0 || grant.teamMemberRunId)
+        continue;
       this.#grants.delete(grantId);
       this.#activeCalls.delete(grantId);
     }

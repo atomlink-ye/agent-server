@@ -426,11 +426,21 @@ class ScriptedRuntime {
   #failedAttemptInjected = false;
   #leadFailureCodeObserved = false;
   #cancelReplayEqual = false;
+  #firstAttemptSubmissions = 0;
+  #firstAttemptWaiters = [];
   get cancelReplayEqual() {
     return this.#cancelReplayEqual;
   }
   get leadFailureCodeObserved() {
     return this.#leadFailureCodeObserved;
+  }
+  async synchronizeFirstAttemptSubmissions() {
+    this.#firstAttemptSubmissions += 1;
+    if (this.#firstAttemptSubmissions === 2) {
+      for (const release of this.#firstAttemptWaiters.splice(0)) release();
+      return;
+    }
+    await new Promise((resolve) => this.#firstAttemptWaiters.push(resolve));
   }
   #pendingLeadIdle = [];
   async assertLeadIdle() {
@@ -990,6 +1000,8 @@ class ScriptedRuntime {
           arguments: { summary },
         }),
       );
+      if (reworkScenario && !reworkDelivery)
+        await this.synchronizeFirstAttemptSubmissions();
       const rejectedAfterSubmit = async (
         name,
         args,

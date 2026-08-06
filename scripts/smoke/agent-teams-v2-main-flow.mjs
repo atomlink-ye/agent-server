@@ -562,7 +562,7 @@ class ScriptedRuntime {
       });
     };
     const directTurn = input.prompt.includes('phase3-direct-sentinel');
-    runtimeCalls.push({
+    const runtimeBinding = {
       kind: 'runtime_binding',
       role: directTurn
         ? 'direct'
@@ -571,7 +571,8 @@ class ScriptedRuntime {
           : 'lead',
       operation: input.operation,
       provider_binding_hash: hash(providerAgentId),
-    });
+    };
+    runtimeCalls.push(runtimeBinding);
     if (directTurn) {
       assert(
         input.prompt.includes('phase3-direct-sentinel'),
@@ -948,15 +949,24 @@ class ScriptedRuntime {
         tools.has('synthetic_stock_snapshot'),
         'member_domain_tool_missing',
       );
-      assert(
-        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
-          input.systemPrompt.includes('Never guess fixture_ref'),
-        'member_canonical_snapshot_args_missing',
-      );
+      const reworkDelivery = input.prompt.includes('Attempt number: 2');
+      if (input.operation === 'create')
+        assert(
+          input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+            input.systemPrompt.includes('Never guess fixture_ref'),
+          'member_canonical_snapshot_args_missing',
+        );
+      else if (reworkDelivery)
+        assert(
+          input.prompt.includes('missing canonical fixture_ref') &&
+            input.prompt.includes('data_as_of 2026-07-31'),
+          'member_rework_feedback_missing',
+        );
       this.#memberTurns += 1;
       const memberState = value(
         await session.client.callTool({ name: 'team_state', arguments: {} }),
       );
+      runtimeBinding.member_name = memberState.member?.name;
       if (
         failedAttemptMode === 'baseline' ||
         (failedAttemptMode === 'fixed' &&
@@ -982,7 +992,6 @@ class ScriptedRuntime {
           },
         }),
       );
-      const reworkDelivery = input.prompt.includes('Attempt number: 2');
       const summary =
         reworkScenario &&
         memberState.member?.name === 'member' &&
@@ -1267,40 +1276,6 @@ try {
   const { loadConfig } = await import('../../src/shared/config.ts');
   const { createLogger } =
     await import('../../src/shared/observability/logger.ts');
-  if (reworkScenario) {
-    const { RuntimeToolGrantService } =
-      await import('../../src/application/extensions/runtime-tool-grant-service.ts');
-    const refreshForTeamMember =
-      RuntimeToolGrantService.prototype.refreshForTeamMember;
-    RuntimeToolGrantService.prototype.refreshForTeamMember = function (input) {
-      try {
-        return refreshForTeamMember.call(this, input);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message === 'Runtime grant allowed tools exceed catalog.'
-        )
-          marker('REWORK_EXPECTED_V6_FAILURE', {
-            error_message: error.message,
-          });
-        throw error;
-      }
-    };
-    const { ExecuteRun } =
-      await import('../../src/application/runs/execute-run.ts');
-    const executeAgentRun = ExecuteRun.prototype.executeAgentRun;
-    ExecuteRun.prototype.executeAgentRun = async function (...args) {
-      try {
-        return await executeAgentRun.apply(this, args);
-      } catch (error) {
-        marker('REWORK_EXECUTE_FAILURE', {
-          error_message:
-            error instanceof Error ? error.message : 'Unknown runtime error',
-        });
-        throw error;
-      }
-    };
-  }
   const { createService } = await import('../../src/bootstrap.ts');
   service = await createService(
     loadConfig(),
@@ -2440,7 +2415,10 @@ try {
     [teamRunId],
   );
   const terminalAttemptStatuses = new Set(['completed', 'failed']);
-  assert(attempts.rowCount >= 2, 'attempt_count_invalid');
+  assert(
+    reworkScenario ? attempts.rowCount === 3 : attempts.rowCount >= 2,
+    'attempt_count_invalid',
+  );
   assert(
     attempts.rows.every((row) => row.execution_task_id),
     'attempt_execution_task_missing',
@@ -2535,22 +2513,37 @@ try {
     });
   }
   const memberSubmittedAttempt = await db.query(
-    `SELECT a.status AS attempt_status,r.status AS run_status,m.status AS member_status
+    `SELECT a.attempt_no,a.status AS attempt_status,r.status AS run_status,m.status AS member_status
        FROM team_work_item_attempts a
        JOIN tasks t ON t.id=a.execution_task_id
        JOIN runs r ON r.task_id=t.id
        JOIN team_member_runs m ON m.id=a.assignee_member_id
-      WHERE a.team_run_id=$1 AND a.assignee_member_id=$2`,
+      WHERE a.team_run_id=$1 AND a.assignee_member_id=$2
+      ORDER BY a.attempt_no`,
     [teamRunId, member.id],
   );
   if (scriptedRuntime) {
-    assert(
-      memberSubmittedAttempt.rowCount === 1 &&
-        memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
-        memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
-        memberSubmittedAttempt.rows[0].member_status === 'idle',
-      'submitted_timeout_member_not_idle',
-    );
+    if (reworkScenario)
+      assert(
+        memberSubmittedAttempt.rowCount === 2 &&
+          memberSubmittedAttempt.rows.every(
+            (row) =>
+              row.attempt_status === 'completed' &&
+              row.run_status === 'succeeded' &&
+              row.member_status === 'idle',
+          ) &&
+          memberSubmittedAttempt.rows.map((row) => row.attempt_no).join(',') ===
+            '1,2',
+        'submitted_timeout_rework_member_not_idle',
+      );
+    else
+      assert(
+        memberSubmittedAttempt.rowCount === 1 &&
+          memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
+          memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
+          memberSubmittedAttempt.rows[0].member_status === 'idle',
+        'submitted_timeout_member_not_idle',
+      );
     marker('SUBMITTED_TIMEOUT_ATTEMPT_PRESERVED');
   } else {
     assert(
@@ -2683,7 +2676,7 @@ try {
       projection.gates?.finish_ready === true &&
       projection.sessions?.find((session) => session.name === 'member')
         ?.status === 'idle' &&
-      direct.length === 1 &&
+      direct.length === (reworkScenario ? 0 : 1) &&
       JSON.stringify(projection) === JSON.stringify(replay),
     'safe_projection_or_replay_invalid',
   );
@@ -2758,57 +2751,64 @@ try {
       leadControlProgress.rows[0].commands.filter(
         (command) => command === 'team_work_create',
       ).length === 2 &&
-      leadControlProgress.rows[1].commands.includes('team_work_accept') &&
+      (reworkScenario
+        ? leadControlProgress.rows[1].commands.includes(
+            'team_work_request_changes',
+          ) && leadControlProgress.rows[1].commands.includes('team_work_accept')
+        : leadControlProgress.rows[1].commands.includes('team_work_accept')) &&
       leadControlProgress.rows[2].commands.includes('team_work_accept') &&
       leadControlProgress.rows[3].commands.includes('team_finish'),
     'lead_canonical_progress_receipts_invalid',
   );
   marker('LEAD_CANONICAL_PROGRESS_PROVEN');
-  const directRunIds = new Set(
-    (
+  const directRunIds = new Set();
+  let directTask = { rowCount: 0, rows: [] };
+  if (!reworkScenario) {
+    for (const row of (
       await db.query(
         `SELECT r.id FROM tasks t JOIN runs r ON r.task_id=t.id
           WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
         [rootTaskId],
       )
-    ).rows.map((row) => row.id),
-  );
-  const directTask = await db.query(
-    `SELECT t.id AS task_id,r.id AS run_id,r.updated_at AS run_updated_at,t.team_task_kind,t.team_member_run_id,
-            t.source_team_message_id,t.input_team_message_ids,t.team_sequence,
-            r.status AS run_status,m.status AS message_status,m.body
-       FROM tasks t
-       JOIN runs r ON r.task_id=t.id
-       JOIN team_messages m ON m.id=t.source_team_message_id
-      WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
-    [rootTaskId],
-  );
+    ).rows)
+      directRunIds.add(row.id);
+    directTask = await db.query(
+      `SELECT t.id AS task_id,r.id AS run_id,r.updated_at AS run_updated_at,t.team_task_kind,t.team_member_run_id,
+              t.source_team_message_id,t.input_team_message_ids,t.team_sequence,
+              r.status AS run_status,m.status AS message_status,m.body
+         FROM tasks t
+         JOIN runs r ON r.task_id=t.id
+         JOIN team_messages m ON m.id=t.source_team_message_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
+      [rootTaskId],
+    );
+    assert(
+      directTask.rowCount === 1 &&
+        directTask.rows[0].team_member_run_id === observer.id &&
+        directTask.rows[0].team_task_kind === 'direct_message' &&
+        directTask.rows[0].message_status === 'delivered' &&
+        directTask.rows[0].input_team_message_ids?.length === 1 &&
+        String(directTask.rows[0].body).includes('phase3-direct-sentinel') &&
+        !String(directTask.rows[0].body).includes('canary-secret') &&
+        !String(directTask.rows[0].body).includes('/Users/canary'),
+      'direct_production_reconcile_invalid',
+    );
+    marker('DIRECT_MCP_QUEUED_AND_PRODUCTION_RECONCILED');
+    const leadAfterDirect = await db.query(
+      `SELECT created_at FROM tasks
+        WHERE root_task_id=$1 AND team_task_kind='lead_turn' AND team_sequence=4`,
+      [rootTaskId],
+    );
+    assert(
+      leadAfterDirect.rowCount === 1 &&
+        Date.parse(leadAfterDirect.rows[0].created_at) >=
+          Date.parse(directTask.rows[0].run_updated_at),
+      'lead_scheduled_before_direct_terminal',
+    );
+    marker('DIRECT_LEAD_DEFERRED_UNTIL_DELIVERED');
+  }
   assert(
-    directTask.rowCount === 1 &&
-      directTask.rows[0].team_member_run_id === observer.id &&
-      directTask.rows[0].team_task_kind === 'direct_message' &&
-      directTask.rows[0].message_status === 'delivered' &&
-      directTask.rows[0].input_team_message_ids?.length === 1 &&
-      String(directTask.rows[0].body).includes('phase3-direct-sentinel') &&
-      !String(directTask.rows[0].body).includes('canary-secret') &&
-      !String(directTask.rows[0].body).includes('/Users/canary'),
-    'direct_production_reconcile_invalid',
-  );
-  marker('DIRECT_MCP_QUEUED_AND_PRODUCTION_RECONCILED');
-  const leadAfterDirect = await db.query(
-    `SELECT created_at FROM tasks
-      WHERE root_task_id=$1 AND team_task_kind='lead_turn' AND team_sequence=4`,
-    [rootTaskId],
-  );
-  assert(
-    leadAfterDirect.rowCount === 1 &&
-      Date.parse(leadAfterDirect.rows[0].created_at) >=
-        Date.parse(directTask.rows[0].run_updated_at),
-    'lead_scheduled_before_direct_terminal',
-  );
-  marker('DIRECT_LEAD_DEFERRED_UNTIL_DELIVERED');
-  assert(
-    leadRunIds.size === 4 && memberRunIds.size === 2,
+    leadRunIds.size === 4 && memberRunIds.size === (reworkScenario ? 3 : 2),
     'team_child_run_cardinality_invalid',
   );
   let paidLeadRuntimeEvidence = {};
@@ -2829,23 +2829,43 @@ try {
     const observerBindings = bindings.filter(
       (call) => call.role === 'member' && call.operation === 'create',
     );
-    assert(
-      directBindings.length === 1 &&
-        directBindings[0].operation === 'continue' &&
-        runtimeCalls.some(
-          (call) =>
-            call.role === 'direct' &&
-            call.observed_sentinel &&
-            call.acknowledged,
-        ) &&
-        observerBindings.length >= 1 &&
-        observerBindings.some(
-          (call) =>
-            call.provider_binding_hash ===
-            directBindings[0].provider_binding_hash,
-        ),
-      'direct_runtime_session_not_continued',
-    );
+    if (reworkScenario) {
+      const memberBindings = bindings.filter((call) => call.role === 'member');
+      const memberCreate = memberBindings.find(
+        (call) => call.operation === 'create' && call.member_name === 'member',
+      );
+      const memberContinue = memberBindings.find(
+        (call) => call.operation === 'continue',
+      );
+      assert(
+        directBindings.length === 0 &&
+          memberBindings.length === 3 &&
+          memberBindings.filter((call) => call.operation === 'create')
+            .length === 2 &&
+          memberBindings.filter((call) => call.operation === 'continue')
+            .length === 1 &&
+          memberCreate?.provider_binding_hash ===
+            memberContinue?.provider_binding_hash,
+        'rework_member_runtime_session_not_continued',
+      );
+    } else
+      assert(
+        directBindings.length === 1 &&
+          directBindings[0].operation === 'continue' &&
+          runtimeCalls.some(
+            (call) =>
+              call.role === 'direct' &&
+              call.observed_sentinel &&
+              call.acknowledged,
+          ) &&
+          observerBindings.length >= 1 &&
+          observerBindings.some(
+            (call) =>
+              call.provider_binding_hash ===
+              directBindings[0].provider_binding_hash,
+          ),
+        'direct_runtime_session_not_continued',
+      );
     const scriptedLeadTurns = runtimeCalls.filter(
       (call) =>
         call.role === 'lead' &&
@@ -2858,9 +2878,17 @@ try {
     );
     assert(
       scriptedLeadTurns.length === 4 &&
-        scriptedMemberTurns.length === 2 &&
         scriptedLeadTurns.every((call, index) => call.turn === index + 1) &&
-        scriptedMemberTurns.every((call, index) => call.turn === index + 1),
+        (reworkScenario
+          ? scriptedMemberTurns.length === 3 &&
+            scriptedMemberTurns.filter((call) => call.attempt === 1).length ===
+              2 &&
+            scriptedMemberTurns.filter((call) => call.attempt === 2).length ===
+              1
+          : scriptedMemberTurns.length === 2 &&
+            scriptedMemberTurns.every(
+              (call, index) => call.turn === index + 1,
+            )),
       'scripted_golden_path_turn_cardinality_invalid',
     );
   } else {
@@ -2875,8 +2903,10 @@ try {
     assert(
       leadCreates.length === 1 &&
         leadPromptSends.length === 4 &&
-        created.filter((event) => memberRunIds.has(event.runId)).length === 2 &&
-        sent.filter((event) => memberRunIds.has(event.runId)).length === 2,
+        created.filter((event) => memberRunIds.has(event.runId)).length ===
+          (reworkScenario ? 3 : 2) &&
+        sent.filter((event) => memberRunIds.has(event.runId)).length ===
+          (reworkScenario ? 3 : 2),
       'paid_lead_task_runtime_evidence_invalid',
     );
     paidLeadRuntimeEvidence = {
@@ -2956,15 +2986,19 @@ try {
       WHERE m.team_run_id=$1 AND m.kind='direct'`,
     [teamRunId],
   );
-  assert(
-    deliveredDirect.rowCount === 1 &&
-      deliveredDirect.rows[0].status === 'delivered' &&
-      deliveredDirect.rows[0].task_id === directTask.rows[0].task_id &&
-      deliveredDirect.rows[0].run_status === 'succeeded' &&
-      directRunIds.has(deliveredDirect.rows[0].run_id ?? ''),
-    'direct_delivery_linkage_invalid',
-  );
-  marker('DIRECT_DELIVERED_AND_CONTINUED');
+  if (reworkScenario)
+    assert(deliveredDirect.rowCount === 0, 'rework_direct_delivery_present');
+  else {
+    assert(
+      deliveredDirect.rowCount === 1 &&
+        deliveredDirect.rows[0].status === 'delivered' &&
+        deliveredDirect.rows[0].task_id === directTask.rows[0].task_id &&
+        deliveredDirect.rows[0].run_status === 'succeeded' &&
+        directRunIds.has(deliveredDirect.rows[0].run_id ?? ''),
+      'direct_delivery_linkage_invalid',
+    );
+    marker('DIRECT_DELIVERED_AND_CONTINUED');
+  }
   const rootRunState = await db.query(
     'SELECT t.status AS task_status,r.status AS run_status FROM tasks t JOIN runs r ON r.task_id=t.id WHERE t.id=$1',
     [rootTaskId],
@@ -3030,8 +3064,18 @@ try {
   ).rows[0];
   marker('EMITTED_RUN_EVENT_TOOL_NAME_QUERY', emittedToolNameFacts ?? null);
   marker('RESULT_PASS', {
-    expected: { terminal: true, direct: true, dependency: true, replay: true },
-    actual: { terminal: true, direct: true, dependency: true, replay: true },
+    expected: {
+      terminal: true,
+      direct: !reworkScenario,
+      dependency: true,
+      replay: true,
+    },
+    actual: {
+      terminal: true,
+      direct: finalMessageFacts.direct === 1,
+      dependency: true,
+      replay: true,
+    },
     durable_cardinality: {
       team_members: roster.rowCount,
       work_items: work.rowCount,

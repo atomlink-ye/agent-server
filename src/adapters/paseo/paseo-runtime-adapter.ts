@@ -1315,6 +1315,11 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             })();
       activeAgentId = agent.id;
       this.#agents.set(input.runId, agent.id);
+      if (input.operation === 'create' && input.onProviderBinding)
+        await input.onProviderBinding({
+          providerAgentId: agent.id,
+          paseoWorkspaceId: workspaceId,
+        });
 
       if (this.#client.fetchAgentTimeline) {
         baseline = await this.#client.fetchAgentTimeline(agent.id, {

@@ -1011,6 +1011,23 @@ export class ExecuteRun {
     let execution: Awaited<ReturnType<AgentRuntimePort['execute']>> | undefined;
     let executionFailed = false;
     let executionError: unknown;
+    let providerBindingPersisted = false;
+    const bindTeamProvider =
+      collaborativeTeam &&
+      sessionRuntime &&
+      !sessionRuntime.providerAgentId &&
+      this.runtimeSessions
+        ? async (binding: {
+            readonly providerAgentId: string;
+            readonly paseoWorkspaceId: string;
+          }) => {
+            await this.runtimeSessions!.bindProvider({
+              id: sessionRuntime.id,
+              ...binding,
+            });
+            providerBindingPersisted = true;
+          }
+        : undefined;
     try {
       execution = await this.runtime.execute(
         priorProviderAgentId
@@ -1055,6 +1072,9 @@ export class ExecuteRun {
                       role: member.role,
                     },
                   }
+                : {}),
+              ...(bindTeamProvider
+                ? { onProviderBinding: bindTeamProvider }
                 : {}),
               runId: claim.run.id,
               prompt: turnPrompt,
@@ -1128,13 +1148,20 @@ export class ExecuteRun {
     if (
       sessionRuntime &&
       !sessionRuntime.providerAgentId &&
-      execution.paseoWorkspaceId
-    )
-      await this.runtimeSessions!.bindProvider({
-        id: sessionRuntime.id,
+      execution.paseoWorkspaceId &&
+      !providerBindingPersisted
+    ) {
+      const binding = {
         paseoWorkspaceId: execution.paseoWorkspaceId,
         providerAgentId: execution.providerAgentId,
-      });
+      };
+      if (bindTeamProvider) await bindTeamProvider(binding);
+      else
+        await this.runtimeSessions!.bindProvider({
+          id: sessionRuntime.id,
+          ...binding,
+        });
+    }
     await this.events?.bind({
       runId: claim.run.id,
       ...(task.sessionId ? { sessionId: task.sessionId } : {}),

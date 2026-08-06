@@ -85,6 +85,11 @@ Workspace per RuntimeSession.
 - The existing scripted main-flow runtime now honors the create input's durable
   Workspace ID. Its existing evidence output queries `runtime_sessions` and
   emitted `run_events`; no new test or fixture file was added.
+- Final review found that a first-turn Lead could dispatch a direct message
+  before its post-execution provider binding was durable. The create input now
+  carries an optional binding callback; Paseo and the scripted runtime persist
+  the Team binding after Agent creation and before the first prompt is sent.
+  The previous post-execution bind remains the compatibility fallback.
 
 ## Risks and recovery
 
@@ -113,8 +118,8 @@ None.
 
 ## Next exact command
 
-Commit the implementation and documentation checkpoint, push it with
-`sandbox-ctl push --mode git`, then run the remote scripted Team smoke.
+Commit and push the early-binding review fix, then rerun the remote scripted
+Team smoke and affected acceptance evidence.
 
 ## Cleanup state
 

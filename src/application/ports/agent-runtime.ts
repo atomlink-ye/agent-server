@@ -112,6 +112,10 @@ export type AgentRuntimeExecuteInput =
       readonly workspaceTitle?: string;
       readonly agentTitle?: string;
       readonly agentLabels?: Readonly<Record<string, string>>;
+      readonly onProviderBinding?: (binding: {
+        readonly providerAgentId: string;
+        readonly paseoWorkspaceId: string;
+      }) => Promise<void> | void;
       readonly prompt: string;
       readonly systemPrompt: string;
       readonly extensions?: RuntimeExtensionBinding;

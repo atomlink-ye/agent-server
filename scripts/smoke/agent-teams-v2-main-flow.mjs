@@ -513,6 +513,10 @@ class ScriptedRuntime {
           input.paseoWorkspaceId ?? `scripted-workspace-${randomUUID()}`,
       };
       this.#sessions.set(providerAgentId, session);
+      await input.onProviderBinding?.({
+        providerAgentId,
+        paseoWorkspaceId: session.workspaceId,
+      });
       await sink?.emit({
         kind: 'tool_status',
         activityId: `scripted-tool-${providerAgentId}`,

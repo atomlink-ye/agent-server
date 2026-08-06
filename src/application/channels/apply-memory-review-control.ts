@@ -7,7 +7,7 @@ import type { ReviewMemoryProposal } from '../memory/review-memory-proposal.js';
 import type { ManagedMemory } from '../memory/managed-memory.js';
 import type { WorkspaceMemoryEntry } from '../../domain/workspace-memory/memory-proposal.js';
 import { ownerFromLarkCanary } from './resolve-lark-binding.js';
-import { renderResolvedMemoryCard } from '../../adapters/lark/lark-memory-card.js';
+import type { MemoryReviewCardRenderer } from '../ports/memory-review-card-renderer.js';
 import type { MemoryDocumentPort } from '../ports/lark-memory-document.js';
 import type { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
 import { createMemoryReviewActionTokenDeriver } from './memory-review-action-token.js';
@@ -31,6 +31,7 @@ export class ApplyMemoryReviewControl {
     private readonly review: Pick<ReviewMemoryProposal, 'execute'>,
     private readonly managedMemory: Pick<ManagedMemory, 'acceptEntry'>,
     private readonly config: LarkCanaryEnabledConfig,
+    private readonly cards: Pick<MemoryReviewCardRenderer, 'renderResolved'>,
     private readonly documents?: MemoryDocumentPort,
     private readonly synthesize?: Pick<SynthesizeMemoryDocument, 'execute'>,
     private readonly acceptFromDocument?: Pick<
@@ -241,7 +242,7 @@ export class ApplyMemoryReviewControl {
           surface: authorized.surface,
           owner,
         });
-        const card = renderResolvedMemoryCard({
+        const card = this.cards.renderResolved({
           status: 'accepted',
           category: authorized.proposal.originalCategory,
           content: accepted.content,
@@ -323,7 +324,7 @@ export class ApplyMemoryReviewControl {
       stage = 'ui';
       const acceptedContent =
         persistedPreview ?? authorized.proposal.originalContent;
-      const card = renderResolvedMemoryCard({
+      const card = this.cards.renderResolved({
         status: outcome,
         category: authorized.proposal.originalCategory,
         content: acceptedContent,

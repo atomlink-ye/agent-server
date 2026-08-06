@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplyMemoryReviewControl } from './apply-memory-review-control.js';
 import { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
+import { testMemoryReviewCardRenderer } from './memory-review-card-renderer.test-helper.js';
 
 const config = {
   connectionKey: 'lark',
@@ -101,6 +102,7 @@ describe('ApplyMemoryReviewControl', () => {
       review as any,
       managedMemory as any,
       config,
+      testMemoryReviewCardRenderer,
     ).execute(ingress('accept'));
 
     expect(result).toEqual({ accepted: true, outcome: 'accepted' });
@@ -138,6 +140,7 @@ describe('ApplyMemoryReviewControl', () => {
       review as any,
       {} as any,
       config,
+      testMemoryReviewCardRenderer,
     ).execute(ingress('edit_in_doc'));
     expect(result).toEqual(
       expect.objectContaining({
@@ -196,6 +199,7 @@ describe('ApplyMemoryReviewControl', () => {
       review as any,
       managed as any,
       config,
+      testMemoryReviewCardRenderer,
     ).execute(ingress('accept'));
     expect(result).toEqual({ accepted: true, outcome: 'accepted' });
     expect(review.execute).toHaveBeenCalledWith(
@@ -275,6 +279,7 @@ describe('ApplyMemoryReviewControl', () => {
       review as any,
       managed as any,
       { ...config, docWebBaseUrl: 'https://lark.test' },
+      testMemoryReviewCardRenderer,
       documents as any,
       synthesize as any,
     ).execute(ingress('preview_doc'));
@@ -286,6 +291,7 @@ describe('ApplyMemoryReviewControl', () => {
       review as any,
       managed as any,
       config,
+      testMemoryReviewCardRenderer,
       documents as any,
     ).execute(ingress('accept_preview'));
     expect(accepted).toEqual({ accepted: true, outcome: 'accepted' });
@@ -399,6 +405,7 @@ describe('ApplyMemoryReviewControl', () => {
         review as any,
         managed as any,
         { ...config, docWebBaseUrl: 'https://lark.test' },
+        testMemoryReviewCardRenderer,
         docs as any,
         synthesize,
       );

@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { stringify } from 'yaml';
 import {
   MAX_COLLECTION_SIZE,
   MAX_SCALAR_LENGTH,
@@ -15,6 +13,11 @@ import {
   type AgentRef,
 } from '../../domain/projects/logical-ref.js';
 import { isSafeNativeRef } from '../../domain/projects/safe-ref.js';
+import {
+  canonicalizeYaml,
+  compareStrings,
+  sha256,
+} from '../../domain/projects/yaml-canonical.js';
 import { SUPPORTED_MANAGED_AGENT_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { Sha256Fingerprint } from '../../domain/projects/project-canonicalization.js';
 
@@ -155,7 +158,7 @@ export function renderProjectAgent(
   if (renderedTools.length > MAX_COLLECTION_SIZE)
     throw new ProjectAgentRenderError('collection_limit', '$.spec.tools');
 
-  const rendered = sortedYaml({
+  const rendered = canonicalizeYaml({
     ...root,
     spec: { ...spec, skills: renderedSkills, tools: renderedTools },
   });
@@ -170,7 +173,7 @@ export function renderProjectAgent(
     nativeFingerprint: nativeParserResult.fingerprint as Sha256Fingerprint,
     expandedSkills,
     expandedTools,
-    dependencies: [...dependencies].sort(compare),
+    dependencies: [...dependencies].sort(compareStrings),
     nativeParserResult,
   };
 }
@@ -295,23 +298,4 @@ function requiredString(value: unknown, path: string): string {
   if (typeof value !== 'string' || !value)
     throw new ProjectAgentRenderError('invalid_reference', path);
   return value;
-}
-function sortedYaml(value: unknown): string {
-  return stringify(sortValue(value), { lineWidth: 0 });
-}
-function sortValue(value: any): any {
-  if (Array.isArray(value)) return value.map(sortValue);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort(compare)
-        .map((key) => [key, sortValue(value[key])]),
-    );
-  return value;
-}
-function sha256(value: string): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
-}
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

@@ -426,16 +426,21 @@ export class PostgresInvokableRepository implements InvokableRepository {
     limit: number,
     cursor: string | null = null,
   ): Promise<{ items: TeamVersion[]; nextCursor: string | null }> {
+    const values: unknown[] = [
+      id,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+    ];
+    const cursorSql = cursor
+      ? ` AND (created_at,id) > (SELECT created_at,id FROM team_versions WHERE id=$6 AND definition_id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5)`
+      : '';
+    if (cursor) values.push(cursor);
+    values.push(limit + 1);
     const result = await this.database.query<TeamVersionRow>(
-      `SELECT id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, spec, environment_version_id, created_at, updated_at, published_at FROM team_versions WHERE definition_id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5 ORDER BY created_at,id LIMIT $6`,
-      [
-        id,
-        owner.tenantId,
-        owner.workspaceId,
-        owner.principalType,
-        owner.principalId,
-        limit + 1,
-      ],
+      `SELECT id, definition_id, tenant_id, workspace_id, principal_type, principal_id, status, name, description, spec, environment_version_id, created_at, updated_at, published_at FROM team_versions WHERE definition_id=$1 AND tenant_id=$2 AND workspace_id=$3 AND principal_type=$4 AND principal_id=$5${cursorSql} ORDER BY created_at,id LIMIT $${cursor ? 7 : 6}`,
+      values,
     );
     const rows = result.rows ?? [];
     const selected = rows.slice(0, limit);
@@ -544,21 +549,6 @@ export class PostgresInvokableRepository implements InvokableRepository {
     }
 
     return mapTeamVersionRow(row);
-  }
-
-  private async loadTeamVersionStatus(
-    id: string,
-  ): Promise<TeamVersion['status'] | null> {
-    const result = await this.database.query<Pick<TeamVersionRow, 'status'>>(
-      `
-        SELECT status
-        FROM team_versions
-        WHERE id = $1
-      `,
-      [id],
-    );
-
-    return result.rows?.[0]?.status ?? null;
   }
 }
 

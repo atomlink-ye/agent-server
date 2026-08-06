@@ -636,10 +636,7 @@ function toPersistedRunState(run: Run, existing: ExistingRunRow) {
   return {
     leaseOwner: null,
     activationId: null,
-    fencingToken:
-      run.status === 'queued' || run.status === 'cancelled'
-        ? existing.fencing_token
-        : existing.fencing_token,
+    fencingToken: existing.fencing_token,
     leaseExpiresAt: null,
     runtimeJson: toJsonValue(run.runtime),
     resultJson: toJsonValue(run.result),

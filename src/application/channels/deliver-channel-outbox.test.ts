@@ -5,6 +5,7 @@ import { createMemoryReviewActionTokenDeriver } from './memory-review-action-tok
 import { PGlite } from '@electric-sql/pglite';
 import { applyDurableKernelMigrations } from '../../infrastructure/postgres/postgres.js';
 import { PostgresChannelRepository } from '../../infrastructure/postgres/postgres-channel-repository.js';
+import { testMemoryReviewCardRenderer } from './memory-review-card-renderer.test-helper.js';
 
 const outbox = {
   id: 'outbox-1',
@@ -460,6 +461,7 @@ describe('DeliverChannelOutbox', () => {
       .fn()
       .mockResolvedValue({ result: 'delivered', providerMessageId: 'card-1' });
     await new DeliverChannelOutbox({ deliver }, { recordAttempt: vi.fn() }, {
+      cards: testMemoryReviewCardRenderer,
       tokenDeriver: deriver,
       validateCardPublication,
       finalizeCardDelivery: vi.fn(),
@@ -520,6 +522,7 @@ describe('DeliverChannelOutbox', () => {
       { deliver },
       { recordAttempt: vi.fn() },
       {
+        cards: testMemoryReviewCardRenderer,
         tokenDeriver: deriver,
         validateCardPublication: vi.fn(async () => undefined),
         finalizeCardDelivery: vi.fn(),
@@ -580,6 +583,7 @@ describe('DeliverChannelOutbox', () => {
       .mockResolvedValue({ result: 'delivered', providerMessageId: 'patch-1' });
     const payload = JSON.stringify(descriptor);
     await new DeliverChannelOutbox({ deliver }, { recordAttempt: vi.fn() }, {
+      cards: testMemoryReviewCardRenderer,
       tokenDeriver: deriver,
       validateCardPublication: vi.fn(async () => undefined),
       finalizeCardDelivery: vi.fn(),
@@ -609,6 +613,7 @@ describe('DeliverChannelOutbox', () => {
       { deliver },
       { recordAttempt },
       {
+        cards: testMemoryReviewCardRenderer,
         tokenDeriver: createMemoryReviewActionTokenDeriver('secret'),
         validateCardPublication,
         finalizeCardDelivery: vi.fn(),
@@ -665,6 +670,7 @@ describe('DeliverChannelOutbox', () => {
       source: 'Proposed by the completed agent task in this thread.',
     };
     await new DeliverChannelOutbox({ deliver }, { recordAttempt }, {
+      cards: testMemoryReviewCardRenderer,
       tokenDeriver: createMemoryReviewActionTokenDeriver('secret'),
       validateCardPublication: vi.fn(async () => undefined),
       finalizeCardDelivery,
@@ -707,6 +713,7 @@ describe('DeliverChannelOutbox', () => {
       source: 'Proposed by the completed agent task in this thread.',
     };
     await new DeliverChannelOutbox({ deliver }, { recordAttempt }, {
+      cards: testMemoryReviewCardRenderer,
       tokenDeriver: createMemoryReviewActionTokenDeriver('secret'),
       validateCardPublication: vi.fn(async () => undefined),
       finalizeCardDelivery,
@@ -754,6 +761,7 @@ describe('DeliverChannelOutbox', () => {
         ...change,
       };
       await new DeliverChannelOutbox({ deliver }, { recordAttempt }, {
+        cards: testMemoryReviewCardRenderer,
         tokenDeriver: createMemoryReviewActionTokenDeriver('secret'),
         validateCardPublication: vi.fn(async () => undefined),
         finalizeCardDelivery: vi.fn(),

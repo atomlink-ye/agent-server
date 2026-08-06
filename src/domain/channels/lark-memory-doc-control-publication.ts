@@ -1,4 +1,4 @@
-import type { ReviewSurfaceOwnerScope } from '../../application/ports/lark-review-surface-repository.js';
+import type { OwnerScope } from '../tenancy/owner-scope.js';
 
 export const MEMORY_REVIEW_DOC_CONTROL_PATCH_TYPE =
   'lark_memory_doc_control_patch_v1';
@@ -9,7 +9,7 @@ export type MemoryReviewDocControlPatchDescriptor = {
   readonly version: number;
   readonly proposalId: string;
   readonly bindingId: string;
-  readonly owner: ReviewSurfaceOwnerScope;
+  readonly owner: OwnerScope;
   readonly category: string;
   readonly excerpt: string;
   readonly docToken: string;

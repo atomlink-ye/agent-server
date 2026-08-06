@@ -1,12 +1,8 @@
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
 import type { ChannelOutboxInput } from '../../domain/channels/channel-delivery.js';
+import type { OwnerScope } from '../../domain/tenancy/owner-scope.js';
 
-export interface ReviewSurfaceOwnerScope {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-}
+export type ReviewSurfaceOwnerScope = OwnerScope;
 
 export interface LarkReviewSurfaceRepository {
   authorizeCardAction(input: {

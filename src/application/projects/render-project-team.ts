@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { stringify } from 'yaml';
 import { parseManagedAgentYaml } from '../../domain/agents/managed-agent-yaml.js';
 import {
   validateAndCanonicalizeTeamPackage,
@@ -11,6 +9,12 @@ import {
   type TeamRef,
 } from '../../domain/projects/logical-ref.js';
 import type { Sha256Fingerprint } from '../../domain/projects/project-canonicalization.js';
+import {
+  bareSha256,
+  canonicalizeYaml,
+  compareStrings,
+  sha256,
+} from '../../domain/projects/yaml-canonical.js';
 
 export class ProjectTeamRenderError extends Error {
   public constructor(
@@ -109,15 +113,13 @@ export function renderProjectTeam(
       };
     }),
   };
-  const source = stringify(sortValue({ ...root, spec: renderedSpec }), {
-    lineWidth: 0,
-  });
+  const source = canonicalizeYaml({ ...root, spec: renderedSpec });
   const nativeParserResult = validateAndCanonicalizeTeamPackage(source);
   return {
     source,
     sourceFingerprint: sha256(record.source),
     nativeFingerprint: nativeParserResult.fingerprint as Sha256Fingerprint,
-    dependencies: [...dependencies].sort(compare),
+    dependencies: [...dependencies].sort(compareStrings),
     nativeParserResult,
   };
 }
@@ -152,22 +154,6 @@ function lookup(targets: TeamRenderTargetMap, ref: string): string | undefined {
     : (targets as Readonly<Record<string, string>>)[ref];
 }
 function sentinel(ref: string): string {
-  const hex = createHash('sha256').update(ref).digest('hex');
+  const hex = bareSha256(ref);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-}
-function sortValue(value: any): any {
-  if (Array.isArray(value)) return value.map(sortValue);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort(compare)
-        .map((key) => [key, sortValue(value[key])]),
-    );
-  return value;
-}
-function sha256(value: string): `sha256:${string}` {
-  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
-}
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

@@ -10,9 +10,9 @@ import type {
 } from './project-control-plane.js';
 import { renderProjectAgent } from './render-project-agent.js';
 import { renderProjectTeam } from './render-project-team.js';
-import type { ProjectSkillRegistrar } from '../../infrastructure/filesystem/local-project-skill-registrar.js';
-import type { AgentProjectLockStore } from '../../infrastructure/filesystem/local-agent-project-lock.js';
-import { deterministicIdempotencyKey } from '../../adapters/http/agent-project-http-control-plane.js';
+import type { ProjectSkillRegistrar } from '../ports/project-skill-registrar.js';
+import type { AgentProjectLockStore } from '../ports/agent-project-lock-store.js';
+import { deterministicIdempotencyKey } from '../../domain/projects/agent-project-idempotency.js';
 import {
   normalizeMemoryPath,
   sha256,

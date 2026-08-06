@@ -1,4 +1,5 @@
 import { assertCardActionToken } from '../../domain/channels/card-action.js';
+import type { MemoryReviewCardRenderer } from '../../application/ports/memory-review-card-renderer.js';
 
 export type MemoryCardAction =
   'accept' | 'edit_in_doc' | 'reject' | 'preview_doc' | 'accept_preview';
@@ -140,6 +141,12 @@ export function renderResolvedMemoryCard(
     ],
   );
 }
+
+export const larkMemoryReviewCardRenderer: MemoryReviewCardRenderer = {
+  renderPending: renderPendingMemoryCard,
+  renderWithDocumentControls: renderCardWithDocControls,
+  renderResolved: renderResolvedMemoryCard,
+};
 
 function card(
   template: MemoryCard['header']['template'],

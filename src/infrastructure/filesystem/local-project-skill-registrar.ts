@@ -1,18 +1,5 @@
 import { registerSkill } from '../../application/extensions/skill-registry.js';
-
-export interface ProjectSkillRegistrar {
-  register(input: {
-    readonly ref: string;
-    readonly name: string;
-    readonly sourceRoot: string;
-    readonly expectedDigest?: string;
-    readonly requiredToolRefs: readonly string[];
-  }): Promise<{
-    readonly ref: string;
-    readonly digest: string;
-    readonly changed: boolean;
-  }>;
-}
+import type { ProjectSkillRegistrar } from '../../application/ports/project-skill-registrar.js';
 
 export class LocalProjectSkillRegistrar implements ProjectSkillRegistrar {
   public constructor(

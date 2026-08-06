@@ -1,13 +1,10 @@
+import type { OwnerScope } from '../tenancy/owner-scope.js';
+
 export const invokableVersionStatuses = ['draft', 'published'] as const;
 
 export type InvokableVersionStatus = (typeof invokableVersionStatuses)[number];
 
-export interface InvokableOwnerScope {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-}
+export type InvokableOwnerScope = OwnerScope;
 
 export function assertInvokableOwnerScope(
   scope: InvokableOwnerScope,

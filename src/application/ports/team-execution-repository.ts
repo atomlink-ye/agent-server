@@ -2,13 +2,8 @@ import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-
-export interface OwnerScope {
-  readonly tenantId: string;
-  readonly workspaceId: string;
-  readonly principalType: string;
-  readonly principalId: string;
-}
+import type { OwnerScope } from '../../domain/tenancy/owner-scope.js';
+export type { OwnerScope } from '../../domain/tenancy/owner-scope.js';
 
 export interface TeamWorkDependency {
   readonly workItemId: string;
@@ -64,24 +59,6 @@ export interface TeamExecutionRepository {
     owner: OwnerScope,
     rootTaskId?: string,
   ): Promise<TeamRun | null>;
-  updateTeamRunPhase(
-    id: string,
-    phase: TeamRun['phase'],
-    owner: OwnerScope,
-    expectedPhase?: TeamRun['phase'],
-  ): Promise<TeamRun>;
-  updateTeamRunPhaseIfCurrent(
-    id: string,
-    phase: TeamRun['phase'],
-    owner: OwnerScope,
-    expectedPhase: TeamRun['phase'],
-  ): Promise<TeamRun | null>;
-  updateTeamRunStatus(
-    id: string,
-    status: TeamRun['status'],
-    finalText: string | null,
-    owner: OwnerScope,
-  ): Promise<TeamRun>;
   completeTeamRunAtomically(input: {
     readonly teamRunId: string;
     readonly rootRunId: string;
@@ -122,7 +99,6 @@ export interface TeamExecutionRepository {
     owner: OwnerScope,
   ): Promise<TeamMemberRun>;
 
-  createWorkItem(item: TeamWorkItem): Promise<void>;
   findWorkItemsByTeamRunId(
     teamRunId: string,
     owner: OwnerScope,
@@ -132,30 +108,10 @@ export interface TeamExecutionRepository {
     teamRunId: string,
     owner: OwnerScope,
   ): Promise<readonly TeamWorkDependency[]>;
-  atomicClaimWorkItem(
-    id: string,
-    ownerMemberId: string,
-    teamRunId: string,
-    owner: OwnerScope,
-  ): Promise<TeamWorkItem>;
-  updateWorkItemStatus(
-    id: string,
-    status: TeamWorkItem['status'],
-    completionSummary: string | null,
-    owner: OwnerScope & {
-      readonly memberId?: string;
-      readonly role?: 'lead' | 'member';
-    },
-  ): Promise<TeamWorkItem>;
   findAttemptsByTeamRunId(
     teamRunId: string,
     owner: OwnerScope,
   ): Promise<TeamWorkItemAttempt[]>;
-  bindAttemptExecution(
-    attemptId: string,
-    executionTaskId: string,
-    owner: OwnerScope,
-  ): Promise<TeamWorkItemAttempt>;
   materializeAttempt(input: {
     readonly attemptId: string;
     readonly executionTaskId: string;

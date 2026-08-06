@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplyMemoryReviewControl } from './apply-memory-review-control.js';
+import { testMemoryReviewCardRenderer } from './memory-review-card-renderer.test-helper.js';
 
 const config = {
   enabled: true,
@@ -53,6 +54,7 @@ function failingControl(overrides: Record<string, unknown> = {}) {
     { execute: vi.fn() } as any,
     { acceptEntry: vi.fn() } as any,
     config,
+    testMemoryReviewCardRenderer,
   );
   return { control, channels, surfaces, event: ingress('accept', overrides) };
 }
@@ -167,6 +169,7 @@ describe('Task 10B2 final direct Card adversarial coverage', () => {
       } as any,
       { acceptEntry: vi.fn() } as any,
       config,
+      testMemoryReviewCardRenderer,
     );
     expect((await control.execute(ingress('reject'))).accepted).toBe(false);
     expect((await control.execute(ingress('reject'))).accepted).toBe(true);
@@ -215,6 +218,7 @@ describe('Task 10B2 final direct Card adversarial coverage', () => {
       } as any,
       managed as any,
       config,
+      testMemoryReviewCardRenderer,
     );
     expect((await control.execute(ingress('accept'))).accepted).toBe(false);
     expect((await control.execute(ingress('accept'))).accepted).toBe(true);
@@ -255,6 +259,7 @@ describe('Task 10B2 final direct Card adversarial coverage', () => {
       } as any,
       managed as any,
       config,
+      testMemoryReviewCardRenderer,
     );
     expect((await control.execute(f.event)).accepted).toBe(false);
     expect((await control.execute(f.event)).accepted).toBe(true);
@@ -290,6 +295,7 @@ describe('Task 10B2 final direct Card adversarial coverage', () => {
       review as any,
       { acceptEntry: vi.fn() } as any,
       config,
+      testMemoryReviewCardRenderer,
     );
     const results = await Promise.all([
       control.execute(f.event),
@@ -334,6 +340,7 @@ describe('Task 10B2 final direct Card adversarial coverage', () => {
       } as any,
       { acceptEntry: vi.fn() } as any,
       config,
+      testMemoryReviewCardRenderer,
     );
     expect((await control.execute(ingress('reject'))).accepted).toBe(false);
   });

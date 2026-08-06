@@ -1267,6 +1267,26 @@ try {
   const { loadConfig } = await import('../../src/shared/config.ts');
   const { createLogger } =
     await import('../../src/shared/observability/logger.ts');
+  if (reworkScenario) {
+    const { RuntimeToolGrantService } =
+      await import('../../src/application/extensions/runtime-tool-grant-service.ts');
+    const refreshForTeamMember =
+      RuntimeToolGrantService.prototype.refreshForTeamMember;
+    RuntimeToolGrantService.prototype.refreshForTeamMember = function (input) {
+      try {
+        return refreshForTeamMember.call(this, input);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'Runtime grant allowed tools exceed catalog.'
+        )
+          marker('REWORK_EXPECTED_V6_FAILURE', {
+            error_message: error.message,
+          });
+        throw error;
+      }
+    };
+  }
   const { createService } = await import('../../src/bootstrap.ts');
   service = await createService(
     loadConfig(),

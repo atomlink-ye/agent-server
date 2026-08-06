@@ -762,12 +762,35 @@ class ScriptedRuntime {
           tools: ['request_changes_A', 'accept_B'],
         });
       } else if (reworkScenario && this.#leadTurns === 3) {
-        const correctedWork = value(
-          await session.client.callTool({
-            name: 'team_work_list',
-            arguments: {},
-          }),
-        ).find((item) => item.work_ref === 'work-1');
+        marker('REWORK_TURN3_ENTERED', {
+          prompt_attempt_no_2: input.prompt.includes('"attempt_no":2'),
+          prompt_canonical_evidence: input.prompt.includes(
+            canonicalSnapshotInvocation,
+          ),
+        });
+        let listedWork;
+        try {
+          listedWork = value(
+            await session.client.callTool({
+              name: 'team_work_list',
+              arguments: {},
+            }),
+          );
+        } catch (error) {
+          marker('REWORK_TURN3_LIST_FAILED', sanitizedErrorDetail(error));
+          throw error;
+        }
+        const correctedWork = listedWork.find(
+          (item) => item.work_ref === 'work-1',
+        );
+        marker('REWORK_TURN3_LISTED', {
+          work_found: Boolean(correctedWork),
+          work_status: correctedWork?.status ?? null,
+          latest_attempt_status: correctedWork?.latest_attempt?.status ?? null,
+          latest_attempt_canonical_evidence: String(
+            correctedWork?.latest_attempt?.summary ?? '',
+          ).includes(canonicalSnapshotInvocation),
+        });
         assert(
           correctedWork?.latest_attempt?.status === 'completed' &&
             String(correctedWork.latest_attempt.summary).includes(
@@ -775,12 +798,18 @@ class ScriptedRuntime {
             ),
           'lead_corrected_submission_missing',
         );
-        value(
-          await session.client.callTool({
-            name: 'team_work_accept',
-            arguments: { work_ref: 'work-1' },
-          }),
-        );
+        try {
+          value(
+            await session.client.callTool({
+              name: 'team_work_accept',
+              arguments: { work_ref: 'work-1' },
+            }),
+          );
+        } catch (error) {
+          marker('REWORK_TURN3_ACCEPT_FAILED', sanitizedErrorDetail(error));
+          throw error;
+        }
+        marker('REWORK_TURN3_ACCEPTED');
         runtimeCalls.push({
           role: 'lead',
           turn: 3,

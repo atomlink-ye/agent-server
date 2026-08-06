@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: agent/provider-agnostic-runtime
 authority: tasks/active/agent-server-implementation-20260722/BRIEF-phase1-2-provider-widening-mve.md
 created_at: 2026-08-06
@@ -38,10 +38,11 @@ updated_at: 2026-08-06
 - [x] Step 7: update `.env.example`, the managed-environment API contract, and the runbook with `PASEO_PROVIDER`, the explicit non-opencode `PASEO_MODEL` pin, provider/mode behavior, and documented naming limitations.
 - [x] Confirm operator-only model pin behavior remains intact and HTTP callers still cannot select arbitrary models.
 - [x] Inspect the finished diff for scope, concurrent-file bounds, default-injection stability, and accidental changes.
-- [ ] Commit and push the implementation to the named sandbox after confirming its status.
-- [ ] Run `make ci` in the sandbox and capture machine-written output.
-- [ ] Run `make paseo-smoke` in the sandbox and capture machine-written output.
-- [ ] Run the existing team smoke with a second provider and `PASEO_MODEL=deepseek-v4-flash`, capturing manifest/assertion artifacts.
+- [x] Commit and push the implementation to the named sandbox after confirming its status.
+- [x] Run `make ci` in the sandbox and capture machine-written output.
+- [x] Run `make paseo-smoke` in the sandbox and capture machine-written output.
+- [x] Run the existing team smoke with a second provider and `PASEO_MODEL=deepseek-v4-flash`, capturing manifest/assertion artifacts or the baseline-reproduced pre-harness environment result.
+- [x] Parse one identical `provider: opencode` package at `c9d7c54` and `df8bb63`, assert byte-identical fingerprints, and capture machine-written evidence.
 - [x] Obtain an independent oracle review of the finished diff focused on breakage and spec compliance, without reopening design.
 - [x] Route any blocker to the originating fixer, re-review, and rerun affected verification.
 
@@ -62,7 +63,9 @@ updated_at: 2026-08-06
 ## Completion evidence
 
 - Baseline evidence: sandbox `3ac7261c-2c5d-4c99-87f2-fc0f36126a38`, remote workspace `/home/daytona/workspace/provider-agnostic`, detached `c9d7c54d16c62c21488e3aeab02db4b4b1254a3f`; `PASEO_MODEL=deepseek-v4-flash make agent-teams-v2-smoke` exited `2` (`sandbox-ctl` chunk `49d739`) because `Cannot connect to the Docker daemon at unix:///run/agent-docker.sock`. The harness never started, so no assertion markers, manifest, stdout, or stderr artifact files were created.
-- `make ci`: pending.
-- `make paseo-smoke`: pending.
-- Second-provider team smoke: pending.
+- Committed/pushed implementation: `df8bb636cad8c4dd119b5798aa8a4eb3dec11914` on `agent/provider-agnostic-runtime`; committed-only git sync to sandbox `3ac7261c-2c5d-4c99-87f2-fc0f36126a38` succeeded.
+- `make ci`: executed at `df8bb63`; exited `2` before project CI because `/run/agent-docker.sock` was unavailable. No test counts or artifacts were emitted. This reproduces the baseline environment condition rather than a change-only failure.
+- `make paseo-smoke`: executed at `df8bb63`; exited `2` before the harness on the same unavailable Docker socket. No assertion markers or artifacts were produced.
+- Second-provider team smoke: `PASEO_PROVIDER=claude PASEO_MODEL=deepseek-v4-flash make agent-teams-v2-smoke` executed at `df8bb63`; exited `2` before the harness on the same unavailable Docker socket. No manifest/assertion artifacts were produced, so the second-provider runtime path was not observable in this environment; the failure is byte-for-byte the captured baseline class.
+- Fingerprint stability: `/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/evidence-fingerprint-stability/manifest.json`; both archived parser revisions exited `0` and produced `sha256:305eec9eddaddbfb3512dcbda657c5f289c75167a5bed303c4c3d640630df79d`, with `equality: true`, `validSha256: true`, and empty stderr.
 - Independent review: oracle approved after one BLOCKER-NOW stale config expectation was fixed by the originating step-3 fixer; oracle evidence was 391/391 unit, 71/71 contract, 141 integration passed with 36 configured skips, and typecheck passed.

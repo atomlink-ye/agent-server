@@ -615,6 +615,10 @@ async function proveRuntimeResolution() {
     distinct_provider_count: distinctProviders.size,
     exact_mappings: exactMappings,
   };
+  marker('RUNTIME_RESOLUTION_DEBUG_ROWS', {
+    durable_rows: resolvedRows,
+    member_count: resolvedRows.length,
+  });
   assert(resolvedRows.length === 3, 'runtime_resolution_member_count_invalid');
   assert(
     new Set(resolvedRows.map((row) => row.member_name)).size === 3 &&

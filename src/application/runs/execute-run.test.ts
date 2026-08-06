@@ -10,7 +10,10 @@ import {
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import type { AgentRuntimePort } from '../ports/agent-runtime.js';
+import {
+  RuntimeTimedOutError,
+  type AgentRuntimePort,
+} from '../ports/agent-runtime.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
   RunCompletionConflictError,
@@ -995,6 +998,68 @@ describe('ExecuteRun', () => {
     });
   });
 
+  it('retries an existing unbound Team runtime session through create and bind', async () => {
+    const fixture = createLeadRuntimeFixture();
+    await fixture.executeRun.execute(fixture.claim);
+    expect(fixture.runtime.execute).toHaveBeenCalled();
+
+    expect(fixture.runtime.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'create' }),
+      expect.anything(),
+    );
+    expect(fixture.runtimeSessions.bindProvider).toHaveBeenCalledWith({
+      id: 'runtime-lead-1',
+      paseoWorkspaceId: 'workspace-provider-1',
+      providerAgentId: 'agent-created',
+    });
+    expect(fixture.binder.bind).toHaveBeenCalledWith(
+      expect.objectContaining({ teamRunId: 'team-run-1' }),
+    );
+  });
+
+  it('keeps a runtime timeout classification when Team grant narrowing also fails', async () => {
+    const fixture = createLeadRuntimeFixture();
+    const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
+    vi.mocked(fixture.runtime.execute).mockRejectedValue(timeout);
+    fixture.binder.refreshForTeamMember.mockImplementation(() => {
+      throw new Error('narrowing failed');
+    });
+    fixture.binder.revoke.mockImplementation(() => {
+      throw new Error('revoke failed');
+    });
+    fixture.logger.log.mockImplementation((_level, event) => {
+      if (event === 'run.runtime_grant_revoke_failed')
+        throw new Error('logger failed');
+    });
+    const failed = {
+      ...fixture.claim.run,
+      status: 'timed_out',
+      error: {
+        code: 'runtime_timed_out',
+        message: 'The runtime exceeded the configured timeout.',
+      },
+    } as Run;
+    vi.mocked(fixture.completeRun.execute).mockResolvedValue(failed);
+
+    await expect(fixture.executeRun.execute(fixture.claim)).resolves.toBe(
+      failed,
+    );
+    expect(fixture.completeRun.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        run: expect.objectContaining({
+          status: 'timed_out',
+          error: expect.objectContaining({ code: 'runtime_timed_out' }),
+        }),
+      }),
+    );
+    expect(fixture.binder.revoke).toHaveBeenCalledWith('grant-1');
+    expect(fixture.logger.log).toHaveBeenCalledWith(
+      'warn',
+      'run.runtime_grant_revoke_failed',
+      expect.anything(),
+    );
+  });
+
   it('does not retry completion or report persistence failure when terminal logging fails', async () => {
     const claim = createClaim();
     const task = createTask();
@@ -1306,6 +1371,152 @@ function createExecuteRun(input: {
     input.logger ?? { log: vi.fn() },
     () => new Date('2026-07-23T00:00:00.000Z'),
   );
+}
+
+function createLeadRuntimeFixture() {
+  const claim = createClaim();
+  const task = createChildTask({
+    id: claim.taskId,
+    tenantId: 'tenant-1',
+    workspaceId: 'workspace-1',
+    principalType: 'user',
+    principalId: 'user-1',
+    policySnapshotVersion: 'policy-1',
+    rootTaskId: 'root-task-1',
+    parentTaskId: 'root-task-1',
+    parentRunId: 'root-run-1',
+    invokableKind: 'agent',
+    invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
+      prompt: 'private prompt',
+    }),
+    inputFingerprint: 'fingerprint-1',
+    logicalStepKey: 'lead:team-run-1:lead-member-1',
+    nodePath: 'lead-turn-1',
+    teamMemberRunId: 'lead-member-1',
+    teamTaskKind: 'lead_turn',
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
+  const team = createTeamRun({
+    id: 'team-run-1',
+    tenantId: task.tenantId,
+    workspaceId: task.workspaceId,
+    principalType: task.principalType,
+    principalId: task.principalId,
+    rootTaskId: task.rootTaskId,
+    rootRunId: 'root-run-1',
+    teamVersionId: 'team-version-1',
+    environmentVersionId: 'environment-version-1',
+    initialLeadTurn: true,
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
+  const lead = createTeamMemberRun({
+    id: 'lead-member-1',
+    teamRunId: team.id,
+    name: 'lead',
+    role: 'lead',
+    agentVersionId: task.invokableVersionId,
+    tenantId: task.tenantId,
+    workspaceId: task.workspaceId,
+    principalType: task.principalType,
+    principalId: task.principalId,
+    now: () => new Date('2026-07-23T00:00:00.000Z'),
+  });
+  const grant = {
+    grantId: 'grant-1',
+    runId: undefined,
+    allowedTools: canonicalTeamToolRefsForRole('lead'),
+    catalogTools: canonicalTeamToolRefsForRole('lead'),
+  };
+  const binder = {
+    bind: vi.fn(async () => ({})),
+    getTeamMemberGrant: vi.fn(() => grant),
+    refreshForTeamMember: vi.fn(() => ({ ...grant, allowedTools: [] })),
+    activeToolCalls: vi.fn(() => 0),
+    revoke: vi.fn(),
+  };
+  const runtime = createRuntimeWithCandidates('agent-created');
+  vi.mocked(runtime.execute).mockResolvedValue({
+    provider: 'test-provider',
+    model: 'test-model',
+    text: 'safe result',
+    providerAgentId: 'agent-created',
+    paseoWorkspaceId: 'workspace-provider-1',
+  });
+  const completeRun = {
+    execute: vi.fn(async ({ run }: { run: Run }) => run),
+  } as unknown as CompleteRun;
+  const runtimeSessions = {
+    findByTeamMember: vi.fn(async () => ({
+      id: 'runtime-lead-1',
+      scopeKind: 'team_member',
+      scopeId: lead.id,
+      productSessionId: null,
+      taskId: task.id,
+      launchSnapshotId: 'launch-1',
+      workspaceId: task.workspaceId,
+      agentVersionId: task.invokableVersionId,
+      environmentVersionId: team.environmentVersionId,
+      resolvedSkills: [],
+      toolRefs: canonicalTeamToolRefsForRole('lead'),
+      paseoWorkspaceId: null,
+      providerAgentId: null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    })),
+    bindProvider: vi.fn(async () => undefined),
+  };
+  const collaborativeExecutions = {
+    findTeamRunByRootTaskId: vi.fn(async () => team),
+    findTeamRunById: vi.fn(async () => team),
+    findMembersByTeamRunId: vi.fn(async () => [lead]),
+    findMemberRunById: vi.fn(async () => lead),
+    findWorkItemsByTeamRunId: vi.fn(async () => []),
+    findAttemptsByTeamRunId: vi.fn(async () => []),
+    updateMemberRunStatus: vi.fn(async () => lead),
+    updateMemberRuntimeSession: vi.fn(async () => lead),
+  };
+  const logger = { log: vi.fn() };
+  const executeRun = new ExecuteRun(
+    completeRun,
+    {
+      findById: vi.fn(async () => task),
+      findByRootTaskIdForOwner: vi.fn(async () => [
+        { task, latestRun: claim.run },
+      ]),
+      save: vi.fn(async () => undefined),
+    } as never,
+    {} as never,
+    {} as never,
+    runtime,
+    logger,
+    () => new Date('2026-07-23T00:00:00.000Z'),
+    undefined,
+    {
+      append: vi.fn(async () => undefined),
+      bind: vi.fn(async () => undefined),
+    } as never,
+    undefined,
+    undefined,
+    binder as never,
+    runtimeSessions as never,
+    undefined,
+    undefined,
+    undefined,
+    collaborativeExecutions as never,
+  );
+  return {
+    claim,
+    task,
+    lead,
+    team,
+    executeRun,
+    runtime,
+    binder,
+    runtimeSessions,
+    completeRun,
+    logger,
+  };
 }
 
 function createDirectExecuteRun(input: {

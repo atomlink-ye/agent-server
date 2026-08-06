@@ -25,6 +25,7 @@ export type RuntimeToolGrant = Readonly<{
   readonly taskId?: string;
   readonly runId?: string;
   readonly teamMemberRunId?: string;
+  readonly teamRunId?: string;
   readonly allowedTools: readonly string[];
   readonly catalogTools: readonly string[];
   readonly contextEpoch?: string;
@@ -59,6 +60,7 @@ export class RuntimeToolGrantService {
     readonly taskId?: string;
     readonly runId?: string;
     readonly teamMemberRunId?: string;
+    readonly teamRunId?: string;
     readonly allowedTools?: readonly string[];
     readonly catalogTools?: readonly string[];
     readonly contextEpoch?: string;
@@ -81,6 +83,16 @@ export class RuntimeToolGrantService {
       allowedTools.some((tool) => !catalogTools.includes(tool))
     )
       throw new Error('Unsupported or duplicate runtime tool ref.');
+    const existing = input.teamMemberRunId
+      ? [...this.#grants.values()].filter(
+          (candidate) =>
+            candidate.teamMemberRunId === input.teamMemberRunId &&
+            candidate.productSessionId === input.productSessionId,
+        )
+      : [];
+    if (existing.some((grant) => this.activeToolCalls(grant.grantId) > 0))
+      throw new Error('Runtime grant replacement fence is active.');
+    for (const grant of existing) this.#grants.delete(grant.grantId);
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(
       Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
@@ -97,6 +109,7 @@ export class RuntimeToolGrantService {
       ...(input.teamMemberRunId
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
+      ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
       allowedTools: Object.freeze([...allowedTools]),
       catalogTools: Object.freeze([...catalogTools]),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
@@ -134,7 +147,8 @@ export class RuntimeToolGrantService {
 
   public revoke(grantId: string): void {
     this.#grants.delete(grantId);
-    this.#activeCalls.delete(grantId);
+    if ((this.#activeCalls.get(grantId) ?? 0) === 0)
+      this.#activeCalls.delete(grantId);
   }
 
   public beginToolCall(grantId: string): RuntimeToolGrant {
@@ -149,6 +163,7 @@ export class RuntimeToolGrantService {
     const count = this.#activeCalls.get(grantId) ?? 0;
     if (count <= 1) this.#activeCalls.delete(grantId);
     else this.#activeCalls.set(grantId, count - 1);
+    this.pruneExpired();
   }
 
   public activeToolCalls(grantId: string): number {
@@ -170,6 +185,7 @@ export class RuntimeToolGrantService {
     allowedTools: readonly string[],
     ttlMs = 15 * 60 * 1000,
   ): void {
+    this.pruneExpired();
     if (
       new Set(allowedTools).size !== allowedTools.length ||
       allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
@@ -178,6 +194,7 @@ export class RuntimeToolGrantService {
     const expiresAt = new Date(Date.now() + Math.max(1, ttlMs)).toISOString();
     for (const [grantId, grant] of this.#grants) {
       if (grant.productSessionId !== productSessionId) continue;
+      if (Date.parse(grant.expiresAt) <= Date.now()) continue;
       this.#grants.set(grantId, {
         ...grant,
         allowedTools: Object.freeze([...allowedTools]),
@@ -197,6 +214,7 @@ export class RuntimeToolGrantService {
     readonly contextEpoch: string;
     readonly ttlMs?: number;
   }): RuntimeToolGrant {
+    this.pruneExpired();
     const matches = [...this.#grants.values()].filter(
       (candidate) =>
         candidate.teamMemberRunId === input.teamMemberRunId &&
@@ -230,6 +248,7 @@ export class RuntimeToolGrantService {
   }
 
   public get(grantId: string): RuntimeToolGrant | null {
+    this.pruneExpired();
     const grant = this.#grants.get(grantId);
     if (!grant) return null;
     const { tokenHash: _tokenHash, ...publicGrant } = grant;
@@ -240,6 +259,7 @@ export class RuntimeToolGrantService {
     readonly teamMemberRunId: string;
     readonly scopeId: string;
   }): RuntimeToolGrant | null {
+    this.pruneExpired();
     const matches = [...this.#grants.values()].filter(
       (grant) =>
         grant.teamMemberRunId === input.teamMemberRunId &&
@@ -252,9 +272,21 @@ export class RuntimeToolGrantService {
     return publicGrant;
   }
 
+  public revokeForTeamRun(teamRunId: string): void {
+    this.pruneExpired();
+    for (const grant of this.#grants.values()) {
+      if (grant.teamRunId === teamRunId) this.revoke(grant.grantId);
+    }
+  }
+
   private pruneExpired(): void {
-    // Expired grants remain as non-authorizing records so a still-live
-    // RuntimeSession can refresh the same bearer token before continuation.
+    const now = Date.now();
+    for (const [grantId, grant] of this.#grants) {
+      if (Date.parse(grant.expiresAt) > now) continue;
+      if ((this.#activeCalls.get(grantId) ?? 0) > 0) continue;
+      this.#grants.delete(grantId);
+      this.#activeCalls.delete(grantId);
+    }
   }
 }
 

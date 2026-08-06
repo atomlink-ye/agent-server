@@ -59,6 +59,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       ...(input.teamMemberRunId
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
+      ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
       allowedTools: input.toolRefs,
       catalogTools: input.catalogTools ?? input.toolRefs,
@@ -145,6 +146,10 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
 
   public revoke(grantId: string): void {
     this.#mcp.grants.revoke(grantId);
+  }
+
+  public revokeForTeamRun(teamRunId: string): void {
+    this.#mcp.grants.revokeForTeamRun(teamRunId);
   }
 
   public activeToolCalls(grantId: string): number {

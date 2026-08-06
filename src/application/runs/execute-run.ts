@@ -418,6 +418,24 @@ export class ExecuteRun {
     );
   }
 
+  private revokeGrantSafely(
+    binder: RuntimeExtensionBinder,
+    grantId: string,
+  ): void {
+    try {
+      binder.revoke?.(grantId);
+    } catch (error) {
+      try {
+        this.logger.log('warn', 'run.runtime_grant_revoke_failed', {
+          grant_id: grantId,
+          error_name: error instanceof Error ? error.name : 'UnknownError',
+        });
+      } catch {
+        // Secondary logging failure must not mask the primary runtime error.
+      }
+    }
+  }
+
   private reportCompletionPersistenceFailure(
     receipt: ReturnType<typeof createRuntimeExecutionReceipt>,
   ): void {
@@ -768,13 +786,6 @@ export class ExecuteRun {
         sessionRuntime.paseoWorkspaceId !== null)
     )
       throw new Error('New Team member runtime session is already bound.');
-    if (
-      member &&
-      sessionRuntime &&
-      !createdRuntimeSession &&
-      !sessionRuntime.providerAgentId
-    )
-      throw new Error('Loaded Team member runtime session is unbound.');
     if (member && sessionRuntime && this.collaborativeExecutions)
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
@@ -828,6 +839,9 @@ export class ExecuteRun {
         taskId: task.id,
         runId: claim.run.id,
         ...(member?.id ? { teamMemberRunId: member.id } : {}),
+        ...(collaborativeTeam && member
+          ? { teamRunId: collaborativeTeam.id }
+          : {}),
         ...(collaborativeTeam && member
           ? {
               contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
@@ -973,7 +987,9 @@ export class ExecuteRun {
           },
         }
       : undefined;
-    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>>;
+    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>> | undefined;
+    let executionFailed = false;
+    let executionError: unknown;
     try {
       execution = await this.runtime.execute(
         priorProviderAgentId
@@ -1013,7 +1029,12 @@ export class ExecuteRun {
             },
         runtimeEventSink,
       );
-    } finally {
+    } catch (error) {
+      executionFailed = true;
+      executionError = error;
+    }
+    let narrowingError: unknown;
+    try {
       if (member?.role === 'lead') {
         if (!exactLeadGrantId || !refreshableBinder?.refreshForTeamMember)
           throw new Error('Lead runtime grant could not be narrowed.');
@@ -1030,7 +1051,7 @@ export class ExecuteRun {
           if (narrowed.allowedTools.length !== 0)
             throw new Error('Lead runtime grant did not narrow to zero.');
         } catch (error) {
-          refreshableBinder.revoke?.(exactLeadGrantId);
+          this.revokeGrantSafely(refreshableBinder, exactLeadGrantId);
           throw error;
         }
       } else if (
@@ -1054,12 +1075,17 @@ export class ExecuteRun {
               contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
             });
           } catch (error) {
-            refreshableBinder.revoke?.(grant.grantId);
+            this.revokeGrantSafely(refreshableBinder, grant.grantId);
             throw error;
           }
         }
       }
+    } catch (error) {
+      narrowingError = error;
     }
+    if (executionFailed) throw executionError;
+    if (narrowingError) throw narrowingError;
+    if (!execution) throw new Error('Runtime execution returned no result.');
     if (
       sessionRuntime &&
       !sessionRuntime.providerAgentId &&

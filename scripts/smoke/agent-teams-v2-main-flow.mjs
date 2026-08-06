@@ -32,6 +32,7 @@ const requestedScriptedRuntime =
 const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
 const failedAttemptMode =
   process.env.AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE ?? '';
+const reworkScenario = process.env.AGENT_TEAMS_V2_SMOKE_REWORK === '1';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
@@ -45,6 +46,8 @@ if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
   throw new Error('invalid_expired_lease_recovery');
 if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
   throw new Error('invalid_failed_attempt_mode');
+if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
+  throw new Error('rework_scenario_mode_conflict');
 const requestedModel =
   process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
 const startedAt = Date.now();
@@ -715,6 +718,52 @@ class ScriptedRuntime {
           turn: 3,
           tool: 'accept_remaining_work',
         });
+      } else if (reworkScenario && this.#leadTurns === 2) {
+        assert(
+          input.prompt.includes('first submission incomplete') &&
+            input.prompt.includes('"assignee":"member"') &&
+            input.prompt.includes('"assignee":"observer"') &&
+            (input.prompt.match(/"status":"completed"/gu)?.length ?? 0) >= 2,
+          'lead_rework_review_snapshot_invalid',
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_request_changes',
+            arguments: {
+              work_ref: 'work-1',
+              feedback:
+                'Add the missing canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 evidence before resubmitting.',
+            },
+          }),
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-2' },
+          }),
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 2,
+          tools: ['request_changes_A', 'accept_B'],
+        });
+      } else if (reworkScenario && this.#leadTurns === 3) {
+        assert(
+          input.prompt.includes('"attempt_no":2') &&
+            input.prompt.includes(canonicalSnapshotInvocation),
+          'lead_corrected_submission_missing',
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-1' },
+          }),
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 3,
+          tool: 'accept_corrected_A',
+        });
       } else if (this.#leadTurns === 2) {
         assert(
           input.prompt.includes('"assignee":"member"'),
@@ -818,17 +867,18 @@ class ScriptedRuntime {
             usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
           };
         }
-        await waitFor(
-          async () =>
-            (
-              await db.query(
-                "SELECT status FROM team_messages WHERE team_run_id=$1 AND kind='direct'",
-                [teamRunId],
-              )
-            ).rows[0]?.status,
-          (status) => status === 'delivered',
-          'direct_delivery_before_finish',
-        );
+        if (!reworkScenario)
+          await waitFor(
+            async () =>
+              (
+                await db.query(
+                  "SELECT status FROM team_messages WHERE team_run_id=$1 AND kind='direct'",
+                  [teamRunId],
+                )
+              ).rows[0]?.status,
+            (status) => status === 'delivered',
+            'direct_delivery_before_finish',
+          );
         let finished;
         try {
           finished = await session.client.callTool({
@@ -872,7 +922,9 @@ class ScriptedRuntime {
         runtimeCalls.push({
           role: 'lead',
           turn: this.#leadTurns,
-          tool: 'finish_after_direct_delivery',
+          tool: reworkScenario
+            ? 'finish_after_rework'
+            : 'finish_after_direct_delivery',
         });
       }
       this.scheduleLeadIdle(session.client, this.#leadTurns);
@@ -917,7 +969,13 @@ class ScriptedRuntime {
           },
         }),
       );
-      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}`;
+      const reworkDelivery = input.prompt.includes('Attempt number: 2');
+      const summary =
+        reworkScenario &&
+        memberState.member?.name === 'member' &&
+        !reworkDelivery
+          ? 'first submission incomplete: snapshot collected but canonical fixture_ref, symbol, and data_as_of evidence omitted'
+          : `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}${reworkDelivery ? '; corrected after substantive Lead feedback' : ''}`;
       value(
         await session.client.callTool({
           name: 'team_work_checkpoint',
@@ -977,7 +1035,8 @@ class ScriptedRuntime {
       };
       runtimeCalls.push({
         role: 'member',
-        turn: memberTurn,
+        turn: reworkDelivery ? 3 : memberTurn,
+        attempt: reworkDelivery ? 2 : 1,
         tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
         post_submit_rejections: postSubmitRejections,
       });
@@ -1049,7 +1108,9 @@ function agentYaml(name) {
   const lead = name === 'lead';
   const observer = name === 'observer';
   const instructions = lead
-    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to observer with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    ? reworkScenario
+      ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Review rubric: both first attempts must complete before review. Work A is inadequate when its result omits the canonical fixture_ref, symbol ACME, or data_as_of 2026-07-31 evidence; request changes exactly once with substantive feedback while accepting qualifying Work B in the same control cycle. Accept corrected Work A only when all canonical evidence is present, then finish after both Work items are accepted. On the empty board create exactly Work A assigned to member and Work B assigned to observer, then stop. Never send a direct message, never invent refs, and never repeat a successful mutation.`
+      : `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to observer with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
     : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
   const refs = lead
     ? [

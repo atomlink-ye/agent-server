@@ -38,8 +38,15 @@ export {
   MAX_SCHEMA_DEPTH,
   MAX_SOURCE_BYTES,
 };
-export const BUILT_IN_MODEL_POLICY_REFS = Object.freeze(['free-only'] as const);
-export type ModelPolicyRef = string;
+export const BUILT_IN_MODEL_POLICY_REFS = Object.freeze([
+  'free-only',
+  'claude/deepseek-v4-flash',
+  'codex/deepseek-v4-flash',
+] as const);
+export type ModelPolicyRef = (typeof BUILT_IN_MODEL_POLICY_REFS)[number];
+export const isModelPolicyRef = (v: unknown): v is ModelPolicyRef =>
+  typeof v === 'string' &&
+  (BUILT_IN_MODEL_POLICY_REFS as readonly string[]).includes(v);
 
 export interface ManagedAgentPackage {
   readonly apiVersion: 'agent-server/v1alpha1';
@@ -50,7 +57,7 @@ export interface ManagedAgentPackage {
     readonly instructions: string;
     readonly runtime: {
       readonly provider: 'paseo';
-      readonly modelPolicyRef: string;
+      readonly modelPolicyRef: ModelPolicyRef;
       readonly mode: 'isolated' | 'shared';
     };
     readonly tools: readonly {
@@ -214,12 +221,7 @@ export function parseManagedAgentPackage(
   if (!isObject(runtime)) fail('invalid_runtime', '$.spec.runtime');
   keys(runtime, ['provider', 'modelPolicyRef', 'mode'], '$.spec.runtime');
   if (runtime.provider !== 'paseo') fail('invalid_provider');
-  if (
-    typeof runtime.modelPolicyRef !== 'string' ||
-    !BUILT_IN_MODEL_POLICY_REFS.includes(
-      runtime.modelPolicyRef as (typeof BUILT_IN_MODEL_POLICY_REFS)[number],
-    )
-  )
+  if (!isModelPolicyRef(runtime.modelPolicyRef))
     fail('model_policy_not_allowed', '$.spec.runtime.modelPolicyRef');
   if (!['isolated', 'shared'].includes(String(runtime.mode)))
     fail('invalid_mode');

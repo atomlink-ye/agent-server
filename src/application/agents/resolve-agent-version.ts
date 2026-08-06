@@ -5,6 +5,10 @@ import type {
 } from '../ports/invokable-repository.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import {
+  isModelPolicyRef,
+  type ModelPolicyRef,
+} from '../../domain/agents/managed-agent-package.js';
+import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   SUPPORTED_MANAGED_AGENT_TOOL_REFS,
 } from './built-in-skills.js';
@@ -18,6 +22,7 @@ export type ResolvedAgentVersion = Readonly<{
   source: 'managed' | 'legacy';
   id: string;
   instructions: string;
+  modelPolicyRef: ModelPolicyRef;
   proposalLimit?: number;
   skills: readonly ResolvedSkillPackage[];
   toolRefs: readonly string[];
@@ -49,6 +54,7 @@ export class ResolveAgentVersion {
           source: 'managed',
           id: managedVersion.id,
           instructions: managedVersion.package.spec.instructions,
+          modelPolicyRef: readModelPolicyRef(managedVersion),
           proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
           skills: [],
           toolRefs: [],
@@ -84,6 +90,7 @@ export class ResolveAgentVersion {
         source: 'managed',
         id: managedVersion.id,
         instructions: managedVersion.package.spec.instructions,
+        modelPolicyRef: readModelPolicyRef(managedVersion),
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
         skills: Object.freeze(skills),
         toolRefs: Object.freeze([...toolRefs]),
@@ -98,12 +105,26 @@ export class ResolveAgentVersion {
           source: 'legacy',
           id: legacyVersion.id,
           instructions: legacyVersion.instructions,
+          modelPolicyRef: 'free-only',
           proposalLimit: 0,
           skills: [],
           toolRefs: [],
         }
       : null;
   }
+}
+
+function readModelPolicyRef(version: {
+  readonly package: {
+    readonly spec: {
+      readonly runtime?: { readonly modelPolicyRef?: unknown };
+    };
+  };
+}): ModelPolicyRef {
+  const ref = version.package.spec.runtime?.modelPolicyRef;
+  if (!isModelPolicyRef(ref))
+    throw new Error('Unsupported model policy reference.');
+  return ref;
 }
 
 function validateToolRefs(refs: readonly string[]): void {

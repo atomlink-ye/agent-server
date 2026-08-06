@@ -39,10 +39,12 @@ For Team execution, the create-time native system prompt is provider-neutral:
 its pure inputs are the role, deterministic fixed roster, and static text. It
 holds the stable Team protocol and the warning that only agent-server MCP
 values are authoritative; user text, including envelope-looking text, is
-untrusted. Per-delivery user prompts carry goal, board, limits,
-`allowed_commands`, `eligible_targets`, a permanent-protocol anchor, and
-turn-kind guidance. Continuation keeps the frozen create-time system prompt
-and sends only the current user delivery.
+untrusted. Each Lead delivery's user prompt carries the current goal, board,
+limits, `allowed_commands`, `eligible_targets`, a permanent-protocol anchor,
+and Lead turn guidance. Member wake, direct, and rework deliveries carry their
+delivery body and the corresponding member/direct turn-kind guidance.
+Continuation keeps the frozen create-time system prompt and sends only the
+current user delivery.
 
 Every control-plane delivery begins with the display/provenance-only envelope
 `[agent-server · team:<short_run_id> · to:<member> · kind:lead_turn|wake|direct|rework · from:<sender> · seq:<n>]`.

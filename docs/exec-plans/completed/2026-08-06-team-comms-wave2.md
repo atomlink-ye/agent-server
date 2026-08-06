@@ -153,6 +153,13 @@ agent-teams-v2-smoke'` was run first; it passed because both member
   provenance only, not public contracts, durable state, credentials, or
   security boundaries. A minor extra roster query on member continuation is
   deferred as non-blocking hardening.
+- Deferred nonblocking harness hardening: `capturePersistedControlPlaneEnvelopeEvidence`
+  currently falls back to pre-runtime Task input snapshots even though Lead
+  envelopes are applied at `ExecuteRun` delivery, and equates Work task
+  sequence with `TeamMessage` sequence. On an unexpected failing smoke it may
+  emit `SMOKE_EVIDENCE_WRITE_FAILED` before generic diagnostics. This did not
+  affect passing default/G acceptance and remains out of scope; the harness was
+  not changed.
 
 ## Risks and recovery
 

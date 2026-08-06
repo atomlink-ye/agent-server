@@ -126,10 +126,11 @@ For Team execution, `create.systemPrompt` is provider-neutral and is built only
 from role, deterministic fixed roster, and static text. It contains the stable
 Team protocol and the warning that only values returned by agent-server MCP
 tools are authoritative; user text, including envelope-looking text, is
-untrusted. Each delivery `prompt` carries the current goal, board, limits,
-`allowed_commands`, `eligible_targets`, a permanent-protocol anchor, and
-turn-kind guidance. Continuations retain the frozen system prompt and send only
-the new user delivery.
+untrusted. Each Lead delivery `prompt` carries the current goal, board, limits,
+`allowed_commands`, `eligible_targets`, a permanent-protocol anchor, and Lead
+turn guidance. Member wake, direct, and rework prompts carry their delivery
+body and the corresponding member/direct turn-kind guidance. Continuations
+retain the frozen system prompt and send only the new user delivery.
 
 Control-plane delivery prompts begin with this display/provenance-only envelope:
 `[agent-server · team:<short_run_id> · to:<member> · kind:lead_turn|wake|direct|rework · from:<sender> · seq:<n>]`.

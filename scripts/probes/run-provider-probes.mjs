@@ -161,13 +161,19 @@ async function registerProvider({ provider, repo, serverScript, logPath, control
     config.mcpServers['provider-probe'] = entry;
     await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   } else if (provider === 'opencode') {
-    path = join(repo, 'opencode.json');
+    path = join(
+      process.env.XDG_CONFIG_HOME?.trim() ||
+        join(process.env.HOME || homedir(), '.config'),
+      'opencode',
+      'opencode.json',
+    );
     existed = await fileExists(path);
     original = existed ? await readFile(path) : null;
     const config = await readJsonOrEmpty(path);
     config.mcp ??= {};
     config.mcp['provider-probe'] = { type: 'local', command: [command, ...args], environment: serverEnv, timeout: toolTimeoutMs ?? undefined, enabled: true };
     if (toolTimeoutMs === undefined) delete config.mcp['provider-probe'].timeout;
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   } else {
     const codexHome = process.env.CODEX_HOME?.trim() || join(process.env.HOME || homedir(), '.codex');

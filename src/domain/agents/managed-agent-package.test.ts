@@ -63,6 +63,9 @@ describe('managed agent package', () => {
   it('parses a valid package into an immutable normalized value', () => {
     const result = parseManagedAgentPackage(yaml());
     expect(result.package.metadata.name).toBe('researcher');
+    expect(result.fingerprint).toBe(
+      'sha256:fde11d9b60891d95074711a20b7183875cedcb77be7b49c306d36dc215870b85',
+    );
     expect(result.package.spec.input.prompt).toEqual({
       segments: [{ text: 'Research ' }, { field: 'topic' }],
       template: 'Research {{ input.topic }}',

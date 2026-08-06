@@ -1286,6 +1286,20 @@ try {
         throw error;
       }
     };
+    const { ExecuteRun } =
+      await import('../../src/application/runs/execute-run.ts');
+    const executeRun = ExecuteRun.prototype.execute;
+    ExecuteRun.prototype.execute = async function (claim) {
+      try {
+        return await executeRun.call(this, claim);
+      } catch (error) {
+        marker('REWORK_EXECUTE_FAILURE', {
+          error_message:
+            error instanceof Error ? error.message : 'Unknown runtime error',
+        });
+        throw error;
+      }
+    };
   }
   const { createService } = await import('../../src/bootstrap.ts');
   service = await createService(

@@ -1043,6 +1043,7 @@ class ScriptedRuntime {
         post_submit_rejections: postSubmitRejections,
       });
       if (
+        !reworkScenario &&
         !this.#submittedTimeoutInjected &&
         memberState.member?.name === 'member'
       ) {

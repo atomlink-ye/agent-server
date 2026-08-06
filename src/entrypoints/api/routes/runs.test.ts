@@ -49,6 +49,7 @@ describe('run routes', () => {
         paseo: {
           wsUrl: 'ws://127.0.0.1:6767/ws',
           agentCwd: '/tmp/agent-server-test',
+          provider: 'opencode',
           workspaceTitle: 'Agent Server Test',
           connectTimeoutMs: 1_000,
           executionTimeoutMs: 1_000,

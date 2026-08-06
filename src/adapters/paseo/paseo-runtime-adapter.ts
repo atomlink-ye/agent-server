@@ -13,6 +13,7 @@ import {
   RuntimeTimedOutError,
 } from '../../application/ports/agent-runtime.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import { PaseoConnectionError } from './errors.js';
 import {
   selectOpenCodeModel,
@@ -33,6 +34,7 @@ import { mapPaseoFinishStatus } from './status-mapper.js';
 export interface PaseoRuntimeOptions {
   readonly wsUrl: string;
   readonly cwd: string;
+  readonly provider: ManagedEnvironmentProvider;
   readonly workspaceTitle: string;
   readonly requestedModel?: string;
   readonly connectTimeoutMs: number;
@@ -118,7 +120,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
     this.#lastError = null;
     this.#logger.log('info', 'runtime.reconnected', {
-      provider: 'opencode',
+      provider: this.#options.provider,
       ...(this.#model ? { model: this.#model.id } : {}),
       ...(this.#workspaceId ? { workspace_id: this.#workspaceId } : {}),
     });
@@ -138,7 +140,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       return;
     }
 
-    const models = await this.#client.listOpenCodeModels(this.#options.cwd);
+    const models = await this.#client.listModels(
+      this.#options.provider,
+      this.#options.cwd,
+    );
     const model = selectOpenCodeModel(models, this.#options.requestedModel);
     const workspaceId = await this.#client.openWorkspace(this.#options.cwd);
     await this.#client.setWorkspaceTitle(
@@ -154,7 +159,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     this.#workspaceId = workspaceId;
     this.#lastError = null;
     this.#logger.log('info', 'runtime.initialized', {
-      provider: 'opencode',
+      provider: this.#options.provider,
       model: model.id,
     });
   }
@@ -1280,7 +1285,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         input.operation === 'continue'
           ? {
               id: input.providerAgentId,
-              provider: 'opencode',
+              provider: this.#options.provider,
               model: this.#model.id,
             }
           : await (async () => {
@@ -1291,7 +1296,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
                 has_mcp_servers: Boolean(input.extensions?.mcpServers?.length),
                 model_id: modelId,
               });
-              const created = await this.#client.createOpenCodeAgent({
+              const created = await this.#client.createAgent({
+                provider: this.#options.provider,
                 cwd: input.cellCwd ?? this.#options.cwd,
                 workspaceId,
                 model: modelId,
@@ -1482,7 +1488,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         ? await this.#readMemoryCandidates(artifact, executionCwd)
         : {};
       return {
-        provider: agent.provider || 'opencode',
+        provider: agent.provider || this.#options.provider,
         model: agent.model ?? this.#model.id,
         text: finished.lastMessage,
         providerAgentId: agent.id,
@@ -1649,7 +1655,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
     return {
       ready: connected && workspaceReady && modelReady,
-      provider: 'opencode',
+      provider: this.#options.provider,
       ...(this.#model ? { model: this.#model.id } : {}),
       checks: [
         {

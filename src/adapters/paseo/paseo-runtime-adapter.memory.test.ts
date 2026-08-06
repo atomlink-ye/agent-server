@@ -20,8 +20,8 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
     connectionStatus: () => 'connected',
     openWorkspace: async () => 'workspace-1',
     setWorkspaceTitle: async () => undefined,
-    listOpenCodeModels: async () => [{ id: 'free/model', label: 'free' }],
-    createOpenCodeAgent: async () => ({
+    listModels: async () => [{ id: 'free/model', label: 'free' }],
+    createAgent: async () => ({
       id: 'agent-1',
       provider: 'opencode',
       model: 'free/model',
@@ -42,6 +42,7 @@ describe('Paseo runtime same-agent continuation', () => {
       {
         wsUrl: 'ws://test',
         cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -81,6 +82,7 @@ describe('Paseo runtime same-agent continuation', () => {
       {
         wsUrl: 'ws://test',
         cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -88,7 +90,7 @@ describe('Paseo runtime same-agent continuation', () => {
       logger,
       {
         ...client(),
-        createOpenCodeAgent: create,
+        createAgent: create,
         sendAgentMessage: async () => {
           throw new Error('closed');
         },
@@ -146,7 +148,7 @@ describe('Paseo runtime same-agent continuation', () => {
     async (_label, configure) => {
       let creates = 0;
       const continuationClient = client();
-      continuationClient.createOpenCodeAgent = async () => {
+      continuationClient.createAgent = async () => {
         creates += 1;
         return { id: 'replacement', provider: 'opencode', model: 'free/model' };
       };
@@ -155,6 +157,7 @@ describe('Paseo runtime same-agent continuation', () => {
         {
           wsUrl: 'ws://test',
           cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+          provider: 'opencode',
           workspaceTitle: 'test',
           connectTimeoutMs: 1,
           executionTimeoutMs: 1,
@@ -213,6 +216,7 @@ describe('Paseo runtime nested provider telemetry', () => {
         {
           wsUrl: 'ws://test',
           cwd: join(tmpdir(), `agent-server-${randomUUID()}`),
+          provider: 'opencode',
           workspaceTitle: 'test',
           connectTimeoutMs: 1,
           executionTimeoutMs: 30_000,
@@ -383,6 +387,7 @@ describe('Paseo runtime memory proposal artifact', () => {
         {
           wsUrl: 'ws://test',
           cwd,
+          provider: 'opencode',
           workspaceTitle: 'test',
           connectTimeoutMs: 1,
           executionTimeoutMs: 1,
@@ -390,7 +395,7 @@ describe('Paseo runtime memory proposal artifact', () => {
         logger,
         {
           ...client(),
-          createOpenCodeAgent: async (input) => {
+          createAgent: async (input) => {
             requestPrompt = input.initialPrompt;
             return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
           },
@@ -429,6 +434,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         wsUrl: 'ws://test',
         cwd,
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -436,7 +442,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       logger,
       {
         ...client(),
-        createOpenCodeAgent: async (input) => {
+        createAgent: async (input) => {
           requestPrompt = input.initialPrompt;
           return { id: 'agent-1', provider: 'opencode', model: 'free/model' };
         },
@@ -473,6 +479,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         wsUrl: 'ws://test',
         cwd,
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -511,6 +518,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         wsUrl: 'ws://test',
         cwd,
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -539,6 +547,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         wsUrl: 'ws://test',
         cwd,
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,
@@ -566,6 +575,7 @@ describe('Paseo runtime memory proposal artifact', () => {
         {
           wsUrl: 'ws://test',
           cwd,
+          provider: 'opencode',
           workspaceTitle: 'test',
           connectTimeoutMs: 1,
           executionTimeoutMs: 1,
@@ -606,6 +616,7 @@ describe('Paseo runtime memory proposal artifact', () => {
         {
           wsUrl: 'ws://test',
           cwd,
+          provider: 'opencode',
           workspaceTitle: 'test',
           connectTimeoutMs: 1,
           executionTimeoutMs: 1,
@@ -639,6 +650,7 @@ describe('Paseo runtime memory proposal artifact', () => {
       {
         wsUrl: 'ws://test',
         cwd,
+        provider: 'opencode',
         workspaceTitle: 'test',
         connectTimeoutMs: 1,
         executionTimeoutMs: 1,

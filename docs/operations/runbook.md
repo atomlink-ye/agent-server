@@ -7,6 +7,20 @@
 3. Call `/health/live`; liveness does not depend on Paseo.
 4. Run `make test-contract` to separate code regression from environment state.
 
+## Provider and model selection
+
+`PASEO_PROVIDER` is a process-global deployment setting with the closed values
+`opencode`, `claude`, and `codex`; it defaults to `opencode` and is not selected
+per package or run. Non-opencode deployments require an explicit operator
+`PASEO_MODEL` pin (the prepared Team smoke uses `deepseek-v4-flash`). The
+unattended provider modes are pinned to `opencode` `build`, Claude
+`bypassPermissions`, and Codex `full-access` where those smoke paths apply.
+
+The managed-environment `spec.provider` declaration may differ from the runtime
+`PASEO_PROVIDER`; rejecting that mismatch needs plumbing that is not yet
+present. HTTP callers cannot choose a model. Preserve the external
+`/health/ready` check name `opencode_model` even when operating another provider.
+
 ## Readiness returns 503
 
 Inspect the named checks:
@@ -90,7 +104,12 @@ Use `POST /api/v1/tasks/{task_id}:cancel`. A queued Task returns `cancelled` aft
 
 ## No free model
 
-This is an expected external dependency failure, not permission to select a paid model. Check the live catalog and OpenCode status. Operators may deliberately configure a known model through `PASEO_MODEL`, but automatic fallback remains free-only. Keep deterministic CI green while external availability is investigated.
+This is an expected external dependency failure, not permission for automatic
+paid fallback. Check the live catalog and OpenCode status. Operators may
+deliberately configure a known model through `PASEO_MODEL`; for Claude or Codex
+that pin is required. The `free-only` package label does not override an
+operator pin, and HTTP callers cannot choose models. Keep deterministic CI
+green while external availability is investigated.
 
 ## Smoke leaves a process
 

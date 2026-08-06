@@ -20,6 +20,7 @@ function createAdapter(client: FakePaseoClient) {
     {
       wsUrl: 'ws://127.0.0.1:6767/ws',
       cwd: '/tmp/agent-server-adapter-test',
+      provider: 'opencode',
       workspaceTitle: 'Adapter Test',
       connectTimeoutMs: 1_000,
       executionTimeoutMs: 1_000,

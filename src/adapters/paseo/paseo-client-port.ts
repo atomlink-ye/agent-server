@@ -1,6 +1,7 @@
 import { DaemonClient } from '@getpaseo/client';
 
 import type { RunUsage } from '../../domain/runs/run.js';
+import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { PaseoFinishStatus } from './status-mapper.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
 import type { RuntimeMcpServerConfig } from '../../application/ports/agent-runtime.js';
@@ -143,8 +144,12 @@ export interface PaseoClientPort {
   openWorkspace(cwd: string): Promise<string>;
   createIndependentWorkspace?(cwd: string): Promise<string>;
   setWorkspaceTitle(workspaceId: string, title: string): Promise<void>;
-  listOpenCodeModels(cwd: string): Promise<readonly PaseoModelDescriptor[]>;
-  createOpenCodeAgent(input: {
+  listModels(
+    provider: ManagedEnvironmentProvider,
+    cwd: string,
+  ): Promise<readonly PaseoModelDescriptor[]>;
+  createAgent(input: {
+    readonly provider: ManagedEnvironmentProvider;
     readonly cwd: string;
     readonly workspaceId: string;
     readonly model: string;
@@ -197,6 +202,14 @@ export class PaseoClientProjectionError extends Error {
   }
 }
 
+const PASEO_PROVIDER_DEFAULT_MODE: Readonly<
+  Record<ManagedEnvironmentProvider, string>
+> = {
+  opencode: 'build',
+  claude: 'bypassPermissions',
+  codex: 'full-access',
+};
+
 export class PaseoSdkClient implements PaseoClientPort {
   readonly #client: DaemonClient;
 
@@ -248,10 +261,11 @@ export class PaseoSdkClient implements PaseoClientPort {
     await this.#client.setWorkspaceTitle(workspaceId, title);
   }
 
-  public async listOpenCodeModels(
+  public async listModels(
+    provider: ManagedEnvironmentProvider,
     cwd: string,
   ): Promise<readonly PaseoModelDescriptor[]> {
-    const result = await this.#client.listProviderModels('opencode', { cwd });
+    const result = await this.#client.listProviderModels(provider, { cwd });
     if (result.error) {
       throw new Error(result.error);
     }
@@ -262,7 +276,8 @@ export class PaseoSdkClient implements PaseoClientPort {
     }));
   }
 
-  public async createOpenCodeAgent(input: {
+  public async createAgent(input: {
+    readonly provider: ManagedEnvironmentProvider;
     readonly cwd: string;
     readonly workspaceId: string;
     readonly model: string;
@@ -274,9 +289,9 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly mcpServers?: readonly RuntimeMcpServerConfig[];
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
-      provider: 'opencode',
+      provider: input.provider,
       model: input.model,
-      modeId: 'build',
+      modeId: PASEO_PROVIDER_DEFAULT_MODE[input.provider],
       cwd: input.cwd,
       workspaceId: input.workspaceId,
       systemPrompt: input.systemPrompt,

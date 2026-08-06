@@ -12,8 +12,8 @@ authority: execution-plan
 
 Make Team control deliveries visibly attributable without treating prompt text
 as authority, move stable Team protocol and roster context into the native
-create-time system prompt, and add a reproducible rework scenario that captures
-the known frozen-member-catalog failure for a later wave.
+create-time system prompt, and add a reproducible rework scenario that records
+the known frozen-member-catalog behavior for a later wave.
 
 ## Context and authority
 
@@ -24,10 +24,13 @@ The accepted design is
 limited to recommendations A, B, G, and the config/seed-only part of E. The
 implementation baseline is `97d9c15` on `agent/team-comms-wave2`.
 
-This is a product-implementation `prove` slice. The first real path is the
-scripted second-attempt delivery, whose expected observation is
-`Runtime grant allowed tools exceed catalog.` The failure is required evidence,
-not authorization to fix the member catalog.
+This is a product-implementation `prove` slice. The G-first harness result did
+not reproduce the expected `Runtime grant allowed tools exceed catalog.`
+failure before A/B: the first and second member deliveries are both
+`work_attempt` turns, so the first turn freezes the full member work catalog.
+The known V6 `direct_message` -> `work_attempt` catalog failure remains
+unfixed and deferred to a later wave; it is not authorization to change the
+member catalog.
 
 ## Scope
 
@@ -68,62 +71,65 @@ not authorization to fix the member catalog.
 
 ## Work breakdown
 
-- [ ] Add the rework harness switch in `Makefile` and
+- [x] Add the rework harness switch in `Makefile` and
       `scripts/smoke/agent-teams-v2-main-flow.mjs`, including poor-but-completed
       first submission, substantive Lead feedback, second delivery, and
       mode-specific evidence checks.
-- [ ] Commit the G-only harness change, push it with `sandbox-ctl push --mode
-      git`, run the scripted rework smoke, and record the literal expected red
-      output (or report immediately if it does not fail).
-- [ ] Add a small provider-neutral Team delivery-envelope formatter and apply it
+- [x] Commit the G-only harness change, push it with `sandbox-ctl push --mode
+  git`, run the scripted rework smoke, and record its literal result,
+      including an explanation if the known V6 failure does not reproduce.
+- [x] Add a small provider-neutral Team delivery-envelope formatter and apply it
       to assignment/direct/rework prompts in
       `src/application/teams/team-wake-reconciler.ts` and Lead user turns in
       `src/application/runs/execute-run.ts`.
-- [ ] Add a pure Team system-prompt builder in
+- [x] Add a pure Team system-prompt builder in
       `src/application/runs/execute-run.ts` whose inputs are only role, fixed
       roster, and static text; relocate stable protocol/roster/authority prose
       and move all turn-kind guidance to user prompts.
-- [ ] Polish scripted roster names and root Task goal wording, then update
+- [x] Polish scripted roster names and root Task goal wording, then update
       existing smoke assertions for the new prompts and envelope evidence.
-- [ ] Synchronize `docs/components/orchestration-kernel.md`,
+- [x] Synchronize `docs/components/orchestration-kernel.md`,
       `docs/components/paseo-runtime-adapter.md`, and
       `docs/contracts/runtime-contract.md` where current prompt/delivery wording
       would otherwise become stale.
-- [ ] Review the complete diff for scoped provider neutrality, absence of
+- [x] Review the complete diff for scoped provider neutrality, absence of
       text-derived authority, no Human-Gate change, no new tests, and no V6 fix.
 
 ## Verification
 
-- [ ] `sandbox-ctl push --mode git` after each committed evidence boundary.
-- [ ] `sandbox-ctl exec --timeout 15m -- bash -lc
-      'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
-      agent-teams-v2-smoke'` captures the expected V6 red run before the A/B/E
-      implementation and is rerun afterward for the final literal result.
-- [ ] `sandbox-ctl exec -- bash -lc 'make ci'` completes, or any failure is
-      classified by literal reproduction on unmodified `97d9c15`; the known
-      contract timeout remains an environment result.
-- [ ] `sandbox-ctl exec --timeout 15m -- bash -lc
-      'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke'` prints
+- [x] `sandbox-ctl push --mode git` after each committed evidence boundary.
+- [x] `sandbox-ctl exec --timeout 15m -- bash -lc
+  'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
+  agent-teams-v2-smoke'` was run first; it passed because both member
+      deliveries were `work_attempt` -> `work_attempt` and therefore froze the
+      full work catalog. The known `direct_message` -> `work_attempt` V6 case
+      remains a later-wave fix. The same command was rerun after A/B/E with the
+      final literal result recorded below.
+- [ ] `sandbox-ctl exec --timeout 30m -- bash -lc 'make ci'` completes. The
+      current attempt failed only on this plan's Prettier formatting, not the
+      environment; the known contract timeout remains an environment result.
+- [x] `sandbox-ctl exec --timeout 15m -- bash -lc
+  'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke'` prints
       `RESULT_PASS` and preserves the owner-provided baseline cardinality and
       persistent-Lead/Workspace markers.
-- [ ] A literal sandbox grep/query command proves zero control-protocol strings
+- [x] A literal sandbox grep/query command proves zero control-protocol strings
       in Lead user deliveries and exactly one in the create-time Team Lead
       `systemPrompt`.
-- [ ] A literal sandbox event/delivered-prompt query proves assignment, direct,
+- [x] A literal sandbox event/delivered-prompt query proves assignment, direct,
       rework, and Lead deliveries begin with the requested bracketed envelope.
 - [ ] `sandbox-ctl exec --timeout 15m -- bash -lc 'make paseo-smoke'` completes
       with its literal result.
-- [ ] `git diff --check`, scoped diff review, and final `git status --short`
+- [x] `git diff --check`, scoped diff review, and final `git status --short`
       confirm repository hygiene.
 
 ## Documentation impact
 
-- [ ] Product/Feature: confirm the baseline classification remains accurate;
+- [x] Product/Feature: confirm the baseline classification remains accurate;
       no status or product-scope change is expected.
-- [ ] Component/Contract: record Team create-time static protocol, turn-scoped
+- [x] Component/Contract: record Team create-time static protocol, turn-scoped
       state/guidance, and display-only provenance envelopes in the existing
       orchestration/runtime documents.
-- [ ] ADR/Runbook: confirm no new architectural decision or operator runbook is
+- [x] ADR/Runbook: confirm no new architectural decision or operator runbook is
       required; the harness switch remains an existing smoke option.
 
 ## Decisions and discoveries
@@ -138,12 +144,21 @@ not authorization to fix the member catalog.
   sender is resolved from the persisted `senderMemberRunId`, never from text.
 - The existing smoke script is the requested reproducible harness and may have
   stale assertions updated; no separate test artifact will be created.
+- The G-first troubleshooting result was a pass, not a V6 reproduction:
+  first and second deliveries both use `work_attempt`, freezing the complete
+  member work catalog. The reachable `direct_message` -> `work_attempt` V6
+  failure remains deferred and unfixed.
+- No Human Gate is required: this wave changes prompt placement and display
+  provenance only, not public contracts, durable state, credentials, or
+  security boundaries. A minor extra roster query on member continuation is
+  deferred as non-blocking hardening.
 
 ## Risks and recovery
 
-- The expected rework red result may terminalize through a safe normalized
-  runtime error rather than print the internal exception at top level; retain
-  the literal markers and database/runtime diagnostics that expose the cause.
+- The G-first run passed because its two member deliveries were both
+  `work_attempt`; retain the literal pass markers and keep the reachable
+  `direct_message` -> `work_attempt` catalog failure deferred to the later V6
+  wave.
 - Prompt relocation can accidentally leave the protocol in continuation user
   turns or omit it from the first create. Acceptance inspects delivered prompts
   and create input separately rather than inferring from source grep alone.
@@ -160,34 +175,85 @@ not authorization to fix the member catalog.
 
 ## Validation evidence
 
-No implementation validation has run yet. The owner-provided `97d9c15`
-baseline is `RESULT_PASS`, one persistent Lead RuntimeSession/provider
-Agent/Workspace across four turns, one TeamRun Paseo Workspace across three
-bound RuntimeSessions, and cardinality `team_members=3`, `work_items=2`,
-`attempts=2`, `direct_messages=1`.
+The G-first rework harness pass is explained by the first and second member
+deliveries both being `work_attempt` -> `work_attempt`; the first turn freezes
+the full member work catalog. The known `direct_message` -> `work_attempt` V6
+failure remains unfixed for a later wave.
+
+The final first-flow scripted smoke was run with:
+
+```text
+sandbox-ctl exec --timeout 15m -- bash -lc 'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke'
+```
+
+Relevant literal output:
+
+```text
+{"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE","at":"2026-08-06T14:55:24.260Z","lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0,"control_plane_delivery_count":7,"first_envelope_lines":["[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:1]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:wake · from:research-lead · seq:2]","[agent-server · team:e28bea2d · to:opportunity-analyst · kind:wake · from:research-lead · seq:1]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:2]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:3]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:direct · from:research-lead · seq:3]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:4]"]}
+{"marker":"RESULT_PASS","at":"2026-08-06T14:55:24.260Z","expected":{"terminal":true,"direct":true,"dependency":true,"replay":true},"actual":{"terminal":true,"direct":true,"dependency":true,"replay":true},"durable_cardinality":{"team_members":3,"work_items":2,"attempts":2,"team_messages":3,"direct_messages":1,"lead_turns":4,"member_attempt_runs":2}}
+```
+
+Owner baseline values preserved in that run: `lead_runtime_session_distinct=1`,
+`lead_provider_agent_distinct=1`, `lead_paseo_workspace_distinct=1`, four Lead
+turns/continues, and `lead_catalog_exact_eight=true`. The durable TeamRun
+Workspace query remained:
+
+```text
+{"marker":"TEAM_RUN_PASEO_WORKSPACE_DURABLE_QUERY","runtime_sessions":3,"bound_runtime_sessions":3,"distinct_paseo_workspace_ids":1}
+```
+
+The final rework-mode scripted smoke was run with:
+
+```text
+sandbox-ctl exec --timeout 15m -- bash -lc 'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make agent-teams-v2-smoke'
+```
+
+Relevant literal output:
+
+```text
+{"marker":"CONTROL_PLANE_ENVELOPE_DELIVERED","at":"2026-08-06T14:59:14.771Z","first_envelope_line":"[agent-server · team:a038ae6d · to:opportunity-analyst · kind:rework · from:research-lead · seq:3]","kind":"rework","recipient":"opportunity-analyst","sender":"research-lead","sequence":3}
+{"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE","at":"2026-08-06T14:59:15.812Z","lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0,"control_plane_delivery_count":7,"first_envelope_lines":["[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:1]","[agent-server · team:a038ae6d · to:opportunity-analyst · kind:wake · from:research-lead · seq:1]","[agent-server · team:a038ae6d · to:risk-reviewer · kind:wake · from:research-lead · seq:2]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:2]","[agent-server · team:a038ae6d · to:opportunity-analyst · kind:rework · from:research-lead · seq:3]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:3]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:4]"]}
+{"marker":"RESULT_PASS","at":"2026-08-06T14:59:15.814Z","expected":{"terminal":true,"direct":false,"dependency":true,"replay":true},"actual":{"terminal":true,"direct":false,"dependency":true,"replay":true},"durable_cardinality":{"team_members":3,"work_items":2,"attempts":3,"team_messages":3,"direct_messages":0,"lead_turns":4,"member_attempt_runs":3}}
+```
+
+The current CI attempt remains pending after the docs formatting fix. Its
+literal command and relevant failure were:
+
+```text
+sandbox-ctl exec --timeout 30m -- bash -lc 'make ci'
+[warn] docs/exec-plans/active/2026-08-06-team-comms-wave2.md
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+```
+
+This was a formatting-only exit, not an environment failure. Final sandbox
+`make ci` and `make paseo-smoke` remain outstanding; local docs/plan checks and
+`git diff --check` are run after this update.
 
 ## Completion checklist
 
-- [ ] G expected-red artifact and all A/B/E changes are committed.
-- [ ] Every requested acceptance command and literal output is recorded.
-- [ ] Expected V6 failure and baseline-reproduced environment results are
-      reported without being misclassified as Wave 2 regressions.
-- [ ] No Human Gate, out-of-scope feature, new test, generated evidence,
+- [x] G harness and all A/B/E changes are committed; the G-first result was a
+      pass, with the reachable V6 failure explicitly deferred.
+- [x] Every requested acceptance command and literal output available so far
+      is recorded.
+- [x] The G-first pass explanation and known later-wave V6 result are reported
+      without misclassifying either as a Wave 2 regression.
+- [x] No Human Gate, out-of-scope feature, new test, generated evidence,
       credential, or local absolute path is committed.
 - [ ] All plan items are resolved, the plan is moved to `completed/`, and
       `status: completed` is committed.
 
 ## Current blocker
 
-None.
+Final sandbox `make ci` and `make paseo-smoke` remain pending; the current CI
+attempt failed only on this plan's Prettier formatting.
 
 ## Next exact command
 
-Use `apply_patch` to add `AGENT_TEAMS_V2_SMOKE_REWORK=1` handling to `Makefile`
-and `scripts/smoke/agent-teams-v2-main-flow.mjs` without changing runtime catalog
-behavior.
+Run the final sandbox `make ci` and `make paseo-smoke` after the formatting and
+docs checks pass; leave this plan active until those results are recorded.
 
 ## Cleanup state
 
-The worktree is clean at `97d9c15`. The provisioned remote sandbox is reported
-synced and clean. No local or remote process was started by this plan.
+The implementation and documentation changes are committed in the active
+worktree. No migration, durable-data repair, or generated evidence is part of
+this wave.

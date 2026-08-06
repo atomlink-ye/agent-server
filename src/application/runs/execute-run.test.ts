@@ -1464,6 +1464,7 @@ function createLeadRuntimeFixture() {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     })),
+    findPaseoWorkspaceByTeamRun: vi.fn(async () => null),
     bindProvider: vi.fn(async () => undefined),
   };
   const collaborativeExecutions = {

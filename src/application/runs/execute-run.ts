@@ -8,6 +8,7 @@ import { transitionTask, type Task } from '../../domain/tasks/task.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import {
+  AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
   type AgentRuntimePort,
   type RuntimeEvent,
   RuntimeTimedOutError,
@@ -802,6 +803,26 @@ export class ExecuteRun {
         ? join(this.runtimeCellRoot, sessionRuntime.id)
         : undefined;
     if (cellCwd) await mkdir(cellCwd, { recursive: true });
+    let teamPaseoWorkspaceId: string | null = null;
+    if (
+      !priorProviderAgentId &&
+      collaborativeTeam &&
+      member &&
+      sessionRuntime
+    ) {
+      if (!this.runtimeSessions?.findPaseoWorkspaceByTeamRun)
+        throw new Error('TeamRun Paseo Workspace lookup is unavailable.');
+      teamPaseoWorkspaceId =
+        await this.runtimeSessions.findPaseoWorkspaceByTeamRun({
+          teamRunId: collaborativeTeam.id,
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        });
+      if (member.role !== 'lead' && !teamPaseoWorkspaceId)
+        throw new Error('TeamRun Paseo Workspace is unavailable.');
+    }
     if (member?.role === 'lead') {
       const capabilityBinder = this.runtimeExtensionBinder as
         | (RuntimeExtensionBinder & {
@@ -1016,7 +1037,25 @@ export class ExecuteRun {
               ...(sessionRuntime
                 ? { runtimeSessionId: sessionRuntime.id }
                 : {}),
+              ...(teamPaseoWorkspaceId
+                ? { paseoWorkspaceId: teamPaseoWorkspaceId }
+                : {}),
               ...(cellCwd ? { cellCwd } : {}),
+              ...(collaborativeTeam
+                ? {
+                    workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
+                  }
+                : {}),
+              ...(member
+                ? {
+                    agentTitle: `${member.name} (${member.role})`,
+                    agentLabels: {
+                      team_run_id: member.teamRunId,
+                      member_name: member.name,
+                      role: member.role,
+                    },
+                  }
+                : {}),
               runId: claim.run.id,
               prompt: turnPrompt,
               systemPrompt,
@@ -1574,7 +1613,7 @@ const safeRuntimeToolNames = new Set([
   'learning_proposal_create',
   'agent_server_memory_read',
 ]);
-const runtimeMcpToolPrefix = 'agent-server-memory-api_';
+const runtimeMcpToolPrefix = `${AGENT_SERVER_RUNTIME_MCP_SERVER_NAME}_`;
 
 function sameToolRefs(
   left: readonly string[],

@@ -82,6 +82,9 @@ Workspace per RuntimeSession.
   `PASEO_WORKSPACE_TITLE` remains the adapter fallback outside Team execution.
 - The runtime-port additions are internal placement/presentation metadata. No
   public HTTP/event/schema, tenant, credential, or isolation contract changes.
+- The existing scripted main-flow runtime now honors the create input's durable
+  Workspace ID. Its existing evidence output queries `runtime_sessions` and
+  emitted `run_events`; no new test or fixture file was added.
 
 ## Risks and recovery
 
@@ -110,9 +113,11 @@ None.
 
 ## Next exact command
 
-Commit this Active Exec Plan locally before editing source files.
+Commit the implementation and documentation checkpoint, push it with
+`sandbox-ctl push --mode git`, then run the remote scripted Team smoke.
 
 ## Cleanup state
 
-The local and remote source trees were clean before plan authoring. Scratch is
-restricted to `/tmp`; no runtime, generated, or credential files are in scope.
+The local tree contains only the scoped implementation/documentation edits
+pending commit. Scratch is restricted to `/tmp`; no runtime, generated, or
+credential files are in scope.

@@ -81,6 +81,12 @@ type AgentRuntimeExecuteInput =
   | {
       operation: 'create';
       runId: string;
+      runtimeSessionId?: string;
+      cellCwd?: string;
+      paseoWorkspaceId?: string;
+      workspaceTitle?: string;
+      agentTitle?: string;
+      agentLabels?: Readonly<Record<string, string>>;
       systemPrompt: string;
       prompt: string;
       memoryCandidates?: {
@@ -101,6 +107,10 @@ type AgentRuntimeExecuteInput =
 ```
 
 `create` sends the native `systemPrompt` plus the initial/current turn.
+Managed Team execution may also provide an existing TeamRun Paseo Workspace ID
+independently of the per-RuntimeSession Cell CWD, plus non-secret Workspace and
+Agent presentation metadata. The adapter creates a Workspace only when no
+durable TeamRun binding exists.
 `continue` requires the bound `providerAgentId` and sends only the current turn;
 `systemPrompt` is forbidden on continuation. When memory proposals are enabled,
 the proposal-artifact instruction is appended to that turn and remains

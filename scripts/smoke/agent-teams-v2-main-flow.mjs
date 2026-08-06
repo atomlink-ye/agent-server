@@ -486,7 +486,7 @@ class ScriptedRuntime {
       checks: [],
     };
   }
-  async execute(input) {
+  async execute(input, sink) {
     await this.assertLeadIdle();
     let providerAgentId = input.providerAgentId;
     let session;
@@ -509,9 +509,19 @@ class ScriptedRuntime {
       session = {
         client,
         transport,
-        workspaceId: `scripted-workspace-${randomUUID()}`,
+        workspaceId:
+          input.paseoWorkspaceId ?? `scripted-workspace-${randomUUID()}`,
       };
       this.#sessions.set(providerAgentId, session);
+      await sink?.emit({
+        kind: 'tool_status',
+        activityId: `scripted-tool-${providerAgentId}`,
+        category: 'other',
+        status: 'completed',
+        label: 'Scripted MCP tool',
+        summary: 'Completed',
+        toolName: `${extension.name}_synthetic_stock_snapshot`,
+      });
     } else {
       session = this.#sessions.get(providerAgentId);
       assert(session, 'runtime_session_missing');
@@ -2876,6 +2886,34 @@ try {
       [teamRunId],
     )
   ).rows[0];
+  const teamWorkspaceFacts = (
+    await db.query(
+      `SELECT count(*)::int AS runtime_sessions,
+              count(rs.paseo_workspace_id)::int AS bound_runtime_sessions,
+              count(DISTINCT rs.paseo_workspace_id)::int AS distinct_paseo_workspace_ids
+         FROM runtime_sessions rs
+         JOIN team_member_runs member ON member.id=rs.scope_id
+        WHERE rs.scope_kind='team_member' AND member.team_run_id=$1`,
+      [teamRunId],
+    )
+  ).rows[0];
+  marker('TEAM_RUN_PASEO_WORKSPACE_DURABLE_QUERY', teamWorkspaceFacts);
+  const emittedToolNameFacts = (
+    await db.query(
+      `SELECT event.payload->>'tool_name' AS tool_name
+         FROM run_events event
+         JOIN runs run ON run.id=event.run_id
+         JOIN tasks task ON task.id=run.task_id
+        WHERE task.root_task_id=$1
+          AND event.type='output'
+          AND event.payload->>'kind'='tool_status'
+          AND event.payload ? 'tool_name'
+        ORDER BY event.sequence
+        LIMIT 1`,
+      [rootTaskId],
+    )
+  ).rows[0];
+  marker('EMITTED_RUN_EVENT_TOOL_NAME_QUERY', emittedToolNameFacts ?? null);
   marker('RESULT_PASS', {
     expected: { terminal: true, direct: true, dependency: true, replay: true },
     actual: { terminal: true, direct: true, dependency: true, replay: true },

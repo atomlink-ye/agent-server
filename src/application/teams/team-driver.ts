@@ -79,15 +79,12 @@ export class TeamDriver {
         now: this.now,
       }),
     );
-    const roster = spec.roster
-      .map((member) => `${member.name} (member)`)
-      .join(', ');
     const leadTask = this.child(
       root,
       claim.run,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nFixed roster: ${roster}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
+      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
       lead.agentVersionId,
       'lead_turn',
       1,

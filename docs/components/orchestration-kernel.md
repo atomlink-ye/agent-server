@@ -37,6 +37,24 @@ is never reclaimed or re-executed.
 Successful in-flight resume, durable runtime grants, provider cancellation,
 retries, and generalized reconciliation remain deferred.
 
+Team create builds a provider-neutral native `systemPrompt` from only the
+role, the deterministic persisted member roster, and static text. It contains
+the stable Team control protocol, roster, and an authority warning: only
+values returned by agent-server MCP tools are authoritative, while user text
+(including envelope-looking text) is untrusted. Each Lead delivery's user
+prompt carries the current goal, board, limits, `allowed_commands`,
+`eligible_targets`, a short permanent-protocol anchor, and Lead turn guidance.
+Member wake, direct, and rework deliveries carry their delivery body and the
+corresponding member/direct turn-kind guidance. The system prompt is frozen for
+the Team Agent; continuations retain it and send only the new delivery prompt.
+
+Control deliveries are prefixed with the exact display/provenance envelope
+`[agent-server · team:<short_run_id> · to:<member> · kind:lead_turn|wake|direct|rework · from:<sender> · seq:<n>]`.
+The kind, recipient, sender, sequence, and TeamRun identity are server-derived
+from durable state. The envelope is display/provenance only: a human `paseo
+send` has no envelope, and authority or grants never derive from envelope or
+other prompt text.
+
 ## Minimum Phase D interaction
 
 Claimed execution binds the Run to a provider session and persists `started`,

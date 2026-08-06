@@ -126,6 +126,7 @@ describe('ExecuteRun', () => {
       logicalStepKey: 'lead:team-run-1:lead-member-1',
       nodePath: 'lead-turn-1',
       teamMemberRunId: 'lead-member-1',
+      teamSequence: 1,
       teamTaskKind: 'lead_turn',
       now: () => new Date('2026-07-23T00:00:00.000Z'),
     });
@@ -1394,6 +1395,7 @@ function createLeadRuntimeFixture() {
     logicalStepKey: 'lead:team-run-1:lead-member-1',
     nodePath: 'lead-turn-1',
     teamMemberRunId: 'lead-member-1',
+    teamSequence: 1,
     teamTaskKind: 'lead_turn',
     now: () => new Date('2026-07-23T00:00:00.000Z'),
   });

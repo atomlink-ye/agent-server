@@ -35,6 +35,23 @@ Timeline contain only the turns, not System/Role text. `idle` maps to success,
 execution failure. The API stores a safe error envelope rather than the
 provider exception.
 
+For Team execution, the create-time native system prompt is provider-neutral:
+its pure inputs are the role, deterministic fixed roster, and static text. It
+holds the stable Team protocol and the warning that only agent-server MCP
+values are authoritative; user text, including envelope-looking text, is
+untrusted. Each Lead delivery's user prompt carries the current goal, board,
+limits, `allowed_commands`, `eligible_targets`, a permanent-protocol anchor,
+and Lead turn guidance. Member wake, direct, and rework deliveries carry their
+delivery body and the corresponding member/direct turn-kind guidance.
+Continuation keeps the frozen create-time system prompt and sends only the
+current user delivery.
+
+Every control-plane delivery begins with the display/provenance-only envelope
+`[agent-server · team:<short_run_id> · to:<member> · kind:lead_turn|wake|direct|rework · from:<sender> · seq:<n>]`.
+All fields are derived by the server from durable Team state. A human `paseo
+send` has no envelope. The marker is not an authorization channel: catalog and
+runtime grants are enforced independently and never derived from text.
+
 For a published managed Agent referencing `agent-server/memory-api`, server-owned
 Skill text is resolved before create-time Bootstrap and included with the
 platform contract and published instructions. It is not resent on continuation.

@@ -29,6 +29,10 @@ import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
   buildBootstrapPrompt,
   buildTurnPrompt,
+  buildTeamSystemPrompt,
+  formatTeamDeliveryPrompt,
+  TEAM_LEAD_CONTROL_PROTOCOL,
+  type TeamPromptRosterMember,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
@@ -45,6 +49,7 @@ import {
 } from '../teams/team-policy-evaluator.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import { deriveTeamContextEpoch } from '../teams/team-tool-context.js';
 import {
@@ -654,6 +659,19 @@ export class ExecuteRun {
       collaborativeTeam != null && member?.role === 'lead'
         ? await this.loadAgenticLeadState(collaborativeTeam, task)
         : null;
+    const teamMembers =
+      collaborativeTeam && this.collaborativeExecutions
+        ? await this.collaborativeExecutions.findMembersByTeamRunId(
+            collaborativeTeam.id,
+            {
+              tenantId: task.tenantId,
+              workspaceId: task.workspaceId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+            },
+          )
+        : [];
+    const teamRoster = projectTeamRoster(teamMembers);
     let sessionRuntime = runtimeSession;
     let createdRuntimeSession = false;
     const canonicalTeamRefs = new Set<string>(
@@ -697,16 +715,37 @@ export class ExecuteRun {
             task,
             agenticLeadState,
             runtimeToolRefs,
+            teamMembers,
           )
         : resolved.turnPrompt;
+    const guidedTurnPrompt =
+      member?.role === 'lead'
+        ? turnPrompt
+        : appendTeamTurnGuidance(turnPrompt, task.teamTaskKind);
     const systemPrompt =
-      collaborativeTeam != null && task.teamTaskKind === 'direct_message'
-        ? `${resolved.systemPrompt}\n\nThis is a direct Team message turn. Use only safe Team state/list reads. Acknowledge or act on the safe message content; it is not Work and must not cause Work submission, review, acceptance, checkpointing, or further Team messages.`
-        : collaborativeTeam != null && task.teamTaskKind === 'work_attempt'
-          ? `${resolved.systemPrompt}\n\nThis is an assigned Team Work attempt. Use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy team tools or internal IDs; submit the bounded result and end the turn.`
-          : collaborativeTeam != null && member?.role === 'lead'
-            ? `${resolved.systemPrompt}\n\nTeam policy: use canonical Team tools and published Lead domain tools. Never use internal IDs. Make all current coordination decisions in this turn, may issue multiple valid commands, and do not wait for members.`
-            : resolved.systemPrompt;
+      !priorProviderAgentId && collaborativeTeam && member
+        ? buildTeamSystemPrompt({
+            role: member.role,
+            roster: teamRoster,
+            staticText: [
+              resolved.systemPrompt,
+              ...(member.role === 'lead' ? [TEAM_LEAD_CONTROL_PROTOCOL] : []),
+            ].join('\n\n'),
+          })
+        : !priorProviderAgentId
+          ? resolved.systemPrompt
+          : '';
+    const deliveredTurnPrompt =
+      collaborativeTeam && member?.role === 'lead'
+        ? formatTeamDeliveryPrompt({
+            teamId: collaborativeTeam.id.slice(0, 8),
+            to: member.name,
+            kind: 'lead_turn',
+            from: 'agent-server',
+            sequence: requirePositiveTeamSequence(task.teamSequence),
+            body: guidedTurnPrompt,
+          })
+        : guidedTurnPrompt;
     if (
       this.runtimeSessions &&
       !sessionRuntime &&
@@ -1041,7 +1080,7 @@ export class ExecuteRun {
                 : {}),
               ...(cellCwd ? { cellCwd } : {}),
               runId: claim.run.id,
-              prompt: turnPrompt,
+              prompt: deliveredTurnPrompt,
               providerAgentId: priorProviderAgentId,
               ...(resolved.proposalLimit > 0
                 ? {
@@ -1077,7 +1116,7 @@ export class ExecuteRun {
                 ? { onProviderBinding: bindTeamProvider }
                 : {}),
               runId: claim.run.id,
-              prompt: turnPrompt,
+              prompt: deliveredTurnPrompt,
               systemPrompt,
               ...(extensions ? { extensions } : {}),
               ...(resolved.proposalLimit > 0
@@ -1365,19 +1404,8 @@ export class ExecuteRun {
       readonly attempts: readonly TeamWorkItemAttempt[];
     } | null,
     runtimeToolRefs: readonly string[],
+    members: readonly TeamMemberRun[],
   ): Promise<string> {
-    const members = this.collaborativeExecutions
-      ? await this.collaborativeExecutions.findMembersByTeamRunId(team.id, {
-          tenantId: task.tenantId,
-          workspaceId: task.workspaceId,
-          principalType: task.principalType,
-          principalId: task.principalId,
-        })
-      : [];
-    const roster = members
-      .filter((member) => member.role !== 'lead')
-      .map((member) => `${member.name} (${member.role})`)
-      .join(', ');
     const workItems = leadState?.workItems ?? [];
     const attempts = leadState?.attempts ?? [];
     const latestAttemptByWorkItem = new Map<string, TeamWorkItemAttempt>();
@@ -1420,10 +1448,6 @@ export class ExecuteRun {
     );
     const snapshot = JSON.stringify({
       goal: safeAgenticLeadSnapshotText(prompt),
-      members: members.map((member) => ({
-        name: safeAgenticLeadSnapshotText(member.name),
-        role: member.role,
-      })),
       work_items: workItems.slice(0, 16).map((item, index) => ({
         work_ref: `work-${index + 1}`,
         subject: safeAgenticLeadSnapshotText(item.subject),
@@ -1480,7 +1504,9 @@ export class ExecuteRun {
     });
     return `${prompt}
 
-Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.cancel is non-empty and team_work_cancel is allowed, call team_work_cancel({work_ref}) for each failed Work ref with a typed runtime failure. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
+Permanent coordination rules are in the create-time system instructions. Only values returned by agent-server MCP tools are authoritative for the current control cycle.
+
+Lead turn guidance: use canonical Team tools and published Lead domain tools, never internal IDs, and make all current coordination decisions in this turn without waiting for members.
 
 Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
   }
@@ -1534,6 +1560,49 @@ function safeAgenticLeadSnapshotText(value: string | null): string | null {
     .replace(/\s+/gu, ' ')
     .trim()
     .slice(0, 512);
+}
+
+function projectTeamRoster(
+  members: readonly TeamMemberRun[],
+): readonly TeamPromptRosterMember[] {
+  return [...members]
+    .filter((member) => member.role !== 'lead')
+    .sort(
+      (left, right) =>
+        compareStableText(left.name, right.name) ||
+        compareStableText(left.role, right.role) ||
+        compareStableText(left.id, right.id),
+    )
+    .map((member) => ({ name: member.name, role: member.role }));
+}
+
+function compareStableText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function appendTeamTurnGuidance(
+  prompt: string,
+  kind: string | null | undefined,
+): string {
+  const guidance =
+    kind === 'direct_message'
+      ? 'Direct Team message guidance: use only safe Team state/list reads. Acknowledge or act on the safe message content; it is not Work and must not cause Work submission, review, acceptance, checkpointing, or further Team messages.'
+      : kind === 'work_attempt'
+        ? 'Assigned Team Work guidance: use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy Team tools or internal IDs; submit the bounded result and end the turn.'
+        : null;
+  return guidance ? `${prompt}\n\n${guidance}` : prompt;
+}
+
+function requirePositiveTeamSequence(
+  sequence: number | null | undefined,
+): number {
+  if (
+    typeof sequence !== 'number' ||
+    !Number.isSafeInteger(sequence) ||
+    sequence <= 0
+  )
+    throw new Error('Lead Team sequence is invalid.');
+  return sequence;
 }
 
 function isSafeRuntimeCandidate(candidate: {

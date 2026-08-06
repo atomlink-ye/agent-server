@@ -6,6 +6,9 @@ import { register as registerTsx } from 'tsx/esm/api';
 
 registerTsx();
 
+const { TEAM_LEAD_CONTROL_PROTOCOL } =
+  await import('../../src/application/context/runtime-prompts.ts');
+
 import { serve } from '@hono/node-server';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -32,6 +35,7 @@ const requestedScriptedRuntime =
 const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
 const failedAttemptMode =
   process.env.AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE ?? '';
+const reworkScenario = process.env.AGENT_TEAMS_V2_SMOKE_REWORK === '1';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
@@ -45,6 +49,8 @@ if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
   throw new Error('invalid_expired_lease_recovery');
 if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
   throw new Error('invalid_failed_attempt_mode');
+if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
+  throw new Error('rework_scenario_mode_conflict');
 const requestedModel =
   process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
 const startedAt = Date.now();
@@ -67,6 +73,11 @@ const principalId = 'svc_agent_teams_v2';
 const workspaceId = randomUUID();
 const canonicalSnapshotInvocation =
   'synthetic_stock_snapshot({fixture_ref:"fixture://self-learning-market-research/acme-v1",symbol:"ACME"})';
+const fixtureNames = Object.freeze({
+  lead: 'research-lead',
+  member: 'opportunity-analyst',
+  observer: 'risk-reviewer',
+});
 const markers = [];
 const stderr = [];
 const runtimeCalls = [];
@@ -83,6 +94,109 @@ let databaseUrl;
 let failureDiagnostic;
 class RecoveryComplete extends Error {}
 let scriptedRuntimeInstance;
+
+const envelopePattern =
+  /^\[agent-server · team:([^\s\]]+) · to:([^\s\]]+) · kind:(wake|direct|rework|lead_turn) · from:([^\s\]]+) · seq:([1-9][0-9]*)\]$/u;
+
+function countOccurrences(value, needle) {
+  if (!value || !needle) return 0;
+  return value.split(needle).length - 1;
+}
+
+function decodeEnvelopeAtom(value, label) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw new Error(`control_plane_envelope_${label}_encoding_invalid`);
+  }
+}
+
+function decodePromptSnapshot(snapshotRef) {
+  const prefix = 'inline:run-request:';
+  assert(
+    typeof snapshotRef === 'string' && snapshotRef.startsWith(prefix),
+    'control_plane_snapshot_ref_invalid',
+  );
+  const parsed = JSON.parse(
+    Buffer.from(snapshotRef.slice(prefix.length), 'base64url').toString('utf8'),
+  );
+  assert(
+    typeof parsed.prompt === 'string',
+    'control_plane_snapshot_prompt_missing',
+  );
+  return parsed.prompt;
+}
+
+async function capturePersistedControlPlaneEnvelopeEvidence() {
+  if (!db || !rootTaskId || !teamRunId) return [];
+  const rows = (
+    await db.query(
+      `SELECT t.team_task_kind,t.team_sequence,t.input_snapshot_ref,m.name,m.role
+         FROM tasks t
+         LEFT JOIN team_member_runs m ON m.id=t.team_member_run_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+        ORDER BY t.created_at,t.id`,
+      [rootTaskId],
+    )
+  ).rows;
+  const firstEnvelopeLines = [];
+  let persistedLeadUserProtocolOccurrences = 0;
+  for (const row of rows) {
+    const prompt = decodePromptSnapshot(row.input_snapshot_ref);
+    if (row.team_task_kind === 'lead_turn') {
+      persistedLeadUserProtocolOccurrences += countOccurrences(
+        prompt,
+        TEAM_LEAD_CONTROL_PROTOCOL,
+      );
+      assert(
+        !prompt.includes(TEAM_LEAD_CONTROL_PROTOCOL),
+        'persisted_lead_control_protocol_in_user_prompt',
+      );
+    }
+    const firstLine = prompt.split('\n', 1)[0];
+    const match = envelopePattern.exec(firstLine);
+    assert(match, 'persisted_control_plane_envelope_missing_or_unanchored');
+    const [, team, recipientEncoded, kind, senderEncoded, sequenceText] = match;
+    const recipient = decodeEnvelopeAtom(recipientEncoded, 'recipient');
+    const sender = decodeEnvelopeAtom(senderEncoded, 'sender');
+    const sequence = Number(sequenceText);
+    const expectedKind =
+      row.team_task_kind === 'lead_turn'
+        ? 'lead_turn'
+        : row.team_task_kind === 'direct_message'
+          ? 'direct'
+          : prompt.includes('Attempt number: 2')
+            ? 'rework'
+            : 'wake';
+    const expectedRecipient =
+      row.team_task_kind === 'lead_turn' ? fixtureNames.lead : row.name;
+    const expectedSender =
+      row.team_task_kind === 'lead_turn' ? 'agent-server' : fixtureNames.lead;
+    const expectedSequence = row.team_sequence;
+    assert(
+      team === teamRunId.slice(0, 8) &&
+        kind === expectedKind &&
+        recipient === expectedRecipient &&
+        sender === expectedSender &&
+        Number.isSafeInteger(sequence) &&
+        sequence > 0 &&
+        sequence === expectedSequence &&
+        prompt.includes(
+          'The authoritative current state is available through agent-server tools.',
+        ) &&
+        !prompt.includes('<system>'),
+      'persisted_control_plane_envelope_values_invalid',
+    );
+    firstEnvelopeLines.push(firstLine);
+  }
+  marker('CONTROL_PLANE_DURABLE_ENVELOPE_EVIDENCE', {
+    first_envelope_lines: firstEnvelopeLines,
+    delivery_count: firstEnvelopeLines.length,
+    persisted_lead_user_protocol_occurrences:
+      persistedLeadUserProtocolOccurrences,
+  });
+  return firstEnvelopeLines;
+}
 
 function assert(condition, code) {
   if (!condition) throw new Error(code);
@@ -419,15 +533,99 @@ class ScriptedRuntime {
   #leadTurns = 0;
   #leadProviderBindings = new Set();
   #memberTurns = 0;
+  #leadCreateSystemProtocolOccurrences = 0;
+  #leadUserProtocolOccurrences = 0;
+  #controlPlaneDeliveries = [];
   #submittedTimeoutInjected = false;
   #failedAttemptInjected = false;
   #leadFailureCodeObserved = false;
   #cancelReplayEqual = false;
+  #firstAttemptSubmissions = 0;
+  #firstAttemptWaiters = [];
   get cancelReplayEqual() {
     return this.#cancelReplayEqual;
   }
   get leadFailureCodeObserved() {
     return this.#leadFailureCodeObserved;
+  }
+  observeControlPlanePrompt(input, role, memberName) {
+    const firstLine = String(input.prompt ?? '').split('\n', 1)[0];
+    const match = envelopePattern.exec(firstLine);
+    assert(match, 'control_plane_envelope_missing_or_unanchored');
+    const [, team, recipientEncoded, kind, senderEncoded, sequenceText] = match;
+    const recipient = decodeEnvelopeAtom(recipientEncoded, 'recipient');
+    const sender = decodeEnvelopeAtom(senderEncoded, 'sender');
+    const sequence = Number(sequenceText);
+    assert(
+      team === teamRunId.slice(0, 8) &&
+        Number.isSafeInteger(sequence) &&
+        sequence > 0 &&
+        input.prompt.includes(
+          'The authoritative current state is available through agent-server tools.',
+        ) &&
+        !input.prompt.includes('<system>'),
+      'control_plane_envelope_values_invalid',
+    );
+    if (role === 'lead') {
+      assert(
+        kind === 'lead_turn' &&
+          recipient === fixtureNames.lead &&
+          sender === 'agent-server' &&
+          sequence === this.#leadTurns + 1,
+        'lead_control_plane_envelope_values_invalid',
+      );
+    } else if (role === 'direct') {
+      assert(
+        kind === 'direct' &&
+          recipient === fixtureNames.observer &&
+          sender === fixtureNames.lead,
+        'direct_control_plane_envelope_values_invalid',
+      );
+    } else {
+      assert(
+        (kind === 'wake' || kind === 'rework') &&
+          recipient === memberName &&
+          sender === fixtureNames.lead,
+        'member_control_plane_envelope_values_invalid',
+      );
+    }
+    this.#controlPlaneDeliveries.push({
+      first_envelope_line: firstLine,
+      kind,
+      recipient,
+      sender,
+      sequence,
+    });
+    marker('CONTROL_PLANE_ENVELOPE_DELIVERED', {
+      first_envelope_line: firstLine,
+      kind,
+      recipient,
+      sender,
+      sequence,
+    });
+  }
+  emitPromptChannelEvidence(extraEnvelopeLines = []) {
+    const firstEnvelopeLines = [
+      ...this.#controlPlaneDeliveries.map(
+        (delivery) => delivery.first_envelope_line,
+      ),
+      ...extraEnvelopeLines,
+    ].filter((line, index, all) => all.indexOf(line) === index);
+    marker('TEAM_PROMPT_CHANNEL_EVIDENCE', {
+      lead_create_system_protocol_occurrences:
+        this.#leadCreateSystemProtocolOccurrences,
+      lead_user_protocol_occurrences: this.#leadUserProtocolOccurrences,
+      control_plane_delivery_count: firstEnvelopeLines.length,
+      first_envelope_lines: firstEnvelopeLines,
+    });
+  }
+  async synchronizeFirstAttemptSubmissions() {
+    this.#firstAttemptSubmissions += 1;
+    if (this.#firstAttemptSubmissions === 2) {
+      for (const release of this.#firstAttemptWaiters.splice(0)) release();
+      return;
+    }
+    await new Promise((resolve) => this.#firstAttemptWaiters.push(resolve));
   }
   #pendingLeadIdle = [];
   async assertLeadIdle() {
@@ -453,7 +651,10 @@ class ScriptedRuntime {
             );
             const mutation = await client.callTool({
               name: 'team_work_create',
-              arguments: { subject: 'old-turn-forbidden', assignee: 'member' },
+              arguments: {
+                subject: 'old-turn-forbidden',
+                assignee: fixtureNames.member,
+              },
             });
             assert(
               mutation.structuredContent?.error === 'unauthorized',
@@ -549,7 +750,7 @@ class ScriptedRuntime {
       });
     };
     const directTurn = input.prompt.includes('phase3-direct-sentinel');
-    runtimeCalls.push({
+    const runtimeBinding = {
       kind: 'runtime_binding',
       role: directTurn
         ? 'direct'
@@ -558,8 +759,16 @@ class ScriptedRuntime {
           : 'lead',
       operation: input.operation,
       provider_binding_hash: hash(providerAgentId),
-    });
+    };
+    runtimeCalls.push(runtimeBinding);
     if (directTurn) {
+      this.observeControlPlanePrompt(input, 'direct', fixtureNames.observer);
+      assert(
+        input.prompt.includes('Direct Team message guidance:') &&
+          !input.systemPrompt?.includes('Direct Team message guidance:') &&
+          !input.systemPrompt?.includes('Assigned Team Work guidance:'),
+        'direct_turn_kind_guidance_channel_invalid',
+      );
       assert(
         input.prompt.includes('phase3-direct-sentinel'),
         'direct_sentinel_not_observed',
@@ -592,6 +801,57 @@ class ScriptedRuntime {
         tools: ['team_state', 'team_work_list'],
       });
     } else if (!tools.has('team_work_submit')) {
+      this.observeControlPlanePrompt(input, 'lead', fixtureNames.lead);
+      const systemProtocolOccurrences = countOccurrences(
+        input.systemPrompt ?? '',
+        TEAM_LEAD_CONTROL_PROTOCOL,
+      );
+      const userProtocolOccurrences = countOccurrences(
+        input.prompt,
+        TEAM_LEAD_CONTROL_PROTOCOL,
+      );
+      if (input.operation === 'create')
+        this.#leadCreateSystemProtocolOccurrences += systemProtocolOccurrences;
+      this.#leadUserProtocolOccurrences += userProtocolOccurrences;
+      assert(
+        userProtocolOccurrences === 0,
+        'lead_control_protocol_in_user_prompt',
+      );
+      assert(
+        input.prompt.includes(
+          'Permanent coordination rules are in the create-time system instructions.',
+        ) &&
+          input.prompt.includes('Current bounded Lead snapshot') &&
+          input.prompt.includes('"goal":') &&
+          input.prompt.includes('"work_items":') &&
+          input.prompt.includes('"limits":') &&
+          input.prompt.includes('"allowed_commands":') &&
+          input.prompt.includes('"eligible_targets":'),
+        'lead_dynamic_state_missing_from_user_prompt',
+      );
+      assert(
+        !input.systemPrompt?.includes('Lead turn guidance:') &&
+          !input.systemPrompt?.includes('Direct Team message guidance:') &&
+          !input.systemPrompt?.includes('Assigned Team Work guidance:'),
+        'turn_kind_guidance_in_system_prompt',
+      );
+      if (input.operation === 'create')
+        assert(
+          systemProtocolOccurrences === 1,
+          'lead_create_system_protocol_occurrence_invalid',
+        );
+      else
+        assert(
+          systemProtocolOccurrences === 0,
+          'lead_continue_system_protocol_occurrence_invalid',
+        );
+      marker('TEAM_LEAD_PROMPT_CHANNEL_CHECK', {
+        operation: input.operation,
+        create_system_protocol_occurrences:
+          this.#leadCreateSystemProtocolOccurrences,
+        user_protocol_occurrences: this.#leadUserProtocolOccurrences,
+        dynamic_state_in_user: true,
+      });
       this.#leadTurns += 1;
       const expectedLeadCatalog = new Set([
         'team_state',
@@ -614,19 +874,12 @@ class ScriptedRuntime {
           `lead_turn_${this.#leadTurns}_provider_binding_changed`,
         );
       this.#leadProviderBindings.add(providerAgentId);
-      assert(
-        input.prompt.includes(
-          'Lead control turns must not spawn, delegate to, or use provider subagents',
-        ) &&
-          input.prompt.includes(
-            'A plain-text response or no-op is not control progress',
-          ),
-        'lead_control_protocol_missing',
-      );
       if (this.#leadTurns === 1)
         assert(
           input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
-            input.systemPrompt.includes('Golden-path review rubric'),
+            input.systemPrompt.includes(
+              reworkScenario ? 'Review rubric' : 'Golden-path review rubric',
+            ),
           'lead_canonical_snapshot_accept_rubric_missing',
         );
       if (this.#leadTurns === 1)
@@ -649,7 +902,7 @@ class ScriptedRuntime {
               subject: 'A',
               description:
                 'Immediately collect and submit the required canonical snapshot evidence without creating a child subagent.',
-              assignee: 'member',
+              assignee: fixtureNames.member,
             },
           }),
         );
@@ -658,9 +911,8 @@ class ScriptedRuntime {
             name: 'team_work_create',
             arguments: {
               subject: 'B',
-              description:
-                'Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence.',
-              assignee: 'observer',
+              description: `Perform the declared ${fixtureNames.observer} preflight, then collect and submit the required canonical snapshot evidence.`,
+              assignee: fixtureNames.observer,
             },
           }),
         );
@@ -715,9 +967,97 @@ class ScriptedRuntime {
           turn: 3,
           tool: 'accept_remaining_work',
         });
+      } else if (reworkScenario && this.#leadTurns === 2) {
+        assert(
+          input.prompt.includes('first submission incomplete') &&
+            input.prompt.includes(`"assignee":"${fixtureNames.member}"`) &&
+            input.prompt.includes(`"assignee":"${fixtureNames.observer}"`) &&
+            (input.prompt.match(/"status":"completed"/gu)?.length ?? 0) >= 2,
+          'lead_rework_review_snapshot_invalid',
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_request_changes',
+            arguments: {
+              work_ref: 'work-1',
+              assignee: fixtureNames.member,
+              feedback:
+                'Add the missing canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 evidence before resubmitting.',
+            },
+          }),
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-2' },
+          }),
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 2,
+          tools: ['request_changes_A', 'accept_B'],
+        });
+      } else if (reworkScenario && this.#leadTurns === 3) {
+        marker('REWORK_TURN3_ENTERED', {
+          prompt_attempt_no_2: input.prompt.includes('"attempt_no":2'),
+          prompt_canonical_evidence: input.prompt.includes(
+            canonicalSnapshotInvocation,
+          ),
+        });
+        let listedWork;
+        try {
+          listedWork = value(
+            await session.client.callTool({
+              name: 'team_work_list',
+              arguments: {},
+            }),
+          );
+        } catch (error) {
+          marker('REWORK_TURN3_LIST_FAILED', sanitizedErrorDetail(error));
+          throw error;
+        }
+        const workItems = Array.isArray(listedWork?.items)
+          ? listedWork.items
+          : [];
+        const correctedWork = workItems.find(
+          (item) => item.work_ref === 'work-1',
+        );
+        marker('REWORK_TURN3_LISTED', {
+          work_list_items_shape: Array.isArray(listedWork?.items),
+          work_found: Boolean(correctedWork),
+          work_status: correctedWork?.status ?? null,
+          latest_attempt_status: correctedWork?.latest_attempt?.status ?? null,
+          latest_attempt_canonical_evidence: String(
+            correctedWork?.latest_attempt?.summary ?? '',
+          ).includes(canonicalSnapshotInvocation),
+        });
+        assert(
+          correctedWork?.latest_attempt?.status === 'completed' &&
+            String(correctedWork.latest_attempt.summary).includes(
+              canonicalSnapshotInvocation,
+            ),
+          'lead_corrected_submission_missing',
+        );
+        try {
+          value(
+            await session.client.callTool({
+              name: 'team_work_accept',
+              arguments: { work_ref: 'work-1' },
+            }),
+          );
+        } catch (error) {
+          marker('REWORK_TURN3_ACCEPT_FAILED', sanitizedErrorDetail(error));
+          throw error;
+        }
+        marker('REWORK_TURN3_ACCEPTED');
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 3,
+          tool: 'accept_corrected_A',
+        });
       } else if (this.#leadTurns === 2) {
         assert(
-          input.prompt.includes('"assignee":"member"'),
+          input.prompt.includes(`"assignee":"${fixtureNames.member}"`),
           'lead_work_1_assignee_missing',
         );
         assert(
@@ -728,7 +1068,7 @@ class ScriptedRuntime {
         );
         await assertForbidden(
           'team_work_create',
-          { subject: 'forbidden', assignee: 'member' },
+          { subject: 'forbidden', assignee: fixtureNames.member },
           'lead_create_not_denied',
         );
         value(
@@ -740,7 +1080,7 @@ class ScriptedRuntime {
         runtimeCalls.push({ role: 'lead', turn: 2, tool: 'accept_A' });
       } else if (this.#leadTurns === 3) {
         assert(
-          input.prompt.includes('"assignee":"observer"'),
+          input.prompt.includes(`"assignee":"${fixtureNames.observer}"`),
           'lead_work_2_assignee_missing',
         );
         assert(
@@ -767,9 +1107,8 @@ class ScriptedRuntime {
           await session.client.callTool({
             name: 'team_message_send',
             arguments: {
-              recipient: 'observer',
-              summary:
-                'phase3-direct-sentinel observer coordination Bearer canary-secret /Users/canary',
+              recipient: fixtureNames.observer,
+              summary: `phase3-direct-sentinel ${fixtureNames.observer} coordination Bearer canary-secret /Users/canary`,
             },
           }),
         );
@@ -777,9 +1116,8 @@ class ScriptedRuntime {
           await session.client.callTool({
             name: 'team_message_send',
             arguments: {
-              recipient: 'observer',
-              summary:
-                'phase3-direct-sentinel observer coordination Bearer canary-secret /Users/canary',
+              recipient: fixtureNames.observer,
+              summary: `phase3-direct-sentinel ${fixtureNames.observer} coordination Bearer canary-secret /Users/canary`,
             },
           }),
         );
@@ -818,17 +1156,18 @@ class ScriptedRuntime {
             usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
           };
         }
-        await waitFor(
-          async () =>
-            (
-              await db.query(
-                "SELECT status FROM team_messages WHERE team_run_id=$1 AND kind='direct'",
-                [teamRunId],
-              )
-            ).rows[0]?.status,
-          (status) => status === 'delivered',
-          'direct_delivery_before_finish',
-        );
+        if (!reworkScenario)
+          await waitFor(
+            async () =>
+              (
+                await db.query(
+                  "SELECT status FROM team_messages WHERE team_run_id=$1 AND kind='direct'",
+                  [teamRunId],
+                )
+              ).rows[0]?.status,
+            (status) => status === 'delivered',
+            'direct_delivery_before_finish',
+          );
         let finished;
         try {
           finished = await session.client.callTool({
@@ -872,7 +1211,9 @@ class ScriptedRuntime {
         runtimeCalls.push({
           role: 'lead',
           turn: this.#leadTurns,
-          tool: 'finish_after_direct_delivery',
+          tool: reworkScenario
+            ? 'finish_after_rework'
+            : 'finish_after_direct_delivery',
         });
       }
       this.scheduleLeadIdle(session.client, this.#leadTurns);
@@ -883,29 +1224,46 @@ class ScriptedRuntime {
         tools.has('synthetic_stock_snapshot'),
         'member_domain_tool_missing',
       );
-      assert(
-        input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
-          input.systemPrompt.includes('Never guess fixture_ref'),
-        'member_canonical_snapshot_args_missing',
-      );
+      const reworkDelivery = input.prompt.includes('Attempt number: 2');
+      if (input.operation === 'create')
+        assert(
+          input.systemPrompt?.includes(canonicalSnapshotInvocation) &&
+            input.systemPrompt.includes('Never guess fixture_ref'),
+          'member_canonical_snapshot_args_missing',
+        );
+      else if (reworkDelivery)
+        assert(
+          input.prompt.includes('missing canonical fixture_ref') &&
+            input.prompt.includes('data_as_of 2026-07-31'),
+          'member_rework_feedback_missing',
+        );
       this.#memberTurns += 1;
       const memberState = value(
         await session.client.callTool({ name: 'team_state', arguments: {} }),
+      );
+      runtimeBinding.member_name = memberState.member?.name;
+      this.observeControlPlanePrompt(input, 'member', memberState.member?.name);
+      assert(
+        input.prompt.includes('Assigned Team Work guidance:') &&
+          !input.systemPrompt?.includes('Assigned Team Work guidance:') &&
+          !input.systemPrompt?.includes('Direct Team message guidance:'),
+        'member_turn_kind_guidance_channel_invalid',
       );
       if (
         failedAttemptMode === 'baseline' ||
         (failedAttemptMode === 'fixed' &&
           !this.#failedAttemptInjected &&
-          memberState.member?.name === 'member')
+          memberState.member?.name === fixtureNames.member)
       ) {
         this.#failedAttemptInjected = true;
         throw new Error('forced member runtime failure before submit');
       }
-      const memberTurn = memberState.member?.name === 'observer' ? 2 : 1;
+      const memberTurn =
+        memberState.member?.name === fixtureNames.observer ? 2 : 1;
       await new Promise((resolve) =>
         setTimeout(
           resolve,
-          memberState.member?.name === 'observer' ? 1_000 : 200,
+          memberState.member?.name === fixtureNames.observer ? 1_000 : 200,
         ),
       );
       value(
@@ -917,7 +1275,12 @@ class ScriptedRuntime {
           },
         }),
       );
-      const summary = `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}`;
+      const summary =
+        reworkScenario &&
+        memberState.member?.name === fixtureNames.member &&
+        !reworkDelivery
+          ? 'first submission incomplete: snapshot collected but canonical fixture_ref, symbol, and data_as_of evidence omitted'
+          : `valid canonical snapshot ${canonicalSnapshotInvocation}; data_as_of=2026-07-31; bounded result ${memberTurn}${reworkDelivery ? '; corrected after substantive Lead feedback' : ''}`;
       value(
         await session.client.callTool({
           name: 'team_work_checkpoint',
@@ -930,6 +1293,8 @@ class ScriptedRuntime {
           arguments: { summary },
         }),
       );
+      if (reworkScenario && !reworkDelivery)
+        await this.synchronizeFirstAttemptSubmissions();
       const rejectedAfterSubmit = async (
         name,
         args,
@@ -969,7 +1334,7 @@ class ScriptedRuntime {
         message: await rejectedAfterSubmit(
           'team_message_send',
           {
-            recipient: 'lead',
+            recipient: fixtureNames.lead,
             summary: `${summary} forbidden member message`,
           },
           { allowMissingTool: true },
@@ -977,13 +1342,15 @@ class ScriptedRuntime {
       };
       runtimeCalls.push({
         role: 'member',
-        turn: memberTurn,
+        turn: reworkDelivery ? 3 : memberTurn,
+        attempt: reworkDelivery ? 2 : 1,
         tools: ['synthetic_stock_snapshot', 'checkpoint', 'submit'],
         post_submit_rejections: postSubmitRejections,
       });
       if (
+        !reworkScenario &&
         !this.#submittedTimeoutInjected &&
-        memberState.member?.name === 'member'
+        memberState.member?.name === fixtureNames.member
       ) {
         this.#submittedTimeoutInjected = true;
         const { RuntimeTimedOutError } =
@@ -1046,11 +1413,20 @@ async function queued(kind) {
   return rows.rows[0].id;
 }
 function agentYaml(name) {
-  const lead = name === 'lead';
-  const observer = name === 'observer';
+  const lead = name === fixtureNames.lead;
+  const observer = name === fixtureNames.observer;
   const instructions = lead
-    ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to member with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to observer with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to observer with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel observer coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    ? reworkScenario
+      ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Review rubric: both first attempts must complete before review. Work A is inadequate when its result omits the canonical ${canonicalSnapshotInvocation}, symbol ACME, or data_as_of 2026-07-31 evidence; request changes exactly once with substantive feedback while accepting qualifying Work B in the same control cycle. Accept corrected Work A only when all canonical evidence is present, then finish after both Work items are accepted. On the empty board create exactly Work A assigned to ${fixtureNames.member} and Work B assigned to ${fixtureNames.observer}, then stop. Never send a direct message, never invent refs, and never repeat a successful mutation.`
+      : `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to ${fixtureNames.member} with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to ${fixtureNames.observer} with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to ${fixtureNames.observer} with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel ${fixtureNames.observer} coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
     : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+  const readableInstructions = instructions
+    .replace('You are the observer.', `You are the ${fixtureNames.observer}.`)
+    .replace(
+      'You are the primary member.',
+      `You are the ${fixtureNames.member}.`,
+    )
+    .replace('observer preflight', `${fixtureNames.observer} preflight`);
   const refs = lead
     ? [
         'team-state',
@@ -1069,13 +1445,13 @@ function agentYaml(name) {
         'team-work-submit',
         'synthetic-stock-snapshot',
       ];
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(readableInstructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 function environmentYaml() {
   return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
 }
 function teamYaml(lead, member, observer, environment) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: lead\n    agentVersionId: ${lead}\n  roster:\n    - name: member\n      agentVersionId: ${member}\n    - name: observer\n      agentVersionId: ${observer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: ${fixtureNames.lead}\n    agentVersionId: ${lead}\n  roster:\n    - name: ${fixtureNames.member}\n      agentVersionId: ${member}\n    - name: ${fixtureNames.observer}\n      agentVersionId: ${observer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 }
 async function expectSqlState(query, values, code) {
   try {
@@ -1230,7 +1606,7 @@ try {
     [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
   );
   const agents = {};
-  for (const name of ['lead', 'member', 'observer']) {
+  for (const name of Object.values(fixtureNames)) {
     const imported = await request('/api/v1/agents:import', {
       method: 'POST',
       body: { source: agentYaml(name) },
@@ -1255,9 +1631,9 @@ try {
     method: 'POST',
     body: {
       source: teamYaml(
-        agents.lead,
-        agents.member,
-        agents.observer,
+        agents[fixtureNames.lead],
+        agents[fixtureNames.member],
+        agents[fixtureNames.observer],
         environment.version.id,
       ),
     },
@@ -1272,7 +1648,9 @@ try {
     status: 202,
     body: {
       invokable: { kind: 'team', version_id: published.id },
-      input: { text: 'bounded v2 retained smoke' },
+      input: {
+        text: 'Compare the two bounded market-research submissions, identify any missing canonical evidence, and recommend whether each should be accepted or revised before finishing.',
+      },
     },
   });
   rootTaskId = invoked.task_id;
@@ -1292,9 +1670,11 @@ try {
     'SELECT id,name,role,agent_version_id FROM team_member_runs WHERE team_run_id=$1',
     [teamRunId],
   );
-  const lead = roster.rows.find((row) => row.name === 'lead');
-  const member = roster.rows.find((row) => row.name === 'member');
-  const observer = roster.rows.find((row) => row.name === 'observer');
+  const lead = roster.rows.find((row) => row.name === fixtureNames.lead);
+  const member = roster.rows.find((row) => row.name === fixtureNames.member);
+  const observer = roster.rows.find(
+    (row) => row.name === fixtureNames.observer,
+  );
   assert(lead && member && observer, 'roster_missing');
   const owner = {
     tenantId,
@@ -1655,7 +2035,7 @@ try {
       ])
     ).rows[0].root_run_id,
     invokableKind: 'agent',
-    invokableVersionId: member.agent_version_id ?? agents.member,
+    invokableVersionId: member.agent_version_id ?? agents[fixtureNames.member],
     inputSnapshotRef: rootTask.inputSnapshotRef,
     inputFingerprint: rootTask.inputFingerprint,
     logicalStepKey: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
@@ -1731,9 +2111,9 @@ try {
   const memberRunFenceMember = activateMemberRun(
     createTeamMemberRun({
       teamRunId,
-      name: `member-run-fence-${suffix}`,
+      name: `${fixtureNames.member}-run-fence-${suffix}`,
       role: 'member',
-      agentVersionId: member.agent_version_id ?? agents.member,
+      agentVersionId: member.agent_version_id ?? agents[fixtureNames.member],
       ...owner,
     }),
   );
@@ -2329,7 +2709,10 @@ try {
     [teamRunId],
   );
   const terminalAttemptStatuses = new Set(['completed', 'failed']);
-  assert(attempts.rowCount >= 2, 'attempt_count_invalid');
+  assert(
+    reworkScenario ? attempts.rowCount === 3 : attempts.rowCount === 2,
+    'attempt_count_invalid',
+  );
   assert(
     attempts.rows.every((row) => row.execution_task_id),
     'attempt_execution_task_missing',
@@ -2424,22 +2807,37 @@ try {
     });
   }
   const memberSubmittedAttempt = await db.query(
-    `SELECT a.status AS attempt_status,r.status AS run_status,m.status AS member_status
+    `SELECT a.attempt_no,a.status AS attempt_status,r.status AS run_status,m.status AS member_status
        FROM team_work_item_attempts a
        JOIN tasks t ON t.id=a.execution_task_id
        JOIN runs r ON r.task_id=t.id
        JOIN team_member_runs m ON m.id=a.assignee_member_id
-      WHERE a.team_run_id=$1 AND a.assignee_member_id=$2`,
+      WHERE a.team_run_id=$1 AND a.assignee_member_id=$2
+      ORDER BY a.attempt_no`,
     [teamRunId, member.id],
   );
   if (scriptedRuntime) {
-    assert(
-      memberSubmittedAttempt.rowCount === 1 &&
-        memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
-        memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
-        memberSubmittedAttempt.rows[0].member_status === 'idle',
-      'submitted_timeout_member_not_idle',
-    );
+    if (reworkScenario)
+      assert(
+        memberSubmittedAttempt.rowCount === 2 &&
+          memberSubmittedAttempt.rows.every(
+            (row) =>
+              row.attempt_status === 'completed' &&
+              row.run_status === 'succeeded' &&
+              row.member_status === 'idle',
+          ) &&
+          memberSubmittedAttempt.rows.map((row) => row.attempt_no).join(',') ===
+            '1,2',
+        'submitted_timeout_rework_member_not_idle',
+      );
+    else
+      assert(
+        memberSubmittedAttempt.rowCount === 1 &&
+          memberSubmittedAttempt.rows[0].attempt_status === 'completed' &&
+          memberSubmittedAttempt.rows[0].run_status === 'timed_out' &&
+          memberSubmittedAttempt.rows[0].member_status === 'idle',
+        'submitted_timeout_member_not_idle',
+      );
     marker('SUBMITTED_TIMEOUT_ATTEMPT_PRESERVED');
   } else {
     assert(
@@ -2570,9 +2968,10 @@ try {
     projection.project?.phase === 'done' &&
       projection.work_items?.length === 2 &&
       projection.gates?.finish_ready === true &&
-      projection.sessions?.find((session) => session.name === 'member')
-        ?.status === 'idle' &&
-      direct.length === 1 &&
+      projection.sessions?.find(
+        (session) => session.name === fixtureNames.member,
+      )?.status === 'idle' &&
+      direct.length === (reworkScenario ? 0 : 1) &&
       JSON.stringify(projection) === JSON.stringify(replay),
     'safe_projection_or_replay_invalid',
   );
@@ -2647,57 +3046,64 @@ try {
       leadControlProgress.rows[0].commands.filter(
         (command) => command === 'team_work_create',
       ).length === 2 &&
-      leadControlProgress.rows[1].commands.includes('team_work_accept') &&
+      (reworkScenario
+        ? leadControlProgress.rows[1].commands.includes(
+            'team_work_request_changes',
+          ) && leadControlProgress.rows[1].commands.includes('team_work_accept')
+        : leadControlProgress.rows[1].commands.includes('team_work_accept')) &&
       leadControlProgress.rows[2].commands.includes('team_work_accept') &&
       leadControlProgress.rows[3].commands.includes('team_finish'),
     'lead_canonical_progress_receipts_invalid',
   );
   marker('LEAD_CANONICAL_PROGRESS_PROVEN');
-  const directRunIds = new Set(
-    (
+  const directRunIds = new Set();
+  let directTask = { rowCount: 0, rows: [] };
+  if (!reworkScenario) {
+    for (const row of (
       await db.query(
         `SELECT r.id FROM tasks t JOIN runs r ON r.task_id=t.id
           WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
         [rootTaskId],
       )
-    ).rows.map((row) => row.id),
-  );
-  const directTask = await db.query(
-    `SELECT t.id AS task_id,r.id AS run_id,r.updated_at AS run_updated_at,t.team_task_kind,t.team_member_run_id,
-            t.source_team_message_id,t.input_team_message_ids,t.team_sequence,
-            r.status AS run_status,m.status AS message_status,m.body
-       FROM tasks t
-       JOIN runs r ON r.task_id=t.id
-       JOIN team_messages m ON m.id=t.source_team_message_id
-      WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
-    [rootTaskId],
-  );
+    ).rows)
+      directRunIds.add(row.id);
+    directTask = await db.query(
+      `SELECT t.id AS task_id,r.id AS run_id,r.updated_at AS run_updated_at,t.team_task_kind,t.team_member_run_id,
+              t.source_team_message_id,t.input_team_message_ids,t.team_sequence,
+              r.status AS run_status,m.status AS message_status,m.body
+         FROM tasks t
+         JOIN runs r ON r.task_id=t.id
+         JOIN team_messages m ON m.id=t.source_team_message_id
+        WHERE t.root_task_id=$1 AND t.team_task_kind='direct_message'`,
+      [rootTaskId],
+    );
+    assert(
+      directTask.rowCount === 1 &&
+        directTask.rows[0].team_member_run_id === observer.id &&
+        directTask.rows[0].team_task_kind === 'direct_message' &&
+        directTask.rows[0].message_status === 'delivered' &&
+        directTask.rows[0].input_team_message_ids?.length === 1 &&
+        String(directTask.rows[0].body).includes('phase3-direct-sentinel') &&
+        !String(directTask.rows[0].body).includes('canary-secret') &&
+        !String(directTask.rows[0].body).includes('/Users/canary'),
+      'direct_production_reconcile_invalid',
+    );
+    marker('DIRECT_MCP_QUEUED_AND_PRODUCTION_RECONCILED');
+    const leadAfterDirect = await db.query(
+      `SELECT created_at FROM tasks
+        WHERE root_task_id=$1 AND team_task_kind='lead_turn' AND team_sequence=4`,
+      [rootTaskId],
+    );
+    assert(
+      leadAfterDirect.rowCount === 1 &&
+        Date.parse(leadAfterDirect.rows[0].created_at) >=
+          Date.parse(directTask.rows[0].run_updated_at),
+      'lead_scheduled_before_direct_terminal',
+    );
+    marker('DIRECT_LEAD_DEFERRED_UNTIL_DELIVERED');
+  }
   assert(
-    directTask.rowCount === 1 &&
-      directTask.rows[0].team_member_run_id === observer.id &&
-      directTask.rows[0].team_task_kind === 'direct_message' &&
-      directTask.rows[0].message_status === 'delivered' &&
-      directTask.rows[0].input_team_message_ids?.length === 1 &&
-      String(directTask.rows[0].body).includes('phase3-direct-sentinel') &&
-      !String(directTask.rows[0].body).includes('canary-secret') &&
-      !String(directTask.rows[0].body).includes('/Users/canary'),
-    'direct_production_reconcile_invalid',
-  );
-  marker('DIRECT_MCP_QUEUED_AND_PRODUCTION_RECONCILED');
-  const leadAfterDirect = await db.query(
-    `SELECT created_at FROM tasks
-      WHERE root_task_id=$1 AND team_task_kind='lead_turn' AND team_sequence=4`,
-    [rootTaskId],
-  );
-  assert(
-    leadAfterDirect.rowCount === 1 &&
-      Date.parse(leadAfterDirect.rows[0].created_at) >=
-        Date.parse(directTask.rows[0].run_updated_at),
-    'lead_scheduled_before_direct_terminal',
-  );
-  marker('DIRECT_LEAD_DEFERRED_UNTIL_DELIVERED');
-  assert(
-    leadRunIds.size === 4 && memberRunIds.size === 2,
+    leadRunIds.size === 4 && memberRunIds.size === (reworkScenario ? 3 : 2),
     'team_child_run_cardinality_invalid',
   );
   let paidLeadRuntimeEvidence = {};
@@ -2718,23 +3124,45 @@ try {
     const observerBindings = bindings.filter(
       (call) => call.role === 'member' && call.operation === 'create',
     );
-    assert(
-      directBindings.length === 1 &&
-        directBindings[0].operation === 'continue' &&
-        runtimeCalls.some(
-          (call) =>
-            call.role === 'direct' &&
-            call.observed_sentinel &&
-            call.acknowledged,
-        ) &&
-        observerBindings.length >= 1 &&
-        observerBindings.some(
-          (call) =>
-            call.provider_binding_hash ===
-            directBindings[0].provider_binding_hash,
-        ),
-      'direct_runtime_session_not_continued',
-    );
+    if (reworkScenario) {
+      const memberBindings = bindings.filter((call) => call.role === 'member');
+      const memberCreate = memberBindings.find(
+        (call) =>
+          call.operation === 'create' &&
+          call.member_name === fixtureNames.member,
+      );
+      const memberContinue = memberBindings.find(
+        (call) => call.operation === 'continue',
+      );
+      assert(
+        directBindings.length === 0 &&
+          memberBindings.length === 3 &&
+          memberBindings.filter((call) => call.operation === 'create')
+            .length === 2 &&
+          memberBindings.filter((call) => call.operation === 'continue')
+            .length === 1 &&
+          memberCreate?.provider_binding_hash ===
+            memberContinue?.provider_binding_hash,
+        'rework_member_runtime_session_not_continued',
+      );
+    } else
+      assert(
+        directBindings.length === 1 &&
+          directBindings[0].operation === 'continue' &&
+          runtimeCalls.some(
+            (call) =>
+              call.role === 'direct' &&
+              call.observed_sentinel &&
+              call.acknowledged,
+          ) &&
+          observerBindings.length >= 1 &&
+          observerBindings.some(
+            (call) =>
+              call.provider_binding_hash ===
+              directBindings[0].provider_binding_hash,
+          ),
+        'direct_runtime_session_not_continued',
+      );
     const scriptedLeadTurns = runtimeCalls.filter(
       (call) =>
         call.role === 'lead' &&
@@ -2747,9 +3175,17 @@ try {
     );
     assert(
       scriptedLeadTurns.length === 4 &&
-        scriptedMemberTurns.length === 2 &&
         scriptedLeadTurns.every((call, index) => call.turn === index + 1) &&
-        scriptedMemberTurns.every((call, index) => call.turn === index + 1),
+        (reworkScenario
+          ? scriptedMemberTurns.length === 3 &&
+            scriptedMemberTurns.filter((call) => call.attempt === 1).length ===
+              2 &&
+            scriptedMemberTurns.filter((call) => call.attempt === 2).length ===
+              1
+          : scriptedMemberTurns.length === 2 &&
+            scriptedMemberTurns.every(
+              (call, index) => call.turn === index + 1,
+            )),
       'scripted_golden_path_turn_cardinality_invalid',
     );
   } else {
@@ -2764,8 +3200,10 @@ try {
     assert(
       leadCreates.length === 1 &&
         leadPromptSends.length === 4 &&
-        created.filter((event) => memberRunIds.has(event.runId)).length === 2 &&
-        sent.filter((event) => memberRunIds.has(event.runId)).length === 2,
+        created.filter((event) => memberRunIds.has(event.runId)).length ===
+          (reworkScenario ? 3 : 2) &&
+        sent.filter((event) => memberRunIds.has(event.runId)).length ===
+          (reworkScenario ? 3 : 2),
       'paid_lead_task_runtime_evidence_invalid',
     );
     paidLeadRuntimeEvidence = {
@@ -2845,15 +3283,19 @@ try {
       WHERE m.team_run_id=$1 AND m.kind='direct'`,
     [teamRunId],
   );
-  assert(
-    deliveredDirect.rowCount === 1 &&
-      deliveredDirect.rows[0].status === 'delivered' &&
-      deliveredDirect.rows[0].task_id === directTask.rows[0].task_id &&
-      deliveredDirect.rows[0].run_status === 'succeeded' &&
-      directRunIds.has(deliveredDirect.rows[0].run_id ?? ''),
-    'direct_delivery_linkage_invalid',
-  );
-  marker('DIRECT_DELIVERED_AND_CONTINUED');
+  if (reworkScenario)
+    assert(deliveredDirect.rowCount === 0, 'rework_direct_delivery_present');
+  else {
+    assert(
+      deliveredDirect.rowCount === 1 &&
+        deliveredDirect.rows[0].status === 'delivered' &&
+        deliveredDirect.rows[0].task_id === directTask.rows[0].task_id &&
+        deliveredDirect.rows[0].run_status === 'succeeded' &&
+        directRunIds.has(deliveredDirect.rows[0].run_id ?? ''),
+      'direct_delivery_linkage_invalid',
+    );
+    marker('DIRECT_DELIVERED_AND_CONTINUED');
+  }
   const rootRunState = await db.query(
     'SELECT t.status AS task_status,r.status AS run_status FROM tasks t JOIN runs r ON r.task_id=t.id WHERE t.id=$1',
     [rootTaskId],
@@ -2918,9 +3360,26 @@ try {
     )
   ).rows[0];
   marker('EMITTED_RUN_EVENT_TOOL_NAME_QUERY', emittedToolNameFacts ?? null);
+  if (scriptedRuntime) {
+    assert(
+      scriptedRuntimeInstance,
+      'scripted_runtime_instance_missing_for_prompt_evidence',
+    );
+    scriptedRuntimeInstance.emitPromptChannelEvidence();
+  }
   marker('RESULT_PASS', {
-    expected: { terminal: true, direct: true, dependency: true, replay: true },
-    actual: { terminal: true, direct: true, dependency: true, replay: true },
+    expected: {
+      terminal: true,
+      direct: !reworkScenario,
+      dependency: true,
+      replay: true,
+    },
+    actual: {
+      terminal: true,
+      direct: finalMessageFacts.direct === 1,
+      dependency: true,
+      replay: true,
+    },
     durable_cardinality: {
       team_members: roster.rowCount,
       work_items: work.rowCount,
@@ -2939,6 +3398,12 @@ try {
   } else {
     const failure = smokeFailure(error);
     try {
+      const persistedEnvelopeLines =
+        await capturePersistedControlPlaneEnvelopeEvidence();
+      if (scriptedRuntimeInstance)
+        scriptedRuntimeInstance.emitPromptChannelEvidence(
+          persistedEnvelopeLines,
+        );
       await collectFailureDiagnostic(failure);
       await evidence('blocked', failure);
     } catch {

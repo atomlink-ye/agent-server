@@ -743,6 +743,7 @@ class ScriptedRuntime {
             name: 'team_work_request_changes',
             arguments: {
               work_ref: 'work-1',
+              assignee: 'member',
               feedback:
                 'Add the missing canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 evidence before resubmitting.',
             },

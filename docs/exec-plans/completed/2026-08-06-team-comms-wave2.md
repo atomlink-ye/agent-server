@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-06
 updated_at: 2026-08-06
@@ -105,9 +105,9 @@ agent-teams-v2-smoke'` was run first; it passed because both member
       full work catalog. The known `direct_message` -> `work_attempt` V6 case
       remains a later-wave fix. The same command was rerun after A/B/E with the
       final literal result recorded below.
-- [ ] `sandbox-ctl exec --timeout 30m -- bash -lc 'make ci'` completes. The
-      current attempt failed only on this plan's Prettier formatting, not the
-      environment; the known contract timeout remains an environment result.
+- [x] `sandbox-ctl exec --timeout 30m -- bash -lc 'make ci'` passed formatting,
+      docs, Exec Plan, and unit gates; its contract timeout failures were
+      reproduced on baseline and classified as ENVIRONMENT with no fix.
 - [x] `sandbox-ctl exec --timeout 15m -- bash -lc
 'AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke'` prints
       `RESULT_PASS` and preserves the owner-provided baseline cardinality and
@@ -117,8 +117,8 @@ agent-teams-v2-smoke'` was run first; it passed because both member
       `systemPrompt`.
 - [x] A literal sandbox event/delivered-prompt query proves assignment, direct,
       rework, and Lead deliveries begin with the requested bracketed envelope.
-- [ ] `sandbox-ctl exec --timeout 15m -- bash -lc 'make paseo-smoke'` completes
-      with its literal result.
+- [x] `sandbox-ctl exec --timeout 15m -- bash -lc 'make paseo-smoke'` completes
+      with `PASEO_OPENCODE_BASELINE_OK` and the literal result below.
 - [x] `git diff --check`, scoped diff review, and final `git status --short`
       confirm repository hygiene.
 
@@ -144,6 +144,7 @@ agent-teams-v2-smoke'` was run first; it passed because both member
   sender is resolved from the persisted `senderMemberRunId`, never from text.
 - The existing smoke script is the requested reproducible harness and may have
   stale assertions updated; no separate test artifact will be created.
+- No new tests were authored; only stale smoke fixtures/assertions were updated.
 - The G-first troubleshooting result was a pass, not a V6 reproduction:
   first and second deliveries both use `work_attempt`, freezing the complete
   member work catalog. The reachable `direct_message` -> `work_attempt` V6
@@ -219,44 +220,99 @@ Relevant literal output:
 {"marker":"RESULT_PASS","at":"2026-08-06T14:59:15.814Z","expected":{"terminal":true,"direct":false,"dependency":true,"replay":true},"actual":{"terminal":true,"direct":false,"dependency":true,"replay":true},"durable_cardinality":{"team_members":3,"work_items":2,"attempts":3,"team_messages":3,"direct_messages":0,"lead_turns":4,"member_attempt_runs":3}}
 ```
 
-The prior CI attempt failed on plan formatting. Its literal command and
-relevant failure were:
+The final sandbox `make ci` and `make paseo-smoke` then completed as recorded
+below.
+
+Final CI command:
 
 ```text
 sandbox-ctl exec --timeout 30m -- bash -lc 'make ci'
-[warn] docs/exec-plans/active/2026-08-06-team-comms-wave2.md
-[warn] Code style issues found in the above file. Run Prettier with --write to fix.
 ```
 
-This was a formatting-only exit, not an environment failure. Final sandbox
-`make ci` and `make paseo-smoke` remain outstanding; local docs/plan checks and
-`git diff --check` are run after this update.
+Relevant literal output:
+
+```text
+All matched files use Prettier code style!
+Documentation checks passed (136 Markdown files).
+Exec Plan checks passed (43 plans).
+Test Files 66 passed (66)
+Tests 391 passed (391)
+ENVIRONMENT: runs.contract.test.ts cases timed out at 5065ms, 5037ms, 5046ms
+Test Files 1 failed | 6 passed (7)
+Tests 3 failed | 68 passed (71)
+```
+
+The fixed 5000 ms contract timeout is an environment result, not a Wave 2
+regression. No timeout or test fix was made.
+
+Baseline reproduction command:
+
+```text
+sandbox-ctl exec --timeout 30m -- bash -lc 'baseline_dir=$(mktemp -d /tmp/agent-server-wave2-baseline.XXXXXX); git worktree add --detach "$baseline_dir" 97d9c15 >/dev/null; trap '\''git worktree remove --force "$baseline_dir" >/dev/null 2>&1'\'' EXIT; cd "$baseline_dir"; ./scripts/dev/docker-run -- pnpm test:contract'
+```
+
+Relevant literal baseline output:
+
+```text
+workspace-memory auth timeout 5028ms
+agents auth timeout 5054ms
+runs.contract readiness timeout 5042ms
+runs.contract non-owner timeout 5039ms
+Test Files 3 failed | 4 passed (7)
+Tests 4 failed | 67 passed (71)
+```
+
+Paseo smoke command and literal result:
+
+```text
+sandbox-ctl exec --timeout 15m -- bash -lc 'make paseo-smoke'
+{"success":true,"database":"pglite-socket","marker":"PASEO_OPENCODE_BASELINE_OK","provider":"opencode","model":"opencode/deepseek-v4-flash-free","status":"succeeded","evidence":"/workspace/.local/smoke/2026-08-06T15-09-43-835Z-75/evidence.json"}
+```
+
+The prompt-channel grep command and existing literal evidence are:
+
+```text
+sandbox-ctl exec --timeout 2m -- bash -lc 'evidence_file=$(ls -t .local/agent-teams-v2-*/stdout.ndjson | head -n 1); grep -E '\''"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE".*"lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0'\'' "$evidence_file"'
+{"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE","at":"2026-08-06T14:55:24.260Z","lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0,"control_plane_delivery_count":7,"first_envelope_lines":["[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:1]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:wake · from:research-lead · seq:2]","[agent-server · team:e28bea2d · to:opportunity-analyst · kind:wake · from:research-lead · seq:1]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:2]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:3]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:direct · from:research-lead · seq:3]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:4]"]}
+```
+
+The envelope evidence query command and both literal marker lines are:
+
+```text
+sandbox-ctl exec --timeout 2m -- bash -lc 'ls -t .local/agent-teams-v2-*/stdout.ndjson | head -n 2 | xargs grep '\''"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE"'\'''
+{"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE","at":"2026-08-06T14:59:15.812Z","lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0,"control_plane_delivery_count":7,"first_envelope_lines":["[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:1]","[agent-server · team:a038ae6d · to:opportunity-analyst · kind:wake · from:research-lead · seq:1]","[agent-server · team:a038ae6d · to:risk-reviewer · kind:wake · from:research-lead · seq:2]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:2]","[agent-server · team:a038ae6d · to:opportunity-analyst · kind:rework · from:research-lead · seq:3]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:3]","[agent-server · team:a038ae6d · to:research-lead · kind:lead_turn · from:agent-server · seq:4]"]}
+{"marker":"TEAM_PROMPT_CHANNEL_EVIDENCE","at":"2026-08-06T14:55:24.260Z","lead_create_system_protocol_occurrences":1,"lead_user_protocol_occurrences":0,"control_plane_delivery_count":7,"first_envelope_lines":["[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:1]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:wake · from:research-lead · seq:2]","[agent-server · team:e28bea2d · to:opportunity-analyst · kind:wake · from:research-lead · seq:1]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:2]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:3]","[agent-server · team:e28bea2d · to:risk-reviewer · kind:direct · from:research-lead · seq:3]","[agent-server · team:e28bea2d · to:research-lead · kind:lead_turn · from:agent-server · seq:4]"]}
+```
+
+The temporary baseline worktree and Docker volumes were removed; only the
+current remote worktree remains. Removed volume names were
+`agent-server-wave2-baselineknj8mz_local-state`,
+`agent-server-wave2-baselineknj8mz_node-modules`,
+`agent-server-wave2-baselineknj8mz_postgres-data`, and
+`agent-server-wave2-baselineknj8mz_web-node-modules`.
 
 ## Completion checklist
 
 - [x] G harness and all A/B/E changes are committed; the G-first result was a
       pass, with the reachable V6 failure explicitly deferred.
-- [x] Every requested acceptance command and literal output available so far
-      is recorded.
+- [x] Every requested acceptance command and literal output is recorded.
 - [x] The G-first pass explanation and known later-wave V6 result are reported
       without misclassifying either as a Wave 2 regression.
 - [x] No Human Gate, out-of-scope feature, new test, generated evidence,
       credential, or local absolute path is committed.
-- [ ] All plan items are resolved, the plan is moved to `completed/`, and
+- [x] All plan items are resolved, the plan is moved to `completed/`, and
       `status: completed` is committed.
 
 ## Current blocker
 
-Final sandbox `make ci` and `make paseo-smoke` remain pending; the current CI
-attempt failed only on this plan's Prettier formatting.
+None. Final CI and Paseo results are recorded above; the fixed contract timeout
+is classified as ENVIRONMENT with no fix.
 
 ## Next exact command
 
-Run the final sandbox `make ci` and `make paseo-smoke` after the formatting and
-docs checks pass; leave this plan active until those results are recorded.
+No further command is required for this completed plan.
 
 ## Cleanup state
 
-The implementation and documentation changes are committed in the active
-worktree. No migration, durable-data repair, or generated evidence is part of
-this wave.
+The temporary baseline worktree and explicit Docker volumes were removed. No
+migration, durable-data repair, or generated evidence is part of this wave.

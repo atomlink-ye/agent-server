@@ -51,7 +51,8 @@ function parseArgs(argv) {
     if (!arg.startsWith('--')) throw new Error(`Unknown argument: ${arg}`);
     const key = arg.slice(2);
     const value = argv[i + 1];
-    if (!value || value.startsWith('--')) throw new Error(`Missing value for --${key}`);
+    if (!value || value.startsWith('--'))
+      throw new Error(`Missing value for --${key}`);
     i += 1;
     const names = {
       artifacts: 'artifacts',
@@ -76,12 +77,19 @@ function parseArgs(argv) {
     throw new Error('--probe must be p1, p2, or p3');
   }
   options.sleepSeconds = Number(options.sleepSeconds);
-  if (!Number.isFinite(options.sleepSeconds) || options.sleepSeconds < 0 || options.sleepSeconds > 3600) {
+  if (
+    !Number.isFinite(options.sleepSeconds) ||
+    options.sleepSeconds < 0 ||
+    options.sleepSeconds > 3600
+  ) {
     throw new Error('--sleep-seconds must be a number from 0 to 3600');
   }
   if (options.toolTimeoutMs !== undefined) {
     options.toolTimeoutMs = Number(options.toolTimeoutMs);
-    if (!Number.isInteger(options.toolTimeoutMs) || options.toolTimeoutMs <= 0) {
+    if (
+      !Number.isInteger(options.toolTimeoutMs) ||
+      options.toolTimeoutMs <= 0
+    ) {
       throw new Error('--tool-timeout-ms must be a positive integer');
     }
   }
@@ -90,7 +98,9 @@ function parseArgs(argv) {
 
 function shellQuote(value) {
   const text = String(value);
-  return /^[A-Za-z0-9_./:=+@,-]+$/.test(text) ? text : `'${text.replaceAll("'", "'\\''")}'`;
+  return /^[A-Za-z0-9_./:=+@,-]+$/.test(text)
+    ? text
+    : `'${text.replaceAll("'", "'\\''")}'`;
 }
 
 function commandText(command) {
@@ -126,8 +136,16 @@ function runCommand(command, { cwd, env, state, name }) {
         rejectRun(error);
         return;
       }
-      appendTranscript(state, `# ${name}: exit=${code ?? 'null'} signal=${signal ?? 'none'}`);
-      resolveRun({ code, signal, stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8') });
+      appendTranscript(
+        state,
+        `# ${name}: exit=${code ?? 'null'} signal=${signal ?? 'none'}`,
+      );
+      resolveRun({
+        code,
+        signal,
+        stdout: stdout.toString('utf8'),
+        stderr: stderr.toString('utf8'),
+      });
     });
   });
 }
@@ -137,11 +155,21 @@ async function readJsonOrEmpty(path) {
     return JSON.parse(await readFile(path, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') return {};
-    throw new Error(`Cannot parse provider config ${path}: ${error?.message ?? String(error)}`);
+    throw new Error(
+      `Cannot parse provider config ${path}: ${error?.message ?? String(error)}`,
+    );
   }
 }
 
-async function registerProvider({ provider, repo, serverScript, logPath, controlPath, state, toolTimeoutMs }) {
+async function registerProvider({
+  provider,
+  repo,
+  serverScript,
+  logPath,
+  controlPath,
+  state,
+  toolTimeoutMs,
+}) {
   const command = process.execPath;
   const args = [serverScript];
   const serverEnv = { MCP_PROBE_LOG: logPath, MCP_PROBE_CONTROL: controlPath };
@@ -161,7 +189,9 @@ async function registerProvider({ provider, repo, serverScript, logPath, control
     const config = await readJsonOrEmpty(path);
     config.mcpServers ??= {};
     config.mcpServers['provider-probe'] = entry;
-    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, {
+      mode: 0o600,
+    });
   } else if (provider === 'opencode') {
     path = join(
       process.env.XDG_CONFIG_HOME?.trim() ||
@@ -173,20 +203,36 @@ async function registerProvider({ provider, repo, serverScript, logPath, control
     original = existed ? await readFile(path) : null;
     const config = await readJsonOrEmpty(path);
     config.mcp ??= {};
-    config.mcp['provider-probe'] = { type: 'local', command: [command, ...args], environment: serverEnv, timeout: toolTimeoutMs ?? undefined, enabled: true };
-    if (toolTimeoutMs === undefined) delete config.mcp['provider-probe'].timeout;
+    config.mcp['provider-probe'] = {
+      type: 'local',
+      command: [command, ...args],
+      environment: serverEnv,
+      timeout: toolTimeoutMs ?? undefined,
+      enabled: true,
+    };
+    if (toolTimeoutMs === undefined)
+      delete config.mcp['provider-probe'].timeout;
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, {
+      mode: 0o600,
+    });
   } else {
-    const codexHome = process.env.CODEX_HOME?.trim() || join(process.env.HOME || homedir(), '.codex');
+    const codexHome =
+      process.env.CODEX_HOME?.trim() ||
+      join(process.env.HOME || homedir(), '.codex');
     path = join(codexHome, 'config.toml');
     existed = await fileExists(path);
     original = existed ? await readFile(path) : null;
     const before = existed ? original.toString('utf8') : '';
-    const timeoutLine = toolTimeoutMs === undefined ? '' : `tool_timeout_sec = ${toolTimeoutMs / 1000}\n`;
+    const timeoutLine =
+      toolTimeoutMs === undefined
+        ? ''
+        : `tool_timeout_sec = ${toolTimeoutMs / 1000}\n`;
     const block = `\n[mcp_servers.provider-probe]\ncommand = ${JSON.stringify(command)}\nargs = ${JSON.stringify(args)}\n${timeoutLine}[mcp_servers.provider-probe.env]\nMCP_PROBE_LOG = ${JSON.stringify(logPath)}\nMCP_PROBE_CONTROL = ${JSON.stringify(controlPath)}\n`;
     if (/^\[mcp_servers\.provider-probe\]/m.test(before)) {
-      throw new Error(`Codex config already has [mcp_servers.provider-probe]; refusing to overwrite ${path}`);
+      throw new Error(
+        `Codex config already has [mcp_servers.provider-probe]; refusing to overwrite ${path}`,
+      );
     }
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${before.trimEnd()}${block}`, { mode: 0o600 });
@@ -200,7 +246,12 @@ async function registerProvider({ provider, repo, serverScript, logPath, control
 }
 
 async function fileExists(path) {
-  try { await access(path, fsConstants.F_OK); return true; } catch { return false; }
+  try {
+    await access(path, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function extractAgentId(stdout) {
@@ -223,13 +274,33 @@ function extractAgentId(stdout) {
 
 function providerMode(provider, explicit) {
   if (explicit) return explicit;
-  return { claude: 'bypassPermissions', codex: 'full-access', opencode: 'build' }[provider];
+  return {
+    claude: 'bypassPermissions',
+    codex: 'full-access',
+    opencode: 'build',
+  }[provider];
 }
 
 function commonRunCommand({ options, prompt, paseo }) {
-  const model = options.provider === 'opencode' ? 'opencode-go/deepseek-v4-flash' : 'deepseek-v4-flash';
-  const command = [paseo, 'run', '--json', '--provider', options.provider, '--model', model, '--mode', providerMode(options.provider, options.mode), '--cwd', options.repo];
-  if (options.provider === 'claude' && options.toolTimeoutMs !== undefined) command.push('--env', `MCP_TOOL_TIMEOUT=${options.toolTimeoutMs}`);
+  const model =
+    options.provider === 'opencode'
+      ? 'opencode-go/deepseek-v4-flash'
+      : 'deepseek-v4-flash';
+  const command = [
+    paseo,
+    'run',
+    '--json',
+    '--provider',
+    options.provider,
+    '--model',
+    model,
+    '--mode',
+    providerMode(options.provider, options.mode),
+    '--cwd',
+    options.repo,
+  ];
+  if (options.provider === 'claude' && options.toolTimeoutMs !== undefined)
+    command.push('--env', `MCP_TOOL_TIMEOUT=${options.toolTimeoutMs}`);
   command.push(prompt);
   if (options.paseoHost) command.splice(3, 0, '--host', options.paseoHost);
   return command;
@@ -239,7 +310,12 @@ async function captureLogs({ options, paseo, agentId, state, index }) {
   if (!agentId) return;
   const command = [paseo, 'logs', '--tail', '500', agentId];
   if (options.paseoHost) command.splice(2, 0, '--host', options.paseoHost);
-  await runCommand(command, { cwd: options.repo, env: process.env, state, name: `paseo-logs-${index}` });
+  await runCommand(command, {
+    cwd: options.repo,
+    env: process.env,
+    state,
+    name: `paseo-logs-${index}`,
+  });
 }
 
 async function waitForControlConsumption(controlPath, state, artifacts) {
@@ -247,23 +323,44 @@ async function waitForControlConsumption(controlPath, state, artifacts) {
   const snapshots = [];
   while (Date.now() - started < 5_000) {
     let contents = '';
-    try { contents = await readFile(controlPath, 'utf8'); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    try {
+      contents = await readFile(controlPath, 'utf8');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
     snapshots.push(contents);
     if (!contents.trim()) {
-      await writeFile(join(artifacts, 'control-consumed.raw'), snapshots.join('--- poll ---\n'));
-      appendTranscript(state, '# out-of-band control consumed (raw state saved)');
+      await writeFile(
+        join(artifacts, 'control-consumed.raw'),
+        snapshots.join('--- poll ---\n'),
+      );
+      appendTranscript(
+        state,
+        '# out-of-band control consumed (raw state saved)',
+      );
       return;
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
-  await writeFile(join(artifacts, 'control-consumed.raw'), snapshots.join('--- poll ---\n'));
+  await writeFile(
+    join(artifacts, 'control-consumed.raw'),
+    snapshots.join('--- poll ---\n'),
+  );
   throw new Error('timed out waiting for MCP control file consumption');
 }
 
 async function main(options) {
   const repo = resolve(options.repo || process.cwd());
   const serverScript = resolve(options.serverScript || defaultServerScript);
-  const artifacts = resolve(options.artifacts || join(repo, '.local', 'provider-probes', `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${process.pid}`));
+  const artifacts = resolve(
+    options.artifacts ||
+      join(
+        repo,
+        '.local',
+        'provider-probes',
+        `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${process.pid}`,
+      ),
+  );
   const runtimeDir = resolve(options.runtimeDir || artifacts);
   await mkdir(artifacts, { recursive: true });
   await mkdir(runtimeDir, { recursive: true });
@@ -273,7 +370,15 @@ async function main(options) {
   const probeLog = join(runtimeDir, 'mcp-probe.jsonl');
   const controlPath = join(runtimeDir, 'mcp-probe-control.json');
   const paseo = options.paseo || process.env.PASEO_BIN || 'paseo';
-  const config = await registerProvider({ provider: options.provider, repo, serverScript, logPath: probeLog, controlPath, state, toolTimeoutMs: options.toolTimeoutMs });
+  const config = await registerProvider({
+    provider: options.provider,
+    repo,
+    serverScript,
+    logPath: probeLog,
+    controlPath,
+    state,
+    toolTimeoutMs: options.toolTimeoutMs,
+  });
   const env = { ...process.env };
   let sequence = 0;
   try {
@@ -282,33 +387,80 @@ async function main(options) {
       p2: 'Use the configured provider-probe MCP server. In this turn call probe_ping, then complete the turn. Do not call probe_arm.',
       p3: `Use the configured provider-probe MCP server and call probe_sleep with seconds=${options.sleepSeconds}. Complete only after the call returns.`,
     };
-    const first = await runCommand(commonRunCommand({ options, prompt: prompts[options.probe], paseo }), { cwd: repo, env, state, name: `paseo-run-${sequence++}` });
+    const first = await runCommand(
+      commonRunCommand({ options, prompt: prompts[options.probe], paseo }),
+      { cwd: repo, env, state, name: `paseo-run-${sequence++}` },
+    );
     const agentId = extractAgentId(first.stdout);
-    if (!agentId) throw new Error('initial paseo run did not yield an agent id; raw artifacts retained');
+    if (!agentId)
+      throw new Error(
+        'initial paseo run did not yield an agent id; raw artifacts retained',
+      );
     await captureLogs({ options, paseo, agentId, state, index: sequence++ });
     if (options.probe === 'p1' || options.probe === 'p2') {
       if (options.probe === 'p2') {
-        await writeFile(controlPath, JSON.stringify({ action: 'arm', notify: false, token: randomUUID() }) + '\n', { mode: 0o600 });
-        appendTranscript(state, `# wrote out-of-band arm control ${controlPath}`);
+        await writeFile(
+          controlPath,
+          JSON.stringify({
+            action: 'arm',
+            notify: false,
+            token: randomUUID(),
+          }) + '\n',
+          { mode: 0o600 },
+        );
+        appendTranscript(
+          state,
+          `# wrote out-of-band arm control ${controlPath}`,
+        );
         await waitForControlConsumption(controlPath, state, artifacts);
       }
       {
-        const continuation = [paseo, 'send', '--json', '--no-wait', agentId, options.probe === 'p2'
-          ? 'Call probe_secret and report the exact string; if you have no such tool reply NO_SUCH_TOOL.'
-          : 'Call probe_secret and report the exact string; if you have no such tool reply NO_SUCH_TOOL.'];
-        if (options.paseoHost) continuation.splice(2, 0, '--host', options.paseoHost);
-        await runCommand(continuation, { cwd: repo, env, state, name: `paseo-send-${sequence++}` });
+        const continuation = [
+          paseo,
+          'send',
+          '--json',
+          '--no-wait',
+          agentId,
+          options.probe === 'p2'
+            ? 'Call probe_secret and report the exact string; if you have no such tool reply NO_SUCH_TOOL.'
+            : 'Call probe_secret and report the exact string; if you have no such tool reply NO_SUCH_TOOL.',
+        ];
+        if (options.paseoHost)
+          continuation.splice(2, 0, '--host', options.paseoHost);
+        await runCommand(continuation, {
+          cwd: repo,
+          env,
+          state,
+          name: `paseo-send-${sequence++}`,
+        });
         const waitCommand = [paseo, 'wait', agentId];
-        if (options.paseoHost) waitCommand.splice(2, 0, '--host', options.paseoHost);
-        await runCommand(waitCommand, { cwd: repo, env, state, name: `paseo-wait-${sequence++}` });
-        await captureLogs({ options, paseo, agentId, state, index: sequence++ });
+        if (options.paseoHost)
+          waitCommand.splice(2, 0, '--host', options.paseoHost);
+        await runCommand(waitCommand, {
+          cwd: repo,
+          env,
+          state,
+          name: `paseo-wait-${sequence++}`,
+        });
+        await captureLogs({
+          options,
+          paseo,
+          agentId,
+          state,
+          index: sequence++,
+        });
       }
     }
   } finally {
     await config.restore();
-    await writeFile(join(artifacts, 'command-transcript.txt'), state.transcript);
+    await writeFile(
+      join(artifacts, 'command-transcript.txt'),
+      state.transcript,
+    );
   }
-  process.stdout.write(`${JSON.stringify({ provider: options.provider, probe: options.probe, artifacts })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ provider: options.provider, probe: options.probe, artifacts })}\n`,
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -5,7 +5,12 @@
  * There is no SDK dependency here: the probe is also useful when checking
  * whether a provider can speak the wire protocol without its normal runtime.
  */
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { randomBytes } from 'node:crypto';
 
 const logPath = process.env.MCP_PROBE_LOG;
@@ -25,9 +30,14 @@ const calls = new Map();
 
 function record(entry) {
   try {
-    appendFileSync(logPath, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+    appendFileSync(
+      logPath,
+      `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`,
+    );
   } catch (error) {
-    process.stderr.write(`mcp probe log error: ${error?.message ?? String(error)}\n`);
+    process.stderr.write(
+      `mcp probe log error: ${error?.message ?? String(error)}\n`,
+    );
   }
 }
 
@@ -80,7 +90,11 @@ function tools() {
     {
       name: 'probe_ping',
       description: 'Return a stable probe marker.',
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
     },
     {
       name: 'probe_sleep',
@@ -95,14 +109,22 @@ function tools() {
     {
       name: 'probe_arm',
       description: 'Arm the probe and refresh the tool list.',
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
     },
   ];
   if (armed) {
     base.push({
       name: 'probe_secret',
       description: 'Return the per-process armed secret marker.',
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
     });
   }
   return base;
@@ -127,18 +149,25 @@ function sleep(seconds, signal) {
     };
     if (signal?.aborted) return onAbort();
     signal?.addEventListener('abort', onAbort, { once: true });
-    timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, Math.round(seconds * 1000));
+    timer = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.round(seconds * 1000),
+    );
   });
 }
 
 async function callTool(request) {
   const id = request.id;
-  const params = request.params && typeof request.params === 'object' ? request.params : {};
+  const params =
+    request.params && typeof request.params === 'object' ? request.params : {};
   const name = params.name;
-  const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
+  const args =
+    params.arguments && typeof params.arguments === 'object'
+      ? params.arguments
+      : {};
   const controller = new AbortController();
   calls.set(String(id), controller);
   record({ event: 'call_start', id, tool: name, params: args });
@@ -155,7 +184,11 @@ async function callTool(request) {
     } else if (name === 'probe_sleep') {
       const seconds = numberSeconds(args.seconds);
       if (seconds === null) {
-        result = errorResponse(id, -32602, 'seconds must be a number from 0 to 3600');
+        result = errorResponse(
+          id,
+          -32602,
+          'seconds must be a number from 0 to 3600',
+        );
       } else {
         await sleep(seconds, controller.signal);
         result = textResult(`SLEPT_${seconds}`);
@@ -166,15 +199,32 @@ async function callTool(request) {
     if (!controller.signal.aborted) {
       send(result.error ? { ...result, id } : response(id, result));
     }
-    record({ event: 'call_finish', id, tool: name, cancelled: controller.signal.aborted });
+    record({
+      event: 'call_finish',
+      id,
+      tool: name,
+      cancelled: controller.signal.aborted,
+    });
   } catch (error) {
     if (error?.code === 'cancelled' || controller.signal.aborted) {
       record({ event: 'call_finish', id, tool: name, cancelled: true });
       return;
     }
-    record({ event: 'error', phase: 'call', id, tool: name, message: error?.message ?? String(error) });
+    record({
+      event: 'error',
+      phase: 'call',
+      id,
+      tool: name,
+      message: error?.message ?? String(error),
+    });
     send(errorResponse(id, -32603, 'Internal probe error'));
-    record({ event: 'call_finish', id, tool: name, cancelled: false, error: true });
+    record({
+      event: 'call_finish',
+      id,
+      tool: name,
+      cancelled: false,
+      error: true,
+    });
   } finally {
     calls.delete(String(id));
   }
@@ -193,19 +243,23 @@ async function handle(frame) {
     return;
   }
   if (id === undefined && typeof method === 'string') {
-    if (method === 'notifications/initialized') record({ event: 'initialized_notification' });
+    if (method === 'notifications/initialized')
+      record({ event: 'initialized_notification' });
     return;
   }
   if (method === 'initialize') {
-    send(response(id, {
-      protocolVersion:
-        typeof frame.params?.protocolVersion === 'string'
-          ? frame.params.protocolVersion
-          : '2024-11-05',
-      capabilities: { tools: { listChanged: true } },
-      serverInfo: { name: 'mcp-probe-server', version: '0.1.0' },
-      instructions: 'Use probe_ping, probe_arm, probe_sleep, and probe_secret when advertised.',
-    }));
+    send(
+      response(id, {
+        protocolVersion:
+          typeof frame.params?.protocolVersion === 'string'
+            ? frame.params.protocolVersion
+            : '2024-11-05',
+        capabilities: { tools: { listChanged: true } },
+        serverInfo: { name: 'mcp-probe-server', version: '0.1.0' },
+        instructions:
+          'Use probe_ping, probe_arm, probe_sleep, and probe_secret when advertised.',
+      }),
+    );
     return;
   }
   if (method === 'ping') {
@@ -232,11 +286,23 @@ function pollControl() {
     if (command?.action === 'arm') {
       arm('control', command.notify !== false);
       // Consume the command so a polling loop cannot emit duplicate events.
-      record({ event: 'control_arm_consumed', notify: command.notify !== false, tokenPresent: Boolean(command.token) });
-      try { writeFileSync(controlPath, ''); } catch { /* best effort; command remains idempotent */ }
+      record({
+        event: 'control_arm_consumed',
+        notify: command.notify !== false,
+        tokenPresent: Boolean(command.token),
+      });
+      try {
+        writeFileSync(controlPath, '');
+      } catch {
+        /* best effort; command remains idempotent */
+      }
     }
   } catch (error) {
-    record({ event: 'error', phase: 'control', message: error?.message ?? String(error) });
+    record({
+      event: 'error',
+      phase: 'control',
+      message: error?.message ?? String(error),
+    });
   }
 }
 
@@ -245,7 +311,10 @@ function shutdown(reason) {
   shuttingDown = true;
   if (controlTimer) clearInterval(controlTimer);
   for (const controller of calls.values()) controller.abort();
-  record({ event: reason === 'stdin_eof' ? 'stdin_eof' : 'signal', signal: reason });
+  record({
+    event: reason === 'stdin_eof' ? 'stdin_eof' : 'signal',
+    signal: reason,
+  });
 }
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
@@ -259,12 +328,20 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 process.once('uncaughtException', (error) => {
-  record({ event: 'error', phase: 'uncaughtException', message: error?.message ?? String(error) });
+  record({
+    event: 'error',
+    phase: 'uncaughtException',
+    message: error?.message ?? String(error),
+  });
   process.exitCode = 1;
   shutdown('error');
 });
 process.once('unhandledRejection', (error) => {
-  record({ event: 'error', phase: 'unhandledRejection', message: error?.message ?? String(error) });
+  record({
+    event: 'error',
+    phase: 'unhandledRejection',
+    message: error?.message ?? String(error),
+  });
   process.exitCode = 1;
   shutdown('error');
 });
@@ -282,7 +359,11 @@ process.stdin.on('data', (chunk) => {
     try {
       frame = JSON.parse(line);
     } catch (error) {
-      record({ event: 'error', phase: 'parse', message: error?.message ?? String(error) });
+      record({
+        event: 'error',
+        phase: 'parse',
+        message: error?.message ?? String(error),
+      });
       continue;
     }
     void handle(frame);
@@ -290,8 +371,14 @@ process.stdin.on('data', (chunk) => {
 });
 process.stdin.on('end', () => {
   if (inputBuffer.trim()) {
-    try { void handle(JSON.parse(inputBuffer)); } catch (error) {
-      record({ event: 'error', phase: 'parse', message: error?.message ?? String(error) });
+    try {
+      void handle(JSON.parse(inputBuffer));
+    } catch (error) {
+      record({
+        event: 'error',
+        phase: 'parse',
+        message: error?.message ?? String(error),
+      });
     }
   }
   shutdown('stdin_eof');

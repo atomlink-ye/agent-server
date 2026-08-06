@@ -29,6 +29,7 @@ Required:
 
 Options:
   --artifacts <dir>       Evidence directory (default: .local/provider-probes/<timestamp>)
+  --runtime-dir <dir>     Stable MCP runtime dir for shared provider sessions (default: artifacts)
   --repo <dir>            Agent working directory (default: current directory)
   --server-script <path>  MCP probe server path (default: this script's sibling)
   --sleep-seconds <n>     probe_sleep duration for p3 (default: 3)
@@ -54,6 +55,7 @@ function parseArgs(argv) {
     i += 1;
     const names = {
       artifacts: 'artifacts',
+      'runtime-dir': 'runtimeDir',
       repo: 'repo',
       'server-script': 'serverScript',
       'sleep-seconds': 'sleepSeconds',
@@ -262,10 +264,14 @@ async function main(options) {
   const repo = resolve(options.repo || process.cwd());
   const serverScript = resolve(options.serverScript || defaultServerScript);
   const artifacts = resolve(options.artifacts || join(repo, '.local', 'provider-probes', `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${process.pid}`));
+  const runtimeDir = resolve(options.runtimeDir || artifacts);
   await mkdir(artifacts, { recursive: true });
+  await mkdir(runtimeDir, { recursive: true });
   const state = { artifacts, transcript: '' };
-  const probeLog = join(artifacts, 'mcp-probe.jsonl');
-  const controlPath = join(artifacts, 'mcp-probe-control.json');
+  await writeFile(join(artifacts, 'runtime-dir.txt'), `${runtimeDir}\n`);
+  appendTranscript(state, `# MCP runtime directory: ${runtimeDir}`);
+  const probeLog = join(runtimeDir, 'mcp-probe.jsonl');
+  const controlPath = join(runtimeDir, 'mcp-probe-control.json');
   const paseo = options.paseo || process.env.PASEO_BIN || 'paseo';
   const config = await registerProvider({ provider: options.provider, repo, serverScript, logPath: probeLog, controlPath, state, toolTimeoutMs: options.toolTimeoutMs });
   const env = { ...process.env };

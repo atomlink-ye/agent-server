@@ -1288,6 +1288,41 @@ export class ExecuteRun {
       .join(', ');
     const workItems = leadState?.workItems ?? [];
     const attempts = leadState?.attempts ?? [];
+    const latestAttemptByWorkItem = new Map<string, TeamWorkItemAttempt>();
+    for (const attempt of attempts) {
+      const previous = latestAttemptByWorkItem.get(attempt.workItemId);
+      if (!previous || attempt.attemptNo > previous.attemptNo)
+        latestAttemptByWorkItem.set(attempt.workItemId, attempt);
+    }
+    const failureCodeByAttempt = new Map<string, string>();
+    if (this.tasks.findByIdForOwner) {
+      await Promise.all(
+        attempts.map(async (attempt) => {
+          if (
+            attempt.status !== 'failed' ||
+            latestAttemptByWorkItem.get(attempt.workItemId)?.id !==
+              attempt.id ||
+            !attempt.executionTaskId
+          )
+            return;
+          const record = await this.tasks.findByIdForOwner(
+            attempt.executionTaskId,
+            {
+              tenantId: task.tenantId,
+              workspaceId: task.workspaceId,
+              principalType: task.principalType,
+              principalId: task.principalId,
+            },
+          );
+          const code = record?.latestRun?.error?.code;
+          if (
+            code === 'runtime_timed_out' ||
+            code === 'runtime_execution_failed'
+          )
+            failureCodeByAttempt.set(attempt.id, code);
+        }),
+      );
+    }
     const memberNameById = new Map(
       members.map((member) => [member.id, member.name]),
     );
@@ -1313,6 +1348,9 @@ export class ExecuteRun {
             attempt_no: attempt.attemptNo,
             status: attempt.status,
             result_summary: safeAgenticLeadSnapshotText(attempt.resultSummary),
+            ...(failureCodeByAttempt.has(attempt.id)
+              ? { failure_code: failureCodeByAttempt.get(attempt.id) }
+              : {}),
             feedback: safeAgenticLeadSnapshotText(attempt.feedback),
           })),
       })),
@@ -1336,6 +1374,11 @@ export class ExecuteRun {
             (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
           )
           .filter((ref) => ref !== 'work-0'),
+        cancel: leadState?.policy.eligibleCancelWorkItemIds
+          .map(
+            (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
+          )
+          .filter((ref) => ref !== 'work-0'),
         rework: leadState?.policy.eligibleReworkWorkItemIds
           .map(
             (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
@@ -1345,7 +1388,7 @@ export class ExecuteRun {
     });
     return `${prompt}
 
-Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
+Team control protocol (authoritative for this turn): Lead control turns must not spawn, delegate to, or use provider subagents, shell commands, or filesystem tools. allowed_commands lists the durable control actions required by the current state; execute every one using eligible_targets. If eligible_targets.accept is non-empty and team_work_accept is allowed, call team_work_accept({work_ref}) for each qualifying completed Work ref that meets the rubric. If eligible_targets.cancel is non-empty and team_work_cancel is allowed, call team_work_cancel({work_ref}) for each failed Work ref with a typed runtime failure. If eligible_targets.rework is non-empty and team_work_request_changes is allowed, call team_work_request_changes for each qualifying ref that requires correction. If the board is empty and team_work_create is allowed, create the necessary useful Work. If team_finish is allowed, call team_finish. available_coordination_commands lists auxiliary actions actually exposed in this turn; after completing required control, use them only when the task requires them. team_message_send never substitutes for or counts as durable control progress. A plain-text response or no-op is not control progress. Supply only business inputs: use the published logical assignee name and work_ref values such as work-1; the server derives all Team, Task, Run, revision, and command identity. The fixed member roster is: ${roster || 'none'}. Do not wait for members in this turn and do not call team_complete.
 
 Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
   }

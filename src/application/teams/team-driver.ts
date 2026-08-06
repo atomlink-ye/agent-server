@@ -214,7 +214,10 @@ export class TeamDriver {
           workItems,
           currentAttempts,
         );
-        if (policy.allowedCommands.length > 0) {
+        if (
+          policy.allowedCommands.length > 0 &&
+          !policy.allowedCommands.includes('team_work_cancel')
+        ) {
           try {
             await this.executions.failTeamRunAtomically({
               teamRunId: fresh.id,
@@ -249,7 +252,8 @@ export class TeamDriver {
           fresh.id,
           owner,
         );
-        if (after.some((a) => a.status !== 'completed')) return;
+        if (after.some((a) => !['completed', 'failed'].includes(a.status)))
+          return;
         const finalText = input.run.result?.text?.trim();
         if (!finalText) return;
         await this.executions.completeTeamRunAtomically({
@@ -324,10 +328,32 @@ export class TeamDriver {
         Boolean(attempt.resultSummary?.trim()) &&
         workById.get(attempt.workItemId)?.status !== 'accepted',
     );
+    const latestFailedUnreviewed = await Promise.all(
+      [...latestByWorkItem.values()].map(async (attempt) => {
+        const work = workById.get(attempt.workItemId);
+        if (
+          attempt.status !== 'failed' ||
+          !work ||
+          ['accepted', 'cancelled'].includes(work.status) ||
+          !attempt.executionTaskId
+        )
+          return false;
+        const record = await this.tasks.findByIdForOwner(
+          attempt.executionTaskId,
+          owner,
+        );
+        const code = record?.latestRun?.error?.code;
+        return (
+          code === 'runtime_timed_out' || code === 'runtime_execution_failed'
+        );
+      }),
+    ).then((values) => values.some(Boolean));
     const emptyBoard = workItems.length === 0;
-    const allAccepted =
+    const allResolved =
       workItems.length > 0 &&
-      workItems.every((work) => work.status === 'accepted');
+      workItems.every((work) =>
+        ['accepted', 'cancelled'].includes(work.status),
+      );
     const queuedAwaitingReconcile = attempts.some(
       (attempt) =>
         attempt.status === 'queued' &&
@@ -341,10 +367,13 @@ export class TeamDriver {
     );
     if (
       queuedAwaitingReconcile ||
-      (!completedUnreviewed && !emptyBoard && !allAccepted)
+      (!completedUnreviewed &&
+        !latestFailedUnreviewed &&
+        !emptyBoard &&
+        !allResolved)
     )
       return false;
-    if (allAccepted) {
+    if (allResolved) {
       const directTasks = taskRecords.filter(
         (record) =>
           record.task.teamTaskKind === 'direct_message' &&

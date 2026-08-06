@@ -161,6 +161,21 @@ export class TeamCommandService {
     return { work_ref: input.workRef, status: result.status };
   }
 
+  public async cancel(context: TeamToolContext, input: { workRef: string }) {
+    this.require(context, AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, 'lead');
+    const workItemId = await this.resolveWorkRef(context, input.workRef);
+    const result = await this.repo.cancelWork({
+      teamRunId: context.teamRun.id,
+      workItemId,
+      sourceRunId: context.run.id,
+      leadTaskId: context.task.id,
+      commandHash: hash('team_work_cancel', input),
+      expectedRevision: context.teamRun.revision,
+      owner: context.owner,
+    });
+    return { work_ref: input.workRef, status: result.status };
+  }
+
   public async requestChanges(
     context: TeamToolContext,
     input: { workRef: string; assignee: string; feedback: string },

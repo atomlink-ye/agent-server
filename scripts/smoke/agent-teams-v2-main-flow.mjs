@@ -30,6 +30,8 @@ const timeoutReserveSeconds = timeoutSeconds - runtimeTimeoutSeconds;
 const requestedScriptedRuntime =
   process.env.AGENT_TEAMS_V2_SMOKE_RUNTIME === 'scripted';
 const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
+const failedAttemptMode =
+  process.env.AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE ?? '';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
@@ -41,6 +43,8 @@ const supportedPaidSmokeModels = new Set([
 ]);
 if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
   throw new Error('invalid_expired_lease_recovery');
+if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
+  throw new Error('invalid_failed_attempt_mode');
 const requestedModel =
   process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
 const startedAt = Date.now();
@@ -416,6 +420,15 @@ class ScriptedRuntime {
   #leadProviderBindings = new Set();
   #memberTurns = 0;
   #submittedTimeoutInjected = false;
+  #failedAttemptInjected = false;
+  #leadFailureCodeObserved = false;
+  #cancelReplayEqual = false;
+  get cancelReplayEqual() {
+    return this.#cancelReplayEqual;
+  }
+  get leadFailureCodeObserved() {
+    return this.#leadFailureCodeObserved;
+  }
   #pendingLeadIdle = [];
   async assertLeadIdle() {
     await Promise.all(this.#pendingLeadIdle.splice(0));
@@ -571,6 +584,7 @@ class ScriptedRuntime {
         'team_work_list',
         'team_work_create',
         'team_work_accept',
+        'team_work_cancel',
         'team_work_request_changes',
         'team_finish',
         'team_message_send',
@@ -641,6 +655,51 @@ class ScriptedRuntime {
           turn: 1,
           tools: ['create_A', 'create_B_independent'],
           zero_work_finish_absent: true,
+        });
+      } else if (this.#leadTurns === 2 && failedAttemptMode === 'fixed') {
+        assert(
+          input.prompt.includes('"failure_code":"runtime_execution_failed"'),
+          'lead_failure_code_missing',
+        );
+        this.#leadFailureCodeObserved = true;
+        const cancelled = value(
+          await session.client.callTool({
+            name: 'team_work_cancel',
+            arguments: { work_ref: 'work-1' },
+          }),
+        );
+        const replay = value(
+          await session.client.callTool({
+            name: 'team_work_cancel',
+            arguments: { work_ref: 'work-1' },
+          }),
+        );
+        assert(
+          JSON.stringify(cancelled) === JSON.stringify(replay),
+          'cancel_replay_not_equal',
+        );
+        this.#cancelReplayEqual = true;
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 2,
+          tool: 'cancel_failed_work',
+        });
+      } else if (this.#leadTurns === 3 && failedAttemptMode === 'fixed') {
+        assert(
+          input.prompt.includes('"allowed_commands":["team_work_accept"]') ||
+            input.prompt.includes('"team_work_accept"'),
+          'lead_accept_after_cancel_missing',
+        );
+        value(
+          await session.client.callTool({
+            name: 'team_work_accept',
+            arguments: { work_ref: 'work-2' },
+          }),
+        );
+        runtimeCalls.push({
+          role: 'lead',
+          turn: 3,
+          tool: 'accept_remaining_work',
         });
       } else if (this.#leadTurns === 2) {
         assert(
@@ -723,6 +782,28 @@ class ScriptedRuntime {
           finish_absent: true,
         });
       } else {
+        if (failedAttemptMode === 'fixed') {
+          value(
+            await session.client.callTool({
+              name: 'team_finish',
+              arguments: {},
+            }),
+          );
+          runtimeCalls.push({
+            role: 'lead',
+            turn: this.#leadTurns,
+            tool: 'finish_after_abandonment',
+          });
+          this.scheduleLeadIdle(session.client, this.#leadTurns);
+          return {
+            provider: 'deterministic',
+            model: 'scripted',
+            providerAgentId,
+            paseoWorkspaceId: session.workspaceId,
+            text: 'bounded turn completed',
+            usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
+          };
+        }
         await waitFor(
           async () =>
             (
@@ -797,6 +878,15 @@ class ScriptedRuntime {
       const memberState = value(
         await session.client.callTool({ name: 'team_state', arguments: {} }),
       );
+      if (
+        failedAttemptMode === 'baseline' ||
+        (failedAttemptMode === 'fixed' &&
+          !this.#failedAttemptInjected &&
+          memberState.member?.name === 'member')
+      ) {
+        this.#failedAttemptInjected = true;
+        throw new Error('forced member runtime failure before submit');
+      }
       const memberTurn = memberState.member?.name === 'observer' ? 2 : 1;
       await new Promise((resolve) =>
         setTimeout(
@@ -953,6 +1043,7 @@ function agentYaml(name) {
         'team-work-list',
         'team-work-create',
         'team-work-accept-v2',
+        'team-work-cancel',
         'team-finish',
         'team-message-send',
         'team-work-request-changes',
@@ -1640,7 +1731,26 @@ try {
     createdByMemberId: lead.id,
     ...owner,
   });
-  await fixtureExecutions.createWorkItem(memberRunFenceWork);
+  await db.query(
+    `INSERT INTO team_work_items
+       (id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
+        tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+    [
+      memberRunFenceWork.id,
+      memberRunFenceWork.teamRunId,
+      memberRunFenceWork.subject,
+      memberRunFenceWork.description,
+      memberRunFenceWork.status,
+      memberRunFenceWork.ownerMemberId,
+      memberRunFenceWork.createdByMemberId,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      memberRunFenceWork.createdAt,
+    ],
+  );
   const leadTaskId = (
     await db.query(
       `SELECT id FROM tasks
@@ -1965,6 +2075,85 @@ try {
     'independent_attempt_not_materialized',
   );
   marker('INDEPENDENT_ATTEMPTS_MATERIALIZED');
+  if (failedAttemptMode === 'baseline') {
+    service.singleRunDebug.startDispatcher();
+    const stranded = await waitFor(
+      async () => {
+        const team = (
+          await db.query(
+            'SELECT status,phase,revision,stop_reason FROM team_runs WHERE id=$1',
+            [teamRunId],
+          )
+        ).rows[0];
+        const failedAttempt = (
+          await db.query(
+            `SELECT a.status,a.attempt_no,a.work_item_id,r.status AS run_status,
+                    r.error->>'code' AS failure_code,t.status AS task_status
+               FROM team_work_item_attempts a
+               JOIN tasks t ON t.id=a.execution_task_id
+               JOIN runs r ON r.task_id=t.id
+              WHERE a.team_run_id=$1 AND a.assignee_member_id=$2
+              ORDER BY a.attempt_no DESC LIMIT 1`,
+            [teamRunId, member.id],
+          )
+        ).rows[0];
+        const activeChildren = (
+          await db.query(
+            `SELECT count(*)::int AS count
+               FROM tasks t
+               LEFT JOIN runs r ON r.task_id=t.id
+              WHERE t.root_task_id=$1 AND t.team_task_kind IN ('lead_turn','work_attempt')
+                AND (t.status NOT IN ('completed','failed','cancelled')
+                     OR (r.id IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')))`,
+            [rootTaskId],
+          )
+        ).rows[0]?.count;
+        const queuedOrRunningChildren = (
+          await db.query(
+            `SELECT count(*)::int AS count
+               FROM runs r JOIN tasks t ON t.id=r.task_id
+              WHERE t.root_task_id=$1 AND t.team_task_kind IN ('lead_turn','work_attempt')
+                AND r.status IN ('queued','running')`,
+            [rootTaskId],
+          )
+        ).rows[0]?.count;
+        return { team, failedAttempt, activeChildren, queuedOrRunningChildren };
+      },
+      (state) =>
+        state.team?.status === 'active' &&
+        state.failedAttempt?.status === 'failed' &&
+        state.failedAttempt?.run_status === 'failed' &&
+        state.failedAttempt?.failure_code === 'runtime_execution_failed' &&
+        ['failed', 'cancelled', 'completed'].includes(
+          state.failedAttempt?.task_status,
+        ) &&
+        state.activeChildren === 0 &&
+        state.queuedOrRunningChildren === 0,
+      'failed_attempt_stranded_timeout',
+    );
+    await service.singleRunDebug.stopDispatcher();
+    const { PostgresTeamExecutionRepository: BaselineTeamRepository } =
+      await import('../../src/infrastructure/postgres/postgres-collaborative-team-repository.ts');
+    const recovered = await new BaselineTeamRepository(
+      queryOnly(db),
+    ).recoverExpiredTeamRuns(new Date().toISOString());
+    assert(
+      recovered.length === 0,
+      'failed_attempt_baseline_recovery_candidate',
+    );
+    marker('FAILED_ATTEMPT_STRANDED_BASELINE_PROVEN', {
+      team_status: stranded.team.status,
+      team_phase: stranded.team.phase,
+      latest_attempt_status: stranded.failedAttempt.status,
+      latest_attempt_code: stranded.failedAttempt.failure_code,
+      member_child_task_status: stranded.failedAttempt.task_status,
+      member_child_run_status: stranded.failedAttempt.run_status,
+      nonterminal_team_child_count: stranded.activeChildren,
+      queued_or_running_team_child_count: stranded.queuedOrRunningChildren,
+      recover_expired_candidate_count: recovered.length,
+    });
+    throw new RecoveryComplete();
+  }
   const workProof = (
     await db.query(
       'SELECT id FROM team_work_items WHERE team_run_id=$1 ORDER BY created_at,id',
@@ -2057,6 +2246,70 @@ try {
   await service.singleRunDebug.stopDispatcher();
   await pollParallelism();
   assert(terminal.phase === 'done', 'team_phase_not_done');
+  if (failedAttemptMode === 'fixed') {
+    const terminalFacts = (
+      await db.query(
+        `SELECT team.status AS team_status,team.stop_reason,
+                root_t.status AS root_task_status,root_r.status AS root_run_status,
+                count(*) FILTER (WHERE w.status='cancelled')::int AS cancelled_work,
+                count(*) FILTER (WHERE w.status NOT IN ('accepted','cancelled'))::int AS nonterminal_work
+           FROM team_runs team
+           JOIN tasks root_t ON root_t.id=team.root_task_id
+           JOIN runs root_r ON root_r.task_id=root_t.id
+           JOIN team_work_items w ON w.team_run_id=team.id
+          WHERE team.id=$1
+          GROUP BY team.status,team.stop_reason,root_t.status,root_r.status`,
+        [teamRunId],
+      )
+    ).rows[0];
+    const cancelReceiptCount = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM team_command_receipts
+           WHERE source_run_id IN (SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.root_task_id=$1)
+             AND command_name='team_work_cancel'`,
+        [rootTaskId],
+      )
+    ).rows[0]?.count;
+    const nonterminalChildren = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM tasks t
+           LEFT JOIN runs r ON r.task_id=t.id
+          WHERE t.root_task_id=$1 AND t.team_task_kind IN ('lead_turn','work_attempt')
+            AND (t.status NOT IN ('completed','failed','cancelled')
+                 OR (r.id IS NOT NULL AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')))`,
+        [rootTaskId],
+      )
+    ).rows[0]?.count;
+    assert(
+      terminalFacts?.team_status === 'succeeded' &&
+        terminalFacts.root_task_status === 'completed' &&
+        terminalFacts.root_run_status === 'succeeded' &&
+        terminalFacts.stop_reason === 'work_abandoned' &&
+        terminalFacts.cancelled_work === 1 &&
+        terminalFacts.nonterminal_work === 0 &&
+        nonterminalChildren === 0 &&
+        scriptedRuntimeInstance?.leadFailureCodeObserved === true &&
+        scriptedRuntimeInstance?.cancelReplayEqual === true &&
+        cancelReceiptCount === 1,
+      'failed_attempt_terminal_path_invalid',
+    );
+    marker('FAILED_ATTEMPT_TERMINAL_PATH_PROVEN', {
+      cancelled_work_count: terminalFacts.cancelled_work,
+      team_status: terminalFacts.team_status,
+      root_task_status: terminalFacts.root_task_status,
+      root_run_status: terminalFacts.root_run_status,
+      stop_reason: terminalFacts.stop_reason,
+      nonterminal_work_count: terminalFacts.nonterminal_work,
+      nonterminal_team_child_count: nonterminalChildren,
+      lead_failure_code_observed:
+        scriptedRuntimeInstance?.leadFailureCodeObserved
+          ? 'runtime_execution_failed'
+          : null,
+      cancel_replay_equal: scriptedRuntimeInstance?.cancelReplayEqual ?? false,
+      cancel_receipt_count: cancelReceiptCount,
+    });
+    throw new RecoveryComplete();
+  }
   const attempts = await db.query(
     'SELECT status,execution_task_id FROM team_work_item_attempts WHERE team_run_id=$1 ORDER BY created_at',
     [teamRunId],
@@ -2546,6 +2799,7 @@ try {
     'agent-server/team-message-send',
     'agent-server/team-work-create',
     'agent-server/team-work-accept-v2',
+    'agent-server/team-work-cancel',
     'agent-server/team-work-request-changes',
     'agent-server/team-finish',
   ];
@@ -2567,7 +2821,7 @@ try {
       : paidLeadRuntimeEvidence.lead_provider_create_executions,
     lead_prompt_sends_or_continues: 4,
     lead_creating_task_matches_first: true,
-    lead_catalog_exact_seven: true,
+    lead_catalog_exact_eight: true,
   });
   const deliveredDirect = await db.query(
     `SELECT m.status,m.consumed_by_task_id,t.id AS task_id,r.id AS run_id,r.status AS run_status

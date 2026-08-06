@@ -156,6 +156,15 @@ export interface TeamExecutionRepository {
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<TeamWorkItem>;
+  cancelWork(input: {
+    readonly teamRunId: string;
+    readonly workItemId: string;
+    readonly sourceRunId: string;
+    readonly leadTaskId?: string;
+    readonly commandHash: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<TeamWorkItem>;
   requestRework(input: {
     readonly teamRunId: string;
     readonly workItemId: string;

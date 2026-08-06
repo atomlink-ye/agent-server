@@ -3,6 +3,7 @@ export const AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS = Object.freeze({
   workList: 'agent-server/team-work-list',
   workCreate: 'agent-server/team-work-create',
   requestChanges: 'agent-server/team-work-request-changes',
+  cancel: 'agent-server/team-work-cancel',
   accept: 'agent-server/team-work-accept-v2',
   finish: 'agent-server/team-finish',
   checkpoint: 'agent-server/team-work-checkpoint',
@@ -24,6 +25,7 @@ export function canonicalTeamToolRefsForRole(
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
+          AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
         ]

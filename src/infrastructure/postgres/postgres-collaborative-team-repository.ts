@@ -11,7 +11,10 @@ import {
   type TeamRun,
 } from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
-import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
+import {
+  cancelWorkItem,
+  type TeamWorkItem,
+} from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import { AGENTIC_TEAM_LIMITS } from '../../application/teams/team-policy-evaluator.js';
 
@@ -191,19 +194,19 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       if (!lead.rows?.[0]) throw new TeamExecutionError('invalid_transition');
       const unsettled = await client.query(
-        `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND (status <> 'completed' OR result_summary IS NULL) LIMIT 1`,
+        `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND (status NOT IN ('completed','failed') OR (status='completed' AND result_summary IS NULL)) LIMIT 1`,
         [input.teamRunId],
       );
       if (unsettled.rows?.[0])
         throw new TeamExecutionError('invalid_transition');
       const unaccepted = await client.query(
-        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' LIMIT 1`,
+        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('accepted','cancelled') LIMIT 1`,
         [input.teamRunId],
       );
       if (unaccepted.rows?.[0])
         throw new TeamExecutionError('invalid_transition');
       const updated = await client.query<TeamRunRow>(
-        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, updated_at=$3 WHERE id=$1 RETURNING *`,
+        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, stop_reason=CASE WHEN EXISTS (SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled') THEN 'work_abandoned' ELSE NULL END, updated_at=$3 WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
       );
       const run = await client.query(
@@ -1173,6 +1176,122 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         client.release();
     }
   }
+  public async cancelWork(input: {
+    teamRunId: string;
+    workItemId: string;
+    sourceRunId: string;
+    leadTaskId?: string;
+    commandHash: string;
+    expectedRevision: number;
+    owner: OwnerScope;
+  }): Promise<TeamWorkItem> {
+    const client = this.database.connect
+      ? await this.database.connect()
+      : this.database;
+    try {
+      await client.query('BEGIN');
+      const receipt = await client.query<{
+        result_json: { work_item_id?: string };
+      }>(
+        'SELECT result_json FROM team_command_receipts WHERE source_run_id=$1 AND command_hash=$2',
+        [input.sourceRunId, input.commandHash],
+      );
+      if (receipt.rows?.[0]?.result_json?.work_item_id) {
+        const replay = await client.query<WorkRow>(
+          `SELECT * FROM team_work_items WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)}`,
+          [
+            receipt.rows[0].result_json.work_item_id,
+            input.teamRunId,
+            ...ownerValues(input.owner),
+          ],
+        );
+        if (!replay.rows?.[0]) throw new TeamExecutionError('not_found');
+        await client.query('COMMIT');
+        return mapWork(replay.rows[0]);
+      }
+      const team = await client.query<TeamRunRow>(
+        `SELECT * FROM team_runs WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND ${ownerSql('', 3)} FOR UPDATE`,
+        [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+      );
+      if (!team.rows?.[0]) throw new TeamExecutionError('stale_state');
+      if (!input.leadTaskId) throw new TeamExecutionError('stale_state');
+      await assertV2Source(
+        client,
+        input.sourceRunId,
+        input.teamRunId,
+        input.leadTaskId,
+        team.rows[0].root_task_id,
+        input.owner,
+      );
+      const item = await client.query<WorkRow>(
+        `SELECT * FROM team_work_items WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
+        [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
+      );
+      if (!item.rows?.[0]) throw new TeamExecutionError('not_found');
+      const now = new Date().toISOString();
+      let cancelled: TeamWorkItem;
+      try {
+        cancelled = cancelWorkItem(mapWork(item.rows[0]), () => new Date(now));
+      } catch {
+        throw new TeamExecutionError('invalid_transition');
+      }
+      const latest = await client.query<
+        AttemptRow & { failure_code: string | null }
+      >(
+        `SELECT a.*,r.error->>'code' AS failure_code
+           FROM team_work_item_attempts a
+           JOIN tasks t ON t.id=a.execution_task_id
+           JOIN runs r ON r.task_id=t.id
+          WHERE a.work_item_id=$1 AND a.team_run_id=$2
+            AND ${ownerSql('a', 3)} ORDER BY a.attempt_no DESC LIMIT 1 FOR UPDATE`,
+        [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
+      );
+      const attempt = latest.rows?.[0];
+      if (
+        !attempt ||
+        attempt.status !== 'failed' ||
+        !['runtime_timed_out', 'runtime_execution_failed'].includes(
+          attempt.failure_code ?? '',
+        )
+      )
+        throw new TeamExecutionError('invalid_transition');
+      const updated = await client.query<WorkRow>(
+        `UPDATE team_work_items SET status=$3,updated_at=$4
+          WHERE id=$1 AND team_run_id=$2 AND status='in_progress' AND ${ownerSql('', 5)} RETURNING *`,
+        [
+          input.workItemId,
+          input.teamRunId,
+          cancelled.status,
+          cancelled.updatedAt,
+          ...ownerValues(input.owner),
+        ],
+      );
+      if (!updated.rows?.[0])
+        throw new TeamExecutionError('invalid_transition');
+      await client.query(
+        `UPDATE team_runs SET revision=revision+1,control_state='lead_ready',updated_at=$2 WHERE id=$1`,
+        [input.teamRunId, now],
+      );
+      await client.query(
+        `INSERT INTO team_command_receipts(source_run_id,command_hash,command_name,result_json,created_at) VALUES ($1,$2,'team_work_cancel',$3::jsonb,$4)`,
+        [
+          input.sourceRunId,
+          input.commandHash,
+          JSON.stringify({ work_item_id: input.workItemId }),
+          now,
+        ],
+      );
+      await client.query('COMMIT');
+      return mapWork(updated.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      if ('release' in client && typeof client.release === 'function')
+        client.release();
+    }
+  }
+
   public async requestRework(input: {
     teamRunId: string;
     workItemId: string;
@@ -1403,7 +1522,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           [input.teamRunId, ...ownerValues(input.owner)],
         );
         const unfinished = await client.query(
-          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status <> 'accepted' AND ${ownerSql('', 2)} LIMIT 1`,
+          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('accepted','cancelled') AND ${ownerSql('', 2)} LIMIT 1`,
           [input.teamRunId, ...ownerValues(input.owner)],
         );
         const activeAttempt = await client.query(
@@ -1440,15 +1559,22 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         if (nonterminalMemberChild.rows?.[0])
           throw new TeamExecutionError('invalid_transition');
       }
+      const abandoned = await client.query(
+        `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled' AND ${ownerSql('', 2)} LIMIT 1`,
+        [input.teamRunId, ...ownerValues(input.owner)],
+      );
       const r = await client.query(
-        `UPDATE team_runs SET completion_requested_by_run_id=$2, revision=revision+1, updated_at=now()
+        `UPDATE team_runs SET completion_requested_by_run_id=$2,
+          stop_reason=CASE WHEN $4::boolean THEN 'work_abandoned' ELSE stop_reason END,
+          revision=revision+1, updated_at=now()
           WHERE id=$1 AND revision=$3
             AND status NOT IN ('succeeded','failed','cancelled')
-            AND ${ownerSql('', 4)} RETURNING id`,
+            AND ${ownerSql('', 5)} RETURNING id`,
         [
           input.teamRunId,
           input.sourceRunId,
           input.expectedRevision,
+          Boolean(abandoned.rows?.[0]),
           ...ownerValues(input.owner),
         ],
       );

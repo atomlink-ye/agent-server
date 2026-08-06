@@ -20,12 +20,14 @@ export const AGENTIC_TEAM_LIMITS = Object.freeze({
 export type AgenticLeadCommand =
   | 'team_work_create'
   | 'team_work_accept'
+  | 'team_work_cancel'
   | 'team_work_request_changes'
   | 'team_finish';
 export interface AgenticLeadCommandPolicy {
   readonly allowedCommands: readonly AgenticLeadCommand[];
   readonly eligibleAcceptWorkItemIds: readonly string[];
   readonly eligibleReworkWorkItemIds: readonly string[];
+  readonly eligibleCancelWorkItemIds: readonly string[];
   readonly limits: {
     readonly maxLeadTurns: number;
     readonly remainingLeadTurns: number;
@@ -57,6 +59,7 @@ export function deriveAgenticLeadCommandPolicy(
     allowedCommands: [] as const,
     eligibleAcceptWorkItemIds: [] as const,
     eligibleReworkWorkItemIds: [] as const,
+    eligibleCancelWorkItemIds: [] as const,
     limits,
   });
   if (
@@ -69,22 +72,31 @@ export function deriveAgenticLeadCommandPolicy(
     return none();
   if (!workItems.length)
     return { ...none(), allowedCommands: ['team_work_create'] };
-  const accepted = workItems.every((item) => item.status === 'accepted');
-  if (accepted) return { ...none(), allowedCommands: ['team_finish'] };
+  const acceptedOrCancelled = workItems.every((item) =>
+    ['accepted', 'cancelled'].includes(item.status),
+  );
+  if (acceptedOrCancelled)
+    return { ...none(), allowedCommands: ['team_finish'] };
   const accept: string[] = [],
-    rework: string[] = [];
+    rework: string[] = [],
+    cancel: string[] = [];
   for (const item of workItems) {
-    if (item.status === 'accepted') continue;
+    if (item.status === 'accepted' || item.status === 'cancelled') continue;
     const latest = attempts
       .filter((a) => a.workItemId === item.id)
       .sort((a, b) => b.attemptNo - a.attemptNo)[0];
-    if (!latest || latest.status !== 'completed' || !latest.resultSummary)
+    if (!latest) continue;
+    if (latest.status === 'failed' && item.status === 'in_progress') {
+      cancel.push(item.id);
       continue;
+    }
+    if (latest.status !== 'completed' || !latest.resultSummary) continue;
     accept.push(item.id);
     if (latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem)
       rework.push(item.id);
   }
   const allowed: AgenticLeadCommand[] = [];
+  if (cancel.length) allowed.push('team_work_cancel');
   if (accept.length) allowed.push('team_work_accept');
   if (rework.length) allowed.push('team_work_request_changes');
   if (allowed.length)
@@ -93,6 +105,7 @@ export function deriveAgenticLeadCommandPolicy(
       allowedCommands: allowed,
       eligibleAcceptWorkItemIds: accept,
       eligibleReworkWorkItemIds: rework,
+      eligibleCancelWorkItemIds: cancel,
     };
   if (limits.remainingWorkItems > 0)
     return { ...none(), allowedCommands: ['team_work_create'] };
@@ -109,6 +122,7 @@ export function canonicalTeamToolRefsForLeadPolicy(
   const commandRefs: Record<AgenticLeadCommand, string> = {
     team_work_create: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
     team_work_accept: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
+    team_work_cancel: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
     team_work_request_changes:
       AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
     team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,

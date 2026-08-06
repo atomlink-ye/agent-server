@@ -40,11 +40,16 @@ const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
   requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
-const supportedPaidSmokeModels = new Set([
-  'opencode-go/deepseek-v4-flash',
-  'opencode-go/mimo-v2.5',
-  'opencode-go/glm-5.2',
-]);
+const requestedProvider = process.env.PASEO_PROVIDER ?? 'opencode';
+const supportedSmokeModels = {
+  opencode: new Set([
+    'opencode-go/deepseek-v4-flash',
+    'opencode-go/mimo-v2.5',
+    'opencode-go/glm-5.2',
+  ]),
+  claude: new Set(['deepseek-v4-flash']),
+  codex: new Set(['deepseek-v4-flash']),
+};
 if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
   throw new Error('invalid_expired_lease_recovery');
 if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
@@ -52,7 +57,9 @@ if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
 if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
   throw new Error('rework_scenario_mode_conflict');
 const requestedModel =
-  process.env.PASEO_MODEL ?? 'opencode-go/deepseek-v4-flash';
+  process.env.PASEO_MODEL ??
+  (requestedProvider === 'opencode' ? 'opencode-go/deepseek-v4-flash' : '');
+const runtimeResolutionProviders = new Set(['opencode', 'claude', 'codex']);
 const startedAt = Date.now();
 const suffix = randomUUID().slice(0, 8);
 const databaseName = `agent_teams_v2_${startedAt}_${suffix}`;
@@ -92,6 +99,7 @@ let rootTaskId;
 let teamRunId;
 let databaseUrl;
 let failureDiagnostic;
+let runtimeResolutionEvidence;
 class RecoveryComplete extends Error {}
 let scriptedRuntimeInstance;
 
@@ -393,6 +401,9 @@ async function evidence(result, error) {
         ? 'provider runtime driver and model decisions'
         : 'none',
     },
+    ...(runtimeResolutionEvidence
+      ? { runtime_resolution_artifact: 'runtime-resolution.json' }
+      : {}),
     markers,
     runtime_calls: runtimeCalls,
     ...(failureDiagnostic ? { failure_diagnostic: failureDiagnostic } : {}),
@@ -407,6 +418,19 @@ async function evidence(result, error) {
   };
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
   await chmod(evidenceRoot, 0o700);
+  if (runtimeResolutionEvidence) {
+    const target = join(evidenceRoot, 'runtime-resolution.json');
+    const temp = `${target}.tmp-${process.pid}-${randomUUID()}`;
+    await writeFile(
+      temp,
+      `${JSON.stringify(runtimeResolutionEvidence, null, 2)}\n`,
+      {
+        mode: 0o600,
+      },
+    );
+    await rename(temp, target);
+    await chmod(target, 0o600);
+  }
   for (const [key, content] of Object.entries({
     manifest: JSON.stringify(manifest, null, 2),
     stdout: markers.map((entry) => JSON.stringify(entry)).join('\n'),
@@ -518,6 +542,90 @@ async function collectFailureDiagnostic(failure) {
     };
   }
   marker('FAILURE_DIAGNOSTIC_CAPTURED', failureDiagnostic);
+}
+async function proveRuntimeResolution() {
+  const rows = (
+    await db.query(
+      `SELECT r.runtime->>'provider' AS provider,
+              r.runtime->>'model' AS model,
+              r.status,
+              t.team_task_kind
+         FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1
+          AND t.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+          AND r.status IN ('succeeded','failed','timed_out')
+        ORDER BY t.team_task_kind,r.id`,
+      [rootTaskId],
+    )
+  ).rows;
+  const allowedStatuses = new Set([
+    'queued',
+    'running',
+    'succeeded',
+    'failed',
+    'timed_out',
+    'cancelled',
+  ]);
+  const allowedKinds = new Set(['lead_turn', 'work_attempt', 'direct_message']);
+  const normalizeRuntimeValue = (value) => {
+    if (value === null || value === undefined) return null;
+    return String(value)
+      .replace(/[^\x20-\x7e]/gu, '?')
+      .slice(0, 200);
+  };
+  const resolvedRows = rows.map((row) => {
+    const provider = normalizeRuntimeValue(row.provider);
+    const model = normalizeRuntimeValue(row.model);
+    return {
+      provider,
+      model,
+      status: allowedStatuses.has(row.status) ? row.status : 'invalid',
+      kind: allowedKinds.has(row.team_task_kind)
+        ? row.team_task_kind
+        : 'invalid',
+    };
+  });
+  const uniquePairs = [
+    ...new Map(
+      resolvedRows.map((row) => [
+        `${row.provider}\u0000${row.model}`,
+        { provider: row.provider, model: row.model },
+      ]),
+    ).values(),
+  ];
+  const countBy = (key) =>
+    Object.fromEntries(
+      [...new Set(resolvedRows.map((row) => row[key]))].map((value) => [
+        value,
+        resolvedRows.filter((row) => row[key] === value).length,
+      ]),
+    );
+  const equalityAssertion =
+    rows.length > 0 &&
+    resolvedRows.every(
+      (row) =>
+        row.provider === requestedProvider && row.model === requestedModel,
+    );
+  runtimeResolutionEvidence = {
+    schema: 'agent-teams-v2-runtime-resolution-v1',
+    requested_provider: requestedProvider,
+    requested_model: requestedModel,
+    resolved_unique_pairs: uniquePairs,
+    row_count: rows.length,
+    status_counts: countBy('status'),
+    kind_counts: countBy('kind'),
+    equality_assertion: equalityAssertion,
+  };
+  assert(rows.length > 0, 'runtime_resolution_missing');
+  assert(equalityAssertion, 'runtime_resolution_mismatch');
+  const resolved = uniquePairs[0];
+  marker('RUNTIME_RESOLUTION_PROVEN', {
+    runtime_backend: resolved.provider,
+    runtime_model: resolved.model,
+    runtime_resolution_count: rows.length,
+    runtime_resolution_equal: true,
+  });
 }
 function value(result) {
   const output = result?.structuredContent;
@@ -1448,7 +1556,7 @@ function agentYaml(name) {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: v2-${name}\nspec:\n  description: V2 retained smoke role\n  instructions: ${JSON.stringify(readableInstructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 function environmentYaml() {
-  return 'apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n';
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: v2-smoke\nspec:\n  adapter: paseo\n  provider: ${requestedProvider}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
 function teamYaml(lead, member, observer, environment) {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: v2-smoke-team\nspec:\n  environmentVersionId: ${environment}\n  lead:\n    name: ${fixtureNames.lead}\n    agentVersionId: ${lead}\n  roster:\n    - name: ${fixtureNames.member}\n      agentVersionId: ${member}\n    - name: ${fixtureNames.observer}\n      agentVersionId: ${observer}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
@@ -1473,6 +1581,15 @@ try {
     'invalid_runtime_timeout',
   );
   assert(timeoutReserveSeconds >= 20, 'invalid_timeout_reserve');
+  assert(
+    runtimeResolutionProviders.has(requestedProvider),
+    'unsupported_paseo_provider',
+  );
+  assert(requestedModel, 'missing_paid_smoke_model');
+  assert(
+    supportedSmokeModels[requestedProvider].has(requestedModel),
+    'unsupported_paid_smoke_model',
+  );
   process.env.PASEO_EXECUTION_TIMEOUT_MS = String(
     runtimeTimeoutSeconds * 1_000,
   );
@@ -1483,11 +1600,7 @@ try {
     timeout_reserve_seconds: timeoutReserveSeconds,
   });
   assert(adminUrl, 'missing_POSTGRES_ADMIN_URL');
-  if (!scriptedRuntime) {
-    assert(
-      supportedPaidSmokeModels.has(requestedModel),
-      'unsupported_paid_smoke_model',
-    );
+  if (!scriptedRuntime && requestedProvider === 'opencode') {
     assert(process.env.OPENCODE_GO_API_KEY, 'missing_OPENCODE_GO_API_KEY');
     const [providerId, modelId] = requestedModel.split('/');
     process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
@@ -1542,6 +1655,7 @@ try {
     DATABASE_URL: databaseUrl.toString(),
     POSTGRES_URL: databaseUrl.toString(),
     PASEO_WS_URL: paseo?.wsUrl ?? 'ws://127.0.0.1:1',
+    PASEO_PROVIDER: requestedProvider,
     PASEO_MODEL: requestedModel,
     PASEO_AGENT_CWD: join(runtimeRoot, 'project'),
     PASEO_RUNTIME_CELL_ROOT: join(runtimeRoot, 'cells'),
@@ -3324,6 +3438,7 @@ try {
     'nonterminal_member_child_remaining',
   );
   marker('COMPLETION_MEMBER_CHILD_FENCE_ENFORCED');
+  if (!scriptedRuntime) await proveRuntimeResolution();
   const finalMessageFacts = (
     await db.query(
       `SELECT count(*)::int AS total,

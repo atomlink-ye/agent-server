@@ -81,7 +81,7 @@ self-learning-team-phase3-smoke:
 	PASEO_MODEL="$${PASEO_MODEL:-opencode/deepseek-v4-flash-free}" ./scripts/dev/docker-run --postgres --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env PHASE3_SMOKE_POLL_MS --pass-env PHASE3_SMOKE_TIMEOUT_MS --pass-env PHASE3_SMOKE_RETAIN_FILE -- pnpm smoke:self-learning-team-phase3
 
 agent-teams-v2-smoke:
-	PASEO_MODEL="$${PASEO_MODEL:-opencode-go/deepseek-v4-flash}" ./scripts/dev/docker-run --postgres --bind-local --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME --pass-env AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_FORCE_STALL --pass-env AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE --pass-env AGENT_TEAMS_V2_SMOKE_REWORK -- pnpm smoke:agent-teams-v2
+	PASEO_PROVIDER="$${PASEO_PROVIDER:-opencode}" PASEO_MODEL="$${PASEO_MODEL:-opencode-go/deepseek-v4-flash}" ./scripts/dev/docker-run --postgres --bind-local --pass-env PASEO_PROVIDER --pass-env PASEO_MODEL --pass-env OPENCODE_GO_API_KEY --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME --pass-env AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_FORCE_STALL --pass-env AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE --pass-env AGENT_TEAMS_V2_SMOKE_REWORK -- pnpm smoke:agent-teams-v2
 
 clean:
 	docker compose down --remove-orphans

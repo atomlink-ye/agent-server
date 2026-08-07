@@ -143,8 +143,8 @@ const extractSummaryField = (summary, pattern, missingAssertion) => {
   assert(match?.[1], missingAssertion);
   return match[1];
 };
-const fixerV1SummarySha256 = extractSummaryField(fixerV1.result_summary, /\bsha[-_]?256\b\s*(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v1_summary_sha256_missing');
-const fixerV2SummarySha256 = extractSummaryField(fixerV2.result_summary, /\bsha[-_]?256\b\s*(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v2_summary_sha256_missing');
+const fixerV1SummarySha256 = extractSummaryField(fixerV1.result_summary, /\bsha[-_]?256\b\s*(?:identical\s+)?(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v1_summary_sha256_missing');
+const fixerV2SummarySha256 = extractSummaryField(fixerV2.result_summary, /\bsha[-_]?256\b\s*(?:identical\s+)?(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v2_summary_sha256_missing');
 assert(fixerV1SummarySha256 === artifactEvidence.v1.sha256, 'fixer_v1_summary_sha256_mismatch');
 assert(fixerV2SummarySha256 === artifactEvidence.final.sha256, 'fixer_v2_summary_sha256_mismatch');
 const fixerV1SummaryLineCount = extractSummaryField(fixerV1.result_summary, /\b(\d+)\s+lines?\b/i, 'fixer_v1_summary_line_count_missing');

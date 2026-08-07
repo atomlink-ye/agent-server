@@ -175,8 +175,9 @@ Paseo Web confirmation.
   review of failed attempts is limited to child Runs carrying
   `runtime_timed_out` or `runtime_execution_failed`. A succeeded child has
   neither code, so reconciliation cannot return control to Lead.
-- Exposure classification (ii): `team_work_submit` was available to the Claude
-  fixer turn. The immutable grant receipt for member Run
+- Authorization/catalog classification (ii): `team_work_submit` was authorized
+  for the Claude fixer turn and present in the catalog offered to its MCP
+  client. The immutable grant receipt for member Run
   `00ea7950-0c59-4cdd-91b6-d3c8ae75cbf2` lists
   `agent-server/team-work-submit` in `allowedTools`; the durable RuntimeSession
   launch catalog contains the identical four member refs. For a first
@@ -184,7 +185,9 @@ Paseo Web confirmation.
   array as both binder `toolRefs` and `catalogTools`; the binder issues those as
   grant `allowedTools`/`catalogTools`, Direct MCP registers the catalog, and
   `team-mcp-tools.ts` registers `team_work_submit` when that ref is present.
-  The Claude adapter forwards the MCP server unchanged.
+  The Claude adapter forwards the MCP server unchanged. This proves server-side
+  authorization and catalog construction; it does not by itself prove that
+  Claude Code included the MCP definitions in the downstream model request.
 - The Claude-side MCP wire log
   `mcp-logs-agent-server/2026-08-07T02-29-45-818Z.jsonl` line 12 records
   `Connection established with capabilities: {"hasTools":true,...}` for that
@@ -259,6 +262,48 @@ Paseo Web confirmation.
   Whether Claude Code translated the connected MCP catalog into the model
   request remains unproven. Do not relabel that remaining boundary as model
   noncompliance or as absence of the MCP server connection.
+- A live, container-only argv capture against Claude Code 2.1.223 closes the
+  launch-translation question. Paseo launched the fixer with the inline
+  cell-scoped server under `--mcp-config`, with
+  `--permission-mode bypassPermissions` and
+  `--allow-dangerously-skip-permissions`. It did not add `--allowedTools`.
+  The retained argv redacts the bearer capability and contains no environment
+  or unrelated process data.
+- The installed 2.1.223 help defines `--mcp-config` as loading MCP servers from
+  JSON files or strings and `--allowedTools` as a tool permission allowlist.
+  Anthropic's official
+  [CLI reference](https://code.claude.com/docs/en/cli-usage),
+  [MCP reference](https://code.claude.com/docs/en/mcp), and
+  [Agent SDK MCP reference](https://code.claude.com/docs/en/agent-sdk/mcp)
+  likewise say that
+  `--mcp-config` loads an ephemeral server, `allowedTools` grants MCP tool
+  permission, and `bypassPermissions` auto-approves MCP tools. The documented
+  `enableAllProjectMcpServers` and `enabledMcpjsonServers` settings approve
+  project `.mcp.json` entries; they do not approve an inline `--mcp-config`
+  server. Noninteractive mode skips workspace trust verification. The seeded
+  Claude settings contain only provider environment keys and no permission,
+  project-MCP approval, or denial rule.
+- Consequently, neither a missing permission mode nor a missing project-MCP
+  approval explains the text-only turns. Adding `--allowedTools` would improve
+  least-privilege expression, but current official semantics do not establish
+  its absence as the cause while `bypassPermissions` is active. The remaining
+  defect boundary is Paseo's Claude provider/Claude SDK model-request assembly:
+  agent-server authorized and supplied the catalog and the provider process
+  connected/listed tools, but the resulting request did not yield an MCP tool
+  attempt. Paseo's create protocol exposes `mcpServers` and `modeId` but no
+  explicit tool allowlist; its internal `extra.claude` extension point can
+  carry SDK options, while agent-server's adapter does not expose it. Any
+  dependency/protocol change is a core-dependency Human Gate and is not made in
+  this slice. The exact corrective change remains unproven without
+  request-manifest instrumentation or a controlled Claude MCP differential.
+  Code ownership is explicit: `src/adapters/paseo/paseo-client-port.ts` lines
+  151-162 and 279-312 expose/forward `mcpServers` and the provider mode but no
+  Claude SDK tool options. Paseo 0.1.110's `AgentSessionConfigSchema` accepts an
+  internal `extra.claude` record, and its Claude provider spreads that record
+  into SDK options before attaching normalized MCP servers. A least-privilege
+  allow rule could therefore be carried only by widening agent-server's Paseo
+  adapter input into that dependency extension point; that is not established
+  as the corrective fix and is not done here.
 - Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
   the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
   reachable under normal concurrency, but the reviewer and next Lead may
@@ -321,6 +366,9 @@ Paseo Web confirmation.
   `authenticated-claude-mcp-delivery/stdout.txt` correlates both authenticated
   fixer roots, cells, grant IDs/allowed tools, connection timestamps, and
   `hasTools=true` capability lines without retaining a grant token.
+  `claude-live-argv/stdout.txt` records Claude Code 2.1.223 and the exact
+  container argv with its bearer value replaced by `[redacted]`; its adjacent
+  machine manifest records the sandbox command and exit code.
 
 ## Completion checklist
 
@@ -340,12 +388,16 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Claude MCP catalog-to-model-request boundary. Both authenticated fixer processes
-received and connected to their own Runtime MCP server through fixer-scoped
-grants, but existing logs do not record the `tools/list` names or downstream
-model request tools. Both turns ended prose-only, so neither B nor C can advance
-to reviewer/Codex execution. No qualifying manifest or visual three-role
-workspace proof exists.
+Claude MCP catalog-to-model-request boundary in the Paseo/Claude provider
+layer. Live argv proves that the inline MCP server and bypass permission mode
+both reached Claude Code 2.1.223; official semantics rule out the project-MCP
+approval settings as the lever and do not establish missing `--allowedTools`
+as causal under bypass mode. Existing logs still do not record the downstream
+model request's tool manifest. Both turns ended prose-only, so neither B nor C
+can advance to reviewer/Codex execution. No qualifying manifest or visual
+three-role workspace proof exists. A dependency/protocol change or new
+request-manifest instrumentation is a core-dependency Human Gate, so this task
+stops rather than landing an unproven workaround.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -356,9 +408,10 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Report the exact MCP delivery evidence and the remaining catalog-to-model
-boundary. Do not weaken the required provider mapping, claim B/C from partial
-execution, drive-by fix the runtime defects, or start another prompt-only retry.
+Report the live argv, documented flag semantics, ownership boundary, and Human
+Gate. Do not weaken the required provider mapping, claim B/C from partial
+execution, add an unproven allow/config workaround, drive-by fix the runtime
+defects, or start another provider retry.
 
 ## Cleanup state
 

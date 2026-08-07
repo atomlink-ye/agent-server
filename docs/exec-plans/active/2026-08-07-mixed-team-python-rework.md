@@ -51,8 +51,12 @@ Paseo Web confirmation.
   approximately 100-line Python file in the shared Team workspace.
 - Require manager assignment, fixer submission, reviewer rejection, fixer
   correction, manager acceptance, and Team finish. Zero rework is failure.
-- Raise the existing bounded `maxAttemptsPerItem` only if the required second
-  fixer attempt is otherwise impossible.
+- Keep `maxAttemptsPerItem=2`: fixer attempts 1 and 2 are sufficient, while the
+  reviewer owns a separate one-attempt review Work item.
+- Permit the Lead to create remaining useful Work during a review turn while
+  `maxWorkItems` capacity remains. This makes the evaluator agree with the
+  existing Lead review instruction; it does not relax fixed-roster, ownership,
+  acceptance, rework, or work-count rules.
 - Emit greppable machine-written artifacts containing the TeamRun/root Task
   identity, manifest composition, provider/model execution rows, Work attempt
   and rejecting-review history, and produced Python path/content or digest.
@@ -90,7 +94,8 @@ Paseo Web confirmation.
       through the existing sandbox binding without raw sandbox Git.
 - [ ] Start or confirm the prepared Compose stack with
       `PASEO_DEV_WEB_UI=1` and `.local/compose.model.yaml`; preserve the
-      `mixed-team-` container prefix and require all three readiness checks.
+      `mixed-team-` container prefix, set dispatcher concurrency to one for
+      deterministic demo ordering, and require all three readiness checks.
 - [ ] Create a three-hour port `18080` preview and run the existing Host rewrite
       shim from `18080` to Paseo `16767` using the preview hostname.
 - [ ] Execute the adapted seed once under real models and wait for terminal
@@ -158,12 +163,28 @@ Paseo Web confirmation.
   not prove provider execution. Policy resolution rows alone are insufficient.
 - The required Python task and review semantics are operational evidence for
   this Prove slice, not a new public Team contract.
+- Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
+  the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
+  reachable under normal concurrency, but the reviewer and next Lead may
+  interleave; this run is not evidence that the platform guarantees that
+  sequence.
+- Before this slice, `deriveAgenticLeadCommandPolicy` omitted
+  `team_work_create` whenever any completed attempt exposed accept/rework,
+  despite remaining capacity and the existing Lead instruction to create any
+  remaining useful Work during review. After the minimum widening, create is
+  available alongside review commands only while `remainingWorkItems > 0`.
+  Existing work ownership, attempt, acceptance, roster, and cardinality bounds
+  remain unchanged. This is correct independently of the demo because results
+  can reveal bounded follow-up Work during a review turn.
 
 ## Risks and recovery
 
 - Real model behavior is nondeterministic. Keep prompts explicit and bounded;
   fix only blockers that invalidate the required path. Never reinterpret a
   missing predicted transition as success.
+- Single-dispatcher FIFO is a demonstration control, not a platform scheduling
+  contract. Evidence must state `platform_sequence_guarantee=false`; do not
+  generalize the observed ordering to the default multi-worker dispatcher.
 - A request to alter a migration, published schema, public API, credential,
   durable-state model, core dependency, or security boundary is a Human Gate:
   stop with facts and options before changing it.

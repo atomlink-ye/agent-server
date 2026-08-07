@@ -1,4 +1,8 @@
 services:
   agent-server:
+    env_file:
+      - path: .local/model.env
+        required: true
     environment:
+      PASEO_EXECUTION_TIMEOUT_MS: '300000'
       AGENT_SERVER_DISPATCHER_CONCURRENCY: '1'

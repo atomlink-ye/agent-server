@@ -35,7 +35,11 @@ services:
       SERVICE_NAME: agent-server
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
-      PASEO_CORS_ORIGINS: 'http://localhost:18081,http://127.0.0.1:18081'
+      # Both must include the browser-visible origin when the daemon is reached
+      # through a proxy: the UI loads over HTTP but then opens a WebSocket, and
+      # the daemon rejects it with "Origin not allowed" / "Host not allowed".
+      PASEO_CORS_ORIGINS: ${PASEO_CORS_ORIGINS:-http://localhost:18081,http://127.0.0.1:18081}
+      PASEO_HOSTNAMES: ${PASEO_HOSTNAMES:-}
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
       HOME: /workspace/.local/home

@@ -163,6 +163,18 @@ Paseo Web confirmation.
   not prove provider execution. Policy resolution rows alone are insufficient.
 - The required Python task and review semantics are operational evidence for
   this Prove slice, not a new public Team contract.
+- The first real-model attempt, root Task
+  `61c3b28c-7b13-4d3d-ae15-7e10b46187e6`, did not reach reviewer execution or
+  rework. The OpenCode Lead created fixer Work, then the Claude fixer Run
+  reported success without creating the Python artifact or issuing
+  `team_work_submit`. The attempt became failed while its Work remained
+  in-progress; no reviewer Task was created and the TeamRun stayed active in an
+  absorbing state. This is a failed attempt, not B/C evidence.
+- The absorbing state is a product finding: terminal succeeded provider Runs
+  without a canonical submit are converted to failed attempts, while Lead
+  review of failed attempts is limited to child Runs carrying
+  `runtime_timed_out` or `runtime_execution_failed`. A succeeded child has
+  neither code, so reconciliation cannot return control to Lead.
 - Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
   the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
   reachable under normal concurrency, but the reviewer and next Lead may
@@ -205,8 +217,10 @@ Paseo Web confirmation.
 
 ## Validation evidence
 
-- No acceptance evidence yet. The brief, merged implementation, and sandbox
-  readiness are prerequisites, not proof of B or C.
+- No acceptance evidence yet. The brief, implementation, sandbox readiness,
+  and failed first real attempt are not proof of B or C. The first attempt did
+  not produce a Python artifact, reviewer Task, rejection, rework, terminal
+  Team success, or a qualifying manifest.
 
 ## Completion checklist
 
@@ -226,14 +240,16 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-None. The Manager restored the ignored remote-only `.local/model.env` with mode
-600 and confirmed its values were never printed. The credential Human Gate is
-cleared without agent-side credential handling.
+Credential Human Gate. During read-only diagnosis of the failed first real
+attempt, an oracle process-inspection command exposed an MCP bearer token in
+its internal tool output. The value has not been copied into repository files,
+evidence, commentary, or this plan. Human rotation/direction is required before
+another provider execution.
 
 ## Next exact command
 
-Restart the prepared `mixed-team-` stack with the committed overlay and execute
-the real mixed-provider seed.
+Obtain human credential rotation/direction, then address the succeeded-without-
+submit absorbing state and retry the real mixed-provider seed.
 
 ## Cleanup state
 
@@ -243,3 +259,5 @@ was cleared and replaced with committed local HEAD through `sandbox-ctl`; the
 two exact `mixed-team-` containers were stopped first. That reset also removed
 the ignored remote-only `.local/model.env`; the Manager subsequently restored
 it with mode 600 and also restored the ignored Host rewrite shim.
+The first seed polling process was terminated locally after the absorbing state
+was established; the stack and preview shim remain running for diagnosis.

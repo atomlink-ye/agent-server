@@ -44,12 +44,12 @@ export type TeamWorkItemProjection = {
   subject: string;
   status:
     | 'pending'
-    | 'ready'
     | 'in_progress'
-    | 'submitted'
-    | 'accepted'
-    | 'changes_requested'
-    | 'blocked';
+    | 'completed'
+    | 'blocked'
+    | 'cancelled'
+    | 'open'
+    | 'accepted';
   assignee_name: string | null;
   dependency_refs: readonly string[];
   latest_attempt: {
@@ -135,7 +135,8 @@ export async function getProject(
   if (!raw.project) return null;
   if (raw.project.team_version_id !== c.teamVersionId)
     throw new BffError('not_found');
-  const sessions = raw.sessions ?? [];
+  requireProjectCollections(raw);
+  const sessions = raw.sessions;
   if (sessions.length !== 3) throw new BffError('bad_gateway');
   return {
     root_task_id: mustUuid(raw.project.root_task_id),
@@ -143,13 +144,13 @@ export async function getProject(
     name: 'Agentic Team',
     status: projectStatus(raw.project.status),
     phase: projectPhase(raw.project.phase, raw.project.status),
-    final_text: projectFinalSummary(raw.project.status, raw.project.final_text),
-    work_items: (raw.work_items ?? []).map(projectWorkItem),
+    final_text: nullableBounded(raw.project.final_text, 4096),
+    work_items: raw.work_items.map(projectWorkItem),
     gates: projectGate(raw.gates),
-    direct_messages: (raw.direct_messages ?? []).map(projectDirectMessage),
-    sessions: sessions.map((session, index) => ({
+    direct_messages: raw.direct_messages.map(projectDirectMessage),
+    sessions: sessions.map((session) => ({
       agent_session_id: mustUuid(session.team_member_run_id),
-      name: agentLabel(index),
+      name: requiredBounded(session.name, 512),
       role: session.role,
       status: sessionStatus(session.status, session.turns.length),
       latest_summary: latestSummary(session),
@@ -164,31 +165,31 @@ function projectPhase(
   if (value === 'member_work') return 'working';
   if (value === 'lead_finalize') return 'review';
   if (value === 'done') return status === 'failed' ? 'failed' : 'completed';
-  if (value !== undefined) throw new BffError('bad_gateway');
-  return status === 'succeeded'
-    ? 'completed'
-    : status === 'failed'
-      ? 'failed'
-      : 'working';
+  throw new BffError('bad_gateway');
 }
 function projectWorkItem(
   value: NonNullable<AgenticTeamProjectResponse['work_items']>[number],
-  index: number,
 ): TeamWorkItemProjection {
   return {
-    work_ref: `work-${index + 1}`,
-    subject: `Work item ${index + 1}`,
+    work_ref: requiredBounded(value.work_ref, 64),
+    subject: requiredBounded(value.subject, 4096),
     status: workItemStatus(value.status),
-    assignee_name: null,
-    dependency_refs: [],
+    assignee_name: nullableBounded(value.assignee_name, 512),
+    dependency_refs: dependencyRefs(value.dependency_refs),
     latest_attempt:
       value.latest_attempt === null
         ? null
         : {
             attempt_no: safeAttemptNumber(value.latest_attempt.attempt_no),
             status: attemptStatus(value.latest_attempt.status),
-            feedback_summary: attemptSummary(value.latest_attempt.status),
-            result_summary: attemptSummary(value.latest_attempt.status),
+            feedback_summary: nullableBounded(
+              value.latest_attempt.feedback_summary,
+              4096,
+            ),
+            result_summary: nullableBounded(
+              value.latest_attempt.result_summary,
+              4096,
+            ),
           },
   };
 }
@@ -208,9 +209,9 @@ function projectDirectMessage(
 ): TeamDirectMessageProjection {
   return {
     sequence: safeSequence(value.sequence),
-    sender_name: 'Team member',
-    recipient_name: 'Team member',
-    summary: 'Coordination update recorded.',
+    sender_name: requiredBounded(value.sender_name, 512),
+    recipient_name: requiredBounded(value.recipient_name, 512),
+    summary: requiredBounded(value.summary, 4096),
     status: directMessageStatus(value.status),
     created_at: safeTimestamp(value.created_at),
   };
@@ -218,12 +219,12 @@ function projectDirectMessage(
 function workItemStatus(value: unknown): TeamWorkItemProjection['status'] {
   if (
     value === 'pending' ||
-    value === 'ready' ||
     value === 'in_progress' ||
-    value === 'submitted' ||
-    value === 'accepted' ||
-    value === 'changes_requested' ||
-    value === 'blocked'
+    value === 'completed' ||
+    value === 'blocked' ||
+    value === 'cancelled' ||
+    value === 'open' ||
+    value === 'accepted'
   )
     return value;
   throw new BffError('bad_gateway');
@@ -256,7 +257,7 @@ function requiredBoolean(value: unknown): boolean {
   return value;
 }
 function safeTimestamp(value: unknown): string {
-  const timestamp = bounded(value, 64);
+  const timestamp = requiredBounded(value, 64);
   if (!Number.isFinite(Date.parse(timestamp)))
     throw new BffError('bad_gateway');
   return timestamp;
@@ -267,14 +268,15 @@ export async function getSession(
   memberId: string,
 ) {
   const raw = await rawProject(rootTaskId);
-  const session = (raw.sessions ?? []).find(
+  if (!Array.isArray(raw.sessions)) throw new BffError('bad_gateway');
+  const session = raw.sessions.find(
     (item) => item.team_member_run_id === memberId,
   );
   if (!session || !raw.project) throw new BffError('not_found');
   return {
     agent_session_id: mustUuid(session.team_member_run_id),
     team_run_id: mustUuid(raw.project.team_run_id),
-    name: agentLabel((raw.sessions ?? []).indexOf(session)),
+    name: requiredBounded(session.name, 512),
     role: session.role,
     read_only: true as const,
     turns: session.turns
@@ -282,8 +284,8 @@ export async function getSession(
         task_id: mustUuid(turn.task_id),
         run_id: mustUuid(turn.run_id),
         sequence: safeSequence(turn.sequence),
-        assignment_summary: assignmentSummary(turn.status),
-        result_summary: resultSummary(turn.status, turn.result_text),
+        assignment_summary: requiredBounded(turn.context, 4096),
+        result_summary: nullableBounded(turn.result_text, 4096),
         status: turn.status,
       }))
       .sort((a, b) => a.sequence - b.sequence),
@@ -313,8 +315,9 @@ export async function openProjectStream(
   },
 ) {
   const raw = await rawProject(rootTaskId);
+  if (!Array.isArray(raw.sessions)) throw new BffError('bad_gateway');
   if (
-    !(raw.sessions ?? []).some((session) =>
+    !raw.sessions.some((session) =>
       session.turns.some((turn) => turn.run_id === runId),
     )
   )
@@ -333,6 +336,20 @@ async function rawProject(
   if (project.project && project.project.team_version_id !== c.teamVersionId)
     throw new BffError('not_found');
   return project;
+}
+function requireProjectCollections(
+  raw: AgenticTeamProjectResponse,
+): asserts raw is AgenticTeamProjectResponse & {
+  work_items: NonNullable<AgenticTeamProjectResponse['work_items']>;
+  direct_messages: NonNullable<AgenticTeamProjectResponse['direct_messages']>;
+  sessions: NonNullable<AgenticTeamProjectResponse['sessions']>;
+} {
+  if (
+    !Array.isArray(raw.work_items) ||
+    !Array.isArray(raw.direct_messages) ||
+    !Array.isArray(raw.sessions)
+  )
+    throw new BffError('bad_gateway');
 }
 function projectStatus(
   value: 'active' | 'waiting' | 'succeeded' | 'failed',
@@ -359,51 +376,21 @@ function latestSummary(
   session: NonNullable<AgenticTeamProjectResponse['sessions']>[number],
 ) {
   const turn = [...session.turns].sort((a, b) => b.sequence - a.sequence)[0];
-  return turn ? resultSummary(turn.status, turn.result_text) : null;
+  return turn ? nullableBounded(turn.result_text, 4096) : null;
 }
-function agentLabel(index: number): string {
-  return index === 0 ? 'Lead agent' : `Team member ${index}`;
-}
-function projectFinalSummary(
-  status: 'active' | 'waiting' | 'succeeded' | 'failed',
-  finalText: unknown,
-): string | null {
-  if (finalText === null) return null;
-  if (typeof finalText !== 'string') throw new BffError('bad_gateway');
-  return status === 'failed'
-    ? 'The team project did not complete.'
-    : 'The team project completed.';
-}
-function assignmentSummary(status: string): string {
-  return status === 'running'
-    ? 'Assignment in progress.'
-    : status === 'failed'
-      ? 'Assignment closed without completion.'
-      : 'Assignment recorded.';
-}
-function resultSummary(status: string, resultText: unknown): string | null {
-  if (resultText === null) return null;
-  if (typeof resultText !== 'string') throw new BffError('bad_gateway');
-  return status === 'failed'
-    ? 'No saved completion summary.'
-    : 'Saved completion summary.';
-}
-function attemptSummary(status: string): string {
-  return status === 'running'
-    ? 'Attempt in progress.'
-    : status === 'completed'
-      ? 'Attempt completed.'
-      : status === 'failed'
-        ? 'Attempt did not complete.'
-        : 'Attempt queued.';
-}
-function bounded(value: unknown, max: number): string {
-  if (typeof value !== 'string' || value.length > max)
-    throw new BffError('bad_gateway');
-  return value;
+function requiredBounded(value: unknown, max: number): string {
+  const result = nullableBounded(value, max);
+  if (result === null) throw new BffError('bad_gateway');
+  return result;
 }
 function nullableBounded(value: unknown, max: number): string | null {
-  return value === null ? null : bounded(value, max);
+  if (value === null) return null;
+  if (typeof value !== 'string') throw new BffError('bad_gateway');
+  return value.slice(0, max);
+}
+function dependencyRefs(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new BffError('bad_gateway');
+  return value.map((dependencyRef) => requiredBounded(dependencyRef, 64));
 }
 function mustUuid(value: unknown): string {
   if (!uuid(value)) throw new BffError('bad_gateway');

@@ -28,12 +28,12 @@ export type TeamWorkItem = {
   readonly subject: string;
   readonly status:
     | 'pending'
-    | 'ready'
     | 'in_progress'
-    | 'submitted'
-    | 'accepted'
-    | 'changes_requested'
-    | 'blocked';
+    | 'completed'
+    | 'blocked'
+    | 'cancelled'
+    | 'open'
+    | 'accepted';
   readonly assignee_name: string | null;
   readonly dependency_refs: readonly string[];
   readonly latest_attempt: {

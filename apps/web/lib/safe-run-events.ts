@@ -43,7 +43,7 @@ export function safeRunEvent(value: unknown): SafeRunEvent | null {
     return { sequence: sequence as number, type: 'output' };
 
   const payload = record(event.payload);
-  const safePayload = safeOutputPayload(payload, sequence as number);
+  const safePayload = safeOutputPayload(payload);
   return safePayload
     ? { sequence: sequence as number, type, payload: safePayload }
     : { sequence: sequence as number, type };
@@ -94,48 +94,108 @@ function safeSseBlock(block: string): string | null {
 
 function safeOutputPayload(
   payload: Record<string, unknown> | null,
-  sequence: number,
 ): Readonly<Record<string, unknown>> | null {
   if (!payload || typeof payload.kind !== 'string') return null;
-  if (payload.kind === 'assistant_text')
-    return { kind: 'assistant_text', text: 'Response updated.' };
+  if (payload.kind === 'assistant_text') {
+    const text = requiredString(payload.text, 32_000);
+    return text ? { kind: 'assistant_text', text } : null;
+  }
   if (
     payload.kind === 'reasoning_progress' &&
     (payload.status === 'started' || payload.status === 'completed')
-  )
-    return { kind: 'reasoning_progress', status: payload.status };
+  ) {
+    const text = optionalString(payload.text, 32_000);
+    return {
+      kind: 'reasoning_progress',
+      status: payload.status,
+      ...(text ? { text } : {}),
+    };
+  }
   if (
     payload.kind === 'tool_status' &&
-    toolCategories.has(String(payload.category)) &&
-    toolStatuses.has(String(payload.status))
+    toolCategories.has(payload.category as string) &&
+    toolStatuses.has(payload.status as string)
   ) {
-    const category = String(payload.category);
-    const status = String(payload.status);
+    const activityId = requiredString(payload.activity_id, 256);
+    const label = requiredString(payload.label, 120);
+    const summary = requiredString(payload.summary, 2_000);
+    if (!activityId || !label || !summary) return null;
+    const category = payload.category as string;
+    const status = payload.status as string;
+    const parentActivityId = optionalString(payload.parent_activity_id, 256);
+    const toolName = optionalString(payload.tool_name);
+    const detailKind = isDetailKind(payload.detail_kind)
+      ? payload.detail_kind
+      : undefined;
+    const detailText = optionalString(payload.detail_text, 12_000);
+    const exitCode =
+      typeof payload.exit_code === 'number' &&
+      Number.isInteger(payload.exit_code)
+        ? payload.exit_code
+        : undefined;
     return {
       kind: 'tool_status',
-      activity_id: `activity-${sequence}`,
+      activity_id: activityId,
       category,
       status,
-      label: toolLabel(category),
-      summary: activitySummary(status),
+      label,
+      summary,
+      ...(toolName ? { tool_name: toolName } : {}),
+      ...(detailKind ? { detail_kind: detailKind } : {}),
+      ...(detailText ? { detail_text: detailText } : {}),
+      ...(exitCode !== undefined ? { exit_code: exitCode } : {}),
+      ...(parentActivityId ? { parent_activity_id: parentActivityId } : {}),
+    };
+  }
+  if (
+    payload.kind === 'child_timeline_item' &&
+    toolStatuses.has(payload.status as string) &&
+    ['assistant', 'reasoning', 'tool'].includes(payload.item_kind as string)
+  ) {
+    const activityId = requiredString(payload.activity_id, 256);
+    const parentActivityId = requiredString(payload.parent_activity_id, 256);
+    const label = requiredString(payload.label, 120);
+    const summary = requiredString(payload.summary, 2_000);
+    if (!activityId || !parentActivityId || !label || !summary) return null;
+    const detailKind = isDetailKind(payload.detail_kind)
+      ? payload.detail_kind
+      : undefined;
+    const detailText = optionalString(payload.detail_text, 12_000);
+    const exitCode =
+      typeof payload.exit_code === 'number' &&
+      Number.isInteger(payload.exit_code)
+        ? payload.exit_code
+        : undefined;
+    return {
+      kind: 'child_timeline_item',
+      activity_id: activityId,
+      parent_activity_id: parentActivityId,
+      item_kind: payload.item_kind as string,
+      status: payload.status as string,
+      label,
+      summary,
+      ...(detailKind ? { detail_kind: detailKind } : {}),
+      ...(detailText ? { detail_text: detailText } : {}),
+      ...(exitCode !== undefined ? { exit_code: exitCode } : {}),
     };
   }
   if (
     payload.kind === 'permission' &&
-    permissionCategories.has(String(payload.category)) &&
-    permissionStatuses.has(String(payload.status))
+    permissionCategories.has(payload.category as string) &&
+    permissionStatuses.has(payload.status as string)
   ) {
-    const status = String(payload.status);
+    const activityId = requiredString(payload.activity_id, 256);
+    const summary = requiredString(payload.summary, 2_000);
+    if (!activityId || !summary) return null;
     return {
       kind: 'permission',
-      activity_id: `permission-${sequence}`,
-      category: String(payload.category),
-      status,
+      activity_id: activityId,
+      category: payload.category as string,
+      status: payload.status as string,
       ...(payload.decision === 'allowed' || payload.decision === 'denied'
         ? { decision: payload.decision }
         : {}),
-      summary:
-        status === 'requested' ? 'Review requested.' : 'Review resolved.',
+      summary,
     };
   }
   if (payload.kind === 'usage') {
@@ -156,29 +216,32 @@ function safeOutputPayload(
   return null;
 }
 
-function toolLabel(category: string): string {
-  return (
-    {
-      shell: 'Shell activity',
-      read: 'Read activity',
-      edit: 'Edit activity',
-      write: 'Write activity',
-      search: 'Workspace search',
-      fetch: 'Fetch activity',
-      subagent: 'Sub-agent task',
-      other: 'Tool activity',
-    }[category] ?? 'Tool activity'
-  );
+const detailKinds = new Set([
+  'shell',
+  'read',
+  'write',
+  'edit',
+  'search',
+  'fetch',
+]);
+
+function isDetailKind(value: unknown): value is string {
+  return typeof value === 'string' && detailKinds.has(value);
 }
 
-function activitySummary(status: string): string {
-  return status === 'running'
-    ? 'In progress.'
-    : status === 'completed'
-      ? 'Completed.'
-      : status === 'failed'
-        ? 'Did not complete.'
-        : 'Cancelled.';
+function requiredString(value: unknown, maxLength: number): string | null {
+  return typeof value === 'string' && value.length > 0
+    ? value.slice(0, maxLength)
+    : null;
+}
+
+function optionalString(
+  value: unknown,
+  maxLength = Number.POSITIVE_INFINITY,
+): string | undefined {
+  return typeof value === 'string' && value.length > 0
+    ? value.slice(0, maxLength)
+    : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> | null {

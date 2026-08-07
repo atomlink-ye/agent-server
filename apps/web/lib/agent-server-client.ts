@@ -14,21 +14,21 @@ export type AgenticTeamProjectResponse = {
     team_version_id: string;
     status: 'active' | 'waiting' | 'succeeded' | 'failed';
     final_text: string | null;
-    phase?: 'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
+    phase: 'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
     created_at: string;
     updated_at: string;
   } | null;
-  work_items?: {
+  work_items: {
     work_ref: string;
     subject: string;
     status:
       | 'pending'
-      | 'ready'
       | 'in_progress'
-      | 'submitted'
-      | 'accepted'
-      | 'changes_requested'
-      | 'blocked';
+      | 'completed'
+      | 'blocked'
+      | 'cancelled'
+      | 'open'
+      | 'accepted';
     assignee_name: string | null;
     dependency_refs: string[];
     latest_attempt: {
@@ -38,13 +38,13 @@ export type AgenticTeamProjectResponse = {
       result_summary: string | null;
     } | null;
   }[];
-  gates?: {
+  gates: {
     finish_ready: boolean;
     all_work_accepted: boolean;
     no_active_attempts: boolean;
     all_members_idle: boolean;
   };
-  direct_messages?: {
+  direct_messages: {
     sequence: number;
     sender_name: string;
     recipient_name: string;
@@ -52,7 +52,7 @@ export type AgenticTeamProjectResponse = {
     created_at: string;
     status: 'delivered' | 'read';
   }[];
-  sessions?: {
+  sessions: {
     team_member_run_id: string;
     name: string;
     role: 'lead' | 'member';
@@ -66,6 +66,8 @@ export type AgenticTeamProjectResponse = {
       context: string;
       result_text: string | null;
       attempt_no: number | null;
+      work_item_id: string | null;
+      attempt_id: string | null;
       created_at: string;
       updated_at: string;
     }[];

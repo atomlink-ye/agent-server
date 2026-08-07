@@ -120,7 +120,7 @@ Paseo Web confirmation.
 - [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke` exits 0
       with the existing scripted smoke unchanged.
 - [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
-      agent-teams-v2-smoke` exits 0 with `attempts=3` and a machine-written
+    agent-teams-v2-smoke` exits 0 with `attempts=3` and a machine-written
       envelope record containing `kind:rework`.
 - [ ] The real run manifest contains `composition.provider_used=true` and a
       `composition.model` other than `scripted`.
@@ -208,16 +208,33 @@ Paseo Web confirmation.
 - The Manager cleared that environment gate in commit `2b9c983`. Two runner
   image defects were confirmed and fixed there: provider CLIs were installed
   without Claude/Codex configuration, directly causing the Claude `Not logged
-  in` response; and the image lacked `ca-certificates`, leaving Codex unable to
+in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   make any HTTPS request. Before the certificate fix, a mixed-provider Team
   could not work at all because a Codex member structurally could not perform a
   single network call. The image now fails its build if the system CA bundle is
   absent, and the local-only provider seeder writes Claude/Codex configuration
   from the container's existing key without printing it.
+- The causal environment chain is broader than the provider diagnosis. The
+  runner image side required `procps` (daemon child cleanup), CA certificates
+  (Codex HTTPS), and Python (the requested artifact's executable verification);
+  the dev-launcher side silently drops non-allowlisted configuration and
+  rewrites `HOME` to `.local/dev-runtime/home` (provider config discovery and
+  dispatcher concurrency). Every instance cost a debugging cycle. These are
+  image defects plus launcher HOME/environment-allowlist behavior, not Paseo or
+  model defects.
 - The working environment does not erase the two runtime product defects found
   by the failed Run: provider CLI authentication failure was persisted as a
   succeeded Run, and succeeded-without-submit left the TeamRun in an absorbing
   state with no outgoing transition. Neither is fixed in this task.
+- Deferred product-defect ledger (none is fixed by this documentation slice):
+  (1) a provider CLI authentication failure can be recorded as `SUCCEEDED`;
+  (2) a succeeded provider Run without `team_work_submit` can leave the
+  TeamRun absorbing with no outgoing TeamDriver transition; and (3) a Lead
+  scheduled while the workflow has no semantically valid decision can fail the
+  entire TeamRun via `lead_no_progress`. A no-progress bypass was considered
+  and rejected because it weakens incremental-Lead semantics. The correct
+  larger direction is a scheduled, durable review-or-defer relation; that
+  design is deferred if it does not fit this slice.
 - Durable no-transition evidence at 2026-08-07T02:51:59Z shows TeamRun
   `6ec80054-2c91-40d3-9aa6-caf6e6a48ca7` still
   `active/lead_kickoff/member_work_running`, root Run `waiting_children`, the
@@ -284,18 +301,15 @@ Paseo Web confirmation.
   Claude settings contain only provider environment keys and no permission,
   project-MCP approval, or denial rule.
 - Consequently, neither a missing permission mode nor a missing project-MCP
-  approval explains the text-only turns. Adding `--allowedTools` would improve
-  least-privilege expression, but current official semantics do not establish
-  its absence as the cause while `bypassPermissions` is active. The remaining
-  defect boundary is Paseo's Claude provider/Claude SDK model-request assembly:
-  agent-server authorized and supplied the catalog and the provider process
-  connected/listed tools, but the resulting request did not yield an MCP tool
-  attempt. Paseo's create protocol exposes `mcpServers` and `modeId` but no
-  explicit tool allowlist; its internal `extra.claude` extension point can
-  carry SDK options, while agent-server's adapter does not expose it. Any
-  dependency/protocol change is a core-dependency Human Gate and is not made in
-  this slice. The exact corrective change remains unproven without
-  request-manifest instrumentation or a controlled Claude MCP differential.
+  approval explains those earlier text-only turns. Adding `--allowedTools`
+  would improve least-privilege expression, but current official semantics do
+  not establish its absence as the cause while `bypassPermissions` is active.
+  The earlier hypothesis that Paseo's Claude provider/SDK failed to translate
+  the catalog into the model request is superseded by the later authenticated
+  tool-use evidence below; do not attribute the no-submit outcome to Paseo or
+  model noncompliance. Paseo's create protocol still exposes `mcpServers` and
+  `modeId` but no explicit tool allowlist; any dependency/protocol change would
+  be a core-dependency Human Gate and is not made in this slice.
   Code ownership is explicit: `src/adapters/paseo/paseo-client-port.ts` lines
   151-162 and 279-312 expose/forward `mcpServers` and the provider mode but no
   Claude SDK tool options. Paseo 0.1.110's `AgentSessionConfigSchema` accepts an
@@ -303,22 +317,40 @@ Paseo Web confirmation.
   into SDK options before attaching normalized MCP servers. A least-privilege
   allow rule could therefore be carried only by widening agent-server's Paseo
   adapter input into that dependency extension point; that is not established
-  as the corrective fix and is not done here.
-- Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
-  the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
-  reachable under normal concurrency, but the reviewer and next Lead may
-  interleave; this run is not evidence that the platform guarantees that
-  sequence.
+  as the corrective fix and is not done here. Retain this only as historical
+  boundary analysis; the authenticated tool-use evidence supersedes it as the
+  explanation for the no-submit outcome.
+- A later authenticated fixer diagnostic (root Task
+  `55b5b813-3988-4303-a446-af3d5c438df7`, Run
+  `45941e57-5e56-4521-a8f7-9318dbd13f51`) used Bash, MCP, and Write tools and
+  produced a 95-line Python artifact, but omitted the canonical submit while
+  discovering that Python was absent from the runner. Its artifact evidence is
+  retained with SHA-256
+  `5c0ca45ce0c57074c150b06e6b80b5e4e18f514260618b608c0a6faa850a409`. This
+  authenticated tool-use path corrects stale claims that Paseo, Claude, or the
+  model could not deliver tools; it is diagnostic evidence, not a fresh
+  successful TeamRun claim.
+- Ordering classification trail: the earlier classification (a) assumed that
+  `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO was effective. Machine
+  evidence then showed that the API child stripped
+  `AGENT_SERVER_DISPATCHER_CONCURRENCY` and started with concurrency 4, so at
+  the dev-stack boundary the actual classification
+  was (b): the intended deterministic flow was unreachable through the Compose
+  override. The minimal allowlist fix restores effective concurrency 1 and
+  makes this run deterministic. Normal concurrency may interleave reviewer and
+  subsequent Lead work; this run is not evidence of a platform sequencing
+  guarantee.
 - Before this slice, `deriveAgenticLeadCommandPolicy` omitted
   `team_work_create` whenever any completed attempt exposed accept/rework,
   despite remaining capacity and the existing Lead instruction to create any
   remaining useful Work during review. After the minimum widening, create is
   available alongside review commands only while `remainingWorkItems > 0`.
   Existing work ownership, attempt, acceptance, roster, and cardinality bounds
-  remain unchanged. This is correct independently of the demo: reviewing a
-  completed attempt and decomposing newly discovered follow-up work are
-  separate Lead responsibilities, and completion is precisely when results can
-  reveal that bounded follow-up work. The Lead already had
+  remain unchanged. This independently accepted Lead-policy justification
+  remains valid: reviewing a completed attempt and decomposing newly discovered
+  follow-up work are separate pre-existing Lead responsibilities, and completion
+  is precisely when results can reveal that bounded follow-up work. The Lead
+  already had
   `team_work_create` authority before the first completion; this change keeps
   that same authority available during an actionable review state, only while
   the pre-existing `maxWorkItems` budget has capacity. It does not grant a new
@@ -350,6 +382,10 @@ Paseo Web confirmation.
   and failed first real attempt are not proof of B or C. The first attempt did
   not produce a Python artifact, reviewer Task, rejection, rework, terminal
   Team success, or a qualifying manifest.
+- The later authenticated diagnostic is also not acceptance evidence: it
+  proves tool use and records the 95-line artifact digest above, but it omitted
+  the canonical submit. Do not claim a current fresh TeamRun success from that
+  artifact.
 - Machine-written diagnostic artifacts are retained under ignored local path
   `.local/mixed-team-diagnosis/`: `fixer-tool-exposure/stdout.txt` contains the
   grant receipt, durable catalog, and exact registration path;
@@ -366,6 +402,9 @@ Paseo Web confirmation.
   `authenticated-claude-mcp-delivery/stdout.txt` correlates both authenticated
   fixer roots, cells, grant IDs/allowed tools, connection timestamps, and
   `hasTools=true` capability lines without retaining a grant token.
+  `authenticated-python-missing/stdout.txt` records the authenticated
+  Bash/MCP/Write path, missing Python observation, 95-line artifact, and its
+  SHA-256 digest.
   `claude-live-argv/stdout.txt` records Claude Code 2.1.223 and the exact
   container argv with its bearer value replaced by `[redacted]`; its adjacent
   machine manifest records the sandbox command and exit code.
@@ -388,16 +427,15 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Claude MCP catalog-to-model-request boundary in the Paseo/Claude provider
-layer. Live argv proves that the inline MCP server and bypass permission mode
-both reached Claude Code 2.1.223; official semantics rule out the project-MCP
-approval settings as the lever and do not establish missing `--allowedTools`
-as causal under bypass mode. Existing logs still do not record the downstream
-model request's tool manifest. Both turns ended prose-only, so neither B nor C
-can advance to reviewer/Codex execution. No qualifying manifest or visual
-three-role workspace proof exists. A dependency/protocol change or new
-request-manifest instrumentation is a core-dependency Human Gate, so this task
-stops rather than landing an unproven workaround.
+There is still no qualifying fresh mixed-provider TeamRun with reviewer
+rejection, fixer rework, terminal completion, and visual three-role workspace
+proof. The authenticated diagnostic proves that Claude could use Bash, MCP, and
+Write and create the 95-line artifact, but it omitted the canonical submit
+while Python was unavailable; it therefore does not establish B or C. The
+environment chain and launcher allowlist/HOME behavior are now recorded, and
+the three runtime product defects remain explicitly deferred. Do not blame
+Paseo or the model for this no-submit observation, and do not claim fresh run
+success yet.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -408,10 +446,11 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Report the live argv, documented flag semantics, ownership boundary, and Human
-Gate. Do not weaken the required provider mapping, claim B/C from partial
-execution, add an unproven allow/config workaround, drive-by fix the runtime
-defects, or start another provider retry.
+Report the corrected environment chain and the authenticated artifact digest.
+Do not weaken the required provider mapping, claim B/C from partial execution,
+blame Paseo or the model for the stale text-only diagnosis, add an unproven
+allow/config workaround, drive-by fix the deferred runtime defects, or claim a
+fresh run success.
 
 ## Cleanup state
 

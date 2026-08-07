@@ -120,7 +120,7 @@ Paseo Web confirmation.
 - [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke` exits 0
       with the existing scripted smoke unchanged.
 - [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
-    agent-teams-v2-smoke` exits 0 with `attempts=3` and a machine-written
+  agent-teams-v2-smoke` exits 0 with `attempts=3` and a machine-written
       envelope record containing `kind:rework`.
 - [ ] The real run manifest contains `composition.provider_used=true` and a
       `composition.model` other than `scripted`.

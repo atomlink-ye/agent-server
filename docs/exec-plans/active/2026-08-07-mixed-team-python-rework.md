@@ -39,8 +39,8 @@ Paseo Web confirmation.
 - Highest unknown: whether all three real provider agents obey the bounded Team
   protocol and complete a forced reject/rework cycle while sharing the intended
   workspace and filesystem artifact.
-- Hill status: validated prerequisites; real mixed-provider execution remains
-  unproven.
+- Hill status: accepted real mixed-provider execution and visual evidence are
+  complete; final oracle review and branch handoff remain.
 
 ## Scope
 
@@ -66,6 +66,41 @@ Paseo Web confirmation.
 - Visually inspect Paseo Web and record the preview URL plus the observed single
   workspace with three readable agent tabs/transcripts.
 
+## Accepted execution
+
+The accepted real run is root Task/TeamRun
+`1a8ccc9f-b6da-4171-866d-3ec290cfc157`. It completed with terminal-success
+Team and root Task/Run state, exactly three attempts, and one Paseo workspace
+`wks_d38c267376f07b4c`. Durable provider composition is Lead=`opencode` with
+model `opencode-go/deepseek-v4-flash` under `free-only`, fixer=`claude` with
+model `deepseek-v4-flash`, and reviewer=`codex` with model
+`deepseek-v4-flash`; `composition.provider_used=true` and
+`scripted_runtime=false`.
+
+The retained dispatch trail is Lead kickoff `61`, fixer V1 `62`, reviewer V1
+`63`, Lead request-changes `64`, and fixer V2 `65`. Canonical accept receipts
+and terminal Team/root state prove the later acceptance and finish without
+claiming unretained dispatch IDs. The machine-written evidence is under ignored
+`.local/evidence/final-1a8ccc9f`.
+
+The produced artifacts are both 106 lines. V1 has SHA-256
+`53bb3e82f1259c0e44bd995f129bd7ac6f8c5941eee25c69cc4294f2d06880b3`, exits 1
+on empty input with `IndexError` at line 57; V2 has SHA-256
+`1490730934c48af5389a80093faade733204ab7d20b1c0cb19df4f2c8b6377c3`, exits 0,
+and emits `{"count":0,"first_token":null}`. The earlier authenticated
+diagnostic remains non-acceptance evidence: its 95-line artifact SHA-256 is
+`5c0ca45ce0c57074c150b06e6b80b5e4e18f514260618b608c0a6faa850a409`.
+
+Visual evidence uses the preview URL on port `:4000`: `paseo-team-success.png`
+is the accepted Team view and `paseo-reviewer-success.png` shows the accepted
+reviewer V1 rejection. The older `paseo-reviewer-tab.png` remains diagnostic
+least-authority evidence. The browser was released after inspection. Reviewer
+creation record `9b900bc6-233b-47bb-a8df-36c457713b46` is
+codex/deepseek-v4-flash/full-access. The visible GPT-5.6-Sol/Full access chip
+is only the new-message composer default. Completed-turn provider/model
+authority is durable state/Paseo records; the reviewer creation record remains
+supporting evidence.
+
 ## Non-goals
 
 - No migration, published schema, public API, credential, durable-state model,
@@ -82,74 +117,74 @@ Paseo Web confirmation.
 
 ## Work breakdown
 
-- [ ] Preserve the sandbox-only seed locally for controlled editing, then give
+- [x] Preserve the sandbox-only seed locally for controlled editing, then give
       a fixer explicit ownership of `.local/seed-team.mjs` only. Require it to
       retain the existing publish/invoke flow while changing the three policy
       refs, Python task prompts, forced rejection/rework sequence, and
       machine-written evidence output.
-- [ ] Review the seed diff for exact provider mapping, exactly two independent
+- [x] Review the seed diff for exact provider mapping, exactly two independent
       kickoff Work items (fixer first, reviewer second), mandatory rejecting
       review followed by a later attempt, safe bounded prompts, no embedded
       credential, and no alternate seed path.
-- [ ] Commit each durable repository change locally before syncing it with
+- [x] Commit each durable repository change locally before syncing it with
       `sandbox-ctl push --mode git`; transfer ignored local seed/evidence only
       through the existing sandbox binding without raw sandbox Git.
-- [ ] Start or confirm the prepared Compose stack with
+- [x] Start or confirm the prepared Compose stack with
       `PASEO_DEV_WEB_UI=1` and `.local/compose.model.yaml`; preserve the
       `mixed-team-` container prefix, set dispatcher concurrency to one for
       deterministic demo ordering, and require all three readiness checks.
-- [ ] Create a three-hour port `18080` preview and run the existing Host rewrite
+- [x] Create a three-hour port `18080` preview and run the existing Host rewrite
       shim from `18080` to Paseo `16767` using the preview hostname.
-- [ ] Execute the adapted seed once under real models and wait for terminal
+- [x] Execute the adapted seed once under real models and wait for terminal
       Team completion; do not substitute the scripted runtime if real execution
       fails.
-- [ ] Query persisted rows for the exact TeamRun and write greppable evidence
+- [x] Query persisted rows for the exact TeamRun and write greppable evidence
       proving three distinct executed providers, non-scripted composition, one
       Paseo workspace, the rejecting review, and a later fixer attempt.
-- [ ] Verify the produced Python file exists, is approximately 100 lines, and
+- [x] Verify the produced Python file exists, is approximately 100 lines, and
       reflects the correction requested by reviewer; write its line count and
       SHA-256 digest into the evidence artifact.
-- [ ] Open the preview URL and inspect that Lead, fixer, and reviewer appear as
+- [x] Open the preview URL and inspect that Lead, fixer, and reviewer appear as
       three tabs beneath one Paseo workspace with readable transcripts.
-- [ ] Classify any non-blocking finding as deferred. After one failed diagnosis
+- [x] Classify any non-blocking finding as deferred. After one failed diagnosis
       iteration, route further diagnosis to an oracle before changing design.
 
 ## Verification
 
-- [ ] `make ci` in `agent-server-mixed` exits 0. If the 5000 ms contract timeout
+- [x] `make ci` in `agent-server-mixed` exits 0. If the 5000 ms contract timeout
       flakes, reproduce on the unmodified baseline, report it as environment
       evidence if it reproduces, and continue.
-- [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke` exits 0
+- [x] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted make agent-teams-v2-smoke` exits 0
       with the existing scripted smoke unchanged.
-- [ ] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
+- [x] `AGENT_TEAMS_V2_SMOKE_RUNTIME=scripted AGENT_TEAMS_V2_SMOKE_REWORK=1 make
 agent-teams-v2-smoke` exits 0 with `attempts=3` and a machine-written
       envelope record containing `kind:rework`.
-- [ ] The real run manifest contains `composition.provider_used=true` and a
+- [x] The real run manifest contains `composition.provider_used=true` and a
       `composition.model` other than `scripted`.
-- [ ] Durable query output for one TeamRun shows Lead=`opencode`,
+- [x] Durable query output for one TeamRun shows Lead=`opencode`,
       fixer=`claude`, reviewer=`codex`, all three with the expected model, and
       one shared non-empty Paseo workspace ID.
-- [ ] Durable Work/attempt/review output shows manager assignment, first fixer
+- [x] Durable Work/attempt/review output shows manager assignment, first fixer
       submit, rejecting review/request-changes, a later fixer attempt/submit,
       acceptance, and terminal Team completion.
-- [ ] Machine-written file evidence reports the produced `.py` path, line count
+- [x] Machine-written file evidence reports the produced `.py` path, line count
       near 100, and digest; the file content is retained for inspection.
-- [ ] Paseo Web visual inspection confirms three agent tabs under one workspace
+- [x] Paseo Web visual inspection confirms three agent tabs under one workspace
       and readable role transcripts; record the preview URL and observation.
-- [ ] `make paseo-smoke` runs and its exact result is recorded.
+- [x] `make paseo-smoke` runs and its exact result is recorded.
 
 ## Documentation impact
 
-- [ ] Product/Feature: update only if the observed real mixed-provider Team
+- [x] Product/Feature: update only if the observed real mixed-provider Team
       changes the truthful capability ledger rather than serving as evidence
       for the already merged seam.
-- [ ] Component/Contract: reconcile any stale provider/runtime description
+- [x] Component/Contract: reconcile any stale provider/runtime description
       discovered by the real run; do not change a public contract without a new
       Human Gate.
-- [ ] ADR/Runbook: no ADR or migration runbook is expected. Record the exact
+- [x] ADR/Runbook: no ADR or migration runbook is expected. Record the exact
       preview/evidence procedure in this plan unless a durable operations gap
       is discovered.
-- [ ] Reconcile the predecessor per-member-provider Active Plan so merged work
+- [x] Reconcile the predecessor per-member-provider Active Plan so merged work
       and still-outstanding real-execution evidence are represented truthfully.
 
 ## Decisions and discoveries
@@ -216,14 +251,14 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   single network call. The image now fails its build if the system CA bundle is
   absent, and the local-only provider seeder writes Claude/Codex configuration
   from the container's existing key without printing it.
-- The causal environment chain is broader than the provider diagnosis. The
-  runner image side required `procps` (daemon child cleanup), CA certificates
-  (Codex HTTPS), and Python (the requested artifact's executable verification);
-  the dev-launcher side silently drops non-allowlisted configuration and
-  rewrites `HOME` to `.local/dev-runtime/home` (provider config discovery and
-  dispatcher concurrency). Every instance cost a debugging cycle. These are
-  image defects plus launcher HOME/environment-allowlist behavior, not Paseo or
-  model defects.
+- The causal environment chain is ours, not Paseo or model behavior: the
+  runner image initially lacked CA certificates (Codex HTTPS), provider CLI
+  configuration, and Python (the requested artifact's executable
+  verification), while the initial configuration seed used the wrong `HOME`.
+  The dev launcher silently drops unallowlisted environment variables and
+  rewrites `HOME` to `.local/dev-runtime/home`, affecting provider discovery
+  and dispatcher concurrency. The runner image was built to run agent-server,
+  not to serve as an agent workspace. Each defect cost a debugging cycle.
 - The working environment does not erase the two runtime product defects found
   by the failed Run: provider CLI authentication failure was persisted as a
   succeeded Run, and succeeded-without-submit left the TeamRun in an absorbing
@@ -262,6 +297,11 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   failed, its Work remains in-progress, and the TeamRun is again absorbing.
   Further prompt iteration is not justified, but these observations alone do
   not establish a model/provider limitation.
+- Failed real retries `105e0d33` reached rework and fixer acceptance but timed
+  out when the upstream endpoint became unavailable on the following Lead turn;
+  `2b368586` failed immediately during kickoff against the same upstream
+  condition. A recovery probe then succeeded, followed by the accepted run
+  recorded above.
 - The hypothesis that only the OpenCode Lead connected to Runtime MCP is
   falsified. Authenticated Claude fixer Run
   `89ec2d83-48ca-48cb-8d59-ed7b15ff0e2d` was created with
@@ -338,10 +378,13 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   `AGENT_SERVER_DISPATCHER_CONCURRENCY` and started with concurrency 4, so at
   the dev-stack boundary the actual classification
   was (b): the intended deterministic flow was unreachable through the Compose
-  override. The minimal allowlist fix restores effective concurrency 1 and
-  makes this run deterministic. Normal concurrency may interleave reviewer and
-  subsequent Lead work; this run is not evidence of a platform sequencing
-  guarantee.
+  override. The minimal allowlist fix made this run effective concurrency 1;
+  FIFO therefore orders the existing dispatches observed here. The member
+  materialization query has no `ORDER BY`, so even concurrency 1 plus FIFO is
+  only observed/asserted ordering for this run, not a structural platform
+  sequencing guarantee. The manifest records
+  `platform_sequence_guarantee=false`. Normal concurrency may interleave
+  reviewer and subsequent Lead work.
 - The initial policy widening was not merely filling an undocumented omission.
   Commit `660f24a` deliberately introduced a negative turn-2 smoke assertion
   that `team_work_create` remains unauthorized while accept/request-changes are
@@ -353,7 +396,8 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   that review and bounded follow-up decomposition independently justified
   create in every actionable review state is therefore withdrawn. The current
   widening contradicts a chosen boundary and weakens that contract; passing a
-  demo is not sufficient justification for landing it.
+  demo is not sufficient justification for landing it. The broad widening was
+  withdrawn and the pre-slice boundary restored; the fixture remains unchanged.
 - No narrower generic widening both preserves that negative assertion and
   enables this exact post-submit review decomposition. A completed fixer
   attempt necessarily makes accept/request-changes legal, so a condition such
@@ -370,8 +414,8 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   so this is only observed/asserted ordering for this run, not a structural
   platform sequence guarantee. At normal concurrency the same transition is
   reachable but the independent attempts may interleave. The original negative
-  smoke assertion remains valid and unchanged, and the branch must restore the
-  pre-slice Lead policy before a replacement real TeamRun is accepted.
+  smoke assertion remains valid and unchanged, and this accepted run uses the
+  restored pre-slice Lead policy.
 
 ## Risks and recovery
 
@@ -395,14 +439,28 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
 
 ## Validation evidence
 
-- No acceptance evidence yet. The brief, implementation, sandbox readiness,
-  and failed first real attempt are not proof of B or C. The first attempt did
-  not produce a Python artifact, reviewer Task, rejection, rework, terminal
-  Team success, or a qualifying manifest.
-- The later authenticated diagnostic is also not acceptance evidence: it
-  proves tool use and records the 95-line artifact digest above, but it omitted
-  the canonical submit. Do not claim a current fresh TeamRun success from that
-  artifact.
+- Acceptance evidence is complete for root
+  `1a8ccc9f-b6da-4171-866d-3ec290cfc157`: the final manifest is
+  machine-written under ignored `.local/evidence/final-1a8ccc9f`, with
+  `composition.provider_used=true`, `scripted_runtime=false`, exactly three
+  attempts, terminal Team/root success, and one shared Paseo workspace. The
+  evidence files and validation summaries are machine-written artifacts, not
+  self-authored prose standing in for durable rows.
+- The earlier authenticated diagnostic remains non-acceptance evidence: it
+  proves tool use and records the 95-line artifact digest above, but omitted the
+  canonical submit. It is retained only as historical authentication/tool-use
+  evidence.
+- Final machine validation recorded under `.local/evidence/final-1a8ccc9f`
+  reports `make ci` exit 0, normal scripted smoke exit 0 (including the epoch-2
+  assertion that `team_work_create` is unauthorized), scripted rework smoke
+  exit 0 with `attempts=3` and `kind:rework`, and `make paseo-smoke` exit 0.
+  The validation summary files include their recorded content hashes.
+- Earlier non-code failures are recorded separately from the final success:
+  local Docker unavailable, AppleDouble metadata, and plan-format/root-seed
+  issues each caused setup or wrapper failures during diagnosis. A detached
+  wrapper also reported a misleading exit 2; the final CI wrapper and direct
+  CI run are exit 0. None of these observations changes the accepted run
+  evidence.
 - Machine-written diagnostic artifacts are retained under ignored local path
   `.local/mixed-team-diagnosis/`: `fixer-tool-exposure/stdout.txt` contains the
   grant receipt, durable catalog, and exact registration path;
@@ -428,15 +486,15 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
 
 ## Completion checklist
 
-- [ ] The real mixed-provider TeamRun and mandatory Python rework flow satisfy
+- [x] The real mixed-provider TeamRun and mandatory Python rework flow satisfy
       every acceptance item with machine-written evidence.
-- [ ] Required scripted smokes, `make ci`, and `make paseo-smoke` have exact
+- [x] Required scripted smokes, `make ci`, and `make paseo-smoke` have exact
       recorded results.
-- [ ] No Human Gate was crossed without explicit authorization.
-- [ ] No credential, raw provider payload, debug code, generated runtime home,
+- [x] No Human Gate was crossed without explicit authorization.
+- [x] No credential, raw provider payload, debug code, generated runtime home,
       or unintended file is present in the PR diff.
-- [ ] Final oracle review has no unresolved `BLOCKER-NOW` finding.
-- [ ] All documentation impact and deferred findings are resolved or
+- [x] Final oracle review has no unresolved `BLOCKER-NOW` finding.
+- [x] All documentation impact and deferred findings are resolved or
       transferred.
 - [ ] Move this plan to `docs/exec-plans/completed/`, set `status: completed`,
       and leave no unchecked boxes.
@@ -444,15 +502,13 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
 
 ## Current blocker
 
-There is still no qualifying fresh mixed-provider TeamRun with reviewer
-rejection, fixer rework, terminal completion, and visual three-role workspace
-proof. The authenticated diagnostic proves that Claude could use Bash, MCP, and
-Write and create the 95-line artifact, but it omitted the canonical submit
-while Python was unavailable; it therefore does not establish B or C. The
-environment chain and launcher allowlist/HOME behavior are now recorded, and
-the three runtime product defects remain explicitly deferred. Do not blame
-Paseo or the model for this no-submit observation, and do not claim fresh run
-success yet.
+No acceptance blocker remains. The accepted root run has reviewer rejection,
+fixer rework, terminal Team/root success, machine-written evidence, and visual
+three-role workspace proof. The earlier authentication/tool-use diagnosis,
+environment chain, and three runtime product defects remain recorded as
+historical or deferred findings; they do not invalidate the accepted run.
+The remaining work is moving this plan to `docs/exec-plans/completed/` and
+opening the single PR.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -463,11 +519,11 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Report the corrected environment chain and the authenticated artifact digest.
-Do not weaken the required provider mapping, claim B/C from partial execution,
-blame Paseo or the model for the stale text-only diagnosis, add an unproven
-allow/config workaround, drive-by fix the deferred runtime defects, or claim a
-fresh run success.
+Commit this reviewed plan update, open exactly one PR, then move the plan to
+`docs/exec-plans/completed/` with `status: completed` and no unchecked boxes in
+the final branch update. Preserve the accepted evidence, provider mapping,
+restored Lead policy, fixture, and deferred runtime-defect ledger; do not
+drive-by fix those deferred defects in this slice.
 
 ## Cleanup state
 
@@ -478,4 +534,6 @@ two exact `mixed-team-` containers were stopped first. That reset also removed
 the ignored remote-only `.local/model.env`; the Manager subsequently restored
 it with mode 600 and also restored the ignored Host rewrite shim.
 The first seed polling process was terminated locally after the absorbing state
-was established; the stack and preview shim remain running for diagnosis.
+was established. The accepted run's browser inspection is complete and the
+browser was released; accepted machine evidence remains under the ignored
+`.local/evidence/final-1a8ccc9f` path pending final artifact cleanup.

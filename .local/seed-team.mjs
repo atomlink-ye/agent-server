@@ -52,14 +52,20 @@ async function importAndPublish(source, importPath, publishPath) {
   await request(publishPath(imported.version.id), { method: 'POST', body: {} });
   return imported.version.id;
 }
-const agents = {};
-for (const name of ['lead', 'fixer', 'reviewer']) agents[name] = await importAndPublish(agentYaml(name), '/api/v1/agents:import', (id) => `/api/v1/agent-versions/${id}:publish`);
-const environment = await importAndPublish(environmentYaml, '/api/v1/environments:import', (id) => `/api/v1/environment-versions/${id}:publish`);
-const team = await request('/api/v1/teams:import', { method: 'POST', body: { source: teamYaml(agents.lead, agents.fixer, agents.reviewer, environment) }, status: 201 });
-const publishedTeam = await request(`/api/v1/team-versions/${team.version.id}:publish`, { method: 'POST', body: {} });
-const invoked = await request('/api/v1/tasks:invoke', { method: 'POST', status: 202, body: { invokable: { kind: 'team', version_id: publishedTeam.id }, input: { text: 'Produce one mixed-provider TeamRun proof for mixed_team_rework.py.' }, workspace_id: workspaceId } });
-const rootTaskId = invoked.task_id;
-await writeFile('.local/web-bootstrap.env', [`WEB_WORKSPACE_ID=${workspaceId}`, 'WEB_WORKSPACE_NAME=Mixed-provider TeamRun proof', `WEB_AGENTIC_TEAM_VERSION_ID=${publishedTeam.id}`, `WEB_ENVIRONMENT_VERSION_ID=${environment}`, `WEB_AGENT_VERSION_ID=${agents.fixer}`, ''].join('\n'));
+const existingRootTaskId = process.env.MIXED_TEAM_EXISTING_ROOT_TASK_ID?.trim();
+let rootTaskId;
+if (existingRootTaskId) {
+  rootTaskId = existingRootTaskId;
+} else {
+  const agents = {};
+  for (const name of ['lead', 'fixer', 'reviewer']) agents[name] = await importAndPublish(agentYaml(name), '/api/v1/agents:import', (id) => `/api/v1/agent-versions/${id}:publish`);
+  const environment = await importAndPublish(environmentYaml, '/api/v1/environments:import', (id) => `/api/v1/environment-versions/${id}:publish`);
+  const team = await request('/api/v1/teams:import', { method: 'POST', body: { source: teamYaml(agents.lead, agents.fixer, agents.reviewer, environment) }, status: 201 });
+  const publishedTeam = await request(`/api/v1/team-versions/${team.version.id}:publish`, { method: 'POST', body: {} });
+  const invoked = await request('/api/v1/tasks:invoke', { method: 'POST', status: 202, body: { invokable: { kind: 'team', version_id: publishedTeam.id }, input: { text: 'Produce one mixed-provider TeamRun proof for mixed_team_rework.py.' }, workspace_id: workspaceId } });
+  rootTaskId = invoked.task_id;
+  await writeFile('.local/web-bootstrap.env', [`WEB_WORKSPACE_ID=${workspaceId}`, 'WEB_WORKSPACE_NAME=Mixed-provider TeamRun proof', `WEB_AGENTIC_TEAM_VERSION_ID=${publishedTeam.id}`, `WEB_ENVIRONMENT_VERSION_ID=${environment}`, `WEB_AGENT_VERSION_ID=${agents.fixer}`, ''].join('\n'));
+}
 
 let projection;
 let terminalTask;
@@ -77,9 +83,9 @@ const db = new PostgresClient({ connectionString: databaseUrl });
 await db.connect();
 const query = async (text, values = []) => (await db.query(text, values)).rows;
 const providers = await query(`SELECT m.name AS member_name, m.role, av.policy_snapshot->>'modelPolicyRef' AS model_policy_ref, r.runtime->>'provider' AS provider, r.runtime->>'model' AS model, count(*)::int AS run_count FROM team_runs tr JOIN team_member_runs m ON m.team_run_id=tr.id JOIN agent_versions av ON av.id=m.agent_version_id JOIN tasks t ON t.team_member_run_id=m.id AND t.root_task_id=tr.root_task_id JOIN runs r ON r.task_id=t.id WHERE tr.root_task_id=$1 AND r.status='succeeded' GROUP BY m.name,m.role,av.policy_snapshot,r.runtime->>'provider',r.runtime->>'model' ORDER BY m.name`, [rootTaskId]);
-const expectedProviders = { lead: { policy: 'free-only', provider: 'opencode' }, fixer: { policy: 'claude/deepseek-v4-flash', provider: 'claude' }, reviewer: { policy: 'codex/deepseek-v4-flash', provider: 'codex' } };
+const expectedProviders = { lead: { policy: 'free-only', provider: 'opencode', model: 'opencode-go/deepseek-v4-flash' }, fixer: { policy: 'claude/deepseek-v4-flash', provider: 'claude', model: 'deepseek-v4-flash' }, reviewer: { policy: 'codex/deepseek-v4-flash', provider: 'codex', model: 'deepseek-v4-flash' } };
 assert(providers.length === 3, 'provider_mapping_cardinality_invalid');
-for (const row of providers) { const expected = expectedProviders[row.member_name]; assert(expected, `unexpected_provider_member_${row.member_name}`); assert(row.run_count > 0, `provider_run_count_invalid_${row.member_name}`); assert(row.model_policy_ref === expected.policy, `provider_policy_mismatch_${row.member_name}`); assert(row.provider === expected.provider, `provider_mismatch_${row.member_name}`); assert(row.model === 'deepseek-v4-flash', `model_mismatch_${row.member_name}`); }
+for (const row of providers) { const expected = expectedProviders[row.member_name]; assert(expected, `unexpected_provider_member_${row.member_name}`); assert(row.run_count > 0, `provider_run_count_invalid_${row.member_name}`); assert(row.model_policy_ref === expected.policy, `provider_policy_mismatch_${row.member_name}`); assert(row.provider === expected.provider, `provider_mismatch_${row.member_name}`); assert(row.model === expected.model, `model_mismatch_${row.member_name}`); }
 const scriptedRuntimeDetected = providers.some((row) => /scripted/i.test(`${row.provider} ${row.model}`));
 assert(!scriptedRuntimeDetected, 'scripted_model_detected');
 await writeFile(`${evidenceRoot}/providers.json`, JSON.stringify(providers, null, 2));
@@ -133,11 +139,13 @@ await copyFile(artifactV1, `${evidenceRoot}/mixed_team_rework.v1.py`);
 await copyFile(artifact, `${evidenceRoot}/mixed_team_rework.py`);
 const artifactEvidence = { v1: { relative_path: 'mixed_team_rework.v1.py', line_count: lineCount(pythonV1), sha256: createHash('sha256').update(pythonV1).digest('hex'), empty_input_run: v1Run }, final: { relative_path: 'mixed_team_rework.py', line_count: lineCount(python), sha256: createHash('sha256').update(python).digest('hex'), empty_input_run: finalRun } };
 await writeFile(`${evidenceRoot}/python-artifact.json`, JSON.stringify(artifactEvidence, null, 2));
-const resolvedModel = providers.every((row) => row.model === 'deepseek-v4-flash') ? 'deepseek-v4-flash' : null;
-assert(resolvedModel, 'composition_model_not_exact_non_scripted');
-const exactMapping = providers.length === 3 && providers.every((row) => expectedProviders[row.member_name]?.provider === row.provider && expectedProviders[row.member_name]?.policy === row.model_policy_ref && row.model === 'deepseek-v4-flash' && row.run_count > 0);
+const distinctModels = [...new Set(providers.map((row) => row.model).filter((model) => typeof model === 'string' && model.trim()))].sort();
+const resolvedModel = distinctModels.join(',');
+assert(resolvedModel && !/scripted/i.test(resolvedModel), 'composition_model_not_exact_non_scripted');
+const memberModels = Object.fromEntries(providers.map((row) => [row.member_name, row.model]));
+const exactMapping = providers.length === 3 && providers.every((row) => expectedProviders[row.member_name]?.provider === row.provider && expectedProviders[row.member_name]?.policy === row.model_policy_ref && expectedProviders[row.member_name]?.model === row.model && row.run_count > 0);
 const compositionProviderUsed = exactMapping && !scriptedRuntimeDetected;
 assert(compositionProviderUsed, 'composition_provider_used_not_derived');
-await writeFile(`${evidenceRoot}/manifest.json`, JSON.stringify({ schema: 'mixed-team-proof-v1', root_task_id: rootTaskId, composition: { provider_used: compositionProviderUsed, model: resolvedModel, scripted_runtime: scriptedRuntimeDetected, members: ['lead', 'fixer', 'reviewer'] }, ordering_mode: 'demo_deterministic_fifo_single_dispatcher', platform_sequence_guarantee: false, normal_concurrency_reachable: true, evidence: ['providers.json', 'workflow.json', 'workspace.json', 'dispatch-order.json', 'python-artifact.json', 'mixed_team_rework.v1.py', 'mixed_team_rework.py'] }, null, 2));
+await writeFile(`${evidenceRoot}/manifest.json`, JSON.stringify({ schema: 'mixed-team-proof-v1', root_task_id: rootTaskId, composition: { provider_used: compositionProviderUsed, model: resolvedModel, models: memberModels, scripted_runtime: scriptedRuntimeDetected, members: ['lead', 'fixer', 'reviewer'] }, ordering_mode: 'demo_deterministic_fifo_single_dispatcher', platform_sequence_guarantee: false, normal_concurrency_reachable: true, evidence: ['providers.json', 'workflow.json', 'workspace.json', 'dispatch-order.json', 'python-artifact.json', 'mixed_team_rework.v1.py', 'mixed_team_rework.py'] }, null, 2));
 await db.end();
 console.log(JSON.stringify({ root_task_id: rootTaskId, evidence_dir: evidenceRoot, markers: ['FIXER_SUBMIT_V1', 'REVIEW_REJECT', 'FIXER_SUBMIT_V2'] }, null, 2));

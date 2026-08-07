@@ -35,6 +35,58 @@ import {
 } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
+  it('does not invent detail_kind when an upstream tool event omits detailKind', async () => {
+    const claim = createClaim();
+    const task = createTask();
+    const append = vi.fn(async (..._args: readonly unknown[]) => undefined);
+    const events = {
+      append,
+      bind: vi.fn(async () => undefined),
+    };
+    const runtime = createRuntime();
+    vi.mocked(runtime.execute).mockImplementation(async (_input, sink) => {
+      await sink?.emit({
+        kind: 'tool_status',
+        activityId: 'activity-shell-1',
+        category: 'shell',
+        status: 'completed',
+        label: 'shell',
+        summary: 'command completed',
+        provider: 'test-provider',
+      });
+      return {
+        provider: 'test-provider',
+        model: 'test-model',
+        text: 'safe result',
+        providerAgentId: 'agent-test',
+      };
+    });
+    const completeRun = {
+      execute: vi.fn(async ({ run }: { run: Run }) => run),
+    } as unknown as CompleteRun;
+    const executeRun = new ExecuteRun(
+      completeRun,
+      {
+        findById: vi.fn(async () => task),
+        save: vi.fn(async () => undefined),
+      } as never,
+      {} as InvokableRepository,
+      {} as never,
+      runtime,
+      { log: vi.fn() },
+      () => new Date('2026-07-23T00:00:00.000Z'),
+      undefined,
+      events as never,
+    );
+
+    await executeRun.execute(claim);
+
+    const outputCall = (
+      append.mock.calls as unknown as Array<[string, string, unknown]>
+    ).find(([, kind]) => kind === 'output');
+    expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
+  });
+
   it('passes the prior session provider Agent and persists the returned Agent id', async () => {
     const claim = createClaim();
     const task = {

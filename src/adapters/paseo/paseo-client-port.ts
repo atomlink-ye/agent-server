@@ -9,7 +9,8 @@ import type { RuntimeMcpServerConfig } from '../../application/ports/agent-runti
 export interface PaseoCreatedAgent {
   readonly id: string;
   readonly provider: string;
-  readonly model: string | null;
+  /** The provider's actual model identity, as returned by createAgent. */
+  readonly model: string;
 }
 
 export interface PaseoFinishedAgent {
@@ -33,25 +34,87 @@ export interface PaseoAgentStreamEvent {
   readonly permission?: PaseoPermissionActivity;
 }
 
+export type PaseoToolDetail =
+  | {
+      readonly type: 'shell';
+      readonly command?: string | undefined;
+      readonly cwd?: string | undefined;
+      readonly output?: string | undefined;
+      readonly exitCode?: number | null | undefined;
+    }
+  | {
+      readonly type: 'read';
+      readonly filePath?: string | undefined;
+      readonly content?: string | undefined;
+      readonly offset?: number | undefined;
+      readonly limit?: number | undefined;
+    }
+  | {
+      readonly type: 'edit';
+      readonly filePath?: string | undefined;
+      readonly oldString?: string | undefined;
+      readonly newString?: string | undefined;
+      readonly unifiedDiff?: string | undefined;
+    }
+  | {
+      readonly type: 'write';
+      readonly filePath?: string | undefined;
+      readonly content?: string | undefined;
+    }
+  | {
+      readonly type: 'search';
+      readonly query?: string | undefined;
+      readonly toolName?: 'search' | 'grep' | 'glob' | 'web_search' | undefined;
+      readonly content?: string | undefined;
+      readonly filePaths?: readonly string[] | undefined;
+      readonly webResults?:
+        | readonly {
+            readonly title?: string | undefined;
+            readonly url?: string | undefined;
+          }[]
+        | undefined;
+      readonly annotations?: readonly string[] | undefined;
+      readonly numFiles?: number | undefined;
+      readonly numMatches?: number | undefined;
+      readonly durationMs?: number | undefined;
+      readonly durationSeconds?: number | undefined;
+      readonly truncated?: boolean | undefined;
+      readonly mode?: 'content' | 'files_with_matches' | 'count' | undefined;
+    }
+  | {
+      readonly type: 'fetch';
+      readonly url?: string | undefined;
+      readonly prompt?: string | undefined;
+      readonly result?: string | undefined;
+      readonly code?: number | undefined;
+      readonly codeText?: string | undefined;
+      readonly bytes?: number | undefined;
+      readonly durationMs?: number | undefined;
+    }
+  | {
+      readonly type: 'sub_agent';
+      readonly subAgentType?: string | undefined;
+      readonly description?: string | undefined;
+      /** Internal correlation only; never emitted in RuntimeToolDetail. */
+      readonly childSessionId?: string | undefined;
+      readonly log?: string | undefined;
+      readonly actions?:
+        | readonly {
+            readonly index?: number | undefined;
+            readonly toolName?: string | undefined;
+            readonly summary?: string | undefined;
+          }[]
+        | undefined;
+    };
+
 export interface PaseoToolCall {
   readonly callId: string;
   readonly name: string;
   readonly status: string;
-  readonly detailType?: string;
-  readonly detailText?: string;
-  readonly exitCode?: number;
-  readonly input?: PaseoToolInputCandidate;
-}
-
-export interface PaseoToolInputCandidate {
-  readonly command?: string;
-  readonly filePath?: string;
-  readonly query?: string;
-  readonly url?: string;
-  readonly subAgentType?: string;
-  readonly description?: string;
-  /** COMPAT: provider-private OpenCode child correlation only. */
-  readonly childSessionId?: string;
+  /** Internal correlation only; never emitted in RuntimeToolDetail. */
+  readonly childSessionId?: string | undefined;
+  readonly detail?: PaseoToolDetail;
+  readonly error?: string;
 }
 
 export interface PaseoProviderSubagentDescriptor {
@@ -319,7 +382,11 @@ export class PaseoSdkClient implements PaseoClientPort {
     return {
       id: agent.id,
       provider: agent.provider,
-      model: agent.model ?? null,
+      ...(typeof agent.model === 'string' && agent.model
+        ? { model: agent.model }
+        : (() => {
+            throw new Error('Paseo returned an agent without a model.');
+          })()),
     };
   }
 
@@ -573,7 +640,7 @@ function projectStreamEvent(event: unknown): {
   return {};
 }
 
-function projectTimelineItem(item: unknown): {
+export function projectTimelineItem(item: unknown): {
   readonly reasoning?: boolean;
   readonly reasoningText?: string;
   readonly toolCall?: PaseoToolCall;
@@ -588,86 +655,183 @@ function projectTimelineItem(item: unknown): {
   const name = stringValue(item.name);
   const status = stringValue(item.status);
   if (!callId || !name || !status) return {};
-  const detail = isRecord(item.detail)
-    ? stringValue(item.detail.type)
-    : undefined;
+  const projected = projectPaseoToolCall(
+    item,
+    status.toLowerCase() === 'failed' ? item.error : undefined,
+  );
   return {
-    toolCall: {
-      callId,
-      name,
-      status,
-      ...(detail ? { detailType: detail } : {}),
-      ...(detail ? projectToolInput(item.detail) : {}),
-      ...projectToolDetail(
-        item.detail,
-        status.toLowerCase() === 'failed' ? item.error : undefined,
-      ),
-    },
+    ...(projected ? { toolCall: { callId, name, status, ...projected } } : {}),
   };
 }
 
-function projectToolInput(
-  value: unknown,
-): { readonly input: PaseoToolInputCandidate } | Record<string, never> {
-  if (!isRecord(value) || typeof value.type !== 'string') return {};
-  const input: {
-    command?: string;
-    filePath?: string;
-    query?: string;
-    url?: string;
-    subAgentType?: string;
-    description?: string;
-    childSessionId?: string;
-  } = {};
-  if (value.type === 'shell' && typeof value.command === 'string')
-    input.command = value.command;
-  if (
-    ['read', 'edit', 'write'].includes(value.type) &&
-    typeof value.filePath === 'string'
-  )
-    input.filePath = value.filePath;
-  if (value.type === 'search' && typeof value.query === 'string')
-    input.query = value.query;
-  if (value.type === 'fetch' && typeof value.url === 'string')
-    input.url = value.url;
-  if (value.type === 'sub_agent') {
-    if (typeof value.subAgentType === 'string')
-      input.subAgentType = value.subAgentType;
-    if (typeof value.description === 'string')
-      input.description = value.description;
-    if (typeof value.childSessionId === 'string')
-      input.childSessionId = value.childSessionId;
-  }
-  return Object.keys(input).length ? { input } : {};
-}
-
-function projectToolDetail(
+export function projectPaseoToolCall(
   value: unknown,
   failedError?: unknown,
-): {
-  readonly detailText?: string;
-  readonly exitCode?: number;
-} {
-  if (!isRecord(value) && typeof failedError !== 'string') return {};
-  const candidates = [
-    ...(isRecord(value)
-      ? [value.output, value.result, value.content, value.unifiedDiff]
-      : []),
-    failedError,
-  ];
-  const detailText = candidates.find(
-    (candidate): candidate is string => typeof candidate === 'string',
+):
+  | {
+      readonly childSessionId?: string | undefined;
+      readonly detail?: PaseoToolDetail;
+      readonly error?: string;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  const type = stringValue(
+    value.detail && isRecord(value.detail) ? value.detail.type : undefined,
   );
-  const exitCode =
-    isRecord(value) &&
-    typeof value.exitCode === 'number' &&
-    Number.isSafeInteger(value.exitCode)
-      ? value.exitCode
+  if (!type)
+    return typeof failedError === 'string' ? { error: failedError } : {};
+  const raw = value.detail;
+  if (!isRecord(raw))
+    return typeof failedError === 'string' ? { error: failedError } : {};
+  const stringField = (key: string): string | undefined =>
+    typeof raw[key] === 'string' ? (raw[key] as string) : undefined;
+  const finiteNumber = (key: string): number | undefined =>
+    typeof raw[key] === 'number' && Number.isFinite(raw[key])
+      ? (raw[key] as number)
       : undefined;
-  const preview = detailText ? safePreview(detailText, 2000) : undefined;
+  const booleanField = (key: string): boolean | undefined =>
+    typeof raw[key] === 'boolean' ? (raw[key] as boolean) : undefined;
+  const strings = (key: string): readonly string[] | undefined =>
+    Array.isArray(raw[key])
+      ? raw[key].filter((item): item is string => typeof item === 'string')
+      : undefined;
+  const webResults = Array.isArray(raw.webResults)
+    ? raw.webResults.filter(isRecord).map((item) => ({
+        ...(typeof item.title === 'string' ? { title: item.title } : {}),
+        ...(typeof item.url === 'string' ? { url: item.url } : {}),
+      }))
+    : undefined;
+  const annotations = Array.isArray(raw.annotations)
+    ? raw.annotations.filter((item): item is string => typeof item === 'string')
+    : undefined;
+  const actions = Array.isArray(raw.actions)
+    ? raw.actions.filter(isRecord).map((item) => ({
+        ...(typeof item.index === 'number' && Number.isFinite(item.index)
+          ? { index: item.index }
+          : {}),
+        ...(typeof item.toolName === 'string'
+          ? { toolName: item.toolName }
+          : {}),
+        ...(typeof item.summary === 'string' ? { summary: item.summary } : {}),
+      }))
+    : undefined;
+  let detail: PaseoToolDetail | undefined;
+  if (type === 'shell')
+    detail = {
+      type,
+      ...(stringField('command') ? { command: stringField('command') } : {}),
+      ...(stringField('cwd') ? { cwd: stringField('cwd') } : {}),
+      ...(stringField('output') ? { output: stringField('output') } : {}),
+      ...(typeof raw.exitCode === 'number' && Number.isFinite(raw.exitCode)
+        ? { exitCode: raw.exitCode }
+        : raw.exitCode === null
+          ? { exitCode: null }
+          : {}),
+    };
+  else if (type === 'read')
+    detail = {
+      type,
+      ...(stringField('filePath') ? { filePath: stringField('filePath') } : {}),
+      ...(stringField('content') ? { content: stringField('content') } : {}),
+      ...(finiteNumber('offset') !== undefined
+        ? { offset: finiteNumber('offset') }
+        : {}),
+      ...(finiteNumber('limit') !== undefined
+        ? { limit: finiteNumber('limit') }
+        : {}),
+    };
+  else if (type === 'edit')
+    detail = {
+      type,
+      ...(stringField('filePath') ? { filePath: stringField('filePath') } : {}),
+      ...(stringField('oldString')
+        ? { oldString: stringField('oldString') }
+        : {}),
+      ...(stringField('newString')
+        ? { newString: stringField('newString') }
+        : {}),
+      ...(stringField('unifiedDiff')
+        ? { unifiedDiff: stringField('unifiedDiff') }
+        : {}),
+    };
+  else if (type === 'write')
+    detail = {
+      type,
+      ...(stringField('filePath') ? { filePath: stringField('filePath') } : {}),
+      ...(stringField('content') ? { content: stringField('content') } : {}),
+    };
+  else if (type === 'search') {
+    const toolName = stringField('toolName');
+    const mode = stringField('mode');
+    detail = {
+      type,
+      ...(stringField('query') ? { query: stringField('query') } : {}),
+      ...(toolName === 'search' ||
+      toolName === 'grep' ||
+      toolName === 'glob' ||
+      toolName === 'web_search'
+        ? { toolName }
+        : {}),
+      ...(stringField('content') ? { content: stringField('content') } : {}),
+      ...(strings('filePaths') ? { filePaths: strings('filePaths') } : {}),
+      ...(webResults ? { webResults } : {}),
+      ...(annotations ? { annotations } : {}),
+      ...(finiteNumber('numFiles') !== undefined
+        ? { numFiles: finiteNumber('numFiles') }
+        : {}),
+      ...(finiteNumber('numMatches') !== undefined
+        ? { numMatches: finiteNumber('numMatches') }
+        : {}),
+      ...(finiteNumber('durationMs') !== undefined
+        ? { durationMs: finiteNumber('durationMs') }
+        : {}),
+      ...(finiteNumber('durationSeconds') !== undefined
+        ? { durationSeconds: finiteNumber('durationSeconds') }
+        : {}),
+      ...(booleanField('truncated') !== undefined
+        ? { truncated: booleanField('truncated') }
+        : {}),
+      ...(mode === 'content' ||
+      mode === 'files_with_matches' ||
+      mode === 'count'
+        ? { mode }
+        : {}),
+    };
+  } else if (type === 'fetch')
+    detail = {
+      type,
+      ...(stringField('url') ? { url: stringField('url') } : {}),
+      ...(stringField('prompt') ? { prompt: stringField('prompt') } : {}),
+      ...(stringField('result') ? { result: stringField('result') } : {}),
+      ...(finiteNumber('code') !== undefined
+        ? { code: finiteNumber('code') }
+        : {}),
+      ...(stringField('codeText') ? { codeText: stringField('codeText') } : {}),
+      ...(finiteNumber('bytes') !== undefined
+        ? { bytes: finiteNumber('bytes') }
+        : {}),
+      ...(finiteNumber('durationMs') !== undefined
+        ? { durationMs: finiteNumber('durationMs') }
+        : {}),
+    };
+  else if (type === 'sub_agent')
+    detail = {
+      type,
+      ...(stringField('subAgentType')
+        ? { subAgentType: stringField('subAgentType') }
+        : {}),
+      ...(stringField('description')
+        ? { description: stringField('description') }
+        : {}),
+      ...(stringField('log') ? { log: stringField('log') } : {}),
+      ...(actions ? { actions } : {}),
+    };
   return {
-    ...(preview ? { detailText: preview } : {}),
-    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(type === 'sub_agent' && stringField('childSessionId')
+      ? { childSessionId: stringField('childSessionId') }
+      : {}),
+    ...(detail ? { detail } : {}),
+    ...(typeof failedError === 'string' ? { error: failedError } : {}),
   };
 }
 

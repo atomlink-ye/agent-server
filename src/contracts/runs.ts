@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { runStatuses } from '../domain/runs/run-status.js';
+import { RunEventPayloadSchema } from '../application/ports/run-events.js';
 
 export const MAX_RUN_REQUEST_BYTES = 64 * 1024;
 
@@ -58,10 +59,7 @@ export const RunEventSchema = z.object({
   run_id: z.uuid(),
   sequence: z.number().int().positive(),
   type: z.enum(['started', 'output', 'succeeded', 'failed', 'cancelled']),
-  payload: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.null()]),
-  ),
+  payload: RunEventPayloadSchema,
   created_at: z.iso.datetime(),
 });
 export const RunEventPageSchema = z.object({

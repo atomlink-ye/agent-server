@@ -28,7 +28,10 @@ import {
   type RunRepository,
 } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
-import type { RunEventRepository } from '../ports/run-events.js';
+import type {
+  RunEventRepository,
+  RunEventPayload,
+} from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
@@ -1642,9 +1645,9 @@ function isSafeRuntimeCandidate(candidate: {
   );
 }
 
-function runtimeEventPayload(
+export function runtimeEventPayload(
   event: import('../ports/agent-runtime.js').RuntimeEvent,
-): Readonly<Record<string, string | number | boolean | null>> {
+): RunEventPayload {
   switch (event.kind) {
     case 'assistant_text':
       return { kind: event.kind, text: event.text };
@@ -1663,15 +1666,9 @@ function runtimeEventPayload(
         label: event.label,
         summary: event.summary,
         ...safeRuntimeToolNamePayload(event.toolName),
-        ...(event.detailKind
-          ? { detail_kind: event.detailKind }
-          : ['shell', 'read', 'write', 'edit', 'search', 'fetch'].includes(
-                event.category,
-              )
-            ? { detail_kind: event.category }
-            : {}),
-        ...(event.detailText ? { detail_text: event.detailText } : {}),
-        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+        ...(event.provider ? { provider: event.provider } : {}),
+        ...(event.detail ? { detail: event.detail } : {}),
+        ...flatDetailProjection(event.detail),
         ...(event.parentActivityId
           ? { parent_activity_id: event.parentActivityId }
           : {}),
@@ -1685,9 +1682,15 @@ function runtimeEventPayload(
         status: event.status,
         label: event.label,
         summary: event.summary,
-        ...(event.detailKind ? { detail_kind: event.detailKind } : {}),
-        ...(event.detailText ? { detail_text: event.detailText } : {}),
-        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+        ...(event.provider ? { provider: event.provider } : {}),
+        ...(event.itemKind === 'tool' && event.detail
+          ? { detail: event.detail }
+          : {}),
+        ...(event.itemKind === 'tool'
+          ? flatDetailProjection(event.detail)
+          : event.text
+            ? { detail_text: event.text }
+            : {}),
       };
     case 'permission':
       return {
@@ -1719,6 +1722,35 @@ function runtimeEventPayload(
     default:
       return assertNeverRuntimeEvent(event);
   }
+}
+
+function flatDetailProjection(
+  detail: import('../ports/agent-runtime.js').RuntimeToolDetail | undefined,
+): RunEventPayload {
+  if (!detail) return {};
+  let text: string | undefined;
+  for (const key of [
+    'text',
+    'output',
+    'result',
+    'content',
+    'unifiedDiff',
+    'log',
+    'error',
+  ]) {
+    const candidate = (detail as unknown as Record<string, unknown>)[key];
+    if (typeof candidate === 'string') {
+      text = candidate;
+      break;
+    }
+  }
+  return {
+    detail_kind: detail.kind,
+    ...(text ? { detail_text: text } : {}),
+    ...('exitCode' in detail && detail.exitCode !== undefined
+      ? { exit_code: detail.exitCode }
+      : {}),
+  };
 }
 
 const safeRuntimeToolNames = new Set([

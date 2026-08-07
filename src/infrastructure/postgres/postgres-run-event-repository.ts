@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { boundedRunEventPayload } from '../../application/ports/run-events.js';
 import type {
   RunEvent,
   RunEventRepository,
@@ -64,13 +65,14 @@ export class PostgresRunEventRepository implements RunEventRepository {
     type: RunEventType,
     payload: RunEvent['payload'],
   ) {
+    const boundedPayload = boundedRunEventPayload(payload);
     const r = await this.db.query<any>(
       `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 RETURNING id,run_id,sequence,type,payload,created_at`,
       [
         randomUUID(),
         runId,
         type,
-        JSON.stringify(payload),
+        JSON.stringify(boundedPayload),
         new Date().toISOString(),
       ],
     );
@@ -80,7 +82,7 @@ export class PostgresRunEventRepository implements RunEventRepository {
       runId: x.run_id,
       sequence: Number(x.sequence),
       type: x.type,
-      payload: x.payload,
+      payload: boundedRunEventPayload(x.payload),
       createdAt: new Date(x.created_at).toISOString(),
     };
   }
@@ -91,6 +93,7 @@ export class PostgresRunEventRepository implements RunEventRepository {
     );
     const events = (r.rows ?? []).map((x) => ({
       ...x,
+      payload: boundedRunEventPayload(x.payload),
       runId: x.run_id,
       sequence: Number(x.sequence),
       createdAt: new Date(x.created_at).toISOString(),

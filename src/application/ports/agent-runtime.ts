@@ -26,6 +26,79 @@ export interface RuntimeExtensionBinding {
   readonly mcpServers?: readonly RuntimeMcpServerConfig[];
 }
 
+export type RuntimeToolDetail =
+  | {
+      readonly kind: 'shell';
+      readonly command?: string;
+      readonly cwd?: string;
+      readonly output?: string;
+      readonly exitCode?: number | null;
+    }
+  | {
+      readonly kind: 'read';
+      readonly filePath?: string;
+      readonly content?: string;
+      readonly offset?: number;
+      readonly limit?: number;
+    }
+  | {
+      readonly kind: 'write';
+      readonly filePath?: string;
+      readonly content?: string;
+      readonly error?: string;
+    }
+  | {
+      readonly kind: 'edit';
+      readonly filePath?: string;
+      readonly oldString?: string;
+      readonly newString?: string;
+      readonly unifiedDiff?: string;
+      readonly error?: string;
+    }
+  | {
+      readonly kind: 'search';
+      readonly query?: string;
+      readonly toolName?: 'search' | 'grep' | 'glob' | 'web_search';
+      readonly content?: string;
+      readonly filePaths?: readonly string[];
+      readonly webResults?: readonly {
+        readonly title?: string;
+        readonly url?: string;
+      }[];
+      readonly annotations?: readonly string[];
+      readonly numFiles?: number;
+      readonly numMatches?: number;
+      readonly durationMs?: number;
+      readonly durationSeconds?: number;
+      readonly truncated?: boolean;
+      readonly mode?: 'content' | 'files_with_matches' | 'count';
+      readonly error?: string;
+    }
+  | {
+      readonly kind: 'fetch';
+      readonly url?: string;
+      readonly prompt?: string;
+      readonly result?: string;
+      readonly code?: number;
+      readonly codeText?: string;
+      readonly bytes?: number;
+      readonly durationMs?: number;
+      readonly error?: string;
+    }
+  | {
+      readonly kind: 'subagent';
+      readonly subAgentType?: string;
+      readonly description?: string;
+      readonly childSessionId?: string;
+      readonly log?: string;
+      readonly actions?: readonly {
+        readonly index?: number;
+        readonly toolName?: string;
+        readonly summary?: string;
+      }[];
+      readonly error?: string;
+    };
+
 export interface AgentRuntimeExecution {
   readonly provider: string;
   readonly model: string;
@@ -63,10 +136,9 @@ export type RuntimeEvent =
       readonly summary: string;
       readonly toolName?: string | undefined;
       readonly parentActivityId?: string;
-      readonly detailKind?:
-        'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
-      readonly detailText?: string;
-      readonly exitCode?: number;
+      readonly provider: string;
+      readonly detail?: RuntimeToolDetail;
+      readonly error?: string;
     }
   | {
       readonly kind: 'child_timeline_item';
@@ -76,10 +148,10 @@ export type RuntimeEvent =
       readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
       readonly label: string;
       readonly summary: string;
-      readonly detailKind?:
-        'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
-      readonly detailText?: string;
-      readonly exitCode?: number;
+      readonly provider: string;
+      readonly text?: string;
+      readonly detail?: RuntimeToolDetail;
+      readonly error?: string;
     }
   | {
       readonly kind: 'usage';

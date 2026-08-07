@@ -9,6 +9,7 @@ import {
   type AgentRuntimePort,
   type RuntimeEventSink,
   type RuntimeEvent,
+  type RuntimeToolDetail,
   RuntimeExecutionError,
   RuntimeTimedOutError,
 } from '../../application/ports/agent-runtime.js';
@@ -210,6 +211,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         : input.operation === 'continue'
           ? continuationBinding!.model
           : this.#model.id;
+    let activeProvider = effectiveProvider;
 
     const artifactRelativePath = join(
       'scratchpad',
@@ -334,10 +336,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         label: string;
         summary: string;
         readonly toolName?: string | undefined;
-        readonly detailKind?:
-          'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch';
-        readonly detailText?: string;
-        readonly exitCode?: number;
+        readonly detail?: RuntimeToolDetail;
+        readonly provider: string;
         readonly quality: number;
         readonly parentActivityId?: string;
       }
@@ -446,22 +446,15 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       toolName?: string,
       parentActivityId?: string,
       quality = 0,
-      detailText?: string,
-      exitCode?: number,
+      detail?: RuntimeToolDetail,
     ): void => {
       const previous = activityStates.get(activityId);
-      const nextDetailText = detailText ? capDetail(detailText) : undefined;
       const detailImproved =
-        nextDetailText !== undefined &&
-        nextDetailText.length > (previous?.detailText?.length ?? 0) &&
-        nextDetailText !== previous?.detailText;
-      const exitCodeImproved =
-        exitCode !== undefined && previous?.exitCode === undefined;
-      const bestDetailText =
-        nextDetailText !== undefined &&
-        (previous?.detailText === undefined || detailImproved)
-          ? nextDetailText
-          : previous?.detailText;
+        detail !== undefined &&
+        JSON.stringify(detail).length >
+          JSON.stringify(previous?.detail ?? {}).length &&
+        JSON.stringify(detail) !== JSON.stringify(previous?.detail);
+      const bestDetail = detailImproved ? detail : previous?.detail;
       if (
         deferParentTerminals &&
         !parentActivityId &&
@@ -491,15 +484,14 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       if (previous && isTerminalToolStatus(previous.status)) {
         if (
           previous.status !== status ||
-          (quality <= previous.quality && !detailImproved && !exitCodeImproved)
+          (quality <= previous.quality && !detailImproved)
         )
           return;
       }
       if (
         previous?.status === status &&
         quality <= previous.quality &&
-        !detailImproved &&
-        !exitCodeImproved
+        !detailImproved
       )
         return;
       const bestLabel =
@@ -513,8 +505,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         previous.label === bestLabel &&
         previous.summary === bestSummary &&
         previous.parentActivityId === parentActivityId &&
-        !detailImproved &&
-        !exitCodeImproved
+        !detailImproved
       )
         return;
       activityStates.set(activityId, {
@@ -525,34 +516,38 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         ...((toolName ?? previous?.toolName)
           ? { toolName: toolName ?? previous?.toolName }
           : {}),
-        ...runtimeToolDetail(category, detailText, exitCode),
-        ...(bestDetailText !== undefined ? { detailText: bestDetailText } : {}),
-        ...(exitCode !== undefined
-          ? { exitCode }
-          : previous?.exitCode !== undefined
-            ? { exitCode: previous.exitCode }
-            : {}),
+        ...(bestDetail ? { detail: bestDetail } : {}),
+        provider: activeProvider,
         quality: bestQuality,
         ...(parentActivityId ? { parentActivityId } : {}),
       });
-      emit({
-        kind: 'tool_status',
-        activityId,
-        category,
-        status,
-        label: bestLabel,
-        summary: bestSummary,
-        ...((toolName ?? previous?.toolName)
-          ? { toolName: toolName ?? previous?.toolName }
-          : {}),
-        ...(bestDetailText !== undefined ? { detailText: bestDetailText } : {}),
-        ...(exitCode !== undefined
-          ? { exitCode }
-          : previous?.exitCode !== undefined
-            ? { exitCode: previous.exitCode }
+      if (parentActivityId) {
+        emit({
+          kind: 'child_timeline_item',
+          activityId,
+          parentActivityId,
+          itemKind: 'tool',
+          status,
+          label: bestLabel,
+          summary: bestSummary,
+          ...(bestDetail ? { detail: bestDetail } : {}),
+          provider: activeProvider,
+        });
+      } else {
+        emit({
+          kind: 'tool_status',
+          activityId,
+          category,
+          status,
+          label: bestLabel,
+          summary: bestSummary,
+          ...((toolName ?? previous?.toolName)
+            ? { toolName: toolName ?? previous?.toolName }
             : {}),
-        ...(parentActivityId ? { parentActivityId } : {}),
-      });
+          ...(bestDetail ? { detail: bestDetail } : {}),
+          provider: activeProvider,
+        });
+      }
     };
     const flushDeferredParentTerminals = (): void => {
       deferParentTerminals = false;
@@ -589,45 +584,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           : parentCallActivities.get(call.callId)) ?? allocateActivityId();
       if (parentActivityId) childCallActivities.set(key, activityId);
       else parentCallActivities.set(call.callId, activityId);
-      let projectedCall = call;
-      if (call.detailText && !quarantinedToolDetails.has(activityId)) {
-        const sourceDetail = mergeProjectedText(
-          toolSourceDetails.get(activityId) ?? '',
-          call.detailText,
-        );
-        toolSourceDetails.set(activityId, sourceDetail);
-        const sanitizedDetail = sanitizeText(
-          sourceDetail,
-          8000,
-          isTerminalToolStatus(status),
-        );
-        if (sanitizedDetail === null) {
-          quarantinedToolDetails.add(activityId);
-          const { detailText: _detailText, ...withoutDetail } = call;
-          projectedCall = withoutDetail;
-        } else {
-          projectedCall = { ...call, detailText: sanitizedDetail };
-        }
-      }
-      if (quarantinedToolDetails.has(activityId)) {
-        const { detailText: _detailText, ...withoutDetail } = call;
-        projectedCall = withoutDetail;
-      } else if (isTerminalToolStatus(status)) {
-        const sourceDetail = toolSourceDetails.get(activityId);
-        if (sourceDetail) {
-          const finalDetail = sanitizeText(sourceDetail, 8000, true);
-          if (finalDetail === null) {
-            quarantinedToolDetails.add(activityId);
-            const { detailText: _detailText, ...withoutDetail } = call;
-            projectedCall = withoutDetail;
-          } else {
-            projectedCall = { ...call, detailText: finalDetail };
-          }
-        }
-      }
-      const category = toolCategory(call.name, call.detailType);
+      const category = toolCategory(call.name, call.detail?.type);
       const presentation = toolPresentation(
-        projectedCall,
+        call,
         category,
         executionCwd,
         sanitizeText,
@@ -648,8 +607,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           call.name,
           undefined,
           presentation.quality,
-          presentation.detailText,
-          presentation.exitCode,
+          presentation.detail,
         );
       publishToolState(
         activityId,
@@ -660,13 +618,18 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         call.name,
         parentActivityId,
         presentation.quality,
-        presentation.detailText,
-        presentation.exitCode,
+        presentation.detail,
       );
       if (!parentActivityId && activityStates.has(activityId))
         publishedParentActivities.add(activityId);
       if (!parentActivityId && activityStates.has(activityId))
-        recordChildSessionCorrelation(call.input?.childSessionId, activityId);
+        recordChildSessionCorrelation(
+          call.childSessionId ??
+            (call.detail?.type === 'sub_agent'
+              ? call.detail.childSessionId
+              : undefined),
+          activityId,
+        );
       return activityId;
     };
     const removeDescriptorBinding = (descriptorId: string): void => {
@@ -964,7 +927,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status: 'running',
         label: itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
         summary,
-        detailText: nextText,
+        text: nextText,
+        provider: activeProvider,
       });
     };
     const finalizeProviderSubagent = (
@@ -995,7 +959,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             status: terminalStatus,
             label: item.itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
             summary,
-            ...(item.text ? { detailText: item.text } : {}),
+            ...(item.text ? { text: item.text } : {}),
+            provider: activeProvider,
           });
           item.status = terminalStatus;
           continue;
@@ -1016,7 +981,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
             status: terminalStatus,
             label: item.itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
             summary: fallbackSummary,
-            ...(item.text ? { detailText: item.text } : {}),
+            ...(item.text ? { text: item.text } : {}),
+            provider: activeProvider,
           });
           item.status = terminalStatus;
           continue;
@@ -1032,7 +998,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           summary:
             safeSingleLine(finalText, 160, false) ??
             (item.itemKind === 'assistant' ? 'Assistant' : 'Thinking'),
-          detailText: finalText,
+          text: finalText,
+          provider: activeProvider,
         });
         item.status = terminalStatus;
       }
@@ -1346,11 +1313,12 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
               });
               return {
                 ...created,
-                provider: created.provider || createProvider,
-                model: created.model ?? effectiveModel,
+                provider: created.provider,
+                model: created.model,
               };
             })();
       activeAgentId = agent.id;
+      activeProvider = agent.provider;
       this.#agents.set(input.runId, agent.id);
       if (input.operation === 'create')
         this.#agentBindings.set(agent.id, {
@@ -1524,8 +1492,8 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         ? await this.#readMemoryCandidates(artifact, executionCwd)
         : {};
       return {
-        provider: agent.provider || effectiveProvider,
-        model: agent.model ?? effectiveModel,
+        provider: agent.provider,
+        model: agent.model,
         text: finished.lastMessage,
         providerAgentId: agent.id,
         paseoWorkspaceId: workspaceId,
@@ -1769,56 +1737,155 @@ function toolPresentation(
   call: PaseoToolCall,
   category: RuntimeToolCategory,
   executionCwd: string,
-  sanitizeText: (value: string, max?: number) => string | null,
+  sanitizeText: (value: string, max?: number, flush?: boolean) => string | null,
 ): {
   readonly label: string;
   readonly summary: string;
   readonly quality: number;
-  readonly detailText?: string;
-  readonly exitCode?: number;
+  readonly detail?: RuntimeToolDetail;
 } {
   const fallback = categoryLabel(category);
-  const input = call.input;
-  const preview = call.detailText
-    ? sanitizeText(call.detailText, 8000)
+  const typedDetail = projectRuntimeToolDetail(
+    call.detail,
+    executionCwd,
+    sanitizeText,
+    call.error,
+  );
+  const detailLabel = typedDetail
+    ? 'command' in typedDetail
+      ? typedDetail.command
+      : 'filePath' in typedDetail
+        ? typedDetail.filePath
+        : 'query' in typedDetail
+          ? typedDetail.query
+          : 'url' in typedDetail
+            ? typedDetail.url
+            : 'description' in typedDetail
+              ? typedDetail.description
+              : undefined
     : undefined;
-  let detail: string | null = null;
-  let quality = 0;
-  if (category === 'shell' && input?.command) {
-    const command = sanitizeText(input.command, 8000);
-    if (command && isSafeShell(command)) detail = command;
-  } else if (['read', 'edit', 'write'].includes(category) && input?.filePath)
-    detail = workspaceRelativePath(executionCwd, input.filePath);
-  else if (category === 'search' && input?.query) {
-    const query = sanitizeText(input.query, 8000);
-    detail = query ? safeSingleLine(query, 80, true) : null;
-  } else if (category === 'fetch' && input?.url)
-    detail = safeHttpUrl(input.url);
-  else if (category === 'subagent') {
-    const description = input?.description
-      ? (() => {
-          const sanitized = sanitizeText(input.description, 8000);
-          return sanitized ? safeSingleLine(sanitized, 80, true) : null;
-        })()
-      : null;
-    const subtype = input?.subAgentType
-      ? (() => {
-          const sanitized = sanitizeText(input.subAgentType, 8000);
-          return sanitized ? safeSingleLine(sanitized, 40, true) : null;
-        })()
-      : null;
-    detail = description ?? subtype;
-  }
-  if (detail) quality = category === 'subagent' ? 1 : 1;
+  const quality = typedDetail ? 1 : 0;
   return {
-    label: detail
-      ? (safeSingleLine(`${fallback}: ${detail}`, 80, false) ?? fallback)
+    label: detailLabel
+      ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ?? fallback)
       : fallback,
     summary: toolSummary(category),
     quality,
-    ...(preview ? { detailText: preview } : {}),
-    ...(call.exitCode !== undefined ? { exitCode: call.exitCode } : {}),
+    ...(typedDetail ? { detail: typedDetail } : {}),
   };
+}
+
+function projectRuntimeToolDetail(
+  source: PaseoToolCall['detail'],
+  executionCwd: string,
+  sanitizeText: (value: string, max?: number, flush?: boolean) => string | null,
+  failedError?: string,
+): RuntimeToolDetail | undefined {
+  if (!source) return undefined;
+  const kind = source.type === 'sub_agent' ? 'subagent' : source.type;
+  const output: Record<string, unknown> = { kind };
+  const putText = (key: string, value: unknown): void => {
+    if (typeof value !== 'string') return;
+    const sanitized = sanitizeText(value, 8000, true);
+    if (sanitized !== null) output[key] = sanitized;
+  };
+  if ('command' in source && source.command) putText('command', source.command);
+  if ('cwd' in source && source.cwd) putText('cwd', source.cwd);
+  if ('filePath' in source && source.filePath) {
+    const path = workspaceRelativePath(executionCwd, source.filePath);
+    if (path && !containsCredentialMarker(path)) output.filePath = path;
+  }
+  if ('content' in source && source.content) putText('content', source.content);
+  if ('oldString' in source && source.oldString)
+    putText('oldString', source.oldString);
+  if ('newString' in source && source.newString)
+    putText('newString', source.newString);
+  if ('query' in source && source.query) putText('query', source.query);
+  if ('toolName' in source && source.toolName)
+    output.toolName = source.toolName;
+  if ('filePaths' in source && Array.isArray(source.filePaths))
+    output.filePaths = source.filePaths
+      .slice(0, 64)
+      .map((path) => workspaceRelativePath(executionCwd, path))
+      .filter(Boolean);
+  if ('webResults' in source && Array.isArray(source.webResults))
+    output.webResults = source.webResults.slice(0, 64).map((item) => ({
+      ...(item.title
+        ? { title: sanitizeText(item.title, 8000, true) ?? undefined }
+        : {}),
+      ...(item.url ? { url: safeHttpUrl(item.url) ?? undefined } : {}),
+    }));
+  if ('annotations' in source && Array.isArray(source.annotations))
+    output.annotations = source.annotations
+      .slice(0, 64)
+      .filter(
+        (annotation): annotation is string => typeof annotation === 'string',
+      )
+      .map((annotation) => sanitizeText(annotation, 8000, true))
+      .filter((annotation): annotation is string => annotation !== null);
+  for (const key of [
+    'offset',
+    'limit',
+    'numFiles',
+    'numMatches',
+    'durationMs',
+    'durationSeconds',
+    'code',
+    'bytes',
+  ]) {
+    const value = (source as unknown as Record<string, unknown>)[key];
+    if (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      (key === 'durationSeconds' || Number.isSafeInteger(value))
+    )
+      output[key] = value;
+  }
+  if ('truncated' in source && typeof source.truncated === 'boolean')
+    output.truncated = source.truncated;
+  if ('mode' in source && source.mode) output.mode = source.mode;
+  if ('url' in source && source.url) {
+    const url = safeHttpUrl(source.url);
+    if (url) output.url = url;
+  }
+  if ('subAgentType' in source && source.subAgentType)
+    putText('subAgentType', source.subAgentType);
+  if ('description' in source && source.description)
+    putText('description', source.description);
+  for (const key of [
+    'output',
+    'result',
+    'prompt',
+    'codeText',
+    'log',
+    'unifiedDiff',
+    'error',
+  ]) {
+    if (key in source)
+      putText(key, (source as unknown as Record<string, unknown>)[key]);
+  }
+  if (
+    'exitCode' in source &&
+    (source.exitCode === null || Number.isSafeInteger(source.exitCode))
+  )
+    output.exitCode = source.exitCode;
+  if ('actions' in source && Array.isArray(source.actions))
+    output.actions = source.actions.slice(0, 64).map((action) => ({
+      ...(typeof action.index === 'number' && Number.isSafeInteger(action.index)
+        ? { index: action.index }
+        : {}),
+      ...(typeof action.toolName === 'string'
+        ? { toolName: sanitizeText(action.toolName, 8000, true) ?? undefined }
+        : {}),
+      ...(typeof action.summary === 'string'
+        ? { summary: sanitizeText(action.summary, 8000, true) ?? undefined }
+        : {}),
+    }));
+  if (failedError) {
+    const safeError = sanitizeText(failedError, 8000, true);
+    if (safeError) output.error = safeError;
+  }
+  return output as RuntimeToolDetail;
 }
 
 function categoryLabel(category: RuntimeToolCategory): string {
@@ -1908,28 +1975,6 @@ function mergeProjectedText(existing: string, incoming: string): string {
   if (next.startsWith(existing)) return next;
   if (existing.endsWith(next)) return existing;
   return capDetail(existing + next);
-}
-
-function runtimeToolDetail(
-  category: RuntimeToolCategory,
-  detailText?: string,
-  exitCode?: number,
-): Record<string, string | number> {
-  const detailKind = [
-    'shell',
-    'read',
-    'write',
-    'edit',
-    'search',
-    'fetch',
-  ].includes(category)
-    ? category
-    : undefined;
-  return {
-    ...(detailKind ? { detailKind } : {}),
-    ...(detailText ? { detailText: capDetail(detailText) } : {}),
-    ...(exitCode !== undefined ? { exitCode } : {}),
-  };
 }
 
 function containsCredentialMarker(value: string): boolean {

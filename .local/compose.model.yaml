@@ -1,5 +1,10 @@
 services:
   agent-server:
+    volumes:
+      - type: bind
+        source: ./.local/seed-team.mjs
+        target: /workspace/.local/seed-team.mjs
+        read_only: true
     env_file:
       - path: .local/model.env
         required: true

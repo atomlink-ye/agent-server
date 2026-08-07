@@ -3,16 +3,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { Client as PostgresClient } from 'pg';
 
-const exec = promisify(execFile);
 const baseUrl = process.env.AGENT_SERVER_BASE_URL ?? 'http://127.0.0.1:3000';
 const token = process.env.AGENT_SERVER_SERVICE_TOKEN ?? 'token-local-dev';
 const workspaceId = process.env.AGENT_SERVER_WORKSPACE_ID ?? 'workspace_main';
 const timeoutMs = Number(process.env.MIXED_TEAM_TIMEOUT_MS ?? 900_000);
 const startedAt = Date.now();
-console.log('MIXED_TEAM_SEED_VOLUME_COPY_REQUIRED');
+const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+const packageMarker = JSON.parse(await readFile('package.json', 'utf8'));
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+assert(packageMarker.name === '@atomlink-ye/agent-server', 'agent_server_working_directory_required');
+await readFile('compose.yaml', 'utf8');
+assert(databaseUrl, 'DATABASE_URL_or_POSTGRES_URL_required');
 
 async function request(path, { method = 'GET', body, status } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -31,12 +34,11 @@ async function request(path, { method = 'GET', body, status } = {}) {
     throw new Error(`${method} ${path} -> ${response.status} ${text}`);
   return text ? JSON.parse(text) : {};
 }
-const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const modelPolicies = Object.freeze({ lead: 'free-only', fixer: 'claude/deepseek-v4-flash', reviewer: 'codex/deepseek-v4-flash' });
 
 function instructions(name) {
   if (name === 'lead') return `Act directly as Lead using only canonical Team tools. Never spawn, delegate, use provider subagents, or call shell/filesystem tools. Read the board first and perform the exact next legal control action, then stop. On an empty board create exactly one Work assigned to fixer: subject "Implement mixed_team_rework.py" and description exactly "Create a useful self-contained Python utility in repo-root relative mixed_team_rework.py. The first attempt must be 90-130 lines, executable, manually run, and submit marker FIXER_SUBMIT_V1 while deliberately retaining one explicit empty-input acceptance defect for review." Do not create reviewer Work on this turn. When fixer Work has a completed latest attempt containing FIXER_SUBMIT_V1, do not accept it; on that next Lead turn create exactly one Work assigned to reviewer with subject "Review mixed_team_rework.py" and description exactly "Read and run mixed_team_rework.py, genuinely detect the declared empty-input acceptance defect, and submit marker REVIEW_REJECT with the exact blocking reason." Do not accept or finish on that creation turn. When reviewer Work is completed with REVIEW_REJECT, accept reviewer Work and request changes on fixer Work in the same turn, passing the reviewer's exact blocking feedback as feedback. When fixer has a completed FIXER_SUBMIT_V2 attempt, accept fixer Work. When every Work is accepted and no active attempts remain, call team_finish exactly once. Never repeat successful mutations, invent refs, or substitute prose for a canonical action.`;
-  if (name === 'fixer') return `Act directly as the assigned fixer using canonical Team tools plus the available workspace terminal. Do not create or mutate another Work and do not use provider subagents. Build a useful self-contained JSON token-summary CLI that accepts --text and emits deterministic JSON with count and first_token. For attempt 1, discover the repository root with git (never embed an absolute path), write it to repo-root relative mixed_team_rework.py with about 100 lines (accepted range 90-130), and intentionally implement the acceptance defect by indexing tokens[0], so running --text '' fails with IndexError. Manually run it, copy that exact defective file to mixed_team_rework.v1.py before submitting, compute lines and sha256 for both, and submit marker FIXER_SUBMIT_V1. After the first submit, stop. On request_changes, read the exact feedback, edit the same file so --text '' succeeds with JSON {"count":0,"first_token":null}, run non-empty and empty cases, recompute line count and sha256, and submit marker FIXER_SUBMIT_V2. Never use absolute paths in prompts or results, never send messages, and never repeat a successful submit.`;
+  if (name === 'fixer') return `Act directly as the assigned fixer using canonical Team tools plus the available workspace terminal. Do not create or mutate another Work and do not use provider subagents. Build a useful self-contained JSON token-summary CLI that accepts --text and emits deterministic JSON with count and first_token. Starting from the current working directory, walk parent directories until package.json has name @atomlink-ye/agent-server and compose.yaml is present; never use version-control commands or print an absolute path. For attempt 1, write it to repo-root relative mixed_team_rework.py with about 100 lines (accepted range 90-130), and intentionally implement the acceptance defect by indexing tokens[0], so running --text '' fails with IndexError. Manually run it, copy that exact defective file to mixed_team_rework.v1.py before submitting, compute lines and sha256 for both, and submit marker FIXER_SUBMIT_V1. After the first submit, stop. On request_changes, locate the same workspace without absolute paths, edit the same file so --text '' succeeds with JSON {"count":0,"first_token":null}, run non-empty and empty cases, recompute line count and sha256, and submit marker FIXER_SUBMIT_V2. Never use absolute paths in prompts or results, never send messages, and never repeat a successful submit.`;
   return `Act directly as the assigned reviewer using canonical Team tools plus the available workspace terminal. Do not create or mutate another Work and do not use provider subagents. Read and run repo-root relative mixed_team_rework.v1.py (the preserved first attempt) with --text ''. Genuinely verify the declared tokens[0] defect produces an IndexError, and submit a completed result containing marker REVIEW_REJECT and exact blocking reason: "empty input is mishandled: the utility indexes the first token instead of returning an empty result." Include the relative path and safe run observation. Do not edit either file, do not accept Work, never send messages, and stop after one submit.`;
 }
 function agentYaml(name) {
@@ -71,20 +73,21 @@ assert(terminalTask?.status === 'completed', 'root_task_not_terminal_success');
 assert(projection?.project?.status === 'succeeded', 'team_run_not_succeeded');
 const evidenceRoot = `.local/mixed-team-evidence/${rootTaskId}`;
 await mkdir(evidenceRoot, { recursive: true });
-const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-const db = databaseUrl ? new PostgresClient({ connectionString: databaseUrl }) : null;
-assert(db, 'DATABASE_URL_or_POSTGRES_URL_required_for_durable_evidence');
+const db = new PostgresClient({ connectionString: databaseUrl });
 await db.connect();
 const query = async (text, values = []) => (await db.query(text, values)).rows;
 const providers = await query(`SELECT m.name AS member_name, m.role, av.policy_snapshot->>'modelPolicyRef' AS model_policy_ref, r.runtime->>'provider' AS provider, r.runtime->>'model' AS model, count(*)::int AS run_count FROM team_runs tr JOIN team_member_runs m ON m.team_run_id=tr.id JOIN agent_versions av ON av.id=m.agent_version_id JOIN tasks t ON t.team_member_run_id=m.id AND t.root_task_id=tr.root_task_id JOIN runs r ON r.task_id=t.id WHERE tr.root_task_id=$1 AND r.status='succeeded' GROUP BY m.name,m.role,av.policy_snapshot,r.runtime->>'provider',r.runtime->>'model' ORDER BY m.name`, [rootTaskId]);
 const expectedProviders = { lead: { policy: 'free-only', provider: 'opencode' }, fixer: { policy: 'claude/deepseek-v4-flash', provider: 'claude' }, reviewer: { policy: 'codex/deepseek-v4-flash', provider: 'codex' } };
 assert(providers.length === 3, 'provider_mapping_cardinality_invalid');
-for (const row of providers) { const expected = expectedProviders[row.member_name]; assert(expected, `unexpected_provider_member_${row.member_name}`); assert(row.model_policy_ref === expected.policy, `provider_policy_mismatch_${row.member_name}`); assert(row.provider === expected.provider, `provider_mismatch_${row.member_name}`); assert(row.model === 'deepseek-v4-flash', `model_mismatch_${row.member_name}`); assert(!String(row.model ?? '').includes('scripted'), 'scripted_model_detected'); }
+for (const row of providers) { const expected = expectedProviders[row.member_name]; assert(expected, `unexpected_provider_member_${row.member_name}`); assert(row.run_count > 0, `provider_run_count_invalid_${row.member_name}`); assert(row.model_policy_ref === expected.policy, `provider_policy_mismatch_${row.member_name}`); assert(row.provider === expected.provider, `provider_mismatch_${row.member_name}`); assert(row.model === 'deepseek-v4-flash', `model_mismatch_${row.member_name}`); }
+const scriptedRuntimeDetected = providers.some((row) => /scripted/i.test(`${row.provider} ${row.model}`));
+assert(!scriptedRuntimeDetected, 'scripted_model_detected');
 await writeFile(`${evidenceRoot}/providers.json`, JSON.stringify(providers, null, 2));
-const workRows = await query(`SELECT w.id AS work_ref,w.subject,w.status AS work_status,w.created_at,w.updated_at,m.name AS assignee_name FROM team_work_items w JOIN team_member_runs m ON m.id=w.owner_member_id WHERE w.team_run_id=(SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY w.created_at`, [rootTaskId]);
+const workRows = await query(`SELECT w.id AS work_ref,w.subject,w.status AS work_status,w.created_at,w.updated_at,m.name AS assignee_name,m.role AS assignee_role,c.name AS created_by_name,c.role AS created_by_role FROM team_work_items w JOIN team_member_runs m ON m.id=w.owner_member_id JOIN team_member_runs c ON c.id=w.created_by_member_id WHERE w.team_run_id=(SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY w.created_at`, [rootTaskId]);
 const attemptRows = await query(`SELECT a.id AS attempt_ref,a.work_item_id AS work_ref,a.attempt_no,a.status AS attempt_status,a.result_summary,a.feedback,a.created_at,a.updated_at,a.completed_at,m.name AS assignee_name FROM team_work_item_attempts a JOIN team_member_runs m ON m.id=a.assignee_member_id WHERE a.team_run_id=(SELECT id FROM team_runs WHERE root_task_id=$1) ORDER BY a.created_at`, [rootTaskId]);
 const reviewReason = 'empty input is mishandled: the utility indexes the first token instead of returning an empty result.';
 assert(workRows.length === 2 && workRows.every((row) => row.work_status === 'accepted'), 'exactly_two_accepted_work_items_required');
+assert(workRows.every((row) => row.created_by_name === 'lead' && row.created_by_role === 'lead'), 'work_creator_must_be_lead');
 assert(attemptRows.length === 3, 'exactly_three_attempts_required');
 const fixerV1 = attemptRows.find((row) => row.assignee_name === 'fixer' && row.attempt_no === 1);
 const reviewerV1 = attemptRows.find((row) => row.assignee_name === 'reviewer' && row.attempt_no === 1);
@@ -99,22 +102,24 @@ const chronological = [...workRows.map((row) => ({ kind: 'work', ...row })), ...
 const terminalTeam = await query(`SELECT status,phase,updated_at FROM team_runs WHERE root_task_id=$1`, [rootTaskId]);
 assert(terminalTeam.length === 1 && terminalTeam[0].status === 'succeeded', 'durable_team_terminal_status_invalid');
 await writeFile(`${evidenceRoot}/workflow.json`, JSON.stringify({ root_task_id: rootTaskId, team_status: projection.project.status, work: workRows, attempts: attemptRows, chronological }, null, 2));
-const workspaceRows = await query(`SELECT DISTINCT rs.paseo_workspace_id FROM runtime_sessions rs JOIN team_member_runs m ON m.runtime_session_id=rs.id JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 AND rs.paseo_workspace_id IS NOT NULL AND btrim(rs.paseo_workspace_id)<>''`, [rootTaskId]);
-assert(workspaceRows.length === 1, 'paseo_workspace_cardinality_invalid');
-await writeFile(`${evidenceRoot}/workspace.json`, JSON.stringify({ paseo_workspace_ids: workspaceRows.map((r) => r.paseo_workspace_id) }, null, 2));
+const workspaceRows = await query(`SELECT m.name,m.role,rs.id AS runtime_session_id,rs.paseo_workspace_id FROM runtime_sessions rs JOIN team_member_runs m ON m.runtime_session_id=rs.id JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 ORDER BY m.name`, [rootTaskId]);
+assert(workspaceRows.length === 3, 'paseo_workspace_member_cardinality_invalid');
+assert(workspaceRows.every((row) => ['lead', 'fixer', 'reviewer'].includes(row.name) && row.paseo_workspace_id && String(row.paseo_workspace_id).trim()), 'paseo_workspace_member_missing');
+const distinctWorkspaceCount = new Set(workspaceRows.map((row) => row.paseo_workspace_id)).size;
+assert(distinctWorkspaceCount === 1, 'paseo_workspace_cardinality_invalid');
+await writeFile(`${evidenceRoot}/workspace.json`, JSON.stringify({ members: workspaceRows, distinct_workspace_count: distinctWorkspaceCount }, null, 2));
 const dispatchRows = await query(`SELECT t.team_task_kind,t.id AS task_id,r.id AS run_id,m.name,d.id AS dispatch_id,d.created_at AS dispatch_created_at,min(e.created_at) FILTER (WHERE e.type='started') AS started_at,max(e.created_at) FILTER (WHERE e.type IN ('succeeded','failed','timed_out','cancelled')) AS terminal_at FROM tasks t JOIN runs r ON r.task_id=t.id LEFT JOIN run_dispatches d ON d.run_id=r.id AND d.event_type='run.enqueue' LEFT JOIN run_events e ON e.run_id=r.id LEFT JOIN team_member_runs m ON m.id=t.team_member_run_id WHERE t.root_task_id=$1 GROUP BY t.team_task_kind,t.id,r.id,m.name,d.id,d.created_at ORDER BY d.id`, [rootTaskId]);
 const reviewerDispatch = dispatchRows.find((r) => r.name === 'reviewer');
 const nextLead = dispatchRows.find((r) => r.name === 'lead' && reviewerDispatch && Number(r.dispatch_id) > Number(reviewerDispatch.dispatch_id));
 assert(reviewerDispatch?.terminal_at && nextLead?.started_at, 'dispatch_order_rows_missing');
 assert(new Date(reviewerDispatch.terminal_at) <= new Date(nextLead.started_at), 'reviewer_terminal_after_queued_lead_start');
 await writeFile(`${evidenceRoot}/dispatch-order.json`, JSON.stringify({ reviewer: reviewerDispatch, queued_lead: nextLead }, null, 2));
-const root = (await exec('git', ['rev-parse', '--show-toplevel'])).stdout.trim();
-const artifact = `${root}/mixed_team_rework.py`;
-const artifactV1 = `${root}/mixed_team_rework.v1.py`;
+const artifact = 'mixed_team_rework.py';
+const artifactV1 = 'mixed_team_rework.v1.py';
 const python = await readFile(artifact);
 const pythonV1 = await readFile(artifactV1);
 const lineCount = (bytes) => { const lines = bytes.toString('utf8').split(/\r?\n/); return lines.at(-1) === '' ? lines.length - 1 : lines.length; };
-const runPython = async (path) => { try { const result = await exec('python3', [path, '--text', ''], { timeout: 10_000 }); return { exit_code: 0, stdout: String(result.stdout).slice(0, 500), stderr: String(result.stderr).slice(0, 500) }; } catch (error) { return { exit_code: Number.isInteger(error.code) ? error.code : 1, stdout: String(error.stdout ?? '').slice(0, 500), stderr: String(error.stderr ?? error.message ?? '').slice(0, 500) }; } };
+const runPython = (path) => new Promise((resolve) => execFile('python3', [path, '--text', ''], { timeout: 10_000 }, (error, stdout, stderr) => resolve({ exit_code: error ? (Number.isInteger(error.code) ? error.code : 1) : 0, stdout: String(stdout ?? '').slice(0, 500), stderr: String(stderr ?? error?.message ?? '').slice(0, 500) })));
 const v1Run = await runPython(artifactV1);
 const finalRun = await runPython(artifact);
 assert(lineCount(pythonV1) >= 90 && lineCount(pythonV1) <= 130, 'python_v1_line_count_invalid');
@@ -130,8 +135,9 @@ const artifactEvidence = { v1: { relative_path: 'mixed_team_rework.v1.py', line_
 await writeFile(`${evidenceRoot}/python-artifact.json`, JSON.stringify(artifactEvidence, null, 2));
 const resolvedModel = providers.every((row) => row.model === 'deepseek-v4-flash') ? 'deepseek-v4-flash' : null;
 assert(resolvedModel, 'composition_model_not_exact_non_scripted');
-const compositionProviderUsed = providers.length === 3 && providers.every((row) => row.provider && row.model === 'deepseek-v4-flash');
+const exactMapping = providers.length === 3 && providers.every((row) => expectedProviders[row.member_name]?.provider === row.provider && expectedProviders[row.member_name]?.policy === row.model_policy_ref && row.model === 'deepseek-v4-flash' && row.run_count > 0);
+const compositionProviderUsed = exactMapping && !scriptedRuntimeDetected;
 assert(compositionProviderUsed, 'composition_provider_used_not_derived');
-await writeFile(`${evidenceRoot}/manifest.json`, JSON.stringify({ schema: 'mixed-team-proof-v1', root_task_id: rootTaskId, composition: { provider_used: compositionProviderUsed, model: resolvedModel, scripted_runtime: false, members: ['lead', 'fixer', 'reviewer'] }, ordering_mode: 'demo_deterministic_fifo_single_dispatcher', platform_sequence_guarantee: false, normal_concurrency_reachable: true, evidence: ['providers.json', 'workflow.json', 'workspace.json', 'dispatch-order.json', 'python-artifact.json', 'mixed_team_rework.v1.py', 'mixed_team_rework.py'] }, null, 2));
+await writeFile(`${evidenceRoot}/manifest.json`, JSON.stringify({ schema: 'mixed-team-proof-v1', root_task_id: rootTaskId, composition: { provider_used: compositionProviderUsed, model: resolvedModel, scripted_runtime: scriptedRuntimeDetected, members: ['lead', 'fixer', 'reviewer'] }, ordering_mode: 'demo_deterministic_fifo_single_dispatcher', platform_sequence_guarantee: false, normal_concurrency_reachable: true, evidence: ['providers.json', 'workflow.json', 'workspace.json', 'dispatch-order.json', 'python-artifact.json', 'mixed_team_rework.v1.py', 'mixed_team_rework.py'] }, null, 2));
 await db.end();
 console.log(JSON.stringify({ root_task_id: rootTaskId, evidence_dir: evidenceRoot, markers: ['FIXER_SUBMIT_V1', 'REVIEW_REJECT', 'FIXER_SUBMIT_V2'] }, null, 2));

@@ -35,7 +35,11 @@ services:
       SERVICE_NAME: agent-server
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
-      PASEO_CORS_ORIGINS: 'http://localhost:18081,http://127.0.0.1:18081'
+      # Both must include the browser-visible origin when the daemon is reached
+      # through a proxy: the UI loads over HTTP but then opens a WebSocket, and
+      # the daemon rejects it with "Origin not allowed" / "Host not allowed".
+      PASEO_CORS_ORIGINS: ${PASEO_CORS_ORIGINS:-http://localhost:18081,http://127.0.0.1:18081}
+      PASEO_HOSTNAMES: ${PASEO_HOSTNAMES:-}
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
       HOME: /workspace/.local/home
@@ -46,6 +50,9 @@ services:
       PASEO_RELAY_ENABLED: 'false'
       PASEO_DICTATION_ENABLED: 'false'
       PASEO_VOICE_MODE_ENABLED: 'false'
+      # The Paseo daemon runs inside this container, so exporting this on the
+      # host does nothing unless compose forwards it. Off unless set to '1'.
+      PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"workspace_main","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace

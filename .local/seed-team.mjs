@@ -163,7 +163,7 @@ const artifactV1 = 'mixed_team_rework.v1.py';
 const python = await readFile(artifact);
 const pythonV1 = await readFile(artifactV1);
 const lineCount = (bytes) => { const lines = bytes.toString('utf8').split(/\r?\n/); return lines.at(-1) === '' ? lines.length - 1 : lines.length; };
-const runPython = (path) => new Promise((resolve) => execFile('python3', [path, '--text', ''], { timeout: 10_000 }, (error, stdout, stderr) => resolve({ exit_code: error ? (Number.isInteger(error.code) ? error.code : 1) : 0, stdout: String(stdout ?? '').slice(0, 500), stderr: String(stderr ?? error?.message ?? '').slice(0, 500) })));
+const runPython = (path) => new Promise((resolve) => execFile('python3', [path, '--text', ''], { timeout: 10_000 }, (error, stdout, stderr) => resolve({ exit_code: error ? (Number.isInteger(error.code) ? error.code : 1) : 0, stdout: String(stdout ?? '').slice(0, 500), stderr: String(stderr ?? error?.message ?? '').slice(-2000) })));
 const v1Run = await runPython(artifactV1);
 const finalRun = await runPython(artifact);
 assert(lineCount(pythonV1) >= 90 && lineCount(pythonV1) <= 130, 'python_v1_line_count_invalid');

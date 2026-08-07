@@ -47,16 +47,17 @@ Paseo Web confirmation.
 - Adapt the existing `.local/seed-team.mjs`; do not create a parallel seed.
 - Publish Lead with `free-only`, fixer with `claude/deepseek-v4-flash`, and
   reviewer with `codex/deepseek-v4-flash`.
-- Run exactly one primary Work item that asks the fixer to create an
-  approximately 100-line Python file in the shared Team workspace.
+- Run exactly two independent Work items created by the kickoff Lead turn: the
+  fixer creates an approximately 100-line Python file, and the reviewer
+  inspects its preserved first attempt.
 - Require manager assignment, fixer submission, reviewer rejection, fixer
   correction, manager acceptance, and Team finish. Zero rework is failure.
 - Keep `maxAttemptsPerItem=2`: fixer attempts 1 and 2 are sufficient, while the
   reviewer owns a separate one-attempt review Work item.
-- Permit the Lead to create remaining useful Work during a review turn while
-  `maxWorkItems` capacity remains. This makes the evaluator agree with the
-  existing Lead review instruction; it does not relax fixed-roster, ownership,
-  acceptance, rework, or work-count rules.
+- Do not permit later `team_work_create` calls. The kickoff Lead turn creates
+  exactly those two independent Work items, fixer first and reviewer second,
+  with no dependency relation; subsequent turns retain the pre-slice
+  incremental-Lead authorization boundary.
 - Emit greppable machine-written artifacts containing the TeamRun/root Task
   identity, manifest composition, provider/model execution rows, Work attempt
   and rejecting-review history, and produced Python path/content or digest.
@@ -86,9 +87,10 @@ Paseo Web confirmation.
       retain the existing publish/invoke flow while changing the three policy
       refs, Python task prompts, forced rejection/rework sequence, and
       machine-written evidence output.
-- [ ] Review the seed diff for exact provider mapping, one Work item, mandatory
-      rejecting review followed by a later attempt, safe bounded prompts, no
-      embedded credential, and no alternate seed path.
+- [ ] Review the seed diff for exact provider mapping, exactly two independent
+      kickoff Work items (fixer first, reviewer second), mandatory rejecting
+      review followed by a later attempt, safe bounded prompts, no embedded
+      credential, and no alternate seed path.
 - [ ] Commit each durable repository change locally before syncing it with
       `sandbox-ctl push --mode git`; transfer ignored local seed/evidence only
       through the existing sandbox binding without raw sandbox Git.
@@ -362,14 +364,14 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   and is a Human Gate outside this slice.
 - The narrower scenario change needs no policy widening: on kickoff, the Lead
   creates fixer Work first and independent reviewer Work second. With effective
-  dispatcher concurrency 1 and FIFO by `run_dispatches.id`, the fixer produces
-  the preserved V1 artifact before the reviewer attempt runs; the reviewer's
-  rejection then makes the next Lead decision request fixer rework. At normal
-  concurrency the same transition is reachable but the independent attempts
-  may interleave. This is a deterministic demo ordering control, not a platform
-  sequencing guarantee. The original negative smoke assertion remains valid
-  and unchanged, and the branch must restore the pre-slice Lead policy before
-  a replacement real TeamRun is accepted.
+  observed dispatcher concurrency 1 and FIFO by `run_dispatches.id`, the
+  existing dispatches in this run order fixer V1 before reviewer V1 and the
+  queued review Lead. The member materialization query itself has no `ORDER BY`,
+  so this is only observed/asserted ordering for this run, not a structural
+  platform sequence guarantee. At normal concurrency the same transition is
+  reachable but the independent attempts may interleave. The original negative
+  smoke assertion remains valid and unchanged, and the branch must restore the
+  pre-slice Lead policy before a replacement real TeamRun is accepted.
 
 ## Risks and recovery
 

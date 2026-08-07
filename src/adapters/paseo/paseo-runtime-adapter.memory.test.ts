@@ -299,7 +299,11 @@ describe('Paseo runtime nested provider telemetry', () => {
           callId: 'parent-call',
           name: 'delegate',
           status: 'running',
-          input: { subAgentType: 'verifier' },
+          detail: {
+            type: 'sub_agent',
+            subAgentType: 'verifier',
+            childSessionId: 'child-1',
+          },
         },
       });
       providerListener?.({

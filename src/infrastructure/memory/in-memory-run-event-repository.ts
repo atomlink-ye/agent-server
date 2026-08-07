@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { boundedRunEventPayload } from '../../application/ports/run-events.js';
 import type {
   RunEvent,
   RunEventRepository,
@@ -57,7 +58,7 @@ export class InMemoryRunEventRepository implements RunEventRepository {
       runId,
       sequence: events.length + 1,
       type,
-      payload,
+      payload: boundedRunEventPayload(payload),
       createdAt: new Date().toISOString(),
     };
     events.push(event);

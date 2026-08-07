@@ -111,6 +111,41 @@ function countOccurrences(value, needle) {
   return value.split(needle).length - 1;
 }
 
+function transcriptEvidenceFacts(rows) {
+  const authenticationFailurePattern =
+    /not logged in|401\s+unauthorized|missing\s+bearer|authentication\s+required/iu;
+  const membersWithTranscript = new Set();
+  let authenticationFailureEvents = 0;
+  for (const row of rows) {
+    const serializedText = JSON.stringify(row.payload);
+    if (authenticationFailurePattern.test(serializedText))
+      authenticationFailureEvents += 1;
+    membersWithTranscript.add(row.team_member_run_id);
+  }
+  return {
+    membersWithTranscriptCount: membersWithTranscript.size,
+    outputEventCount: rows.length,
+    authenticationFailureEvents,
+  };
+}
+
+function assertPaidTranscriptEvidence(rows, expectedMemberCount) {
+  const facts = transcriptEvidenceFacts(rows);
+  assert(
+    expectedMemberCount > 0 &&
+      facts.membersWithTranscriptCount === expectedMemberCount &&
+      facts.authenticationFailureEvents === 0,
+    'paid_transcript_acceptance_invalid',
+  );
+  marker('PAID_TRANSCRIPT_ACCEPTANCE', {
+    transcript_evidence: true,
+    member_count: expectedMemberCount,
+    members_with_transcript: facts.membersWithTranscriptCount,
+    output_event_count: facts.outputEventCount,
+    authentication_failure_events: facts.authenticationFailureEvents,
+  });
+}
+
 function decodeEnvelopeAtom(value, label) {
   try {
     return decodeURIComponent(value);
@@ -235,15 +270,21 @@ function assertSafeProjection(value, path = 'projection') {
   if (value && typeof value === 'object') {
     for (const [key, entry] of Object.entries(value)) {
       const normalized = normalizedProjectionKey(key);
+      const isProjectedTurnProvider =
+        normalized === 'provider' &&
+        /^projection\.sessions\[[0-9]+\]\.turns\[[0-9]+\]\.provider$/u.test(
+          `${path}.${key}`,
+        );
       assert(
-        ![
-          'runtimesessionid',
-          'provideragentid',
-          'provider',
-          'owner',
-          'prompt',
-          'credential',
-        ].includes(normalized),
+        isProjectedTurnProvider ||
+          ![
+            'runtimesessionid',
+            'provideragentid',
+            'provider',
+            'owner',
+            'prompt',
+            'credential',
+          ].includes(normalized),
         `forbidden_projection_key_${normalized}`,
       );
       assertSafeProjection(entry, `${path}.${key}`);
@@ -275,6 +316,7 @@ function assertProjectionScannerSelfCheck() {
     narration:
       'Lead redacted the credential/path fragments; Bearer [redacted]; [redacted path].',
   });
+  assertSafeProjection({ sessions: [{ turns: [{ provider: 'x' }] }] });
   for (const [label, value] of [
     ['camel_key', { runtimeSessionId: 'x' }],
     ['snake_key', { runtime_session_id: 'x' }],
@@ -282,6 +324,7 @@ function assertProjectionScannerSelfCheck() {
     ['key_value', { note: 'token=leaked-value' }],
     ['path', { note: '/Volumes/private' }],
     ['canary', { note: 'canary-secret' }],
+    ['provider', { provider: 'x' }],
   ]) {
     let rejected = false;
     try {
@@ -634,6 +677,205 @@ async function proveRuntimeResolution() {
     member_count: resolvedRows.length,
     distinct_provider_count: distinctProviders.size,
     runtime_resolution_equal: true,
+  });
+}
+async function captureS3S4TimeoutEvidence() {
+  await proveRuntimeResolution();
+  const projection = await request(
+    `/api/v1/team-runs:project?root_task_id=${rootTaskId}`,
+  );
+  assert(Array.isArray(projection.work_items), 's3_s4_work_items_missing');
+  assert(projection.work_items.length > 0, 's3_s4_work_items_empty');
+  const expectedAttemptKeys = [
+    'attempt_no',
+    'status',
+    'feedback_summary',
+    'result_summary',
+  ].sort();
+  let projectedAttemptCount = 0;
+  for (const item of projection.work_items) {
+    assert(
+      Object.hasOwn(item, 'description') && Array.isArray(item.attempts),
+      's3_s4_work_item_shape_invalid',
+    );
+    assert(
+      item.description === null || typeof item.description === 'string',
+      's3_s4_work_item_description_invalid',
+    );
+    projectedAttemptCount += item.attempts.length;
+    for (const attempt of item.attempts) {
+      assert(
+        expectedAttemptKeys.every((key) => Object.hasOwn(attempt, key)) &&
+          Number.isInteger(attempt.attempt_no) &&
+          attempt.attempt_no > 0 &&
+          ['queued', 'running', 'completed', 'failed'].includes(
+            attempt.status,
+          ) &&
+          (attempt.feedback_summary === null ||
+            typeof attempt.feedback_summary === 'string') &&
+          (attempt.result_summary === null ||
+            typeof attempt.result_summary === 'string'),
+        's3_s4_attempt_shape_invalid',
+      );
+    }
+  }
+  assert(projectedAttemptCount > 0, 's3_s4_attempts_empty');
+  assert(Array.isArray(projection.sessions), 's3_s4_sessions_missing');
+  const projectedTurns = projection.sessions.flatMap((session) =>
+    Array.isArray(session.turns) ? session.turns : [],
+  );
+  const projectedTurnIds = projectedTurns.map((turn) => turn.run_id);
+  assert(
+    projectedTurnIds.length > 0 &&
+      projectedTurnIds.every((runId) => typeof runId === 'string'),
+    's3_s4_projected_turns_missing',
+  );
+  const projectedRuntimeRows = (
+    await db.query('SELECT id,runtime FROM runs WHERE id=ANY($1::uuid[])', [
+      projectedTurnIds,
+    ])
+  ).rows;
+  const runtimeByRunId = new Map(
+    projectedRuntimeRows.map((row) => [row.id, row.runtime]),
+  );
+  const runtimeProjectionExact =
+    projectedRuntimeRows.length === new Set(projectedTurnIds).size &&
+    projectedTurns.every((turn) => {
+      const runtime = runtimeByRunId.get(turn.run_id);
+      return (
+        runtime &&
+        Object.hasOwn(turn, 'provider') &&
+        Object.hasOwn(turn, 'model') &&
+        turn.provider === runtime.provider &&
+        turn.model === runtime.model
+      );
+    });
+  assert(runtimeProjectionExact, 's3_s4_projected_runtime_mismatch');
+  const runtimeLabels = new Set(
+    projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
+  );
+  const expectedRuntimeLabels = [
+    'opencode/opencode-go/deepseek-v4-flash',
+    'claude/deepseek-v4-flash',
+    'codex/deepseek-v4-flash',
+  ];
+  assert(
+    expectedRuntimeLabels.every((label) => runtimeLabels.has(label)),
+    's3_s4_runtime_label_set_invalid',
+  );
+  const team = (
+    await db.query(
+      'SELECT status,stop_reason,revision FROM team_runs WHERE id=$1',
+      [teamRunId],
+    )
+  ).rows[0];
+  assert(
+    ['active', 'waiting'].includes(team?.status) &&
+      team.stop_reason === null &&
+      Number.isInteger(team.revision) &&
+      team.revision > 0,
+    's3_s4_team_not_absorbing_active',
+  );
+  assert(
+    projection.project &&
+      Object.hasOwn(projection.project, 'stop_reason') &&
+      projection.project.stop_reason === null &&
+      Number.isInteger(projection.project.revision) &&
+      projection.project.revision > 0,
+    's3_s4_project_terminal_metadata_invalid',
+  );
+  const succeededWorkAttemptRuns = (
+    await db.query(
+      `SELECT r.id,
+              EXISTS (
+                SELECT 1 FROM team_command_receipts receipt
+                 WHERE receipt.source_run_id=r.id
+                   AND receipt.command_name='team_work_submit'
+              ) AS has_submit_receipt
+         FROM runs r
+         JOIN tasks t ON t.id=r.task_id
+        WHERE t.root_task_id=$1
+          AND t.team_task_kind='work_attempt'
+          AND r.status='succeeded'
+        ORDER BY r.id`,
+      [rootTaskId],
+    )
+  ).rows;
+  const succeededWithoutSubmit = succeededWorkAttemptRuns.filter(
+    (row) => !row.has_submit_receipt,
+  ).length;
+  assert(
+    succeededWorkAttemptRuns.length > 0 && succeededWithoutSubmit > 0,
+    's3_s4_succeeded_without_submit_missing',
+  );
+  const queuedOrRunningChildren = Number(
+    (
+      await db.query(
+        `SELECT count(*)::int AS count
+           FROM tasks t
+           LEFT JOIN runs r ON r.task_id=t.id
+          WHERE t.root_task_id=$1
+            AND t.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+            AND (t.status IN ('queued','running') OR r.status IN ('queued','running'))`,
+        [rootTaskId],
+      )
+    ).rows[0]?.count ?? 0,
+  );
+  assert(queuedOrRunningChildren === 0, 's3_s4_queued_running_children');
+  const rosterCount = Number(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM team_member_runs WHERE team_run_id=$1',
+        [teamRunId],
+      )
+    ).rows[0]?.count ?? 0,
+  );
+  const teamChildRunEvents = (
+    await db.query(
+      `SELECT run.id AS run_id,task.team_member_run_id,event.payload
+         FROM runs run
+         JOIN tasks task ON task.id=run.task_id
+         JOIN run_events event ON event.run_id=run.id
+        WHERE task.root_task_id=$1
+          AND task.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+          AND event.type='output'
+        ORDER BY run.id,event.sequence`,
+      [rootTaskId],
+    )
+  ).rows;
+  const transcriptFacts = transcriptEvidenceFacts(teamChildRunEvents);
+  const completeTranscriptCoverage =
+    transcriptFacts.membersWithTranscriptCount === rosterCount;
+  const persistedTranscriptEvidence =
+    transcriptFacts.outputEventCount > 0 &&
+    transcriptFacts.authenticationFailureEvents === 0;
+  marker('PAID_TRANSCRIPT_PARTIAL_OBSERVATION', {
+    transcript_evidence: persistedTranscriptEvidence,
+    members_with_transcript: transcriptFacts.membersWithTranscriptCount,
+    expected_member_count: rosterCount,
+    complete_coverage: completeTranscriptCoverage,
+    output_event_count: transcriptFacts.outputEventCount,
+    authentication_failure_events: transcriptFacts.authenticationFailureEvents,
+  });
+  marker('S3_S4_TIMEOUT_EVIDENCE_PROVEN', {
+    s3_s4_runtime_projection_proven: true,
+    known_product_blocker: 'succeeded_without_submit_absorbing',
+    team_terminal: false,
+    team_status: team.status,
+    project_stop_reason_null: true,
+    project_revision_positive: true,
+    runtime_projection_exact: true,
+    runtime_labels: expectedRuntimeLabels,
+    work_item_count: projection.work_items.length,
+    attempt_count: projectedAttemptCount,
+    succeeded_work_attempt_run_count: succeededWorkAttemptRuns.length,
+    succeeded_without_submit_count: succeededWithoutSubmit,
+    queued_or_running_child_count: queuedOrRunningChildren,
+    roster_member_count: rosterCount,
+    persisted_output_event_count: transcriptFacts.outputEventCount,
+    persisted_transcript_complete_coverage: completeTranscriptCoverage,
+    persisted_transcript_evidence: persistedTranscriptEvidence,
+    authentication_failure_events: transcriptFacts.authenticationFailureEvents,
   });
 }
 function value(result) {
@@ -1636,6 +1878,14 @@ try {
       },
     });
   }
+  if (!scriptedRuntime) {
+    assert(process.env.OPENCODE_GO_API_KEY, 'missing_OPENCODE_GO_API_KEY');
+    Object.assign(process.env, {
+      ANTHROPIC_BASE_URL: 'https://opencode.ai/zen/go',
+      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+    });
+  }
   await Promise.all([
     mkdir(evidenceRoot, { recursive: true }),
     mkdir(join(runtimeRoot, 'project'), { recursive: true }),
@@ -1651,6 +1901,24 @@ try {
   db = new PostgresClient({ connectionString: databaseUrl.toString() });
   await db.connect();
   if (!scriptedRuntime) {
+    const codexHome = join(runtimeRoot, 'home', '.codex');
+    const codexConfigPath = join(codexHome, 'config.toml');
+    await mkdir(codexHome, { recursive: true, mode: 0o700 });
+    await writeFile(
+      codexConfigPath,
+      [
+        'model_provider = "opencode-go"',
+        '',
+        '[model_providers.opencode-go]',
+        'name = "OpenCode Go"',
+        'base_url = "https://opencode.ai/zen/go/v1"',
+        'env_key = "OPENCODE_GO_API_KEY"',
+        'wire_api = "responses"',
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+    await chmod(codexConfigPath, 0o600);
     const paseoPort = await getAvailablePort();
     paseo = await startPaseo({
       repositoryRoot: root,
@@ -1659,6 +1927,9 @@ try {
       environmentVariableNames: [
         'OPENCODE_GO_API_KEY',
         'OPENCODE_CONFIG_CONTENT',
+        'ANTHROPIC_BASE_URL',
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_MODEL',
       ],
     });
   }
@@ -3093,6 +3364,8 @@ try {
   const replay = await request(
     `/api/v1/team-runs:project?root_task_id=${rootTaskId}`,
   );
+  const replayByteIdentical =
+    JSON.stringify(projection) === JSON.stringify(replay);
   assert(
     projection.project?.phase === 'done' &&
       projection.work_items?.length === 2 &&
@@ -3101,12 +3374,87 @@ try {
         (session) => session.name === fixtureNames.member,
       )?.status === 'idle' &&
       direct.length === (reworkScenario ? 0 : 1) &&
-      JSON.stringify(projection) === JSON.stringify(replay),
+      replayByteIdentical,
     'safe_projection_or_replay_invalid',
   );
   assertProjectionScannerSelfCheck();
   assertSafeProjection(projection);
   assert(Array.isArray(projection.sessions), 'sessions_projection_missing');
+  const projectedTurns = projection.sessions.flatMap((session) =>
+    Array.isArray(session.turns) ? session.turns : [],
+  );
+  const projectedTurnIds = projectedTurns.map((turn) => turn.run_id);
+  assert(
+    projectedTurnIds.length > 0 &&
+      projectedTurnIds.every((runId) => typeof runId === 'string'),
+    'projected_turns_missing',
+  );
+  const projectedRuntimeRows = (
+    await db.query('SELECT id,runtime FROM runs WHERE id=ANY($1::uuid[])', [
+      projectedTurnIds,
+    ])
+  ).rows;
+  const runtimeByRunId = new Map(
+    projectedRuntimeRows.map((row) => [row.id, row.runtime]),
+  );
+  const runtimeProjectionExact =
+    projectedRuntimeRows.length === new Set(projectedTurnIds).size &&
+    projectedTurns.every((turn) => {
+      const runtime = runtimeByRunId.get(turn.run_id);
+      return (
+        runtime &&
+        Object.hasOwn(turn, 'provider') &&
+        Object.hasOwn(turn, 'model') &&
+        turn.provider === runtime.provider &&
+        turn.model === runtime.model
+      );
+    });
+  assert(runtimeProjectionExact, 'projected_runtime_provider_model_mismatch');
+  const runtimeLabels = new Set(
+    projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
+  );
+  const expectedRuntimeLabels = [
+    'opencode/opencode-go/deepseek-v4-flash',
+    'claude/deepseek-v4-flash',
+    'codex/deepseek-v4-flash',
+  ];
+  assert(
+    expectedRuntimeLabels.every((label) => runtimeLabels.has(label)),
+    'projected_runtime_label_set_invalid',
+  );
+  let reworkProjectionAcceptance = true;
+  if (reworkScenario) {
+    const reworkItems = projection.work_items.filter(
+      (item) =>
+        Array.isArray(item.attempts) &&
+        item.attempts.map((attempt) => attempt.attempt_no).join(',') === '1,2',
+    );
+    reworkProjectionAcceptance =
+      reworkItems.length === 1 &&
+      reworkItems[0].attempts.every((attempt) =>
+        Object.hasOwn(attempt, 'feedback_summary'),
+      ) &&
+      reworkItems[0].latest_attempt?.attempt_no === 2;
+    assert(reworkProjectionAcceptance, 'rework_projection_attempts_invalid');
+  }
+  const projectAcceptance =
+    projection.project?.status === 'succeeded' &&
+    projection.project?.phase === 'done' &&
+    Object.hasOwn(projection.project, 'stop_reason') &&
+    projection.project?.stop_reason === null &&
+    Number.isInteger(projection.project?.revision) &&
+    projection.project.revision > 0;
+  assert(projectAcceptance, 'project_terminal_metadata_invalid');
+  marker('CANONICAL_PROJECT_S4_ACCEPTANCE', {
+    project_status_succeeded: true,
+    project_phase_done: true,
+    project_stop_reason_null: true,
+    project_revision_positive: true,
+    replay_byte_identical: replayByteIdentical,
+    runtime_projection_exact: runtimeProjectionExact,
+    runtime_labels: expectedRuntimeLabels,
+    rework_attempts_valid: reworkProjectionAcceptance,
+  });
   const runtimeSessions = await db.query(
     `SELECT id,name,role,runtime_session_id
        FROM team_member_runs WHERE team_run_id=$1 ORDER BY name`,
@@ -3490,6 +3838,22 @@ try {
     )
   ).rows[0];
   marker('EMITTED_RUN_EVENT_TOOL_NAME_QUERY', emittedToolNameFacts ?? null);
+  if (!scriptedRuntime) {
+    const teamChildRunEvents = (
+      await db.query(
+        `SELECT run.id AS run_id,task.team_member_run_id,event.payload
+           FROM runs run
+           JOIN tasks task ON task.id=run.task_id
+           JOIN run_events event ON event.run_id=run.id
+          WHERE task.root_task_id=$1
+            AND task.team_task_kind IN ('lead_turn','work_attempt','direct_message')
+            AND event.type='output'
+          ORDER BY run.id,event.sequence`,
+        [rootTaskId],
+      )
+    ).rows;
+    assertPaidTranscriptEvidence(teamChildRunEvents, roster.rowCount);
+  }
   if (scriptedRuntime) {
     assert(
       scriptedRuntimeInstance,
@@ -3527,6 +3891,27 @@ try {
     await evidence('passed');
   } else {
     const failure = smokeFailure(error);
+    if (
+      !scriptedRuntime &&
+      (error?.code === 'team_terminal_timeout' ||
+        failure.code === 'team_terminal_timeout')
+    ) {
+      try {
+        await captureS3S4TimeoutEvidence();
+      } catch (evidenceError) {
+        marker('S3_S4_TIMEOUT_EVIDENCE_FAILED', {
+          s3_s4_runtime_projection_proven: false,
+          known_product_blocker: 'succeeded_without_submit_absorbing',
+          team_terminal: false,
+          evidence_failure_code: failureCode(evidenceError),
+        });
+        stderr.push(
+          JSON.stringify({
+            evidence_error: sanitizedErrorDetail(evidenceError),
+          }),
+        );
+      }
+    }
     try {
       const persistedEnvelopeLines =
         await capturePersistedControlPlaneEnvelopeEvidence();
@@ -3536,7 +3921,7 @@ try {
         );
       await collectFailureDiagnostic(failure);
       await evidence('blocked', failure);
-    } catch {
+    } catch (evidenceError) {
       process.stderr.write('SMOKE_EVIDENCE_WRITE_FAILED\n');
     }
     throw failure;

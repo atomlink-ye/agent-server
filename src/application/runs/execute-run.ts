@@ -28,7 +28,10 @@ import {
   type RunRepository,
 } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
-import type { RunEventRepository } from '../ports/run-events.js';
+import type {
+  RunEventRepository,
+  RunEventPayload,
+} from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
@@ -577,14 +580,27 @@ export class ExecuteRun {
         runtimeSession.scopeId !== member.id)
     )
       throw new Error('Team member runtime session scope is invalid.');
-    if (
-      runtimeSession &&
-      (runtimeSession.agentVersionId !== task.invokableVersionId ||
-        runtimeSession.workspaceId !== task.workspaceId ||
-        runtimeSession.environmentVersionId !==
-          collaborativeTeam?.environmentVersionId)
-    )
-      throw new Error('Runtime session snapshot is invalid.');
+    if (runtimeSession) {
+      const commonSnapshotInvalid =
+        runtimeSession.agentVersionId !== task.invokableVersionId ||
+        runtimeSession.workspaceId !== task.workspaceId;
+      if (
+        member &&
+        (commonSnapshotInvalid ||
+          runtimeSession.environmentVersionId !==
+            collaborativeTeam?.environmentVersionId)
+      )
+        throw new Error('Runtime session snapshot is invalid.');
+      if (
+        !member &&
+        (commonSnapshotInvalid ||
+          runtimeSession.scopeKind !== 'product_session' ||
+          runtimeSession.scopeId !== task.sessionId ||
+          runtimeSession.environmentVersionId !==
+            productSession?.environmentVersionId)
+      )
+        throw new Error('Product Session runtime session snapshot is invalid.');
+    }
     const priorProviderAgentId = member
       ? (runtimeSession?.providerAgentId ?? null)
       : (runtimeSession?.providerAgentId ??
@@ -816,9 +832,9 @@ export class ExecuteRun {
         throw new Error('Team member runtime session unavailable.');
       createdRuntimeSession = true;
     }
-    if (
-      createdRuntimeSession &&
-      (!sessionRuntime ||
+    if (createdRuntimeSession && member) {
+      if (
+        !sessionRuntime ||
         sessionRuntime.scopeKind !== 'team_member' ||
         sessionRuntime.scopeId !== member?.id ||
         sessionRuntime.taskId !== task.id ||
@@ -831,9 +847,26 @@ export class ExecuteRun {
           member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
         ) ||
         sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null)
-    )
-      throw new Error('New Team member runtime session is already bound.');
+        sessionRuntime.paseoWorkspaceId !== null
+      )
+        throw new Error('New Team member runtime session is already bound.');
+    } else if (createdRuntimeSession) {
+      if (
+        !sessionRuntime ||
+        sessionRuntime.scopeKind !== 'product_session' ||
+        sessionRuntime.scopeId !== task.sessionId ||
+        sessionRuntime.workspaceId !== task.workspaceId ||
+        sessionRuntime.agentVersionId !== task.invokableVersionId ||
+        sessionRuntime.environmentVersionId !==
+          productSession?.environmentVersionId ||
+        !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
+        sessionRuntime.providerAgentId !== null ||
+        sessionRuntime.paseoWorkspaceId !== null
+      )
+        throw new Error(
+          'New Product Session runtime session is already bound.',
+        );
+    }
     if (member && sessionRuntime && this.collaborativeExecutions)
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,
@@ -1642,9 +1675,9 @@ function isSafeRuntimeCandidate(candidate: {
   );
 }
 
-function runtimeEventPayload(
+export function runtimeEventPayload(
   event: import('../ports/agent-runtime.js').RuntimeEvent,
-): Readonly<Record<string, string | number | boolean | null>> {
+): RunEventPayload {
   switch (event.kind) {
     case 'assistant_text':
       return { kind: event.kind, text: event.text };
@@ -1663,15 +1696,9 @@ function runtimeEventPayload(
         label: event.label,
         summary: event.summary,
         ...safeRuntimeToolNamePayload(event.toolName),
-        ...(event.detailKind
-          ? { detail_kind: event.detailKind }
-          : ['shell', 'read', 'write', 'edit', 'search', 'fetch'].includes(
-                event.category,
-              )
-            ? { detail_kind: event.category }
-            : {}),
-        ...(event.detailText ? { detail_text: event.detailText } : {}),
-        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+        ...(event.provider ? { provider: event.provider } : {}),
+        ...(event.detail ? { detail: event.detail } : {}),
+        ...flatDetailProjection(event.detail),
         ...(event.parentActivityId
           ? { parent_activity_id: event.parentActivityId }
           : {}),
@@ -1685,9 +1712,15 @@ function runtimeEventPayload(
         status: event.status,
         label: event.label,
         summary: event.summary,
-        ...(event.detailKind ? { detail_kind: event.detailKind } : {}),
-        ...(event.detailText ? { detail_text: event.detailText } : {}),
-        ...(event.exitCode !== undefined ? { exit_code: event.exitCode } : {}),
+        ...(event.provider ? { provider: event.provider } : {}),
+        ...(event.itemKind === 'tool' && event.detail
+          ? { detail: event.detail }
+          : {}),
+        ...(event.itemKind === 'tool'
+          ? flatDetailProjection(event.detail)
+          : event.text
+            ? { detail_text: event.text }
+            : {}),
       };
     case 'permission':
       return {
@@ -1719,6 +1752,35 @@ function runtimeEventPayload(
     default:
       return assertNeverRuntimeEvent(event);
   }
+}
+
+function flatDetailProjection(
+  detail: import('../ports/agent-runtime.js').RuntimeToolDetail | undefined,
+): RunEventPayload {
+  if (!detail) return {};
+  let text: string | undefined;
+  for (const key of [
+    'text',
+    'output',
+    'result',
+    'content',
+    'unifiedDiff',
+    'log',
+    'error',
+  ]) {
+    const candidate = (detail as unknown as Record<string, unknown>)[key];
+    if (typeof candidate === 'string') {
+      text = candidate;
+      break;
+    }
+  }
+  return {
+    detail_kind: detail.kind,
+    ...(text ? { detail_text: text } : {}),
+    ...('exitCode' in detail && detail.exitCode !== undefined
+      ? { exit_code: detail.exitCode }
+      : {}),
+  };
 }
 
 const safeRuntimeToolNames = new Set([

@@ -159,6 +159,8 @@ export const AgenticTeamProjectTurnSchema = z
     work_item_id: uuid.nullable(),
     attempt_id: uuid.nullable(),
     attempt_no: z.number().int().nullable(),
+    provider: z.string().nullable(),
+    model: z.string().nullable(),
     created_at: timestamp,
     updated_at: timestamp,
   })
@@ -184,6 +186,8 @@ export const AgenticTeamProjectResponseSchema = z
         status: z.enum(['active', 'waiting', 'succeeded', 'failed']),
         phase: z.enum(['lead_kickoff', 'member_work', 'lead_finalize', 'done']),
         final_text: z.string().nullable(),
+        revision: z.number().int(),
+        stop_reason: z.string().nullable(),
         created_at: timestamp,
         updated_at: timestamp,
       })
@@ -194,9 +198,20 @@ export const AgenticTeamProjectResponseSchema = z
         .object({
           work_ref: z.string().regex(/^work-\d+$/),
           subject: z.string(),
+          description: z.string().nullable(),
           status: TeamWorkItemResponseSchema.shape.status,
           assignee_name: z.string().nullable(),
           dependency_refs: z.array(z.string().regex(/^work-\d+$/)),
+          attempts: z.array(
+            z
+              .object({
+                attempt_no: z.number().int(),
+                status: z.enum(['queued', 'running', 'completed', 'failed']),
+                feedback_summary: z.string().nullable(),
+                result_summary: z.string().nullable(),
+              })
+              .strict(),
+          ),
           latest_attempt: z
             .object({
               attempt_no: z.number().int(),
@@ -231,6 +246,10 @@ export const AgenticTeamProjectResponseSchema = z
     sessions: z.array(AgenticTeamProjectSessionSchema),
   })
   .strict();
+
+export type AgenticTeamProjectResponse = z.infer<
+  typeof AgenticTeamProjectResponseSchema
+>;
 
 export const TeamDirectMessageResponseSchema = z
   .object({

@@ -15,15 +15,24 @@ export interface AgenticTeamProject {
     readonly status: 'active' | 'waiting' | 'succeeded' | 'failed';
     readonly phase: 'lead_kickoff' | 'member_work' | 'lead_finalize' | 'done';
     readonly finalText: string | null;
+    readonly revision: number;
+    readonly stopReason: string | null;
     readonly createdAt: string;
     readonly updatedAt: string;
   };
   readonly workItems: readonly {
     readonly workRef: string;
     readonly subject: string;
+    readonly description: string | null;
     readonly status: string;
     readonly assigneeName: string | null;
     readonly dependencyRefs: readonly string[];
+    readonly attempts: readonly {
+      readonly attemptNo: number;
+      readonly status: 'queued' | 'running' | 'completed' | 'failed';
+      readonly feedbackSummary: string | null;
+      readonly resultSummary: string | null;
+    }[];
     readonly latestAttempt: {
       readonly attemptNo: number;
       readonly status: 'queued' | 'running' | 'completed' | 'failed';
@@ -61,6 +70,8 @@ export interface AgenticTeamProject {
       readonly workItemId: string | null;
       readonly attemptId: string | null;
       readonly attemptNo: number | null;
+      readonly provider: string | null;
+      readonly model: string | null;
       readonly createdAt: string;
       readonly updatedAt: string;
     }[];
@@ -136,12 +147,14 @@ export class ProjectAgenticTeam {
         .map((attempt) => [attempt.executionTaskId!, attempt]),
     );
     const workProjection = orderedWork.map((work) => {
-      const latestAttempt = attempts
+      const workAttempts = attempts
         .filter((attempt) => attempt.workItemId === work.id)
-        .sort((a, b) => b.attemptNo - a.attemptNo)[0];
+        .sort(compareAttempts);
+      const latestAttempt = workAttempts.at(-1);
       return {
         workRef: workRefById.get(work.id)!,
         subject: safeText(work.subject) ?? '',
+        description: safeText(work.description),
         status: work.status,
         assigneeName: work.ownerMemberId
           ? safeText(nameByMemberId.get(work.ownerMemberId) ?? null)
@@ -150,6 +163,12 @@ export class ProjectAgenticTeam {
           .filter((dependency) => dependency.workItemId === work.id)
           .map((dependency) => workRefById.get(dependency.dependsOnWorkItemId))
           .filter((ref): ref is string => Boolean(ref)),
+        attempts: workAttempts.map((attempt) => ({
+          attemptNo: attempt.attemptNo,
+          status: attempt.status,
+          feedbackSummary: safeText(attempt.feedback),
+          resultSummary: safeText(attempt.resultSummary),
+        })),
         latestAttempt: latestAttempt
           ? {
               attemptNo: latestAttempt.attemptNo,
@@ -179,6 +198,8 @@ export class ProjectAgenticTeam {
         status: team.status,
         phase: team.phase,
         finalText: safeText(team.finalText),
+        revision: team.revision,
+        stopReason: safeText(team.stopReason),
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
       },
@@ -242,6 +263,8 @@ export class ProjectAgenticTeam {
                 workItemId: work?.id ?? null,
                 attemptId: attempt?.id ?? null,
                 attemptNo: attempt?.attemptNo ?? null,
+                provider: run.runtime?.provider ?? null,
+                model: run.runtime?.model ?? null,
                 createdAt: run.createdAt,
                 updatedAt: run.updatedAt,
               },
@@ -251,6 +274,25 @@ export class ProjectAgenticTeam {
       }),
     };
   }
+}
+
+function compareAttempts(
+  a: {
+    readonly attemptNo: number;
+    readonly createdAt: string;
+    readonly id: string;
+  },
+  b: {
+    readonly attemptNo: number;
+    readonly createdAt: string;
+    readonly id: string;
+  },
+): number {
+  return (
+    a.attemptNo - b.attemptNo ||
+    a.createdAt.localeCompare(b.createdAt) ||
+    a.id.localeCompare(b.id)
+  );
 }
 
 function compareTasks(a: TaskRecord, b: TaskRecord): number {

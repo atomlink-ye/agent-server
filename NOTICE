@@ -1,0 +1,8 @@
+Cloudflare OS
+Source: https://github.com/cloudflare/cloudflare-os
+Upstream commit: 0eaec6c5e8fc6b3298ea1aa73bf5c3e47b923c7f
+License: Apache-2.0
+
+The migrated file apps/web/app/cloudflare-os-tokens.css is derived from
+packages/workshop-frontend/src/styles.css at the upstream commit above.
+It applies variable renaming and extracts a portable token subset.

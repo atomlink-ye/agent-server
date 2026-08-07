@@ -580,14 +580,27 @@ export class ExecuteRun {
         runtimeSession.scopeId !== member.id)
     )
       throw new Error('Team member runtime session scope is invalid.');
-    if (
-      runtimeSession &&
-      (runtimeSession.agentVersionId !== task.invokableVersionId ||
-        runtimeSession.workspaceId !== task.workspaceId ||
-        runtimeSession.environmentVersionId !==
-          collaborativeTeam?.environmentVersionId)
-    )
-      throw new Error('Runtime session snapshot is invalid.');
+    if (runtimeSession) {
+      const commonSnapshotInvalid =
+        runtimeSession.agentVersionId !== task.invokableVersionId ||
+        runtimeSession.workspaceId !== task.workspaceId;
+      if (
+        member &&
+        (commonSnapshotInvalid ||
+          runtimeSession.environmentVersionId !==
+            collaborativeTeam?.environmentVersionId)
+      )
+        throw new Error('Runtime session snapshot is invalid.');
+      if (
+        !member &&
+        (commonSnapshotInvalid ||
+          runtimeSession.scopeKind !== 'product_session' ||
+          runtimeSession.scopeId !== task.sessionId ||
+          runtimeSession.environmentVersionId !==
+            productSession?.environmentVersionId)
+      )
+        throw new Error('Product Session runtime session snapshot is invalid.');
+    }
     const priorProviderAgentId = member
       ? (runtimeSession?.providerAgentId ?? null)
       : (runtimeSession?.providerAgentId ??
@@ -819,9 +832,9 @@ export class ExecuteRun {
         throw new Error('Team member runtime session unavailable.');
       createdRuntimeSession = true;
     }
-    if (
-      createdRuntimeSession &&
-      (!sessionRuntime ||
+    if (createdRuntimeSession && member) {
+      if (
+        !sessionRuntime ||
         sessionRuntime.scopeKind !== 'team_member' ||
         sessionRuntime.scopeId !== member?.id ||
         sessionRuntime.taskId !== task.id ||
@@ -834,9 +847,26 @@ export class ExecuteRun {
           member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
         ) ||
         sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null)
-    )
-      throw new Error('New Team member runtime session is already bound.');
+        sessionRuntime.paseoWorkspaceId !== null
+      )
+        throw new Error('New Team member runtime session is already bound.');
+    } else if (createdRuntimeSession) {
+      if (
+        !sessionRuntime ||
+        sessionRuntime.scopeKind !== 'product_session' ||
+        sessionRuntime.scopeId !== task.sessionId ||
+        sessionRuntime.workspaceId !== task.workspaceId ||
+        sessionRuntime.agentVersionId !== task.invokableVersionId ||
+        sessionRuntime.environmentVersionId !==
+          productSession?.environmentVersionId ||
+        !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
+        sessionRuntime.providerAgentId !== null ||
+        sessionRuntime.paseoWorkspaceId !== null
+      )
+        throw new Error(
+          'New Product Session runtime session is already bound.',
+        );
+    }
     if (member && sessionRuntime && this.collaborativeExecutions)
       await this.collaborativeExecutions.updateMemberRuntimeSession(
         member.id,

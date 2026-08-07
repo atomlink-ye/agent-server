@@ -21,6 +21,7 @@ import {
 } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import type { EnvironmentVersion } from '../ports/environment-registry.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { TeamDriver } from '../teams/team-driver.js';
@@ -35,6 +36,128 @@ import {
 } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
+  it('allows a first product-session runtime session to execute', async () => {
+    const claim = createClaim();
+    const task = { ...createTask(), sessionId: 'product-session-1' } as Task;
+    const runtimeSession = {
+      id: 'runtime-product-1',
+      scopeKind: 'product_session',
+      scopeId: 'product-session-1',
+      productSessionId: 'product-session-1',
+      taskId: null,
+      launchSnapshotId: 'launch-1',
+      workspaceId: task.workspaceId,
+      agentVersionId: task.invokableVersionId,
+      environmentVersionId: 'environment-version-1',
+      resolvedSkills: [],
+      toolRefs: [],
+      paseoWorkspaceId: null,
+      providerAgentId: null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    } as const;
+    const resolver = {
+      resolve: vi.fn(async () => ({
+        agentVersionId: task.invokableVersionId,
+        modelPolicyRef: 'free-only',
+        systemPrompt: 'system',
+        turnPrompt: 'turn',
+        skills: [],
+        toolRefs: [],
+        proposalLimit: 0,
+      })),
+    } as never;
+    const sessions = {
+      getSession: vi.fn(async () => ({
+        id: 'product-session-1',
+        workspaceId: task.workspaceId,
+        tenantId: task.tenantId,
+        principalType: task.principalType,
+        principalId: task.principalId,
+        publishedAgentVersionId: task.invokableVersionId,
+        environmentVersionId: 'environment-version-1',
+        generation: 1,
+        status: 'active' as const,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      })),
+    };
+    const environments = {
+      findVersion: vi.fn(async (): Promise<EnvironmentVersion> => ({
+        id: 'environment-version-1',
+        definitionId: 'environment-definition-1',
+        tenantId: task.tenantId,
+        principalType: task.principalType,
+        principalId: task.principalId,
+        status: 'published' as const,
+        displayName: 'test',
+        canonicalJson: '{}',
+        fingerprint: 'sha256:test',
+        package: {
+          apiVersion: 'agent-server/v1alpha1',
+          kind: 'ManagedEnvironment',
+          metadata: { name: 'test' },
+          spec: {
+            adapter: 'paseo',
+            provider: 'opencode',
+            modelPolicyRef: 'free-only',
+            runtimeCellPolicy: 'per_runtime_session',
+          },
+        },
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        publishedAt: task.createdAt,
+      })),
+    };
+    const runtimeSessions = {
+      findByProductSession: vi.fn(
+        async (): Promise<typeof runtimeSession | null> => null,
+      ),
+      createOrGetForProductSession: vi.fn(async () => runtimeSession),
+      bindProvider: vi.fn(async () => runtimeSession),
+    };
+    const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
+    const executeRun = new ExecuteRun(
+      { execute: completeRunExecute } as never,
+      {
+        findById: vi.fn(async () => task),
+        save: vi.fn(async () => undefined),
+      } as never,
+      {} as never,
+      {} as never,
+      createRuntime(),
+      { log: vi.fn() },
+      () => new Date('2026-07-23T00:00:00.000Z'),
+      resolver,
+      {
+        append: vi.fn(async () => undefined),
+        bind: vi.fn(async () => undefined),
+      } as never,
+      undefined,
+      undefined,
+      undefined,
+      runtimeSessions as never,
+      sessions,
+      environments,
+    );
+
+    await expect(executeRun.execute(claim)).resolves.toBeDefined();
+    expect(runtimeSessions.createOrGetForProductSession).toHaveBeenCalled();
+    expect(completeRunExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        run: expect.objectContaining({ status: 'succeeded' }),
+      }),
+    );
+
+    runtimeSessions.findByProductSession.mockResolvedValue(runtimeSession);
+    await expect(executeRun.execute(claim)).resolves.toBeDefined();
+    expect(completeRunExecute).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        run: expect.objectContaining({ status: 'succeeded' }),
+      }),
+    );
+  });
+
   it('does not invent detail_kind when an upstream tool event omits detailKind', async () => {
     const claim = createClaim();
     const task = createTask();

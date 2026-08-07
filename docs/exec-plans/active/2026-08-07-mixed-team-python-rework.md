@@ -226,19 +226,14 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Credential Human Gate. While reconciling the Manager-owned dirty remote to the
-committed local tree through `sandbox-ctl`, the ignored remote-only
-`.local/model.env` was removed with the disposable workspace contents. The
-stopped `mixed-team-agent-server-1` container retains its configured
-environment, but extracting credentials from that container or reconstructing
-the env file requires explicit human direction. No credential value has been
-printed, copied, committed, or written into evidence.
+None. The Manager restored the ignored remote-only `.local/model.env` with mode
+600 and confirmed its values were never printed. The credential Human Gate is
+cleared without agent-side credential handling.
 
 ## Next exact command
 
-Obtain human direction for restoring `.local/model.env`, then restart the
-prepared `mixed-team-` stack with the committed overlay and execute the real
-mixed-provider seed.
+Restart the prepared `mixed-team-` stack with the committed overlay and execute
+the real mixed-provider seed.
 
 ## Cleanup state
 
@@ -246,5 +241,5 @@ The local worktree was clean before this plan. The prepared sandbox remains
 bound at remote path `workspace/mixed-team`. Its Manager-owned dirty workspace
 was cleared and replaced with committed local HEAD through `sandbox-ctl`; the
 two exact `mixed-team-` containers were stopped first. That reset also removed
-the ignored remote-only `.local/model.env`, producing the credential Human Gate
-described above.
+the ignored remote-only `.local/model.env`; the Manager subsequently restored
+it with mode 600 and also restored the ignored Host rewrite shim.

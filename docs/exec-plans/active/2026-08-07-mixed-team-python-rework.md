@@ -175,6 +175,34 @@ Paseo Web confirmation.
   review of failed attempts is limited to child Runs carrying
   `runtime_timed_out` or `runtime_execution_failed`. A succeeded child has
   neither code, so reconciliation cannot return control to Lead.
+- Exposure classification (ii): `team_work_submit` was available to the Claude
+  fixer turn. The immutable grant receipt for member Run
+  `00ea7950-0c59-4cdd-91b6-d3c8ae75cbf2` lists
+  `agent-server/team-work-submit` in `allowedTools`; the durable RuntimeSession
+  launch catalog contains the identical four member refs. For a first
+  non-Lead `work_attempt`, `execute-run.ts` passes that same `runtimeToolRefs`
+  array as both binder `toolRefs` and `catalogTools`; the binder issues those as
+  grant `allowedTools`/`catalogTools`, Direct MCP registers the catalog, and
+  `team-mcp-tools.ts` registers `team_work_submit` when that ref is present.
+  The Claude adapter forwards the MCP server unchanged.
+- The Claude-side MCP wire log
+  `mcp-logs-agent-server/2026-08-07T02-29-45-818Z.jsonl` line 12 records
+  `Connection established with capabilities: {"hasTools":true,...}` for that
+  member cell. It does not serialize individual `tools/list` response names;
+  the exact-name proof therefore comes from the immutable grant receipt,
+  durable launch catalog, and registration path rather than a nonexistent raw
+  list-response line. There is no evidence of provider-specific catalog
+  filtering in this turn. The missing submit is model behavior, not structural
+  Claude tool omission.
+- Durable no-transition evidence at 2026-08-07T02:51:59Z shows TeamRun
+  `6ec80054-2c91-40d3-9aa6-caf6e6a48ca7` still
+  `active/lead_kickoff/member_work_running`, root Run `waiting_children`, the
+  sole wake consumed, and zero nonterminal child Runs, unpublished dispatches,
+  queued Team messages, actionable attempts, claimed child leases, or fixer
+  command receipts. The correct platform transition is to classify
+  provider-success-without-submit as a safe execution/no-progress failure and
+  return control to Lead, or atomically fail the TeamRun with a dedicated
+  reason. This task will record but not drive-by fix that product defect.
 - Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
   the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
   reachable under normal concurrency, but the reviewer and next Lead may
@@ -221,6 +249,13 @@ Paseo Web confirmation.
   and failed first real attempt are not proof of B or C. The first attempt did
   not produce a Python artifact, reviewer Task, rejection, rework, terminal
   Team success, or a qualifying manifest.
+- Machine-written diagnostic artifacts are retained under ignored local path
+  `.local/mixed-team-diagnosis/`: `fixer-tool-exposure/stdout.txt` contains the
+  grant receipt, durable catalog, and exact registration path;
+  `fixer-mcp-wire/stdout.txt` contains a sanitized twelve-line MCP connection
+  log with Authorization and URL values redacted; `first-run-durable/stdout.txt`
+  contains Team/Run/Work/attempt/receipt/dispatch/event rows; and
+  `absorbing-state/stdout.txt` contains the metadata-only no-transition proof.
 
 ## Completion checklist
 
@@ -240,16 +275,17 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Credential Human Gate. During read-only diagnosis of the failed first real
-attempt, an oracle process-inspection command exposed an MCP bearer token in
-its internal tool output. The value has not been copied into repository files,
-evidence, commentary, or this plan. Human rotation/direction is required before
-another provider execution.
+None. The Manager established that the exposed value was an ephemeral
+15-minute, in-memory-only RuntimeToolGrant capability scoped to one member Run
+and the sandbox loopback server. It expired, was never persisted, and requires
+no rotation. Its value is confined to the internal diagnostic transcript and
+does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Obtain human credential rotation/direction, then address the succeeded-without-
-submit absorbing state and retry the real mixed-provider seed.
+Tighten the fixer turn instruction without changing the platform protocol, then
+retry the real mixed-provider seed. Do not drive-by fix the separately recorded
+succeeded-without-submit absorbing-state defect.
 
 ## Cleanup state
 

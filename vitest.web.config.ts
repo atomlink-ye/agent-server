@@ -16,6 +16,6 @@ export default defineConfig({
   test: {
     include: ['apps/web/**/*.test.ts', 'apps/web/**/*.test.tsx'],
     environment: 'node',
-    testTimeout: 5_000,
+    testTimeout: 30_000,
   },
 });

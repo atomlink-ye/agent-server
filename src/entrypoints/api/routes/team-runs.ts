@@ -18,8 +18,105 @@ import {
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { z } from 'zod';
-import { ProjectAgenticTeam } from '../../../application/teams/project-agentic-team.js';
-import { AgenticTeamProjectResponseSchema } from '../../../contracts/teams.js';
+import {
+  ProjectAgenticTeam,
+  type AgenticTeamProject,
+} from '../../../application/teams/project-agentic-team.js';
+import {
+  AgenticTeamProjectResponseSchema,
+  type AgenticTeamProjectResponse,
+} from '../../../contracts/teams.js';
+
+export function toAgenticTeamProjectResponse(
+  projection: AgenticTeamProject | null,
+): AgenticTeamProjectResponse {
+  if (!projection)
+    return {
+      project: null,
+      work_items: [],
+      gates: {
+        finish_ready: false,
+        all_work_accepted: false,
+        no_active_attempts: true,
+        all_members_idle: true,
+      },
+      direct_messages: [],
+      sessions: [],
+    };
+  return {
+    project: {
+      root_task_id: projection.project.rootTaskId,
+      team_run_id: projection.project.teamRunId,
+      team_version_id: projection.project.teamVersionId,
+      status: projection.project.status,
+      phase: projection.project.phase,
+      final_text: projection.project.finalText,
+      revision: projection.project.revision,
+      stop_reason: projection.project.stopReason,
+      created_at: projection.project.createdAt,
+      updated_at: projection.project.updatedAt,
+    },
+    work_items: projection.workItems.map((work) => ({
+      work_ref: work.workRef,
+      subject: work.subject,
+      description: work.description,
+      status:
+        work.status as AgenticTeamProjectResponse['work_items'][number]['status'],
+      assignee_name: work.assigneeName,
+      dependency_refs: [...work.dependencyRefs],
+      attempts: work.attempts.map((attempt) => ({
+        attempt_no: attempt.attemptNo,
+        status: attempt.status,
+        feedback_summary: attempt.feedbackSummary,
+        result_summary: attempt.resultSummary,
+      })),
+      latest_attempt: work.latestAttempt
+        ? {
+            attempt_no: work.latestAttempt.attemptNo,
+            status: work.latestAttempt.status,
+            feedback_summary: work.latestAttempt.feedbackSummary,
+            result_summary: work.latestAttempt.resultSummary,
+          }
+        : null,
+    })),
+    gates: {
+      finish_ready: projection.gates.finishReady,
+      all_work_accepted: projection.gates.allWorkAccepted,
+      no_active_attempts: projection.gates.noActiveAttempts,
+      all_members_idle: projection.gates.allMembersIdle,
+    },
+    direct_messages: projection.directMessages.map((message) => ({
+      sequence: message.sequence,
+      sender_name: message.senderName,
+      recipient_name: message.recipientName,
+      summary: message.summary,
+      status: message.status,
+      created_at: message.createdAt,
+    })),
+    sessions: projection.sessions.map((session) => ({
+      team_member_run_id: session.teamMemberRunId,
+      name: session.name,
+      role: session.role,
+      status: session.status,
+      turns: session.turns.map((turn) => ({
+        task_id: turn.taskId,
+        run_id: turn.runId,
+        sequence: turn.sequence,
+        kind: turn.kind,
+        status: turn.status,
+        context: turn.context,
+        result_text: turn.resultText,
+        work_item_id: turn.workItemId,
+        attempt_id: turn.attemptId,
+        attempt_no: turn.attemptNo,
+        provider: turn.provider,
+        model: turn.model,
+        created_at: turn.createdAt,
+        updated_at: turn.updatedAt,
+      })),
+    })),
+  };
+}
 export function registerTeamRunRoutes(
   app: Hono<ApiEnvironment>,
   d: {
@@ -41,84 +138,10 @@ export function registerTeamRunRoutes(
         'The root task ID is invalid.',
       );
     const projection = await d.projectAgenticTeam.execute(owner(c), rootTaskId);
-    if (!projection)
-      return c.json(
-        AgenticTeamProjectResponseSchema.parse({
-          project: null,
-          work_items: [],
-          gates: {
-            finish_ready: false,
-            all_work_accepted: false,
-            no_active_attempts: true,
-            all_members_idle: true,
-          },
-          direct_messages: [],
-          sessions: [],
-        }),
-        200,
-      );
     return c.json(
-      AgenticTeamProjectResponseSchema.parse({
-        project: {
-          root_task_id: projection.project.rootTaskId,
-          team_run_id: projection.project.teamRunId,
-          team_version_id: projection.project.teamVersionId,
-          status: projection.project.status,
-          phase: projection.project.phase,
-          final_text: projection.project.finalText,
-          created_at: projection.project.createdAt,
-          updated_at: projection.project.updatedAt,
-        },
-        work_items: projection.workItems.map((work) => ({
-          work_ref: work.workRef,
-          subject: work.subject,
-          status: work.status,
-          assignee_name: work.assigneeName,
-          dependency_refs: work.dependencyRefs,
-          latest_attempt: work.latestAttempt
-            ? {
-                attempt_no: work.latestAttempt.attemptNo,
-                status: work.latestAttempt.status,
-                feedback_summary: work.latestAttempt.feedbackSummary,
-                result_summary: work.latestAttempt.resultSummary,
-              }
-            : null,
-        })),
-        gates: {
-          finish_ready: projection.gates.finishReady,
-          all_work_accepted: projection.gates.allWorkAccepted,
-          no_active_attempts: projection.gates.noActiveAttempts,
-          all_members_idle: projection.gates.allMembersIdle,
-        },
-        direct_messages: projection.directMessages.map((message) => ({
-          sequence: message.sequence,
-          sender_name: message.senderName,
-          recipient_name: message.recipientName,
-          summary: message.summary,
-          status: message.status,
-          created_at: message.createdAt,
-        })),
-        sessions: projection.sessions.map((session) => ({
-          team_member_run_id: session.teamMemberRunId,
-          name: session.name,
-          role: session.role,
-          status: session.status,
-          turns: session.turns.map((turn) => ({
-            task_id: turn.taskId,
-            run_id: turn.runId,
-            sequence: turn.sequence,
-            kind: turn.kind,
-            status: turn.status,
-            context: turn.context,
-            result_text: turn.resultText,
-            work_item_id: turn.workItemId,
-            attempt_id: turn.attemptId,
-            attempt_no: turn.attemptNo,
-            created_at: turn.createdAt,
-            updated_at: turn.updatedAt,
-          })),
-        })),
-      }),
+      AgenticTeamProjectResponseSchema.parse(
+        toAgenticTeamProjectResponse(projection),
+      ),
       200,
     );
   });

@@ -1,0 +1,186 @@
+/*
+ * Derived from Cloudflare OS (packages/workshop-frontend/src/styles.css)
+ * at upstream commit 0eaec6c5e8fc6b3298ea1aa73bf5c3e47b923c7f.
+ * Apache-2.0. Modified: portable token subset with --as-* names.
+ * The upstream dark brand variants are intentionally omitted to preserve one
+ * source-accent replacement point for this application.
+ */
+
+:root {
+  /* Surfaces, line/ring, and chat bubble tokens from upstream light mode. */
+  --as-surface-base: #fcfcfb;
+  --as-surface-elevated: #f8f8f7;
+  --as-surface-tint: #f3f3f1;
+  --as-surface-overlay: #fbfbfa;
+  --as-surface-recessed: #efeeec;
+  --as-surface-control: #ffffff;
+  --as-surface-contrast: #14110f;
+  --as-surface-fill: #e8e7e4;
+  --as-surface-fill-hover: #dededb;
+  --as-surface-interact: #cac8c3;
+  --as-line: #1411100f;
+  --as-ring: #cac8c3;
+  --as-bubble-user: #f1f0ee;
+  --as-tip-shadow: #14111014;
+  --as-tip-stroke: transparent;
+
+  /* Status colors and tints from the upstream light palette. */
+  --as-status-info: oklch(62.3% 0.214 259.815);
+  --as-status-info-tint: oklch(90% 0.06 250);
+  --as-status-warning: oklch(79.5% 0.184 86.047);
+  --as-status-warning-tint: oklch(92% 0.08 85);
+  --as-status-danger: oklch(63.7% 0.237 25.331);
+  --as-status-danger-tint: oklch(92% 0.06 25);
+  --as-status-success: oklch(72.3% 0.219 149.579);
+  --as-status-success-tint: oklch(92% 0.08 150);
+
+  /* Apache-2.0 §6 grants no Cloudflare trademark license. Replace this
+     value before exposing the accent in an outward-facing product. */
+  --as-source-accent: #ff4801;
+  --as-accent: var(--as-source-accent);
+  --as-link: var(--as-source-accent);
+  --as-selection: var(--as-source-accent);
+
+  /* Text tokens from upstream; brand/link intentionally use the replacement. */
+  --as-text-default: #1c1a18;
+  --as-text-default-hover: #100f0d;
+  --as-text-inverse: #ffffff;
+  --as-text-strong: #100f0d;
+  --as-text-subtle: oklch(52% 0.006 60);
+  --as-text-inactive: oklch(66% 0.005 60);
+  --as-text-brand: var(--as-source-accent);
+  --as-text-link: var(--as-source-accent);
+  --as-text-success: var(--as-status-success);
+  --as-text-danger: var(--as-status-danger);
+  --as-text-warning: oklch(47.6% 0.114 61.907);
+
+  /* Spacing uses upstream's 4px base and derived scale. */
+  --as-space-base: 4px;
+  --as-space-1: 4px;
+  --as-space-2: 8px;
+  --as-space-3: 12px;
+  --as-space-4: 16px;
+  --as-space-5: 20px;
+  --as-space-6: 24px;
+  --as-space-8: 32px;
+
+  /* Upstream type sizes and line heights. */
+  --as-font-size-sm: 12px;
+  --as-line-height-sm: 16px;
+  --as-font-size-body: 14px;
+  --as-line-height-body: 20px;
+  --as-font-size-md: 16px;
+  --as-line-height-md: 24px;
+  --as-font-size-lg: 18px;
+  --as-line-height-lg: 28px;
+
+  /* Upstream 4/6/8/12/16px radius scale. */
+  --as-radius-sm: 4px;
+  --as-radius-control: 6px;
+  --as-radius-md: 8px;
+  --as-radius-lg: 12px;
+  --as-radius-xl: 16px;
+
+  /* Upstream transitions and easing curves. */
+  --as-transition-duration: 0.15s;
+  --as-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --as-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --as-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --as-ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --as-ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --as-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --as-transition-colors:
+    color var(--as-transition-duration) var(--as-ease-out),
+    background-color var(--as-transition-duration) var(--as-ease-out),
+    border-color var(--as-transition-duration) var(--as-ease-out);
+
+  /* Exact upstream stack and component shadows, with portable variable names. */
+  --as-shadow-stack:
+    1px 6px 6px 0 #fff3 inset, 0 0 0px 0 #ffffff59 inset,
+    0 4px 12px 0 #00000005, 0 0 0px 0 #00000005, 0 2px 12px 0 #00000008;
+  --as-shadow-inset: inset 0 1px 0
+    color-mix(in srgb, var(--as-surface-fill) 65%, transparent);
+  --as-shadow-inset-outline: inset 0 0 0 1px
+    color-mix(in srgb, var(--as-surface-fill) 65%, transparent);
+  --as-shadow-prompt:
+    inset 0 1px 0 color-mix(in srgb, var(--as-surface-fill) 75%, transparent),
+    0 1px 2px rgba(20, 17, 16, 0.03), 0 10px 28px -16px rgba(20, 17, 16, 0.12);
+  --as-shadow-prompt-focus:
+    inset 0 1px 0 color-mix(in srgb, var(--as-surface-fill) 85%, transparent),
+    0 1px 2px rgba(20, 17, 16, 0.04), 0 14px 34px -14px rgba(20, 17, 16, 0.16);
+  --as-shadow-user:
+    0 1px 1px rgba(82, 16, 0, 0.03),
+    inset 0 1px 0 color-mix(in srgb, var(--as-surface-fill) 65%, transparent);
+  --as-shadow-thumbnail: 0 2px 14px rgba(20, 17, 16, 0.1);
+  --as-shadow-floating: 0 8px 20px rgba(82, 16, 0, 0.1);
+  --as-shadow-floating-lg: 0 14px 36px rgba(82, 16, 0, 0.1);
+  --as-shadow-bottom: 0 4px 10px -8px rgba(82, 16, 0, 0.1);
+  --as-shadow-compact: 0 8px 24px -20px rgba(82, 16, 0, 0.28);
+  --as-shadow-compact-focus: 0 10px 28px -20px rgba(82, 16, 0, 0.34);
+  --as-shadow-card-hover: 0 8px 20px -16px rgba(82, 16, 0, 0.12);
+  --as-shadow-row-hover: 0 8px 20px -18px rgba(82, 16, 0, 0.28);
+}
+
+[data-mode='dark'],
+[data-theme='dark'],
+.dark {
+  /* Exact upstream dark hue-285 surfaces, text, status, line, and ring. */
+  --as-surface-base: oklch(0.115 0.012 285);
+  --as-surface-elevated: oklch(0.155 0.011 285);
+  --as-surface-tint: oklch(0.225 0.025 285);
+  --as-surface-overlay: oklch(0.155 0.011 285);
+  --as-surface-recessed: oklch(0.1 0.012 285);
+  --as-surface-control: oklch(0.155 0.011 285);
+  --as-surface-contrast: var(--as-source-accent);
+  --as-surface-fill: oklch(0.225 0.025 285);
+  --as-surface-fill-hover: oklch(0.295 0.045 285);
+  --as-surface-interact: oklch(0.34 0.022 285);
+  --as-line: oklch(0.34 0.022 285);
+  --as-ring: oklch(0.52 0.065 285);
+  --as-bubble-user: oklch(0.225 0.025 285);
+  --as-tip-shadow: #00000066;
+  --as-tip-stroke: oklch(0.34 0.022 285);
+  --as-status-info: oklch(62.3% 0.214 259.815);
+  --as-status-info-tint: oklch(0.25 0.065 259.815);
+  --as-status-warning: oklch(55.5% 0.163 48.998);
+  --as-status-warning-tint: oklch(0.27 0.06 84.429);
+  --as-status-danger: oklch(50.5% 0.213 27.518);
+  --as-status-danger-tint: oklch(0.25 0.065 25.331);
+  --as-status-success: oklch(52.7% 0.154 150.069);
+  --as-status-success-tint: oklch(0.25 0.06 150.069);
+  --as-text-default: oklch(0.92 0.01 285);
+  --as-text-default-hover: oklch(0.97 0.006 285);
+  --as-text-inverse: #ffffff;
+  --as-text-strong: oklch(0.92 0.01 285);
+  --as-text-subtle: oklch(0.66 0.02 285);
+  --as-text-inactive: oklch(0.58 0.025 285);
+  --as-text-success: oklch(79.2% 0.209 151.711);
+  --as-text-danger: oklch(70.4% 0.191 22.216);
+  --as-text-warning: oklch(82.8% 0.189 84.429);
+  --as-shadow-stack:
+    1px 6px 6px 0 #ffffff08 inset, 0 0 0 1px #ffffff05 inset,
+    0 18px 40px 0 #00000033, 0 4px 12px 0 #0000002e;
+  --as-shadow-inset: inset 0 1px 0
+    color-mix(in srgb, var(--as-line) 80%, transparent);
+  --as-shadow-inset-outline: inset 0 0 0 1px
+    color-mix(in srgb, var(--as-line) 80%, transparent);
+  --as-shadow-prompt:
+    inset 0 1px 0
+      color-mix(in srgb, var(--as-surface-fill-hover) 42%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.24), 0 10px 28px -16px rgba(0, 0, 0, 0.45);
+  --as-shadow-prompt-focus:
+    inset 0 1px 0
+      color-mix(in srgb, var(--as-surface-fill-hover) 52%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.28), 0 14px 34px -14px rgba(0, 0, 0, 0.55);
+  --as-shadow-user:
+    0 1px 1px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 color-mix(in srgb, var(--as-line) 80%, transparent);
+  --as-shadow-thumbnail: 0 2px 14px rgba(0, 0, 0, 0.34);
+  --as-shadow-floating: 0 8px 20px rgba(0, 0, 0, 0.32);
+  --as-shadow-floating-lg: 0 14px 36px rgba(0, 0, 0, 0.38);
+  --as-shadow-bottom: 0 4px 10px -8px rgba(0, 0, 0, 0.48);
+  --as-shadow-compact: 0 8px 24px -20px rgba(0, 0, 0, 0.5);
+  --as-shadow-compact-focus: 0 10px 28px -20px rgba(0, 0, 0, 0.62);
+  --as-shadow-card-hover: 0 8px 20px -16px rgba(0, 0, 0, 0.55);
+  --as-shadow-row-hover: 0 8px 20px -18px rgba(0, 0, 0, 0.58);
+}

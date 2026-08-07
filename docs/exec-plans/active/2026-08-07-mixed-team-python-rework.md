@@ -174,8 +174,14 @@ Paseo Web confirmation.
   remaining useful Work during review. After the minimum widening, create is
   available alongside review commands only while `remainingWorkItems > 0`.
   Existing work ownership, attempt, acceptance, roster, and cardinality bounds
-  remain unchanged. This is correct independently of the demo because results
-  can reveal bounded follow-up Work during a review turn.
+  remain unchanged. This is correct independently of the demo: reviewing a
+  completed attempt and decomposing newly discovered follow-up work are
+  separate Lead responsibilities, and completion is precisely when results can
+  reveal that bounded follow-up work. The Lead already had
+  `team_work_create` authority before the first completion; this change keeps
+  that same authority available during an actionable review state, only while
+  the pre-existing `maxWorkItems` budget has capacity. It does not grant a new
+  role, owner transition, retry, acceptance, or unbounded creation power.
 
 ## Risks and recovery
 
@@ -220,18 +226,25 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-None. The next step is a scoped fixer adaptation of the existing sandbox seed;
-no Human Gate is presently implicated.
+Credential Human Gate. While reconciling the Manager-owned dirty remote to the
+committed local tree through `sandbox-ctl`, the ignored remote-only
+`.local/model.env` was removed with the disposable workspace contents. The
+stopped `mixed-team-agent-server-1` container retains its configured
+environment, but extracting credentials from that container or reconstructing
+the env file requires explicit human direction. No credential value has been
+printed, copied, committed, or written into evidence.
 
 ## Next exact command
 
-Commit this Active Exec Plan locally, then dispatch a fixer with ownership of
-`.local/seed-team.mjs` and the check that its dry structural inspection proves
-the three exact policy refs plus a forced reject/rework Python workflow.
+Obtain human direction for restoring `.local/model.env`, then restart the
+prepared `mixed-team-` stack with the committed overlay and execute the real
+mixed-provider seed.
 
 ## Cleanup state
 
 The local worktree was clean before this plan. The prepared sandbox remains
-bound at remote path `workspace/mixed-team`; no provisioning or destructive
-operation has occurred. The running stack and ignored `.local` files predate
-this task.
+bound at remote path `workspace/mixed-team`. Its Manager-owned dirty workspace
+was cleared and replaced with committed local HEAD through `sandbox-ctl`; the
+two exact `mixed-team-` containers were stopped first. That reset also removed
+the ignored remote-only `.local/model.env`, producing the credential Human Gate
+described above.

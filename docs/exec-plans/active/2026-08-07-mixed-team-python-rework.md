@@ -224,6 +224,23 @@ Paseo Web confirmation.
   provider-success-without-submit as a safe execution/no-progress failure and
   return control to Lead, or atomically fail the TeamRun with a dedicated
   reason. This task will record but not drive-by fix that product defect.
+- After the provider image/configuration gate was cleared, real retry root Task
+  `3853990a-32b3-483a-bca2-321d13a5cccd` reached a genuine
+  `claude/deepseek-v4-flash` turn. Its transcript contained one text-only
+  assistant record, `stop_sequence`, zero tool-use blocks, no Python artifacts,
+  and no fixer command receipt. It reproduced the absorbing state without an
+  authentication failure.
+- A prompt-only hard gate in `f101469` required the first fixer assistant block
+  to be a terminal call, prohibited prose before tool use, and prohibited turn
+  completion until both files and a successful canonical submit existed. Final
+  retry root Task `9c96182a-207c-415a-86a9-1da66a4d2582` still produced exactly
+  one text-only assistant record, `stop_sequence`, zero tool-use names, and
+  neither Python artifact. Its Claude Run
+  `510fdbb9-ce29-4e3a-a1a7-11d50448c64f` was persisted succeeded, its attempt
+  failed, its Work remains in-progress, and the TeamRun is again absorbing.
+  Further prompt iteration is not justified: under the required
+  Claude/DeepSeek provider pairing, the model did not exercise available tools
+  even under the explicit hard gate.
 - Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
   the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
   reachable under normal concurrency, but the reviewer and next Lead may
@@ -279,6 +296,10 @@ Paseo Web confirmation.
   `absorbing-state/stdout.txt` contains the metadata-only no-transition proof.
   `fixer-provider-transcript/stdout.txt` contains the single safe assistant
   block proving the Claude CLI returned `Not logged in · Please run /login`.
+  `second-fixer-transcript/stdout.txt` contains metadata for the first
+  authenticated Claude retry, and `hard-gated-fixer/stdout.txt` contains the
+  final hard-gated retry metadata (`block_types=["text"]`, empty
+  `tool_use_names`, and both artifact-existence fields false).
 
 ## Completion checklist
 
@@ -298,8 +319,12 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-None. The Manager fixed and verified the runner image CA bundle and provider CLI
-configuration in `2b9c983`, clearing the Claude/Codex environment gate.
+Required provider/model behavior. With authentication and CA configuration
+verified, `claude/deepseek-v4-flash` twice ended with a prose-only turn and zero
+tool calls; the second attempt did so despite an explicit first-block terminal
+hard gate. Because the fixer never creates or submits its artifact, neither B
+nor C can advance to reviewer/Codex execution. No qualifying manifest or visual
+three-role workspace proof exists.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -310,9 +335,9 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Pipe `.local/seed-provider-configs.sh` into the running agent-server container,
-verify readiness without printing configuration values, and retry the real
-mixed-provider seed. Do not drive-by fix either recorded runtime defect.
+Report the exact provider/model blocker and await human direction. Do not weaken
+the required provider mapping, claim B/C from partial execution, drive-by fix
+the runtime defects, or start another prompt-only retry.
 
 ## Cleanup state
 

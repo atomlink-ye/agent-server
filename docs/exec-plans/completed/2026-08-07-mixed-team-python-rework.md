@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 owner: orchestrator
 created_at: 2026-08-07
 updated_at: 2026-08-07
@@ -496,9 +496,9 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
 - [x] Final oracle review has no unresolved `BLOCKER-NOW` finding.
 - [x] All documentation impact and deferred findings are resolved or
       transferred.
-- [ ] Move this plan to `docs/exec-plans/completed/`, set `status: completed`,
+- [x] Move this plan to `docs/exec-plans/completed/`, set `status: completed`,
       and leave no unchecked boxes.
-- [ ] Open exactly one PR covering the complete branch.
+- [x] Open exactly one PR covering the complete branch.
 
 ## Current blocker
 
@@ -507,8 +507,6 @@ fixer rework, terminal Team/root success, machine-written evidence, and visual
 three-role workspace proof. The earlier authentication/tool-use diagnosis,
 environment chain, and three runtime product defects remain recorded as
 historical or deferred findings; they do not invalidate the accepted run.
-The remaining work is moving this plan to `docs/exec-plans/completed/` and
-opening the single PR.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -519,11 +517,10 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Commit this reviewed plan update, open exactly one PR, then move the plan to
-`docs/exec-plans/completed/` with `status: completed` and no unchecked boxes in
-the final branch update. Preserve the accepted evidence, provider mapping,
-restored Lead policy, fixture, and deferred runtime-defect ledger; do not
-drive-by fix those deferred defects in this slice.
+No further execution command is required. PR #33 contains the completed branch.
+Preserve the accepted evidence, provider mapping, restored Lead policy,
+fixture, and deferred runtime-defect ledger; do not drive-by fix those deferred
+defects in this slice.
 
 ## Cleanup state
 
@@ -536,4 +533,4 @@ it with mode 600 and also restored the ignored Host rewrite shim.
 The first seed polling process was terminated locally after the absorbing state
 was established. The accepted run's browser inspection is complete and the
 browser was released; accepted machine evidence remains under the ignored
-`.local/evidence/final-1a8ccc9f` path pending final artifact cleanup.
+`.local/evidence/final-1a8ccc9f` path for audit.

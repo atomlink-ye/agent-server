@@ -192,8 +192,16 @@ Paseo Web confirmation.
   the exact-name proof therefore comes from the immutable grant receipt,
   durable launch catalog, and registration path rather than a nonexistent raw
   list-response line. There is no evidence of provider-specific catalog
-  filtering in this turn. The missing submit is model behavior, not structural
-  Claude tool omission.
+  filtering in this turn. The missing submit is not structural Claude tool
+  omission.
+- The provider transcript then separated exposure from execution: its sole
+  assistant block, line 8, is `Not logged in · Please run /login` with
+  `stop_reason=stop_sequence`. Therefore no DeepSeek model turn occurred and
+  this cannot be classified as model-quality noncompliance. The runtime adapter
+  persisted the Claude CLI authentication response as a succeeded provider Run;
+  TeamDriver then converted the missing canonical submit into a failed attempt
+  without an outgoing transition. Claude authentication/configuration is a
+  Human Gate; the runtime success classification is a second product finding.
 - Durable no-transition evidence at 2026-08-07T02:51:59Z shows TeamRun
   `6ec80054-2c91-40d3-9aa6-caf6e6a48ca7` still
   `active/lead_kickoff/member_work_running`, root Run `waiting_children`, the
@@ -256,6 +264,8 @@ Paseo Web confirmation.
   log with Authorization and URL values redacted; `first-run-durable/stdout.txt`
   contains Team/Run/Work/attempt/receipt/dispatch/event rows; and
   `absorbing-state/stdout.txt` contains the metadata-only no-transition proof.
+  `fixer-provider-transcript/stdout.txt` contains the single safe assistant
+  block proving the Claude CLI returned `Not logged in · Please run /login`.
 
 ## Completion checklist
 
@@ -275,7 +285,13 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-None. The Manager established that the exposed value was an ephemeral
+Claude provider credential/configuration Human Gate. The fixer transcript shows
+the CLI was not logged in, so the required real Claude/DeepSeek execution did
+not occur. Do not run `/login`, alter service-account configuration, or start
+another provider run without human direction.
+
+The prior token incident is closed: the Manager established that the exposed
+value was an ephemeral
 15-minute, in-memory-only RuntimeToolGrant capability scoped to one member Run
 and the sandbox loopback server. It expired, was never persisted, and requires
 no rotation. Its value is confined to the internal diagnostic transcript and
@@ -283,9 +299,10 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Tighten the fixer turn instruction without changing the platform protocol, then
-retry the real mixed-provider seed. Do not drive-by fix the separately recorded
-succeeded-without-submit absorbing-state defect.
+Obtain human direction for the Claude CLI authentication/configuration gate.
+After it is cleared, retry the real mixed-provider seed without changing the
+already-exposed fixer tool catalog. Do not drive-by fix either recorded runtime
+defect.
 
 ## Cleanup state
 

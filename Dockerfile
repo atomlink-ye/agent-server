@@ -52,6 +52,17 @@ RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
     && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
 RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"
 
+# The Paseo daemon shells out to `ps` to reap agent child processes. The slim
+# base has no procps, so that spawn raises ENOENT as an *uncaught* exception and
+# the daemon dies, taking scripts/dev/with-paseo.mjs and the container with it.
+# Observed as "Paseo did not become healthy" long after a healthy start.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && ps --version
+USER node
+
 FROM dependencies AS development
 
 COPY --chown=node:node . .

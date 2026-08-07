@@ -138,6 +138,19 @@ assert(finalJson?.count === 0 && finalJson?.first_token === null, 'python_final_
 await copyFile(artifactV1, `${evidenceRoot}/mixed_team_rework.v1.py`);
 await copyFile(artifact, `${evidenceRoot}/mixed_team_rework.py`);
 const artifactEvidence = { v1: { relative_path: 'mixed_team_rework.v1.py', line_count: lineCount(pythonV1), sha256: createHash('sha256').update(pythonV1).digest('hex'), empty_input_run: v1Run }, final: { relative_path: 'mixed_team_rework.py', line_count: lineCount(python), sha256: createHash('sha256').update(python).digest('hex'), empty_input_run: finalRun } };
+const extractSummaryField = (summary, pattern, missingAssertion) => {
+  const match = String(summary ?? '').match(pattern);
+  assert(match?.[1], missingAssertion);
+  return match[1];
+};
+const fixerV1SummarySha256 = extractSummaryField(fixerV1.result_summary, /\bsha[-_]?256\b\s*(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v1_summary_sha256_missing');
+const fixerV2SummarySha256 = extractSummaryField(fixerV2.result_summary, /\bsha[-_]?256\b\s*(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i, 'fixer_v2_summary_sha256_missing');
+assert(fixerV1SummarySha256 === artifactEvidence.v1.sha256, 'fixer_v1_summary_sha256_mismatch');
+assert(fixerV2SummarySha256 === artifactEvidence.final.sha256, 'fixer_v2_summary_sha256_mismatch');
+const fixerV1SummaryLineCount = extractSummaryField(fixerV1.result_summary, /\b(\d+)\s+lines?\b/i, 'fixer_v1_summary_line_count_missing');
+const fixerV2SummaryLineCount = extractSummaryField(fixerV2.result_summary, /\b(\d+)\s+lines?\b/i, 'fixer_v2_summary_line_count_missing');
+assert(Number(fixerV1SummaryLineCount) === artifactEvidence.v1.line_count, 'fixer_v1_summary_line_count_mismatch');
+assert(Number(fixerV2SummaryLineCount) === artifactEvidence.final.line_count, 'fixer_v2_summary_line_count_mismatch');
 await writeFile(`${evidenceRoot}/python-artifact.json`, JSON.stringify(artifactEvidence, null, 2));
 const distinctModels = [...new Set(providers.map((row) => row.model).filter((model) => typeof model === 'string' && model.trim()))].sort();
 const resolvedModel = distinctModels.join(',');

@@ -238,9 +238,27 @@ Paseo Web confirmation.
   neither Python artifact. Its Claude Run
   `510fdbb9-ce29-4e3a-a1a7-11d50448c64f` was persisted succeeded, its attempt
   failed, its Work remains in-progress, and the TeamRun is again absorbing.
-  Further prompt iteration is not justified: under the required
-  Claude/DeepSeek provider pairing, the model did not exercise available tools
-  even under the explicit hard gate.
+  Further prompt iteration is not justified, but these observations alone do
+  not establish a model/provider limitation.
+- The hypothesis that only the OpenCode Lead connected to Runtime MCP is
+  falsified. Authenticated Claude fixer Run
+  `89ec2d83-48ca-48cb-8d59-ed7b15ff0e2d` was created with
+  `has_mcp_servers=true` in managed cell
+  `18de1b71-3e8a-458c-b4cb-aabf38eda036`; that cell's sole grant receipt is
+  `2d856e90-0815-430f-bd1f-a0a6d782a61f`, scoped to fixer member Run
+  `a713041f-2f24-405a-8185-df70db08881f`, and its cell-local Claude MCP log
+  records a successful `hasTools=true` connection at 03:08:24.190Z. Hard-gated
+  fixer Run `510fdbb9-ce29-4e3a-a1a7-11d50448c64f` independently has
+  `has_mcp_servers=true`, cell `84953ba4-407d-4d6d-ae81-38329a0d6c1d`, sole
+  fixer grant `af96c025-bb96-4630-bb77-33359907d5e7`, and its own successful
+  `hasTools=true` Claude connection at 03:19:19.071Z.
+- Therefore Paseo delivered an MCP server configuration to both authenticated
+  Claude processes and each opened a connection through its cell-scoped fixer
+  grant path. Existing logs stop at server capabilities: they do not serialize
+  `tools/list` response names or the downstream model request's tool array.
+  Whether Claude Code translated the connected MCP catalog into the model
+  request remains unproven. Do not relabel that remaining boundary as model
+  noncompliance or as absence of the MCP server connection.
 - Classification (a): `AGENT_SERVER_DISPATCHER_CONCURRENCY=1` plus FIFO makes
   the demo order deterministic. The reviewer-rejects-then-fixer-reworks flow is
   reachable under normal concurrency, but the reviewer and next Lead may
@@ -300,6 +318,9 @@ Paseo Web confirmation.
   authenticated Claude retry, and `hard-gated-fixer/stdout.txt` contains the
   final hard-gated retry metadata (`block_types=["text"]`, empty
   `tool_use_names`, and both artifact-existence fields false).
+  `authenticated-claude-mcp-delivery/stdout.txt` correlates both authenticated
+  fixer roots, cells, grant IDs/allowed tools, connection timestamps, and
+  `hasTools=true` capability lines without retaining a grant token.
 
 ## Completion checklist
 
@@ -319,12 +340,12 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Required provider/model behavior. With authentication and CA configuration
-verified, `claude/deepseek-v4-flash` twice ended with a prose-only turn and zero
-tool calls; the second attempt did so despite an explicit first-block terminal
-hard gate. Because the fixer never creates or submits its artifact, neither B
-nor C can advance to reviewer/Codex execution. No qualifying manifest or visual
-three-role workspace proof exists.
+Claude MCP catalog-to-model-request boundary. Both authenticated fixer processes
+received and connected to their own Runtime MCP server through fixer-scoped
+grants, but existing logs do not record the `tools/list` names or downstream
+model request tools. Both turns ended prose-only, so neither B nor C can advance
+to reviewer/Codex execution. No qualifying manifest or visual three-role
+workspace proof exists.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -335,9 +356,9 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Report the exact provider/model blocker and await human direction. Do not weaken
-the required provider mapping, claim B/C from partial execution, drive-by fix
-the runtime defects, or start another prompt-only retry.
+Report the exact MCP delivery evidence and the remaining catalog-to-model
+boundary. Do not weaken the required provider mapping, claim B/C from partial
+execution, drive-by fix the runtime defects, or start another prompt-only retry.
 
 ## Cleanup state
 

@@ -202,6 +202,19 @@ Paseo Web confirmation.
   TeamDriver then converted the missing canonical submit into a failed attempt
   without an outgoing transition. Claude authentication/configuration is a
   Human Gate; the runtime success classification is a second product finding.
+- The Manager cleared that environment gate in commit `2b9c983`. Two runner
+  image defects were confirmed and fixed there: provider CLIs were installed
+  without Claude/Codex configuration, directly causing the Claude `Not logged
+  in` response; and the image lacked `ca-certificates`, leaving Codex unable to
+  make any HTTPS request. Before the certificate fix, a mixed-provider Team
+  could not work at all because a Codex member structurally could not perform a
+  single network call. The image now fails its build if the system CA bundle is
+  absent, and the local-only provider seeder writes Claude/Codex configuration
+  from the container's existing key without printing it.
+- The working environment does not erase the two runtime product defects found
+  by the failed Run: provider CLI authentication failure was persisted as a
+  succeeded Run, and succeeded-without-submit left the TeamRun in an absorbing
+  state with no outgoing transition. Neither is fixed in this task.
 - Durable no-transition evidence at 2026-08-07T02:51:59Z shows TeamRun
   `6ec80054-2c91-40d3-9aa6-caf6e6a48ca7` still
   `active/lead_kickoff/member_work_running`, root Run `waiting_children`, the
@@ -285,10 +298,8 @@ Paseo Web confirmation.
 
 ## Current blocker
 
-Claude provider credential/configuration Human Gate. The fixer transcript shows
-the CLI was not logged in, so the required real Claude/DeepSeek execution did
-not occur. Do not run `/login`, alter service-account configuration, or start
-another provider run without human direction.
+None. The Manager fixed and verified the runner image CA bundle and provider CLI
+configuration in `2b9c983`, clearing the Claude/Codex environment gate.
 
 The prior token incident is closed: the Manager established that the exposed
 value was an ephemeral
@@ -299,10 +310,9 @@ does not appear in repository files or retained evidence.
 
 ## Next exact command
 
-Obtain human direction for the Claude CLI authentication/configuration gate.
-After it is cleared, retry the real mixed-provider seed without changing the
-already-exposed fixer tool catalog. Do not drive-by fix either recorded runtime
-defect.
+Pipe `.local/seed-provider-configs.sh` into the running agent-server container,
+verify readiness without printing configuration values, and retry the real
+mixed-provider seed. Do not drive-by fix either recorded runtime defect.
 
 ## Cleanup state
 

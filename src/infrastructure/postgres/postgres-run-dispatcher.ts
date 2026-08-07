@@ -56,6 +56,9 @@ export class PostgresRunDispatcher implements RunDispatcher {
     }
 
     this.#running = true;
+    this.logger.log('info', 'run.dispatch.started', {
+      concurrency: this.#concurrency,
+    });
     this.#stopping = false;
     this.#maintenanceAt = Date.now();
     this.#loops = Array.from({ length: this.#concurrency }, () =>

@@ -46,6 +46,9 @@ services:
       PASEO_RELAY_ENABLED: 'false'
       PASEO_DICTATION_ENABLED: 'false'
       PASEO_VOICE_MODE_ENABLED: 'false'
+      # The Paseo daemon runs inside this container, so exporting this on the
+      # host does nothing unless compose forwards it. Off unless set to '1'.
+      PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"workspace_main","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace

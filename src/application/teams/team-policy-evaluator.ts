@@ -99,6 +99,7 @@ export function deriveAgenticLeadCommandPolicy(
   if (cancel.length) allowed.push('team_work_cancel');
   if (accept.length) allowed.push('team_work_accept');
   if (rework.length) allowed.push('team_work_request_changes');
+  if (limits.remainingWorkItems > 0) allowed.push('team_work_create');
   if (allowed.length)
     return {
       ...none(),

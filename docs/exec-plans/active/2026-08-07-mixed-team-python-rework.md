@@ -340,21 +340,36 @@ in` response; and the image lacked `ca-certificates`, leaving Codex unable to
   makes this run deterministic. Normal concurrency may interleave reviewer and
   subsequent Lead work; this run is not evidence of a platform sequencing
   guarantee.
-- Before this slice, `deriveAgenticLeadCommandPolicy` omitted
-  `team_work_create` whenever any completed attempt exposed accept/rework,
-  despite remaining capacity and the existing Lead instruction to create any
-  remaining useful Work during review. After the minimum widening, create is
-  available alongside review commands only while `remainingWorkItems > 0`.
-  Existing work ownership, attempt, acceptance, roster, and cardinality bounds
-  remain unchanged. This independently accepted Lead-policy justification
-  remains valid: reviewing a completed attempt and decomposing newly discovered
-  follow-up work are separate pre-existing Lead responsibilities, and completion
-  is precisely when results can reveal that bounded follow-up work. The Lead
-  already had
-  `team_work_create` authority before the first completion; this change keeps
-  that same authority available during an actionable review state, only while
-  the pre-existing `maxWorkItems` budget has capacity. It does not grant a new
-  role, owner transition, retry, acceptance, or unbounded creation power.
+- The initial policy widening was not merely filling an undocumented omission.
+  Commit `660f24a` deliberately introduced a negative turn-2 smoke assertion
+  that `team_work_create` remains unauthorized while accept/request-changes are
+  legal. The same commit's persistent-Lead static-catalog evidence records
+  epoch 2 as accept/request-changes allowed and create rejected. That assertion
+  protects per-turn least authority in the incremental-Lead contract: the
+  provider keeps the full seven-tool catalog, while the server grant exposes
+  only the commands legal for the current decision state. The earlier claim
+  that review and bounded follow-up decomposition independently justified
+  create in every actionable review state is therefore withdrawn. The current
+  widening contradicts a chosen boundary and weakens that contract; passing a
+  demo is not sufficient justification for landing it.
+- No narrower generic widening both preserves that negative assertion and
+  enables this exact post-submit review decomposition. A completed fixer
+  attempt necessarily makes accept/request-changes legal, so a condition such
+  as "only when no other Lead action is legal" cannot create reviewer Work at
+  that point. A special rule based on Work count, assignee name, or prompt text
+  would be demo-shaped rather than independently correct. A durable review
+  relation could express the semantics cleanly, but that changes durable state
+  and is a Human Gate outside this slice.
+- The narrower scenario change needs no policy widening: on kickoff, the Lead
+  creates fixer Work first and independent reviewer Work second. With effective
+  dispatcher concurrency 1 and FIFO by `run_dispatches.id`, the fixer produces
+  the preserved V1 artifact before the reviewer attempt runs; the reviewer's
+  rejection then makes the next Lead decision request fixer rework. At normal
+  concurrency the same transition is reachable but the independent attempts
+  may interleave. This is a deterministic demo ordering control, not a platform
+  sequencing guarantee. The original negative smoke assertion remains valid
+  and unchanged, and the branch must restore the pre-slice Lead policy before
+  a replacement real TeamRun is accepted.
 
 ## Risks and recovery
 

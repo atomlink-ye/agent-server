@@ -67,10 +67,11 @@ RUN node --input-type=module -e "import { createHash } from 'node:crypto'; impor
 # Team cannot work at all without this.
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends procps ca-certificates \
+    && apt-get install -y --no-install-recommends procps ca-certificates python3 \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && ps --version \
+    && python3 --version \
     && test -s /etc/ssl/certs/ca-certificates.crt
 USER node
 

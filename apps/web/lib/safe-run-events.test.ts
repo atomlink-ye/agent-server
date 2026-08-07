@@ -237,19 +237,149 @@ describe('safeRunEvent output payload contract', () => {
   });
 
   it.each([
-    ['tool category', { kind: 'tool_status', activity_id: 'x', category: 'invalid', status: 'running', label: 'x', summary: 'x' }],
-    ['tool status', { kind: 'tool_status', activity_id: 'x', category: 'read', status: 'invalid', label: 'x', summary: 'x' }],
-    ['tool activity id', { kind: 'tool_status', activity_id: 42, category: 'read', status: 'running', label: 'x', summary: 'x' }],
-    ['tool label', { kind: 'tool_status', activity_id: 'x', category: 'read', status: 'running', label: 42, summary: 'x' }],
-    ['tool summary', { kind: 'tool_status', activity_id: 'x', category: 'read', status: 'running', label: 'x', summary: 42 }],
-    ['permission category', { kind: 'permission', activity_id: 'x', category: 'invalid', status: 'requested', summary: 'x' }],
-    ['permission status', { kind: 'permission', activity_id: 'x', category: 'tool', status: 'invalid', summary: 'x' }],
-    ['permission activity id', { kind: 'permission', activity_id: 42, category: 'tool', status: 'requested', summary: 'x' }],
-    ['permission summary', { kind: 'permission', activity_id: 'x', category: 'tool', status: 'requested', summary: 42 }],
-    ['child kind', { kind: 'child_timeline_item', activity_id: 'x', parent_activity_id: 'p', item_kind: 'invalid', status: 'running', label: 'x', summary: 'x' }],
-    ['child parent id', { kind: 'child_timeline_item', activity_id: 'x', parent_activity_id: 42, item_kind: 'tool', status: 'running', label: 'x', summary: 'x' }],
-    ['child label', { kind: 'child_timeline_item', activity_id: 'x', parent_activity_id: 'p', item_kind: 'tool', status: 'running', label: 42, summary: 'x' }],
-    ['child summary', { kind: 'child_timeline_item', activity_id: 'x', parent_activity_id: 'p', item_kind: 'tool', status: 'running', label: 'x', summary: 42 }],
+    [
+      'tool category',
+      {
+        kind: 'tool_status',
+        activity_id: 'x',
+        category: 'invalid',
+        status: 'running',
+        label: 'x',
+        summary: 'x',
+      },
+    ],
+    [
+      'tool status',
+      {
+        kind: 'tool_status',
+        activity_id: 'x',
+        category: 'read',
+        status: 'invalid',
+        label: 'x',
+        summary: 'x',
+      },
+    ],
+    [
+      'tool activity id',
+      {
+        kind: 'tool_status',
+        activity_id: 42,
+        category: 'read',
+        status: 'running',
+        label: 'x',
+        summary: 'x',
+      },
+    ],
+    [
+      'tool label',
+      {
+        kind: 'tool_status',
+        activity_id: 'x',
+        category: 'read',
+        status: 'running',
+        label: 42,
+        summary: 'x',
+      },
+    ],
+    [
+      'tool summary',
+      {
+        kind: 'tool_status',
+        activity_id: 'x',
+        category: 'read',
+        status: 'running',
+        label: 'x',
+        summary: 42,
+      },
+    ],
+    [
+      'permission category',
+      {
+        kind: 'permission',
+        activity_id: 'x',
+        category: 'invalid',
+        status: 'requested',
+        summary: 'x',
+      },
+    ],
+    [
+      'permission status',
+      {
+        kind: 'permission',
+        activity_id: 'x',
+        category: 'tool',
+        status: 'invalid',
+        summary: 'x',
+      },
+    ],
+    [
+      'permission activity id',
+      {
+        kind: 'permission',
+        activity_id: 42,
+        category: 'tool',
+        status: 'requested',
+        summary: 'x',
+      },
+    ],
+    [
+      'permission summary',
+      {
+        kind: 'permission',
+        activity_id: 'x',
+        category: 'tool',
+        status: 'requested',
+        summary: 42,
+      },
+    ],
+    [
+      'child kind',
+      {
+        kind: 'child_timeline_item',
+        activity_id: 'x',
+        parent_activity_id: 'p',
+        item_kind: 'invalid',
+        status: 'running',
+        label: 'x',
+        summary: 'x',
+      },
+    ],
+    [
+      'child parent id',
+      {
+        kind: 'child_timeline_item',
+        activity_id: 'x',
+        parent_activity_id: 42,
+        item_kind: 'tool',
+        status: 'running',
+        label: 'x',
+        summary: 'x',
+      },
+    ],
+    [
+      'child label',
+      {
+        kind: 'child_timeline_item',
+        activity_id: 'x',
+        parent_activity_id: 'p',
+        item_kind: 'tool',
+        status: 'running',
+        label: 42,
+        summary: 'x',
+      },
+    ],
+    [
+      'child summary',
+      {
+        kind: 'child_timeline_item',
+        activity_id: 'x',
+        parent_activity_id: 'p',
+        item_kind: 'tool',
+        status: 'running',
+        label: 'x',
+        summary: 42,
+      },
+    ],
   ])('drops an event when required enum %s is invalid', (_name, input) => {
     const event = safeRunEvent({ sequence: 1, type: 'output', payload: input });
     expect(event).not.toBeNull();
@@ -304,24 +434,27 @@ describe('safeRunEvent field bounds', () => {
     ['label', 120],
     ['summary', 2000],
     ['detail_text', 12000],
-  ])('%s at limit + 1 is truncated and remains reducer-parseable', (field, limit) => {
-    const input: Record<string, unknown> = {
-      kind: 'tool_status',
-      activity_id: 'a',
-      category: 'shell',
-      status: 'running',
-      label: 'label',
-      summary: 'summary',
-      detail_kind: 'shell',
-      detail_text: 'detail',
-      parent_activity_id: 'parent',
-    };
-    input[field] = 'x'.repeat(limit + 1);
-    const payload = outputPayload(input);
-    expect(payload).toBeDefined();
-    expect(typeof payload?.[field]).toBe('string');
-    expect((payload?.[field] as string).length).toBe(limit);
-  });
+  ])(
+    '%s at limit + 1 is truncated and remains reducer-parseable',
+    (field, limit) => {
+      const input: Record<string, unknown> = {
+        kind: 'tool_status',
+        activity_id: 'a',
+        category: 'shell',
+        status: 'running',
+        label: 'label',
+        summary: 'summary',
+        detail_kind: 'shell',
+        detail_text: 'detail',
+        parent_activity_id: 'parent',
+      };
+      input[field] = 'x'.repeat(limit + 1);
+      const payload = outputPayload(input);
+      expect(payload).toBeDefined();
+      expect(typeof payload?.[field]).toBe('string');
+      expect((payload?.[field] as string).length).toBe(limit);
+    },
+  );
 
   it.each([
     ['assistant_text', 'text'],

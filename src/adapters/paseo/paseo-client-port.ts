@@ -111,6 +111,8 @@ export interface PaseoToolCall {
   readonly callId: string;
   readonly name: string;
   readonly status: string;
+  /** Raw provider-supplied title for this tool call, when present. */
+  readonly title?: string | undefined;
   /** Internal correlation only; never emitted in RuntimeToolDetail. */
   readonly childSessionId?: string | undefined;
   readonly detail?: PaseoToolDetail;
@@ -669,20 +671,37 @@ export function projectPaseoToolCall(
   failedError?: unknown,
 ):
   | {
+      readonly title?: string | undefined;
       readonly childSessionId?: string | undefined;
       readonly detail?: PaseoToolDetail;
       readonly error?: string;
     }
   | undefined {
   if (!isRecord(value)) return undefined;
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const state = isRecord(value.state) ? value.state : undefined;
+  const title =
+    typeof value.title === 'string' && value.title.trim().length > 0
+      ? value.title
+      : typeof metadata?.title === 'string' && metadata.title.trim().length > 0
+        ? metadata.title
+        : typeof state?.title === 'string' && state.title.trim().length > 0
+          ? state.title
+          : undefined;
   const type = stringValue(
     value.detail && isRecord(value.detail) ? value.detail.type : undefined,
   );
   if (!type)
-    return typeof failedError === 'string' ? { error: failedError } : {};
+    return {
+      ...(title ? { title } : {}),
+      ...(typeof failedError === 'string' ? { error: failedError } : {}),
+    };
   const raw = value.detail;
   if (!isRecord(raw))
-    return typeof failedError === 'string' ? { error: failedError } : {};
+    return {
+      ...(title ? { title } : {}),
+      ...(typeof failedError === 'string' ? { error: failedError } : {}),
+    };
   const stringField = (key: string): string | undefined =>
     typeof raw[key] === 'string' ? (raw[key] as string) : undefined;
   const finiteNumber = (key: string): number | undefined =>
@@ -827,6 +846,7 @@ export function projectPaseoToolCall(
       ...(actions ? { actions } : {}),
     };
   return {
+    ...(title ? { title } : {}),
     ...(type === 'sub_agent' && stringField('childSessionId')
       ? { childSessionId: stringField('childSessionId') }
       : {}),

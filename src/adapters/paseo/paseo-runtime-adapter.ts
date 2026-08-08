@@ -1772,11 +1772,23 @@ function toolPresentation(
               ? typedDetail.description
               : undefined
     : undefined;
-  const quality = typedDetail ? 1 : 0;
+  const sanitizedTitle = call.title
+    ? sanitizeText(call.title, 8000, true)
+    : undefined;
+  const providerTitle = sanitizedTitle
+    ? safeSingleLine(sanitizedTitle, 80, true)
+    : null;
+  const titleWasRedacted = call.title !== undefined && sanitizedTitle === null;
+  const quality = call.title !== undefined ? 2 : typedDetail ? 1 : 0;
   return {
-    label: detailLabel
-      ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ?? fallback)
-      : fallback,
+    label: providerTitle
+      ? providerTitle
+      : titleWasRedacted
+        ? 'Tool title hidden by credential screening'
+        : detailLabel
+          ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ??
+            fallback)
+          : fallback,
     summary: toolSummary(category),
     quality,
     ...(typedDetail ? { detail: typedDetail } : {}),

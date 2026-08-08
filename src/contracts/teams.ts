@@ -2,6 +2,60 @@ import { z } from 'zod';
 export const MAX_TEAM_REQUEST_BYTES = 64 * 1024;
 const uuid = z.string().uuid();
 const timestamp = z.iso.datetime({ offset: true });
+const decisionTarget = z
+  .object({
+    work_item_id: uuid,
+    attempt_no_at_decision: z.number().int().positive(),
+  })
+  .strict();
+export const TeamCompletionDecisionRequestSchema = z.discriminatedUnion(
+  'decision',
+  [
+    z
+      .object({
+        decision: z.literal('approve'),
+        expected_revision: z.number().int().nonnegative(),
+      })
+      .strict(),
+    z
+      .object({
+        decision: z.literal('reject'),
+        expected_revision: z.number().int().nonnegative(),
+        feedback: z.string().trim().min(1).max(4096),
+        work_item_ids: z
+          .array(uuid)
+          .min(1)
+          .superRefine((ids, context) => {
+            if (new Set(ids).size !== ids.length)
+              context.addIssue({
+                code: 'custom',
+                message: 'work_item_ids must be unique',
+              });
+          }),
+      })
+      .strict(),
+  ],
+);
+export const TeamCompletionDecisionResponseSchema = z
+  .object({
+    id: uuid,
+    team_run_id: uuid,
+    completion_requested_by_run_id: uuid,
+    decision: z.enum(['approve', 'reject']),
+    feedback: z.string().nullable(),
+    decided_by: z.string().min(1),
+    decided_at: timestamp,
+    team_revision_at_decision: z.number().int().nonnegative(),
+    lead_turn_count_at_decision: z.number().int().nonnegative(),
+    targets: z.array(decisionTarget),
+  })
+  .strict();
+export const TeamCompletionDecisionResultResponseSchema = z
+  .object({
+    decision: TeamCompletionDecisionResponseSchema,
+    team_run: z.lazy(() => TeamRunResponseSchema),
+  })
+  .strict();
 export const TeamPackageRequestSchema = z
   .object({ source: z.string() })
   .strict();
@@ -89,6 +143,8 @@ export const TeamRunResponseSchema = z
     lead_turn_count: z.number().int(),
     stop_reason: z.string().nullable(),
     completion_requested_by_run_id: uuid.nullable(),
+    completion_approval_required: z.boolean(),
+    completion_decisions: z.array(TeamCompletionDecisionResponseSchema),
   })
   .strict();
 export const TeamMemberResponseSchema = z
@@ -188,6 +244,8 @@ export const AgenticTeamProjectResponseSchema = z
         final_text: z.string().nullable(),
         revision: z.number().int(),
         stop_reason: z.string().nullable(),
+        completion_approval_required: z.boolean(),
+        completion_decisions: z.array(TeamCompletionDecisionResponseSchema),
         created_at: timestamp,
         updated_at: timestamp,
       })

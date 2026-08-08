@@ -16,6 +16,7 @@ export type TeamExecutionErrorCode =
   | 'not_found'
   | 'conflict'
   | 'invalid_transition'
+  | 'invalid_target'
   | 'limit_exceeded'
   | 'team_terminal';
 
@@ -67,6 +68,11 @@ export interface TeamExecutionRepository {
     readonly owner: OwnerScope;
     readonly updatedAt: string;
     readonly leadRunId?: string;
+    readonly approvalDecision?: {
+      readonly expectedRevision: number;
+      readonly decidedBy: string;
+      readonly decidedAt: string;
+    };
   }): Promise<TeamRun>;
   failTeamRunAtomically(input: FailTeamRunInput): Promise<TeamRun>;
   recoverExpiredTeamRuns(now: string): Promise<
@@ -189,4 +195,39 @@ export interface TeamExecutionRepository {
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamRun>;
+  findCompletionDecisionsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<
+    readonly import('../../domain/teams/team-completion-decision.js').TeamCompletionDecision[]
+  >;
+  findLatestCompletionDecision(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<
+    | import('../../domain/teams/team-completion-decision.js').TeamCompletionDecision
+    | null
+  >;
+  findCompletionDecisionForRequest(
+    teamRunId: string,
+    completionRequestedByRunId: string,
+    owner: OwnerScope,
+  ): Promise<
+    | import('../../domain/teams/team-completion-decision.js').TeamCompletionDecision
+    | null
+  >;
+  recordCompletionRejectionInTransaction(input: {
+    readonly teamRunId: string;
+    readonly completionRequestedByRunId: string;
+    readonly feedback: string;
+    readonly workItemIds: readonly string[];
+    readonly decidedBy: string;
+    readonly decidedAt: string;
+    readonly expectedRevision: number;
+    readonly owner: OwnerScope;
+  }): Promise<{
+    readonly decision: import('../../domain/teams/team-completion-decision.js').TeamCompletionDecision;
+    readonly team: TeamRun;
+    readonly recorded: boolean;
+  }>;
 }

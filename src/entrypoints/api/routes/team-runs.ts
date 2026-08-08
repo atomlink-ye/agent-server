@@ -4,12 +4,18 @@ import type {
   TeamExecutionRepository,
   OwnerScope,
 } from '../../../application/ports/team-execution-repository.js';
+import { TeamExecutionError } from '../../../application/ports/team-execution-repository.js';
+import type { TeamDriver } from '../../../application/teams/team-driver.js';
 import { HttpError } from '../../../contracts/http.js';
 import {
   TeamRunResponseSchema,
   TeamMemberResponseSchema,
   TeamWorkItemResponseSchema,
   TeamDirectMessageResponseSchema,
+  TeamCompletionDecisionRequestSchema,
+  TeamCompletionDecisionResponseSchema,
+  TeamCompletionDecisionResultResponseSchema,
+  MAX_TEAM_REQUEST_BYTES,
 } from '../../../contracts/teams.js';
 import {
   getAuthenticatedAccessContext,
@@ -18,6 +24,8 @@ import {
 import type { ApiEnvironment } from '../http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { z } from 'zod';
+import { readBoundedJson } from '../read-bounded-json.js';
+import { isTeamCompletionApprovalPending } from '../../../application/teams/team-policy-evaluator.js';
 import {
   ProjectAgenticTeam,
   type AgenticTeamProject,
@@ -53,6 +61,10 @@ export function toAgenticTeamProjectResponse(
       final_text: projection.project.finalText,
       revision: projection.project.revision,
       stop_reason: projection.project.stopReason,
+      completion_approval_required:
+        projection.project.completionApprovalRequired,
+      completion_decisions:
+        projection.project.completionDecisions.map(completionDecision),
       created_at: projection.project.createdAt,
       updated_at: projection.project.updatedAt,
     },
@@ -123,6 +135,7 @@ export function registerTeamRunRoutes(
     config: AppConfig;
     teamExecutions: TeamExecutionRepository;
     projectAgenticTeam: ProjectAgenticTeam;
+    teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   },
 ): void {
   const auth = new ServiceAccountAuthenticator(d.config.serviceAccounts ?? []);
@@ -150,7 +163,12 @@ export function registerTeamRunRoutes(
       c.req.param('taskId'),
       owner(c),
     );
-    return c.json(r ? run(r) : null, 200);
+    return c.json(
+      r
+        ? run(r, await completionHistory(d.teamExecutions, r.id, owner(c)))
+        : null,
+      200,
+    );
   });
   app.get('/api/v1/team-runs/:id', async (c) => {
     const found = await d.teamExecutions.findTeamRunById(
@@ -158,7 +176,104 @@ export function registerTeamRunRoutes(
       owner(c),
     );
     const r = required(found);
-    return c.json(TeamRunResponseSchema.parse(run(r)), 200);
+    const decisions = await d.teamExecutions.findCompletionDecisionsByTeamRunId(
+      r.id,
+      owner(c),
+    );
+    return c.json(TeamRunResponseSchema.parse(run(r, decisions)), 200);
+  });
+  app.post('/api/v1/team-runs/:id/completion-decisions', async (c) => {
+    const teamRunId = c.req.param('id');
+    if (!z.uuid().safeParse(teamRunId).success)
+      throw new HttpError(
+        400,
+        'invalid_team_run_id',
+        'The team run ID is invalid.',
+      );
+    let existing;
+    try {
+      existing = await d.teamExecutions.findTeamRunById(teamRunId, owner(c));
+    } catch (error) {
+      if (error instanceof TeamExecutionError && error.code === 'not_found')
+        throw new HttpError(404, error.code, error.message);
+      throw error;
+    }
+    if (!existing)
+      throw new HttpError(404, 'team_not_found', 'The team run was not found.');
+    if (!d.teamDriver)
+      throw new HttpError(
+        503,
+        'team_driver_unavailable',
+        'Completion decisions are unavailable.',
+      );
+    let body: unknown;
+    try {
+      body = await readBoundedJson(c.req.raw, MAX_TEAM_REQUEST_BYTES);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The request body is invalid.',
+      );
+    }
+    const parsed = TeamCompletionDecisionRequestSchema.safeParse(body);
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The completion decision is invalid.',
+      );
+    const a = owner(c);
+    try {
+      const input =
+        parsed.data.decision === 'approve'
+          ? {
+              teamRunId,
+              expectedRevision: parsed.data.expected_revision,
+              owner: a,
+              decidedBy: a.principalId,
+              decision: 'approve' as const,
+            }
+          : {
+              teamRunId,
+              expectedRevision: parsed.data.expected_revision,
+              owner: a,
+              decidedBy: a.principalId,
+              decision: 'reject' as const,
+              feedback: parsed.data.feedback,
+              workItemIds: parsed.data.work_item_ids,
+            };
+      const result = await d.teamDriver.decideCompletion(input);
+      const decisions = await completionHistory(
+        d.teamExecutions,
+        result.team.id,
+        a,
+      );
+      const response = {
+        decision: completionDecision(result.decision),
+        team_run: run(result.team, decisions),
+      };
+      return c.json(
+        TeamCompletionDecisionResultResponseSchema.parse(response),
+        200,
+      );
+    } catch (error) {
+      if (error instanceof TeamExecutionError) {
+        if (error.code === 'invalid_target')
+          throw new HttpError(422, error.code, error.message);
+        if (error.code === 'not_found')
+          throw new HttpError(404, error.code, error.message);
+        if (
+          error.code === 'stale_state' ||
+          error.code === 'conflict' ||
+          error.code === 'invalid_transition' ||
+          error.code === 'not_allowed'
+        )
+          throw new HttpError(409, error.code, error.message);
+      }
+      throw error;
+    }
   });
   app.get('/api/v1/team-runs/:id/members', async (c) => {
     const found = await d.teamExecutions.findTeamRunById(
@@ -217,23 +332,63 @@ function required<T>(v: T | null): T {
     throw new HttpError(404, 'team_not_found', 'The team run was not found.');
   return v;
 }
-function run(v: any) {
+function run(v: any, decisions: readonly any[]) {
+  const currentDecision = decisions.find(
+    (decision) =>
+      decision.completionRequestedByRunId === v.completionRequestedByRunId,
+  );
+  const approvalPending = isTeamCompletionApprovalPending(v, currentDecision);
   return TeamRunResponseSchema.parse({
     id: v.id,
     root_task_id: v.rootTaskId,
     root_run_id: v.rootRunId,
     team_version_id: v.teamVersionId,
     environment_version_id: v.environmentVersionId,
-    status: v.status,
+    status: approvalPending ? 'waiting' : v.status,
     phase: v.phase,
     final_text: v.finalText,
     control_state: v.controlState,
     revision: v.revision,
     lead_turn_count: v.leadTurnCount,
-    stop_reason: v.stopReason,
+    stop_reason: approvalPending ? 'approval_required' : v.stopReason,
     completion_requested_by_run_id: v.completionRequestedByRunId,
+    completion_approval_required: v.completionApprovalRequired,
+    completion_decisions: decisions.map(completionDecision),
     created_at: v.createdAt,
     updated_at: v.updatedAt,
+  });
+}
+async function completionHistory(
+  executions: TeamExecutionRepository,
+  teamRunId: string,
+  ownerScope: OwnerScope,
+) {
+  const decisions = await executions.findCompletionDecisionsByTeamRunId(
+    teamRunId,
+    ownerScope,
+  );
+  return [...decisions].sort(
+    (a, b) =>
+      a.teamRevisionAtDecision - b.teamRevisionAtDecision ||
+      a.decidedAt.localeCompare(b.decidedAt) ||
+      a.id.localeCompare(b.id),
+  );
+}
+function completionDecision(v: any) {
+  return TeamCompletionDecisionResponseSchema.parse({
+    id: v.id,
+    team_run_id: v.teamRunId,
+    completion_requested_by_run_id: v.completionRequestedByRunId,
+    decision: v.decision,
+    feedback: v.feedback,
+    decided_by: v.decidedBy,
+    decided_at: v.decidedAt,
+    team_revision_at_decision: v.teamRevisionAtDecision,
+    lead_turn_count_at_decision: v.leadTurnCountAtDecision,
+    targets: v.targets.map((target: any) => ({
+      work_item_id: target.workItemId,
+      attempt_no_at_decision: target.attemptNoAtDecision,
+    })),
   });
 }
 function member(v: any) {

@@ -1567,26 +1567,31 @@ Current bounded Lead snapshot (control-plane fields only): ${snapshot}`;
     team: import('../../domain/teams/team-run.js').TeamRun,
     task: import('../../domain/tasks/task.js').Task,
   ) {
+    const executions = this.collaborativeExecutions!;
     const owner = {
       tenantId: task.tenantId,
       workspaceId: task.workspaceId,
       principalType: task.principalType,
       principalId: task.principalId,
     };
-    const workItems =
-      await this.collaborativeExecutions!.findWorkItemsByTeamRunId(
-        team.id,
-        owner,
-      );
-    const attempts =
-      await this.collaborativeExecutions!.findAttemptsByTeamRunId(
-        team.id,
-        owner,
-      );
+    const workItems = await executions.findWorkItemsByTeamRunId(team.id, owner);
+    const attempts = await executions.findAttemptsByTeamRunId(team.id, owner);
+    const decision = team.completionRequestedByRunId
+      ? await executions.findCompletionDecisionForRequest(
+          team.id,
+          team.completionRequestedByRunId,
+          owner,
+        )
+      : null;
     return {
       workItems,
       attempts,
-      policy: deriveAgenticLeadCommandPolicy(team, workItems, attempts),
+      policy: deriveAgenticLeadCommandPolicy(
+        team,
+        workItems,
+        attempts,
+        decision,
+      ),
     };
   }
 

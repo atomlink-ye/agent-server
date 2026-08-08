@@ -153,6 +153,8 @@ const ConfigSchema = z
       .int()
       .min(1)
       .default(4),
+    AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED:
+      BooleanEnvironment.default(false),
     SERVICE_ACCOUNTS_JSON: ServiceAccountsEnvironmentSchema,
     LARK_CANARY_ENABLED: BooleanEnvironment.default(false),
     LARK_CANARY_CONNECTION_KEY: OptionalConfigString,
@@ -247,6 +249,7 @@ export type AppConfig = Readonly<{
   port: number;
   logLevel: z.infer<typeof ConfigSchema>['LOG_LEVEL'];
   serviceName: string;
+  teamCompletionApprovalRequired: boolean;
   serviceAccounts?: readonly ServiceAccountRecord[];
   larkCanary?: LarkCanaryConfig;
   skillRegistryRoot: string;
@@ -293,6 +296,8 @@ export function loadConfig(
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
+    teamCompletionApprovalRequired:
+      parsed.data.AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED,
     serviceAccounts: Object.freeze(
       parsed.data.SERVICE_ACCOUNTS_JSON.map((account) =>
         Object.freeze({ ...account }),

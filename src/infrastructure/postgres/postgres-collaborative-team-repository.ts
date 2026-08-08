@@ -10,6 +10,11 @@ import {
   normalizeTeamRunFinalText,
   type TeamRun,
 } from '../../domain/teams/team-run.js';
+import {
+  normalizeDecisionFeedback,
+  rehydrateTeamCompletionDecision,
+  type TeamCompletionDecision,
+} from '../../domain/teams/team-completion-decision.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import {
   cancelWorkItem,
@@ -45,6 +50,7 @@ type TeamRunRow = Omit<TeamRun, never> & {
   lead_turn_count: number;
   stop_reason: string | null;
   completion_requested_by_run_id: string | null;
+  completion_approval_required: boolean;
   final_text: string | null;
   created_at: string | Date;
   updated_at: string | Date;
@@ -92,6 +98,47 @@ type AttemptRow = TeamWorkItemAttempt & {
   principal_type: string;
   principal_id: string;
 };
+type CompletionDecisionRow = {
+  id: string;
+  team_run_id: string;
+  completion_requested_by_run_id: string;
+  decision: 'approve' | 'reject';
+  feedback: string | null;
+  decided_by: string;
+  decided_at: string | Date;
+  team_revision_at_decision: number;
+  lead_turn_count_at_decision: number;
+  tenant_id: string;
+  workspace_id: string;
+  principal_type: string;
+  principal_id: string;
+};
+type CompletionDecisionTargetRow = {
+  decision_id: string;
+  team_run_id: string;
+  work_item_id: string;
+  attempt_no_at_decision: number;
+  ordinal: number;
+  tenant_id: string;
+  workspace_id: string;
+  principal_type: string;
+  principal_id: string;
+};
+type CompletionRejectionInput = Readonly<{
+  teamRunId: string;
+  completionRequestedByRunId: string;
+  feedback: string;
+  workItemIds: readonly string[];
+  decidedBy: string;
+  decidedAt: string;
+  expectedRevision: number;
+  owner: OwnerScope;
+}>;
+type CompletionRejectionResult = {
+  decision: TeamCompletionDecision;
+  team: TeamRun;
+  recorded: boolean;
+};
 
 export class PostgresTeamExecutionRepository implements TeamExecutionRepository {
   public constructor(
@@ -100,7 +147,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
   ) {}
   public async createTeamRun(run: TeamRun): Promise<void> {
     await this.database.query(
-      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,control_state,revision,lead_turn_count,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      `INSERT INTO team_runs (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,team_version_id,environment_version_id,status,phase,final_text,control_state,revision,lead_turn_count,completion_approval_required,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [
         run.id,
         run.tenantId,
@@ -117,6 +164,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         run.controlState,
         run.revision,
         run.leadTurnCount,
+        run.completionApprovalRequired,
         run.createdAt,
         run.updatedAt,
       ],
@@ -157,6 +205,11 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     readonly owner: OwnerScope;
     readonly updatedAt: string;
     readonly leadRunId?: string;
+    readonly approvalDecision?: {
+      readonly expectedRevision: number;
+      readonly decidedBy: string;
+      readonly decidedAt: string;
+    };
   }): Promise<TeamRun> {
     const normalizedFinalText = normalizeTeamRunFinalText(input.finalText);
     const client = this.database.connect
@@ -179,6 +232,33 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       if (team.status === 'succeeded' && team.phase === 'done') {
         normalizeTeamRunFinalText(team.final_text ?? '');
+        if (team.completion_approval_required) {
+          const approval = input.approvalDecision;
+          if (!approval || !team.completion_requested_by_run_id)
+            throw new TeamExecutionError('conflict');
+          const existing = await client.query<CompletionDecisionRow>(
+            `SELECT * FROM team_completion_decisions
+             WHERE team_run_id=$1 AND completion_requested_by_run_id=$2
+               AND ${ownerSql('', 3)} LIMIT 1`,
+            [
+              input.teamRunId,
+              team.completion_requested_by_run_id,
+              ...ownerValues(input.owner),
+            ],
+          );
+          if (!existing.rows?.[0]) throw new TeamExecutionError('conflict');
+          const decision = await this.loadCompletionDecision(
+            existing.rows[0],
+            client,
+          );
+          if (
+            decision.decision !== 'approve' ||
+            decision.decidedBy !== approval.decidedBy
+          )
+            throw new TeamExecutionError('conflict');
+          if (approval.expectedRevision !== decision.teamRevisionAtDecision)
+            throw new TeamExecutionError('stale_state');
+        }
         await client.query('COMMIT');
         return mapRun(team);
       }
@@ -205,8 +285,61 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       if (unaccepted.rows?.[0])
         throw new TeamExecutionError('invalid_transition');
+      const gatedApproval = team.completion_approval_required;
+      if (gatedApproval) {
+        const approval = input.approvalDecision;
+        if (
+          !approval ||
+          approval.expectedRevision !== team.revision ||
+          !team.completion_requested_by_run_id
+        )
+          throw new TeamExecutionError('stale_state');
+        const existing = await client.query<CompletionDecisionRow>(
+          `SELECT * FROM team_completion_decisions
+           WHERE team_run_id=$1 AND completion_requested_by_run_id=$2
+             AND ${ownerSql('', 3)} LIMIT 1`,
+          [
+            input.teamRunId,
+            team.completion_requested_by_run_id,
+            ...ownerValues(input.owner),
+          ],
+        );
+        if (existing.rows?.[0]) {
+          const decision = await this.loadCompletionDecision(
+            existing.rows[0],
+            client,
+          );
+          if (
+            decision.decision !== 'approve' ||
+            decision.feedback !== null ||
+            decision.targets.length > 0 ||
+            decision.decidedBy !== approval.decidedBy
+          )
+            throw new TeamExecutionError('conflict');
+        } else {
+          await client.query(
+            `INSERT INTO team_completion_decisions
+              (id,team_run_id,completion_requested_by_run_id,decision,feedback,
+               decided_by,decided_at,team_revision_at_decision,
+               lead_turn_count_at_decision,tenant_id,workspace_id,principal_type,
+               principal_id)
+             VALUES ($1,$2,$3,'approve',NULL,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [
+              randomUUID(),
+              input.teamRunId,
+              team.completion_requested_by_run_id,
+              approval.decidedBy,
+              approval.decidedAt,
+              team.revision,
+              team.lead_turn_count,
+              ...ownerValues(input.owner),
+            ],
+          );
+        }
+      }
+      const revisionSet = gatedApproval ? ', revision=revision+1' : '';
       const updated = await client.query<TeamRunRow>(
-        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, stop_reason=CASE WHEN EXISTS (SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled') THEN 'work_abandoned' ELSE NULL END, updated_at=$3 WHERE id=$1 RETURNING *`,
+        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, stop_reason=CASE WHEN EXISTS (SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled') THEN 'work_abandoned' ELSE NULL END, updated_at=$3${revisionSet} WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
       );
       const run = await client.query(
@@ -1396,10 +1529,36 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const previous = rows.rows?.[0];
       if (
         !previous ||
-        previous.attempt_no >= AGENTIC_TEAM_LIMITS.maxAttemptsPerItem ||
         previous.status !== 'completed' ||
         !previous.result_summary
       )
+        throw new TeamExecutionError('invalid_transition');
+      const rejection = await client.query(
+        `SELECT 1
+           FROM team_completion_decisions d
+           JOIN team_completion_decision_targets target
+             ON target.decision_id=d.id AND target.work_item_id=$2
+           JOIN team_runs team ON team.id=d.team_run_id
+          WHERE d.team_run_id=$1 AND d.decision='reject'
+            AND d.completion_requested_by_run_id=team.completion_requested_by_run_id
+            AND target.attempt_no_at_decision=$3
+            AND ${ownerSql('d', 4)}
+            AND team.completion_requested_by_run_id IS NOT NULL
+          LIMIT 1`,
+        [
+          input.teamRunId,
+          input.workItemId,
+          previous.attempt_no,
+          ...ownerValues(input.owner),
+        ],
+      );
+      const rejectionBypass = Boolean(rejection.rows?.[0]);
+      if (
+        previous.attempt_no >= AGENTIC_TEAM_LIMITS.maxAttemptsPerItem &&
+        !rejectionBypass
+      )
+        throw new TeamExecutionError('invalid_transition');
+      if (work.rows[0].status === 'accepted' && !rejectionBypass)
         throw new TeamExecutionError('invalid_transition');
       const now = new Date().toISOString();
       const id = randomUUID();
@@ -1419,7 +1578,8 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       await client.query(
         `UPDATE team_work_items SET status='pending', updated_at=$2
-          WHERE id=$1 AND team_run_id=$3 AND status='in_progress' AND ${ownerSql('', 4)}`,
+          WHERE id=$1 AND team_run_id=$3
+            AND status IN ('in_progress','accepted') AND ${ownerSql('', 4)}`,
         [input.workItemId, now, input.teamRunId, ...ownerValues(input.owner)],
       );
       await client.query(
@@ -1593,13 +1753,247 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         client.release();
     }
   }
+  public async findCompletionDecisionsByTeamRunId(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<readonly TeamCompletionDecision[]> {
+    const rows = await this.database.query<CompletionDecisionRow>(
+      `SELECT * FROM team_completion_decisions d
+       WHERE d.team_run_id=$1 AND ${ownerSql('d', 2)}
+       ORDER BY d.team_revision_at_decision ASC`,
+      [teamRunId, ...ownerValues(owner)],
+    );
+    return Object.freeze(
+      await Promise.all(
+        (rows.rows ?? []).map((row) => this.loadCompletionDecision(row)),
+      ),
+    );
+  }
+
+  public async findLatestCompletionDecision(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamCompletionDecision | null> {
+    const rows = await this.database.query<CompletionDecisionRow>(
+      `SELECT * FROM team_completion_decisions d
+       WHERE d.team_run_id=$1 AND ${ownerSql('d', 2)}
+       ORDER BY d.team_revision_at_decision DESC LIMIT 1`,
+      [teamRunId, ...ownerValues(owner)],
+    );
+    return rows.rows?.[0] ? this.loadCompletionDecision(rows.rows[0]) : null;
+  }
+
+  public async findCompletionDecisionForRequest(
+    teamRunId: string,
+    completionRequestedByRunId: string,
+    owner: OwnerScope,
+  ): Promise<TeamCompletionDecision | null> {
+    const rows = await this.database.query<CompletionDecisionRow>(
+      `SELECT * FROM team_completion_decisions d
+       WHERE d.team_run_id=$1 AND d.completion_requested_by_run_id=$2
+         AND ${ownerSql('d', 3)} LIMIT 1`,
+      [teamRunId, completionRequestedByRunId, ...ownerValues(owner)],
+    );
+    return rows.rows?.[0] ? this.loadCompletionDecision(rows.rows[0]) : null;
+  }
+
+  public async recordCompletionRejectionInTransaction(
+    input: CompletionRejectionInput,
+  ): Promise<CompletionRejectionResult> {
+    return this.recordCompletionRejectionCore(input, this.database);
+  }
+
+  private async recordCompletionRejectionCore(
+    input: CompletionRejectionInput,
+    client: Queryable,
+  ): Promise<CompletionRejectionResult> {
+    const existing = await client.query<CompletionDecisionRow>(
+      `SELECT * FROM team_completion_decisions d
+         WHERE d.team_run_id=$1 AND d.completion_requested_by_run_id=$2
+           AND ${ownerSql('d', 3)} LIMIT 1`,
+      [
+        input.teamRunId,
+        input.completionRequestedByRunId,
+        ...ownerValues(input.owner),
+      ],
+    );
+    if (existing.rows?.[0]) {
+      const team = await client.query<TeamRunRow>(
+        `SELECT * FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
+        [input.teamRunId, ...ownerValues(input.owner)],
+      );
+      if (!team.rows?.[0]) throw new TeamExecutionError('not_found');
+      const decision = await this.loadCompletionDecision(
+        existing.rows[0],
+        client,
+      );
+      if (input.expectedRevision !== decision.teamRevisionAtDecision)
+        throw new TeamExecutionError('stale_state');
+      const normalizedFeedback = normalizeDecisionFeedback(input.feedback);
+      const sameTargets =
+        decision.targets.length === input.workItemIds.length &&
+        decision.targets.every(
+          (target, index) => target.workItemId === input.workItemIds[index],
+        );
+      if (
+        decision.feedback !== normalizedFeedback ||
+        decision.decidedBy !== input.decidedBy ||
+        !sameTargets
+      )
+        throw new TeamExecutionError('conflict');
+      return { decision, team: mapRun(team.rows[0]), recorded: false };
+    }
+
+    const locked = await client.query<TeamRunRow>(
+      `SELECT * FROM team_runs
+         WHERE id=$1 AND revision=$2 AND ${ownerSql('', 3)} FOR UPDATE`,
+      [input.teamRunId, input.expectedRevision, ...ownerValues(input.owner)],
+    );
+    const team = locked.rows?.[0];
+    if (!team) throw new TeamExecutionError('stale_state');
+    if (
+      team.status !== 'active' ||
+      !team.completion_approval_required ||
+      team.completion_requested_by_run_id !== input.completionRequestedByRunId
+    )
+      throw new TeamExecutionError('invalid_transition');
+
+    const feedback = normalizeDecisionFeedback(input.feedback);
+    if (!feedback) throw new TeamExecutionError('invalid_transition');
+    const uniqueWorkItemIds = new Set(input.workItemIds);
+    if (
+      input.workItemIds.length === 0 ||
+      uniqueWorkItemIds.size !== input.workItemIds.length
+    )
+      throw new TeamExecutionError('invalid_target');
+
+    const targetRows = await client.query<{
+      id: string;
+      status: TeamWorkItem['status'];
+      attempt_no: number | null;
+      attempt_status: TeamWorkItemAttempt['status'] | null;
+      result_summary: string | null;
+    }>(
+      `SELECT w.id,w.status,a.attempt_no,a.status AS attempt_status,a.result_summary
+         FROM team_work_items w
+         LEFT JOIN LATERAL (
+           SELECT a.attempt_no,a.status,a.result_summary
+           FROM team_work_item_attempts a
+           WHERE a.work_item_id=w.id AND a.team_run_id=w.team_run_id
+             AND ${ownerSql('a', 2)}
+           ORDER BY a.attempt_no DESC LIMIT 1
+         ) a ON true
+         WHERE w.team_run_id=$1 AND ${ownerSql('w', 2)}
+           AND w.id = ANY($6::uuid[])`,
+      [input.teamRunId, ...ownerValues(input.owner), input.workItemIds],
+    );
+    const byId = new Map((targetRows.rows ?? []).map((row) => [row.id, row]));
+    const targets = input.workItemIds.map((workItemId, index) => {
+      const target = byId.get(workItemId);
+      if (
+        !target ||
+        target.status !== 'accepted' ||
+        target.attempt_no === null ||
+        target.attempt_status !== 'completed' ||
+        !target.result_summary?.trim()
+      )
+        throw new TeamExecutionError('invalid_target');
+      return {
+        workItemId,
+        attemptNoAtDecision: target.attempt_no,
+        ordinal: index + 1,
+      };
+    });
+
+    const decisionId = randomUUID();
+    await client.query(
+      `INSERT INTO team_completion_decisions
+          (id,team_run_id,completion_requested_by_run_id,decision,feedback,
+           decided_by,decided_at,team_revision_at_decision,
+           lead_turn_count_at_decision,tenant_id,workspace_id,principal_type,
+           principal_id)
+         VALUES ($1,$2,$3,'reject',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        decisionId,
+        input.teamRunId,
+        input.completionRequestedByRunId,
+        feedback,
+        input.decidedBy,
+        input.decidedAt,
+        team.revision,
+        team.lead_turn_count,
+        ...ownerValues(input.owner),
+      ],
+    );
+    for (const target of targets) {
+      await client.query(
+        `INSERT INTO team_completion_decision_targets
+            (decision_id,team_run_id,work_item_id,attempt_no_at_decision,
+             ordinal,tenant_id,workspace_id,principal_type,principal_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          decisionId,
+          input.teamRunId,
+          target.workItemId,
+          target.attemptNoAtDecision,
+          target.ordinal,
+          ...ownerValues(input.owner),
+        ],
+      );
+    }
+    const updated = await client.query<TeamRunRow>(
+      `UPDATE team_runs SET revision=revision+1,updated_at=$2
+         WHERE id=$1 AND revision=$3 AND ${ownerSql('', 4)} RETURNING *`,
+      [
+        input.teamRunId,
+        input.decidedAt,
+        input.expectedRevision,
+        ...ownerValues(input.owner),
+      ],
+    );
+    if (!updated.rows?.[0]) throw new TeamExecutionError('stale_state');
+    const decision = rehydrateTeamCompletionDecision({
+      id: decisionId,
+      tenantId: input.owner.tenantId,
+      workspaceId: input.owner.workspaceId,
+      principalType: input.owner.principalType,
+      principalId: input.owner.principalId,
+      teamRunId: input.teamRunId,
+      completionRequestedByRunId: input.completionRequestedByRunId,
+      decision: 'reject',
+      feedback,
+      decidedBy: input.decidedBy,
+      decidedAt: input.decidedAt,
+      teamRevisionAtDecision: team.revision,
+      leadTurnCountAtDecision: team.lead_turn_count,
+      targets: targets.map(({ ordinal: _ordinal, ...target }) => target),
+    });
+    return { decision, team: mapRun(updated.rows[0]), recorded: true };
+  }
+
   public async advanceAgenticLead(input: {
     teamRunId: string;
     expectedRevision: number;
     owner: OwnerScope;
   }): Promise<TeamRun> {
     const r = await this.database.query<TeamRunRow>(
-      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled') AND lead_turn_count < $7 AND ${ownerSql('', 3)} RETURNING *`,
+      `UPDATE team_runs SET control_state='lead_running',lead_turn_count=lead_turn_count+1,revision=revision+1,updated_at=now()
+       WHERE id=$1 AND revision=$2 AND status NOT IN ('succeeded','failed','cancelled')
+         AND (
+           lead_turn_count < $7
+           OR lead_turn_count - COALESCE((
+             SELECT d.lead_turn_count_at_decision
+             FROM team_completion_decisions d
+             WHERE d.team_run_id=team_runs.id
+               AND d.decision='reject'
+               AND d.completion_requested_by_run_id=team_runs.completion_requested_by_run_id
+               AND d.completion_requested_by_run_id IS NOT NULL
+               AND d.lead_turn_count_at_decision <= team_runs.lead_turn_count
+               AND ${ownerSql('d', 3)}
+             ORDER BY d.team_revision_at_decision DESC LIMIT 1
+           ), 0) < $7
+         )
+         AND ${ownerSql('', 3)} RETURNING *`,
       [
         input.teamRunId,
         input.expectedRevision,
@@ -1611,8 +2005,20 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const current = await this.database.query<{
         lead_turn_count: number;
         revision: number;
+        rejection_baseline: number | null;
       }>(
-        `SELECT lead_turn_count, revision FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
+        `SELECT team.lead_turn_count, team.revision,
+                (
+                  SELECT d.lead_turn_count_at_decision
+                  FROM team_completion_decisions d
+                  WHERE d.team_run_id=team.id AND d.decision='reject'
+                    AND d.completion_requested_by_run_id=team.completion_requested_by_run_id
+                    AND d.completion_requested_by_run_id IS NOT NULL
+                    AND d.lead_turn_count_at_decision <= team.lead_turn_count
+                    AND ${ownerSql('d', 2)}
+                  ORDER BY d.team_revision_at_decision DESC LIMIT 1
+                ) AS rejection_baseline
+           FROM team_runs team WHERE team.id=$1 AND ${ownerSql('team', 2)}`,
         [input.teamRunId, ...ownerValues(input.owner)],
       );
       if (
@@ -1620,9 +2026,14 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         input.expectedRevision
       )
         throw new TeamExecutionError('stale_state');
+      const currentLeadTurnCount = current.rows?.[0]?.lead_turn_count ?? 0;
+      const rejectionBaseline = current.rows?.[0]?.rejection_baseline;
       if (
-        (current.rows?.[0]?.lead_turn_count ?? 0) >=
-        AGENTIC_TEAM_LIMITS.maxLeadTurns
+        currentLeadTurnCount >= AGENTIC_TEAM_LIMITS.maxLeadTurns &&
+        (rejectionBaseline === null ||
+          rejectionBaseline === undefined ||
+          currentLeadTurnCount - rejectionBaseline >=
+            AGENTIC_TEAM_LIMITS.maxLeadTurns)
       )
         throw new TeamExecutionError('limit_exceeded');
       throw new TeamExecutionError('stale_state');
@@ -1638,6 +2049,44 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       values,
     );
     return r.rows?.[0] ? mapRun(r.rows[0]) : null;
+  }
+  private async loadCompletionDecision(
+    row: CompletionDecisionRow,
+    database: Queryable = this.database,
+  ): Promise<TeamCompletionDecision> {
+    const targets = await database.query<CompletionDecisionTargetRow>(
+      `SELECT * FROM team_completion_decision_targets
+       WHERE decision_id=$1 AND ${ownerSql('', 2)}
+       ORDER BY ordinal ASC`,
+      [
+        row.id,
+        ...ownerValues({
+          tenantId: row.tenant_id,
+          workspaceId: row.workspace_id,
+          principalType: row.principal_type,
+          principalId: row.principal_id,
+        }),
+      ],
+    );
+    return rehydrateTeamCompletionDecision({
+      id: row.id,
+      tenantId: row.tenant_id,
+      workspaceId: row.workspace_id,
+      principalType: row.principal_type,
+      principalId: row.principal_id,
+      teamRunId: row.team_run_id,
+      completionRequestedByRunId: row.completion_requested_by_run_id,
+      decision: row.decision,
+      feedback: row.feedback,
+      decidedBy: row.decided_by,
+      decidedAt: iso(row.decided_at)!,
+      teamRevisionAtDecision: row.team_revision_at_decision,
+      leadTurnCountAtDecision: row.lead_turn_count_at_decision,
+      targets: (targets.rows ?? []).map((target) => ({
+        workItemId: target.work_item_id,
+        attemptNoAtDecision: target.attempt_no_at_decision,
+      })),
+    });
   }
   private async updateMember(
     id: string,
@@ -1769,6 +2218,7 @@ function mapRun(r: TeamRunRow): TeamRun {
     leadTurnCount: r.lead_turn_count,
     stopReason: r.stop_reason,
     completionRequestedByRunId: r.completion_requested_by_run_id,
+    completionApprovalRequired: r.completion_approval_required,
     status: r.status,
     phase: r.phase,
     createdAt: iso(r.created_at)!,

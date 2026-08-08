@@ -41,9 +41,11 @@ import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/p
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
+import { PostgresTeamExecutionRepository } from '../../src/infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { TestClock } from '../fixtures/test-clock.js';
+import { createTeamRun } from '../../src/domain/teams/team-run.js';
 
 const primaryAccessContext = {
   tenantId: 'tenant_alpha',
@@ -75,6 +77,84 @@ interface CompletedDispatchRow {
 }
 
 describe('durable kernel postgres bootstrap', () => {
+  it('round-trips the Team completion approval snapshot through Postgres', async () => {
+    const database = await createDatabase();
+    await applyDurableKernelMigrations(database);
+    const repository = new PostgresTeamExecutionRepository(database);
+    const now = () => new Date('2026-08-08T00:00:00.000Z');
+    const team = createTeamRun({
+      id: '00000000-0000-4000-8000-000000002801',
+      tenantId: 'tenant_alpha',
+      workspaceId: 'workspace_main',
+      principalType: 'service_account',
+      principalId: 'svc_alpha',
+      rootTaskId: '00000000-0000-4000-8000-000000002802',
+      rootRunId: '00000000-0000-4000-8000-000000002803',
+      teamVersionId: '00000000-0000-4000-8000-000000002804',
+      environmentVersionId: '00000000-0000-4000-8000-000000002805',
+      completionApprovalRequired: true,
+      now,
+    });
+
+    await repository.createTeamRun(team);
+    const loaded = await repository.findTeamRunById(team.id, {
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+    });
+    const raw = await database.query<{ status: string }>(
+      'SELECT status FROM team_runs WHERE id = $1',
+      [team.id],
+    );
+
+    expect(loaded?.completionApprovalRequired).toBe(true);
+    expect(raw.rows).toEqual([{ status: 'active' }]);
+  });
+
+  it('upgrades an existing active Team run with a false completion approval default', async () => {
+    const database = await createDatabase();
+    const migration0028Index = durableKernelMigrationFilePaths.findIndex(
+      (filePath) => filePath.endsWith('/0028_team-completion-approval.sql'),
+    );
+    await applyDurableKernelMigrations(
+      database,
+      durableKernelMigrationFilePaths.slice(0, migration0028Index),
+    );
+    const teamRunId = '00000000-0000-4000-8000-000000002811';
+    await database.query(
+      `INSERT INTO team_runs(
+        id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,
+        root_run_id,team_version_id,environment_version_id,status,created_at,updated_at
+      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$10)`,
+      [
+        teamRunId,
+        'tenant_alpha',
+        'workspace_main',
+        'service_account',
+        'svc_alpha',
+        '00000000-0000-4000-8000-000000002812',
+        '00000000-0000-4000-8000-000000002813',
+        '00000000-0000-4000-8000-000000002814',
+        '00000000-0000-4000-8000-000000002815',
+        '2026-08-08T00:00:00.000Z',
+      ],
+    );
+
+    await applyDurableKernelMigrations(database);
+
+    const row = await database.query<{
+      completion_approval_required: boolean;
+      status: string;
+    }>(
+      'SELECT completion_approval_required,status FROM team_runs WHERE id=$1',
+      [teamRunId],
+    );
+    expect(row.rows).toEqual([
+      { completion_approval_required: false, status: 'active' },
+    ]);
+  });
+
   it('loads the migration SQL from the source tree for dist runtime paths', async () => {
     const distModuleUrl = new URL(
       '../../dist/infrastructure/postgres/postgres.js',
@@ -137,6 +217,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0025_agent_team_work_dependencies' },
       { version: '0026_agent-teams-v2-cutover' },
       { version: '0027_agent-team-roster-limits' },
+      { version: '0028_team-completion-approval' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -189,6 +270,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0025_agent_team_work_dependencies' },
       { version: '0026_agent-teams-v2-cutover' },
       { version: '0027_agent-team-roster-limits' },
+      { version: '0028_team-completion-approval' },
     ]);
   });
 

@@ -50,6 +50,7 @@ import {
 } from './routes/memory-api.js';
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
+import type { TeamDriver } from '../../application/teams/team-driver.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -73,6 +74,7 @@ export interface AppDependencies {
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;
+  readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   readonly teamMessages?: TeamMessageRepository;
   readonly tasks?: TaskRepository;
   readonly sessions?: SessionRepository;
@@ -153,6 +155,9 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
         dependencies.teamMessages,
         dependencies.tasks,
       ),
+      ...(dependencies.teamDriver
+        ? { teamDriver: dependencies.teamDriver }
+        : {}),
     });
   if (dependencies.environmentRegistry)
     registerEnvironmentRoutes(app, {

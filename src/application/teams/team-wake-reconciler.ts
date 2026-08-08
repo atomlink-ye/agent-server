@@ -12,6 +12,7 @@ import type { TeamMessageRepository } from '../ports/team-message-repository.js'
 import type { TeamMessage } from '../../domain/teams/team-message.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { formatTeamDeliveryPrompt } from '../context/runtime-prompts.js';
+import { isTeamCompletionApprovalPending } from './team-policy-evaluator.js';
 
 export class TeamWakeReconciler {
   public constructor(
@@ -67,6 +68,14 @@ export class TeamWakeReconciler {
       owner,
     );
     if (!team || team.status !== 'active') return;
+    const decision = team.completionRequestedByRunId
+      ? await this.executions.findCompletionDecisionForRequest(
+          team.id,
+          team.completionRequestedByRunId,
+          owner,
+        )
+      : null;
+    if (isTeamCompletionApprovalPending(team, decision)) return;
     const members = await this.executions.findMembersByTeamRunId(
       team.id,
       owner,

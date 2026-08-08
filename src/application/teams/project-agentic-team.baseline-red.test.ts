@@ -57,6 +57,7 @@ describe('ProjectAgenticTeam baseline RED coverage', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => []),
       findAttemptsByTeamRunId: vi.fn(async () => []),
       findWorkDependenciesByTeamRunId: vi.fn(async () => []),
+      findCompletionDecisionsByTeamRunId: vi.fn(async () => []),
     };
     const tasks = {
       findByRootTaskIdForOwner: vi.fn(async () => [
@@ -146,6 +147,7 @@ describe('ProjectAgenticTeam baseline RED coverage', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => [work]),
       findAttemptsByTeamRunId: vi.fn(async () => [attempt2, attempt1]),
       findWorkDependenciesByTeamRunId: vi.fn(async () => []),
+      findCompletionDecisionsByTeamRunId: vi.fn(async () => []),
     };
     const project = new ProjectAgenticTeam(
       teams as never,

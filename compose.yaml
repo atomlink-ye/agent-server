@@ -33,6 +33,9 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
+      OPENCODE_GO_API_KEY:
+      PASEO_MODEL: ${PASEO_MODEL:-opencode-go/deepseek-v4-flash}
+      AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
       # Both must include the browser-visible origin when the daemon is reached
@@ -53,7 +56,7 @@ services:
       # The Paseo daemon runs inside this container, so exporting this on the
       # host does nothing unless compose forwards it. Off unless set to '1'.
       PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
-      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"workspace_main","policyVersion":"policy-local"}]'
+      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-workspace_main}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace
       - node-modules:/workspace/node_modules

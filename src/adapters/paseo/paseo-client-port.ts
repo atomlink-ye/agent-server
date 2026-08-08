@@ -111,6 +111,8 @@ export interface PaseoToolCall {
   readonly callId: string;
   readonly name: string;
   readonly status: string;
+  /** Raw provider-supplied title for this tool call, when present. */
+  readonly title?: string | undefined;
   /** Internal correlation only; never emitted in RuntimeToolDetail. */
   readonly childSessionId?: string | undefined;
   readonly detail?: PaseoToolDetail;
@@ -537,7 +539,7 @@ export class PaseoSdkClient implements PaseoClientPort {
           if (timelineItemType === 'assistant_message') {
             const assistantText =
               'text' in item && typeof item.text === 'string'
-                ? (safePreview(item.text, 4000) ?? null)
+                ? (projectAssistantText(item.text, 8000) ?? null)
                 : null;
             return assistantText !== null
               ? [
@@ -669,20 +671,37 @@ export function projectPaseoToolCall(
   failedError?: unknown,
 ):
   | {
+      readonly title?: string | undefined;
       readonly childSessionId?: string | undefined;
       readonly detail?: PaseoToolDetail;
       readonly error?: string;
     }
   | undefined {
   if (!isRecord(value)) return undefined;
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const state = isRecord(value.state) ? value.state : undefined;
+  const title =
+    typeof value.title === 'string' && value.title.trim().length > 0
+      ? value.title
+      : typeof metadata?.title === 'string' && metadata.title.trim().length > 0
+        ? metadata.title
+        : typeof state?.title === 'string' && state.title.trim().length > 0
+          ? state.title
+          : undefined;
   const type = stringValue(
     value.detail && isRecord(value.detail) ? value.detail.type : undefined,
   );
   if (!type)
-    return typeof failedError === 'string' ? { error: failedError } : {};
+    return {
+      ...(title ? { title } : {}),
+      ...(typeof failedError === 'string' ? { error: failedError } : {}),
+    };
   const raw = value.detail;
   if (!isRecord(raw))
-    return typeof failedError === 'string' ? { error: failedError } : {};
+    return {
+      ...(title ? { title } : {}),
+      ...(typeof failedError === 'string' ? { error: failedError } : {}),
+    };
   const stringField = (key: string): string | undefined =>
     typeof raw[key] === 'string' ? (raw[key] as string) : undefined;
   const finiteNumber = (key: string): number | undefined =>
@@ -827,6 +846,7 @@ export function projectPaseoToolCall(
       ...(actions ? { actions } : {}),
     };
   return {
+    ...(title ? { title } : {}),
     ...(type === 'sub_agent' && stringField('childSessionId')
       ? { childSessionId: stringField('childSessionId') }
       : {}),
@@ -843,6 +863,15 @@ function safePreview(value: string, max: number): string | undefined {
   if (!sanitized.trim() || containsCredentialMarker(sanitized))
     return undefined;
   return Array.from(sanitized).slice(0, max).join('');
+}
+
+function projectAssistantText(value: string, max: number): string | undefined {
+  const projected = value.replace(
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu,
+    '',
+  );
+  if (!projected.trim()) return undefined;
+  return Array.from(projected).slice(0, max).join('');
 }
 
 function containsCredentialMarker(value: string): boolean {
@@ -974,8 +1003,8 @@ function projectProviderSubagentTimelineItem(
     return {
       timelineItemType,
       ...(timelineKey ? { timelineKey } : {}),
-      ...(safePreview(value.text, 4000)
-        ? { assistantText: safePreview(value.text, 4000)! }
+      ...(projectAssistantText(value.text, 8000)
+        ? { assistantText: projectAssistantText(value.text, 8000)! }
         : {}),
     };
   return null;

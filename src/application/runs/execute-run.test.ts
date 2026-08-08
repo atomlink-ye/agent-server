@@ -28,6 +28,9 @@ import { TeamDriver } from '../teams/team-driver.js';
 import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
+import { PaseoRuntimeAdapter } from '../../adapters/paseo/paseo-runtime-adapter.js';
+import { FakePaseoClient } from '../../../tests/fixtures/fake-paseo-client.js';
+import { createLogger } from '../../shared/observability/logger.js';
 import { canonicalTeamToolRefsForRole } from '../teams/team-policy-evaluator.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
@@ -36,6 +39,61 @@ import {
 } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
+  it('fails a terminal run without positive model usage', async () => {
+    const claim = createClaim();
+    const task = createTask();
+    const client = new FakePaseoClient();
+    client.models = [{ id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' }];
+    client.finished = {
+      status: 'idle',
+      error: null,
+      lastMessage: 'PASEO_FAKE_NO_USAGE',
+      usage: { inputTokens: 0, outputTokens: 0, totalCostUsd: 0 },
+    };
+    vi.spyOn(client, 'createAgent').mockResolvedValue({
+      id: 'agent-opencode',
+      provider: 'opencode',
+      model: 'deepseek-v4-flash',
+    });
+    const runtime = new PaseoRuntimeAdapter(
+      {
+        wsUrl: 'ws://127.0.0.1:6767/ws',
+        cwd: '/tmp/execute-run-paseo-test',
+        provider: 'opencode',
+        workspaceTitle: 'ExecuteRun Paseo Test',
+        requestedModel: 'deepseek-v4-flash',
+        connectTimeoutMs: 1_000,
+        executionTimeoutMs: 1_000,
+      },
+      createLogger({
+        service: 'execute-run-paseo-test',
+        minimumLevel: 'error',
+        write: () => undefined,
+      }),
+      client,
+    );
+    const completeExecute = vi.fn(async ({ run }: { run: Run }) => run);
+    const completeRun = { execute: completeExecute } as unknown as CompleteRun;
+    const executeRun = createExecuteRun({
+      task,
+      runtime,
+      completeRun,
+    });
+
+    await executeRun.execute(claim);
+
+    expect(completeExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        run: expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'runtime_execution_failed',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('allows a first product-session runtime session to execute', async () => {
     const claim = createClaim();
     const task = { ...createTask(), sessionId: 'product-session-1' } as Task;

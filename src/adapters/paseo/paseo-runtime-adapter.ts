@@ -30,7 +30,10 @@ import {
   type PaseoToolCall,
   type PaseoTimelinePage,
 } from './paseo-client-port.js';
-import { mapPaseoFinishStatus } from './status-mapper.js';
+import {
+  hasPositiveModelUsage,
+  mapPaseoFinishStatus,
+} from './status-mapper.js';
 
 export interface PaseoRuntimeOptions {
   readonly wsUrl: string;
@@ -290,7 +293,6 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     let streamReady = false;
     const seenLiveSequences = new Set<string>();
     const emittedSnapshots = new Map<string, string>();
-    let assistantQuarantined = false;
     const parentCallActivities = new Map<string, string>();
     const publishedParentActivities = new Set<string>();
     const childSessionToParentActivity = new Map<string, string>();
@@ -381,6 +383,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       readonly seq: number;
       readonly text: string;
     } | null = null;
+    let assistantBlockObserved = false;
+    let assistantBlockBlocked = false;
+    let assistantBlockLastPublicText = '';
+    const observedAssistantTexts = new Set<string>();
     const emitSnapshot = (
       epoch: string,
       seq: number,
@@ -388,13 +394,32 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       flush = false,
     ): void => {
       if (!sink || !text) return;
-      if (assistantQuarantined) return;
-      const sanitized = sanitizeText(text, 8000, flush);
-      if (sanitized === null) {
-        assistantQuarantined = true;
+      const projection = projectText(
+        text,
+        8000,
+        [executionCwd, this.#options.cwd],
+        flush,
+      );
+      if (projection.kind === 'blocked') {
+        if (assistantBlockBlocked) return;
+        assistantBlockBlocked = true;
+        const redactedText = assistantBlockLastPublicText
+          ? `${assistantBlockLastPublicText}\n\n[Content redacted by credential screening]`
+          : '[Content redacted by credential screening]';
+        const key = `${epoch}:${seq}`;
+        if (emittedSnapshots.get(key) === redactedText) return;
+        emittedSnapshots.set(key, redactedText);
+        assistantBlockLastPublicText = redactedText;
+        sinkQueue = sinkQueue.then(() =>
+          sink.emit({
+            kind: 'assistant_text',
+            text: redactedText,
+          }),
+        );
         return;
       }
-      if (!sanitized) return;
+      if (projection.kind !== 'visible' || !projection.text) return;
+      const sanitized = projection.text;
       if (
         baseline?.epoch === epoch &&
         baseline.endCursor &&
@@ -404,6 +429,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       const key = `${epoch}:${seq}`;
       if (emittedSnapshots.get(key) === sanitized) return;
       emittedSnapshots.set(key, sanitized);
+      assistantBlockLastPublicText = sanitized;
       sinkQueue = sinkQueue.then(() =>
         sink.emit({ kind: 'assistant_text', text: sanitized }),
       );
@@ -1139,6 +1165,50 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         seq > baseline.endCursor.seq
       );
     };
+    const flushAssistantBlock = (): void => {
+      if (!liveAssistant) return;
+      emitSnapshot(
+        liveAssistant.epoch,
+        liveAssistant.seq,
+        liveAssistant.text,
+        true,
+      );
+      liveAssistant = null;
+    };
+    const resetAssistantBlock = (): void => {
+      flushAssistantBlock();
+      assistantBlockObserved = false;
+      assistantBlockBlocked = false;
+      assistantBlockLastPublicText = '';
+    };
+    const consumeAssistantSnapshot = (
+      epoch: string,
+      seq: number,
+      text: string,
+      flush = false,
+    ): void => {
+      if (!isAfterBaseline(epoch, seq)) return;
+      observedAssistantTexts.add(text);
+      if (seenLiveSequences.has(`${epoch}:${seq}`)) return;
+      if (liveAssistant === null || liveAssistant.epoch !== epoch) {
+        if (liveAssistant) resetAssistantBlock();
+        assistantBlockObserved = false;
+        assistantBlockBlocked = false;
+        assistantBlockLastPublicText = '';
+        liveAssistant = { epoch, seq, text };
+      } else if (seq <= liveAssistant.seq) {
+        return;
+      } else {
+        liveAssistant = {
+          ...liveAssistant,
+          seq,
+          text: mergeProjectedText(liveAssistant.text, text),
+        };
+      }
+      seenLiveSequences.add(`${epoch}:${seq}`);
+      assistantBlockObserved = true;
+      emitSnapshot(epoch, seq, liveAssistant.text, flush);
+    };
     const consumeProjectedActivity = (event: PaseoAgentStreamEvent): void => {
       if (
         !acceptingTurnActivity ||
@@ -1162,8 +1232,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       if (event.assistantText !== undefined) completeReasoning();
       if (event.toolCall) {
         completeReasoning();
-        liveAssistant = null;
-        assistantQuarantined = false;
+        resetAssistantBlock();
         consumeParentToolCall(event.toolCall);
       }
       if (event.permission) {
@@ -1227,32 +1296,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         event.epoch === null
       )
         return;
-      if (
-        baseline?.epoch === event.epoch &&
-        baseline.endCursor &&
-        event.seq <= baseline.endCursor.seq
-      )
-        return;
-      if (seenLiveSequences.has(`${event.epoch}:${event.seq}`)) return;
-      if (liveAssistant === null || liveAssistant.epoch !== event.epoch) {
-        assistantQuarantined = false;
-        liveAssistant = {
-          epoch: event.epoch,
-          seq: event.seq,
-          text: event.assistantText,
-        };
-        seenLiveSequences.add(`${event.epoch}:${event.seq}`);
-      } else if (event.seq > liveAssistant.seq) {
-        seenLiveSequences.add(`${event.epoch}:${event.seq}`);
-        liveAssistant = {
-          ...liveAssistant,
-          seq: event.seq,
-          text: liveAssistant.text + event.assistantText,
-        };
-      } else {
-        return;
-      }
-      emitSnapshot(liveAssistant.epoch, liveAssistant.seq, liveAssistant.text);
+      consumeAssistantSnapshot(event.epoch, event.seq, event.assistantText);
     };
     let unsubscribe = this.#client.subscribeAgentStream?.((event) => {
       if (streamReady) consumeStreamEvent(event);
@@ -1420,6 +1464,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           limit: 100,
           projection: 'projected',
         });
+        resetAssistantBlock();
         for (const entry of page.entries) {
           if (!isAfterBaseline(page.epoch, entry.seqEnd)) continue;
           if (entry.reasoningText) {
@@ -1450,6 +1495,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           }
           if (entry.toolCall) {
             completeReasoning();
+            resetAssistantBlock();
             consumeParentToolCall(entry.toolCall);
           }
           if (
@@ -1460,9 +1506,30 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
               entry.seqEnd <= baseline.endCursor.seq)
           )
             continue;
-          emitSnapshot(page.epoch, entry.seqEnd, entry.assistantText, true);
+          consumeAssistantSnapshot(
+            page.epoch,
+            entry.seqEnd,
+            entry.assistantText,
+            true,
+          );
+        }
+        flushAssistantBlock();
+        if (
+          !assistantBlockObserved &&
+          finished.lastMessage &&
+          !observedAssistantTexts.has(finished.lastMessage) &&
+          page.endCursor
+        ) {
+          consumeAssistantSnapshot(
+            page.epoch,
+            page.endCursor.seq,
+            finished.lastMessage,
+            true,
+          );
+          flushAssistantBlock();
         }
       }
+      flushAssistantBlock();
       flushDeferredParentTerminals();
       completeReasoning();
       if (finished.usage) {
@@ -1485,6 +1552,11 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       if (finished.lastMessage === null) {
         throw new RuntimeExecutionError(
           'Paseo completed without a final assistant message.',
+        );
+      }
+      if (!hasPositiveModelUsage(finished.usage)) {
+        throw new RuntimeExecutionError(
+          `Paseo completed without positive model usage evidence (provider=${agent.provider}, model=${agent.model}).`,
         );
       }
 
@@ -1733,6 +1805,17 @@ type RuntimeToolCategory =
   | 'subagent'
   | 'other';
 
+type TextProjection =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'pending' }
+  | {
+      readonly kind: 'visible';
+      readonly text: string;
+      readonly redacted: boolean;
+    }
+  | { readonly kind: 'blocked'; readonly reason: 'credential' };
+
 function toolPresentation(
   call: PaseoToolCall,
   category: RuntimeToolCategory,
@@ -1764,15 +1847,35 @@ function toolPresentation(
               ? typedDetail.description
               : undefined
     : undefined;
-  const quality = typedDetail ? 1 : 0;
+  const titleProjection = projectText(call.title, 8000, [executionCwd], true);
+  const providerTitle =
+    titleProjection.kind === 'visible'
+      ? flattenProviderTitle(titleProjection.text, 80)
+      : null;
+  const titleWasRedacted = titleProjection.kind === 'blocked';
+  const quality = call.title !== undefined ? 2 : typedDetail ? 1 : 0;
   return {
-    label: detailLabel
-      ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ?? fallback)
-      : fallback,
+    label: providerTitle
+      ? providerTitle
+      : titleWasRedacted
+        ? 'Tool title hidden by credential screening'
+        : detailLabel
+          ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ??
+            fallback)
+          : fallback,
     summary: toolSummary(category),
     quality,
     ...(typedDetail ? { detail: typedDetail } : {}),
   };
+}
+
+function flattenProviderTitle(
+  value: string,
+  maxCodePoints: number,
+): string | null {
+  const flattened = value.replace(/[\r\n\t ]+/gu, ' ').trim();
+  if (!flattened) return null;
+  return Array.from(flattened).slice(0, maxCodePoints).join('');
 }
 
 function projectRuntimeToolDetail(
@@ -1918,7 +2021,51 @@ function sanitizeRuntimeText(
   max: number,
   roots: readonly string[],
 ): string | null {
-  if (containsCredentialMarker(value)) return null;
+  const projection = projectText(value, max, roots, true);
+  return projection.kind === 'visible' ? projection.text : null;
+}
+
+function projectText(
+  value: string | undefined,
+  max: number,
+  roots: readonly string[],
+  flush: boolean,
+): TextProjection {
+  if (value === undefined) return { kind: 'absent' };
+  if (!value.trim()) return { kind: 'empty' };
+  const redacted = redactCredentialValues(value);
+  if (redacted.blocked) return { kind: 'blocked', reason: 'credential' };
+  if (!flush && credentialPrefixPending(value)) return { kind: 'pending' };
+  let sanitized = formatProjectedText(redacted.text, roots);
+  sanitized = Array.from(sanitized).slice(0, max).join('');
+  if (!flush) {
+    const tailSize = 512;
+    let committedEnd = Math.max(0, sanitized.length - tailSize);
+    const suspiciousStart = Math.max(
+      value.lastIndexOf('/'),
+      value.lastIndexOf('\\'),
+      value.toLowerCase().lastIndexOf('authorization'),
+      value.toLowerCase().lastIndexOf('password'),
+      value.toLowerCase().lastIndexOf('secret'),
+      value.toLowerCase().lastIndexOf('token'),
+    );
+    if (suspiciousStart >= 0 && value.length - suspiciousStart <= 4096)
+      committedEnd = Math.min(
+        committedEnd,
+        Math.max(0, sanitized.length - (value.length - suspiciousStart)),
+      );
+    if (committedEnd === 0) return { kind: 'pending' };
+    sanitized = sanitized.slice(0, committedEnd);
+  }
+  if (!sanitized.trim()) return { kind: 'empty' };
+  return {
+    kind: 'visible',
+    text: sanitized,
+    redacted: redacted.redacted,
+  };
+}
+
+function formatProjectedText(value: string, roots: readonly string[]): string {
   let sanitized = capDetail(value);
   sanitized = sanitized.replace(
     /\/workspace\/\.local\/runtime-cells\/[A-Za-z0-9_-]+\/?/gu,
@@ -1938,8 +2085,8 @@ function sanitizeRuntimeText(
       /(?<![A-Za-z0-9])(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?![A-Za-z0-9])/giu,
       '<id>',
     );
-  const bounded = Array.from(sanitized).slice(0, max).join('');
-  return bounded || null;
+  sanitized = sanitized.replace(/\b[A-Za-z0-9_-]{32,}\b/gu, '<redacted>');
+  return sanitized;
 }
 
 function sanitizeStreamingText(
@@ -1948,25 +2095,8 @@ function sanitizeStreamingText(
   roots: readonly string[],
   flush: boolean,
 ): string | null {
-  const sanitized = sanitizeRuntimeText(value, max, roots);
-  if (sanitized === null || flush) return sanitized;
-  const tailSize = 512;
-  let committedEnd = Math.max(0, sanitized.length - tailSize);
-  const suspiciousStart = Math.max(
-    value.lastIndexOf('/'),
-    value.lastIndexOf('\\'),
-    value.toLowerCase().lastIndexOf('authorization'),
-    value.toLowerCase().lastIndexOf('password'),
-    value.toLowerCase().lastIndexOf('secret'),
-    value.toLowerCase().lastIndexOf('token'),
-  );
-  if (suspiciousStart >= 0 && value.length - suspiciousStart <= 4096) {
-    committedEnd = Math.min(
-      committedEnd,
-      Math.max(0, sanitized.length - (value.length - suspiciousStart)),
-    );
-  }
-  return sanitized.slice(0, committedEnd);
+  const projection = projectText(value, max, roots, flush);
+  return projection.kind === 'visible' ? projection.text : null;
 }
 
 function mergeProjectedText(existing: string, incoming: string): string {
@@ -1977,24 +2107,58 @@ function mergeProjectedText(existing: string, incoming: string): string {
   return capDetail(existing + next);
 }
 
+const credentialAssignmentPattern =
+  /(?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s,;]+)/i;
+const credentialHeaderPattern =
+  /(?:^|\s)(?:-u|--user|-H|--header|--auth|--authentication|--password|--secret|--token|--credential|--access[_-]?key|--session[_-]?key|--api[_-]?key|--private[_-]?key)(?:=|\s+)(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s]+)/i;
+const credentialBearerPattern =
+  /\b(?:bearer|basic)\s+(?!\[REDACTED\])[A-Za-z0-9+/._~=-]+/i;
+const credentialUrlPattern = /:\/\/(?!\[REDACTED\])[^/?#\s]+@/i;
+const credentialPemPattern = /-----BEGIN [^-]+-----/i;
+
+function redactCredentialValues(value: string): {
+  readonly text: string;
+  readonly redacted: boolean;
+  readonly blocked: boolean;
+} {
+  let text = value;
+  let redacted = false;
+  const replace = (pattern: RegExp, replacement: string): void => {
+    const next = text.replace(pattern, replacement);
+    if (next !== text) redacted = true;
+    text = next;
+  };
+  replace(
+    /((?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*)(?:(?:bearer|basic)\s+[^\s,;]+|"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+    '$1[REDACTED]',
+  );
+  replace(
+    /((?:^|\s)(?:-u|--user|-H|--header|--auth|--authentication|--password|--secret|--token|--credential|--access[_-]?key|--session[_-]?key|--api[_-]?key|--private[_-]?key)(?:=|\s+))(?:"[^"]*"|'[^']*'|[^\s]+)/giu,
+    '$1[REDACTED]',
+  );
+  replace(/(\b(?:bearer|basic)\s+)[A-Za-z0-9+/._~=-]+/giu, '$1[REDACTED]');
+  replace(/((?:https?|ftp):\/\/)[^/?#\s]+@/giu, '$1[REDACTED]@');
+  replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/giu, '[REDACTED]');
+  return {
+    text,
+    redacted,
+    blocked: containsCredentialMarker(text),
+  };
+}
+
+function credentialPrefixPending(value: string): boolean {
+  return /(?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*$/i.test(
+    value,
+  );
+}
+
 function containsCredentialMarker(value: string): boolean {
   return (
-    /authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key/i.test(
-      value,
-    ) ||
-    /(?:^|\s)(?:-u|--user|-H|--header|--auth|--authentication)(?:=|\s)/i.test(
-      value,
-    ) ||
-    /\b(?:bearer|basic)\s+[A-Za-z0-9+/._~=-]+/i.test(value) ||
-    /(?:^|\s)[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD)\s*=/i.test(value) ||
-    /(?:^|\s)--?(?:password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key)(?:=|\s)/i.test(
-      value,
-    ) ||
-    /(?:password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key)\s*[:=]/i.test(
-      value,
-    ) ||
-    /:\/\/[^/?#:@]+:[^@]+@/i.test(value) ||
-    /\b[A-Za-z0-9_-]{32,}\b/.test(value)
+    credentialAssignmentPattern.test(value) ||
+    credentialHeaderPattern.test(value) ||
+    credentialBearerPattern.test(value) ||
+    credentialUrlPattern.test(value) ||
+    credentialPemPattern.test(value)
   );
 }
 

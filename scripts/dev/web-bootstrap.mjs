@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import {
   managedAgentYaml,
   managedEnvironmentYaml,
+  mixedTeamAgentYaml,
+  mixedTeamYaml,
 } from './web-bootstrap-fixtures.mjs';
 
 const repositoryRoot = resolve(
@@ -19,6 +21,7 @@ const baseUrl = (
 const token = env('AGENT_SERVER_SERVICE_TOKEN') || 'token-local-dev';
 let agentVersionId = env('WEB_AGENT_VERSION_ID');
 let environmentVersionId = env('WEB_ENVIRONMENT_VERSION_ID');
+let agenticTeamVersionId = env('WEB_AGENTIC_TEAM_VERSION_ID');
 const workspaceName = env('WEB_WORKSPACE_NAME') || 'Web Chat MVE';
 
 if (!agentVersionId) agentVersionId = await bootstrapAgentVersion();
@@ -28,6 +31,12 @@ if (!environmentVersionId)
 else
   await readPublished(
     `${baseUrl}/api/v1/environment-versions/${environmentVersionId}`,
+  );
+if (!agenticTeamVersionId)
+  agenticTeamVersionId = await bootstrapMixedTeamVersion(environmentVersionId);
+else
+  await readPublished(
+    `${baseUrl}/api/v1/team-versions/${agenticTeamVersionId}`,
   );
 let workspaceId = env('WEB_WORKSPACE_ID');
 if (workspaceId) await request(`${baseUrl}/api/v1/workspaces/${workspaceId}`);
@@ -47,6 +56,7 @@ await writeFile(
     `AGENT_SERVER_BASE_URL=${baseUrl}`,
     `WEB_AGENT_VERSION_ID=${agentVersionId}`,
     `WEB_ENVIRONMENT_VERSION_ID=${environmentVersionId}`,
+    `WEB_AGENTIC_TEAM_VERSION_ID=${agenticTeamVersionId}`,
     `WEB_WORKSPACE_NAME=${quoteEnv(workspaceName)}`,
     `WEB_WORKSPACE_ID=${workspaceId}`,
     '',
@@ -63,28 +73,69 @@ async function readPublished(url) {
 }
 
 async function bootstrapAgentVersion() {
+  return bootstrapPublishedAgent(managedAgentYaml(), 'web-chat-mve-agent');
+}
+
+async function bootstrapPublishedAgent(source, key) {
   await request(`${baseUrl}/api/v1/agent-packages:validate`, {
     method: 'POST',
-    body: { source: managedAgentYaml() },
+    body: { source },
   });
   const imported = await request(`${baseUrl}/api/v1/agents:import`, {
     method: 'POST',
-    idempotencyKey: 'web-chat-mve-agent-import-v1',
-    body: { source: managedAgentYaml() },
+    idempotencyKey: `${key}-import-v1`,
+    body: { source },
     expectedStatus: 201,
   });
   const versionId = imported.version?.id;
   if (typeof versionId !== 'string')
-    fail('Agent bootstrap returned no version.');
+    fail(`Agent bootstrap returned no version for ${key}.`);
   const published = await request(
     `${baseUrl}/api/v1/agent-versions/${versionId}:publish`,
     {
       method: 'POST',
-      idempotencyKey: 'web-chat-mve-agent-publish-v1',
+      idempotencyKey: `${key}-publish-v1`,
       body: {},
     },
   );
-  if (published.status !== 'published') fail('Agent publish did not complete.');
+  if (published.status !== 'published')
+    fail(`Agent publish did not complete for ${key}.`);
+  return versionId;
+}
+
+async function bootstrapMixedTeamVersion(environmentVersionId) {
+  const agents = {};
+  for (const name of ['lead', 'fixer', 'reviewer'])
+    agents[name] = await bootstrapPublishedAgent(
+      mixedTeamAgentYaml(name),
+      `web-chat-mixed-team-${name}`,
+    );
+  const imported = await request(`${baseUrl}/api/v1/teams:import`, {
+    method: 'POST',
+    idempotencyKey: 'web-chat-mixed-team-import-v1',
+    body: {
+      source: mixedTeamYaml(
+        agents.lead,
+        agents.fixer,
+        agents.reviewer,
+        environmentVersionId,
+      ),
+    },
+    expectedStatus: 201,
+  });
+  const versionId = imported.version?.id;
+  if (typeof versionId !== 'string')
+    fail('Mixed team bootstrap returned no version.');
+  const published = await request(
+    `${baseUrl}/api/v1/team-versions/${versionId}:publish`,
+    {
+      method: 'POST',
+      idempotencyKey: 'web-chat-mixed-team-publish-v1',
+      body: {},
+    },
+  );
+  if (published.status !== 'published')
+    fail('Mixed team publish did not complete.');
   return versionId;
 }
 

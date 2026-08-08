@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +27,25 @@ const applicationEnvironmentNames = [
 const paseoEnvironmentNames = [
   'OPENCODE_GO_API_KEY',
   'OPENCODE_CONFIG_CONTENT',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
 ];
+
+const anthropicDefaults = {
+  ANTHROPIC_BASE_URL: 'https://opencode.ai/zen/go',
+  ANTHROPIC_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_SMALL_FAST_MODEL: 'deepseek-v4-flash',
+  CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-v4-flash',
+};
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -47,10 +65,56 @@ if (command.length === 0) {
     mkdir(runtimeRoot, { recursive: true }),
     mkdir(agentWorkspace, { recursive: true }),
   ]);
+  for (const name of paseoEnvironmentNames) {
+    if (!process.env[name]?.trim()) delete process.env[name];
+  }
   const paseoPort = process.env.PASEO_PORT
     ? Number.parseInt(process.env.PASEO_PORT, 10)
     : await getAvailablePort();
   const paseoListenHost = process.env.PASEO_LISTEN_HOST ?? '127.0.0.1';
+  if (process.env.OPENCODE_GO_API_KEY?.trim()) {
+    if (!process.env.OPENCODE_CONFIG_CONTENT?.trim()) {
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        $schema: 'https://opencode.ai/config.json',
+        agent: { build: { permission: 'allow' } },
+        provider: {
+          'opencode-go': {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'OpenCode Go',
+            options: {
+              baseURL: 'https://opencode.ai/zen/go/v1',
+              apiKey: '{env:OPENCODE_GO_API_KEY}',
+            },
+            models: {
+              'deepseek-v4-flash': { name: 'deepseek-v4-flash' },
+            },
+          },
+        },
+      });
+    }
+    for (const [name, value] of Object.entries({
+      ...anthropicDefaults,
+      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
+    })) {
+      if (!process.env[name]?.trim()) process.env[name] = value;
+    }
+  }
+  const codexHome = join(runtimeRoot, 'home', '.codex');
+  await mkdir(codexHome, { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(codexHome, 'config.toml'),
+    [
+      'model_provider = "opencode-go"',
+      '',
+      '[model_providers.opencode-go]',
+      'name = "OpenCode Go"',
+      'base_url = "https://opencode.ai/zen/go/v1"',
+      'env_key = "OPENCODE_GO_API_KEY"',
+      'wire_api = "responses"',
+      '',
+    ].join('\n'),
+    { mode: 0o600 },
+  );
   const paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot,

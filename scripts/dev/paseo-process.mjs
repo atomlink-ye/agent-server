@@ -10,6 +10,8 @@ import {
   createSafeRuntimeEnvironment,
 } from './safe-environment.mjs';
 
+const MAX_HTTP_ERROR_BODY_LENGTH = 4_096;
+
 export async function getAvailablePort() {
   const server = createServer();
   await new Promise((resolve, reject) => {
@@ -146,7 +148,13 @@ export async function waitForHttp(url, timeoutMs, child) {
       if (response.ok) {
         return response;
       }
-      lastError = new Error(`HTTP ${response.status}`);
+      const responseBody = (await response.text()).trim();
+      const boundedBody = responseBody.slice(0, MAX_HTTP_ERROR_BODY_LENGTH);
+      lastError = new Error(
+        boundedBody
+          ? `HTTP ${response.status}: ${boundedBody}`
+          : `HTTP ${response.status}`,
+      );
     } catch (error) {
       lastError = error;
     }

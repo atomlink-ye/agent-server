@@ -110,7 +110,6 @@ describe('runtime memory PostgreSQL materialization', () => {
         status: 'idle',
         error: null,
         lastMessage: 'done',
-        usage: { inputTokens: 1, outputTokens: 1 },
       }),
       close: async () => undefined,
     };

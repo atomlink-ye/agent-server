@@ -539,7 +539,7 @@ export class PaseoSdkClient implements PaseoClientPort {
           if (timelineItemType === 'assistant_message') {
             const assistantText =
               'text' in item && typeof item.text === 'string'
-                ? (safePreview(item.text, 4000) ?? null)
+                ? (projectAssistantText(item.text, 8000) ?? null)
                 : null;
             return assistantText !== null
               ? [
@@ -865,6 +865,15 @@ function safePreview(value: string, max: number): string | undefined {
   return Array.from(sanitized).slice(0, max).join('');
 }
 
+function projectAssistantText(value: string, max: number): string | undefined {
+  const projected = value.replace(
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu,
+    '',
+  );
+  if (!projected.trim()) return undefined;
+  return Array.from(projected).slice(0, max).join('');
+}
+
 function containsCredentialMarker(value: string): boolean {
   return (
     /authorization|cookie|password|secret|token|credential|api[_-]?key|private[ _-]?key|bearer\s+/i.test(
@@ -994,8 +1003,8 @@ function projectProviderSubagentTimelineItem(
     return {
       timelineItemType,
       ...(timelineKey ? { timelineKey } : {}),
-      ...(safePreview(value.text, 4000)
-        ? { assistantText: safePreview(value.text, 4000)! }
+      ...(projectAssistantText(value.text, 8000)
+        ? { assistantText: projectAssistantText(value.text, 8000)! }
         : {}),
     };
   return null;

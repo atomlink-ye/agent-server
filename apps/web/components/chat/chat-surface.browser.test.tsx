@@ -50,11 +50,13 @@ it('S6 Step1 renders the golden fixture without fallback tool labels', async () 
         <ChatSurface
           messages={messages}
           entries={timeline}
-          capabilities={{ canCompose: true, canRetry: true }}
+          capabilities={{
+            surface: 'product',
+            canCompose: true,
+            canRetry: true,
+          }}
           now="2026-08-08T00:00:00.000Z"
           replayStatus={{ [runId]: 'ready' }}
-          selectedTeam={false}
-          selectedOverview={false}
           status="completed"
           retryText=""
           text=""

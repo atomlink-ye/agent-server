@@ -111,6 +111,7 @@ export default function HomePage() {
   const [sseConnected, setSseConnected] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [navigationPending, setNavigationPending] = useState(false);
+  const [now, setNow] = useState<string | null>(null);
   const retrySendRef = useRef<{ text: string; key: string } | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const runTrackingRef = useRef<RunTracking | null>(null);
@@ -129,6 +130,13 @@ export default function HomePage() {
     | undefined
   >(undefined);
   activeTaskIdRef.current = activeTaskId;
+
+  useEffect(() => {
+    const tick = () => setNow(new Date().toISOString());
+    tick();
+    const interval = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const commitTimeline = useCallback((next: TimelineState) => {
     timelineRef.current = next;
@@ -1109,7 +1117,6 @@ export default function HomePage() {
     selection,
     read_only: selectedTeam || selectedOverview,
   });
-  const now = new Date().toISOString();
 
   return (
     <main className="page-shell">
@@ -1203,8 +1210,6 @@ export default function HomePage() {
               capabilities={capabilities}
               now={now}
               replayStatus={replayStatus}
-              selectedTeam={selectedTeam}
-              selectedOverview={selectedOverview}
               teamProject={teamProject}
               teamSession={teamSession}
               status={status}

@@ -6,6 +6,7 @@ import {
   selectCurrentLifecycle,
   selectActivityEntries,
   selectPromptEntries,
+  selectRunEntries,
   selectUsageEntry,
   selectChildEntriesByParent,
   type TimelineActivityEntry,
@@ -57,10 +58,8 @@ export type ChatSurfaceProps = {
   readonly activeRunId?: string;
   readonly entries: TimelineState;
   readonly capabilities: Capabilities;
-  readonly now: string;
+  readonly now: string | null;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
-  readonly selectedTeam: boolean;
-  readonly selectedOverview: boolean;
   readonly teamProject?: TeamProject;
   readonly teamSession?: TeamSessionResponse;
   readonly status: ViewStatus;
@@ -81,8 +80,6 @@ export function ChatSurface({
   capabilities,
   now,
   replayStatus,
-  selectedTeam,
-  selectedOverview,
   teamProject,
   teamSession,
   status,
@@ -95,6 +92,8 @@ export function ChatSurface({
   onSend,
   onRetry,
 }: ChatSurfaceProps) {
+  const selectedTeam = capabilities.surface === 'team';
+  const selectedOverview = capabilities.surface === 'overview';
   const turns = groupTurns(messages);
   return (
     <section className="conversation-column">
@@ -144,14 +143,12 @@ export function ChatSurface({
           />
         ) : null}
       </div>
-      {capabilities.canCompose !== true ? (
-        selectedTeam || selectedOverview ? (
-          <div className="read-only-session">
-            {selectedTeam
-              ? 'This Agent Session is read-only.'
-              : 'This Team Overview is read-only.'}
-          </div>
-        ) : null
+      {selectedTeam || selectedOverview ? (
+        <div className="read-only-session">
+          {selectedTeam
+            ? 'This Agent Session is read-only.'
+            : 'This Team Overview is read-only.'}
+        </div>
       ) : (
         <Composer
           text={text}
@@ -181,7 +178,7 @@ function TurnView({
   readonly turn: Turn;
   readonly activeRunId?: string;
   readonly entries: TimelineState;
-  readonly now: string;
+  readonly now: string | null;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
 }) {
   const runId = turn.runId;
@@ -239,13 +236,13 @@ function AssistantDocument({
   readonly runId: string;
   readonly entries: TimelineState;
   readonly active: boolean;
-  readonly now: string;
+  readonly now: string | null;
   readonly label?: string;
   readonly fallbackText?: string | null;
   readonly replayAvailable?: boolean;
   readonly replayLoading?: boolean;
 }) {
-  const runEntries = entries.runs[runId]?.entries ?? [];
+  const runEntries = selectRunEntries(entries, runId);
   const childrenByParent = selectChildEntriesByParent(entries, runId);
   const hasActivity = selectActivityEntries(entries, runId).some(
     (entry) => entry.kind !== 'usage',
@@ -311,7 +308,7 @@ function ReplayStatusNotice({
 }
 
 function hasRenderableDocumentEntries(entries: TimelineState, runId: string) {
-  return (entries.runs[runId]?.entries ?? []).some(
+  return selectRunEntries(entries, runId).some(
     (entry) =>
       (entry.kind === 'agentText' && entry.origin === 'assistant_text') ||
       isRenderableActivity(entry),
@@ -325,7 +322,7 @@ function TurnFooter({
 }: {
   readonly entries: TimelineState;
   readonly runId: string;
-  readonly now: string;
+  readonly now: string | null;
 }) {
   const lifecycle = selectCurrentLifecycle(entries, runId);
   const usage = selectUsageEntry(entries, runId)?.usage;
@@ -343,7 +340,7 @@ function TurnFooter({
 function latestCreatedAt(entries: TimelineState, runId: string) {
   let latest: string | null = null;
   let latestMs = Number.NEGATIVE_INFINITY;
-  for (const entry of entries.runs[runId]?.entries ?? []) {
+  for (const entry of selectRunEntries(entries, runId)) {
     if (!entry.lastCreatedAt) continue;
     const timestamp = Date.parse(entry.lastCreatedAt);
     if (Number.isFinite(timestamp) && timestamp > latestMs) {
@@ -371,8 +368,8 @@ function formatUsage(
   return values.length ? values.join(', ') : 'Usage reported';
 }
 
-function relativeTime(value: string | null, now: string) {
-  if (!value) return null;
+function relativeTime(value: string | null, now: string | null) {
+  if (!value || !now) return null;
   const then = Date.parse(value);
   const current = Date.parse(now);
   if (!Number.isFinite(then) || !Number.isFinite(current)) return null;
@@ -410,7 +407,7 @@ function TeamTranscript({
   readonly session: TeamSessionResponse;
   readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
-  readonly now: string;
+  readonly now: string | null;
 }) {
   if (session.turns.length === 0)
     return (
@@ -445,7 +442,7 @@ function TeamTurnView({
   readonly turn: TeamTurn;
   readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
-  readonly now: string;
+  readonly now: string | null;
 }) {
   const prompts = selectPromptEntries(timeline, turn.run_id);
   const hasDocument = hasRenderableDocumentEntries(timeline, turn.run_id);
@@ -723,7 +720,6 @@ function EmptyState({
       </p>
       <button
         type="button"
-        data-capability="canCompose"
         disabled={canCompose !== true}
         onClick={() =>
           onPrompt(
@@ -761,7 +757,7 @@ function ErrorState({
     <div className="error-state" role="alert">
       <strong>{message}</strong>
       {canRetry === true && retryText ? (
-        <button type="button" data-capability="canRetry" onClick={onRetry}>
+        <button type="button" onClick={onRetry}>
           Retry sending
         </button>
       ) : null}
@@ -816,12 +812,10 @@ function Composer({
             status === 'running'
           }
           aria-label="Message"
-          data-capability="canCompose"
           rows={1}
         />
         <button
           type="submit"
-          data-capability="canCompose"
           disabled={
             canCompose !== true ||
             pending ||
@@ -838,12 +832,7 @@ function Composer({
           {error ?? 'Markdown supported · Shift + Enter for a new line'}
         </span>
         {hasRetry ? (
-          <button
-            type="button"
-            className="inline-retry"
-            data-capability="canRetry"
-            onClick={onRetry}
-          >
+          <button type="button" className="inline-retry" onClick={onRetry}>
             Retry
           </button>
         ) : null}

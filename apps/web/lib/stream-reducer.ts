@@ -1194,6 +1194,14 @@ export type TimelineChildEntry =
   | Extract<TimelineToolEntry, { readonly origin: 'child_timeline_item' }>
   | ParentLinkedTimelineToolEntry;
 
+/** Select all ordered entries for a run, returning an empty list when absent. */
+export function selectRunEntries(
+  state: TimelineState,
+  runId: string,
+): readonly TimelineEntry[] {
+  return timelineRunFor(state, runId).entries;
+}
+
 /** Select top-level activity entries in their original insertion order. */
 export function selectActivityEntries(
   state: TimelineState,

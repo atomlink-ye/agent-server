@@ -31,7 +31,7 @@ import {
   type PaseoTimelinePage,
 } from './paseo-client-port.js';
 import {
-  isClaudeAuthenticationFailure,
+  hasPositiveModelUsage,
   mapPaseoFinishStatus,
 } from './status-mapper.js';
 
@@ -1479,18 +1479,6 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       unsubscribeProviderSubagents = undefined;
 
       const status = mapPaseoFinishStatus(finished.status);
-      if (
-        isClaudeAuthenticationFailure({
-          provider: agent.provider,
-          status: finished.status,
-          error: finished.error,
-          lastMessage: finished.lastMessage,
-        })
-      ) {
-        throw new RuntimeExecutionError(
-          'Claude runtime authentication is required.',
-        );
-      }
       if (status === 'timed_out') throw new RuntimeTimedOutError();
       if (status === 'failed') {
         throw new RuntimeExecutionError(
@@ -1500,6 +1488,11 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       if (finished.lastMessage === null) {
         throw new RuntimeExecutionError(
           'Paseo completed without a final assistant message.',
+        );
+      }
+      if (!hasPositiveModelUsage(finished.usage)) {
+        throw new RuntimeExecutionError(
+          'Paseo completed without positive model usage evidence.',
         );
       }
 

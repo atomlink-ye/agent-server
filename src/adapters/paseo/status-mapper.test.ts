@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  isClaudeAuthenticationFailure,
+  hasPositiveModelUsage,
   mapPaseoFinishStatus,
 } from './status-mapper.js';
 
 describe('mapPaseoFinishStatus', () => {
   it.each([
-    ['idle', 'succeeded'],
+    ['idle', 'idle'],
     ['error', 'failed'],
     ['permission', 'failed'],
     ['timeout', 'timed_out'],
@@ -16,42 +16,26 @@ describe('mapPaseoFinishStatus', () => {
   });
 });
 
-describe('isClaudeAuthenticationFailure', () => {
-  const base = {
-    provider: 'claude',
-    status: 'idle' as const,
-    error: null,
-    lastMessage: 'Not logged in · Please run /login',
-  };
-
-  it('recognizes the exact Claude authentication sentinel', () => {
-    expect(isClaudeAuthenticationFailure(base)).toBe(true);
-    expect(
-      isClaudeAuthenticationFailure({
-        ...base,
-        lastMessage: '  Not logged in · Please run /login  ',
-      }),
-    ).toBe(true);
+describe('hasPositiveModelUsage', () => {
+  it.each([
+    { inputTokens: 1 },
+    { outputTokens: 1 },
+    { inputTokens: 1, outputTokens: 1 },
+  ])('accepts positive model usage %#', (usage) => {
+    expect(hasPositiveModelUsage(usage)).toBe(true);
   });
 
   it.each([
-    { provider: 'opencode', lastMessage: base.lastMessage },
-    {
-      provider: 'claude',
-      status: 'error' as const,
-      lastMessage: base.lastMessage,
-    },
-    {
-      provider: 'claude',
-      error: 'authentication failed',
-      lastMessage: base.lastMessage,
-    },
-    { provider: 'claude', lastMessage: 'Not logged in' },
-    { provider: 'claude', lastMessage: `x${base.lastMessage}` },
-    { provider: 'claude', lastMessage: `${base.lastMessage} now` },
-    { provider: 'claude', lastMessage: 'not logged in · Please run /login' },
-    { provider: 'claude', lastMessage: 'Not logged in - Please run /login' },
-  ])('rejects non-sentinel outcome %#', (variant) => {
-    expect(isClaudeAuthenticationFailure({ ...base, ...variant })).toBe(false);
+    undefined,
+    null,
+    {},
+    { inputTokens: 0, outputTokens: 0 },
+    { inputTokens: -1, outputTokens: -1 },
+    { inputTokens: Number.NaN, outputTokens: Number.NaN },
+    { inputTokens: Number.POSITIVE_INFINITY },
+    { outputTokens: Number.NEGATIVE_INFINITY },
+    { totalCostUsd: 1 },
+  ])('rejects missing or non-positive model usage %#', (usage) => {
+    expect(hasPositiveModelUsage(usage)).toBe(false);
   });
 });

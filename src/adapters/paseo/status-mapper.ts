@@ -1,20 +1,23 @@
 export type PaseoFinishStatus = 'idle' | 'error' | 'permission' | 'timeout';
 
-export type RuntimeFinishStatus = 'succeeded' | 'failed' | 'timed_out';
+export type RuntimeFinishStatus = 'idle' | 'failed' | 'timed_out';
 
-const CLAUDE_AUTHENTICATION_SENTINEL = 'Not logged in · Please run /login';
-
-export function isClaudeAuthenticationFailure(input: {
-  readonly provider: string;
-  readonly status: PaseoFinishStatus;
-  readonly error: string | null;
-  readonly lastMessage: string | null;
-}): boolean {
+export function hasPositiveModelUsage(
+  usage:
+    | {
+        readonly inputTokens?: number;
+        readonly outputTokens?: number;
+      }
+    | null
+    | undefined,
+): boolean {
   return (
-    input.provider === 'claude' &&
-    input.status === 'idle' &&
-    input.error === null &&
-    input.lastMessage?.trim() === CLAUDE_AUTHENTICATION_SENTINEL
+    (typeof usage?.inputTokens === 'number' &&
+      Number.isFinite(usage.inputTokens) &&
+      usage.inputTokens > 0) ||
+    (typeof usage?.outputTokens === 'number' &&
+      Number.isFinite(usage.outputTokens) &&
+      usage.outputTokens > 0)
   );
 }
 
@@ -22,7 +25,7 @@ export function mapPaseoFinishStatus(
   status: PaseoFinishStatus,
 ): RuntimeFinishStatus {
   if (status === 'idle') {
-    return 'succeeded';
+    return 'idle';
   }
   if (status === 'timeout') {
     return 'timed_out';

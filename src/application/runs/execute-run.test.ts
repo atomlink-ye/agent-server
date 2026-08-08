@@ -39,7 +39,7 @@ import {
 } from './runtime-execution-receipt.js';
 
 describe('ExecuteRun', () => {
-  it('fails when Paseo reports an idle unauthenticated finish', async () => {
+  it('fails a terminal run without positive model usage', async () => {
     const claim = createClaim();
     const task = createTask();
     const client = new FakePaseoClient();
@@ -47,11 +47,12 @@ describe('ExecuteRun', () => {
     client.finished = {
       status: 'idle',
       error: null,
-      lastMessage: 'Not logged in · Please run /login',
+      lastMessage: 'PASEO_FAKE_NO_USAGE',
+      usage: { inputTokens: 0, outputTokens: 0, totalCostUsd: 0 },
     };
     vi.spyOn(client, 'createAgent').mockResolvedValue({
-      id: 'agent-claude',
-      provider: 'claude',
+      id: 'agent-opencode',
+      provider: 'opencode',
       model: 'deepseek-v4-flash',
     });
     const runtime = new PaseoRuntimeAdapter(

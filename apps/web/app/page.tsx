@@ -430,6 +430,7 @@ export default function HomePage() {
             return;
           }
         }
+        if (requestedTeam) return;
         if (hasTeamUrl) clearTeamUrl();
         if (!sessionResponse || !sessionResponse.ok) throw new Error('session');
         const data = (await sessionResponse.json()) as SessionResponse;
@@ -974,6 +975,51 @@ export default function HomePage() {
   }
 
   selectTeamSessionRef.current = selectTeamSession;
+
+  useEffect(() => {
+    const requestedTeam = readTeamUrlSelection();
+    const selectedTeam =
+      selection?.kind === 'team_agent_session' ||
+      selection?.kind === 'team_overview';
+    if (!selectedTeam && !requestedTeam) return;
+
+    let disposed = false;
+    let inFlight = false;
+    const poll = async () => {
+      if (disposed || inFlight) return;
+      inFlight = true;
+      try {
+        const project = await refreshTeamProject();
+        if (disposed || !project) return;
+        const currentRequestedTeam = readTeamUrlSelection();
+        if (
+          selection ||
+          !currentRequestedTeam ||
+          project.root_task_id !== currentRequestedTeam.rootTaskId
+        )
+          return;
+        if (!currentRequestedTeam.memberRunId) {
+          await selectTeamOverview(project);
+          return;
+        }
+        const teamSession = project.sessions.find(
+          (session) =>
+            session.agent_session_id === currentRequestedTeam.memberRunId,
+        );
+        if (teamSession) {
+          await selectTeamSessionRef.current?.(teamSession, undefined, project);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 3_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, [refreshTeamProject, selection]);
 
   async function createChat() {
     if (

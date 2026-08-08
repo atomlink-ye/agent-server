@@ -651,12 +651,7 @@ function createStreamingClient(
     },
     waitForFinish: async () => {
       if (streamListener) publish(streamListener);
-      return {
-        status: 'idle',
-        error: null,
-        lastMessage: 'done',
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
+      return { status: 'idle', error: null, lastMessage: 'done' };
     },
     close: async () => undefined,
   };

@@ -24,12 +24,7 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
     sendAgentMessage: async () => undefined,
     waitForFinish: async () => {
       await onFinish?.();
-      return {
-        status: 'idle',
-        error: null,
-        lastMessage: 'done',
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
+      return { status: 'idle', error: null, lastMessage: 'done' };
     },
     close: async () => undefined,
   };
@@ -57,7 +52,6 @@ describe('Paseo runtime same-agent continuation', () => {
           status: 'idle',
           error: null,
           lastMessage: `continued:${agentId}`,
-          usage: { inputTokens: 1, outputTokens: 1 },
         }),
       },
     );
@@ -194,7 +188,6 @@ describe('Paseo runtime nested provider telemetry', () => {
             status: 'idle';
             error: null;
             lastMessage: string;
-            usage: { inputTokens: number; outputTokens: number };
           }) => void)
         | undefined;
       let listCalls = 0;
@@ -203,7 +196,6 @@ describe('Paseo runtime nested provider telemetry', () => {
         status: 'idle';
         error: null;
         lastMessage: string;
-        usage: { inputTokens: number; outputTokens: number };
       }>((resolve) => {
         resolveFinish = resolve;
       });
@@ -343,12 +335,7 @@ describe('Paseo runtime nested provider telemetry', () => {
       expect(listCalls).toBe(1);
       expect(fetchCalls).toBe(0);
 
-      resolveFinish?.({
-        status: 'idle',
-        error: null,
-        lastMessage: 'done',
-        usage: { inputTokens: 1, outputTokens: 1 },
-      });
+      resolveFinish?.({ status: 'idle', error: null, lastMessage: 'done' });
       await execution;
       expect(events).toEqual(
         expect.arrayContaining([

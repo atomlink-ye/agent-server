@@ -9,6 +9,7 @@ ENV COREPACK_HOME=/tmp/corepack \
     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false \
     NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     PATH=/pnpm:/opt/providers/bin:/opt/opencode/bin:$PATH \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers \
     OPENCODE_BIN=/opt/opencode/bin/opencode \
     CLAUDE_CODE_BIN=/opt/providers/bin/claude \
     CODEX_BIN=/opt/providers/bin/codex
@@ -17,7 +18,7 @@ WORKDIR /workspace
 
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin /opt/providers/bin \
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin /opt/providers/bin /opt/playwright-browsers \
     && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode /opt/providers
 
 USER node
@@ -69,10 +70,12 @@ USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends procps ca-certificates python3 \
     && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
     && ps --version \
     && python3 --version \
-    && test -s /etc/ssl/certs/ca-certificates.crt
+    && test -s /etc/ssl/certs/ca-certificates.crt \
+    && pnpm exec playwright install --with-deps --only-shell chromium \
+    && chmod -R a+rX /opt/playwright-browsers \
+    && rm -rf /var/lib/apt/lists/*
 USER node
 
 FROM dependencies AS development

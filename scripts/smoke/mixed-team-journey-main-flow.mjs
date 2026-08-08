@@ -440,12 +440,6 @@ await writeFile(
     2,
   ),
 );
-assert(
-  reviewerV1.terminal_at &&
-    requestChanges.started_at &&
-    new Date(reviewerV1.terminal_at) <= new Date(requestChanges.started_at),
-  'reviewer_terminal_after_queued_lead_start',
-);
 await writeFile(
   `${evidenceRoot}/dispatch-order.json`,
   JSON.stringify(

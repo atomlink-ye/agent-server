@@ -37,8 +37,12 @@ const team = {
   createdAt: '2026-08-08T00:00:00.000Z',
   updatedAt: '2026-08-08T00:00:00.000Z',
 };
+type RouteTeam = Omit<typeof team, 'status' | 'stopReason'> & {
+  status: string;
+  stopReason: string | null;
+};
 
-function setup() {
+function setup(teamValue: RouteTeam = team) {
   const app = new Hono<ApiEnvironment>();
   const decideCompletion = vi.fn(async () => ({
     team,
@@ -60,8 +64,8 @@ function setup() {
     },
   }));
   const teamExecutions = {
-    findTeamRunById: vi.fn(async () => team),
-    findTeamRunByRootTaskId: vi.fn(async () => team),
+    findTeamRunById: vi.fn(async () => teamValue),
+    findTeamRunByRootTaskId: vi.fn(async () => teamValue),
     findCompletionDecisionsByTeamRunId: vi.fn(async () => []),
     findMembersByTeamRunId: vi.fn(async () => []),
     findWorkItemsByTeamRunId: vi.fn(async () => []),
@@ -179,5 +183,24 @@ describe('team completion decision route', () => {
       },
     );
     expect(response.status).toBe(400);
+  });
+
+  it('does not mask a failed Lead run as approval waiting on GET', async () => {
+    const failedTeam = {
+      ...team,
+      status: 'failed' as const,
+      stopReason: 'lead_run_failed',
+    };
+    const { app } = setup(failedTeam);
+    const response = await app.request(`/api/v1/team-runs/${team.id}`, {
+      headers,
+    });
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      status: string;
+      stop_reason: string | null;
+    };
+    expect(payload.status).toBe('failed');
+    expect(payload.stop_reason).toBe('lead_run_failed');
   });
 });

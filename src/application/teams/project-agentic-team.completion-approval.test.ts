@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createTeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
-import { createTeamRun } from '../../domain/teams/team-run.js';
+import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { ProjectAgenticTeam } from './project-agentic-team.js';
 
 const owner = {
@@ -12,7 +12,10 @@ const owner = {
 } as const;
 const now = () => new Date('2026-08-08T00:00:00.000Z');
 
-function fixture(decision: 'pending' | 'reject') {
+function fixture(
+  decision: 'pending' | 'reject',
+  overrides: Partial<TeamRun> = {},
+) {
   const team = {
     ...createTeamRun({
       id: '00000000-0000-4000-8000-000000000101',
@@ -26,6 +29,7 @@ function fixture(decision: 'pending' | 'reject') {
     }),
     completionRequestedByRunId: '00000000-0000-4000-8000-000000000106',
     phase: 'lead_finalize' as const,
+    ...overrides,
   };
   const rejection = createTeamCompletionDecision({
     id: '00000000-0000-4000-8000-000000000107',
@@ -97,6 +101,19 @@ describe('ProjectAgenticTeam completion approval projection', () => {
           ],
         }),
       ],
+    });
+  });
+
+  it('projects a failed Lead run as failed even when an approval request is current', async () => {
+    const { project, team } = fixture('pending', {
+      status: 'failed',
+      stopReason: 'lead_run_failed',
+    });
+    const result = await project.project(team.id, owner);
+    expect(result?.project).toMatchObject({
+      status: 'failed',
+      stopReason: 'lead_run_failed',
+      completionApprovalRequired: true,
     });
   });
 });

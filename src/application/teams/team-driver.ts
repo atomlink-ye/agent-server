@@ -11,7 +11,10 @@ import type { TeamVersion } from '../../domain/invokables/team-version.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import type { ClaimedRun, RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
-import type { AdmissionRepository } from '../ports/admission-repository.js';
+import type {
+  AdmissionRepository,
+  AdmissionTransaction,
+} from '../ports/admission-repository.js';
 import type {
   TeamExecutionRepository,
   OwnerScope,
@@ -88,7 +91,7 @@ export class TeamDriver {
     );
     const leadTask = this.child(
       root,
-      claim.run,
+      claim.run.id,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
       `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
@@ -134,7 +137,11 @@ export class TeamDriver {
       input.teamRunId,
       input.owner,
     );
-    if (!team || !team.completionRequestedByRunId)
+    if (
+      !team ||
+      !team.completionApprovalRequired ||
+      !team.completionRequestedByRunId
+    )
       throw new TeamExecutionError('invalid_transition');
     const requestRun = await this.runs.findByIdForOwner(
       team.completionRequestedByRunId,
@@ -186,38 +193,20 @@ export class TeamDriver {
         });
       if (rejection.recorded === false)
         return { decision: rejection.decision, team: rejection.team };
-      const next = await tx.teamExecutions.advanceAgenticLead({
-        teamRunId: team.id,
-        expectedRevision: rejection.team.revision,
-        owner: input.owner,
-      });
-      const lead = (
-        await tx.teamExecutions.findMembersByTeamRunId(team.id, input.owner)
-      ).find((member) => member.role === 'lead');
-      if (!lead) throw new Error('Agentic Team lead member is missing.');
+
       const rootTask = (
         await tx.tasks.findByIdForOwner(team.rootTaskId, input.owner)
       )?.task;
       if (!rootTask) throw new Error('Team root task is missing.');
-      const feedback = safeText(rejection.decision.feedback);
-      const prompt = `A reviewer rejected the completion request. Feedback: ${feedback}\n\nReview the safe board and address the requested changes before making another completion request.`;
-      const task = this.child(
+      const prompt = this.reviewPrompt(rejection.decision);
+      const next = await this.scheduleLead(
+        rejection.team,
         rootTask,
-        {
-          id: team.rootRunId,
-          prompt: requestRun.prompt,
-        } as Run,
-        lead,
-        `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
+        input.owner,
         prompt,
-        lead.agentVersionId,
-        'lead_turn',
-        next.leadTurnCount,
+        tx,
       );
-      const run = createRun(prompt, { now: this.now });
-      await tx.tasks.save(task);
-      await tx.runs.save(run, { taskId: task.id, attempt: 1 });
-      await tx.enqueueRunDispatch(run.id, run.createdAt);
+      if (next === null) throw new TeamExecutionError('conflict');
       return { decision: rejection.decision, team: next };
     });
   }
@@ -563,60 +552,68 @@ export class TeamDriver {
     parent: Task,
     owner: OwnerScope,
     prompt: string,
-  ) {
-    try {
-      await this.admission.withTransaction(async (tx) => {
-        if (!tx.teamExecutions)
-          throw new Error(
-            'Transaction-scoped Team execution persistence is required.',
-          );
-        const lead = (
-          await tx.teamExecutions.findMembersByTeamRunId(team.id, owner)
-        ).find((member) => member.role === 'lead');
-        if (!lead) throw new Error('Agentic Team lead member is missing.');
-        const teamTasks = await tx.tasks.findByRootTaskIdForOwner(
-          team.rootTaskId,
-          owner,
+    transaction?: AdmissionTransaction,
+  ): Promise<TeamRun | null> {
+    const schedule = async (
+      tx: AdmissionTransaction,
+    ): Promise<TeamRun | null> => {
+      if (!tx.teamExecutions)
+        throw new Error(
+          'Transaction-scoped Team execution persistence is required.',
         );
-        if (
-          teamTasks.some(
-            (record) =>
-              record.task.teamMemberRunId === lead.id &&
-              record.task.teamTaskKind === 'lead_turn' &&
-              !terminalTaskStatuses.has(record.task.status),
-          )
+      const executions = tx.teamExecutions;
+      const lead = (
+        await executions.findMembersByTeamRunId(team.id, owner)
+      ).find((member) => member.role === 'lead');
+      if (!lead) throw new Error('Agentic Team lead member is missing.');
+      const teamTasks = await tx.tasks.findByRootTaskIdForOwner(
+        team.rootTaskId,
+        owner,
+      );
+      if (
+        teamTasks.some(
+          (record) =>
+            record.task.teamMemberRunId === lead.id &&
+            record.task.teamTaskKind === 'lead_turn' &&
+            !terminalTaskStatuses.has(record.task.status),
         )
-          return;
-        const next = await tx.teamExecutions.advanceAgenticLead({
-          teamRunId: team.id,
-          expectedRevision: team.revision,
-          owner,
-        });
-        const task = this.child(
-          parent,
-          {
-            id: parent.parentRunId ?? team.rootRunId,
-            prompt: parent.inputSnapshotRef,
-          } as Run,
-          lead,
-          `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
-          `${prompt}\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
-          lead.agentVersionId,
-          'lead_turn',
-          next.leadTurnCount,
-        );
-        const run = createRun(prompt, { now: this.now });
-        await tx.tasks.save(task);
-        await tx.runs.save(run, { taskId: task.id, attempt: 1 });
-        await tx.enqueueRunDispatch(run.id, run.createdAt);
+      )
+        return null;
+      const next = await executions.advanceAgenticLead({
+        teamRunId: team.id,
+        expectedRevision: team.revision,
+        owner,
       });
+      const task = this.child(
+        parent,
+        parent.parentRunId ?? team.rootRunId,
+        lead,
+        `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
+        `${prompt}\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
+        lead.agentVersionId,
+        'lead_turn',
+        next.leadTurnCount,
+      );
+      const run = createRun(prompt, { now: this.now });
+      await tx.tasks.save(task);
+      await tx.runs.save(run, { taskId: task.id, attempt: 1 });
+      await tx.enqueueRunDispatch(run.id, run.createdAt);
+      return next;
+    };
+    try {
+      return await (transaction
+        ? schedule(transaction)
+        : this.admission.withTransaction(schedule));
     } catch (error) {
-      if (error instanceof TeamExecutionError && error.code === 'stale_state')
-        return;
+      if (error instanceof TeamExecutionError && error.code === 'stale_state') {
+        if (transaction) throw error;
+        return null;
+      }
       if (
         error instanceof TeamExecutionError &&
         error.code === 'limit_exceeded'
       ) {
+        if (transaction) throw error;
         await this.executions.failTeamRunAtomically({
           teamRunId: team.id,
           rootRunId: team.rootRunId,
@@ -629,7 +626,7 @@ export class TeamDriver {
             message: 'The Team reached its Lead turn limit without completing.',
           },
         });
-        return;
+        return null;
       }
       throw error;
     }
@@ -637,7 +634,7 @@ export class TeamDriver {
 
   private child(
     parent: Task,
-    parentRun: Run,
+    parentRunId: string,
     member: TeamMemberRun,
     key: string,
     prompt: string,
@@ -653,7 +650,7 @@ export class TeamDriver {
       policySnapshotVersion: parent.policySnapshotVersion,
       rootTaskId: parent.rootTaskId,
       parentTaskId: parent.id,
-      parentRunId: parentRun.id,
+      parentRunId,
       teamMemberRunId: member.id,
       teamSequence: sequence,
       invokableKind: 'agent',

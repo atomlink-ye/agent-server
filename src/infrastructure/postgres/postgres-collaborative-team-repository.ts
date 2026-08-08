@@ -337,9 +337,8 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           );
         }
       }
-      const revisionSet = gatedApproval ? ', revision=revision+1' : '';
       const updated = await client.query<TeamRunRow>(
-        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, stop_reason=CASE WHEN EXISTS (SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled') THEN 'work_abandoned' ELSE NULL END, updated_at=$3${revisionSet} WHERE id=$1 RETURNING *`,
+        `UPDATE team_runs SET status='succeeded', phase='done', control_state='terminal', final_text=$2, stop_reason=CASE WHEN EXISTS (SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status='cancelled') THEN 'work_abandoned' ELSE NULL END, revision=revision+1, updated_at=$3 WHERE id=$1 RETURNING *`,
         [input.teamRunId, normalizedFinalText, input.updatedAt],
       );
       const run = await client.query(

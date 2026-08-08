@@ -775,6 +775,42 @@ describe('Postgres team completion approval persistence (PGlite)', () => {
     ).rejects.toMatchObject({ code: 'stale_state' });
   });
 
+  it('increments revision exactly once when completing with approval disabled', async () => {
+    const { database, repository } = await seededRepository();
+    await database.query(
+      `UPDATE team_runs SET completion_approval_required=false WHERE id=$1`,
+      [ids.teamRun],
+    );
+    await database.query(
+      `UPDATE runs SET status='waiting_children',result=NULL WHERE id=$1`,
+      [ids.rootRun],
+    );
+    await database.query(`UPDATE tasks SET status='active' WHERE id=$1`, [
+      ids.rootTask,
+    ]);
+
+    const before = await database.query<{ revision: number }>(
+      `SELECT revision FROM team_runs WHERE id=$1`,
+      [ids.teamRun],
+    );
+    const team = await repository.completeTeamRunAtomically({
+      teamRunId: ids.teamRun,
+      rootRunId: ids.rootRun,
+      rootTaskId: ids.rootTask,
+      finalText: 'Ungated final output',
+      owner,
+      updatedAt: '2026-08-08T00:10:00.000Z',
+      leadRunId: ids.completionRequestRun,
+    });
+
+    expect(team.revision).toBe(before.rows![0]!.revision + 1);
+    const after = await database.query<{ revision: number }>(
+      `SELECT revision FROM team_runs WHERE id=$1`,
+      [ids.teamRun],
+    );
+    expect(after.rows).toEqual([{ revision: before.rows![0]!.revision + 1 }]);
+  });
+
   it('rolls back approval and Team completion when root completion fails', async () => {
     const { database, repository } = await seededRepository();
     await expect(

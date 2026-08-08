@@ -98,7 +98,10 @@ function makeDecision(
   });
 }
 
-function setupDriver(initialTeam = makeTeam()) {
+function setupDriver(
+  initialTeam = makeTeam(),
+  options: { existingLeadTask?: Task } = {},
+) {
   let currentTeam = initialTeam;
   const rootTask = makeRootTask(initialTeam);
   const completionRun = {
@@ -156,6 +159,7 @@ function setupDriver(initialTeam = makeTeam()) {
   const saveTask = vi.fn(async (_task: Task) => undefined);
   const saveRun = vi.fn(async (_run: { prompt: string }) => undefined);
   const enqueue = vi.fn(async () => undefined);
+  const commit = vi.fn();
   const recordRejection = vi.fn(
     async (input: { feedback: string; completionRequestedByRunId: string }) => {
       const decision = makeDecision(currentTeam, input.feedback);
@@ -177,15 +181,19 @@ function setupDriver(initialTeam = makeTeam()) {
     return currentTeam;
   });
   const withTransaction = vi.fn(
-    async (work: (tx: unknown) => Promise<unknown>) =>
-      work({
+    async (work: (tx: unknown) => Promise<unknown>) => {
+      const result = await work({
         tasks: {
           save: saveTask,
           findByIdForOwner: vi.fn(async () => ({
             task: rootTask,
             latestRun: null,
           })),
-          findByRootTaskIdForOwner: vi.fn(async () => []),
+          findByRootTaskIdForOwner: vi.fn(async () =>
+            options.existingLeadTask
+              ? [{ task: options.existingLeadTask, latestRun: null }]
+              : [],
+          ),
         },
         runs: { save: saveRun },
         teamExecutions: {
@@ -194,7 +202,10 @@ function setupDriver(initialTeam = makeTeam()) {
           advanceAgenticLead: advanceLead,
         },
         enqueueRunDispatch: enqueue,
-      }),
+      });
+      commit();
+      return result;
+    },
   );
   const completeTeamRunAtomically = vi.fn(async () => currentTeam);
   const latestDecision = vi.fn<() => Promise<TeamCompletionDecision | null>>(
@@ -235,6 +246,7 @@ function setupDriver(initialTeam = makeTeam()) {
     saveTask,
     saveRun,
     enqueue,
+    commit,
     latestDecision,
     setCurrentTeam(next: TeamRun) {
       currentTeam = next;
@@ -341,6 +353,57 @@ describe('TeamDriver completion decision orchestration', () => {
     expect(setup.enqueue).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the standard scheduleLead suffix on a Lead task created after rejection', async () => {
+    const setup = setupDriver();
+    const feedback = 'Re-open the API contract and include source links.';
+
+    await setup.driver.decideCompletion({
+      teamRunId: 'team-decision',
+      expectedRevision: setup.currentTeam.revision,
+      owner,
+      decidedBy: 'reviewer-decision',
+      decision: 'reject',
+      feedback,
+      workItemIds: ['work-decision'],
+    });
+
+    const savedTask = setup.saveTask.mock.calls.at(-1)?.[0] as Task;
+    const prompt = decodeRootTaskRunRequestSnapshotRef(
+      savedTask.inputSnapshotRef,
+    ).prompt;
+    expect(prompt).toBe(
+      `A reviewer rejected the completion request. Feedback: ${feedback}\n\nReview the safe board and address the requested changes before making another completion request.\n\nYou are the Lead. Read the safe board, make all current decisions needed in this turn, and end the turn when those decisions are done. You may issue multiple valid canonical Team commands; do not wait for running members.`,
+    );
+  });
+
+  it('rejects when a nonterminal Lead task already exists without committing', async () => {
+    const currentTeam = makeTeam();
+    const existingLeadTask = {
+      ...leadTerminalTask(currentTeam),
+      id: 'existing-lead-task',
+      status: 'active' as const,
+    };
+    const setup = setupDriver(currentTeam, { existingLeadTask });
+
+    await expect(
+      setup.driver.decideCompletion({
+        teamRunId: currentTeam.id,
+        expectedRevision: currentTeam.revision,
+        owner,
+        decidedBy: 'reviewer-decision',
+        decision: 'reject',
+        feedback: 'Keep the current Lead turn.',
+        workItemIds: ['work-decision'],
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+
+    expect(setup.advanceLead).not.toHaveBeenCalled();
+    expect(setup.saveTask).not.toHaveBeenCalled();
+    expect(setup.saveRun).not.toHaveBeenCalled();
+    expect(setup.enqueue).not.toHaveBeenCalled();
+    expect(setup.commit).not.toHaveBeenCalled();
+  });
+
   it('keeps absolute monotonic Lead turn counts across two sequential rejects with a fresh epoch', async () => {
     const setup = setupDriver({
       ...makeTeam(),
@@ -427,6 +490,26 @@ describe('TeamDriver completion decision orchestration', () => {
     );
     expect(setup.recordRejection).not.toHaveBeenCalled();
     expect(setup.withTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects approval when completion approval is disabled without side effects', async () => {
+    const setup = setupDriver(makeTeam({ completionApprovalRequired: false }));
+
+    await expect(
+      setup.driver.decideCompletion({
+        teamRunId: setup.currentTeam.id,
+        expectedRevision: setup.currentTeam.revision,
+        owner,
+        decidedBy: 'reviewer-decision',
+        decision: 'approve',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_transition' });
+
+    expect(setup.completeTeamRunAtomically).not.toHaveBeenCalled();
+    expect(setup.withTransaction).not.toHaveBeenCalled();
+    expect(setup.saveTask).not.toHaveBeenCalled();
+    expect(setup.saveRun).not.toHaveBeenCalled();
+    expect(setup.enqueue).not.toHaveBeenCalled();
   });
 
   it('bubbles invalid_target from rejection persistence without scheduling a Lead', async () => {

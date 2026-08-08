@@ -1,106 +1,188 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import * as streamReducer from './stream-reducer';
-
-type PlannedIdentity = {
-  readonly scope: 'wire' | 'local';
-  readonly value: string;
-};
-
-type PlannedEntry = {
-  readonly kind: string;
-  readonly runId: string;
-  readonly activityId: PlannedIdentity;
-  readonly firstSequence: number | null;
-  readonly lastSequence: number | null;
-  readonly [key: string]: unknown;
-};
-
-type PlannedRun = {
-  readonly lastSequence: number;
-  readonly openAgentTextActivityId: PlannedIdentity | null;
-  readonly entries: readonly PlannedEntry[];
-};
-
-type PlannedDiagnostic = {
-  readonly code: string;
-  readonly runId: string;
-  readonly activityId: PlannedIdentity;
-  readonly sequence: number;
-  readonly [key: string]: unknown;
-};
-
-type PlannedTimelineState = {
-  readonly runs: Readonly<Record<string, PlannedRun>>;
-  readonly diagnostics: readonly PlannedDiagnostic[];
-};
-
-type PlannedApi = {
-  readonly initialTimelineState: PlannedTimelineState;
-  readonly applyTimelineEnvelope: (
-    state: PlannedTimelineState,
-    envelope: unknown,
-  ) => PlannedTimelineState;
-  readonly applyTimelineEnvelopes: (
-    state: PlannedTimelineState,
-    envelopes: readonly unknown[],
-  ) => PlannedTimelineState;
-};
-
-function plannedApi(): PlannedApi {
-  const api = streamReducer as unknown as Partial<PlannedApi>;
-  expect(api.initialTimelineState).toBeDefined();
-  expect(typeof api.applyTimelineEnvelope).toBe('function');
-  expect(typeof api.applyTimelineEnvelopes).toBe('function');
-  return api as PlannedApi;
-}
+import type {
+  ApprovalEntry,
+  AgentTextEntry,
+  LifecycleEntry,
+  PromptEntry,
+  ThinkingEntry,
+  TimelineEntry,
+  TimelineEnvelope,
+  TimelineState,
+  TimelineToolEntry,
+  UsageEntry,
+} from './stream-reducer';
 
 function runEvent(
   runId: string,
   sequence: number,
   type: string,
   payload?: Record<string, unknown>,
-) {
+  createdAt?: string | null,
+): TimelineEnvelope {
+  const event = {
+    sequence,
+    type,
+    ...(payload === undefined ? {} : { payload }),
+    ...(createdAt === undefined ? {} : { createdAt }),
+  };
   return {
     runId,
     update: {
       kind: 'runEvent',
-      event: {
-        sequence,
-        type,
-        ...(payload === undefined ? {} : { payload }),
-      },
+      event,
     },
   };
 }
 
 function apply(
-  state: PlannedTimelineState,
-  envelope: unknown,
-): PlannedTimelineState {
-  return plannedApi().applyTimelineEnvelope(state, envelope);
+  state: TimelineState,
+  envelope: TimelineEnvelope,
+): TimelineState {
+  return streamReducer.applyTimelineEnvelope(state, envelope);
+}
+
+function malformedEnvelope(value: unknown): TimelineEnvelope {
+  return value as TimelineEnvelope;
 }
 
 function entries(
-  state: PlannedTimelineState,
+  state: TimelineState,
   runId: string,
-): readonly PlannedEntry[] {
+): readonly TimelineEntry[] {
   return state.runs[runId]?.entries ?? [];
 }
 
 function entryByValue(
-  state: PlannedTimelineState,
+  state: TimelineState,
   runId: string,
   value: string,
-): PlannedEntry | undefined {
+): TimelineEntry | undefined {
   return entries(state, runId).find(
     (entry) => entry.activityId.value === value,
   );
 }
 
+function entryField(
+  entry: TimelineEntry | null | undefined,
+  key: string,
+): unknown {
+  return entry && Object.hasOwn(entry, key)
+    ? Reflect.get(entry, key)
+    : undefined;
+}
+
+type AssistantTextEntry = Extract<
+  AgentTextEntry,
+  { readonly origin: 'assistant_text' }
+>;
+
+function assistantTextEntry(
+  entry: TimelineEntry | null | undefined,
+): AssistantTextEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'agentText' || entry.origin !== 'assistant_text')
+    throw new Error('expected an assistant text entry');
+  return entry;
+}
+
+function toolEntry(entry: TimelineEntry | undefined): TimelineToolEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'tool') throw new Error('expected a tool entry');
+  return entry;
+}
+
+function thinkingEntry(
+  entry: TimelineEntry | undefined,
+): Extract<ThinkingEntry, { readonly origin: 'reasoning_progress' }> {
+  expect(entry).toBeDefined();
+  if (
+    !entry ||
+    entry.kind !== 'thinking' ||
+    entry.origin !== 'reasoning_progress'
+  )
+    throw new Error('expected a reasoning entry');
+  return entry;
+}
+
+function approvalEntry(entry: TimelineEntry | undefined): ApprovalEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'approval')
+    throw new Error('expected an approval entry');
+  return entry;
+}
+
+function lifecycleEntry(
+  entry: TimelineEntry | null | undefined,
+): LifecycleEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'lifecycle')
+    throw new Error('expected a lifecycle entry');
+  return entry;
+}
+
+function promptEntry(entry: TimelineEntry | undefined): PromptEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'prompt')
+    throw new Error('expected a prompt entry');
+  return entry;
+}
+
+function usageEntry(entry: TimelineEntry | null | undefined): UsageEntry {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'usage')
+    throw new Error('expected a usage entry');
+  return entry;
+}
+
+function childToolEntry(
+  entry: TimelineEntry | undefined,
+): Extract<TimelineToolEntry, { readonly origin: 'child_timeline_item' }> {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'tool' || entry.origin !== 'child_timeline_item')
+    throw new Error('expected a child tool entry');
+  return entry;
+}
+
+function childAgentTextEntry(
+  entry: TimelineEntry | undefined,
+): Extract<AgentTextEntry, { readonly origin: 'child_timeline_item' }> {
+  expect(entry).toBeDefined();
+  if (
+    !entry ||
+    entry.kind !== 'agentText' ||
+    entry.origin !== 'child_timeline_item'
+  )
+    throw new Error('expected a child agent text entry');
+  return entry;
+}
+
+function childThinkingEntry(
+  entry: TimelineEntry | undefined,
+): Extract<ThinkingEntry, { readonly origin: 'child_timeline_item' }> {
+  expect(entry).toBeDefined();
+  if (
+    !entry ||
+    entry.kind !== 'thinking' ||
+    entry.origin !== 'child_timeline_item'
+  )
+    throw new Error('expected a child thinking entry');
+  return entry;
+}
+
+function toolStatusEntry(
+  entry: TimelineEntry | undefined,
+): Extract<TimelineToolEntry, { readonly origin: 'tool_status' }> {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'tool' || entry.origin !== 'tool_status')
+    throw new Error('expected a top-level tool entry');
+  return entry;
+}
+
 describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   it('keeps one agent text entry across seq26 then thinking27/28 then seq29', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('golden-run', 26, 'output', {
@@ -134,11 +216,13 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         entry.kind === 'agentText' && entry.origin === 'assistant_text',
     );
     expect(textEntries).toHaveLength(1);
-    expect(textEntries[0]).toMatchObject({ text: 'before thinking seq29' });
+    expect(assistantTextEntry(textEntries[0])).toMatchObject({
+      text: 'before thinking seq29',
+    });
   });
 
   it('isolates the same wire activity identity across runs', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     const stateA = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -165,11 +249,11 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     const b = entries(state, 'run-b');
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(1);
-    expect(a[0]).toMatchObject({
+    expect(toolEntry(a[0])).toMatchObject({
       runId: 'run-a',
       activityId: { scope: 'wire', value: 'activity-1' },
     });
-    expect(b[0]).toMatchObject({
+    expect(toolEntry(b[0])).toMatchObject({
       runId: 'run-b',
       activityId: { scope: 'wire', value: 'activity-1' },
     });
@@ -178,7 +262,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('rejects cross-kind wire identity collisions and bounds diagnostics', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -236,8 +320,8 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     );
   });
 
-  it('handles cumulative assistant text idempotently and only accepts strict prefixes', () => {
-    const api = plannedApi();
+  it('handles cumulative assistant text and diagnoses non-prefix snapshots', () => {
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -270,32 +354,48 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     expect(entries(state, 'run-a')).toEqual(beforeNonPrefix);
     expect(state.runs['run-a']?.lastSequence).toBe(4);
     expect(entries(state, 'run-a')).toHaveLength(1);
-    expect(entries(state, 'run-a')[0]).toMatchObject({
+    expect(assistantTextEntry(entries(state, 'run-a')[0])).toMatchObject({
       kind: 'agentText',
       firstSequence: 1,
       lastSequence: 3,
       text: 'Hello world',
     });
+    expect(state.diagnostics).toEqual([
+      {
+        code: 'assistant_text_non_prefix',
+        runId: 'run-a',
+        activityId: { scope: 'local', value: 'agent-text:1' },
+        sequence: 4,
+      },
+    ]);
+    expect(
+      state.diagnostics.every(
+        (diagnostic) =>
+          Object.keys(diagnostic).sort().join(',') ===
+          'activityId,code,runId,sequence',
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(state.diagnostics)).not.toContain('Not a prefix');
   });
 
-  it('closes an open agent segment only for a newly introduced top-level tool', () => {
-    const api = plannedApi();
+  it('keeps one open agent segment across a same top-level tool completion', () => {
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
-        kind: 'assistant_text',
-        text: 'Hello',
-      }),
-    );
-    state = apply(
-      state,
-      runEvent('run-a', 2, 'output', {
         kind: 'tool_status',
         activity_id: 'tool-1',
         category: 'shell',
         status: 'running',
         label: 'Shell',
         summary: 'running',
+      }),
+    );
+    state = apply(
+      state,
+      runEvent('run-a', 2, 'output', {
+        kind: 'assistant_text',
+        text: 'A',
       }),
     );
     state = apply(
@@ -309,35 +409,67 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         summary: 'completed',
       }),
     );
-    expect(entries(state, 'run-a')).toHaveLength(2);
-    expect(state.runs['run-a']?.openAgentTextActivityId).toBeNull();
     state = apply(
       state,
       runEvent('run-a', 4, 'output', {
         kind: 'assistant_text',
-        text: 'Hello world',
+        text: 'AB',
       }),
     );
-    expect(entries(state, 'run-a')).toHaveLength(3);
-    expect(entries(state, 'run-a')[0]).toMatchObject({
-      kind: 'agentText',
-      firstSequence: 1,
-      lastSequence: 1,
-      text: 'Hello',
-    });
-    expect(entries(state, 'run-a')[2]).toMatchObject({
-      kind: 'agentText',
-      firstSequence: 4,
+    expect(entries(state, 'run-a')).toHaveLength(2);
+    const text = assistantTextEntry(
+      entryByValue(state, 'run-a', 'agent-text:2'),
+    );
+    expect(text).toMatchObject({
+      firstSequence: 2,
       lastSequence: 4,
-      text: 'Hello world',
+      text: 'AB',
+      status: 'streaming',
+    });
+    expect(toolEntry(entryByValue(state, 'run-a', 'tool-1'))).toMatchObject({
+      status: 'completed',
+      firstSequence: 1,
+      lastSequence: 3,
     });
     expect(state.runs['run-a']?.openAgentTextActivityId).toEqual(
-      entries(state, 'run-a')[2]?.activityId,
+      text.activityId,
     );
   });
 
+  it('closes an open agent segment when a new top-level tool is created', () => {
+    const api = streamReducer;
+    let state = apply(
+      api.initialTimelineState,
+      runEvent('run-a', 1, 'output', {
+        kind: 'assistant_text',
+        text: 'A',
+      }),
+    );
+    state = apply(
+      state,
+      runEvent('run-a', 2, 'output', {
+        kind: 'tool_status',
+        activity_id: 'tool-1',
+        category: 'shell',
+        status: 'running',
+        label: 'Shell',
+        summary: 'running',
+      }),
+    );
+    const agent = assistantTextEntry(
+      entryByValue(state, 'run-a', 'agent-text:1'),
+    );
+    expect(agent).toMatchObject({
+      firstSequence: 1,
+      lastSequence: 1,
+      text: 'A',
+      status: 'streaming',
+    });
+    expect(state.runs['run-a']?.openAgentTextActivityId).toBeNull();
+  });
+
   it('keeps thinking, approval, usage, lifecycle, child, and existing-tool updates in one agent entry', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -431,7 +563,9 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     expect(
       entries(state, 'run-a').filter((entry) => entry.kind === 'agentText'),
     ).toHaveLength(1);
-    expect(entryByValue(state, 'run-a', 'agent-text:2')).toMatchObject({
+    expect(
+      assistantTextEntry(entryByValue(state, 'run-a', 'agent-text:2')),
+    ).toMatchObject({
       text: 'Hello world, continued',
       firstSequence: 2,
       lastSequence: 4,
@@ -443,7 +577,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('creates and advances reasoning spans, including completed without started', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let missing = apply(
       api.initialTimelineState,
       runEvent('missing', 1, 'output', {
@@ -452,16 +586,11 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         text: 'done',
       }),
     );
-    expect(entries(missing, 'missing')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'thinking',
-          activityId: { scope: 'local', value: 'thinking:1' },
-          firstSequence: 1,
-          lastSequence: 1,
-        }),
-      ]),
-    );
+    expect(thinkingEntry(entries(missing, 'missing')[0])).toMatchObject({
+      activityId: { scope: 'local', value: 'thinking:1' },
+      firstSequence: 1,
+      lastSequence: 1,
+    });
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -495,13 +624,13 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(state, 'run-a')).toHaveLength(2);
-    expect(entries(state, 'run-a')[0]).toMatchObject({
+    expect(thinkingEntry(entries(state, 'run-a')[0])).toMatchObject({
       kind: 'thinking',
       firstSequence: 1,
       lastSequence: 3,
       text: 'ABC',
     });
-    expect(entries(state, 'run-a')[1]).toMatchObject({
+    expect(thinkingEntry(entries(state, 'run-a')[1])).toMatchObject({
       kind: 'thinking',
       firstSequence: 4,
       lastSequence: 4,
@@ -510,7 +639,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('guards monotonic tool and approval statuses', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -534,6 +663,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     const completed = structuredClone(entries(state, 'run-a'));
+    const toolDiagnostics = structuredClone(state.diagnostics);
     state = apply(
       state,
       runEvent('run-a', 3, 'output', {
@@ -557,6 +687,8 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(state, 'run-a')).toEqual(completed);
+    expect(state.diagnostics).toEqual(toolDiagnostics);
+    expect(state.runs['run-a']?.lastSequence).toBe(4);
     state = apply(
       state,
       runEvent('run-a', 5, 'output', {
@@ -579,6 +711,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     const resolved = structuredClone(entries(state, 'run-a'));
+    const approvalDiagnostics = structuredClone(state.diagnostics);
     state = apply(
       state,
       runEvent('run-a', 7, 'output', {
@@ -590,10 +723,12 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(state, 'run-a')).toEqual(resolved);
+    expect(state.diagnostics).toEqual(approvalDiagnostics);
+    expect(state.runs['run-a']?.lastSequence).toBe(7);
   });
 
   it('maps child item kinds while preserving wire identity and never closing top-level agent text', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -632,26 +767,25 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         }),
       );
     }
-    expect(entries(state, 'run-a')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'agentText',
-          activityId: { scope: 'wire', value: 'child-a' },
-          parentActivityId: { scope: 'wire', value: 'parent' },
-        }),
-        expect.objectContaining({
-          kind: 'thinking',
-          activityId: { scope: 'wire', value: 'child-r' },
-          parentActivityId: { scope: 'wire', value: 'parent' },
-        }),
-        expect.objectContaining({
-          kind: 'tool',
-          activityId: { scope: 'wire', value: 'child-t' },
-          parentActivityId: { scope: 'wire', value: 'parent' },
-          detailText: 'tool-detail',
-        }),
-      ]),
-    );
+    expect(
+      childAgentTextEntry(entryByValue(state, 'run-a', 'child-a')),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-a' },
+      parentActivityId: { scope: 'wire', value: 'parent' },
+    });
+    expect(
+      childThinkingEntry(entryByValue(state, 'run-a', 'child-r')),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-r' },
+      parentActivityId: { scope: 'wire', value: 'parent' },
+    });
+    expect(
+      childToolEntry(entryByValue(state, 'run-a', 'child-t')),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-t' },
+      parentActivityId: { scope: 'wire', value: 'parent' },
+      detailText: 'tool-detail',
+    });
     expect(state.runs['run-a']?.openAgentTextActivityId).toEqual({
       scope: 'local',
       value: 'agent-text:2',
@@ -680,18 +814,18 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         summary: 'late parent',
       }),
     );
-    expect(entries(childThenParent, 'child-first')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          activityId: { scope: 'wire', value: 'orphan-child' },
-          parentActivityId: { scope: 'wire', value: 'late-parent' },
-        }),
-      ]),
-    );
+    expect(
+      childToolEntry(
+        entryByValue(childThenParent, 'child-first', 'orphan-child'),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'orphan-child' },
+      parentActivityId: { scope: 'wire', value: 'late-parent' },
+    });
   });
 
   it('ignores late run events after terminal while canonical text can save the last agent segment', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', { kind: 'assistant_text', text: 'draft' }),
@@ -713,16 +847,13 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         messageId: 'assistant-1',
       },
     });
-    expect(entries(state, 'run-a')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'agentText',
-          text: 'saved',
-          status: 'saved',
-          messageId: 'assistant-1',
-        }),
-      ]),
-    );
+    expect(
+      assistantTextEntry(entryByValue(state, 'run-a', 'agent-text:1')),
+    ).toMatchObject({
+      text: 'saved',
+      status: 'saved',
+      messageId: 'assistant-1',
+    });
     const canonicalOnly = apply(api.initialTimelineState, {
       runId: 'run-b',
       update: {
@@ -731,20 +862,19 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         messageId: 'assistant-2',
       },
     });
-    expect(entries(canonicalOnly, 'run-b')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'agentText',
-          activityId: { scope: 'local', value: 'agent-text:canonical' },
-          status: 'saved',
-          messageId: 'assistant-2',
-        }),
-      ]),
-    );
+    expect(
+      assistantTextEntry(
+        entryByValue(canonicalOnly, 'run-b', 'agent-text:canonical'),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'local', value: 'agent-text:canonical' },
+      status: 'saved',
+      messageId: 'assistant-2',
+    });
   });
 
   it('canonicalizes only the last top-level agent segment for a reused message id', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 1, 'output', {
@@ -790,7 +920,9 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       },
     });
     expect(entryByValue(state, 'run-a', 'agent-text:1')).toEqual(segmentA);
-    expect(entryByValue(state, 'run-a', 'agent-text:3')).toMatchObject({
+    expect(
+      assistantTextEntry(entryByValue(state, 'run-a', 'agent-text:3')),
+    ).toMatchObject({
       kind: 'agentText',
       text: 'segment B saved',
       status: 'saved',
@@ -799,7 +931,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('allows same-terminal updates to fill tool, child-tool, and approval details', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let toolState = apply(
       api.initialTimelineState,
       runEvent('tool-run', 1, 'output', {
@@ -849,7 +981,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(toolState, 'tool-run')).toHaveLength(1);
-    expect(entries(toolState, 'tool-run')[0]).toMatchObject({
+    expect(toolEntry(entries(toolState, 'tool-run')[0])).toMatchObject({
       status: 'completed',
       detailText: 'TOOL_OK',
       exitCode: 0,
@@ -909,7 +1041,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(childState, 'child-run')).toHaveLength(1);
-    expect(entries(childState, 'child-run')[0]).toMatchObject({
+    expect(childToolEntry(entries(childState, 'child-run')[0])).toMatchObject({
       status: 'completed',
       detailText: 'CHILD_OK',
       exitCode: 0,
@@ -961,7 +1093,9 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       }),
     );
     expect(entries(approvalState, 'approval-run')).toHaveLength(1);
-    expect(entries(approvalState, 'approval-run')[0]).toMatchObject({
+    expect(
+      approvalEntry(entries(approvalState, 'approval-run')[0]),
+    ).toMatchObject({
       kind: 'approval',
       status: 'resolved',
       decision: 'allowed',
@@ -969,8 +1103,8 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     expect(entries(approvalState, 'approval-run')).toEqual(resolvedApproval);
   });
 
-  it('coalesces consecutive reasoning completions before opening a new span', () => {
-    const api = plannedApi();
+  it('keeps consecutive reasoning completions separate before a new span', () => {
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('reasoning-run', 1, 'output', {
@@ -995,16 +1129,24 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         text: 'new span',
       }),
     );
-    expect(entries(state, 'reasoning-run')).toHaveLength(2);
-    expect(entries(state, 'reasoning-run')[0]).toMatchObject({
+    expect(entries(state, 'reasoning-run')).toHaveLength(3);
+    expect(thinkingEntry(entries(state, 'reasoning-run')[0])).toMatchObject({
       kind: 'thinking',
       activityId: { scope: 'local', value: 'thinking:1' },
       firstSequence: 1,
+      lastSequence: 1,
+      status: 'completed',
+      text: 'first completed',
+    });
+    expect(thinkingEntry(entries(state, 'reasoning-run')[1])).toMatchObject({
+      kind: 'thinking',
+      activityId: { scope: 'local', value: 'thinking:2' },
+      firstSequence: 2,
       lastSequence: 2,
       status: 'completed',
       text: 'second completed',
     });
-    expect(entries(state, 'reasoning-run')[1]).toMatchObject({
+    expect(thinkingEntry(entries(state, 'reasoning-run')[2])).toMatchObject({
       kind: 'thinking',
       activityId: { scope: 'local', value: 'thinking:3' },
       firstSequence: 3,
@@ -1015,7 +1157,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('treats prototype-looking run ids as independent own runs', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     const runIds = ['__proto__', 'constructor', 'toString'];
     const state = runIds.reduce(
       (current, runId, index) =>
@@ -1032,7 +1174,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
       expect(Object.hasOwn(state.runs, runId)).toBe(true);
       expect(state.runs[runId]?.lastSequence).toBe(1);
       expect(entries(state, runId)).toHaveLength(1);
-      expect(entries(state, runId)[0]).toMatchObject({
+      expect(assistantTextEntry(entries(state, runId)[0])).toMatchObject({
         runId,
         text: `text for ${runId}`,
       });
@@ -1040,7 +1182,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('advances only the addressed run sequence for unknown or malformed outputs', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     let state = apply(
       api.initialTimelineState,
       runEvent('run-a', 5, 'output', { kind: 'unknown_kind', body: 'ignored' }),
@@ -1055,6 +1197,16 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     state = apply(state, runEvent('run-a', 6, 'output', { malformed: true }));
     state = apply(
       state,
+      malformedEnvelope({
+        runId: 'run-a',
+        update: {
+          kind: 'runEvent',
+          event: { sequence: 'not-a-sequence', type: 'output' },
+        },
+      }),
+    );
+    state = apply(
+      state,
       runEvent('run-b', 1, 'output', {
         kind: 'assistant_text',
         text: 'independent run',
@@ -1067,8 +1219,8 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 
   it('deduplicates canonical prompts by message id without sequence advancement', () => {
-    const api = plannedApi();
-    const prompt = {
+    const api = streamReducer;
+    const prompt: TimelineEnvelope = {
       runId: 'run-a',
       update: { kind: 'prompt', text: 'Prompt text', messageId: 'message-1' },
     };
@@ -1085,7 +1237,7 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
         (entry) => entry.activityId.value === 'prompt:message-1',
       ),
     ).toHaveLength(1);
-    expect(entries(state, 'run-a')[0]).toMatchObject({
+    expect(promptEntry(entries(state, 'run-a')[0])).toMatchObject({
       kind: 'prompt',
       firstSequence: null,
       lastSequence: null,
@@ -1093,8 +1245,41 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
     });
   });
 
+  it('merges usage fields while preserving first and advancing last sequence', () => {
+    const api = streamReducer;
+    let state = apply(
+      api.initialTimelineState,
+      runEvent('usage-run', 1, 'output', {
+        kind: 'usage',
+        input_tokens: 10,
+        output_tokens: 3,
+        total_cost_usd: 0.42,
+      }),
+    );
+    state = apply(
+      state,
+      runEvent('usage-run', 2, 'output', {
+        kind: 'usage',
+        input_tokens: 11,
+      }),
+    );
+    const usage = entries(state, 'usage-run').find(
+      (entry) => entry.kind === 'usage',
+    );
+    expect(usage).toEqual({
+      kind: 'usage',
+      runId: 'usage-run',
+      activityId: { scope: 'local', value: 'usage' },
+      firstSequence: 1,
+      lastSequence: 2,
+      firstCreatedAt: null,
+      lastCreatedAt: null,
+      usage: { inputTokens: 11, outputTokens: 3, totalCostUsd: 0.42 },
+    });
+  });
+
   it('keeps apply pure for initial state, input state, and entries arrays', () => {
-    const api = plannedApi();
+    const api = streamReducer;
     const initialSnapshot = structuredClone(api.initialTimelineState);
     const input = apply(
       api.initialTimelineState,
@@ -1119,60 +1304,8 @@ describe('planned ordered timeline reducer (S5 Task 2 red tests)', () => {
   });
 });
 
-type PlannedSelectorApi = {
-  readonly selectActivityEntries: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => readonly PlannedEntry[];
-  readonly selectChildEntriesByParent: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => ReadonlyMap<string, readonly PlannedEntry[]>;
-  readonly selectCurrentLifecycle: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => PlannedEntry | null;
-  readonly selectTerminalLifecycle: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => PlannedEntry | null;
-  readonly selectUsageEntry: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => PlannedEntry | null;
-  readonly selectFinalAgentText: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => PlannedEntry | null;
-  readonly selectPromptEntries: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => readonly PlannedEntry[];
-  readonly selectAgentTextEntries: (
-    state: PlannedTimelineState,
-    runId: string,
-  ) => readonly PlannedEntry[];
-};
-
-function plannedSelectors(): PlannedSelectorApi {
-  const api = streamReducer as unknown as Partial<PlannedSelectorApi>;
-  for (const name of [
-    'selectActivityEntries',
-    'selectChildEntriesByParent',
-    'selectCurrentLifecycle',
-    'selectTerminalLifecycle',
-    'selectUsageEntry',
-    'selectFinalAgentText',
-    'selectPromptEntries',
-    'selectAgentTextEntries',
-  ] as const) {
-    expect(typeof api[name]).toBe('function');
-  }
-  return api as PlannedSelectorApi;
-}
-
-function selectorFixture(runId = 'selector-run'): PlannedTimelineState {
-  const api = plannedApi();
+function selectorFixture(runId = 'selector-run'): TimelineState {
+  const api = streamReducer;
   let state = apply(api.initialTimelineState, {
     runId,
     update: { kind: 'prompt', text: 'Inspect the repository', messageId: 'p1' },
@@ -1305,10 +1438,7 @@ function selectorFixture(runId = 'selector-run'): PlannedTimelineState {
 describe('planned timeline selectors (S5 Task 3 red tests)', () => {
   it('returns only top-level activity entries in first-inserted order', () => {
     const state = selectorFixture();
-    const entries = plannedSelectors().selectActivityEntries(
-      state,
-      'selector-run',
-    );
+    const entries = streamReducer.selectActivityEntries(state, 'selector-run');
 
     expect(entries).toHaveLength(6);
     expect(
@@ -1336,15 +1466,11 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
           entry.kind === 'usage',
       ),
     ).toBe(true);
-    expect(entries.some((entry) => entry.kind === 'prompt')).toBe(false);
+    expect(entries.map((entry) => entry.kind)).not.toContain('prompt');
     expect(
-      entries.some(
-        (entry) =>
-          entry.kind === 'agentText' ||
-          ('origin' in entry && entry.origin === 'child_timeline_item'),
-      ),
-    ).toBe(false);
-    expect(entries[3]).toMatchObject({
+      entries.map((entry) => ('origin' in entry ? entry.origin : null)),
+    ).not.toContain('child_timeline_item');
+    expect(usageEntry(entries[3])).toMatchObject({
       kind: 'usage',
       firstSequence: 9,
       lastSequence: 14,
@@ -1354,36 +1480,46 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
 
   it('groups children by raw parent id without mixing top-level entries', () => {
     const state = selectorFixture();
-    const children = plannedSelectors().selectChildEntriesByParent(
+    const children = streamReducer.selectChildEntriesByParent(
       state,
       'selector-run',
     );
 
     expect(children).toBeInstanceOf(Map);
     expect([...children.keys()]).toEqual(['__proto__']);
-    expect(children.get('__proto__')).toEqual([
-      expect.objectContaining({
-        kind: 'tool',
-        origin: 'child_timeline_item',
-        activityId: { scope: 'wire', value: 'child-tool' },
-        parentActivityId: { scope: 'wire', value: '__proto__' },
-        firstSequence: 3,
-      }),
-      expect.objectContaining({
-        kind: 'agentText',
-        origin: 'child_timeline_item',
-        activityId: { scope: 'wire', value: 'child-assistant' },
-        parentActivityId: { scope: 'wire', value: '__proto__' },
-        firstSequence: 6,
-      }),
-      expect.objectContaining({
-        kind: 'thinking',
-        origin: 'child_timeline_item',
-        activityId: { scope: 'wire', value: 'child-reasoning' },
-        parentActivityId: { scope: 'wire', value: '__proto__' },
-        firstSequence: 7,
-      }),
-    ]);
+    const childEntries = children.get('__proto__') ?? [];
+    expect(childEntries).toHaveLength(3);
+    expect(
+      childToolEntry(
+        childEntries.find((entry) => entry.activityId.value === 'child-tool'),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-tool' },
+      parentActivityId: { scope: 'wire', value: '__proto__' },
+      firstSequence: 3,
+    });
+    expect(
+      childAgentTextEntry(
+        childEntries.find(
+          (entry) => entry.activityId.value === 'child-assistant',
+        ),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-assistant' },
+      parentActivityId: { scope: 'wire', value: '__proto__' },
+      firstSequence: 6,
+    });
+    expect(
+      childThinkingEntry(
+        childEntries.find(
+          (entry) => entry.activityId.value === 'child-reasoning',
+        ),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'child-reasoning' },
+      parentActivityId: { scope: 'wire', value: '__proto__' },
+      firstSequence: 7,
+    });
     expect(
       [...children.values()]
         .flat()
@@ -1394,9 +1530,9 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
   });
 
   it('groups parent-linked legacy tool entries as children even before their parent', () => {
-    const api = plannedSelectors();
+    const api = streamReducer;
     let state = apply(
-      plannedApi().initialTimelineState,
+      streamReducer.initialTimelineState,
       runEvent('legacy-child-run', 1, 'output', {
         kind: 'tool_status',
         activity_id: 'legacy-child',
@@ -1434,63 +1570,73 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
       }),
     );
 
-    expect(api.selectActivityEntries(state, 'legacy-child-run')).toEqual([
-      expect.objectContaining({
-        kind: 'tool',
-        origin: 'tool_status',
-        activityId: { scope: 'wire', value: 'parent' },
-        firstSequence: 2,
-      }),
-    ]);
+    const activity = api.selectActivityEntries(state, 'legacy-child-run');
+    expect(activity).toHaveLength(1);
+    expect(toolStatusEntry(activity[0])).toMatchObject({
+      activityId: { scope: 'wire', value: 'parent' },
+      firstSequence: 2,
+    });
+    const legacyChildren =
+      api.selectChildEntriesByParent(state, 'legacy-child-run').get('parent') ??
+      [];
+    expect(legacyChildren).toHaveLength(2);
     expect(
-      api.selectChildEntriesByParent(state, 'legacy-child-run').get('parent'),
-    ).toEqual([
-      expect.objectContaining({
-        kind: 'tool',
-        origin: 'tool_status',
-        activityId: { scope: 'wire', value: 'legacy-child' },
-        parentActivityId: { scope: 'wire', value: 'parent' },
-        sourceActivityId: 'legacy-child',
-        firstSequence: 1,
-        lastSequence: 1,
-        category: 'shell',
-        status: 'completed',
-        label: 'Legacy child command',
-        summary: 'legacy child complete',
-        detailKind: 'shell',
-        detailText: 'legacy output',
-        exitCode: 0,
-      }),
-      expect.objectContaining({
-        kind: 'agentText',
-        origin: 'child_timeline_item',
-        activityId: { scope: 'wire', value: 'timeline-child' },
-        parentActivityId: { scope: 'wire', value: 'parent' },
-        firstSequence: 3,
-      }),
-    ]);
+      toolStatusEntry(
+        legacyChildren.find(
+          (entry) => entry.activityId.value === 'legacy-child',
+        ),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'legacy-child' },
+      parentActivityId: { scope: 'wire', value: 'parent' },
+      sourceActivityId: 'legacy-child',
+      firstSequence: 1,
+      lastSequence: 1,
+      category: 'shell',
+      status: 'completed',
+      label: 'Legacy child command',
+      summary: 'legacy child complete',
+      detailKind: 'shell',
+      detailText: 'legacy output',
+      exitCode: 0,
+    });
+    expect(
+      childAgentTextEntry(
+        legacyChildren.find(
+          (entry) => entry.activityId.value === 'timeline-child',
+        ),
+      ),
+    ).toMatchObject({
+      activityId: { scope: 'wire', value: 'timeline-child' },
+      parentActivityId: { scope: 'wire', value: 'parent' },
+      firstSequence: 3,
+    });
   });
 
   it('selects the last lifecycle and only a terminal lifecycle when present', () => {
-    const api = plannedSelectors();
+    const api = streamReducer;
     const state = selectorFixture();
-    expect(api.selectCurrentLifecycle(state, 'selector-run')).toMatchObject({
+    expect(
+      lifecycleEntry(api.selectCurrentLifecycle(state, 'selector-run')),
+    ).toMatchObject({
       kind: 'lifecycle',
       status: 'succeeded',
       firstSequence: 15,
       lastSequence: 15,
     });
-    expect(api.selectTerminalLifecycle(state, 'selector-run')).toMatchObject({
+    expect(
+      lifecycleEntry(api.selectTerminalLifecycle(state, 'selector-run')),
+    ).toMatchObject({
       kind: 'lifecycle',
       status: 'succeeded',
     });
 
     const startedOnly = apply(
-      plannedApi().initialTimelineState,
+      streamReducer.initialTimelineState,
       runEvent('started-only', 1, 'started'),
     );
     expect(
-      api.selectCurrentLifecycle(startedOnly, 'started-only'),
+      lifecycleEntry(api.selectCurrentLifecycle(startedOnly, 'started-only')),
     ).toMatchObject({ status: 'started' });
     expect(api.selectTerminalLifecycle(startedOnly, 'started-only')).toBeNull();
     expect(api.selectCurrentLifecycle(state, 'missing-run')).toBeNull();
@@ -1500,7 +1646,7 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
   it('returns the merged usage entry while preserving its first sequence', () => {
     const state = selectorFixture();
     expect(
-      plannedSelectors().selectUsageEntry(state, 'selector-run'),
+      usageEntry(streamReducer.selectUsageEntry(state, 'selector-run')),
     ).toMatchObject({
       kind: 'usage',
       activityId: { scope: 'local', value: 'usage' },
@@ -1508,15 +1654,15 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
       lastSequence: 14,
       usage: { inputTokens: 10, outputTokens: 3, totalCostUsd: 0.42 },
     });
-    expect(
-      plannedSelectors().selectUsageEntry(state, 'missing-run'),
-    ).toBeNull();
+    expect(streamReducer.selectUsageEntry(state, 'missing-run')).toBeNull();
   });
 
   it('selects only top-level agent text and keeps prompt order stable', () => {
-    const api = plannedSelectors();
+    const api = streamReducer;
     const state = selectorFixture();
-    expect(api.selectFinalAgentText(state, 'selector-run')).toMatchObject({
+    expect(
+      assistantTextEntry(api.selectFinalAgentText(state, 'selector-run')),
+    ).toMatchObject({
       kind: 'agentText',
       origin: 'assistant_text',
       activityId: { scope: 'local', value: 'agent-text:12' },
@@ -1524,22 +1670,18 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
       firstSequence: 12,
       lastSequence: 12,
     });
-    expect(api.selectAgentTextEntries(state, 'selector-run')).toEqual([
-      expect.objectContaining({
-        kind: 'agentText',
-        origin: 'assistant_text',
-        activityId: { scope: 'local', value: 'agent-text:5' },
-        text: 'Agent A extended',
-        firstSequence: 5,
-        lastSequence: 10,
-      }),
-      expect.objectContaining({
-        kind: 'agentText',
-        origin: 'assistant_text',
-        activityId: { scope: 'local', value: 'agent-text:12' },
-        text: 'Agent B',
-      }),
-    ]);
+    const agentTextEntries = api.selectAgentTextEntries(state, 'selector-run');
+    expect(agentTextEntries).toHaveLength(2);
+    expect(assistantTextEntry(agentTextEntries[0])).toMatchObject({
+      activityId: { scope: 'local', value: 'agent-text:5' },
+      text: 'Agent A extended',
+      firstSequence: 5,
+      lastSequence: 10,
+    });
+    expect(assistantTextEntry(agentTextEntries[1])).toMatchObject({
+      activityId: { scope: 'local', value: 'agent-text:12' },
+      text: 'Agent B',
+    });
     expect(
       api
         .selectAgentTextEntries(state, 'selector-run')
@@ -1548,19 +1690,18 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
             entry.kind === 'agentText' && entry.origin === 'assistant_text',
         ),
     ).toBe(true);
-    expect(api.selectPromptEntries(state, 'selector-run')).toEqual([
-      expect.objectContaining({
-        kind: 'prompt',
-        text: 'Inspect the repository',
-        messageId: 'p1',
-        firstSequence: null,
-        lastSequence: null,
-      }),
-    ]);
+    const promptEntries = api.selectPromptEntries(state, 'selector-run');
+    expect(promptEntries).toHaveLength(1);
+    expect(promptEntry(promptEntries[0])).toMatchObject({
+      text: 'Inspect the repository',
+      messageId: 'p1',
+      firstSequence: null,
+      lastSequence: null,
+    });
   });
 
   it('returns empty or null values for missing runs and remains pure across calls', () => {
-    const api = plannedSelectors();
+    const api = streamReducer;
     const state = selectorFixture();
     const snapshot = structuredClone(state);
     const first = {
@@ -1594,7 +1735,7 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
     expect(second).toEqual(first);
     expect(state).toEqual(snapshot);
 
-    let prototypeRun = apply(plannedApi().initialTimelineState, {
+    let prototypeRun = apply(streamReducer.initialTimelineState, {
       runId: '__proto__',
       update: { kind: 'prompt', text: 'Prototype run', messageId: 'proto' },
     });
@@ -1606,9 +1747,224 @@ describe('planned timeline selectors (S5 Task 3 red tests)', () => {
       }),
     );
     expect(api.selectPromptEntries(prototypeRun, '__proto__')).toHaveLength(1);
-    expect(api.selectFinalAgentText(prototypeRun, '__proto__')).toMatchObject({
+    expect(
+      assistantTextEntry(api.selectFinalAgentText(prototypeRun, '__proto__')),
+    ).toMatchObject({
       origin: 'assistant_text',
       text: 'Prototype response',
     });
+  });
+});
+
+describe('created_at provenance and provider red tests', () => {
+  it('records created_at first/last values and provider across entry variants', () => {
+    const api = streamReducer;
+    let state = apply(
+      api.initialTimelineState,
+      runEvent(
+        'provenance-run',
+        1,
+        'output',
+        {
+          kind: 'assistant_text',
+          text: 'A',
+        },
+        '2026-08-08T10:00:00.001Z',
+      ),
+    );
+    state = apply(
+      state,
+      runEvent(
+        'provenance-run',
+        2,
+        'output',
+        {
+          kind: 'assistant_text',
+          text: 'AB',
+        },
+        '2026-08-08T10:00:00.002Z',
+      ),
+    );
+    const text = assistantTextEntry(
+      entryByValue(state, 'provenance-run', 'agent-text:1'),
+    );
+    expect(text.firstCreatedAt).toBe('2026-08-08T10:00:00.001Z');
+    expect(text.lastCreatedAt).toBe('2026-08-08T10:00:00.002Z');
+
+    state = apply(
+      state,
+      runEvent(
+        'provenance-run',
+        3,
+        'output',
+        {
+          kind: 'tool_status',
+          activity_id: 'tool-provenance',
+          category: 'shell',
+          status: 'running',
+          label: 'Shell',
+          summary: 'running',
+          provider: 'opencode',
+        },
+        '2026-08-08T10:00:00.003Z',
+      ),
+    );
+    state = apply(
+      state,
+      runEvent(
+        'provenance-run',
+        4,
+        'output',
+        {
+          kind: 'tool_status',
+          activity_id: 'tool-provenance',
+          category: 'shell',
+          status: 'completed',
+          label: 'Shell',
+          summary: 'completed',
+          provider: 'opencode',
+        },
+        '2026-08-08T10:00:00.004Z',
+      ),
+    );
+    const tool = toolEntry(
+      entryByValue(state, 'provenance-run', 'tool-provenance'),
+    );
+    expect(tool.firstCreatedAt).toBe('2026-08-08T10:00:00.003Z');
+    expect(tool.lastCreatedAt).toBe('2026-08-08T10:00:00.004Z');
+    expect(tool.provider).toBe('opencode');
+
+    state = apply(
+      state,
+      runEvent(
+        'provenance-run',
+        5,
+        'output',
+        {
+          kind: 'child_timeline_item',
+          activity_id: 'child-provenance',
+          parent_activity_id: 'tool-provenance',
+          item_kind: 'tool',
+          status: 'running',
+          label: 'Child shell',
+          summary: 'running',
+          provider: 'codex',
+        },
+        '2026-08-08T10:00:00.005Z',
+      ),
+    );
+    const child = childToolEntry(
+      entryByValue(state, 'provenance-run', 'child-provenance'),
+    );
+    expect(child.firstCreatedAt).toBe('2026-08-08T10:00:00.005Z');
+    expect(child.lastCreatedAt).toBe('2026-08-08T10:00:00.005Z');
+    expect(child.provider).toBe('codex');
+  });
+
+  it('does not read a payload created_at value as event provenance', () => {
+    const state = apply(
+      streamReducer.initialTimelineState,
+      runEvent('payload-time-run', 1, 'output', {
+        kind: 'assistant_text',
+        text: 'A',
+        created_at: '2026-08-08T10:00:00.999Z',
+      }),
+    );
+    const text = assistantTextEntry(
+      entryByValue(state, 'payload-time-run', 'agent-text:1'),
+    );
+    expect(text.firstCreatedAt).toBeNull();
+    expect(text.lastCreatedAt).toBeNull();
+  });
+
+  it('uses null provenance for missing or invalid created_at without reading Date.now', () => {
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => {
+      throw new Error('apply must not read the client clock');
+    });
+    try {
+      const api = streamReducer;
+      let state = apply(
+        api.initialTimelineState,
+        runEvent('provenance-null-run', 1, 'output', {
+          kind: 'assistant_text',
+          text: 'A',
+        }),
+      );
+      state = apply(
+        state,
+        runEvent(
+          'provenance-null-run',
+          2,
+          'output',
+          {
+            kind: 'tool_status',
+            activity_id: 'tool-invalid-time',
+            category: 'shell',
+            status: 'running',
+            label: 'Shell',
+            summary: 'running',
+          },
+          '0',
+        ),
+      );
+      state = apply(
+        state,
+        runEvent(
+          'provenance-null-run',
+          3,
+          'output',
+          {
+            kind: 'tool_status',
+            activity_id: 'tool-invalid-time',
+            category: 'shell',
+            status: 'completed',
+            label: 'Shell',
+            summary: 'completed',
+          },
+          '2026-02-30T00:00:00Z',
+        ),
+      );
+      state = apply(
+        state,
+        malformedEnvelope({
+          runId: 'provenance-null-run',
+          update: {
+            kind: 'runEvent',
+            event: {
+              sequence: 4,
+              type: 'output',
+              payload: {
+                kind: 'child_timeline_item',
+                activity_id: 'child-invalid-time',
+                parent_activity_id: 'tool-invalid-time',
+                item_kind: 'tool',
+                status: 'running',
+                label: 'Child shell',
+                summary: 'running',
+              },
+              createdAt: 42,
+            },
+          },
+        }),
+      );
+
+      const text = assistantTextEntry(
+        entryByValue(state, 'provenance-null-run', 'agent-text:1'),
+      );
+      const tool = toolEntry(
+        entryByValue(state, 'provenance-null-run', 'tool-invalid-time'),
+      );
+      const child = childToolEntry(
+        entryByValue(state, 'provenance-null-run', 'child-invalid-time'),
+      );
+      expect(text.firstCreatedAt).toBeNull();
+      expect(text.lastCreatedAt).toBeNull();
+      expect(tool.firstCreatedAt).toBeNull();
+      expect(tool.lastCreatedAt).toBeNull();
+      expect(child.firstCreatedAt).toBeNull();
+      expect(child.lastCreatedAt).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
   });
 });

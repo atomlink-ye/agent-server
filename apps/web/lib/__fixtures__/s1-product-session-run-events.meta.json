@@ -3,6 +3,11 @@
   "base_commit": "ef7c57247f21acf071c19cc5216e1ffd33eeb997",
   "captured_at": "2026-08-08",
   "fixture_run_id": "run-s5-product-session-cumulative",
+  "runtime": {
+    "provider": "unknown",
+    "model": "unknown",
+    "recording": "Provider and model were not recorded during the original capture; values are intentionally not inferred after the fact."
+  },
   "capture": {
     "normal_path": [
       "make web-dev",
@@ -59,6 +64,8 @@
   "omissions": {
     "approval": "not present in the captured run; not fabricated",
     "child_timeline_item": "not present in the captured run; not fabricated",
-    "nested_detail": "discarded by the BFF allowlist as expected"
+    "nested_detail": "discarded by the BFF allowlist as expected",
+    "event_created_at": "discarded by the pre-fix Web BFF; replay entries intentionally use null rather than an inferred timestamp",
+    "tool_provider": "discarded by the pre-fix Web BFF; no provider value was inferred after capture"
   }
 }

@@ -158,14 +158,32 @@ export default function HomePage() {
   >(undefined);
   activeTaskIdRef.current = activeTaskId;
 
+  const commitTimeline = useCallback((next: TimelineState) => {
+    timelineRef.current = next;
+    setTimeline(next);
+    return next;
+  }, []);
+
   const commitTimelineEnvelopes = useCallback(
     (envelopes: readonly TimelineEnvelope[]) => {
       const next = applyTimelineEnvelopes(timelineRef.current, envelopes);
-      timelineRef.current = next;
-      setTimeline(next);
-      return next;
+      return commitTimeline(next);
     },
-    [],
+    [commitTimeline],
+  );
+
+  const applyRunEvent = useCallback(
+    (runId: string, data: unknown) => {
+      if (typeof data !== 'string') return undefined;
+      const parsed = parseRunStreamEvent(data);
+      if (!parsed) return undefined;
+      const next = commitTimelineEnvelopes([
+        { runId, update: { kind: 'runEvent', event: parsed } },
+      ]);
+      setReplayStatus((current) => ({ ...current, [runId]: 'ready' }));
+      return selectTerminalLifecycle(next, runId);
+    },
+    [commitTimelineEnvelopes],
   );
 
   const beginNavigation = useCallback(() => {
@@ -360,8 +378,7 @@ export default function HomePage() {
         initialTimelineState,
         Object.values(replay.envelopes).flat(),
       );
-      timelineRef.current = hydrated;
-      setTimeline(hydrated);
+      commitTimeline(hydrated);
       setReplayStatus(
         Object.fromEntries(
           nextMessages
@@ -398,7 +415,7 @@ export default function HomePage() {
           : null;
       setMobileSidebarOpen(false);
     },
-    [buildReplayTimelines, clearTeamUrl],
+    [buildReplayTimelines, clearTeamUrl, commitTimeline],
   );
 
   const loadSession = useCallback(async () => {
@@ -634,40 +651,28 @@ export default function HomePage() {
       )
         return;
       const data = event instanceof MessageEvent ? event.data : undefined;
-      if (typeof data !== 'string') return;
-      const parsed = parseRunStreamEvent(data);
-      if (!parsed) return;
-      commitTimelineEnvelopes([
-        { runId: activeRunId, update: { kind: 'runEvent', event: parsed } },
-      ]);
-      setReplayStatus((current) => ({ ...current, [activeRunId]: 'ready' }));
-      const terminal = selectTerminalLifecycle(
-        timelineRef.current,
-        activeRunId,
-      );
-      if (terminal) {
-        if (terminal.status === 'started') return;
-        tracking.terminal = terminal.status;
-        source.close();
-        setSseConnected(false);
-        if (terminal.status === 'succeeded') {
-          if (tracking.formalAssistantSeen && tracking.canonicalAssistant) {
-            commitTimelineEnvelopes([
-              {
-                runId: activeRunId,
-                update: {
-                  kind: 'canonicalAgentText',
-                  text: tracking.canonicalAssistant.text,
-                  messageId: tracking.canonicalAssistant.id,
-                },
+      const terminal = applyRunEvent(activeRunId, data);
+      if (!terminal || terminal.status === 'started') return;
+      tracking.terminal = terminal.status;
+      source.close();
+      setSseConnected(false);
+      if (terminal.status === 'succeeded') {
+        if (tracking.formalAssistantSeen && tracking.canonicalAssistant) {
+          commitTimelineEnvelopes([
+            {
+              runId: activeRunId,
+              update: {
+                kind: 'canonicalAgentText',
+                text: tracking.canonicalAssistant.text,
+                messageId: tracking.canonicalAssistant.id,
               },
-            ]);
-            finishSuccessfulRun();
-          }
-        } else {
-          setError('The Agent couldn’t complete this request.');
-          finishFailedRun();
+            },
+          ]);
+          finishSuccessfulRun();
         }
+      } else {
+        setError('The Agent couldn’t complete this request.');
+        finishFailedRun();
       }
     };
     const onError = () => {
@@ -708,6 +713,7 @@ export default function HomePage() {
   }, [
     activeRunId,
     activeTaskId,
+    applyRunEvent,
     commitTimelineEnvelopes,
     finishFailedRun,
     finishSuccessfulRun,
@@ -737,16 +743,7 @@ export default function HomePage() {
         return;
       if (terminalHandled) return;
       const data = event instanceof MessageEvent ? event.data : undefined;
-      if (typeof data !== 'string') return;
-      const parsed = parseRunStreamEvent(data);
-      if (!parsed) return;
-      commitTimelineEnvelopes([
-        { runId: turn.run_id, update: { kind: 'runEvent', event: parsed } },
-      ]);
-      const terminal = selectTerminalLifecycle(
-        timelineRef.current,
-        turn.run_id,
-      );
+      const terminal = applyRunEvent(turn.run_id, data);
       if (!terminal || terminal.status === 'started') return;
       const terminalFailed =
         terminal.status === 'failed' || terminal.status === 'cancelled';
@@ -804,7 +801,7 @@ export default function HomePage() {
       source.close();
       if (eventSourceRef.current === source) eventSourceRef.current = null;
     };
-  }, [commitTimelineEnvelopes, selection, status, teamSession]);
+  }, [applyRunEvent, commitTimelineEnvelopes, selection, status, teamSession]);
 
   async function selectChat(nextSessionId: string) {
     if (
@@ -868,8 +865,7 @@ export default function HomePage() {
     setSelection(nextSelection);
     setTeamSession(undefined);
     setMessages([]);
-    timelineRef.current = initialTimelineState;
-    setTimeline(initialTimelineState);
+    commitTimeline(initialTimelineState);
     setReplayStatus({});
     setActiveTaskId(undefined);
     setActiveRunId(undefined);
@@ -937,8 +933,7 @@ export default function HomePage() {
         initialTimelineState,
         eventResults.flatMap(([, envelopes]) => envelopes),
       );
-      timelineRef.current = hydrated;
-      setTimeline(hydrated);
+      commitTimeline(hydrated);
       setReplayStatus(
         Object.fromEntries(
           eventResults.map(([runId, , replay]) => [runId, replay]),
@@ -987,8 +982,7 @@ export default function HomePage() {
     });
     setTeamSession(undefined);
     setMessages([]);
-    timelineRef.current = initialTimelineState;
-    setTimeline(initialTimelineState);
+    commitTimeline(initialTimelineState);
     setReplayStatus({});
     setActiveTaskId(undefined);
     setActiveRunId(undefined);

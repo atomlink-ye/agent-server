@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import * as streamReducer from './stream-reducer';
+import type {
+  AgentTextEntry,
+  TimelineEntry,
+  TimelineEnvelope,
+  TimelineState,
+} from './stream-reducer';
 
 const fixturePath = new URL(
   './__fixtures__/s1-product-session-run-events.jsonl',
@@ -23,6 +29,11 @@ type FixtureMetadata = {
   readonly base_commit: string;
   readonly captured_at: string;
   readonly fixture_run_id: string;
+  readonly runtime: {
+    readonly provider: string;
+    readonly model: string;
+    readonly recording: string;
+  };
   readonly event_count: number;
   readonly last_sequence: number;
   readonly terminal: string;
@@ -45,18 +56,6 @@ type FixtureMetadata = {
   };
 };
 
-type PlannedTimelineApi = {
-  readonly initialTimelineState?: unknown;
-  readonly applyTimelineEnvelope?: (
-    state: unknown,
-    envelope: unknown,
-  ) => unknown;
-  readonly applyTimelineEnvelopes?: (
-    state: unknown,
-    envelopes: readonly unknown[],
-  ) => unknown;
-};
-
 function fixtureLines(): readonly string[] {
   return readFileSync(fixturePath, 'utf8')
     .split(/\r?\n/u)
@@ -75,11 +74,63 @@ function payloadOf(
   return event.payload as Record<string, unknown>;
 }
 
-function entriesForRun(state: unknown, runId: string): readonly unknown[] {
-  const runs = (
-    state as { runs?: Record<string, { entries?: readonly unknown[] }> }
-  ).runs;
-  return runs?.[runId]?.entries ?? [];
+function stringField(
+  payload: Record<string, unknown> | null,
+  key: string,
+): string | undefined {
+  const value = payload?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function requiredStringField(
+  payload: Record<string, unknown> | null,
+  key: string,
+): string {
+  const value = stringField(payload, key);
+  if (value === undefined) throw new Error(`expected string field: ${key}`);
+  return value;
+}
+
+function numberField(
+  payload: Record<string, unknown> | null,
+  key: string,
+): number | undefined {
+  const value = payload?.[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function entriesForRun(
+  state: TimelineState,
+  runId: string,
+): readonly TimelineEntry[] {
+  return state.runs[runId]?.entries ?? [];
+}
+
+function assistantTextEntry(
+  entry: TimelineEntry | undefined,
+): Extract<AgentTextEntry, { readonly origin: 'assistant_text' }> {
+  expect(entry).toBeDefined();
+  if (!entry || entry.kind !== 'agentText' || entry.origin !== 'assistant_text')
+    throw new Error('expected an assistant text entry');
+  return entry;
+}
+
+function deterministicShuffle<T>(values: readonly T[]): T[] {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = (index * 7 + 3) % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex]!,
+      shuffled[index]!,
+    ];
+  }
+  return shuffled;
+}
+
+function runtimeSequence(envelope: TimelineEnvelope): number {
+  if (envelope.update.kind !== 'runEvent')
+    throw new Error('expected a runtime envelope');
+  return envelope.update.event.sequence;
 }
 
 describe('S5 ProductSession cumulative replay fixture', () => {
@@ -95,6 +146,12 @@ describe('S5 ProductSession cumulative replay fixture', () => {
     );
     expect(metadata.captured_at).toBe('2026-08-08');
     expect(metadata.fixture_run_id).toBe(fixtureRunId);
+    expect(metadata.runtime).toEqual({
+      provider: 'unknown',
+      model: 'unknown',
+      recording:
+        'Provider and model were not recorded during the original capture; values are intentionally not inferred after the fact.',
+    });
     expect(events).toHaveLength(metadata.event_count);
     expect(events.every((event) => event !== null)).toBe(true);
     const parsed = events.filter(
@@ -199,23 +256,11 @@ describe('S5 ProductSession cumulative replay fixture', () => {
     );
   });
 
-  it('locks the future ordered entry snapshot (red on the legacy map-and-bucket reducer)', () => {
+  it('locks the ordered entry snapshot across deterministic runtime reordering', () => {
     const events = fixtureEvents();
     const parsed = events.filter(
       (event): event is NonNullable<typeof event> => event !== null,
     );
-    const api = streamReducer as unknown as PlannedTimelineApi;
-    expect(api.initialTimelineState).toBeDefined();
-    expect(typeof api.applyTimelineEnvelope).toBe('function');
-    expect(typeof api.applyTimelineEnvelopes).toBe('function');
-    if (
-      api.initialTimelineState === undefined ||
-      typeof api.applyTimelineEnvelope !== 'function' ||
-      typeof api.applyTimelineEnvelopes !== 'function'
-    )
-      return;
-    const initialSnapshot = structuredClone(api.initialTimelineState);
-    const freshInitialState = () => structuredClone(initialSnapshot);
     const reasoningAt = (sequence: number) => {
       const event = parsed.find((candidate) => candidate.sequence === sequence);
       const payload = payloadOf(event ?? null);
@@ -226,62 +271,81 @@ describe('S5 ProductSession cumulative replay fixture', () => {
     );
     // Classification evidence proves canonical saved text equals the final snapshot;
     // apply it as a separate canonical envelope rather than inventing a run event.
+    const finalAssistantTextValue = payloadOf(
+      parsed.find((event) => event.sequence === 29) ?? null,
+    )?.text;
     const finalAssistantText =
-      payloadOf(parsed.find((event) => event.sequence === 29) ?? null)?.text ??
-      '';
+      typeof finalAssistantTextValue === 'string'
+        ? finalAssistantTextValue
+        : '';
     const usagePayload = payloadOf(
       parsed.find((event) => event.sequence === 30) ?? null,
     );
-    const runtimeEnvelopes = parsed.map((event) => ({
+    const runtimeEnvelopes: TimelineEnvelope[] = parsed.map((event) => ({
       runId: fixtureRunId,
       update: { kind: 'runEvent', event },
     }));
-    const envelopes = [
-      {
-        runId: fixtureRunId,
-        update: {
-          kind: 'prompt',
-          text: canonicalPrompt,
-          messageId: userMessageId,
-        },
+    const promptEnvelope: TimelineEnvelope = {
+      runId: fixtureRunId,
+      update: {
+        kind: 'prompt',
+        text: canonicalPrompt,
+        messageId: userMessageId,
       },
+    };
+    const canonicalEnvelope: TimelineEnvelope = {
+      runId: fixtureRunId,
+      update: {
+        kind: 'canonicalAgentText',
+        text: finalAssistantText,
+        messageId: assistantMessageId,
+      },
+    };
+    const orderedEnvelopes: TimelineEnvelope[] = [
+      promptEnvelope,
       ...runtimeEnvelopes,
-      {
-        runId: fixtureRunId,
-        update: {
-          kind: 'canonicalAgentText',
-          text: finalAssistantText,
-          messageId: assistantMessageId,
-        },
-      },
+      canonicalEnvelope,
     ];
-    const replayState = api.applyTimelineEnvelopes(
-      freshInitialState(),
-      envelopes,
+    const shuffledRuntimeEnvelopes = deterministicShuffle(runtimeEnvelopes);
+    expect(shuffledRuntimeEnvelopes.map(runtimeSequence)).not.toEqual(
+      runtimeEnvelopes.map(runtimeSequence),
     );
-    const liveState = envelopes.reduce<unknown>(
-      (state, envelope) => api.applyTimelineEnvelope!(state, envelope),
-      freshInitialState(),
+    expect(shuffledRuntimeEnvelopes.map(runtimeSequence)).toEqual(
+      expect.arrayContaining(runtimeEnvelopes.map(runtimeSequence)),
     );
-    expect(liveState).toEqual(replayState);
-    const prefixState = envelopes
-      .slice(0, Math.ceil(envelopes.length / 2))
-      .reduce<unknown>(
-        (state, envelope) => api.applyTimelineEnvelope!(state, envelope),
-        freshInitialState(),
-      );
-    const catchUpState = api.applyTimelineEnvelopes(prefixState, envelopes);
-    expect(catchUpState).toEqual(replayState);
+    const shuffledEnvelopes: TimelineEnvelope[] = [
+      promptEnvelope,
+      ...shuffledRuntimeEnvelopes,
+      canonicalEnvelope,
+    ];
+    const goldenState = streamReducer.applyTimelineEnvelopes(
+      streamReducer.initialTimelineState,
+      orderedEnvelopes,
+    );
+    const replayState = streamReducer.applyTimelineEnvelopes(
+      streamReducer.initialTimelineState,
+      shuffledEnvelopes,
+    );
+    expect(replayState).toEqual(goldenState);
+    const prefixState = streamReducer.applyTimelineEnvelopes(
+      streamReducer.initialTimelineState,
+      orderedEnvelopes.slice(0, Math.ceil(orderedEnvelopes.length / 2)),
+    );
+    const catchUpState = streamReducer.applyTimelineEnvelopes(
+      prefixState,
+      orderedEnvelopes,
+    );
+    expect(catchUpState).toEqual(goldenState);
     const secondRunId = `${fixtureRunId}-second`;
-    const secondRunEnvelopes = envelopes.map((envelope) => ({
+    const secondRunEnvelopes = orderedEnvelopes.map((envelope) => ({
       ...envelope,
       runId: secondRunId,
     }));
-    const dualRunState = api.applyTimelineEnvelopes(freshInitialState(), [
-      ...envelopes,
-      ...secondRunEnvelopes,
-    ]);
-    const dualRuns = (dualRunState as { runs: Record<string, unknown> }).runs;
+    const dualRunState = streamReducer.applyTimelineEnvelopes(
+      streamReducer.initialTimelineState,
+      [...orderedEnvelopes, ...secondRunEnvelopes],
+    );
+    const dualRuns = dualRunState.runs;
     expect(Object.keys(dualRuns).sort()).toEqual(
       [fixtureRunId, secondRunId].sort(),
     );
@@ -301,6 +365,8 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: `prompt:${userMessageId}` },
         firstSequence: null,
         lastSequence: null,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         text: canonicalPrompt,
         messageId: userMessageId,
       },
@@ -310,6 +376,8 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: 'lifecycle:1' },
         firstSequence: 1,
         lastSequence: 1,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         status: 'started',
       },
       {
@@ -318,6 +386,8 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: 'thinking:2' },
         firstSequence: 2,
         lastSequence: 2,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         origin: 'reasoning_progress',
         status: 'completed',
         text: reasoningAt(2),
@@ -332,8 +402,10 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         category: 'shell',
         sourceActivityId: 'activity-1',
         status: 'completed',
-        label: tool?.label,
-        summary: tool?.summary,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
+        label: requiredStringField(tool, 'label'),
+        summary: requiredStringField(tool, 'summary'),
         detailKind: 'shell',
         detailText: 'TOOL_OK',
       },
@@ -346,6 +418,8 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         origin: 'assistant_text',
         text: finalAssistantText,
         status: 'saved',
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         messageId: assistantMessageId,
       },
       {
@@ -354,6 +428,8 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: 'thinking:27' },
         firstSequence: 27,
         lastSequence: 28,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         origin: 'reasoning_progress',
         status: 'completed',
         text: reasoningAt(28),
@@ -364,12 +440,20 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: 'usage' },
         firstSequence: 30,
         lastSequence: 30,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         usage: {
-          inputTokens: usagePayload?.input_tokens,
-          cachedInputTokens: usagePayload?.cached_input_tokens,
-          outputTokens: usagePayload?.output_tokens,
-          contextWindowMaxTokens: usagePayload?.context_window_max_tokens,
-          contextWindowUsedTokens: usagePayload?.context_window_used_tokens,
+          inputTokens: numberField(usagePayload, 'input_tokens'),
+          cachedInputTokens: numberField(usagePayload, 'cached_input_tokens'),
+          outputTokens: numberField(usagePayload, 'output_tokens'),
+          contextWindowMaxTokens: numberField(
+            usagePayload,
+            'context_window_max_tokens',
+          ),
+          contextWindowUsedTokens: numberField(
+            usagePayload,
+            'context_window_used_tokens',
+          ),
         },
       },
       {
@@ -378,9 +462,12 @@ describe('S5 ProductSession cumulative replay fixture', () => {
         activityId: { scope: 'local', value: 'lifecycle:32' },
         firstSequence: 32,
         lastSequence: 32,
+        firstCreatedAt: null,
+        lastCreatedAt: null,
         status: 'succeeded',
       },
-    ];
+    ] satisfies readonly TimelineEntry[];
+    expect(entriesForRun(goldenState, fixtureRunId)).toEqual(expectedEntries);
     expect(entriesForRun(replayState, fixtureRunId)).toEqual(expectedEntries);
     expect(entriesForRun(dualRunState, fixtureRunId)).toEqual(expectedEntries);
     expect(entriesForRun(dualRunState, fixtureRunId)).not.toBe(
@@ -389,6 +476,59 @@ describe('S5 ProductSession cumulative replay fixture', () => {
     expect(entriesForRun(dualRunState, secondRunId)).toEqual(
       expectedEntries.map((entry) => ({ ...entry, runId: secondRunId })),
     );
-    expect(api.initialTimelineState).toEqual(initialSnapshot);
+    expect(streamReducer.initialTimelineState).toEqual({
+      runs: {},
+      diagnostics: [],
+    });
+  });
+
+  it('does not reorder run events across a canonical envelope barrier', () => {
+    const runId = 'barrier-run';
+    const envelopes: readonly TimelineEnvelope[] = [
+      {
+        runId,
+        update: {
+          kind: 'runEvent',
+          event: {
+            sequence: 2,
+            type: 'output',
+            payload: { kind: 'assistant_text', text: 'AB' },
+          },
+        },
+      },
+      {
+        runId,
+        update: {
+          kind: 'canonicalAgentText',
+          text: 'canonical',
+          messageId: 'barrier-assistant',
+        },
+      },
+      {
+        runId,
+        update: {
+          kind: 'runEvent',
+          event: {
+            sequence: 1,
+            type: 'output',
+            payload: { kind: 'assistant_text', text: 'A' },
+          },
+        },
+      },
+    ];
+    const state = streamReducer.applyTimelineEnvelopes(
+      streamReducer.initialTimelineState,
+      envelopes,
+    );
+    const text = assistantTextEntry(entriesForRun(state, runId)[0]);
+    expect(text).toMatchObject({
+      activityId: { scope: 'local', value: 'agent-text:2' },
+      firstSequence: 2,
+      lastSequence: 2,
+      text: 'canonical',
+      status: 'saved',
+      messageId: 'barrier-assistant',
+    });
+    expect(state.runs[runId]?.lastSequence).toBe(2);
   });
 });

@@ -14,10 +14,13 @@ export type PermissionCategory =
   'tool' | 'plan' | 'question' | 'mode' | 'other';
 export type PermissionStatus = 'requested' | 'resolved';
 export type PermissionDecision = 'allowed' | 'denied';
+export type Provider = 'opencode' | 'claude' | 'codex';
 
 export type RunStreamEvent = {
   readonly sequence: number;
   readonly type: string;
+  /** Source event timestamp; parser normalizes missing/invalid values to null. */
+  readonly createdAt?: string | null;
   readonly payload?: unknown;
 };
 
@@ -27,6 +30,7 @@ type ParsedTool = {
   readonly status: ToolStatus;
   readonly label: string;
   readonly summary: string;
+  readonly provider?: Provider;
   readonly toolName?: string;
   readonly parentActivityId?: string;
   readonly detailKind?: DetailKind;
@@ -43,6 +47,7 @@ type ParsedChild = {
   readonly status: ToolStatus;
   readonly label: string;
   readonly summary: string;
+  readonly provider?: Provider;
   readonly detailKind?: DetailKind;
   readonly detailText?: string;
   readonly exitCode?: number;
@@ -81,6 +86,7 @@ export function parseRunStreamEvent(data: string): RunStreamEvent | null {
     return {
       sequence: record.sequence,
       type: record.type,
+      createdAt: validCreatedAt(record.created_at) ? record.created_at : null,
       ...(Object.hasOwn(record, 'payload') ? { payload: record.payload } : {}),
     };
   } catch {
@@ -95,6 +101,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function isReasoningStatus(value: unknown): value is ReasoningStatus {
   return value === 'started' || value === 'completed';
+}
+
+function validCreatedAt(value: unknown): value is string {
+  if (
+    typeof value !== 'string' ||
+    value.length !== 24 ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+  )
+    return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function parseProvider(value: unknown): Provider | undefined {
+  return value === 'opencode' || value === 'claude' || value === 'codex'
+    ? value
+    : undefined;
 }
 
 export const FALLBACK_TOOL_LABELS: Record<ToolCategory, string> = {
@@ -127,6 +150,7 @@ function parseTool(value: Record<string, unknown>): ParsedTool | null {
   }
   const summary = boundedString(value.summary, 2000);
   if (!summary) return null;
+  const provider = parseProvider(value.provider);
   const parentActivityId =
     value.parent_activity_id === undefined
       ? undefined
@@ -138,6 +162,7 @@ function parseTool(value: Record<string, unknown>): ParsedTool | null {
     status: value.status as ToolStatus,
     label,
     summary,
+    ...(provider ? { provider } : {}),
     ...(boundedString(value.tool_name, 120)
       ? { toolName: boundedString(value.tool_name, 120)! }
       : {}),
@@ -155,6 +180,7 @@ function parseChild(value: Record<string, unknown>):
   const parentActivityId = boundedString(value.parent_activity_id, 256);
   const label = boundedString(value.label, 120);
   const summary = boundedString(value.summary, 2000);
+  const provider = parseProvider(value.provider);
   if (
     !activityId ||
     !parentActivityId ||
@@ -171,8 +197,15 @@ function parseChild(value: Record<string, unknown>):
     status: value.status,
     label,
     summary,
+    ...(provider ? { provider } : {}),
     ...parseDetailFields(value),
   };
+}
+
+function eventCreatedAt(event: RunStreamEvent): string | null {
+  if (event.createdAt !== undefined)
+    return validCreatedAt(event.createdAt) ? event.createdAt : null;
+  return null;
 }
 
 function parseDetailFields(value: Record<string, unknown>): {
@@ -322,7 +355,12 @@ export type TimelineEntryIdentity = Readonly<{
 }>;
 
 type TimelineEntryBase = TimelineEntryIdentity &
-  Readonly<{ firstSequence: number | null; lastSequence: number | null }>;
+  Readonly<{
+    firstSequence: number | null;
+    lastSequence: number | null;
+    firstCreatedAt: string | null;
+    lastCreatedAt: string | null;
+  }>;
 
 export type PromptEntry = TimelineEntryBase & {
   readonly kind: 'prompt';
@@ -346,6 +384,7 @@ export type AgentTextEntry = TimelineEntryBase &
         readonly status: ToolStatus;
         readonly label: string;
         readonly summary: string;
+        readonly provider?: Provider;
         readonly detailKind?: DetailKind;
         readonly detailText?: string;
         readonly exitCode?: number;
@@ -367,6 +406,7 @@ export type ThinkingEntry = TimelineEntryBase &
         readonly status: ToolStatus;
         readonly label: string;
         readonly summary: string;
+        readonly provider?: Provider;
         readonly detailKind?: DetailKind;
         readonly detailText?: string;
         readonly exitCode?: number;
@@ -380,6 +420,7 @@ export type TimelineToolEntry = TimelineEntryBase &
     sourceActivityId: string;
     label: string;
     summary: string;
+    provider?: Provider;
     toolName?: string;
     detailKind?: DetailKind;
     detailText?: string;
@@ -394,6 +435,7 @@ export type TimelineToolEntry = TimelineEntryBase &
     | {
         readonly origin: 'child_timeline_item';
         readonly parentActivityId: TimelineActivityId;
+        readonly provider?: Provider;
       }
   );
 
@@ -449,7 +491,7 @@ export type RunTimeline = Readonly<{
 }>;
 
 export type TimelineDiagnostic = Readonly<{
-  readonly code: 'identity_kind_conflict';
+  readonly code: 'identity_kind_conflict' | 'assistant_text_non_prefix';
   readonly runId: string;
   readonly activityId: TimelineActivityId;
   readonly sequence: number | null;
@@ -555,52 +597,82 @@ function addTimelineDiagnostic(
   runId: string,
   activityId: TimelineActivityId,
   sequence: number | null,
+  code: TimelineDiagnostic['code'] = 'identity_kind_conflict',
 ): TimelineState {
   const diagnostics = [
     ...state.diagnostics,
-    { code: 'identity_kind_conflict' as const, runId, activityId, sequence },
+    { code, runId, activityId, sequence },
   ];
   return { ...state, diagnostics: diagnostics.slice(-20) };
 }
 
-function upsertTimelineEntry(
+function timelineEnvelopeSequence(envelope: TimelineEnvelope): number {
+  if (envelope.update.kind !== 'runEvent') return Number.MAX_SAFE_INTEGER;
+  return envelope.update.event.sequence;
+}
+
+type TimelineEntryOutcome = 'created' | 'merged' | 'rejected' | 'conflict';
+
+type TimelineEntryMergeOptions = Readonly<{
+  readonly locate?: (run: RunTimeline, incoming: TimelineEntry) => number;
+  readonly merge?: (
+    existing: TimelineEntry,
+    incoming: TimelineEntry,
+  ) => TimelineEntry | null;
+}>;
+
+function mergeTimelineEntryState(
   state: TimelineState,
   runId: string,
   run: RunTimeline,
   entry: TimelineEntry,
   sequence: number,
-  onExisting?: (existing: TimelineEntry, index: number) => TimelineEntry | null,
-): { state: TimelineState; created: boolean; conflict: boolean } {
-  const index = timelineEntryIndex(run, entry.activityId);
+  options: TimelineEntryMergeOptions = {},
+): { state: TimelineState; outcome: TimelineEntryOutcome } {
+  const index =
+    options.locate?.(run, entry) ?? timelineEntryIndex(run, entry.activityId);
   if (index < 0) {
-    const nextRun = {
-      ...run,
-      entries: [...run.entries, entry],
+    const created = {
+      ...entry,
+      runId,
+      firstSequence: entry.firstSequence ?? sequence,
+      lastSequence: sequence,
+      firstCreatedAt: entry.firstCreatedAt ?? null,
+      lastCreatedAt: entry.lastCreatedAt ?? null,
     };
     return {
-      state: timelineWithRun(state, runId, nextRun),
-      created: true,
-      conflict: false,
+      state: timelineWithRun(state, runId, {
+        ...run,
+        entries: [...run.entries, created],
+      }),
+      outcome: 'created',
     };
   }
   const existing = run.entries[index]!;
   if (!sameTimelineEntryKind(existing, entry)) {
     return {
       state: addTimelineDiagnostic(state, runId, entry.activityId, sequence),
-      created: false,
-      conflict: true,
+      outcome: 'conflict',
     };
   }
-  const replacement = onExisting?.(existing, index) ?? entry;
+  const replacement = options.merge ? options.merge(existing, entry) : entry;
   if (replacement === null) {
-    return { state, created: false, conflict: false };
+    return { state, outcome: 'rejected' };
   }
+  const merged = {
+    ...replacement,
+    runId: existing.runId,
+    activityId: existing.activityId,
+    firstSequence: existing.firstSequence,
+    lastSequence: sequence,
+    firstCreatedAt: existing.firstCreatedAt ?? null,
+    lastCreatedAt: replacement.lastCreatedAt ?? null,
+  } as TimelineEntry;
   const entries = run.entries.slice();
-  entries[index] = replacement;
+  entries[index] = merged;
   return {
     state: timelineWithRun(state, runId, { ...run, entries }),
-    created: false,
-    conflict: false,
+    outcome: 'merged',
   };
 }
 
@@ -608,12 +680,15 @@ function timelineToolEntry(
   runId: string,
   sequence: number,
   tool: ParsedTool,
+  createdAt: string | null,
 ): TimelineToolEntry {
   return {
     runId,
     activityId: timelineId('wire', tool.activityId),
     firstSequence: sequence,
     lastSequence: sequence,
+    firstCreatedAt: createdAt,
+    lastCreatedAt: createdAt,
     kind: 'tool',
     origin: 'tool_status',
     category: tool.category,
@@ -621,6 +696,7 @@ function timelineToolEntry(
     status: tool.status,
     label: tool.label,
     summary: tool.summary,
+    ...(tool.provider ? { provider: tool.provider } : {}),
     ...(tool.toolName ? { toolName: tool.toolName } : {}),
     ...(tool.parentActivityId
       ? { parentActivityId: timelineId('wire', tool.parentActivityId) }
@@ -635,16 +711,20 @@ function timelineChildEntry(
   runId: string,
   sequence: number,
   child: ParsedChild & { readonly parentActivityId: string },
+  createdAt: string | null,
 ): TimelineEntry {
   const base = {
     runId,
     activityId: timelineId('wire', child.activityId),
     firstSequence: sequence,
     lastSequence: sequence,
+    firstCreatedAt: createdAt,
+    lastCreatedAt: createdAt,
     parentActivityId: timelineId('wire', child.parentActivityId),
     status: child.status,
     label: child.label,
     summary: child.summary,
+    ...(child.provider ? { provider: child.provider } : {}),
     ...(child.detailKind ? { detailKind: child.detailKind } : {}),
     ...(child.detailText ? { detailText: child.detailText } : {}),
     ...(child.exitCode !== undefined ? { exitCode: child.exitCode } : {}),
@@ -701,10 +781,12 @@ function applyTimelineRunEvent(
       activityId: timelineId('local', `lifecycle:${event.sequence}`),
       firstSequence: event.sequence,
       lastSequence: event.sequence,
+      firstCreatedAt: eventCreatedAt(event),
+      lastCreatedAt: eventCreatedAt(event),
       kind: 'lifecycle',
       status: event.type,
     };
-    return upsertTimelineEntry(nextState, runId, run, entry, event.sequence)
+    return mergeTimelineEntryState(nextState, runId, run, entry, event.sequence)
       .state;
   }
   if (event.type !== 'output') return nextState;
@@ -717,26 +799,52 @@ function applyTimelineRunEvent(
     const openIndex = openId ? timelineEntryIndex(run, openId) : -1;
     const open = openIndex >= 0 ? run.entries[openIndex] : undefined;
     if (open && open.kind === 'agentText' && open.origin === 'assistant_text') {
-      if (payload.text === open.text) return nextState;
-      if (!payload.text.startsWith(open.text)) return nextState;
-      const entries = run.entries.slice();
-      entries[openIndex] = {
-        ...open,
-        text: payload.text,
-        status: 'streaming',
-        lastSequence: event.sequence,
-      };
-      return timelineWithRun(nextState, runId, {
-        ...run,
-        entries,
-        lastSequence: event.sequence,
-      });
+      const createdAt = eventCreatedAt(event);
+      if (payload.text === open.text)
+        return mergeTimelineEntryState(
+          nextState,
+          runId,
+          run,
+          { ...open, lastCreatedAt: createdAt },
+          event.sequence,
+          {
+            locate: () => openIndex,
+            merge: (existing, incoming) => ({ ...existing, ...incoming }),
+          },
+        ).state;
+      if (!payload.text.startsWith(open.text))
+        return addTimelineDiagnostic(
+          nextState,
+          runId,
+          open.activityId,
+          event.sequence,
+          'assistant_text_non_prefix',
+        );
+      return mergeTimelineEntryState(
+        nextState,
+        runId,
+        run,
+        {
+          ...open,
+          text: payload.text,
+          status: 'streaming',
+          lastCreatedAt: createdAt,
+        },
+        event.sequence,
+        {
+          locate: () => openIndex,
+          merge: (existing, incoming) => ({ ...existing, ...incoming }),
+        },
+      ).state;
     }
+    const createdAt = eventCreatedAt(event);
     const entry: AgentTextEntry = {
       runId,
       activityId: timelineId('local', `agent-text:${event.sequence}`),
       firstSequence: event.sequence,
       lastSequence: event.sequence,
+      firstCreatedAt: createdAt,
+      lastCreatedAt: createdAt,
       kind: 'agentText',
       origin: 'assistant_text',
       text: payload.text,
@@ -752,47 +860,27 @@ function applyTimelineRunEvent(
   if (payload.kind === 'tool_status') {
     const tool = parseTool(payload);
     if (!tool) return nextState;
-    const entry = timelineToolEntry(runId, event.sequence, tool);
-    const index = timelineEntryIndex(run, entry.activityId);
-    if (index >= 0) {
-      const existing = run.entries[index]!;
-      if (!sameTimelineEntryKind(existing, entry))
-        return addTimelineDiagnostic(
-          nextState,
-          runId,
-          entry.activityId,
-          event.sequence,
-        );
-      const existingTool = existing as TimelineToolEntry;
-      if (!canAdvanceTool(existingTool.status, tool.status)) return nextState;
-      const merged: TimelineToolEntry = {
-        ...existingTool,
-        ...entry,
-        firstSequence: existingTool.firstSequence,
-        lastSequence: event.sequence,
-        ...(existingTool.detailKind && !entry.detailKind
-          ? { detailKind: existingTool.detailKind }
-          : {}),
-        ...(existingTool.detailText && !entry.detailText
-          ? { detailText: existingTool.detailText }
-          : {}),
-        ...(existingTool.exitCode !== undefined && entry.exitCode === undefined
-          ? { exitCode: existingTool.exitCode }
-          : {}),
-      };
-      const entries = run.entries.slice();
-      entries[index] = merged;
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
-    const result = upsertTimelineEntry(
+    const entry = timelineToolEntry(
+      runId,
+      event.sequence,
+      tool,
+      eventCreatedAt(event),
+    );
+    const result = mergeTimelineEntryState(
       nextState,
       runId,
       run,
       entry,
       event.sequence,
+      {
+        merge: (existing, incoming) => {
+          const existingTool = existing as TimelineToolEntry;
+          if (!canAdvanceTool(existingTool.status, tool.status)) return null;
+          return { ...existingTool, ...incoming };
+        },
+      },
     );
-    if (result.conflict) return result.state;
-    if (!tool.parentActivityId) {
+    if (result.outcome === 'created' && !tool.parentActivityId) {
       const currentRun = timelineRunFor(result.state, runId);
       return timelineWithRun(result.state, runId, {
         ...currentRun,
@@ -805,43 +893,30 @@ function applyTimelineRunEvent(
   if (payload.kind === 'child_timeline_item') {
     const child = parseChild(payload);
     if (!child) return nextState;
-    const entry = timelineChildEntry(runId, event.sequence, child);
-    const index = timelineEntryIndex(run, entry.activityId);
-    if (index >= 0) {
-      const existing = run.entries[index]!;
-      if (!sameTimelineEntryKind(existing, entry))
-        return addTimelineDiagnostic(
-          nextState,
-          runId,
-          entry.activityId,
-          event.sequence,
-        );
-      const existingChild = existing as
-        | Extract<AgentTextEntry, { origin: 'child_timeline_item' }>
-        | Extract<ThinkingEntry, { origin: 'child_timeline_item' }>
-        | TimelineToolEntry;
-      if (!canAdvanceTool(existingChild.status, child.status)) return nextState;
-      const merged = {
-        ...existingChild,
-        ...entry,
-        firstSequence: existingChild.firstSequence,
-        lastSequence: event.sequence,
-        ...('detailKind' in existingChild && !('detailKind' in entry)
-          ? { detailKind: existingChild.detailKind }
-          : {}),
-        ...('detailText' in existingChild && !('detailText' in entry)
-          ? { detailText: existingChild.detailText }
-          : {}),
-        ...('exitCode' in existingChild && !('exitCode' in entry)
-          ? { exitCode: existingChild.exitCode }
-          : {}),
-      } as TimelineEntry;
-      const entries = run.entries.slice();
-      entries[index] = merged;
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
-    return upsertTimelineEntry(nextState, runId, run, entry, event.sequence)
-      .state;
+    const entry = timelineChildEntry(
+      runId,
+      event.sequence,
+      child,
+      eventCreatedAt(event),
+    );
+    const result = mergeTimelineEntryState(
+      nextState,
+      runId,
+      run,
+      entry,
+      event.sequence,
+      {
+        merge: (existing, incoming) => {
+          const existingChild = existing as
+            | Extract<AgentTextEntry, { origin: 'child_timeline_item' }>
+            | Extract<ThinkingEntry, { origin: 'child_timeline_item' }>
+            | TimelineToolEntry;
+          if (!canAdvanceTool(existingChild.status, child.status)) return null;
+          return { ...existingChild, ...incoming };
+        },
+      },
+    );
+    return result.state;
   }
 
   if (payload.kind === 'reasoning_progress') {
@@ -850,65 +925,42 @@ function applyTimelineRunEvent(
       (payload.text !== undefined && typeof payload.text !== 'string')
     )
       return nextState;
-    const thinkingIndex = [...run.entries]
+    const latestThinking = [...run.entries]
       .map((entry, index) => ({ entry, index }))
       .reverse()
       .find(
         ({ entry }) =>
           entry.kind === 'thinking' && entry.origin === 'reasoning_progress',
       );
-    if (
-      thinkingIndex &&
-      thinkingIndex.entry.kind === 'thinking' &&
-      (thinkingIndex.entry.status === 'started' ||
-        thinkingIndex.entry.status === 'completed') &&
-      payload.status === 'completed'
-    ) {
-      const existing = thinkingIndex.entry as Extract<
-        ThinkingEntry,
-        { origin: 'reasoning_progress' }
-      >;
-      const entries = run.entries.slice();
-      entries[thinkingIndex.index] = {
-        ...existing,
-        status: 'completed',
-        lastSequence: event.sequence,
-        ...(typeof payload.text === 'string' ? { text: payload.text } : {}),
-      };
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
-    if (
-      thinkingIndex &&
-      thinkingIndex.entry.kind === 'thinking' &&
-      thinkingIndex.entry.status === 'started' &&
-      payload.status === 'started'
-    ) {
-      const existing = thinkingIndex.entry as Extract<
-        ThinkingEntry,
-        { origin: 'reasoning_progress' }
-      >;
-      const entries = run.entries.slice();
-      entries[thinkingIndex.index] = {
-        ...existing,
-        lastSequence: event.sequence,
-        ...(typeof payload.text === 'string' ? { text: payload.text } : {}),
-      };
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
+    const thinkingIndex =
+      latestThinking?.entry.kind === 'thinking' &&
+      latestThinking.entry.origin === 'reasoning_progress' &&
+      latestThinking.entry.status === 'started'
+        ? latestThinking.index
+        : -1;
     const entry: ThinkingEntry = {
       runId,
       activityId: timelineId('local', `thinking:${event.sequence}`),
       firstSequence: event.sequence,
       lastSequence: event.sequence,
+      firstCreatedAt: eventCreatedAt(event),
+      lastCreatedAt: eventCreatedAt(event),
       kind: 'thinking',
       origin: 'reasoning_progress',
       status: payload.status,
       ...(typeof payload.text === 'string' ? { text: payload.text } : {}),
     };
-    return timelineWithRun(nextState, runId, {
-      ...run,
-      entries: [...run.entries, entry],
-    });
+    return mergeTimelineEntryState(
+      nextState,
+      runId,
+      run,
+      entry,
+      event.sequence,
+      {
+        locate: () => thinkingIndex,
+        merge: (existing, incoming) => ({ ...existing, ...incoming }),
+      },
+    ).state;
   }
 
   if (payload.kind === 'permission') {
@@ -920,6 +972,8 @@ function applyTimelineRunEvent(
       activityId,
       firstSequence: event.sequence,
       lastSequence: event.sequence,
+      firstCreatedAt: eventCreatedAt(event),
+      lastCreatedAt: eventCreatedAt(event),
       kind: 'approval',
       sourceActivityId: permission.activityId,
       category: permission.category,
@@ -927,63 +981,55 @@ function applyTimelineRunEvent(
       ...(permission.decision ? { decision: permission.decision } : {}),
       summary: permission.summary,
     };
-    const index = timelineEntryIndex(run, activityId);
-    if (index >= 0) {
-      const existing = run.entries[index]!;
-      if (existing.kind !== 'approval')
-        return addTimelineDiagnostic(
-          nextState,
-          runId,
-          activityId,
-          event.sequence,
-        );
-      if (!canAdvancePermission(existing.status, permission.status))
-        return nextState;
-      const entries = run.entries.slice();
-      entries[index] = {
-        ...existing,
-        ...entry,
-        firstSequence: existing.firstSequence,
-        lastSequence: event.sequence,
-      };
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
-    return upsertTimelineEntry(nextState, runId, run, entry, event.sequence)
-      .state;
+    return mergeTimelineEntryState(
+      nextState,
+      runId,
+      run,
+      entry,
+      event.sequence,
+      {
+        merge: (existing, incoming) => {
+          const existingApproval = existing as ApprovalEntry;
+          if (!canAdvancePermission(existingApproval.status, permission.status))
+            return null;
+          return { ...existingApproval, ...incoming };
+        },
+      },
+    ).state;
   }
 
   if (payload.kind === 'usage') {
     const usage = parseUsage(payload);
     if (!usage) return nextState;
     const activityId = timelineId('local', 'usage');
-    const index = timelineEntryIndex(run, activityId);
-    if (index >= 0) {
-      const existing = run.entries[index]!;
-      if (existing.kind !== 'usage')
-        return addTimelineDiagnostic(
-          nextState,
-          runId,
-          activityId,
-          event.sequence,
-        );
-      const entries = run.entries.slice();
-      entries[index] = {
-        ...existing,
-        usage: { ...existing.usage, ...usage },
-        lastSequence: event.sequence,
-      };
-      return timelineWithRun(nextState, runId, { ...run, entries });
-    }
     const entry: UsageEntry = {
       runId,
       activityId,
       firstSequence: event.sequence,
       lastSequence: event.sequence,
+      firstCreatedAt: eventCreatedAt(event),
+      lastCreatedAt: eventCreatedAt(event),
       kind: 'usage',
       usage,
     };
-    return upsertTimelineEntry(nextState, runId, run, entry, event.sequence)
-      .state;
+    return mergeTimelineEntryState(
+      nextState,
+      runId,
+      run,
+      entry,
+      event.sequence,
+      {
+        merge: (existing, incoming) => {
+          const existingUsage = existing as UsageEntry;
+          const incomingUsage = incoming as UsageEntry;
+          return {
+            ...existingUsage,
+            ...incomingUsage,
+            usage: { ...existingUsage.usage, ...incomingUsage.usage },
+          };
+        },
+      },
+    ).state;
   }
   return nextState;
 }
@@ -1019,6 +1065,8 @@ export function applyTimelineEnvelope(
       activityId,
       firstSequence: null,
       lastSequence: null,
+      firstCreatedAt: null,
+      lastCreatedAt: null,
       kind: 'prompt',
       text: update.text,
       ...(typeof update.messageId === 'string' && update.messageId
@@ -1066,6 +1114,8 @@ export function applyTimelineEnvelope(
       activityId: timelineId('local', 'agent-text:canonical'),
       firstSequence: null,
       lastSequence: null,
+      firstCreatedAt: null,
+      lastCreatedAt: null,
       kind: 'agentText',
       origin: 'assistant_text',
       text: update.text,
@@ -1087,7 +1137,44 @@ export function applyTimelineEnvelopes(
   state: TimelineState,
   envelopes: readonly TimelineEnvelope[],
 ): TimelineState {
-  return envelopes.reduce(applyTimelineEnvelope, state);
+  let nextState = state;
+  let index = 0;
+  while (index < envelopes.length) {
+    const first = envelopes[index]!;
+    if (first.update.kind !== 'runEvent') {
+      nextState = applyTimelineEnvelope(nextState, first);
+      index += 1;
+      continue;
+    }
+    const block: TimelineEnvelope[] = [];
+    while (
+      index < envelopes.length &&
+      envelopes[index]!.update.kind === 'runEvent'
+    ) {
+      block.push(envelopes[index]!);
+      index += 1;
+    }
+    const runtimeByRun = new Map<string, TimelineEnvelope[]>();
+    for (const envelope of block) {
+      const runtime = runtimeByRun.get(envelope.runId);
+      if (runtime) runtime.push(envelope);
+      else runtimeByRun.set(envelope.runId, [envelope]);
+    }
+    for (const runtime of runtimeByRun.values()) {
+      runtime.sort(
+        (left, right) =>
+          timelineEnvelopeSequence(left) - timelineEnvelopeSequence(right),
+      );
+    }
+    const runtimeOffsets = new Map<string, number>();
+    for (const envelope of block) {
+      const runtime = runtimeByRun.get(envelope.runId)!;
+      const offset = runtimeOffsets.get(envelope.runId) ?? 0;
+      runtimeOffsets.set(envelope.runId, offset + 1);
+      nextState = applyTimelineEnvelope(nextState, runtime[offset]!);
+    }
+  }
+  return nextState;
 }
 
 /** Entries representing top-level activity in a run's ordered timeline. */

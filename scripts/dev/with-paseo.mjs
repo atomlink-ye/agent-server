@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,6 +65,9 @@ if (command.length === 0) {
     mkdir(runtimeRoot, { recursive: true }),
     mkdir(agentWorkspace, { recursive: true }),
   ]);
+  for (const name of paseoEnvironmentNames) {
+    if (!process.env[name]?.trim()) delete process.env[name];
+  }
   const paseoPort = process.env.PASEO_PORT
     ? Number.parseInt(process.env.PASEO_PORT, 10)
     : await getAvailablePort();
@@ -77,6 +80,22 @@ if (command.length === 0) {
       if (!process.env[name]?.trim()) process.env[name] = value;
     }
   }
+  const codexHome = join(runtimeRoot, 'home', '.codex');
+  await mkdir(codexHome, { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(codexHome, 'config.toml'),
+    [
+      'model_provider = "opencode-go"',
+      '',
+      '[model_providers.opencode-go]',
+      'name = "OpenCode Go"',
+      'base_url = "https://opencode.ai/zen/go/v1"',
+      'env_key = "OPENCODE_GO_API_KEY"',
+      'wire_api = "responses"',
+      '',
+    ].join('\n'),
+    { mode: 0o600 },
+  );
   const paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot,

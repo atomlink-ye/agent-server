@@ -93,8 +93,8 @@ if ((postgres)); then
 fi
 if ((${#pass_env[@]})); then
   for name in "${pass_env[@]}"; do
-    if [[ -n ${!name+x} ]]; then
-      env_args+=(-e "$name")
+    if [[ -n ${!name:-} ]]; then
+      env_args+=(-e "$name=${!name}")
     fi
   done
 fi

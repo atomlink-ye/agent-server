@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +18,7 @@ const repositoryRoot = resolve(
 const provider = 'claude';
 const gatewayProvider = 'opencode-go';
 const model = 'deepseek-v4-flash';
-const marker = 'CLAUDE_OPENCODE_GO_SMOKE_OK';
+const nonce = randomUUID();
 const authSentinel = 'Not logged in · Please run /login';
 const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
 const runtimeRoot = join(
@@ -27,14 +27,32 @@ const runtimeRoot = join(
   `claude-provider-smoke-${timestamp}-${randomUUID()}`,
 );
 const projectCwd = join(runtimeRoot, 'project');
-const artifactPath = join(runtimeRoot, 'model-output.txt');
-const prompt = `Reply with exactly this marker and no other text: ${marker}. Do not use tools.`;
-const systemPrompt = 'You are a smoke-test agent. Do not use tools.';
-const environmentVariableNames = [
+const artifactPath = join(projectCwd, 'model-artifact.txt');
+const sidecarPath = join(projectCwd, 'model-artifact.sha256');
+const prompt = [
+  'Use your shell tool in the current working directory. Do not skip this.',
+  `Run: printf '%s' '${nonce}' > model-artifact.txt`,
+  "Then run: hash=$(sha256sum model-artifact.txt | cut -d' ' -f1); printf '%s' \"$hash\" > model-artifact.sha256",
+  `After both files are created, reply with exactly ${nonce} and no other text.`,
+].join('\n');
+const systemPrompt =
+  'You are a smoke-test agent. You may use the shell tool to complete the requested file task.';
+const anthropicEnvironmentVariableNames = [
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
 ];
+const omitAuth = process.env.CLAUDE_PROVIDER_SMOKE_OMIT_AUTH === '1';
+const rawApiKey = process.env.OPENCODE_GO_API_KEY;
+const apiKey = rawApiKey?.trim() || null;
+const redactionValues = [rawApiKey, apiKey, nonce, prompt, systemPrompt].filter(
+  (value, index, values) => value && values.indexOf(value) === index,
+);
 
 let paseo;
 let client;
@@ -44,12 +62,17 @@ let timeline;
 let stage = 'setup';
 
 try {
-  const apiKey = process.env.OPENCODE_GO_API_KEY?.trim();
-  if (!apiKey) throw new Error('missing_api_key');
+  if (!omitAuth && !apiKey) throw new Error('missing_api_key');
 
-  process.env.ANTHROPIC_BASE_URL = 'https://opencode.ai/zen/go';
-  process.env.ANTHROPIC_API_KEY = apiKey;
-  process.env.ANTHROPIC_MODEL = model;
+  if (omitAuth) {
+    for (const name of anthropicEnvironmentVariableNames)
+      delete process.env[name];
+  } else {
+    process.env.ANTHROPIC_BASE_URL = 'https://opencode.ai/zen/go';
+    process.env.ANTHROPIC_API_KEY = apiKey;
+    for (const name of anthropicEnvironmentVariableNames.slice(2))
+      process.env[name] = model;
+  }
 
   stage = 'workspace';
   await mkdir(projectCwd, { recursive: true });
@@ -59,7 +82,7 @@ try {
     repositoryRoot,
     runtimeRoot,
     port: await getAvailablePort(),
-    environmentVariableNames,
+    environmentVariableNames: omitAuth ? [] : anthropicEnvironmentVariableNames,
   });
 
   stage = 'connect';
@@ -67,7 +90,7 @@ try {
     url: paseo.wsUrl,
     clientId: `claude-provider-smoke-${process.pid}`,
     clientType: 'cli',
-    appVersion: 'agent-server-claude-provider-smoke/1',
+    appVersion: 'agent-server-claude-provider-smoke/2',
     connectTimeoutMs: 10_000,
     reconnect: { enabled: false },
   });
@@ -106,54 +129,130 @@ try {
 
   stage = 'verify';
   const timelineEntries = timeline.entries ?? [];
-  const timelineMarker = timelineEntries.some(
+  const usage = safeUsage(finished.final?.lastUsage);
+  const usageAccepted =
+    usage !== null && usage.inputTokens > 0 && usage.outputTokens > 0;
+  const finalMessageAccepted =
+    finished.status === 'idle' &&
+    finished.lastMessage?.trim() === nonce &&
+    finished.lastMessage?.trim() !== authSentinel;
+  const timelineAccepted = timelineEntries.some(
     (entry) =>
       entry.item.type === 'assistant_message' &&
-      entry.item.text?.trim() === marker,
+      typeof entry.item.text === 'string' &&
+      entry.item.text.trim() === nonce,
   );
-  if (
-    finished.status !== 'idle' ||
-    finished.lastMessage?.trim() !== marker ||
-    finished.lastMessage?.trim() === authSentinel ||
-    !timelineMarker
-  ) {
+  const artifacts = await readAgentArtifacts();
+  if (!usageAccepted || !finalMessageAccepted || !timelineAccepted) {
     throw new Error('acceptance_failed');
   }
-
-  stage = 'artifact';
-  await writeFile(artifactPath, marker, { encoding: 'utf8', mode: 0o600 });
-  const artifactStat = await stat(artifactPath);
-  const output = await readFile(artifactPath, 'utf8');
-  if (artifactStat.size <= 0 || output.length === 0 || output !== marker) {
-    throw new Error('artifact_invalid');
-  }
-  const outputBytes = Buffer.byteLength(output, 'utf8');
 
   process.stdout.write(
     `${JSON.stringify({
       outcome: 'PASS',
+      nonce_sha256: artifacts.nonceSha256,
       provider,
       gateway_provider: gatewayProvider,
       model,
       agent_id: agentId,
       status: finished.status,
-      output_sha256: createHash('sha256').update(output).digest('hex'),
-      output_bytes: outputBytes,
-      artifact_path: artifactPath,
-      artifact_bytes: artifactStat.size,
+      usage,
+      model_artifact_path: artifactPath,
+      model_artifact_bytes: artifacts.modelBytes,
+      model_artifact_sha256: artifacts.nonceSha256,
+      sidecar_artifact_path: sidecarPath,
+      sidecar_artifact_bytes: artifacts.sidecarBytes,
+      sidecar_artifact_sha256: artifacts.sidecarArtifactSha256,
+      sidecar_hash: artifacts.sidecarHash,
       timeline_entry_count: timelineEntries.length,
       daemon_log_path: paseo.logPath,
     })}\n`,
   );
-} catch {
+} catch (error) {
   process.stdout.write(
     `${JSON.stringify({
       outcome: 'FAIL',
+      stage,
       error_code: `claude_provider_smoke_${stage}`,
+      message: sanitizeText(error instanceof Error ? error.message : error),
+      status: finished?.status ?? null,
+      usage: safeUsage(finished?.final?.lastUsage),
+      last_message: limitText(sanitizeText(finished?.lastMessage), 160),
+      daemon_log_path: paseo?.logPath ?? null,
+      daemon_log_tail: await readDaemonLogTail(paseo?.logPath),
     })}\n`,
   );
   process.exitCode = 1;
 } finally {
   if (client) await client.close().catch(() => undefined);
   await stopProcessTree(paseo?.child).catch(() => undefined);
+}
+
+async function readAgentArtifacts() {
+  const modelStat = await stat(artifactPath);
+  const sidecarStat = await stat(sidecarPath);
+  if (!modelStat.isFile() || !sidecarStat.isFile())
+    throw new Error('artifact_missing');
+  const [modelOutput, sidecarHash] = await Promise.all([
+    readFile(artifactPath, 'utf8'),
+    readFile(sidecarPath, 'utf8'),
+  ]);
+  const nonceSha256 = createHash('sha256').update(nonce).digest('hex');
+  if (modelOutput !== nonce) throw new Error('artifact_content_invalid');
+  if (!/^[a-f0-9]{64}$/.test(sidecarHash) || sidecarHash !== nonceSha256) {
+    throw new Error('artifact_hash_invalid');
+  }
+  if (modelStat.size <= 0 || sidecarStat.size !== 64)
+    throw new Error('artifact_size_invalid');
+  return {
+    modelBytes: modelStat.size,
+    nonceSha256,
+    sidecarBytes: sidecarStat.size,
+    sidecarArtifactSha256: createHash('sha256')
+      .update(sidecarHash)
+      .digest('hex'),
+    sidecarHash,
+  };
+}
+
+function safeUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const inputTokens =
+    typeof usage.inputTokens === 'number' && Number.isFinite(usage.inputTokens)
+      ? usage.inputTokens
+      : null;
+  const outputTokens =
+    typeof usage.outputTokens === 'number' &&
+    Number.isFinite(usage.outputTokens)
+      ? usage.outputTokens
+      : null;
+  if (inputTokens === null && outputTokens === null) return null;
+  return { inputTokens, outputTokens };
+}
+
+function sanitizeText(value) {
+  let text = value === undefined || value === null ? '' : String(value);
+  for (const valueToRedact of redactionValues) {
+    text = text.split(valueToRedact).join('[REDACTED]');
+  }
+  text = text.replace(/(\bbearer\s+)[^\s,;]+/gi, '$1[REDACTED]');
+  text = text.replace(
+    /(\b(?:x-api-key|api[-_]?key|authorization)\s*[:=]\s*)[^\s,;]+/gi,
+    '$1[REDACTED]',
+  );
+  return text;
+}
+
+function limitText(value, maxLength) {
+  return value.slice(0, maxLength);
+}
+
+async function readDaemonLogTail(logPath) {
+  if (!logPath) return null;
+  try {
+    const contents = sanitizeText(await readFile(logPath, 'utf8'));
+    return contents.split(/\r?\n/).slice(-40).join('\n');
+  } catch {
+    return null;
+  }
 }

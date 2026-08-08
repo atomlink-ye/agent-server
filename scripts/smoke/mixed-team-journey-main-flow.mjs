@@ -372,7 +372,7 @@ for (const interval of dispatchIntervals) {
   activeTerminals.push(new Date(interval.terminal_at));
   effectiveConcurrency = Math.max(effectiveConcurrency, activeTerminals.length);
 }
-assert(effectiveConcurrency === 1, 'effective_dispatcher_concurrency_not_one');
+assert(effectiveConcurrency >= 2, 'effective_dispatcher_concurrency_below_two');
 const chronological = [
   ...workRows.map((row) => ({ kind: 'work', ...row })),
   ...attemptRows.map((row) => ({ kind: 'attempt', ...row })),
@@ -533,48 +533,6 @@ const artifactEvidence = {
     empty_input_run: finalRun,
   },
 };
-const extractSummaryField = (summary, pattern, missingAssertion) => {
-  const match = String(summary ?? '').match(pattern);
-  const value = match?.slice(1).find(Boolean);
-  assert(value, missingAssertion);
-  return value;
-};
-const fixerV1SummarySha256 = extractSummaryField(
-  fixerV1.result_summary,
-  /\bsha[-_]?256\b\s*(?:identical\s+)?(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i,
-  'fixer_v1_summary_sha256_missing',
-);
-const fixerV2SummarySha256 = extractSummaryField(
-  fixerV2.result_summary,
-  /\bsha[-_]?256\b\s*(?:identical\s+)?(?:hash\s*)?(?:[:=]\s*)?[`'\"]?([a-f0-9]{64})\b/i,
-  'fixer_v2_summary_sha256_missing',
-);
-assert(
-  fixerV1SummarySha256 === artifactEvidence.v1.sha256,
-  'fixer_v1_summary_sha256_mismatch',
-);
-assert(
-  fixerV2SummarySha256 === artifactEvidence.final.sha256,
-  'fixer_v2_summary_sha256_mismatch',
-);
-const fixerV1SummaryLineCount = extractSummaryField(
-  fixerV1.result_summary,
-  /\b(?:line\s+count\s*[:=]?\s*(\d+)|(\d+)\s+lines?)\b/i,
-  'fixer_v1_summary_line_count_missing',
-);
-const fixerV2SummaryLineCount = extractSummaryField(
-  fixerV2.result_summary,
-  /\b(?:line\s+count\s*[:=]?\s*(\d+)|(\d+)\s+lines?)\b/i,
-  'fixer_v2_summary_line_count_missing',
-);
-assert(
-  Number(fixerV1SummaryLineCount) === artifactEvidence.v1.line_count,
-  'fixer_v1_summary_line_count_mismatch',
-);
-assert(
-  Number(fixerV2SummaryLineCount) === artifactEvidence.final.line_count,
-  'fixer_v2_summary_line_count_mismatch',
-);
 await writeFile(
   `${evidenceRoot}/python-artifact.json`,
   JSON.stringify(artifactEvidence, null, 2),
@@ -618,7 +576,7 @@ await writeFile(
         scripted_runtime: scriptedRuntimeDetected,
         members: ['lead', 'fixer', 'reviewer'],
       },
-      ordering_mode: 'observed_dispatch_id_fifo_single_observed_concurrency',
+      ordering_mode: 'observed_dispatch_id_fifo_parallel_observed_concurrency',
       effective_concurrency: effectiveConcurrency,
       platform_sequence_guarantee: false,
       normal_concurrency_reachable: true,

@@ -24,7 +24,12 @@ function client(onFinish?: () => Promise<void>): PaseoClientPort {
     sendAgentMessage: async () => undefined,
     waitForFinish: async () => {
       await onFinish?.();
-      return { status: 'idle', error: null, lastMessage: 'done' };
+      return {
+        status: 'idle',
+        error: null,
+        lastMessage: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
     },
     close: async () => undefined,
   };
@@ -188,6 +193,7 @@ describe('Paseo runtime nested provider telemetry', () => {
             status: 'idle';
             error: null;
             lastMessage: string;
+            usage: { inputTokens: number; outputTokens: number };
           }) => void)
         | undefined;
       let listCalls = 0;
@@ -196,6 +202,7 @@ describe('Paseo runtime nested provider telemetry', () => {
         status: 'idle';
         error: null;
         lastMessage: string;
+        usage: { inputTokens: number; outputTokens: number };
       }>((resolve) => {
         resolveFinish = resolve;
       });
@@ -335,7 +342,12 @@ describe('Paseo runtime nested provider telemetry', () => {
       expect(listCalls).toBe(1);
       expect(fetchCalls).toBe(0);
 
-      resolveFinish?.({ status: 'idle', error: null, lastMessage: 'done' });
+      resolveFinish?.({
+        status: 'idle',
+        error: null,
+        lastMessage: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
       await execution;
       expect(events).toEqual(
         expect.arrayContaining([

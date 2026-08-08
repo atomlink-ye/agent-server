@@ -67,7 +67,7 @@ test-web:
 
 mixed-team-journey:
 	@test -n "$${OPENCODE_GO_API_KEY:-}" || { echo 'mixed-team-journey requires OPENCODE_GO_API_KEY' >&2; exit 1; }
-	AGENT_SERVER_DISPATCHER_CONCURRENCY=1 PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose up --build -d postgres agent-server
+	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose up --build -d postgres agent-server
 	@for attempt in $$(seq 1 120); do \
 		if curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; then break; fi; \
 		if [ "$$attempt" -eq 120 ]; then echo 'agent-server did not become ready' >&2; exit 1; fi; \
@@ -75,17 +75,17 @@ mixed-team-journey:
 	done
 	@dispatch_log="$$(docker compose logs --no-color --no-log-prefix agent-server | grep '"event":"run.dispatch.started"' | tail -n 1)"; \
 		if [ -z "$$dispatch_log" ]; then echo 'agent-server dispatcher startup log not found' >&2; exit 1; fi; \
-		printf '%s\n' "$$dispatch_log" | grep -Eq '"event":"run.dispatch.started".*"concurrency":1([,}])' || { \
-			echo 'agent-server dispatcher did not start with concurrency=1' >&2; \
+		printf '%s\n' "$$dispatch_log" | grep -Eq '"event":"run.dispatch.started".*"concurrency":3([,}])' || { \
+			echo 'agent-server dispatcher did not start with concurrency=3' >&2; \
 			exit 1; \
 		}
-	AGENT_SERVER_DISPATCHER_CONCURRENCY=1 PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose run --rm --no-deps \
+	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose run --rm --no-deps \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
 		-e AGENT_SERVER_WORKSPACE_ID="$${AGENT_SERVER_WORKSPACE_ID:-workspace_main}" \
 		-e DATABASE_URL=postgresql://agent:agent@postgres:5432/agent_server \
 		-e POSTGRES_URL=postgresql://agent:agent@postgres:5432/agent_server \
-		-e AGENT_SERVER_DISPATCHER_CONCURRENCY=1 \
+		-e AGENT_SERVER_DISPATCHER_CONCURRENCY=3 \
 		-e PASEO_MODEL=opencode-go/deepseek-v4-flash \
 		-e MIXED_TEAM_EXISTING_ROOT_TASK_ID="$${MIXED_TEAM_EXISTING_ROOT_TASK_ID:-}" \
 		-v "$$(pwd)/.local:/workspace/.local" \

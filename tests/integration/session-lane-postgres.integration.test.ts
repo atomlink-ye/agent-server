@@ -180,6 +180,12 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
         ),
       );
       await execute.execute(claim);
+      await expect(
+        pool.query<{ status: string }>(
+          'SELECT status FROM runs WHERE id = $1',
+          [first.runId],
+        ),
+      ).resolves.toMatchObject({ rows: [{ status: 'succeeded' }] });
       const proposals = await new PostgresWorkspaceMemoryRepository(
         pool,
       ).listProposalsByOwnerScope({ ...owner, workspaceId: workspace.id });

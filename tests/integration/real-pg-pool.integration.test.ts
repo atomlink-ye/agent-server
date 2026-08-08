@@ -984,6 +984,38 @@ async function cleanTestRows(
   );
   await pool.query(
     `
+      DELETE FROM channel_delivery_attempts
+      WHERE outbox_id IN (
+        SELECT id
+        FROM channel_outbox
+        WHERE connection_key LIKE 'task6-real-%'
+           OR connection_key LIKE 'task6-cross-scope-%'
+      )
+    `,
+  );
+  await pool.query(
+    `
+      DELETE FROM channel_outbox
+      WHERE connection_key LIKE 'task6-real-%'
+         OR connection_key LIKE 'task6-cross-scope-%'
+    `,
+  );
+  await pool.query(
+    `
+      DELETE FROM channel_conversation_bindings
+      WHERE connection_key LIKE 'task6-real-%'
+         OR connection_key LIKE 'task6-cross-scope-%'
+    `,
+  );
+  await pool.query(
+    `
+      DELETE FROM channel_ingress_events
+      WHERE connection_key LIKE 'task6-real-%'
+         OR connection_key LIKE 'task6-cross-scope-%'
+    `,
+  );
+  await pool.query(
+    `
       DELETE FROM run_dispatches
       WHERE run_id IN (
         SELECT runs.id FROM runs INNER JOIN tasks ON tasks.id = runs.task_id

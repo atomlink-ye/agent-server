@@ -22,6 +22,8 @@ export interface TeamRun {
   readonly leadTurnCount: number;
   readonly stopReason: string | null;
   readonly completionRequestedByRunId: string | null;
+  /** Snapshot of whether completion review is required for this Team run. */
+  readonly completionApprovalRequired: boolean;
   readonly phase: TeamRunPhase;
   readonly finalText: string | null;
   readonly createdAt: string;
@@ -40,6 +42,8 @@ export interface CreateTeamRunOptions {
   readonly environmentVersionId: string;
   /** Set when activation admits the initial Agentic lead task in this path. */
   readonly initialLeadTurn?: boolean;
+  /** Snapshot of whether completion review is required for this Team run. */
+  readonly completionApprovalRequired?: boolean;
   readonly now?: () => Date;
 }
 
@@ -62,6 +66,7 @@ export function createTeamRun(options: CreateTeamRunOptions): TeamRun {
     leadTurnCount: initialAgenticLead ? 1 : 0,
     stopReason: null,
     completionRequestedByRunId: null,
+    completionApprovalRequired: options.completionApprovalRequired ?? false,
     phase: 'lead_kickoff' as const,
     finalText: null,
     createdAt: timestamp,

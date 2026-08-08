@@ -8,6 +8,7 @@ export {
   canonicalTeamToolRefsForRole,
 } from '../../domain/teams/canonical-team-role-tools.js';
 import type { TeamToolContext } from './team-tool-context.js';
+import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
@@ -37,16 +38,51 @@ export interface AgenticLeadCommandPolicy {
   };
 }
 
+export function completionDecisionMatchesCurrentRequest(
+  team: TeamRun,
+  decision: TeamCompletionDecision | null | undefined,
+): boolean {
+  return Boolean(
+    decision &&
+    team.completionRequestedByRunId !== null &&
+    decision.teamRunId === team.id &&
+    decision.tenantId === team.tenantId &&
+    decision.workspaceId === team.workspaceId &&
+    decision.principalType === team.principalType &&
+    decision.principalId === team.principalId &&
+    decision.completionRequestedByRunId === team.completionRequestedByRunId,
+  );
+}
+
+export function isTeamCompletionApprovalPending(
+  team: TeamRun,
+  decision: TeamCompletionDecision | null | undefined,
+): boolean {
+  return Boolean(
+    team.completionApprovalRequired &&
+    team.completionRequestedByRunId !== null &&
+    !completionDecisionMatchesCurrentRequest(team, decision),
+  );
+}
+
 export function deriveAgenticLeadCommandPolicy(
   team: TeamRun,
   workItems: readonly TeamWorkItem[],
   attempts: readonly TeamWorkItemAttempt[],
+  latestDecision?: TeamCompletionDecision | null,
 ): AgenticLeadCommandPolicy {
+  const currentRejection =
+    latestDecision?.decision === 'reject' &&
+    completionDecisionMatchesCurrentRequest(team, latestDecision) &&
+    latestDecision.leadTurnCountAtDecision <= team.leadTurnCount;
+  const turnsSinceDecision = currentRejection
+    ? Math.max(0, team.leadTurnCount - latestDecision.leadTurnCountAtDecision)
+    : team.leadTurnCount;
   const limits = {
     maxLeadTurns: AGENTIC_TEAM_LIMITS.maxLeadTurns,
     remainingLeadTurns: Math.max(
       0,
-      AGENTIC_TEAM_LIMITS.maxLeadTurns - team.leadTurnCount,
+      AGENTIC_TEAM_LIMITS.maxLeadTurns - turnsSinceDecision,
     ),
     maxWorkItems: AGENTIC_TEAM_LIMITS.maxWorkItems,
     remainingWorkItems: Math.max(
@@ -65,23 +101,46 @@ export function deriveAgenticLeadCommandPolicy(
   if (
     team.status !== 'active' ||
     team.controlState === 'terminal' ||
-    team.completionRequestedByRunId !== null
+    (team.completionRequestedByRunId !== null && !currentRejection)
   )
     return none();
   if (limits.remainingLeadTurns === 0 && team.controlState !== 'lead_running')
     return none();
   if (!workItems.length)
     return { ...none(), allowedCommands: ['team_work_create'] };
+  const eligibleRejectedTargets = new Set<string>();
+  if (currentRejection) {
+    const targetAttempts = new Map(
+      latestDecision.targets.map((target) => [target.workItemId, target]),
+    );
+    for (const item of workItems) {
+      const target = targetAttempts.get(item.id);
+      if (!target || item.status !== 'accepted') continue;
+      const latest = attempts
+        .filter((attempt) => attempt.workItemId === item.id)
+        .sort((a, b) => b.attemptNo - a.attemptNo)[0];
+      if (
+        latest?.status === 'completed' &&
+        latest.resultSummary &&
+        latest.attemptNo === target.attemptNoAtDecision
+      )
+        eligibleRejectedTargets.add(item.id);
+    }
+  }
   const acceptedOrCancelled = workItems.every((item) =>
     ['accepted', 'cancelled'].includes(item.status),
   );
-  if (acceptedOrCancelled)
+  if (acceptedOrCancelled && eligibleRejectedTargets.size === 0)
     return { ...none(), allowedCommands: ['team_finish'] };
   const accept: string[] = [],
     rework: string[] = [],
     cancel: string[] = [];
   for (const item of workItems) {
-    if (item.status === 'accepted' || item.status === 'cancelled') continue;
+    const rejectedTarget = eligibleRejectedTargets.has(item.id);
+    if (item.status === 'accepted' || item.status === 'cancelled') {
+      if (rejectedTarget) rework.push(item.id);
+      continue;
+    }
     const latest = attempts
       .filter((a) => a.workItemId === item.id)
       .sort((a, b) => b.attemptNo - a.attemptNo)[0];
@@ -92,7 +151,10 @@ export function deriveAgenticLeadCommandPolicy(
     }
     if (latest.status !== 'completed' || !latest.resultSummary) continue;
     accept.push(item.id);
-    if (latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem)
+    if (
+      latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem ||
+      rejectedTarget
+    )
       rework.push(item.id);
   }
   const allowed: AgenticLeadCommand[] = [];

@@ -239,6 +239,7 @@ describe('managed agent registry migration', () => {
       '0025_agent_team_work_dependencies',
       '0026_agent-teams-v2-cutover',
       '0027_agent-team-roster-limits',
+      '0028_team-completion-approval',
     ]);
   });
 

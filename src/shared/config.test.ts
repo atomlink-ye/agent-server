@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       port: 3_000,
       logLevel: 'info',
       serviceName: 'agent-server',
+      teamCompletionApprovalRequired: false,
       serviceAccounts: [],
       larkCanary: { enabled: false },
       skillRegistryRoot: '/repo/.local/skill-registry',
@@ -37,6 +38,14 @@ describe('loadConfig', () => {
       loadConfig({ AGENT_SERVER_DISPATCHER_CONCURRENCY: '7' }).dispatcher
         ?.concurrency,
     ).toBe(7);
+  });
+
+  it('parses explicit Team completion approval enablement', () => {
+    expect(
+      loadConfig({
+        AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED: 'true',
+      }).teamCompletionApprovalRequired,
+    ).toBe(true);
   });
 
   it('fails before startup when configuration is invalid', () => {

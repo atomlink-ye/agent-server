@@ -1,6 +1,7 @@
 import { createRun, type Run } from '../../domain/runs/run.js';
 import { createChildTask, type Task } from '../../domain/tasks/task.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
+import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
 import {
   createTeamMemberRun,
   activateMemberRun,
@@ -23,6 +24,7 @@ import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import {
   AGENTIC_TEAM_LIMITS,
   deriveAgenticLeadCommandPolicy,
+  isTeamCompletionApprovalPending,
 } from './team-policy-evaluator.js';
 
 export class TeamDriver {
@@ -40,6 +42,9 @@ export class TeamDriver {
       'reconcileForRootTask'
     >,
     private readonly now: () => Date = () => new Date(),
+    private readonly options: {
+      readonly completionApprovalRequired?: boolean;
+    } = {},
   ) {}
 
   public async activateTeamRun(
@@ -56,6 +61,8 @@ export class TeamDriver {
       teamVersionId: version.id,
       environmentVersionId: spec.environmentVersionId,
       initialLeadTurn: true,
+      completionApprovalRequired:
+        this.options.completionApprovalRequired ?? false,
       now: this.now,
     });
     const lead = activateMemberRun(
@@ -104,6 +111,117 @@ export class TeamDriver {
     return waiting;
   }
 
+  public async decideCompletion(
+    input:
+      | {
+          readonly teamRunId: string;
+          readonly expectedRevision: number;
+          readonly owner: OwnerScope;
+          readonly decidedBy: string;
+          readonly decision: 'approve';
+        }
+      | {
+          readonly teamRunId: string;
+          readonly expectedRevision: number;
+          readonly owner: OwnerScope;
+          readonly decidedBy: string;
+          readonly decision: 'reject';
+          readonly feedback: string;
+          readonly workItemIds: readonly string[];
+        },
+  ): Promise<{ decision: TeamCompletionDecision; team: TeamRun }> {
+    const team = await this.executions.findTeamRunById(
+      input.teamRunId,
+      input.owner,
+    );
+    if (!team || !team.completionRequestedByRunId)
+      throw new TeamExecutionError('invalid_transition');
+    const requestRun = await this.runs.findByIdForOwner(
+      team.completionRequestedByRunId,
+      input.owner,
+    );
+    const finalText = requestRun?.result?.text?.trim();
+    if (!requestRun || requestRun.status !== 'succeeded' || !finalText)
+      throw new TeamExecutionError('invalid_transition');
+    const decidedAt = this.now().toISOString();
+    if (input.decision === 'approve') {
+      const teamAfter = await this.executions.completeTeamRunAtomically({
+        teamRunId: team.id,
+        rootRunId: team.rootRunId,
+        rootTaskId: team.rootTaskId,
+        finalText,
+        owner: input.owner,
+        updatedAt: decidedAt,
+        leadRunId: team.completionRequestedByRunId,
+        approvalDecision: {
+          expectedRevision: input.expectedRevision,
+          decidedBy: input.decidedBy,
+          decidedAt,
+        },
+      });
+      const decision = await this.executions.findCompletionDecisionForRequest(
+        team.id,
+        team.completionRequestedByRunId,
+        input.owner,
+      );
+      if (!decision) throw new TeamExecutionError('stale_state');
+      return { team: teamAfter, decision };
+    }
+
+    return this.admission.withTransaction(async (tx) => {
+      if (!tx.teamExecutions)
+        throw new Error(
+          'Transaction-scoped Team execution persistence is required.',
+        );
+      const rejection =
+        await tx.teamExecutions.recordCompletionRejectionInTransaction({
+          teamRunId: team.id,
+          completionRequestedByRunId: team.completionRequestedByRunId!,
+          feedback: input.feedback,
+          workItemIds: input.workItemIds,
+          decidedBy: input.decidedBy,
+          decidedAt,
+          expectedRevision: input.expectedRevision,
+          owner: input.owner,
+        });
+      if (rejection.recorded === false)
+        return { decision: rejection.decision, team: rejection.team };
+      const next = await tx.teamExecutions.advanceAgenticLead({
+        teamRunId: team.id,
+        expectedRevision: rejection.team.revision,
+        owner: input.owner,
+      });
+      const lead = (
+        await tx.teamExecutions.findMembersByTeamRunId(team.id, input.owner)
+      ).find((member) => member.role === 'lead');
+      if (!lead) throw new Error('Agentic Team lead member is missing.');
+      const rootTask = (
+        await tx.tasks.findByIdForOwner(team.rootTaskId, input.owner)
+      )?.task;
+      if (!rootTask) throw new Error('Team root task is missing.');
+      const feedback = safeText(rejection.decision.feedback);
+      const prompt = `A reviewer rejected the completion request. Feedback: ${feedback}\n\nReview the safe board and address the requested changes before making another completion request.`;
+      const task = this.child(
+        rootTask,
+        {
+          id: team.rootRunId,
+          prompt: requestRun.prompt,
+        } as Run,
+        lead,
+        `lead:${team.id}:${lead.id}:turn:${next.leadTurnCount}`,
+        prompt,
+        lead.agentVersionId,
+        'lead_turn',
+        next.leadTurnCount,
+      );
+      const run = createRun(prompt, { now: this.now });
+      await tx.tasks.save(task);
+      await tx.runs.save(run, { taskId: task.id, attempt: 1 });
+      await tx.enqueueRunDispatch(run.id, run.createdAt);
+      return { decision: rejection.decision, team: next };
+    });
+  }
+
   public async handleTerminalRun(input: {
     team: TeamRun;
     task: Task;
@@ -134,6 +252,8 @@ export class TeamDriver {
           owner,
         );
         if (!fresh || fresh.status !== 'active') return;
+        const decision = await this.currentCompletionDecision(fresh, owner);
+        if (isTeamCompletionApprovalPending(fresh, decision)) return;
         const attempts = await this.executions.findAttemptsByTeamRunId(
           fresh.id,
           owner,
@@ -147,7 +267,7 @@ export class TeamDriver {
           fresh,
           input.task,
           owner,
-          'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.',
+          this.reviewPrompt(decision),
         );
       }
       return;
@@ -191,6 +311,8 @@ export class TeamDriver {
       fresh.id,
       owner,
     );
+    const currentDecision = await this.currentCompletionDecision(fresh, owner);
+    if (isTeamCompletionApprovalPending(fresh, currentDecision)) return;
     if (input.task.teamTaskKind === 'lead_turn') {
       if (
         input.task.teamSequence === null ||
@@ -210,6 +332,7 @@ export class TeamDriver {
           fresh,
           workItems,
           currentAttempts,
+          currentDecision,
         );
         if (
           policy.allowedCommands.length > 0 &&
@@ -244,6 +367,7 @@ export class TeamDriver {
         // A completion request may arrive in the same Lead turn as the final
         // assignments. Materialize those queued attempts before deciding that
         // the Team is complete; otherwise the request can strand work forever.
+        if (isTeamCompletionApprovalPending(fresh, currentDecision)) return;
         await this.materializeQueuedAttempts(fresh, owner);
         const after = await this.executions.findAttemptsByTeamRunId(
           fresh.id,
@@ -251,8 +375,19 @@ export class TeamDriver {
         );
         if (after.some((a) => !['completed', 'failed'].includes(a.status)))
           return;
+        if (currentDecision?.decision === 'reject') {
+          if (!(await this.readyForLeadReview(fresh, after, owner))) return;
+          await this.scheduleLead(
+            fresh,
+            input.task,
+            owner,
+            this.reviewPrompt(currentDecision),
+          );
+          return;
+        }
         const finalText = input.run.result?.text?.trim();
         if (!finalText) return;
+        if (fresh.completionApprovalRequired) return;
         await this.executions.completeTeamRunAtomically({
           teamRunId: fresh.id,
           rootRunId: fresh.rootRunId,
@@ -274,7 +409,7 @@ export class TeamDriver {
         fresh,
         input.task,
         owner,
-        'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.',
+        this.reviewPrompt(currentDecision),
       );
     } else if (await this.readyForLeadReview(fresh, currentAttempts, owner)) {
       const lead = (
@@ -285,7 +420,7 @@ export class TeamDriver {
         fresh,
         input.task,
         owner,
-        'Review the latest teammate evidence and apply the quality rubric.',
+        this.reviewPrompt(currentDecision),
       );
     }
   }
@@ -404,27 +539,31 @@ export class TeamDriver {
     throw new Error('Durable Team wake reconciler is required.');
   }
 
+  private async currentCompletionDecision(
+    team: TeamRun,
+    owner: OwnerScope,
+  ): Promise<TeamCompletionDecision | null> {
+    if (!team.completionRequestedByRunId) return null;
+    return this.executions.findCompletionDecisionForRequest(
+      team.id,
+      team.completionRequestedByRunId,
+      owner,
+    );
+  }
+
+  private reviewPrompt(decision: TeamCompletionDecision | null): string {
+    if (decision?.decision === 'reject') {
+      return `A reviewer rejected the completion request. Feedback: ${safeText(decision.feedback)}\n\nReview the safe board and address the requested changes before making another completion request.`;
+    }
+    return 'Review the safe board and latest member summaries. Request changes where acceptance criteria are not met, accept completed Work that meets the quality rubric, create any remaining useful Work, and finish only when all Work is accepted.';
+  }
+
   private async scheduleLead(
     team: TeamRun,
     parent: Task,
     owner: OwnerScope,
     prompt: string,
   ) {
-    if (team.leadTurnCount >= AGENTIC_TEAM_LIMITS.maxLeadTurns) {
-      await this.executions.failTeamRunAtomically({
-        teamRunId: team.id,
-        rootRunId: team.rootRunId,
-        rootTaskId: team.rootTaskId,
-        owner,
-        updatedAt: this.now().toISOString(),
-        stopReason: 'lead_turn_limit',
-        failure: {
-          code: 'runtime_execution_failed',
-          message: 'The Team reached its Lead turn limit without completing.',
-        },
-      });
-      return;
-    }
     try {
       await this.admission.withTransaction(async (tx) => {
         if (!tx.teamExecutions)
@@ -474,6 +613,24 @@ export class TeamDriver {
     } catch (error) {
       if (error instanceof TeamExecutionError && error.code === 'stale_state')
         return;
+      if (
+        error instanceof TeamExecutionError &&
+        error.code === 'limit_exceeded'
+      ) {
+        await this.executions.failTeamRunAtomically({
+          teamRunId: team.id,
+          rootRunId: team.rootRunId,
+          rootTaskId: team.rootTaskId,
+          owner,
+          updatedAt: this.now().toISOString(),
+          stopReason: 'lead_turn_limit',
+          failure: {
+            code: 'runtime_execution_failed',
+            message: 'The Team reached its Lead turn limit without completing.',
+          },
+        });
+        return;
+      }
       throw error;
     }
   }

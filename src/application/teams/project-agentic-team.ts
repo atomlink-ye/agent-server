@@ -2,6 +2,8 @@ import type {
   OwnerScope,
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
+import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
+import { isTeamCompletionApprovalPending } from './team-policy-evaluator.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
 
@@ -17,6 +19,8 @@ export interface AgenticTeamProject {
     readonly finalText: string | null;
     readonly revision: number;
     readonly stopReason: string | null;
+    readonly completionApprovalRequired: boolean;
+    readonly completionDecisions: readonly TeamCompletionDecision[];
     readonly createdAt: string;
     readonly updatedAt: string;
   };
@@ -100,14 +104,29 @@ export class ProjectAgenticTeam {
   ): Promise<AgenticTeamProject | null> {
     const team = await this.teams.findTeamRunById(teamRunId, owner);
     if (!team) return null;
-    const [members, workItems, attempts, dependencies, messages] =
+    const [members, workItems, attempts, dependencies, messages, decisions] =
       await Promise.all([
         this.teams.findMembersByTeamRunId(team.id, owner),
         this.teams.findWorkItemsByTeamRunId(team.id, owner),
         this.teams.findAttemptsByTeamRunId(team.id, owner),
         this.teams.findWorkDependenciesByTeamRunId(team.id, owner),
         this.messages.listDirectForTeamRun(team.id, owner),
+        this.teams.findCompletionDecisionsByTeamRunId(team.id, owner),
       ]);
+    const completionDecisions = [...decisions].sort(
+      (a, b) =>
+        a.teamRevisionAtDecision - b.teamRevisionAtDecision ||
+        a.decidedAt.localeCompare(b.decidedAt) ||
+        a.id.localeCompare(b.id),
+    );
+    const currentDecision = completionDecisions.find(
+      (decision) =>
+        decision.completionRequestedByRunId === team.completionRequestedByRunId,
+    );
+    const approvalPending = isTeamCompletionApprovalPending(
+      team,
+      currentDecision,
+    );
     const orderedWork = [...workItems].sort(
       (a, b) =>
         a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
@@ -195,11 +214,15 @@ export class ProjectAgenticTeam {
         rootTaskId: team.rootTaskId,
         teamRunId: team.id,
         teamVersionId: team.teamVersionId,
-        status: team.status,
+        status: approvalPending ? 'waiting' : team.status,
         phase: team.phase,
         finalText: safeText(team.finalText),
         revision: team.revision,
-        stopReason: safeText(team.stopReason),
+        stopReason: approvalPending
+          ? 'approval_required'
+          : safeText(team.stopReason),
+        completionApprovalRequired: team.completionApprovalRequired,
+        completionDecisions,
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
       },

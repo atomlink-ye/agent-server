@@ -457,6 +457,8 @@ export async function createService(
     admissionRepository,
     teamMessages,
     terminalWakeReconciler,
+    undefined,
+    { completionApprovalRequired: config.teamCompletionApprovalRequired },
   );
   const completeRun = new CompleteRun(
     runRepository,
@@ -653,6 +655,7 @@ export async function createService(
     agentRegistry,
     invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
+    teamDriver,
     teamMessages,
     tasks: taskRepository,
     environmentRegistry,

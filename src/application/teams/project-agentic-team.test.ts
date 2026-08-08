@@ -121,6 +121,7 @@ describe('ProjectAgenticTeam', () => {
       findWorkItemsByTeamRunId: vi.fn(async () => [work]),
       findAttemptsByTeamRunId: vi.fn(async () => attempts),
       findWorkDependenciesByTeamRunId: vi.fn(async () => []),
+      findCompletionDecisionsByTeamRunId: vi.fn(async () => []),
     } as unknown as TeamExecutionRepository;
     const messages = {
       listDirectForTeamRun: vi.fn(async () => []),

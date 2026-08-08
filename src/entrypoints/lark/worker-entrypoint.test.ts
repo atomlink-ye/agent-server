@@ -8,6 +8,7 @@ const baseConfig: AppConfig = {
   port: 3000,
   logLevel: 'info',
   serviceName: 'test',
+  teamCompletionApprovalRequired: false,
   skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
   paseo: {
     wsUrl: 'ws://127.0.0.1:6767/ws',

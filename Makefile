@@ -75,15 +75,10 @@ mixed-team-journey:
 	done
 	@dispatch_log="$$(docker compose logs --no-color --no-log-prefix agent-server | grep '"event":"run.dispatch.started"' | tail -n 1)"; \
 		if [ -z "$$dispatch_log" ]; then echo 'agent-server dispatcher startup log not found' >&2; exit 1; fi; \
-		DISPATCH_LOG_LINE="$$dispatch_log" node -e '
-			const line = process.env.DISPATCH_LOG_LINE ?? "";
-			let payload;
-			try { payload = JSON.parse(line); } catch { process.stderr.write("invalid dispatcher startup log JSON\\n"); process.exit(1); }
-			if (payload.event !== "run.dispatch.started" || payload.concurrency !== 1) {
-				process.stderr.write(`dispatcher startup concurrency was $${String(payload.concurrency)}\\n`);
-				process.exit(1);
-			}
-		'
+		printf '%s\n' "$$dispatch_log" | grep -Eq '"event":"run.dispatch.started".*"concurrency":1([,}])' || { \
+			echo 'agent-server dispatcher did not start with concurrency=1' >&2; \
+			exit 1; \
+		}
 	AGENT_SERVER_DISPATCHER_CONCURRENCY=1 PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose run --rm --no-deps \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \

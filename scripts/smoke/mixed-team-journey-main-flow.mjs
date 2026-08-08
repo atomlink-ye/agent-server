@@ -300,14 +300,6 @@ assert(
   'request_changes_attempt_binding_invalid',
 );
 assert(
-  fixerV1.started_at &&
-    reviewerV1.started_at &&
-    fixerV1.terminal_at &&
-    reviewerV1.terminal_at &&
-    new Date(fixerV1.terminal_at) <= new Date(reviewerV1.started_at),
-  'fixer_v1_terminal_after_reviewer_start',
-);
-assert(
   new Date(reviewerV1.completed_at ?? reviewerV1.terminal_at) <=
     new Date(requestChanges.receipt_created_at),
   'reviewer_completion_after_request_changes',

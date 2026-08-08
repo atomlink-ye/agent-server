@@ -1,13 +1,19 @@
-import { ActivityPanel } from '@/components/chat/activity-panel';
+import { ActivityItem, ActivityPanel } from '@/components/chat/activity-panel';
 import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
 import type { TeamProject } from '@/components/chat/conversation-sidebar';
 import type { ViewStatus } from '@/components/chat/run-details';
 import {
-  selectAgentTextEntries,
+  selectCurrentLifecycle,
+  selectActivityEntries,
   selectPromptEntries,
+  selectUsageEntry,
+  selectChildEntriesByParent,
+  type TimelineActivityEntry,
+  type TimelineEntry,
   type PromptEntry,
   type TimelineState,
 } from '@/lib/stream-reducer';
+import type { Capabilities } from '@/lib/capabilities';
 
 export type Message = {
   id: string;
@@ -49,7 +55,9 @@ type Turn = {
 export type ChatSurfaceProps = {
   readonly messages: readonly Message[];
   readonly activeRunId?: string;
-  readonly timeline: TimelineState;
+  readonly entries: TimelineState;
+  readonly capabilities: Capabilities;
+  readonly now: string;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
   readonly selectedTeam: boolean;
   readonly selectedOverview: boolean;
@@ -69,7 +77,9 @@ export type ChatSurfaceProps = {
 export function ChatSurface({
   messages,
   activeRunId,
-  timeline,
+  entries,
+  capabilities,
+  now,
   replayStatus,
   selectedTeam,
   selectedOverview,
@@ -99,7 +109,10 @@ export function ChatSurface({
         !selectedOverview &&
         !messages.length &&
         status !== 'loading' ? (
-          <EmptyState onPrompt={onPrompt} />
+          <EmptyState
+            canCompose={capabilities.canCompose === true}
+            onPrompt={onPrompt}
+          />
         ) : null}
         {status === 'loading' ? <LoadingState /> : null}
         {!selectedTeam &&
@@ -109,29 +122,36 @@ export function ChatSurface({
               key={turn.taskId}
               turn={turn}
               activeRunId={activeRunId}
-              timeline={timeline}
+              entries={entries}
+              now={now}
               replayStatus={replayStatus}
             />
           ))}
         {selectedTeam && teamSession ? (
           <TeamTranscript
             session={teamSession}
-            timeline={timeline}
+            timeline={entries}
+            now={now}
             replayStatus={replayStatus}
           />
         ) : null}
         {error && status !== 'running' ? (
-          <ErrorState message={error} retryText={retryText} onRetry={onRetry} />
+          <ErrorState
+            message={error}
+            retryText={retryText}
+            canRetry={capabilities.canRetry === true}
+            onRetry={onRetry}
+          />
         ) : null}
       </div>
-      {selectedTeam ? (
-        <div className="read-only-session">
-          This Agent Session is read-only.
-        </div>
-      ) : selectedOverview ? (
-        <div className="read-only-session">
-          This Team Overview is read-only.
-        </div>
+      {capabilities.canCompose !== true ? (
+        selectedTeam || selectedOverview ? (
+          <div className="read-only-session">
+            {selectedTeam
+              ? 'This Agent Session is read-only.'
+              : 'This Team Overview is read-only.'}
+          </div>
+        ) : null
       ) : (
         <Composer
           text={text}
@@ -141,7 +161,10 @@ export function ChatSurface({
           error={error}
           onSend={onSend}
           onRetry={onRetry}
-          hasRetry={Boolean(error && retryText)}
+          canCompose={capabilities.canCompose === true}
+          hasRetry={
+            capabilities.canRetry === true && Boolean(error && retryText)
+          }
         />
       )}
     </section>
@@ -151,18 +174,22 @@ export function ChatSurface({
 function TurnView({
   turn,
   activeRunId,
-  timeline,
+  entries,
+  now,
   replayStatus,
 }: {
   readonly turn: Turn;
   readonly activeRunId?: string;
-  readonly timeline: TimelineState;
+  readonly entries: TimelineState;
+  readonly now: string;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
 }) {
   const runId = turn.runId;
   const active = Boolean(runId && runId === activeRunId);
-  const prompts = runId ? selectPromptEntries(timeline, runId) : [];
-  const agentTexts = runId ? selectAgentTextEntries(timeline, runId) : [];
+  const prompts = runId ? selectPromptEntries(entries, runId) : [];
+  const hasDocument = runId
+    ? hasRenderableDocumentEntries(entries, runId)
+    : false;
   return (
     <div className="turn">
       {prompts.length > 0 ? (
@@ -173,42 +200,217 @@ function TurnView({
       ) : (
         <MessageView message={turn.user} />
       )}
-      {runId ? (
+      {runId && hasDocument ? (
+        <AssistantDocument
+          runId={runId}
+          entries={entries}
+          active={active}
+          now={now}
+          replayAvailable={replayStatus[runId] !== 'unavailable'}
+          replayLoading={active || replayStatus[runId] === 'loading'}
+        />
+      ) : null}
+      {!hasDocument && turn.assistant ? (
+        <MessageView message={turn.assistant} />
+      ) : null}
+      {runId && !hasDocument ? (
         <ActivityPanel
-          timeline={timeline}
+          timeline={entries}
           runId={runId}
           active={active}
           replayAvailable={replayStatus[runId] !== 'unavailable'}
           replayLoading={active || replayStatus[runId] === 'loading'}
         />
       ) : null}
-      {agentTexts.length > 0 ? (
-        agentTexts.map((entry) => (
-          <article
-            className="message assistant"
-            key={`${entry.runId}-${entry.activityId.scope}-${entry.activityId.value}`}
-          >
-            <p className="message-label">Research Desk</p>
-            <div className="assistant-surface">
-              <AssistantMarkdown text={entry.text} />
-            </div>
-          </article>
-        ))
-      ) : turn.assistant ? (
-        <MessageView message={turn.assistant} />
-      ) : null}
     </div>
   );
+}
+
+function AssistantDocument({
+  runId,
+  entries,
+  active,
+  now,
+  label = 'Research Desk',
+  fallbackText,
+  replayAvailable = true,
+  replayLoading = false,
+}: {
+  readonly runId: string;
+  readonly entries: TimelineState;
+  readonly active: boolean;
+  readonly now: string;
+  readonly label?: string;
+  readonly fallbackText?: string | null;
+  readonly replayAvailable?: boolean;
+  readonly replayLoading?: boolean;
+}) {
+  const runEntries = entries.runs[runId]?.entries ?? [];
+  const childrenByParent = selectChildEntriesByParent(entries, runId);
+  const hasActivity = selectActivityEntries(entries, runId).some(
+    (entry) => entry.kind !== 'usage',
+  );
+  return (
+    <article className="message assistant">
+      <p className="message-label">{label}</p>
+      <div className="assistant-surface">
+        {runEntries.map((entry) => {
+          if (entry.kind === 'agentText' && entry.origin === 'assistant_text')
+            return (
+              <AssistantMarkdown key={timelineKey(entry)} text={entry.text} />
+            );
+          if (!isRenderableActivity(entry)) return null;
+          return (
+            <ActivityItem
+              key={timelineKey(entry)}
+              active={active}
+              entry={entry}
+              children={childrenByParent.get(entry.activityId.value) ?? []}
+            />
+          );
+        })}
+        {!hasRenderableDocumentEntries(entries, runId) && fallbackText ? (
+          <AssistantMarkdown text={fallbackText} />
+        ) : null}
+      </div>
+      <ReplayStatusNotice
+        active={active}
+        hasActivity={hasActivity}
+        replayAvailable={replayAvailable}
+        replayLoading={replayLoading}
+      />
+      <TurnFooter entries={entries} runId={runId} now={now} />
+    </article>
+  );
+}
+
+function ReplayStatusNotice({
+  active,
+  hasActivity,
+  replayAvailable,
+  replayLoading,
+}: {
+  readonly active: boolean;
+  readonly hasActivity: boolean;
+  readonly replayAvailable: boolean;
+  readonly replayLoading: boolean;
+}) {
+  if (replayLoading && !hasActivity)
+    return (
+      <p className="activity-unavailable">
+        {active ? 'Waiting for runtime activity…' : 'Loading saved activity…'}
+      </p>
+    );
+  if (!replayAvailable)
+    return (
+      <p className="activity-unavailable">
+        Activity details are not available for this turn.
+      </p>
+    );
+  return null;
+}
+
+function hasRenderableDocumentEntries(entries: TimelineState, runId: string) {
+  return (entries.runs[runId]?.entries ?? []).some(
+    (entry) =>
+      (entry.kind === 'agentText' && entry.origin === 'assistant_text') ||
+      isRenderableActivity(entry),
+  );
+}
+
+function TurnFooter({
+  entries,
+  runId,
+  now,
+}: {
+  readonly entries: TimelineState;
+  readonly runId: string;
+  readonly now: string;
+}) {
+  const lifecycle = selectCurrentLifecycle(entries, runId);
+  const usage = selectUsageEntry(entries, runId)?.usage;
+  const updatedAt = latestCreatedAt(entries, runId);
+  const details = [
+    lifecycle ? lifecycle.status : null,
+    usage ? formatUsage(usage) : null,
+    relativeTime(updatedAt, now),
+  ].filter(Boolean);
+  return details.length ? (
+    <p className="message-meta">{details.join(' · ')}</p>
+  ) : null;
+}
+
+function latestCreatedAt(entries: TimelineState, runId: string) {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const entry of entries.runs[runId]?.entries ?? []) {
+    if (!entry.lastCreatedAt) continue;
+    const timestamp = Date.parse(entry.lastCreatedAt);
+    if (Number.isFinite(timestamp) && timestamp > latestMs) {
+      latest = entry.lastCreatedAt;
+      latestMs = timestamp;
+    }
+  }
+  return latest;
+}
+
+function formatUsage(
+  usage: NonNullable<ReturnType<typeof selectUsageEntry>>['usage'],
+) {
+  const values = [
+    usage.inputTokens === undefined
+      ? null
+      : `${usage.inputTokens.toLocaleString()} input`,
+    usage.outputTokens === undefined
+      ? null
+      : `${usage.outputTokens.toLocaleString()} output`,
+    usage.totalCostUsd === undefined
+      ? null
+      : `$${usage.totalCostUsd.toFixed(4)}`,
+  ].filter(Boolean);
+  return values.length ? values.join(', ') : 'Usage reported';
+}
+
+function relativeTime(value: string | null, now: string) {
+  if (!value) return null;
+  const then = Date.parse(value);
+  const current = Date.parse(now);
+  if (!Number.isFinite(then) || !Number.isFinite(current)) return null;
+  const seconds = Math.max(0, Math.floor((current - then) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function isRenderableActivity(
+  entry: TimelineEntry,
+): entry is TimelineActivityEntry {
+  return (
+    (entry.kind === 'thinking' && entry.origin === 'reasoning_progress') ||
+    (entry.kind === 'tool' &&
+      entry.origin === 'tool_status' &&
+      entry.parentActivityId === undefined) ||
+    entry.kind === 'approval'
+  );
+}
+
+function timelineKey(entry: TimelineEntry) {
+  return `${entry.runId}-${entry.activityId.scope}-${entry.activityId.value}`;
 }
 
 function TeamTranscript({
   session,
   timeline,
   replayStatus,
+  now,
 }: {
   readonly session: TeamSessionResponse;
   readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
+  readonly now: string;
 }) {
   if (session.turns.length === 0)
     return (
@@ -225,6 +427,7 @@ function TeamTranscript({
           turn={turn}
           timeline={timeline}
           replayStatus={replayStatus}
+          now={now}
         />
       ))}
     </div>
@@ -236,59 +439,49 @@ function TeamTurnView({
   turn,
   timeline,
   replayStatus,
+  now,
 }: {
   readonly session: TeamSessionResponse;
   readonly turn: TeamTurn;
   readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
+  readonly now: string;
 }) {
   const prompts = selectPromptEntries(timeline, turn.run_id);
-  const agentTexts = selectAgentTextEntries(timeline, turn.run_id);
+  const hasDocument = hasRenderableDocumentEntries(timeline, turn.run_id);
+  const label = session.role === 'lead' ? 'Lead' : session.name;
   return (
     <div className="team-turn">
       <div className="team-context-block">
         <span>Assignment context</span>
         <p>{prompts[0]?.text ?? turn.assignment_summary}</p>
       </div>
-      <ActivityPanel
-        timeline={timeline}
-        runId={turn.run_id}
-        active={turn.status === 'running'}
-        replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
-        replayLoading={replayStatus[turn.run_id] === 'loading'}
-      />
-      {agentTexts.length > 0 ? (
-        agentTexts.map((entry) => (
-          <article
-            className="message assistant"
-            key={`${entry.runId}-${entry.activityId.scope}-${entry.activityId.value}`}
-          >
-            <p className="message-label">
-              {session.role === 'lead' ? 'Lead' : session.name}
-            </p>
-            <div className="assistant-surface">
-              <AssistantMarkdown text={entry.text} />
-            </div>
-            <p className="message-meta">
-              {turn.status === 'failed' ? 'Turn failed' : 'Saved response'}
-            </p>
-          </article>
-        ))
-      ) : turn.result_summary ? (
-        <article className="message assistant">
-          <p className="message-label">
-            {session.role === 'lead' ? 'Lead' : session.name}
-          </p>
-          <div className="assistant-surface">
-            <AssistantMarkdown text={turn.result_summary} />
-          </div>
-        </article>
+      {hasDocument || turn.result_summary ? (
+        <AssistantDocument
+          runId={turn.run_id}
+          entries={timeline}
+          active={turn.status === 'running'}
+          now={now}
+          label={label}
+          fallbackText={turn.result_summary}
+          replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
+          replayLoading={replayStatus[turn.run_id] === 'loading'}
+        />
       ) : (
-        <p className="team-result-pending">
-          {turn.status === 'running'
-            ? 'Working on this assignment…'
-            : 'No result recorded.'}
-        </p>
+        <>
+          <ActivityPanel
+            timeline={timeline}
+            runId={turn.run_id}
+            active={turn.status === 'running'}
+            replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
+            replayLoading={replayStatus[turn.run_id] === 'loading'}
+          />
+          <p className="team-result-pending">
+            {turn.status === 'running'
+              ? 'Working on this assignment…'
+              : 'No result recorded.'}
+          </p>
+        </>
       )}
     </div>
   );
@@ -513,8 +706,10 @@ function MessageView({ message }: { readonly message?: Message }) {
 }
 
 function EmptyState({
+  canCompose,
   onPrompt,
 }: {
+  readonly canCompose: boolean;
   readonly onPrompt: (prompt: string) => void;
 }) {
   return (
@@ -528,6 +723,8 @@ function EmptyState({
       </p>
       <button
         type="button"
+        data-capability="canCompose"
+        disabled={canCompose !== true}
         onClick={() =>
           onPrompt(
             'Summarize the current project direction and next decisions.',
@@ -552,17 +749,19 @@ function LoadingState() {
 function ErrorState({
   message,
   retryText,
+  canRetry,
   onRetry,
 }: {
   readonly message: string;
   readonly retryText: string;
+  readonly canRetry: boolean;
   readonly onRetry: () => void;
 }) {
   return (
     <div className="error-state" role="alert">
       <strong>{message}</strong>
-      {retryText ? (
-        <button type="button" onClick={onRetry}>
+      {canRetry === true && retryText ? (
+        <button type="button" data-capability="canRetry" onClick={onRetry}>
           Retry sending
         </button>
       ) : null}
@@ -578,6 +777,7 @@ function Composer({
   error,
   onSend,
   onRetry,
+  canCompose,
   hasRetry,
 }: {
   readonly text: string;
@@ -587,6 +787,7 @@ function Composer({
   readonly error?: string;
   readonly onSend: () => void;
   readonly onRetry: () => void;
+  readonly canCompose: boolean;
   readonly hasRetry: boolean;
 }) {
   return (
@@ -608,13 +809,21 @@ function Composer({
             }
           }}
           placeholder="Ask the managed Agent…"
-          disabled={pending || status === 'loading' || status === 'running'}
+          disabled={
+            canCompose !== true ||
+            pending ||
+            status === 'loading' ||
+            status === 'running'
+          }
           aria-label="Message"
+          data-capability="canCompose"
           rows={1}
         />
         <button
           type="submit"
+          data-capability="canCompose"
           disabled={
+            canCompose !== true ||
             pending ||
             !text.trim() ||
             status === 'loading' ||
@@ -629,7 +838,12 @@ function Composer({
           {error ?? 'Markdown supported · Shift + Enter for a new line'}
         </span>
         {hasRetry ? (
-          <button type="button" className="inline-retry" onClick={onRetry}>
+          <button
+            type="button"
+            className="inline-retry"
+            data-capability="canRetry"
+            onClick={onRetry}
+          >
             Retry
           </button>
         ) : null}

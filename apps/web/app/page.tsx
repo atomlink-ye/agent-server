@@ -14,6 +14,7 @@ import {
   type TeamSession,
 } from '@/components/chat/conversation-sidebar';
 import { RunDetails, type ViewStatus } from '@/components/chat/run-details';
+import { selectCapabilities } from '@/lib/capabilities';
 import type { SafeRunEvent } from '@/lib/safe-run-events';
 import {
   applyTimelineEnvelopes,
@@ -1104,6 +1105,11 @@ export default function HomePage() {
   );
   const selectedTeam = selection?.kind === 'team_agent_session';
   const selectedOverview = selection?.kind === 'team_overview';
+  const capabilities = selectCapabilities({
+    selection,
+    read_only: selectedTeam || selectedOverview,
+  });
+  const now = new Date().toISOString();
 
   return (
     <main className="page-shell">
@@ -1193,7 +1199,9 @@ export default function HomePage() {
             <ChatSurface
               messages={messages}
               activeRunId={activeRunId}
-              timeline={timeline}
+              entries={timeline}
+              capabilities={capabilities}
+              now={now}
               replayStatus={replayStatus}
               selectedTeam={selectedTeam}
               selectedOverview={selectedOverview}

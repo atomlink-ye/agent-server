@@ -27,7 +27,9 @@ export function ActivityPanel({
   replayAvailable = true,
   replayLoading = false,
 }: ActivityPanelProps) {
-  const entries = selectActivityEntries(timeline, runId);
+  const entries = selectActivityEntries(timeline, runId).filter(
+    (entry) => entry.kind !== 'usage',
+  );
   const childrenByParent = selectChildEntriesByParent(timeline, runId);
   const hasActivity = entries.length > 0;
   if (!hasActivity && replayAvailable && !replayLoading && !active) return null;
@@ -44,29 +46,38 @@ export function ActivityPanel({
         </p>
       ) : null}
       <div className="activity-list">
-        {entries.map((entry) => {
-          const key = `${entry.activityId.scope}:${entry.activityId.value}`;
-          if (entry.kind === 'thinking')
-            return <ThinkingRow key={key} active={active} entry={entry} />;
-          if (entry.kind === 'tool') {
-            return entry.category === 'subagent' ? (
-              <SubagentRow
-                key={key}
-                active={active}
-                entry={entry}
-                children={childrenByParent.get(entry.activityId.value) ?? []}
-              />
-            ) : (
-              <ToolRow key={key} entry={entry} />
-            );
-          }
-          if (entry.kind === 'approval')
-            return <PermissionRow key={key} entry={entry} />;
-          return <UsageRow key={key} entry={entry} />;
-        })}
+        {entries.map((entry) => (
+          <ActivityItem
+            key={`${entry.activityId.scope}:${entry.activityId.value}`}
+            active={active}
+            entry={entry}
+            children={childrenByParent.get(entry.activityId.value) ?? []}
+          />
+        ))}
       </div>
     </div>
   );
+}
+
+export function ActivityItem({
+  active,
+  entry,
+  children = [],
+}: {
+  readonly active: boolean;
+  readonly entry: TimelineActivityEntry;
+  readonly children?: readonly TimelineChildEntry[];
+}) {
+  if (entry.kind === 'thinking')
+    return <ThinkingRow active={active} entry={entry} />;
+  if (entry.kind === 'tool')
+    return entry.category === 'subagent' ? (
+      <SubagentRow active={active} entry={entry} children={children} />
+    ) : (
+      <ToolRow entry={entry} />
+    );
+  if (entry.kind === 'approval') return <PermissionRow entry={entry} />;
+  return <UsageRow entry={entry} />;
 }
 
 type ActivityIconKind =
@@ -175,7 +186,6 @@ function ThinkingRow({
       autoOpenedRef.current = true;
     }
   }, [active, status, text]);
-
   const rowClass = `activity-item activity-row ${status === 'started' ? 'is-running' : ''}`;
   const content = (
     <>
@@ -221,13 +231,15 @@ function ToolRow({
       <ActivityIcon kind="tool" status={tool.status} />
       <span className="activity-item-copy">
         <strong>{tool.label}</strong>
-        <small>{tool.summary}</small>
+        <small>
+          {tool.provider ? `${tool.provider} · ${tool.summary}` : tool.summary}
+        </small>
       </span>
       {tool.detailKind ? <DetailIcon kind={tool.detailKind} /> : null}
       <span className="sr-only">{tool.status}</span>
     </>
   );
-  if (!tool.detailText)
+  if (tool.detailText === undefined && tool.exitCode === undefined)
     return <div className={`${rowClass} activity-row-static`}>{content}</div>;
   return (
     <details className={rowClass}>
@@ -235,7 +247,11 @@ function ToolRow({
         {content}
         <ChevronIcon />
       </summary>
-      <DetailContent text={tool.detailText} exitCode={tool.exitCode} />
+      <DetailContent
+        text={tool.detailText ?? ''}
+        kind={tool.detailKind}
+        exitCode={tool.exitCode}
+      />
     </details>
   );
 }
@@ -260,14 +276,22 @@ function DetailIcon({ kind }: { readonly kind: string }) {
 
 function DetailContent({
   text,
+  kind,
   exitCode,
 }: {
   readonly text: string;
+  readonly kind?: string;
   readonly exitCode?: number;
 }) {
   return (
     <div className="activity-detail" role="note">
-      <div>{text}</div>
+      {kind === 'shell' ? (
+        <pre aria-label="Shell output">{text}</pre>
+      ) : kind === 'edit' ? (
+        <pre aria-label="Edit details">{text}</pre>
+      ) : (
+        <div>{text}</div>
+      )}
       {exitCode !== undefined ? <small>Exit code: {exitCode}</small> : null}
     </div>
   );
@@ -307,7 +331,11 @@ function SubagentRow({
         <ActivityIcon kind="subagent" status={tool.status} />
         <span className="activity-item-copy">
           <strong>{tool.label}</strong>
-          <small>{tool.summary}</small>
+          <small>
+            {tool.provider
+              ? `${tool.provider} · ${tool.summary}`
+              : tool.summary}
+          </small>
         </span>
         <span className="sr-only">{tool.status}</span>
         <ChevronIcon />
@@ -378,13 +406,17 @@ function ChildRow({
               ? 'Assistant'
               : child.label}
         </strong>
-        <small>{isTextChild ? preview : child.summary}</small>
+        <small>
+          {child.provider ? `${child.provider} · ` : ''}
+          {isTextChild ? preview : child.summary}
+        </small>
       </span>
       {child.detailKind ? <DetailIcon kind={child.detailKind} /> : null}
       <span className="sr-only">{child.status}</span>
     </>
   );
-  if (!fullText)
+  const hasDetails = Boolean(fullText) || child.exitCode !== undefined;
+  if (!hasDetails)
     return preview ? (
       <div className={`${rowClass} activity-row-static`}>{content}</div>
     ) : null;
@@ -394,7 +426,11 @@ function ChildRow({
         {content}
         <ChevronIcon />
       </summary>
-      <DetailContent text={fullText} exitCode={child.exitCode} />
+      <DetailContent
+        text={fullText}
+        kind={child.detailKind}
+        exitCode={child.exitCode}
+      />
     </details>
   );
 }

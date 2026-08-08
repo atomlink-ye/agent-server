@@ -87,6 +87,7 @@ mixed-team-journey:
 		-e POSTGRES_URL=postgresql://agent:agent@postgres:5432/agent_server \
 		-e AGENT_SERVER_DISPATCHER_CONCURRENCY=1 \
 		-e PASEO_MODEL=opencode-go/deepseek-v4-flash \
+		-e MIXED_TEAM_EXISTING_ROOT_TASK_ID="$${MIXED_TEAM_EXISTING_ROOT_TASK_ID:-}" \
 		-v "$$(pwd)/.local:/workspace/.local" \
 		runner node scripts/smoke/mixed-team-journey-main-flow.mjs
 

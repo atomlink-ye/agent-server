@@ -102,7 +102,7 @@ if (existingRootTaskId) {
     '.local/web-bootstrap.env',
     [
       `WEB_WORKSPACE_ID=${workspaceId}`,
-      'WEB_WORKSPACE_NAME=Mixed-provider TeamRun proof',
+      `WEB_WORKSPACE_NAME=${JSON.stringify('Mixed-provider TeamRun proof')}`,
       `WEB_AGENTIC_TEAM_VERSION_ID=${publishedTeam.id}`,
       `WEB_ENVIRONMENT_VERSION_ID=${environment}`,
       `WEB_AGENT_VERSION_ID=${agents.fixer}`,

@@ -59,6 +59,7 @@ export function isTeamCompletionApprovalPending(
   decision: TeamCompletionDecision | null | undefined,
 ): boolean {
   return Boolean(
+    team.status === 'active' &&
     team.completionApprovalRequired &&
     team.completionRequestedByRunId !== null &&
     !completionDecisionMatchesCurrentRequest(team, decision),

@@ -31,7 +31,7 @@ web-dev:
 	docker compose up --build -d postgres agent-server
 	@until curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; do sleep 1; done
 	$(MAKE) web-bootstrap
-	docker compose up --build web
+	@set -a; . .local/web-bootstrap.env; set +a; docker compose up --build web
 
 web-e2e-smoke:
 	@set -eu; \

@@ -73,6 +73,25 @@ if (command.length === 0) {
     : await getAvailablePort();
   const paseoListenHost = process.env.PASEO_LISTEN_HOST ?? '127.0.0.1';
   if (process.env.OPENCODE_GO_API_KEY?.trim()) {
+    if (!process.env.OPENCODE_CONFIG_CONTENT?.trim()) {
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        $schema: 'https://opencode.ai/config.json',
+        agent: { build: { permission: 'allow' } },
+        provider: {
+          'opencode-go': {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'OpenCode Go',
+            options: {
+              baseURL: 'https://opencode.ai/zen/go/v1',
+              apiKey: '{env:OPENCODE_GO_API_KEY}',
+            },
+            models: {
+              'deepseek-v4-flash': { name: 'deepseek-v4-flash' },
+            },
+          },
+        },
+      });
+    }
     for (const [name, value] of Object.entries({
       ...anthropicDefaults,
       ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,

@@ -164,6 +164,7 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
                     tools: [],
                     skills: [],
                     memory: { proposalLimit: 1 },
+                    runtime: { modelPolicyRef: 'free-only' },
                   },
                 },
               }) as never,

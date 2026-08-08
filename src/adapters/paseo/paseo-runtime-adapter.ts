@@ -2067,6 +2067,7 @@ function projectText(
 
 function formatProjectedText(value: string, roots: readonly string[]): string {
   let sanitized = capDetail(value);
+  sanitized = sanitized.replace(/\b[A-Za-z0-9_-]{32,}\b/gu, '<redacted>');
   sanitized = sanitized.replace(
     /\/workspace\/\.local\/runtime-cells\/[A-Za-z0-9_-]+\/?/gu,
     './',

@@ -198,6 +198,7 @@ describe('Paseo runtime nested provider telemetry', () => {
         | undefined;
       let listCalls = 0;
       let fetchCalls = 0;
+      const bareCredential = 'A'.repeat(32);
       const finished = new Promise<{
         status: 'idle';
         error: null;
@@ -301,6 +302,15 @@ describe('Paseo runtime nested provider telemetry', () => {
         timestamp: new Date().toISOString(),
         seq: 1,
         epoch: 'epoch-1',
+        timelineItemType: 'assistant_message',
+        assistantText: `nested ${bareCredential} result`,
+      });
+      streamListener?.({
+        agentId: 'agent-1',
+        eventType: 'timeline',
+        timestamp: new Date().toISOString(),
+        seq: 2,
+        epoch: 'epoch-1',
         timelineItemType: 'tool',
         toolCall: {
           callId: 'parent-call',
@@ -351,6 +361,7 @@ describe('Paseo runtime nested provider telemetry', () => {
       await execution;
       expect(events).toEqual(
         expect.arrayContaining([
+          { kind: 'assistant_text', text: 'nested <redacted> result' },
           expect.objectContaining({
             kind: 'tool_status',
             category: 'subagent',

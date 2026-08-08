@@ -10,11 +10,6 @@ import {
   startPaseo,
   stopProcessTree,
 } from '../dev/paseo-process.mjs';
-import {
-  ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
-  clearAnthropicGatewayEnvironment,
-  seedAnthropicGatewayEnvironment,
-} from '../dev/anthropic-gateway-env.mjs';
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -41,6 +36,16 @@ const prompt = [
 ].join('\n');
 const systemPrompt =
   'You are a smoke-test agent. You may use the shell tool to complete the requested file task.';
+const anthropicEnvironmentVariableNames = [
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
+];
 const omitAuth = process.env.CLAUDE_PROVIDER_SMOKE_OMIT_AUTH === '1';
 const rawApiKey = process.env.OPENCODE_GO_API_KEY;
 const apiKey = rawApiKey?.trim() || null;
@@ -59,9 +64,13 @@ try {
   if (!omitAuth && !apiKey) throw new Error('missing_api_key');
 
   if (omitAuth) {
-    clearAnthropicGatewayEnvironment(process.env);
+    for (const name of anthropicEnvironmentVariableNames)
+      delete process.env[name];
   } else {
-    seedAnthropicGatewayEnvironment(process.env, { forcePinned: true });
+    process.env.ANTHROPIC_BASE_URL = 'https://opencode.ai/zen/go';
+    process.env.ANTHROPIC_API_KEY = apiKey;
+    for (const name of anthropicEnvironmentVariableNames.slice(2))
+      process.env[name] = model;
   }
 
   stage = 'workspace';
@@ -72,9 +81,7 @@ try {
     repositoryRoot,
     runtimeRoot,
     port: await getAvailablePort(),
-    environmentVariableNames: omitAuth
-      ? []
-      : ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
+    environmentVariableNames: omitAuth ? [] : anthropicEnvironmentVariableNames,
   });
 
   stage = 'connect';

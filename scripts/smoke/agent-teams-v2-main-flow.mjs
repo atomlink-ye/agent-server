@@ -20,10 +20,6 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
-import {
-  ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
-  seedAnthropicGatewayEnvironment,
-} from '../dev/anthropic-gateway-env.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const adminUrl = process.env.POSTGRES_ADMIN_URL;
@@ -64,6 +60,16 @@ const requestedModel =
   process.env.PASEO_MODEL ??
   (requestedProvider === 'opencode' ? 'opencode-go/deepseek-v4-flash' : '');
 const runtimeResolutionProviders = new Set(['opencode', 'claude', 'codex']);
+const anthropicEnvironmentVariableNames = [
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
+];
 const startedAt = Date.now();
 const suffix = randomUUID().slice(0, 8);
 const databaseName = `agent_teams_v2_${startedAt}_${suffix}`;
@@ -1884,7 +1890,16 @@ try {
   }
   if (!scriptedRuntime) {
     assert(process.env.OPENCODE_GO_API_KEY, 'missing_OPENCODE_GO_API_KEY');
-    seedAnthropicGatewayEnvironment(process.env, { forcePinned: true });
+    Object.assign(process.env, {
+      ANTHROPIC_BASE_URL: 'https://opencode.ai/zen/go',
+      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+      ANTHROPIC_SMALL_FAST_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-v4-flash',
+    });
   }
   await Promise.all([
     mkdir(evidenceRoot, { recursive: true }),
@@ -1927,7 +1942,7 @@ try {
       environmentVariableNames: [
         'OPENCODE_GO_API_KEY',
         'OPENCODE_CONFIG_CONTENT',
-        ...ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
+        ...anthropicEnvironmentVariableNames,
       ],
     });
   }

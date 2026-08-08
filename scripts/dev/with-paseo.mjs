@@ -8,10 +8,6 @@ import {
   startPaseo,
   stopProcessTree,
 } from './paseo-process.mjs';
-import {
-  ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
-  seedAnthropicGatewayEnvironment,
-} from './anthropic-gateway-env.mjs';
 import { copyNamedEnvironment } from './safe-environment.mjs';
 
 const applicationEnvironmentNames = [
@@ -31,8 +27,25 @@ const applicationEnvironmentNames = [
 const paseoEnvironmentNames = [
   'OPENCODE_GO_API_KEY',
   'OPENCODE_CONFIG_CONTENT',
-  ...ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_SMALL_FAST_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
 ];
+
+const anthropicDefaults = {
+  ANTHROPIC_BASE_URL: 'https://opencode.ai/zen/go',
+  ANTHROPIC_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_SMALL_FAST_MODEL: 'deepseek-v4-flash',
+  CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-v4-flash',
+};
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -56,7 +69,14 @@ if (command.length === 0) {
     ? Number.parseInt(process.env.PASEO_PORT, 10)
     : await getAvailablePort();
   const paseoListenHost = process.env.PASEO_LISTEN_HOST ?? '127.0.0.1';
-  seedAnthropicGatewayEnvironment(process.env);
+  if (process.env.OPENCODE_GO_API_KEY?.trim()) {
+    for (const [name, value] of Object.entries({
+      ...anthropicDefaults,
+      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
+    })) {
+      if (!process.env[name]?.trim()) process.env[name] = value;
+    }
+  }
   const paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot,

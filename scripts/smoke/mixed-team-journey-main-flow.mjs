@@ -535,8 +535,9 @@ const artifactEvidence = {
 };
 const extractSummaryField = (summary, pattern, missingAssertion) => {
   const match = String(summary ?? '').match(pattern);
-  assert(match?.[1], missingAssertion);
-  return match[1];
+  const value = match?.slice(1).find(Boolean);
+  assert(value, missingAssertion);
+  return value;
 };
 const fixerV1SummarySha256 = extractSummaryField(
   fixerV1.result_summary,
@@ -558,12 +559,12 @@ assert(
 );
 const fixerV1SummaryLineCount = extractSummaryField(
   fixerV1.result_summary,
-  /\b(\d+)\s+lines?\b/i,
+  /\b(?:line\s+count\s*[:=]?\s*(\d+)|(\d+)\s+lines?)\b/i,
   'fixer_v1_summary_line_count_missing',
 );
 const fixerV2SummaryLineCount = extractSummaryField(
   fixerV2.result_summary,
-  /\b(\d+)\s+lines?\b/i,
+  /\b(?:line\s+count\s*[:=]?\s*(\d+)|(\d+)\s+lines?)\b/i,
   'fixer_v2_summary_line_count_missing',
 );
 assert(

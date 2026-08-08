@@ -206,7 +206,8 @@ export class TeamDriver {
         prompt,
         tx,
       );
-      return { decision: rejection.decision, team: next ?? rejection.team };
+      if (next === null) throw new TeamExecutionError('conflict');
+      return { decision: rejection.decision, team: next };
     });
   }
 
@@ -604,14 +605,16 @@ export class TeamDriver {
         ? schedule(transaction)
         : this.admission.withTransaction(schedule));
     } catch (error) {
-      if (error instanceof TeamExecutionError && error.code === 'stale_state')
+      if (error instanceof TeamExecutionError && error.code === 'stale_state') {
+        if (transaction) throw error;
         return null;
+      }
       if (
         error instanceof TeamExecutionError &&
         error.code === 'limit_exceeded'
       ) {
-        const executions = transaction?.teamExecutions ?? this.executions;
-        await executions.failTeamRunAtomically({
+        if (transaction) throw error;
+        await this.executions.failTeamRunAtomically({
           teamRunId: team.id,
           rootRunId: team.rootRunId,
           rootTaskId: team.rootTaskId,

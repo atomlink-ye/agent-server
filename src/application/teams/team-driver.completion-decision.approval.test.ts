@@ -159,6 +159,7 @@ function setupDriver(
   const saveTask = vi.fn(async (_task: Task) => undefined);
   const saveRun = vi.fn(async (_run: { prompt: string }) => undefined);
   const enqueue = vi.fn(async () => undefined);
+  const commit = vi.fn();
   const recordRejection = vi.fn(
     async (input: { feedback: string; completionRequestedByRunId: string }) => {
       const decision = makeDecision(currentTeam, input.feedback);
@@ -180,8 +181,8 @@ function setupDriver(
     return currentTeam;
   });
   const withTransaction = vi.fn(
-    async (work: (tx: unknown) => Promise<unknown>) =>
-      work({
+    async (work: (tx: unknown) => Promise<unknown>) => {
+      const result = await work({
         tasks: {
           save: saveTask,
           findByIdForOwner: vi.fn(async () => ({
@@ -201,7 +202,10 @@ function setupDriver(
           advanceAgenticLead: advanceLead,
         },
         enqueueRunDispatch: enqueue,
-      }),
+      });
+      commit();
+      return result;
+    },
   );
   const completeTeamRunAtomically = vi.fn(async () => currentTeam);
   const latestDecision = vi.fn<() => Promise<TeamCompletionDecision | null>>(
@@ -242,6 +246,7 @@ function setupDriver(
     saveTask,
     saveRun,
     enqueue,
+    commit,
     latestDecision,
     setCurrentTeam(next: TeamRun) {
       currentTeam = next;
@@ -371,7 +376,7 @@ describe('TeamDriver completion decision orchestration', () => {
     );
   });
 
-  it('does not advance or create another Lead when a nonterminal Lead task already exists', async () => {
+  it('rejects when a nonterminal Lead task already exists without committing', async () => {
     const currentTeam = makeTeam();
     const existingLeadTask = {
       ...leadTerminalTask(currentTeam),
@@ -380,20 +385,23 @@ describe('TeamDriver completion decision orchestration', () => {
     };
     const setup = setupDriver(currentTeam, { existingLeadTask });
 
-    await setup.driver.decideCompletion({
-      teamRunId: currentTeam.id,
-      expectedRevision: currentTeam.revision,
-      owner,
-      decidedBy: 'reviewer-decision',
-      decision: 'reject',
-      feedback: 'Keep the current Lead turn.',
-      workItemIds: ['work-decision'],
-    });
+    await expect(
+      setup.driver.decideCompletion({
+        teamRunId: currentTeam.id,
+        expectedRevision: currentTeam.revision,
+        owner,
+        decidedBy: 'reviewer-decision',
+        decision: 'reject',
+        feedback: 'Keep the current Lead turn.',
+        workItemIds: ['work-decision'],
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
 
     expect(setup.advanceLead).not.toHaveBeenCalled();
     expect(setup.saveTask).not.toHaveBeenCalled();
     expect(setup.saveRun).not.toHaveBeenCalled();
     expect(setup.enqueue).not.toHaveBeenCalled();
+    expect(setup.commit).not.toHaveBeenCalled();
   });
 
   it('keeps absolute monotonic Lead turn counts across two sequential rejects with a fresh epoch', async () => {

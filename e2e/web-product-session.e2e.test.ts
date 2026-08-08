@@ -217,6 +217,13 @@ describe.skipIf(baseUrlEnv === undefined)(
           phase = 'live response';
           await waitForSettledTurn(page, marker);
           await page.waitForTimeout(750);
+          await saveArtifactScreenshot(
+            page,
+            'web-product-session-live-desktop.png',
+            {
+              fullPage: true,
+            },
+          );
           liveSnapshot = await captureSnapshot(page);
           assertTranscriptInvariants(liveSnapshot);
           expect(
@@ -286,6 +293,22 @@ describe.skipIf(baseUrlEnv === undefined)(
           expect(replaySnapshot).toEqual(liveSnapshot);
           expect(replaySnapshot.assistantTexts).toHaveLength(1);
           expect(hasToolEvent(replayEvents)).toBe(false);
+
+          await saveArtifactScreenshot(
+            page,
+            'web-product-session-replay-desktop.png',
+            { fullPage: true },
+          );
+          if (artifactDir) {
+            await page.setViewportSize({ width: 390, height: 600 });
+            await page.evaluate(() => {
+              window.scrollTo(0, document.documentElement.scrollHeight);
+            });
+            await saveArtifactScreenshot(
+              page,
+              'web-product-session-mobile-bottom.png',
+            );
+          }
 
           if (artifactDir) {
             await mkdir(artifactDir, { recursive: true });
@@ -415,6 +438,16 @@ async function captureResponseBody(
   const body = await response.body();
   if (!body) throw new Error(`${label} response.body() unavailable`);
   return { response, body };
+}
+
+async function saveArtifactScreenshot(
+  page: Page,
+  filename: string,
+  options: { fullPage?: boolean } = {},
+): Promise<void> {
+  if (!artifactDir) return;
+  await mkdir(artifactDir, { recursive: true });
+  await page.screenshot({ path: join(artifactDir, filename), ...options });
 }
 
 async function captureSnapshot(page: Page): Promise<DomSnapshot> {

@@ -216,6 +216,18 @@ describe.skipIf(baseUrlEnv === undefined)(
 
           phase = 'live response';
           await waitForSettledTurn(page, marker);
+
+          const liveCapture = await captureResponseBody(
+            liveResponsePromise,
+            'live events',
+          );
+          runId = runIdFromLiveUrl(liveCapture.response.url());
+          if (!runId)
+            throw new Error('live events URL did not contain a full run id');
+          liveEvents = parseSseEvents(liveCapture.body, 'live events');
+          assertCanonicalCreatedAt(liveEvents, 'live events');
+          expect(hasToolEvent(liveEvents)).toBe(false);
+
           await page.waitForTimeout(750);
           await saveArtifactScreenshot(
             page,
@@ -229,17 +241,6 @@ describe.skipIf(baseUrlEnv === undefined)(
           expect(
             liveSnapshot.assistantTexts.some((text) => text.includes(marker)),
           ).toBe(true);
-
-          const liveCapture = await captureResponseBody(
-            liveResponsePromise,
-            'live events',
-          );
-          runId = runIdFromLiveUrl(liveCapture.response.url());
-          if (!runId)
-            throw new Error('live events URL did not contain a full run id');
-          liveEvents = parseSseEvents(liveCapture.body, 'live events');
-          assertCanonicalCreatedAt(liveEvents, 'live events');
-          expect(hasToolEvent(liveEvents)).toBe(false);
 
           phase = 'reload/replay';
           const expectedSession = sessionId;
@@ -264,9 +265,6 @@ describe.skipIf(baseUrlEnv === undefined)(
             timeout: testTimeout,
           });
           await waitForSettledTurn(page, marker);
-          await page.waitForTimeout(750);
-          replaySnapshot = await captureSnapshot(page);
-          assertTranscriptInvariants(replaySnapshot);
 
           const replayCapture = await captureResponseBody(
             replayResponsePromise,
@@ -279,6 +277,10 @@ describe.skipIf(baseUrlEnv === undefined)(
           };
           replayEvents = replayBody.events ?? null;
           assertCanonicalCreatedAt(replayEvents, 'replay events');
+
+          await page.waitForTimeout(750);
+          replaySnapshot = await captureSnapshot(page);
+          assertTranscriptInvariants(replaySnapshot);
           rawEventsDiffSummary = rawEventsDiff(liveEvents, replayEvents);
           if (rawEventsDiffSummary)
             throw new Error(

@@ -13,10 +13,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [paseo-smoke, collaborative-team-smoke]
+        target: [paseo-smoke, agent-teams-v2-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: make setup
       - run: make ${{ matrix.target }}
+        env:
+          PASEO_PROVIDER: opencode
+          PASEO_MODEL: opencode-go/deepseek-v4-flash
+          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}

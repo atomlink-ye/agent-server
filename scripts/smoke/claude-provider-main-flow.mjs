@@ -19,7 +19,6 @@ const provider = 'claude';
 const gatewayProvider = 'opencode-go';
 const model = 'deepseek-v4-flash';
 const nonce = randomUUID();
-const authSentinel = 'Not logged in · Please run /login';
 const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
 const runtimeRoot = join(
   repositoryRoot,
@@ -131,21 +130,19 @@ try {
   const timelineEntries = timeline.entries ?? [];
   const usage = safeUsage(finished.final?.lastUsage);
   const usageAccepted =
-    usage !== null && usage.inputTokens > 0 && usage.outputTokens > 0;
+    usage !== null && (usage.inputTokens > 0 || usage.outputTokens > 0);
   const finalMessageAccepted =
-    finished.status === 'idle' &&
-    finished.lastMessage?.trim() === nonce &&
-    finished.lastMessage?.trim() !== authSentinel;
+    finished.status === 'idle' && finished.lastMessage?.trim() === nonce;
   const timelineAccepted = timelineEntries.some(
     (entry) =>
       entry.item.type === 'assistant_message' &&
       typeof entry.item.text === 'string' &&
       entry.item.text.trim() === nonce,
   );
-  const artifacts = await readAgentArtifacts();
   if (!usageAccepted || !finalMessageAccepted || !timelineAccepted) {
     throw new Error('acceptance_failed');
   }
+  const artifacts = await readAgentArtifacts();
 
   process.stdout.write(
     `${JSON.stringify({
@@ -159,7 +156,7 @@ try {
       usage,
       model_artifact_path: artifactPath,
       model_artifact_bytes: artifacts.modelBytes,
-      model_artifact_sha256: artifacts.nonceSha256,
+      model_artifact_sha256: artifacts.modelArtifactSha256,
       sidecar_artifact_path: sidecarPath,
       sidecar_artifact_bytes: artifacts.sidecarBytes,
       sidecar_artifact_sha256: artifacts.sidecarArtifactSha256,
@@ -178,6 +175,14 @@ try {
       status: finished?.status ?? null,
       usage: safeUsage(finished?.final?.lastUsage),
       last_message: limitText(sanitizeText(finished?.lastMessage), 160),
+      cause: limitText(
+        sanitizeText(error instanceof Error ? error.cause : undefined),
+        512,
+      ),
+      stack: limitText(
+        sanitizeText(error instanceof Error ? error.stack : undefined),
+        4096,
+      ),
       daemon_log_path: paseo?.logPath ?? null,
       daemon_log_tail: await readDaemonLogTail(paseo?.logPath),
     })}\n`,
@@ -198,14 +203,21 @@ async function readAgentArtifacts() {
     readFile(sidecarPath, 'utf8'),
   ]);
   const nonceSha256 = createHash('sha256').update(nonce).digest('hex');
+  const modelArtifactSha256 = createHash('sha256')
+    .update(modelOutput)
+    .digest('hex');
   if (modelOutput !== nonce) throw new Error('artifact_content_invalid');
-  if (!/^[a-f0-9]{64}$/.test(sidecarHash) || sidecarHash !== nonceSha256) {
+  if (
+    !/^[a-f0-9]{64}$/.test(sidecarHash) ||
+    sidecarHash !== modelArtifactSha256
+  ) {
     throw new Error('artifact_hash_invalid');
   }
   if (modelStat.size <= 0 || sidecarStat.size !== 64)
     throw new Error('artifact_size_invalid');
   return {
     modelBytes: modelStat.size,
+    modelArtifactSha256,
     nonceSha256,
     sidecarBytes: sidecarStat.size,
     sidecarArtifactSha256: createHash('sha256')

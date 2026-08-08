@@ -1861,6 +1861,49 @@ describe('created_at provenance and provider red tests', () => {
     expect(child.provider).toBe('codex');
   });
 
+  it('preserves the existing last_created_at when an update has no valid timestamp', () => {
+    let state = apply(
+      streamReducer.initialTimelineState,
+      runEvent(
+        'provenance-preserve-run',
+        1,
+        'output',
+        {
+          kind: 'tool_status',
+          activity_id: 'tool-preserve-time',
+          category: 'shell',
+          status: 'running',
+          label: 'Shell',
+          summary: 'running',
+        },
+        '2026-08-08T10:00:00.001Z',
+      ),
+    );
+    state = apply(
+      state,
+      runEvent(
+        'provenance-preserve-run',
+        2,
+        'output',
+        {
+          kind: 'tool_status',
+          activity_id: 'tool-preserve-time',
+          category: 'shell',
+          status: 'completed',
+          label: 'Shell',
+          summary: 'completed',
+        },
+        null,
+      ),
+    );
+
+    expect(
+      toolEntry(
+        entryByValue(state, 'provenance-preserve-run', 'tool-preserve-time'),
+      ).lastCreatedAt,
+    ).toBe('2026-08-08T10:00:00.001Z');
+  });
+
   it('does not read a payload created_at value as event provenance', () => {
     const state = apply(
       streamReducer.initialTimelineState,

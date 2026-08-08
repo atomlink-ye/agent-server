@@ -10,6 +10,7 @@ import {
   type TeamSession,
 } from '@/components/chat/conversation-sidebar';
 import { RunDetails, type ViewStatus } from '@/components/chat/run-details';
+import type { SafeRunEvent } from '@/lib/safe-run-events';
 import {
   applyTimelineEnvelopes,
   initialTimelineState,
@@ -309,11 +310,7 @@ export default function HomePage() {
             );
             if (!response.ok) throw new Error('events');
             const data = (await response.json()) as {
-              events: Array<{
-                sequence: number;
-                type: string;
-                payload?: unknown;
-              }>;
+              events: SafeRunEvent[];
             };
             parsedEvents = data.events
               .map((event) => parseRunStreamEvent(JSON.stringify(event)))
@@ -652,7 +649,7 @@ export default function HomePage() {
         return;
       const data = event instanceof MessageEvent ? event.data : undefined;
       const terminal = applyRunEvent(activeRunId, data);
-      if (!terminal || terminal.status === 'started') return;
+      if (!terminal) return;
       tracking.terminal = terminal.status;
       source.close();
       setSseConnected(false);
@@ -744,7 +741,7 @@ export default function HomePage() {
       if (terminalHandled) return;
       const data = event instanceof MessageEvent ? event.data : undefined;
       const terminal = applyRunEvent(turn.run_id, data);
-      if (!terminal || terminal.status === 'started') return;
+      if (!terminal) return;
       const terminalFailed =
         terminal.status === 'failed' || terminal.status === 'cancelled';
       terminalHandled = true;
@@ -892,11 +889,7 @@ export default function HomePage() {
             );
             if (!eventsResponse.ok) throw new Error('team events');
             const eventData = (await eventsResponse.json()) as {
-              events: Array<{
-                sequence: number;
-                type: string;
-                payload?: unknown;
-              }>;
+              events: SafeRunEvent[];
             };
             for (const event of eventData.events) {
               const parsed = parseRunStreamEvent(JSON.stringify(event));
@@ -1311,11 +1304,7 @@ function TurnView({
   const runId = turn.runId;
   const active = Boolean(runId && runId === activeRunId);
   const prompts = runId ? selectPromptEntries(timeline, runId) : [];
-  const agentTexts = runId
-    ? selectAgentTextEntries(timeline, runId).filter(
-        (entry) => entry.origin === 'assistant_text',
-      )
-    : [];
+  const agentTexts = runId ? selectAgentTextEntries(timeline, runId) : [];
   return (
     <div className="turn">
       {prompts.length > 0 ? (
@@ -1384,10 +1373,7 @@ function TeamTranscript({
         <div className="team-turn" key={`${turn.task_id}-${turn.sequence}`}>
           {(() => {
             const prompts = selectPromptEntries(timeline, turn.run_id);
-            const agentTexts = selectAgentTextEntries(
-              timeline,
-              turn.run_id,
-            ).filter((entry) => entry.origin === 'assistant_text');
+            const agentTexts = selectAgentTextEntries(timeline, turn.run_id);
             return (
               <>
                 <div className="team-context-block">

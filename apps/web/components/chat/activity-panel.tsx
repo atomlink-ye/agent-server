@@ -133,12 +133,8 @@ function ChevronIcon() {
   );
 }
 
-function UsageRow({
-  entry,
-}: {
-  readonly entry: UsageEntry | UsageEntry['usage'];
-}) {
-  const usage = 'usage' in entry ? entry.usage : entry;
+function UsageRow({ entry }: { readonly entry: UsageEntry }) {
+  const usage = entry.usage;
   const values = [
     usage.inputTokens === undefined
       ? null

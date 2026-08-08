@@ -435,7 +435,6 @@ export type TimelineToolEntry = TimelineEntryBase &
     | {
         readonly origin: 'child_timeline_item';
         readonly parentActivityId: TimelineActivityId;
-        readonly provider?: Provider;
       }
   );
 
@@ -473,6 +472,10 @@ export type UsageEntry = TimelineEntryBase & {
 export type LifecycleEntry = TimelineEntryBase & {
   readonly kind: 'lifecycle';
   readonly status: LifecycleEvent;
+};
+
+export type TerminalLifecycleEntry = Omit<LifecycleEntry, 'status'> & {
+  readonly status: Exclude<LifecycleEvent, 'started'>;
 };
 
 export type TimelineEntry =
@@ -666,7 +669,7 @@ function mergeTimelineEntryState(
     firstSequence: existing.firstSequence,
     lastSequence: sequence,
     firstCreatedAt: existing.firstCreatedAt ?? null,
-    lastCreatedAt: replacement.lastCreatedAt ?? null,
+    lastCreatedAt: replacement.lastCreatedAt ?? existing.lastCreatedAt,
   } as TimelineEntry;
   const entries = run.entries.slice();
   entries[index] = merged;
@@ -1260,7 +1263,7 @@ export function selectCurrentLifecycle(
 export function selectTerminalLifecycle(
   state: TimelineState,
   runId: string,
-): LifecycleEntry | null {
+): TerminalLifecycleEntry | null {
   const run = timelineRunFor(state, runId);
   for (let index = run.entries.length - 1; index >= 0; index -= 1) {
     const entry = run.entries[index];
@@ -1270,7 +1273,7 @@ export function selectTerminalLifecycle(
         entry.status === 'failed' ||
         entry.status === 'cancelled')
     )
-      return entry;
+      return entry as TerminalLifecycleEntry;
   }
   return null;
 }

@@ -104,6 +104,7 @@ services:
     command: ['pnpm', 'web:dev']
 
   runner:
+    shm_size: 1gb
     build:
       context: .
       dockerfile: Dockerfile

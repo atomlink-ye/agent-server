@@ -14,6 +14,12 @@ function outputPayload(
   return event?.payload;
 }
 
+function field(value: object | null | undefined, key: string): unknown {
+  return value && Object.hasOwn(value, key)
+    ? Reflect.get(value, key)
+    : undefined;
+}
+
 describe('safeRunEvent output payload contract', () => {
   it('passes assistant text through with its exact whitelist', () => {
     const payload = outputPayload({
@@ -473,5 +479,99 @@ describe('safeRunEvent field bounds', () => {
       [field]: 'x'.repeat(32_001),
     });
     expect(over?.[field]).toBe('x'.repeat(32_000));
+  });
+});
+
+describe('safeRunEvent provenance fields', () => {
+  it('passes a valid top-level created_at through unchanged', () => {
+    const createdAt = '2026-08-08T10:00:00.123Z';
+    const event = safeRunEvent({
+      sequence: 1,
+      type: 'output',
+      created_at: createdAt,
+      payload: { kind: 'assistant_text', text: 'A' },
+    });
+
+    expect(event).not.toBeNull();
+    expect(field(event, 'created_at')).toBe(createdAt);
+    expect(event?.payload).toEqual({ kind: 'assistant_text', text: 'A' });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['number', 42],
+    ['empty', ''],
+    ['invalid', 'not-a-timestamp'],
+    ['zero', '0'],
+    ['calendar-overflow', '2026-02-30T00:00:00Z'],
+  ])(
+    'fails closed for %s created_at without dropping the event',
+    (_name, createdAt) => {
+      const event = safeRunEvent({
+        sequence: 1,
+        type: 'output',
+        ...(createdAt === undefined ? {} : { created_at: createdAt }),
+        payload: { kind: 'assistant_text', text: 'A' },
+      });
+
+      expect(event).not.toBeNull();
+      expect(field(event, 'created_at')).toBeUndefined();
+      expect(event?.payload).toEqual({ kind: 'assistant_text', text: 'A' });
+    },
+  );
+
+  it.each(['opencode', 'claude', 'codex'])(
+    'passes the supported %s provider on tools and children',
+    (provider) => {
+      const tool = outputPayload({
+        kind: 'tool_status',
+        activity_id: 'tool-provider',
+        category: 'shell',
+        status: 'running',
+        label: 'Shell',
+        summary: 'running',
+        provider,
+      });
+      const child = outputPayload({
+        kind: 'child_timeline_item',
+        activity_id: 'child-provider',
+        parent_activity_id: 'parent',
+        item_kind: 'tool',
+        status: 'running',
+        label: 'Child shell',
+        summary: 'running',
+        provider,
+      });
+
+      expect(field(tool, 'provider')).toBe(provider);
+      expect(field(child, 'provider')).toBe(provider);
+    },
+  );
+
+  it('drops an unknown provider field without dropping tool or child events', () => {
+    const tool = outputPayload({
+      kind: 'tool_status',
+      activity_id: 'tool-unknown-provider',
+      category: 'shell',
+      status: 'running',
+      label: 'Shell',
+      summary: 'running',
+      provider: 'unknown',
+    });
+    const child = outputPayload({
+      kind: 'child_timeline_item',
+      activity_id: 'child-unknown-provider',
+      parent_activity_id: 'parent',
+      item_kind: 'tool',
+      status: 'running',
+      label: 'Child shell',
+      summary: 'running',
+      provider: 'unknown',
+    });
+
+    expect(tool).toBeDefined();
+    expect(child).toBeDefined();
+    expect(field(tool, 'provider')).toBeUndefined();
+    expect(field(child, 'provider')).toBeUndefined();
   });
 });

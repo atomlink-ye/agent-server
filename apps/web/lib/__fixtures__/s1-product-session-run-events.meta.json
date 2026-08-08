@@ -1,0 +1,71 @@
+{
+  "schema": "s5-task1-run-events-fixture-v1",
+  "base_commit": "ef7c57247f21acf071c19cc5216e1ffd33eeb997",
+  "captured_at": "2026-08-08",
+  "fixture_run_id": "run-s5-product-session-cumulative",
+  "runtime": {
+    "provider": "unknown",
+    "model": "unknown",
+    "recording": "Provider and model were not recorded during the original capture; values are intentionally not inferred after the fact."
+  },
+  "capture": {
+    "normal_path": [
+      "make web-dev",
+      "POST /api/chats {}",
+      "new ProductSession first message POST /api/sessions/<sessionId>/messages",
+      "GET /api/runs/<runId>/events",
+      "GET /api/sessions/<sessionId>/messages (canonical comparison)"
+    ],
+    "url": "/api/runs/<runId>/events",
+    "transport": "Web JSONL after BFF safe-event allowlist"
+  },
+  "event_count": 32,
+  "last_sequence": 32,
+  "terminal": "succeeded",
+  "types": {
+    "started": 1,
+    "output": 30,
+    "succeeded": 1
+  },
+  "kinds": {
+    "reasoning_progress": 3,
+    "tool_status": 2,
+    "assistant_text": 23,
+    "usage": 1
+  },
+  "assistant_text": {
+    "classification": "cumulative",
+    "observed_classification": "cumulative only",
+    "frame_count": 23,
+    "sequences": [
+      5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+      25, 26, 29
+    ],
+    "lengths": [
+      102, 179, 212, 231, 244, 329, 433, 480, 562, 637, 730, 799, 848, 894, 953,
+      1054, 1122, 1151, 1222, 1274, 1303, 1311, 1823
+    ],
+    "strict_monotonic_prefix": true,
+    "thinking_between_snapshots": true,
+    "sequence_26_is_prefix_of_29": true,
+    "canonical_saved_present": true,
+    "canonical_saved_length": 1823,
+    "canonical_equals_last_snapshot": true,
+    "canonical_saved_sha256": "1ee56b0c4d6e263baf1e76ce7d985363bf5019499bcfc875374633c99f6ff317",
+    "last_snapshot_sha256": "1ee56b0c4d6e263baf1e76ce7d985363bf5019499bcfc875374633c99f6ff317",
+    "canonical_comparison": "Canonical body is not duplicated in fixture metadata; hashes come from the real canonical message and final JSONL snapshot."
+  },
+  "classification_basis": {
+    "description": "Observed pattern only: Web JSONL discarded source/provenance fields, so this does not prove production provenance.",
+    "all_assistant_frames_strict_prefixes": true,
+    "thinking_sequences_between_26_and_29": [27, 28],
+    "sequence_29_strictly_extends_sequence_26": true
+  },
+  "omissions": {
+    "approval": "not present in the captured run; not fabricated",
+    "child_timeline_item": "not present in the captured run; not fabricated",
+    "nested_detail": "discarded by the BFF allowlist as expected",
+    "event_created_at": "discarded by the pre-fix Web BFF; replay entries intentionally use null rather than an inferred timestamp",
+    "tool_provider": "discarded by the pre-fix Web BFF; no provider value was inferred after capture"
+  }
+}

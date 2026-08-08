@@ -1,8 +1,8 @@
-.PHONY: setup dev dev-api web-bootstrap web-dev web-build web-check-types build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
+.PHONY: setup dev dev-api web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
-	internal-test-real-pg internal-test-contract internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
+	internal-test-real-pg internal-test-contract internal-test-web internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
-	test-contract-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native self-learning-team-phase2-smoke self-learning-team-phase3-smoke agent-teams-v2-smoke
+	test-contract-native test-web-native e2e-smoke-native paseo-smoke-native eval-smoke-native ci-native clean-native self-learning-team-phase2-smoke self-learning-team-phase3-smoke agent-teams-v2-smoke
 
 setup:
 	docker compose build agent-server runner
@@ -31,6 +31,38 @@ web-dev:
 	@until curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; do sleep 1; done
 	$(MAKE) web-bootstrap
 	docker compose up --build web
+
+web-e2e-smoke:
+	@set -eu; \
+	wait_for_url() { \
+		url="$$1"; \
+		deadline=$$(expr $$(date +%s) + 180); \
+		while [ $$(date +%s) -lt "$$deadline" ]; do \
+			if curl -fsS --max-time 2 "$$url" >/dev/null; then return 0; fi; \
+			sleep 1; \
+		done; \
+		echo "Timed out waiting for $$url" >&2; \
+		return 1; \
+	}; \
+	cleanup() { \
+		status="$$?"; \
+		docker compose -f compose.yaml -f e2e/compose.web-provider.yaml down --remove-orphans >/dev/null 2>&1 || true; \
+		trap - EXIT; \
+		exit "$$status"; \
+	}; \
+	trap 'exit 130' INT; \
+	trap 'exit 143' TERM; \
+	trap cleanup EXIT; \
+	test -n "$${OPENCODE_GO_API_KEY:-}" || { echo 'OPENCODE_GO_API_KEY is required' >&2; exit 1; }; \
+	PASEO_PROVIDER=opencode PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose -f compose.yaml -f e2e/compose.web-provider.yaml up --build -d postgres agent-server; \
+	wait_for_url http://127.0.0.1:3000/health/ready; \
+	$(MAKE) web-bootstrap; \
+	PASEO_PROVIDER=opencode PASEO_MODEL=opencode-go/deepseek-v4-flash docker compose -f compose.yaml -f e2e/compose.web-provider.yaml up --build -d web; \
+	wait_for_url http://127.0.0.1:3001; \
+	WEB_E2E_BASE_URL=http://web.localhost:3001 WEB_E2E_PROVIDER=opencode WEB_E2E_MODEL=opencode-go/deepseek-v4-flash WEB_E2E_ARTIFACT_DIR=/workspace/.local/web-e2e-artifacts ./scripts/dev/docker-run --bind-local --pass-env WEB_E2E_BASE_URL --pass-env WEB_E2E_PROVIDER --pass-env WEB_E2E_MODEL --pass-env WEB_E2E_ARTIFACT_DIR -- pnpm test:e2e:web
+
+test-web:
+	./scripts/dev/docker-run -- pnpm test:web
 
 web-build:
 	./scripts/dev/docker-run -- pnpm web:build
@@ -119,6 +151,9 @@ internal-test-real-pg:
 internal-test-contract:
 	pnpm test:contract
 
+internal-test-web:
+	pnpm test:web
+
 internal-e2e-smoke:
 	pnpm test:e2e
 
@@ -144,6 +179,7 @@ test-unit-native: internal-test-unit
 test-integration-native: internal-test-integration
 test-real-pg-native: internal-test-real-pg
 test-contract-native: internal-test-contract
+test-web-native: internal-test-web
 e2e-smoke-native: internal-e2e-smoke
 paseo-smoke-native: internal-paseo-smoke
 eval-smoke-native: internal-eval-smoke

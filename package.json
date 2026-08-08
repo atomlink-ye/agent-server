@@ -38,6 +38,7 @@
     "test:real-pg": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts --no-file-parallelism tests/integration/real-pg-pool.integration.test.ts tests/integration/postgres-migration-concurrency.integration.test.ts tests/integration/agent-registry-postgres.integration.test.ts tests/integration/session-lane-postgres.integration.test.ts tests/integration/runtime-memory-real-pg.integration.test.ts tests/integration/run-cancellation-postgres.integration.test.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:web": "vitest run --config vitest.web.config.ts",
+    "test:e2e:web": "vitest run --config vitest.e2e.config.ts e2e/web-product-session.e2e.test.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",
     "eval:smoke": "node --import tsx scripts/eval/memory-policy-eval.ts",
@@ -62,6 +63,8 @@
     "opencode-linux-x64": "1.18.4"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "6.0.4",
+    "@vitest/browser-playwright": "4.1.10",
     "@electric-sql/pglite": "0.3.14",
     "@electric-sql/pglite-smoke": "npm:@electric-sql/pglite@0.5.4",
     "@electric-sql/pglite-socket": "0.2.7",
@@ -69,6 +72,7 @@
     "@types/node": "22.20.1",
     "@types/pg": "8.15.5",
     "prettier": "3.9.6",
+    "playwright": "1.62.1",
     "tsx": "4.23.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10"

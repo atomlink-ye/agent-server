@@ -3,8 +3,12 @@ import 'server-only';
 export type SafeRunEvent = {
   readonly sequence: number;
   readonly type: string;
+  /** A validated source timestamp; malformed values are omitted. */
+  readonly created_at?: string;
   readonly payload?: Readonly<Record<string, unknown>>;
 };
+
+const providers = new Set(['opencode', 'claude', 'codex']);
 
 const toolCategories = new Set([
   'shell',
@@ -38,15 +42,40 @@ export function safeRunEvent(value: unknown): SafeRunEvent | null {
   )
     return null;
   if (['started', 'succeeded', 'failed', 'cancelled'].includes(type))
-    return { sequence: sequence as number, type };
+    return {
+      sequence: sequence as number,
+      type,
+      ...(validCreatedAt(event.created_at)
+        ? { created_at: event.created_at }
+        : {}),
+    };
   if (type !== 'output')
-    return { sequence: sequence as number, type: 'output' };
+    return {
+      sequence: sequence as number,
+      type: 'output',
+      ...(validCreatedAt(event.created_at)
+        ? { created_at: event.created_at }
+        : {}),
+    };
 
   const payload = record(event.payload);
   const safePayload = safeOutputPayload(payload);
   return safePayload
-    ? { sequence: sequence as number, type, payload: safePayload }
-    : { sequence: sequence as number, type };
+    ? {
+        sequence: sequence as number,
+        type,
+        ...(validCreatedAt(event.created_at)
+          ? { created_at: event.created_at }
+          : {}),
+        payload: safePayload,
+      }
+    : {
+        sequence: sequence as number,
+        type,
+        ...(validCreatedAt(event.created_at)
+          ? { created_at: event.created_at }
+          : {}),
+      };
 }
 
 export function safeRunEventStream(body: ReadableStream<Uint8Array>) {
@@ -140,6 +169,9 @@ function safeOutputPayload(
       status,
       label,
       summary,
+      ...(providers.has(payload.provider as string)
+        ? { provider: payload.provider as string }
+        : {}),
       ...(toolName ? { tool_name: toolName } : {}),
       ...(detailKind ? { detail_kind: detailKind } : {}),
       ...(detailText ? { detail_text: detailText } : {}),
@@ -174,6 +206,9 @@ function safeOutputPayload(
       status: payload.status as string,
       label,
       summary,
+      ...(providers.has(payload.provider as string)
+        ? { provider: payload.provider as string }
+        : {}),
       ...(detailKind ? { detail_kind: detailKind } : {}),
       ...(detailText ? { detail_text: detailText } : {}),
       ...(exitCode !== undefined ? { exit_code: exitCode } : {}),
@@ -256,4 +291,15 @@ function parseJson(value: string): unknown {
   } catch {
     return null;
   }
+}
+
+function validCreatedAt(value: unknown): value is string {
+  if (
+    typeof value !== 'string' ||
+    value.length !== 24 ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+  )
+    return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }

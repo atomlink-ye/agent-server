@@ -24,10 +24,6 @@ import {
   ANTHROPIC_GATEWAY_ENVIRONMENT_NAMES,
   seedAnthropicGatewayEnvironment,
 } from '../dev/anthropic-gateway-env.mjs';
-import {
-  PROVIDER_SMOKE_MODEL,
-  PROVIDER_SMOKE_PROVIDER,
-} from '../dev/provider-smoke-contract.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const adminUrl = process.env.POSTGRES_ADMIN_URL;
@@ -48,10 +44,10 @@ const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
   requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
-const requestedProvider = process.env.PASEO_PROVIDER ?? PROVIDER_SMOKE_PROVIDER;
+const requestedProvider = process.env.PASEO_PROVIDER ?? 'opencode';
 const supportedSmokeModels = {
   opencode: new Set([
-    PROVIDER_SMOKE_MODEL,
+    'opencode-go/deepseek-v4-flash',
     'opencode-go/mimo-v2.5',
     'opencode-go/glm-5.2',
   ]),
@@ -66,7 +62,7 @@ if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
   throw new Error('rework_scenario_mode_conflict');
 const requestedModel =
   process.env.PASEO_MODEL ??
-  (requestedProvider === PROVIDER_SMOKE_PROVIDER ? PROVIDER_SMOKE_MODEL : '');
+  (requestedProvider === 'opencode' ? 'opencode-go/deepseek-v4-flash' : '');
 const runtimeResolutionProviders = new Set(['opencode', 'claude', 'codex']);
 const startedAt = Date.now();
 const suffix = randomUUID().slice(0, 8);

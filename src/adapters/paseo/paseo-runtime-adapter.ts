@@ -30,7 +30,10 @@ import {
   type PaseoToolCall,
   type PaseoTimelinePage,
 } from './paseo-client-port.js';
-import { mapPaseoFinishStatus } from './status-mapper.js';
+import {
+  isClaudeAuthenticationFailure,
+  mapPaseoFinishStatus,
+} from './status-mapper.js';
 
 export interface PaseoRuntimeOptions {
   readonly wsUrl: string;
@@ -1476,6 +1479,18 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       unsubscribeProviderSubagents = undefined;
 
       const status = mapPaseoFinishStatus(finished.status);
+      if (
+        isClaudeAuthenticationFailure({
+          provider: agent.provider,
+          status: finished.status,
+          error: finished.error,
+          lastMessage: finished.lastMessage,
+        })
+      ) {
+        throw new RuntimeExecutionError(
+          'Claude runtime authentication is required.',
+        );
+      }
       if (status === 'timed_out') throw new RuntimeTimedOutError();
       if (status === 'failed') {
         throw new RuntimeExecutionError(

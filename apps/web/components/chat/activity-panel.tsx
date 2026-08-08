@@ -1,42 +1,35 @@
 import { useEffect, useRef } from 'react';
-import { deriveToolActivityGroups } from '@/lib/stream-reducer';
+import {
+  selectActivityEntries,
+  selectChildEntriesByParent,
+} from '@/lib/stream-reducer';
 import type {
-  ChildProjection,
-  PermissionProjection,
-  StreamProjection,
-  ToolProjection,
+  ApprovalEntry,
+  TimelineActivityEntry,
+  TimelineChildEntry,
+  TimelineState,
+  TimelineToolEntry,
+  UsageEntry,
 } from '@/lib/stream-reducer';
 
 type ActivityPanelProps = {
-  readonly projection: StreamProjection;
+  readonly timeline: TimelineState;
+  readonly runId: string;
   readonly active: boolean;
   readonly replayAvailable?: boolean;
   readonly replayLoading?: boolean;
 };
 
 export function ActivityPanel({
-  projection,
+  timeline,
+  runId,
   active,
   replayAvailable = true,
   replayLoading = false,
 }: ActivityPanelProps) {
-  const tools = Object.values(projection.tools);
-  const { roots, childrenByParent } = deriveToolActivityGroups(
-    projection.tools,
-    projection.childrenByParent,
-    projection.activityOrder,
-  );
-  const permissions = Object.values(projection.permissions);
-  const childCount = Object.values(projection.childrenByParent).reduce(
-    (count, children) => count + children.length,
-    0,
-  );
-  const hasActivity =
-    projection.reasoning ||
-    tools.length > 0 ||
-    childCount > 0 ||
-    permissions.length > 0 ||
-    projection.usage;
+  const entries = selectActivityEntries(timeline, runId);
+  const childrenByParent = selectChildEntriesByParent(timeline, runId);
+  const hasActivity = entries.length > 0;
   if (!hasActivity && replayAvailable && !replayLoading && !active) return null;
   return (
     <div className="activity-panel" aria-label="Execution activity">
@@ -51,29 +44,26 @@ export function ActivityPanel({
         </p>
       ) : null}
       <div className="activity-list">
-        {projection.reasoning ? (
-          <ThinkingRow
-            active={active}
-            status={projection.reasoning.status}
-            text={projection.reasoning.text}
-          />
-        ) : null}
-        {roots.map((tool) =>
-          tool.category === 'subagent' ? (
-            <SubagentRow
-              key={tool.activityId}
-              active={active}
-              tool={tool}
-              children={childrenByParent[tool.activityId] ?? []}
-            />
-          ) : (
-            <ToolRow key={tool.activityId} tool={tool} />
-          ),
-        )}
-        {projection.usage ? <UsageRow projection={projection} /> : null}
-        {permissions.map((permission) => (
-          <PermissionRow key={permission.activityId} permission={permission} />
-        ))}
+        {entries.map((entry) => {
+          const key = `${entry.activityId.scope}:${entry.activityId.value}`;
+          if (entry.kind === 'thinking')
+            return <ThinkingRow key={key} active={active} entry={entry} />;
+          if (entry.kind === 'tool') {
+            return entry.category === 'subagent' ? (
+              <SubagentRow
+                key={key}
+                active={active}
+                entry={entry}
+                children={childrenByParent.get(entry.activityId.value) ?? []}
+              />
+            ) : (
+              <ToolRow key={key} entry={entry} />
+            );
+          }
+          if (entry.kind === 'approval')
+            return <PermissionRow key={key} entry={entry} />;
+          return <UsageRow key={key} entry={entry} />;
+        })}
       </div>
     </div>
   );
@@ -143,9 +133,12 @@ function ChevronIcon() {
   );
 }
 
-function UsageRow({ projection }: { readonly projection: StreamProjection }) {
-  const usage = projection.usage;
-  if (!usage) return null;
+function UsageRow({
+  entry,
+}: {
+  readonly entry: UsageEntry | UsageEntry['usage'];
+}) {
+  const usage = 'usage' in entry ? entry.usage : entry;
   const values = [
     usage.inputTokens === undefined
       ? null
@@ -170,13 +163,12 @@ function UsageRow({ projection }: { readonly projection: StreamProjection }) {
 
 function ThinkingRow({
   active,
-  status,
-  text,
+  entry,
 }: {
   readonly active: boolean;
-  readonly status: 'started' | 'completed';
-  readonly text?: string;
+  readonly entry: Extract<TimelineActivityEntry, { readonly kind: 'thinking' }>;
 }) {
+  const { status, text } = entry;
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -220,12 +212,13 @@ function ThinkingRow({
 }
 
 function ToolRow({
-  tool,
+  entry,
   nested = false,
 }: {
-  readonly tool: ToolProjection;
+  readonly entry: TimelineToolEntry;
   readonly nested?: boolean;
 }) {
+  const tool = entry;
   const rowClass = `activity-item activity-row tool-item ${nested ? 'nested-tool-item' : ''} ${tool.status === 'running' ? 'is-running' : ''} ${tool.status === 'failed' || tool.status === 'cancelled' ? 'is-failed' : ''}`;
   const content = (
     <>
@@ -286,13 +279,14 @@ function DetailContent({
 
 function SubagentRow({
   active,
-  tool,
+  entry,
   children,
 }: {
   readonly active: boolean;
-  readonly tool: ToolProjection;
-  readonly children: readonly ChildProjection[];
+  readonly entry: TimelineToolEntry;
+  readonly children: readonly TimelineChildEntry[];
 }) {
+  const tool = entry;
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -325,7 +319,11 @@ function SubagentRow({
       {children.length > 0 ? (
         <div className="subagent-children" aria-label="Subagent activity">
           {children.map((child) => (
-            <ChildRow key={child.activityId} active={active} child={child} />
+            <ChildRow
+              key={`${child.activityId.scope}:${child.activityId.value}`}
+              active={active}
+              child={child}
+            />
           ))}
         </div>
       ) : null}
@@ -338,16 +336,16 @@ function ChildRow({
   child,
 }: {
   readonly active: boolean;
-  readonly child: ChildProjection;
+  readonly child: TimelineChildEntry;
 }) {
   const iconKind: ActivityIconKind =
-    child.kind === 'reasoning'
+    child.kind === 'thinking'
       ? 'reasoning'
-      : child.kind === 'assistant'
+      : child.kind === 'agentText'
         ? 'subagent'
         : 'tool';
-  const isTextChild = child.kind === 'reasoning' || child.kind === 'assistant';
-  const semanticLabel = child.kind === 'assistant' ? 'Assistant' : 'Thinking';
+  const isTextChild = child.kind === 'thinking' || child.kind === 'agentText';
+  const semanticLabel = child.kind === 'agentText' ? 'Assistant' : 'Thinking';
   const fullText = isTextChild
     ? (distinctText(child.detailText, semanticLabel) ??
       distinctText(child.summary, semanticLabel) ??
@@ -378,9 +376,9 @@ function ChildRow({
       <ActivityIcon kind={iconKind} status={child.status} />
       <span className="activity-item-copy">
         <strong>
-          {child.kind === 'reasoning'
+          {child.kind === 'thinking'
             ? 'Thinking'
-            : child.kind === 'assistant'
+            : child.kind === 'agentText'
               ? 'Assistant'
               : child.label}
         </strong>
@@ -424,11 +422,8 @@ function compactPreview(text: string) {
   return `${firstLine.slice(0, 117).trimEnd()}…`;
 }
 
-function PermissionRow({
-  permission,
-}: {
-  readonly permission: PermissionProjection;
-}) {
+function PermissionRow({ entry }: { readonly entry: ApprovalEntry }) {
+  const permission = entry;
   const decision = permission.decision ? ` · ${permission.decision}` : '';
   return (
     <details

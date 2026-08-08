@@ -1,10 +1,15 @@
-import type { StreamProjection } from '@/lib/stream-reducer';
+import {
+  selectCurrentLifecycle,
+  selectTerminalLifecycle,
+  selectUsageEntry,
+} from '@/lib/stream-reducer';
+import type { TimelineState, UsageMetrics } from '@/lib/stream-reducer';
 
 export type ViewStatus =
   'loading' | 'idle' | 'running' | 'completed' | 'failed';
 
 type RunDetailsProps = {
-  readonly projection: StreamProjection;
+  readonly timeline: TimelineState;
   readonly status: ViewStatus;
   readonly sessionId?: string;
   readonly taskId?: string;
@@ -13,25 +18,27 @@ type RunDetailsProps = {
 };
 
 export function RunDetails({
-  projection,
+  timeline,
   status,
   sessionId,
   taskId,
   runId,
   connected,
 }: RunDetailsProps) {
-  const usage = projection.usage;
+  const lifecycle = runId ? selectCurrentLifecycle(timeline, runId) : null;
+  const terminal = runId ? selectTerminalLifecycle(timeline, runId) : null;
+  const usage = runId ? selectUsageEntry(timeline, runId)?.usage : null;
   return (
     <aside className="run-details" aria-label="Run details">
       <p className="details-kicker">Run details</p>
       <dl>
         <div>
           <dt>Status</dt>
-          <dd>{runStatus(projection, status)}</dd>
+          <dd>{runStatus(lifecycle, terminal, status)}</dd>
         </div>
         <div>
           <dt>Lifecycle</dt>
-          <dd>{lifecycleLabel(projection, status)}</dd>
+          <dd>{lifecycleLabel(lifecycle, terminal, status)}</dd>
         </div>
         <div>
           <dt>Live updates</dt>
@@ -62,10 +69,14 @@ export function RunDetails({
   );
 }
 
-function runStatus(projection: StreamProjection, status: ViewStatus) {
-  if (projection.terminal === 'succeeded') return 'Completed';
-  if (projection.terminal) return 'Failed';
-  if (projection.lifecycle === 'started') return 'Working';
+function runStatus(
+  lifecycle: ReturnType<typeof selectCurrentLifecycle>,
+  terminal: ReturnType<typeof selectTerminalLifecycle>,
+  status: ViewStatus,
+) {
+  if (terminal?.status === 'succeeded') return 'Completed';
+  if (terminal) return 'Failed';
+  if (lifecycle?.status === 'started') return 'Working';
   return {
     loading: 'Connecting',
     idle: 'Ready',
@@ -75,10 +86,14 @@ function runStatus(projection: StreamProjection, status: ViewStatus) {
   }[status];
 }
 
-function lifecycleLabel(projection: StreamProjection, status: ViewStatus) {
-  if (projection.terminal === 'succeeded') return 'Saved result';
-  if (projection.terminal) return 'Run ended';
-  if (projection.lifecycle === 'started') return 'Output streaming';
+function lifecycleLabel(
+  lifecycle: ReturnType<typeof selectCurrentLifecycle>,
+  terminal: ReturnType<typeof selectTerminalLifecycle>,
+  status: ViewStatus,
+) {
+  if (terminal?.status === 'succeeded') return 'Saved result';
+  if (terminal) return 'Run ended';
+  if (lifecycle?.status === 'started') return 'Output streaming';
   return {
     loading: 'Connecting',
     idle: 'Waiting',
@@ -88,7 +103,7 @@ function lifecycleLabel(projection: StreamProjection, status: ViewStatus) {
   }[status];
 }
 
-function formatUsage(usage: StreamProjection['usage']) {
+function formatUsage(usage: UsageMetrics | null | undefined) {
   if (!usage) return 'Not available';
   const parts = [];
   if (usage.inputTokens !== undefined)

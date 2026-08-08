@@ -11,10 +11,14 @@ import {
 } from '@/components/chat/conversation-sidebar';
 import { RunDetails, type ViewStatus } from '@/components/chat/run-details';
 import {
-  initialStreamProjection,
+  applyTimelineEnvelopes,
+  initialTimelineState,
   parseRunStreamEvent,
-  reduceRunStreamEvent,
-  type StreamProjection,
+  selectAgentTextEntries,
+  selectPromptEntries,
+  selectTerminalLifecycle,
+  type TimelineEnvelope,
+  type TimelineState,
 } from '@/lib/stream-reducer';
 
 type Message = {
@@ -60,14 +64,15 @@ type ChatSelection =
       memberRunId: string;
     };
 type ReplayStatus = 'loading' | 'ready' | 'unavailable';
-type ReplayProjections = {
-  readonly projections: Readonly<Record<string, StreamProjection>>;
+type ReplayTimelines = {
+  readonly envelopes: Readonly<Record<string, readonly TimelineEnvelope[]>>;
   readonly statuses: Readonly<Record<string, ReplayStatus>>;
 };
 type RunTracking = {
   taskId: string;
   runId: string;
   formalAssistantSeen: boolean;
+  canonicalAssistant: Message | null;
   terminal: 'succeeded' | 'failed' | 'cancelled' | null;
   sseDisconnected: boolean;
   durableCatchupInFlight: boolean;
@@ -127,11 +132,7 @@ export default function HomePage() {
     taskId?: string;
     runId?: string;
   }>({});
-  const [transientAssistantText, setTransientAssistantText] =
-    useState<string>();
-  const [projections, setProjections] = useState<
-    Readonly<Record<string, StreamProjection>>
-  >({});
+  const [timeline, setTimeline] = useState<TimelineState>(initialTimelineState);
   const [replayStatus, setReplayStatus] = useState<
     Readonly<Record<string, ReplayStatus>>
   >({});
@@ -144,7 +145,7 @@ export default function HomePage() {
   const runEpochRef = useRef(0);
   const selectionEpochRef = useRef(0);
   const activeTaskIdRef = useRef<string | undefined>(undefined);
-  const projectionsRef = useRef(projections);
+  const timelineRef = useRef(timeline);
   const navigationPendingRef = useRef(false);
   const navigationOperationRef = useRef(0);
   const selectTeamSessionRef = useRef<
@@ -156,7 +157,16 @@ export default function HomePage() {
     | undefined
   >(undefined);
   activeTaskIdRef.current = activeTaskId;
-  projectionsRef.current = projections;
+
+  const commitTimelineEnvelopes = useCallback(
+    (envelopes: readonly TimelineEnvelope[]) => {
+      const next = applyTimelineEnvelopes(timelineRef.current, envelopes);
+      timelineRef.current = next;
+      setTimeline(next);
+      return next;
+    },
+    [],
+  );
 
   const beginNavigation = useCallback(() => {
     if (navigationPendingRef.current) return null;
@@ -227,7 +237,6 @@ export default function HomePage() {
     runTrackingRef.current = null;
     setActiveTaskId(undefined);
     setActiveRunId(undefined);
-    setTransientAssistantText(undefined);
     setError(undefined);
     setSseConnected(false);
     setStatus('completed');
@@ -246,12 +255,12 @@ export default function HomePage() {
     void refreshChats().catch(() => undefined);
   }, [refreshChats]);
 
-  const buildReplayProjections = useCallback(
+  const buildReplayTimelines = useCallback(
     async (
       selectedId: string,
       nextMessages: Message[],
       epoch: number,
-    ): Promise<ReplayProjections> => {
+    ): Promise<ReplayTimelines> => {
       const runIds = [
         ...new Set(
           nextMessages
@@ -259,11 +268,22 @@ export default function HomePage() {
             .filter((value): value is string => Boolean(value)),
         ),
       ];
-      if (runIds.length === 0) return { projections: {}, statuses: {} };
-      const results: Record<string, StreamProjection> = {};
+      if (runIds.length === 0) return { envelopes: {}, statuses: {} };
+      const results: Record<string, readonly TimelineEnvelope[]> = {};
       const statuses: Record<string, ReplayStatus> = {};
       await Promise.all(
         runIds.map(async (runId) => {
+          const user = nextMessages.find(
+            (message) => message.run_id === runId && message.role === 'user',
+          );
+          const assistant = nextMessages.find(
+            (message) =>
+              message.run_id === runId && message.role === 'assistant',
+          );
+          let parsedEvents: NonNullable<
+            ReturnType<typeof parseRunStreamEvent>
+          >[] = [];
+          let replayAvailable = true;
           try {
             const response = await fetch(
               `/api/chats/${encodeURIComponent(selectedId)}/runs/${encodeURIComponent(runId)}/events`,
@@ -277,23 +297,41 @@ export default function HomePage() {
                 payload?: unknown;
               }>;
             };
-            const parsedEvents = data.events
+            parsedEvents = data.events
               .map((event) => parseRunStreamEvent(JSON.stringify(event)))
               .filter(
                 (event): event is NonNullable<typeof event> => event !== null,
               );
-            let projection = initialStreamProjection;
-            for (const event of parsedEvents)
-              projection = reduceRunStreamEvent(projection, event);
-            if (selectionEpochRef.current === epoch)
-              results[runId] = projection;
-            statuses[runId] = 'ready';
+            replayAvailable = true;
           } catch {
-            statuses[runId] = 'unavailable';
+            replayAvailable = false;
           }
+          const envelopes: TimelineEnvelope[] = [];
+          if (user)
+            envelopes.push({
+              runId,
+              update: { kind: 'prompt', text: user.text, messageId: user.id },
+            });
+          envelopes.push(
+            ...parsedEvents.map((event) => ({
+              runId,
+              update: { kind: 'runEvent' as const, event },
+            })),
+          );
+          if (assistant)
+            envelopes.push({
+              runId,
+              update: {
+                kind: 'canonicalAgentText',
+                text: assistant.text,
+                messageId: assistant.id,
+              },
+            });
+          if (selectionEpochRef.current === epoch) results[runId] = envelopes;
+          statuses[runId] = replayAvailable ? 'ready' : 'unavailable';
         }),
       );
-      return { projections: results, statuses };
+      return { envelopes: results, statuses };
     },
     [],
   );
@@ -307,7 +345,7 @@ export default function HomePage() {
       eventSourceRef.current = null;
       runTrackingRef.current = null;
       setSseConnected(false);
-      const replay = await buildReplayProjections(
+      const replay = await buildReplayTimelines(
         session.session_id,
         nextMessages,
         epoch,
@@ -318,7 +356,12 @@ export default function HomePage() {
       setSelection({ kind: 'product_session', sessionId: session.session_id });
       setTeamSession(undefined);
       setMessages(nextMessages);
-      setProjections(replay.projections);
+      const hydrated = applyTimelineEnvelopes(
+        initialTimelineState,
+        Object.values(replay.envelopes).flat(),
+      );
+      timelineRef.current = hydrated;
+      setTimeline(hydrated);
       setReplayStatus(
         Object.fromEntries(
           nextMessages
@@ -330,7 +373,6 @@ export default function HomePage() {
             ]),
         ),
       );
-      setTransientAssistantText(undefined);
       setError(undefined);
       setRetryText('');
       const restored = restoreTask(nextMessages);
@@ -348,6 +390,7 @@ export default function HomePage() {
               taskId: restored.taskId,
               runId: restored.runId,
               formalAssistantSeen: false,
+              canonicalAssistant: null,
               terminal: null,
               sseDisconnected: false,
               durableCatchupInFlight: false,
@@ -355,7 +398,7 @@ export default function HomePage() {
           : null;
       setMobileSidebarOpen(false);
     },
-    [buildReplayProjections, clearTeamUrl],
+    [buildReplayTimelines, clearTeamUrl],
   );
 
   const loadSession = useCallback(async () => {
@@ -459,18 +502,20 @@ export default function HomePage() {
         !tracking.sseDisconnected ||
         tracking.durableCatchupInFlight ||
         !capturedRunId ||
-        !sessionId
+        !sessionId ||
+        !tracking.canonicalAssistant
       )
         return;
       tracking.durableCatchupInFlight = true;
       try {
-        const results = await buildReplayProjections(
+        const assistant = tracking.canonicalAssistant;
+        const results = await buildReplayTimelines(
           sessionId,
           [
             {
-              id: 'durable-catchup',
+              id: assistant.id,
               role: 'assistant',
-              text: '',
+              text: assistant.text,
               status: 'completed',
               task_id: capturedTaskId,
               run_id: capturedRunId,
@@ -479,18 +524,12 @@ export default function HomePage() {
           selectionEpochRef.current,
         );
         if (!isCurrent()) return;
-        const replay = results.projections[capturedRunId];
-        if (!replay) return;
-        setProjections((current) => ({
-          ...current,
-          [capturedRunId]: replay,
-        }));
+        const envelopes = results.envelopes[capturedRunId] ?? [];
+        commitTimelineEnvelopes(envelopes);
         setReplayStatus((current) => ({
           ...current,
           [capturedRunId]: results.statuses[capturedRunId] ?? 'unavailable',
         }));
-        if (replay.assistantText !== null)
-          setTransientAssistantText(replay.assistantText);
         finishSuccessfulRun();
       } finally {
         tracking.durableCatchupInFlight = false;
@@ -513,11 +552,23 @@ export default function HomePage() {
             const tracking = runTrackingRef.current;
             if (tracking && tracking.taskId === capturedTaskId) {
               tracking.formalAssistantSeen = true;
-              setTransientAssistantText(undefined);
+              tracking.canonicalAssistant = assistant;
               if (tracking.terminal === 'succeeded') {
                 if (tracking.sseDisconnected)
                   await completeAfterDurableCatchup(tracking);
-                else finishSuccessfulRun();
+                else if (tracking.canonicalAssistant) {
+                  commitTimelineEnvelopes([
+                    {
+                      runId: capturedRunId!,
+                      update: {
+                        kind: 'canonicalAgentText',
+                        text: tracking.canonicalAssistant.text,
+                        messageId: tracking.canonicalAssistant.id,
+                      },
+                    },
+                  ]);
+                  finishSuccessfulRun();
+                }
               } else if (
                 tracking.terminal === 'failed' ||
                 tracking.terminal === 'cancelled'
@@ -544,7 +595,8 @@ export default function HomePage() {
   }, [
     activeRunId,
     activeTaskId,
-    buildReplayProjections,
+    buildReplayTimelines,
+    commitTimelineEnvelopes,
     finishFailedRun,
     finishSuccessfulRun,
     refreshMessages,
@@ -560,8 +612,6 @@ export default function HomePage() {
     eventSourceRef.current?.close();
     eventSourceRef.current = source;
     setSseConnected(false);
-    let nextProjection =
-      projectionsRef.current[activeRunId] ?? initialStreamProjection;
     const isCurrentSource = () => {
       const tracking = runTrackingRef.current;
       return (
@@ -587,20 +637,33 @@ export default function HomePage() {
       if (typeof data !== 'string') return;
       const parsed = parseRunStreamEvent(data);
       if (!parsed) return;
-      nextProjection = reduceRunStreamEvent(nextProjection, parsed);
-      setProjections((current) => ({
-        ...current,
-        [activeRunId]: nextProjection,
-      }));
+      commitTimelineEnvelopes([
+        { runId: activeRunId, update: { kind: 'runEvent', event: parsed } },
+      ]);
       setReplayStatus((current) => ({ ...current, [activeRunId]: 'ready' }));
-      if (nextProjection.assistantText !== null)
-        setTransientAssistantText(nextProjection.assistantText);
-      if (nextProjection.terminal) {
-        tracking.terminal = nextProjection.terminal;
+      const terminal = selectTerminalLifecycle(
+        timelineRef.current,
+        activeRunId,
+      );
+      if (terminal) {
+        if (terminal.status === 'started') return;
+        tracking.terminal = terminal.status;
         source.close();
         setSseConnected(false);
-        if (nextProjection.terminal === 'succeeded') {
-          if (tracking.formalAssistantSeen) finishSuccessfulRun();
+        if (terminal.status === 'succeeded') {
+          if (tracking.formalAssistantSeen && tracking.canonicalAssistant) {
+            commitTimelineEnvelopes([
+              {
+                runId: activeRunId,
+                update: {
+                  kind: 'canonicalAgentText',
+                  text: tracking.canonicalAssistant.text,
+                  messageId: tracking.canonicalAssistant.id,
+                },
+              },
+            ]);
+            finishSuccessfulRun();
+          }
         } else {
           setError('The Agent couldn’t complete this request.');
           finishFailedRun();
@@ -642,7 +705,14 @@ export default function HomePage() {
         setSseConnected(false);
       }
     };
-  }, [activeRunId, activeTaskId, finishFailedRun, finishSuccessfulRun, status]);
+  }, [
+    activeRunId,
+    activeTaskId,
+    commitTimelineEnvelopes,
+    finishFailedRun,
+    finishSuccessfulRun,
+    status,
+  ]);
 
   useEffect(() => {
     if (
@@ -651,6 +721,7 @@ export default function HomePage() {
       status !== 'running'
     )
       return;
+    const capturedSelectionEpoch = selectionEpochRef.current;
     const turn = teamSession.turns.find((item) => item.status === 'running');
     if (!turn) return;
     const source = new EventSource(
@@ -658,35 +729,70 @@ export default function HomePage() {
     );
     eventSourceRef.current?.close();
     eventSourceRef.current = source;
-    let nextProjection =
-      projectionsRef.current[turn.run_id] ?? initialStreamProjection;
+    let terminalHandled = false;
+    const isCurrentSelectionEpoch = () =>
+      selectionEpochRef.current === capturedSelectionEpoch;
     const onEvent = (event: Event) => {
+      if (!isCurrentSelectionEpoch() || eventSourceRef.current !== source)
+        return;
+      if (terminalHandled) return;
       const data = event instanceof MessageEvent ? event.data : undefined;
       if (typeof data !== 'string') return;
       const parsed = parseRunStreamEvent(data);
       if (!parsed) return;
-      nextProjection = reduceRunStreamEvent(nextProjection, parsed);
-      setProjections((current) => ({
-        ...current,
-        [turn.run_id]: nextProjection,
-      }));
-      if (nextProjection.terminal) {
-        source.close();
-        void (async () => {
-          try {
-            const response = await fetch(
-              `/api/team-project/sessions/${encodeURIComponent(selection.memberRunId)}?task=${encodeURIComponent(selection.rootTaskId)}`,
-              { cache: 'no-store' },
-            );
-            if (response.ok) {
-              setTeamSession((await response.json()) as TeamSessionResponse);
-              setStatus('completed');
-            }
-          } catch {
-            // The saved transcript remains visible if refresh is unavailable.
+      commitTimelineEnvelopes([
+        { runId: turn.run_id, update: { kind: 'runEvent', event: parsed } },
+      ]);
+      const terminal = selectTerminalLifecycle(
+        timelineRef.current,
+        turn.run_id,
+      );
+      if (!terminal || terminal.status === 'started') return;
+      const terminalFailed =
+        terminal.status === 'failed' || terminal.status === 'cancelled';
+      terminalHandled = true;
+      source.close();
+      setStatus(terminalFailed ? 'failed' : 'completed');
+      void (async () => {
+        try {
+          const response = await fetch(
+            `/api/team-project/sessions/${encodeURIComponent(selection.memberRunId)}?task=${encodeURIComponent(selection.rootTaskId)}`,
+            { cache: 'no-store' },
+          );
+          if (!response.ok || !isCurrentSelectionEpoch()) return;
+          const refreshed = (await response.json()) as TeamSessionResponse;
+          if (!isCurrentSelectionEpoch()) return;
+          const refreshedTurn = refreshed.turns.find(
+            (item) => item.run_id === turn.run_id,
+          );
+          if (refreshedTurn?.result_summary) {
+            if (!isCurrentSelectionEpoch()) return;
+            commitTimelineEnvelopes([
+              {
+                runId: turn.run_id,
+                update: {
+                  kind: 'canonicalAgentText',
+                  text: refreshedTurn.result_summary,
+                },
+              },
+            ]);
           }
-        })();
-      }
+          if (!isCurrentSelectionEpoch()) return;
+          setTeamSession(refreshed);
+          if (!isCurrentSelectionEpoch()) return;
+          const hasRunningTurn = refreshed.turns.some(
+            (item) => item.status === 'running',
+          );
+          const hasFailedTurn =
+            terminalFailed ||
+            refreshed.turns.some((item) => item.status === 'failed');
+          setStatus(
+            hasRunningTurn ? 'running' : hasFailedTurn ? 'failed' : 'completed',
+          );
+        } catch {
+          // The saved transcript remains visible if refresh is unavailable.
+        }
+      })();
     };
     source.addEventListener('started', onEvent);
     source.addEventListener('output', onEvent);
@@ -698,7 +804,7 @@ export default function HomePage() {
       source.close();
       if (eventSourceRef.current === source) eventSourceRef.current = null;
     };
-  }, [selection, status, teamSession]);
+  }, [commitTimelineEnvelopes, selection, status, teamSession]);
 
   async function selectChat(nextSessionId: string) {
     if (
@@ -762,12 +868,12 @@ export default function HomePage() {
     setSelection(nextSelection);
     setTeamSession(undefined);
     setMessages([]);
-    setProjections({});
+    timelineRef.current = initialTimelineState;
+    setTimeline(initialTimelineState);
     setReplayStatus({});
     setActiveTaskId(undefined);
     setActiveRunId(undefined);
     setRunDetails({});
-    setTransientAssistantText(undefined);
     try {
       const response = await fetch(
         `/api/team-project/sessions/${encodeURIComponent(session.agent_session_id)}?task=${encodeURIComponent(project.root_task_id)}`,
@@ -777,6 +883,12 @@ export default function HomePage() {
       const data = (await response.json()) as TeamSessionResponse;
       const eventResults = await Promise.all(
         data.turns.map(async (turn) => {
+          const envelopes: TimelineEnvelope[] = [
+            {
+              runId: turn.run_id,
+              update: { kind: 'prompt', text: turn.assignment_summary },
+            },
+          ];
           try {
             const eventsResponse = await fetch(
               `/api/team-project/sessions/${encodeURIComponent(session.agent_session_id)}/runs/${encodeURIComponent(turn.run_id)}/events?task=${encodeURIComponent(project.root_task_id)}`,
@@ -790,27 +902,43 @@ export default function HomePage() {
                 payload?: unknown;
               }>;
             };
-            let projection = initialStreamProjection;
             for (const event of eventData.events) {
               const parsed = parseRunStreamEvent(JSON.stringify(event));
-              if (parsed) projection = reduceRunStreamEvent(projection, parsed);
+              if (parsed)
+                envelopes.push({
+                  runId: turn.run_id,
+                  update: { kind: 'runEvent', event: parsed },
+                });
             }
-            return [turn.run_id, projection, 'ready' as const] as const;
+            if (turn.result_summary)
+              envelopes.push({
+                runId: turn.run_id,
+                update: {
+                  kind: 'canonicalAgentText',
+                  text: turn.result_summary,
+                },
+              });
+            return [turn.run_id, envelopes, 'ready' as const] as const;
           } catch {
-            return [
-              turn.run_id,
-              initialStreamProjection,
-              'unavailable' as const,
-            ] as const;
+            if (turn.result_summary)
+              envelopes.push({
+                runId: turn.run_id,
+                update: {
+                  kind: 'canonicalAgentText',
+                  text: turn.result_summary,
+                },
+              });
+            return [turn.run_id, envelopes, 'unavailable' as const] as const;
           }
         }),
       );
       setTeamSession(data);
-      setProjections(
-        Object.fromEntries(
-          eventResults.map(([runId, projection]) => [runId, projection]),
-        ),
+      const hydrated = applyTimelineEnvelopes(
+        initialTimelineState,
+        eventResults.flatMap(([, envelopes]) => envelopes),
       );
+      timelineRef.current = hydrated;
+      setTimeline(hydrated);
       setReplayStatus(
         Object.fromEntries(
           eventResults.map(([runId, , replay]) => [runId, replay]),
@@ -859,12 +987,12 @@ export default function HomePage() {
     });
     setTeamSession(undefined);
     setMessages([]);
-    setProjections({});
+    timelineRef.current = initialTimelineState;
+    setTimeline(initialTimelineState);
     setReplayStatus({});
     setActiveTaskId(undefined);
     setActiveRunId(undefined);
     setRunDetails({});
-    setTransientAssistantText(undefined);
     runTrackingRef.current = null;
     setSseConnected(false);
     setError(undefined);
@@ -940,7 +1068,6 @@ export default function HomePage() {
       return;
     setError(undefined);
     setRetryText('');
-    setTransientAssistantText(undefined);
     const pending = retrySendRef.current;
     const idempotencyKey =
       pending?.text === messageText ? pending.key : crypto.randomUUID();
@@ -961,6 +1088,17 @@ export default function HomePage() {
       const submitted = (await response.json()) as Message;
       retrySendRef.current = null;
       setMessages((current) => [...current, submitted]);
+      if (submitted.run_id)
+        commitTimelineEnvelopes([
+          {
+            runId: submitted.run_id,
+            update: {
+              kind: 'prompt',
+              text: messageText,
+              messageId: submitted.id,
+            },
+          },
+        ]);
       setRunDetails({
         taskId: submitted.task_id,
         runId: submitted.run_id ?? undefined,
@@ -972,6 +1110,7 @@ export default function HomePage() {
             taskId: submitted.task_id,
             runId: submitted.run_id,
             formalAssistantSeen: false,
+            canonicalAssistant: null,
             terminal: null,
             sseDisconnected: false,
             durableCatchupInFlight: false,
@@ -1084,11 +1223,7 @@ export default function HomePage() {
               <details className="run-details-disclosure">
                 <summary>Details</summary>
                 <RunDetails
-                  projection={
-                    activeRunId
-                      ? (projections[activeRunId] ?? initialStreamProjection)
-                      : initialStreamProjection
-                  }
+                  timeline={timeline}
                   status={status}
                   sessionId={sessionId}
                   taskId={runDetails.taskId}
@@ -1121,19 +1256,14 @@ export default function HomePage() {
                       key={turn.taskId}
                       turn={turn}
                       activeRunId={activeRunId}
-                      projections={projections}
+                      timeline={timeline}
                       replayStatus={replayStatus}
-                      transientAssistantText={
-                        turn.taskId === activeTaskId
-                          ? transientAssistantText
-                          : undefined
-                      }
                     />
                   ))}
                 {selectedTeam && teamSession ? (
                   <TeamTranscript
                     session={teamSession}
-                    projections={projections}
+                    timeline={timeline}
                     replayStatus={replayStatus}
                   />
                 ) : null}
@@ -1176,43 +1306,64 @@ export default function HomePage() {
 function TurnView({
   turn,
   activeRunId,
-  projections,
+  timeline,
   replayStatus,
-  transientAssistantText,
 }: {
   readonly turn: Turn;
   readonly activeRunId?: string;
-  readonly projections: Readonly<Record<string, StreamProjection>>;
+  readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
-  readonly transientAssistantText?: string;
 }) {
   const runId = turn.runId;
-  const projection = runId
-    ? (projections[runId] ?? initialStreamProjection)
-    : initialStreamProjection;
   const active = Boolean(runId && runId === activeRunId);
-  const isFormalAssistant = Boolean(turn.assistant);
+  const prompts = runId ? selectPromptEntries(timeline, runId) : [];
+  const agentTexts = runId
+    ? selectAgentTextEntries(timeline, runId).filter(
+        (entry) => entry.origin === 'assistant_text',
+      )
+    : [];
   return (
     <div className="turn">
-      <MessageView message={turn.user} />
+      {prompts.length > 0 ? (
+        <MessageView
+          message={{
+            ...(turn.user ?? {
+              id: prompts[0].activityId.value,
+              role: 'user' as const,
+              status: 'completed',
+              task_id: turn.taskId,
+              run_id: runId,
+              created_at: undefined,
+            }),
+            text: prompts[0].text,
+          }}
+        />
+      ) : (
+        <MessageView message={turn.user} />
+      )}
       {runId ? (
         <ActivityPanel
-          projection={projection}
+          timeline={timeline}
+          runId={runId}
           active={active}
           replayAvailable={replayStatus[runId] !== 'unavailable'}
           replayLoading={active || replayStatus[runId] === 'loading'}
         />
       ) : null}
-      {turn.assistant ? <MessageView message={turn.assistant} /> : null}
-      {transientAssistantText !== undefined && !isFormalAssistant ? (
-        <article className="message assistant transient-message">
-          <p className="message-label">
-            Research Desk <span>· live response</span>
-          </p>
-          <div className="assistant-surface">
-            <AssistantMarkdown text={transientAssistantText} />
-          </div>
-        </article>
+      {agentTexts.length > 0 ? (
+        agentTexts.map((entry) => (
+          <article
+            className="message assistant"
+            key={`${entry.runId}-${entry.activityId.scope}-${entry.activityId.value}`}
+          >
+            <p className="message-label">Research Desk</p>
+            <div className="assistant-surface">
+              <AssistantMarkdown text={entry.text} />
+            </div>
+          </article>
+        ))
+      ) : turn.assistant ? (
+        <MessageView message={turn.assistant} />
       ) : null}
     </div>
   );
@@ -1220,11 +1371,11 @@ function TurnView({
 
 function TeamTranscript({
   session,
-  projections,
+  timeline,
   replayStatus,
 }: {
   readonly session: TeamSessionResponse;
-  readonly projections: Readonly<Record<string, StreamProjection>>;
+  readonly timeline: TimelineState;
   readonly replayStatus: Readonly<Record<string, ReplayStatus>>;
 }) {
   if (session.turns.length === 0)
@@ -1237,35 +1388,63 @@ function TeamTranscript({
     <div className="team-transcript">
       {session.turns.map((turn) => (
         <div className="team-turn" key={`${turn.task_id}-${turn.sequence}`}>
-          <div className="team-context-block">
-            <span>Assignment context</span>
-            <p>{turn.assignment_summary}</p>
-          </div>
-          <ActivityPanel
-            projection={projections[turn.run_id] ?? initialStreamProjection}
-            active={turn.status === 'running'}
-            replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
-            replayLoading={replayStatus[turn.run_id] === 'loading'}
-          />
-          {turn.result_summary ? (
-            <article className="message assistant">
-              <p className="message-label">
-                {session.role === 'lead' ? 'Lead' : session.name}
-              </p>
-              <div className="assistant-surface">
-                <AssistantMarkdown text={turn.result_summary} />
-              </div>
-              <p className="message-meta">
-                {turn.status === 'failed' ? 'Turn failed' : 'Saved response'}
-              </p>
-            </article>
-          ) : (
-            <p className="team-result-pending">
-              {turn.status === 'running'
-                ? 'Working on this assignment…'
-                : 'No result recorded.'}
-            </p>
-          )}
+          {(() => {
+            const prompts = selectPromptEntries(timeline, turn.run_id);
+            const agentTexts = selectAgentTextEntries(
+              timeline,
+              turn.run_id,
+            ).filter((entry) => entry.origin === 'assistant_text');
+            return (
+              <>
+                <div className="team-context-block">
+                  <span>Assignment context</span>
+                  <p>{prompts[0]?.text ?? turn.assignment_summary}</p>
+                </div>
+                <ActivityPanel
+                  timeline={timeline}
+                  runId={turn.run_id}
+                  active={turn.status === 'running'}
+                  replayAvailable={replayStatus[turn.run_id] !== 'unavailable'}
+                  replayLoading={replayStatus[turn.run_id] === 'loading'}
+                />
+                {agentTexts.length > 0 ? (
+                  agentTexts.map((entry) => (
+                    <article
+                      className="message assistant"
+                      key={`${entry.runId}-${entry.activityId.scope}-${entry.activityId.value}`}
+                    >
+                      <p className="message-label">
+                        {session.role === 'lead' ? 'Lead' : session.name}
+                      </p>
+                      <div className="assistant-surface">
+                        <AssistantMarkdown text={entry.text} />
+                      </div>
+                      <p className="message-meta">
+                        {turn.status === 'failed'
+                          ? 'Turn failed'
+                          : 'Saved response'}
+                      </p>
+                    </article>
+                  ))
+                ) : turn.result_summary ? (
+                  <article className="message assistant">
+                    <p className="message-label">
+                      {session.role === 'lead' ? 'Lead' : session.name}
+                    </p>
+                    <div className="assistant-surface">
+                      <AssistantMarkdown text={turn.result_summary} />
+                    </div>
+                  </article>
+                ) : (
+                  <p className="team-result-pending">
+                    {turn.status === 'running'
+                      ? 'Working on this assignment…'
+                      : 'No result recorded.'}
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       ))}
     </div>

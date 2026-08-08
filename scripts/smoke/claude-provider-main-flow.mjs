@@ -130,7 +130,7 @@ try {
   const timelineEntries = timeline.entries ?? [];
   const usage = safeUsage(finished.final?.lastUsage);
   const usageAccepted =
-    usage !== null && (usage.inputTokens > 0 || usage.outputTokens > 0);
+    usage !== null && usage.inputTokens > 0 && usage.outputTokens > 0;
   const finalMessageAccepted =
     finished.status === 'idle' && finished.lastMessage?.trim() === nonce;
   const timelineAccepted = timelineEntries.some(
@@ -175,14 +175,6 @@ try {
       status: finished?.status ?? null,
       usage: safeUsage(finished?.final?.lastUsage),
       last_message: limitText(sanitizeText(finished?.lastMessage), 160),
-      cause: limitText(
-        sanitizeText(error instanceof Error ? error.cause : undefined),
-        512,
-      ),
-      stack: limitText(
-        sanitizeText(error instanceof Error ? error.stack : undefined),
-        4096,
-      ),
       daemon_log_path: paseo?.logPath ?? null,
       daemon_log_tail: await readDaemonLogTail(paseo?.logPath),
     })}\n`,

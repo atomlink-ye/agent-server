@@ -1492,7 +1492,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       }
       if (!hasPositiveModelUsage(finished.usage)) {
         throw new RuntimeExecutionError(
-          'Paseo completed without positive model usage evidence.',
+          `Paseo completed without positive model usage evidence (provider=${agent.provider}, model=${agent.model}).`,
         );
       }
 

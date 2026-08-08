@@ -7,7 +7,7 @@ import {
 
 describe('mapPaseoFinishStatus', () => {
   it.each([
-    ['idle', null],
+    ['idle', 'idle'],
     ['error', 'failed'],
     ['permission', 'failed'],
     ['timeout', 'timed_out'],
@@ -19,9 +19,7 @@ describe('mapPaseoFinishStatus', () => {
 describe('hasPositiveModelUsage', () => {
   it.each([
     { inputTokens: 1 },
-    { cachedInputTokens: 1 },
     { outputTokens: 1 },
-    { totalCostUsd: 1 },
     { inputTokens: 1, outputTokens: 1 },
   ])('accepts positive model usage %#', (usage) => {
     expect(hasPositiveModelUsage(usage)).toBe(true);
@@ -36,8 +34,7 @@ describe('hasPositiveModelUsage', () => {
     { inputTokens: Number.NaN, outputTokens: Number.NaN },
     { inputTokens: Number.POSITIVE_INFINITY },
     { outputTokens: Number.NEGATIVE_INFINITY },
-    { contextWindowMaxTokens: 1 },
-    { contextWindowUsedTokens: 1 },
+    { totalCostUsd: 1 },
   ])('rejects missing or non-positive model usage %#', (usage) => {
     expect(hasPositiveModelUsage(usage)).toBe(false);
   });

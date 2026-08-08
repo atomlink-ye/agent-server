@@ -33,7 +33,6 @@ import {
 import {
   hasPositiveModelUsage,
   mapPaseoFinishStatus,
-  normalizeUsage,
 } from './status-mapper.js';
 
 export interface PaseoRuntimeOptions {
@@ -1469,8 +1468,10 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       }
       flushDeferredParentTerminals();
       completeReasoning();
-      const normalizedUsage = normalizeUsage(finished.usage);
-      if (normalizedUsage) emit({ kind: 'usage', ...normalizedUsage });
+      if (finished.usage) {
+        const usage = normalizeUsage(finished.usage);
+        if (usage) emit({ kind: 'usage', ...usage });
+      }
       await sinkQueue;
       unsubscribe?.();
       unsubscribe = undefined;
@@ -1489,9 +1490,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           'Paseo completed without a final assistant message.',
         );
       }
-      if (!hasPositiveModelUsage(normalizedUsage)) {
+      if (!hasPositiveModelUsage(finished.usage)) {
         throw new RuntimeExecutionError(
-          `Paseo completed without positive model usage evidence (provider=${agent.provider}, model=${agent.model}).`,
+          'Paseo completed without positive model usage evidence.',
         );
       }
 
@@ -1504,7 +1505,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         text: finished.lastMessage,
         providerAgentId: agent.id,
         paseoWorkspaceId: workspaceId,
-        ...(normalizedUsage ? { usage: normalizedUsage } : {}),
+        ...(finished.usage ? { usage: finished.usage } : {}),
         ...(memory.memoryCandidates
           ? { memoryCandidates: memory.memoryCandidates }
           : {}),
@@ -2091,6 +2092,30 @@ function permissionCategory(
   if (value.includes('question')) return 'question';
   if (value.includes('mode')) return 'mode';
   return 'other';
+}
+
+function normalizeUsage(
+  usage: NonNullable<AgentRuntimeExecution['usage']>,
+): Record<string, number> | null {
+  const output: Record<string, number> = {};
+  for (const key of [
+    'inputTokens',
+    'cachedInputTokens',
+    'outputTokens',
+    'contextWindowMaxTokens',
+    'contextWindowUsedTokens',
+  ] as const) {
+    const value = usage[key];
+    if (value !== undefined && Number.isFinite(value) && value >= 0)
+      output[key] = value;
+  }
+  if (
+    usage.totalCostUsd !== undefined &&
+    Number.isFinite(usage.totalCostUsd) &&
+    usage.totalCostUsd >= 0
+  )
+    output.totalCostUsd = usage.totalCostUsd;
+  return Object.keys(output).length ? output : null;
 }
 
 function isTerminalToolStatus(status: string): boolean {

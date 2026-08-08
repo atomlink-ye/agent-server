@@ -10,17 +10,51 @@ permissions:
 
 jobs:
   zero-credential-smoke:
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [paseo-smoke, agent-teams-v2-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: make setup
-      - run: make ${{ matrix.target }}
-        env:
-          PASEO_PROVIDER: opencode
-          PASEO_MODEL: opencode-go/deepseek-v4-flash
-          OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+      - run: make paseo-smoke
+
+  credentialed-agent-teams-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check Agent Teams smoke credentials
+        id: credentials
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api_key="${OPENCODE_GO_API_KEY:-}"
+          provider="${PASEO_PROVIDER:-}"
+          model="${PASEO_MODEL:-}"
+
+          if [[ -z "$api_key" && -z "$provider" && -z "$model" ]]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping credentialed Agent Teams smoke: OPENCODE_GO_API_KEY, PASEO_PROVIDER, and PASEO_MODEL are not set."
+            exit 0
+          fi
+
+          if [[ -n "$api_key" && "$provider" == "opencode" && "$model" == "opencode-go/deepseek-v4-flash" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::Credentialed Agent Teams smoke requires OPENCODE_GO_API_KEY plus PASEO_PROVIDER=opencode and PASEO_MODEL=opencode-go/deepseek-v4-flash."
+          exit 1
+
+      - name: Check out repository
+        if: steps.credentials.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+      - name: Set up smoke dependencies
+        if: steps.credentials.outputs.should_run == 'true'
+        run: make setup
+      - name: Run credentialed Agent Teams smoke
+        if: steps.credentials.outputs.should_run == 'true'
+        run: make agent-teams-v2-smoke
+      - name: Skip credentialed Agent Teams smoke
+        if: steps.credentials.outputs.should_run == 'false'
+        run: echo "Credentialed Agent Teams smoke skipped because ambient credentials are not configured."

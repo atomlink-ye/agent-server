@@ -7,7 +7,7 @@ Choose the cheapest honest evidence that touches the changed risk. During the cu
 | Change                        | Minimum evidence                                                                                            |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Domain/config/helper          | Real main-flow evidence when reachable; supporting checks only when requested or needed                     |
-| HTTP contract                 | Real main-flow E2E; focused contract evidence is required only by a changed public-contract Human Gate       |
+| HTTP contract                 | Real main-flow E2E; focused contract evidence is required only by a changed public-contract Human Gate      |
 | Adapter translation           | Observed adapter behavior; existing component checks are supporting evidence                                |
 | Paseo/process/model/readiness | Real external behavior when the product path needs it; existing checks are supporting evidence              |
 | Durable state/concurrency     | Real datastore/concurrency behavior when the product path needs it; existing checks are supporting evidence |

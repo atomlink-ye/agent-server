@@ -10,8 +10,4 @@ docs/exec-plans/
 
 Use the full [Exec Plan protocol](agents/exec-plan-protocol.md). Active plans may contain unchecked work. Completed plans must have `status: completed` and no unchecked checkbox. Deferred work is transferred explicitly rather than erased.
 
-Before beginning a task, inspect active plans for scope and file overlap. Before declaring completion, run:
-
-```bash
-make check
-```
+Before beginning a task, inspect active plans for scope and file overlap. `make check` is an available documentation/plan consistency check, not a default Prove-stage completion gate. Run it when the task explicitly archives a plan, the user requests it, or it is the cheapest relevant validation.

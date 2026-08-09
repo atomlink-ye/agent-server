@@ -1,21 +1,22 @@
 # Release gates
 
-## Current product implementation-stage gate
+## Current Prove-stage gate
 
-The repository remains in product implementation stage until the user explicitly changes the phase. The default acceptance target for every slice is the smallest complete user-visible/main-flow real E2E, run as early as prerequisites allow. Fix only blockers or issues that make that path invalid, unsafe, or unverifiable; defer non-blocking hardening, uncommon recovery, concurrency, generalized abstractions, performance, polish, and review findings.
+The repository remains in Prove / MVE-first product implementation until the user explicitly changes the stage. Root [AGENTS.md](../../AGENTS.md#current-phase-and-development-cadence) defines the gate: one representative real path reproducibly produces its observable result, no `BLOCKER-NOW` remains, no required Human Gate is unresolved, and non-blocking findings are deferred.
 
-Do not proactively author or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work. Test authoring requires an explicit user request. Existing CI/checks may run and should be reported truthfully, but are supporting merge signals rather than a default reason to delay the first real E2E. Human Gates remain mandatory for security, tenant, credential, public API, migration, durable-state, and core-dependency changes.
+Opening or updating a pull request does not change the stage and does not automatically require new tests, a full local suite, or waiting for CI. Report checks that actually ran. A user-requested merge/release gate or a Human Gate may add stronger evidence for that operation.
 
-## Pull-request gate
+## Pull-request record
 
-A pull request must have:
+A Prove-stage pull request records:
 
-- complete Active Exec Plan status and documentation-impact review;
-- the real main-flow E2E run and recorded with its actual result; for a documentation-only diff that changes no product behavior, record not applicable and the reason;
+- the scoped outcome and representative real-path result, with documentation-only work marked not applicable;
 - no secret, runtime home, generated evidence, or unrelated file;
-- applicable supporting checks recorded truthfully; new tests are not implied by this gate;
-- ADR and Human Gate for core dependency, public contract, storage, tenant/security, or irreversible behavior changes;
-- external smoke evidence when Paseo/OpenCode/process/model/readiness behavior changed, or a recorded environmental blocker.
+- supporting checks that actually ran, without implying unrun checks passed;
+- deferred findings and known residual risk; and
+- ADR and Human Gate for core dependency, public contract, tenant/security/credential boundary, migration or durable-state contract, destructive operation, or irreversible behavior change.
+
+An Exec Plan, external smoke, full deterministic suite, or CI result is included only when the current slice, user instruction, or Human Gate requires it.
 
 ## Baseline acceptance gate when release criteria are in scope
 

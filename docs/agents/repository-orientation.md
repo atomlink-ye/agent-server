@@ -6,8 +6,8 @@
 2. Check working-tree status and current branch before opening files.
 3. List `docs/exec-plans/active/`; identify ownership and overlapping paths.
 4. Read Product and Feature status, then the relevant Component and Contract.
-5. Trace from contract to application port/use case, adapter/infrastructure, and tests.
-6. Run the smallest existing test that establishes the current baseline.
+5. Trace the representative path from its real entry point through the changed boundary to its observable result.
+6. Record the baseline behavior. Run a focused existing check only when it is the cheapest honest observation or the task explicitly requires it.
 
 ## Trace model
 
@@ -17,10 +17,10 @@ flowchart LR
     F --> C["Component owner"]
     C --> K["Contract"]
     K --> I["Implementation"]
-    I --> T["Test evidence"]
+    I --> E["Observable evidence"]
 ```
 
-A code path without Feature/Contract context may be scaffolding rather than a supported capability. A documented target without code/test evidence remains planned.
+A code path without Feature/Contract context may be scaffolding rather than a supported capability. A documented target without observed implementation evidence remains planned.
 
 ## Code map
 
@@ -48,8 +48,7 @@ Do not overwrite or stage unexplained changes. Identify which files belong to th
 git status --short --branch
 find docs/exec-plans/active -type f -maxdepth 1
 rg "term or contract" docs src tests e2e
-make test-unit
-make ci
+# Optional when relevant: run one focused existing check or the canonical smoke.
 ```
 
 Use `rg`/`rg --files` for discovery. Avoid broad file dumps, destructive cleanup, or package upgrades before the relevant boundary is understood.

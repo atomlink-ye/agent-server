@@ -26,7 +26,7 @@ Never infer that a documented V1 target is implemented. `docs/features.md` is th
 - HTTP callers cannot choose arbitrary models. Automatic model selection must never silently select a paid model.
 - Prompts, credentials, tokens, raw provider errors, and local paths must not enter normal responses or logs.
 - Deterministic pull-request gates cannot require an external model or free-model availability.
-- A change in public API, tenant/security boundary, durable state model, or core dependency is a Human Gate.
+- A change in public API, tenant/security/credential boundary, migration or durable state model, destructive behavior, or core dependency is a Human Gate.
 
 ## Repository map
 
@@ -43,38 +43,37 @@ scripts/smoke/          optional external-system verification
 docs/                   product and engineering authority
 ```
 
-## Work protocol
+## Current phase and development cadence
 
-The repository is in product implementation stage until the user explicitly changes the phase. Create or take ownership of an Active Exec Plan before substantive work, but keep the minimum truthful plan and handoff needed for safe continuation. Documentation ceremony must not delay the real main-flow E2E.
+The repository is in **Prove / MVE-first product implementation** until the user explicitly changes the stage. The current goal is fast product learning through the smallest real vertical slice, not production hardening or a comprehensive regression bar.
 
-Default every slice to the smallest complete user-visible/main-flow real E2E and run that flow as early as prerequisites allow; it is the primary phase acceptance target. Fix only issues that block that flow or make the minimum path invalid, unsafe, or unverifiable. Record and defer non-blocking hardening, uncommon recovery, concurrency, generalized abstractions, performance, polish, and review findings rather than expanding the slice.
+Use this cadence for every slice:
 
-Do not proactively author or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work. Test authoring happens only when the user explicitly requests it. Existing CI/checks may run and must be reported truthfully, but they are supporting merge signals and must not delay the first real E2E unless the user asks or the requested GitHub operation requires them. Preserve security, tenant, credential, public API, migration, durable-state, and core-dependency Human Gates.
+1. **Bound the bet.** State one observable outcome, a small appetite, one representative scenario, and explicit non-goals.
+2. **Probe only a blocker.** If one technical unknown can invalidate the path, answer it with the shortest real-boundary experiment. Otherwise start the slice.
+3. **Build the thinnest real path.** Connect a real entry point through the changed code and affected real critical boundary to an observable result. Prefer fixed configuration, one provider, one tenant, or a manual setup step over a generalized subsystem.
+4. **Exercise it early.** As soon as the path can run, use the canonical smoke/manual flow. A focused existing check is optional when it is cheaper or helps keep the change honest.
+5. **Classify findings.** Fix `BLOCKER-NOW`: the path cannot complete, the evidence is false, a critical boundary is bypassed, or the slice is unsafe. Record `DEFERRED-FEATURE`, `HARDENING`, and `QUESTION` findings without expanding the slice.
+6. **Stop at proof.** Finish when the representative path works, the observable result is reproducible through the canonical smoke/manual flow, no `BLOCKER-NOW` remains, and no required Human Gate is unresolved. Do not polish past that exit condition.
 
-Use the smallest relevant loop first. Existing test, smoke, and CI commands are optional supporting checks: run them only when already applicable to the changed behavior or when the user explicitly requests them, and report the exact result. They are not a default implementation-stage requirement and must not delay the first real main-flow E2E.
+Plans and handoffs must be only as large as safe continuation requires. Use an Active Exec Plan for work that spans sessions, crosses Human Gates, or needs durable coordination; a small reversible slice may use a compact task note or the current task context. Documentation ceremony must not delay the real path.
 
-```bash
-# Optional supporting checks, only when applicable or explicitly requested:
-make test-unit
-make test-contract
-make test-integration
-make e2e-smoke
-make ci
-```
+The default verification budget is the canonical real flow plus, at the implementer's discretion, one focused existing check when it is useful. Automated test authoring is not a default deliverable in this stage. Do not require TDD, a red baseline, new unit/contract/integration/E2E tests, coverage growth, `make check`, `make test`, or `make ci` unless the user explicitly requests that gate or the changed risk makes it necessary for a Human Gate. Full suites and CI belong to an explicitly requested merge/release gate, not ordinary feature completion.
 
-Run `make paseo-smoke` when changing Paseo, OpenCode resolution, process isolation, model selection, readiness, or runtime result mapping.
+Preserve security, tenant, credential, public API, migration, durable-state, destructive-operation, and core-dependency Human Gates. MVE-first reduces scope and ceremony; it does not weaken these boundaries or permit unverifiable claims.
+
+When Paseo, provider resolution, process isolation, model selection, readiness, or runtime result mapping changes, exercise the smallest real affected runtime path. `make paseo-smoke` is one available supporting command, not an automatic full-slice gate.
 
 ## Completion definition
 
-A task is complete only when:
+A Prove-stage slice is complete when:
 
-- implementation and documented scope agree;
-- the primary real main-flow E2E ran, and any supporting checks are reported truthfully; for a documentation-only diff that changes no product behavior, record why the E2E is not applicable;
-- external smoke ran when product runtime behavior changed, or the reason it could not run is recorded;
-- Feature, Component, Contract, ADR, and Runbook impact is resolved;
-- no unexplained TODO, skipped test, debug output, credential, or generated evidence remains;
-- every Exec Plan item is checked or explicitly transferred;
-- the plan is moved to `completed/`, has `status: completed`, and contains no unchecked boxes.
+- the scoped implementation produces the promised observable result on the representative real path;
+- the evidence actually run is reported truthfully, with documentation-only work marked as not applicable;
+- no `BLOCKER-NOW` remains and no required Human Gate is unresolved;
+- non-blocking findings and unfinished ambitions are recorded as deferred rather than silently absorbed into the slice;
+- the intended diff contains no credential, debug residue, or generated evidence; and
+- any plan used for the slice is truthful: finished items are closed and remaining items are explicitly transferred. Archival and broad documentation convergence may follow as separate work unless the user made them part of this slice.
 
 Human Gates, handoff format, failure recovery, and the full lifecycle are defined in [docs/agents](docs/agents.md).
 

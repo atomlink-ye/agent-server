@@ -8,8 +8,8 @@ Stop and request an explicit decision before:
 - adding/replacing a core framework, database, queue, infrastructure service, runtime, or major dependency;
 - changing a public API/event/schema or compatibility commitment;
 - changing tenant, identity, credential, approval, audit, or execution-isolation boundary;
-- performing an irreversible migration or uncertain data repair;
-- deleting user data, important repository history, or an active plan owned by someone else;
+- changing a migration, durable-state contract, or performing uncertain data repair;
+- performing a destructive action, including deleting or overwriting user data, important repository history, or an active plan owned by someone else;
 - silently selecting a paid model, expanding tool/capability scope, or weakening a safety test;
 - resolving a material conflict with another Active Plan;
 - proceeding when the documented solution cannot be implemented safely in scope.

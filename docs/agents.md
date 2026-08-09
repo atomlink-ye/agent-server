@@ -4,9 +4,9 @@ This handbook turns repository instructions into an executable work protocol. Ro
 
 ## Current implementation-stage policy
 
-The repository is in product implementation stage until the user explicitly changes the phase. Default every slice to the smallest complete user-visible/main-flow real E2E and run it as early as prerequisites allow; that real flow is the primary acceptance target. Fix only blockers or issues that make the minimum path invalid, unsafe, or unverifiable. Defer non-blocking hardening, uncommon recovery, concurrency, generalized abstractions, performance, polish, and review findings.
+The repository is in **Prove / MVE-first product implementation** until the user explicitly changes the stage. Root [AGENTS.md](../AGENTS.md#current-phase-and-development-cadence) is the single authority for the six-step cadence, finding classes, stop condition, and testing policy. This handbook expands the branches that need more detail; it does not add a broader completion bar.
 
-Do not proactively author or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work. Test authoring requires an explicit user request. Existing CI/checks may run and must be reported truthfully, but they are supporting merge signals, not a default reason to delay the first real E2E. Minimum truthful plan/handoff documentation comes first; ceremony must not delay the real path. Security, tenant, credential, public API, migration, durable-state, and core-dependency Human Gates remain mandatory.
+The working rule is: prove one real representative path, fix only `BLOCKER-NOW`, record the rest, and stop. Automated tests and full CI are optional unless explicitly requested or required by a Human Gate. Security, tenant, credential, public API, migration, durable-state, destructive-operation, and core-dependency Human Gates remain mandatory.
 
 ## Handbook map
 

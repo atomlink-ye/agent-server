@@ -2,7 +2,7 @@
 
 ## Test philosophy
 
-The repository separates deterministic product correctness from externally variable model/runtime availability. Pull requests must prove state, contracts, error safety, and adapter translation without network access. A separate smoke proves the pinned SDK/process/provider path. Future behavior evaluations judge research usefulness and evidence quality without replacing ordinary tests.
+The repository separates deterministic checks from externally variable model/runtime evidence. During Prove, automated tests are an optional protection tool, not a default feature deliverable: use an existing focused check when it cheaply protects the claim, and use the representative real path as primary evidence. New tests, full deterministic suites, and CI become required only when the user names that gate, a Human Gate needs them, or the work has explicitly moved to Protect/Harden. A separate smoke can observe the pinned SDK/process/provider path when that boundary is in scope.
 
 ## Current suites
 
@@ -20,7 +20,7 @@ The repository separates deterministic product correctness from externally varia
 
 For the managed registry, PGlite is the deterministic role: it proves parser,
 application, migration replay, and ordinary repository transitions quickly. The
-real `pg.Pool` role is separate and required on PostgreSQL 16: it proves
+real `pg.Pool` role is separate evidence for Protect/Harden, release, or a Human Gate on PostgreSQL 16; it is not a default Prove-stage gate. It proves
 multi-connection visibility, import/publish races, owner hiding, database
 immutability, and cursor traversal with tied `(created_at, id)` values. The
 registry matrix covers idempotency replay/conflict, equal-canonical convergence,

@@ -49,3 +49,4 @@ The repository baseline proves the smallest developer loop:
 7. `make paseo-smoke` proves the same seam against a live free model without model credentials.
 
 This baseline journey is infrastructure evidence. It is not the end-user V1 workflow.
+It is also not the required command sequence for each current Prove-stage feature slice.

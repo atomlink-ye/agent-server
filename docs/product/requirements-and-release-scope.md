@@ -6,6 +6,8 @@ Every capability is classified as `baseline`, `V1_MUST`, `V1_SHOULD`, `V1_RESERV
 
 ## Walking-skeleton acceptance
 
+This is the repository baseline/release milestone, not the completion gate for every current Prove-stage slice.
+
 - A new clone installs on supported Linux/macOS x64/arm64 platforms.
 - `make ci` passes without a daemon, network model request, or credential.
 - `POST /api/v1/runs` validates a prompt, refuses model selection, returns `202`, and exposes a pollable resource.

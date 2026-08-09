@@ -2,7 +2,7 @@
 
 ## When required
 
-Create an Exec Plan for every Feature, bug fix, refactor, dependency upgrade, public API/event/schema change, migration, security/reliability change, cross-component documentation change, multi-step investigation/implementation, or work likely to span sessions. During product implementation stage, keep the plan to the minimum truthful handoff needed for safe continuation; plan ceremony must not delay the real main-flow E2E. A read-only investigation or semantics-free typo may be exempt.
+Create an Exec Plan when work is likely to span sessions, coordinates multiple writers, crosses a Human Gate, or changes a public contract, migration, durable-state boundary, security boundary, or core dependency. A small reversible feature, bug fix, read-only investigation, or documentation correction may remain in the current task context or a compact task note. During Prove, planning exists for safe continuation and decisions, not as a delivery gate; ceremony must not delay the real path.
 
 Active path:
 
@@ -13,6 +13,23 @@ docs/exec-plans/active/YYYY-MM-DD-task-slug.md
 Completed path keeps the same filename under `completed/`.
 
 ## Required structure
+
+Use only the fields the risk and handoff require. For an early-stage slice, the preferred compact contract is:
+
+```yaml
+stage: prove
+appetite: <bounded time or effort>
+outcome: <one observable result>
+real_path: <entry -> changed boundary -> observable result>
+highest_unknown: <one potential invalidator, if any>
+scope_now: []
+no_gos: []
+canonical_smoke: <command or manual runbook>
+exit_condition: <minimum proof that ends the slice>
+deferred: []
+```
+
+Use the fuller structure below only when durable coordination needs it.
 
 ```markdown
 ---
@@ -71,7 +88,7 @@ authority: execution-plan
 
 ## Archival
 
-Before moving to `completed/`, all work, verification, documentation, cleanup, and completion checkboxes must be checked. Set `status: completed`, update evidence and remaining risks, move the file, and run the applicable checks. Completed plans cannot contain `- [ ]` anywhere. Do not add deterministic tests, eval datasets, or fixtures to satisfy ceremony unless the user explicitly requests that work.
+When a plan is intentionally archived, all remaining items must be completed or explicitly transferred, `status` must be `completed`, and the file cannot contain `- [ ]`. Run a documentation checker only when requested or when it is the cheapest way to verify the archival edit. Do not add tests, eval datasets, fixtures, or unrelated documentation to satisfy ceremony.
 
 ### Related Spec and Plan artifacts
 

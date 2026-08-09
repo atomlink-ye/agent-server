@@ -64,13 +64,20 @@ real OpenCode smoke, and Linux or macOS on x64/arm64. The image supplies Node
 
 ```bash
 make setup
+```
+
+Use the command for the representative path you are changing. The following are
+available scoped or merge/release verification commands, not a default sequence
+for every Prove-stage slice:
+
+```bash
 make ci
 make paseo-smoke
 make managed-environment-smoke
 make agent-teams-v2-smoke
 ```
 
-All commands above run in one-shot Docker runner containers; `make ci` is
+These commands run in one-shot Docker runner containers; `make ci` is
 deterministic and does not call an external model. `make paseo-smoke` runs the
 baseline external smoke inside the image and expects
 `PASEO_OPENCODE_BASELINE_OK`. The Managed Environment smoke uses the ephemeral

@@ -60,6 +60,11 @@ services:
       # The Paseo daemon runs inside this container, so exporting this on the
       # host does nothing unless compose forwards it. Off unless set to '1'.
       PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:-}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:-}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:-}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:-}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:-}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-workspace_main}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace

@@ -557,7 +557,6 @@ async function collectFailureDiagnostic(failure) {
         `SELECT t.id AS task_ref,t.team_task_kind,t.status AS task_status,
                 r.id AS run_ref,r.status AS run_status,
                 r.error->>'code' AS run_error_code,
-                r.error->>'message' AS run_error_message,
                 r.runtime->>'provider' AS runtime_provider,
                 r.runtime->>'model' AS runtime_model,
                 (r.lease_owner IS NOT NULL) AS lease_present,
@@ -578,7 +577,6 @@ async function collectFailureDiagnostic(failure) {
       task_status: row.task_status,
       run_status: row.run_status ?? null,
       run_error_code: row.run_error_code ?? null,
-      run_error_message: row.run_error_message ?? null,
       runtime_provider: row.runtime_provider ?? null,
       runtime_model: row.runtime_model ?? null,
       lease_present: row.lease_present ?? false,
@@ -1992,13 +1990,20 @@ async function runProductWorkDurableIdentityFlow({
   );
   assert(providerExecution.claimed, 'product_work_provider_run_not_claimed');
   const providerRun = (
-    await db.query('SELECT id,status,runtime FROM runs WHERE id=$1', [
-      productLeadRunId,
-    ])
+    await db.query(
+      `SELECT r.id,r.status,r.runtime,t.root_task_id
+         FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE r.id=$1`,
+      [productLeadRunId],
+    )
   ).rows[0];
   assert(
     providerRun?.status === 'succeeded',
     'product_work_provider_run_not_succeeded',
+  );
+  assert(
+    providerRun.root_task_id === firstRootTaskId,
+    'product_work_provider_root_task_mismatch',
   );
   const providerRuntime = providerRun.runtime ?? {};
   const provider =
@@ -2012,7 +2017,9 @@ async function runProductWorkDurableIdentityFlow({
     provider,
     model,
     root_run_id: rootRunRow.id,
+    root_run_sha256: hash(rootRunRow.id),
     provider_run_id: providerRun.id,
+    provider_run_sha256: hash(providerRun.id),
     status: providerRun.status,
   });
   teamRunId = (
@@ -2154,7 +2161,12 @@ async function runProductWorkDurableIdentityFlow({
   });
   marker('PRODUCT_WORK_DURABLE_IDENTITY_PASS', {
     work_id: work.id,
+    work_sha256: hash(work.id),
     work_run_ids: workRunIds,
+    work_run_sha256s: workRunIds.map((id) => hash(id)),
+    root_task_sha256s: [firstRootTaskId, secondRootTaskId].map((id) =>
+      hash(id),
+    ),
     root_task_receipts: [
       {
         work_run_id: firstRun.id,

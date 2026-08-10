@@ -43,12 +43,11 @@ done
 
 (($#)) || { printf '%s\n' 'docker-run: a command is required after --' >&2; exit 2; }
 
-# Pin the compose project name. It otherwise defaults to the working directory's
-# basename, so the same image gets a different tag in every git worktree and in
-# every sandbox whose remote workspace is named after its lane — which defeats
-# the prebuilt image baked into the sandbox template (a matching tag builds in
-# ~1.5 minutes, a mismatched one pays the full image export again).
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-agent-server}"
+# Deliberately NOT pinning COMPOSE_PROJECT_NAME. The project name scopes
+# containers and volumes, so two lanes sharing one sandbox need different ones;
+# compose derives it from the working directory, which gives exactly that. The
+# image tag is pinned in compose.yaml instead, so a distinct project name no
+# longer misses the prebuilt image baked into the sandbox template.
 
 compose=(docker compose)
 existing_postgres_test_id=''

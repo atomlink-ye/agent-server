@@ -116,6 +116,12 @@ services:
 
   runner:
     shm_size: 1gb
+    # Explicit image name so the tag no longer depends on the compose project
+    # name. The project name is what isolates concurrent lanes sharing one
+    # sandbox (it scopes containers and volumes), but it also used to decide the
+    # image tag — which meant either the lanes collided or the prebuilt image in
+    # the sandbox template was missed. Naming the image here separates the two.
+    image: agent-server-runner:latest
     build:
       context: .
       dockerfile: Dockerfile

@@ -1,0 +1,46 @@
+{
+  "frozenAt": "2026-08-10",
+  "source": "docs/contracts/product-work-identity.md",
+  "productObjectNames": [
+    "work",
+    "work_run",
+    "work_item",
+    "attempt",
+    "actor",
+    "decision",
+    "artifact",
+    "artifact_version"
+  ],
+  "forbiddenProductIdentityKeys": [
+    "root_task_id",
+    "team_run_id",
+    "team_member_run_id",
+    "task_id",
+    "run_id"
+  ],
+  "forbiddenLeafPrefixes": [
+    "root_task",
+    "team_run",
+    "team_member_run",
+    "team_version",
+    "compiled_",
+    "node_execution"
+  ],
+  "technicalIdContainer": "source_refs",
+  "allowedSourceRefKeys": [
+    "root_task_id",
+    "team_run_id",
+    "team_member_run_id",
+    "task_id",
+    "run_id",
+    "team_message_id"
+  ],
+  "ownerScopeColumns": {
+    "tenant_id": "text",
+    "workspace_id": "uuid"
+  },
+  "decisionCaptureStatuses": [
+    "not_captured",
+    "reported"
+  ]
+}

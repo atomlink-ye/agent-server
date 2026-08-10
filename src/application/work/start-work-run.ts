@@ -25,6 +25,8 @@ export interface StartWorkRunResult {
   readonly workRun: WorkRun;
   readonly executionReceipt: {
     readonly reused: boolean;
+    /** Technical Task identity retained for the receipt boundary only. */
+    readonly taskId: string;
   };
 }
 
@@ -58,7 +60,7 @@ export class StartWorkRun {
       await this.recordDefinitionManifest(pending, owner);
       return {
         workRun: pending,
-        executionReceipt: { reused: true },
+        executionReceipt: { reused: true, taskId: pending.rootTaskId },
       };
     }
 
@@ -84,7 +86,7 @@ export class StartWorkRun {
       await this.recordDefinitionManifest(bound, owner);
       return {
         workRun: bound,
-        executionReceipt: { reused: receipt.reused },
+        executionReceipt: { reused: receipt.reused, taskId: receipt.taskId },
       };
     } catch (error) {
       if (error instanceof WorkRunBindingConflictError) throw error;
@@ -96,6 +98,7 @@ export class StartWorkRun {
     workRun: WorkRun,
     owner: { readonly tenantId: string; readonly workspaceId: string },
   ): Promise<void> {
+    const requestedRef = `team_version:${workRun.definitionVersionId}`;
     const existing = await this.repository.getResolvedManifest(workRun.id, owner);
     if (existing) {
       const definition = existing.entries.find((entry) => entry.slot === 'definition');
@@ -103,7 +106,7 @@ export class StartWorkRun {
         existing.entries.length === 1 &&
         definition?.resourceKind === 'definition' &&
         definition.resolvedVersionId === workRun.definitionVersionId &&
-        definition.requestedRef === null
+        definition.requestedRef === requestedRef
       )
         return;
       throw new Error('The WorkRun resolved manifest conflicts with its pinned definition.');
@@ -115,7 +118,7 @@ export class StartWorkRun {
         {
           slot: 'definition',
           resourceKind: 'definition',
-          requestedRef: null,
+          requestedRef,
           resolvedVersionId: workRun.definitionVersionId,
           resolvedFingerprint: null,
           resolvedAt: this.now().toISOString(),

@@ -54,6 +54,11 @@ export const StartWorkRunResponseSchema = z
     execution_receipt: z
       .object({
         reused: z.boolean(),
+        source_refs: z
+          .object({
+            task_id: z.string().min(1),
+          })
+          .strict(),
       })
       .strict(),
   })
@@ -114,6 +119,12 @@ export function toWorkRunResponse(run: {
   };
 }
 
-export function toExecutionReceiptResponse(receipt: { readonly reused: boolean }) {
-  return { reused: receipt.reused };
+export function toExecutionReceiptResponse(receipt: {
+  readonly reused: boolean;
+  readonly taskId: string;
+}) {
+  return {
+    reused: receipt.reused,
+    source_refs: { task_id: receipt.taskId },
+  };
 }

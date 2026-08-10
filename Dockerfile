@@ -51,7 +51,9 @@ RUN set -eu; \
     /opt/providers/bin/codex --version
 RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
     && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
-RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"
+COPY --chown=node:node scripts/dev/dependency-stamp.mjs ./scripts/dev/dependency-stamp.mjs
+RUN node scripts/dev/dependency-stamp.mjs /workspace > /home/node/image-node_modules/.docker-dependencies-stamp \
+    && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-node_modules/.docker-dependencies-stamp
 
 # Two things the slim base omits that only bite at runtime, both masked for a
 # long time because the smoke suite only ever exercised the opencode provider.

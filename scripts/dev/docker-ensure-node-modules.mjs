@@ -1,17 +1,12 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+
+import { computeDependencyStamp } from './dependency-stamp.mjs';
 
 const workspaceNodeModules = '/workspace/node_modules';
 const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
 const imageNodeModules = '/home/node/image-node_modules';
 const imageWebNodeModules = '/home/node/image-web-node_modules';
-const dependencyFiles = [
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'apps/web/package.json',
-];
 const command = process.argv.slice(2);
 
 const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
@@ -37,11 +32,7 @@ if (command.length === 0) {
   process.exitCode = 2;
 } else {
   try {
-    const dependencyHash = createHash('sha256');
-    for (const file of dependencyFiles) {
-      dependencyHash.update(await readFile(`/workspace/${file}`));
-    }
-    const expectedStamp = `${dependencyHash.digest('hex')}\n`;
+    const expectedStamp = await computeDependencyStamp('/workspace');
     const imageStamps = await Promise.all(
       [imageNodeModules, imageWebNodeModules].map(async (nodeModules) => {
         try {

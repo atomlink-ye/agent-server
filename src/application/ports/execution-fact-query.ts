@@ -8,7 +8,13 @@ export interface ExecutionRunFact {
   readonly taskId: string;
   readonly rootTaskId: string;
   readonly status:
-    'queued' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'cancelled';
+    | 'queued'
+    | 'running'
+    | 'waiting_children'
+    | 'succeeded'
+    | 'failed'
+    | 'timed_out'
+    | 'cancelled';
   readonly provider: string | null;
   readonly model: string | null;
   readonly resultPresent: boolean;

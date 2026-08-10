@@ -20,6 +20,7 @@ const ExecutionRunSchema = z
     status: z.enum([
       'queued',
       'running',
+      'waiting_children',
       'succeeded',
       'failed',
       'timed_out',

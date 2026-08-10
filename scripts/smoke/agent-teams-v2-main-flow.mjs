@@ -2084,14 +2084,14 @@ async function runProductWorkDurableIdentityFlow({
               t.id AS root_task_row_id,tr.id AS team_run_id
          FROM works w
          JOIN work_runs wr
-           ON wr.work_id=w.id AND wr.tenant_id=$3 AND wr.workspace_id=$4
+           ON wr.work_id=w.id AND wr.tenant_id=$3 AND wr.workspace_id=$4::uuid
          JOIN tasks t
-           ON t.id=wr.root_task_id AND t.tenant_id=$3 AND t.workspace_id=$4
+           ON t.id=wr.root_task_id AND t.tenant_id=$3 AND t.workspace_id=$4::text
          JOIN team_runs tr
            ON tr.root_task_id=t.id
-          AND tr.tenant_id=$3 AND tr.workspace_id=$4
+          AND tr.tenant_id=$3 AND tr.workspace_id=$4::text
         WHERE w.id=$1 AND wr.id=$2
-          AND w.tenant_id=$3 AND w.workspace_id=$4
+          AND w.tenant_id=$3 AND w.workspace_id=$4::uuid
         LIMIT 1`,
       [work.id, firstRun.id, tenantId, workspaceId],
     )

@@ -66,6 +66,27 @@ export async function startPaseo({
   listenHost = '127.0.0.1',
   environmentVariableNames = [],
 }) {
+  const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+    process.env.PASEO_DAEMON_STARTUP_TIMEOUT_MS,
+    DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS,
+  );
+  const openCodeStartupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+    process.env.PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS,
+    undefined,
+  );
+  const providerRefreshTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+    process.env.PASEO_PROVIDER_REFRESH_TIMEOUT_MS,
+    undefined,
+  );
+  const openCodeAppAgentsTimeoutMs =
+    parsePositiveSafeIntegerEnvironmentVariable(
+      'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+      process.env.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS,
+      undefined,
+  );
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
@@ -75,6 +96,25 @@ export async function startPaseo({
   const environment = {
     ...isolated.environment,
     ...copyNamedEnvironment(process.env, environmentVariableNames),
+    ...(openCodeStartupTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: String(
+            openCodeStartupTimeoutMs,
+          ),
+        }),
+    ...(providerRefreshTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_PROVIDER_REFRESH_TIMEOUT_MS: String(providerRefreshTimeoutMs),
+        }),
+    ...(openCodeAppAgentsTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: String(
+            openCodeAppAgentsTimeoutMs,
+          ),
+        }),
     PWD: repositoryRoot,
   };
 

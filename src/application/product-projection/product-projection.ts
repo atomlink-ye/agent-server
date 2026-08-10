@@ -5,18 +5,20 @@ import type {
   ExecutionRunFact,
 } from '../ports/execution-fact-query.js';
 import type { WorkProjectionWorkspaceScope } from '../work/work-projection-facts.js';
-import type {
-  WorkProjectionFactsSource,
-  ProductWorkProjectionFacts,
-} from './work-projection-facts-source.js';
+import type { WorkProjectionFactsSource } from './work-projection-facts-source.js';
 import {
   toWorkResponse,
   toWorkRunResponse,
 } from '../../contracts/product-work-commands.js';
+import {
+  ProductRunTraceResponseSchema,
+  ProductWorkRunResponseSchema,
+} from '../../contracts/product-projection/index.js';
 import type {
   ProductRunTrace,
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
+import type { ProductProjectionIdentity } from '../../contracts/product-projection/identity.js';
 import { PRODUCT_CONTRACT_STATUS } from '../../contracts/product-contract-policy.js';
 
 export interface ProductProjectionOwnerScope {
@@ -102,7 +104,7 @@ export function createProductProjection(
   const identity = async (
     loaded: LoadedProductWorkRun,
     owner: ProductProjectionOwnerScope,
-  ): Promise<ProductWorkProjectionFacts> => {
+  ): Promise<ProductProjectionIdentity> => {
     const facts = await options.workFacts.getByRootTask(
       owner,
       loaded.workRun.rootTaskId,
@@ -115,13 +117,13 @@ export function createProductProjection(
     async getWorkRun(input) {
       const loaded = await load(input);
       const facts = await identity(loaded, input);
-      return {
+      return ProductWorkRunResponseSchema.parse({
         contract_status: PRODUCT_CONTRACT_STATUS,
         work: toWorkResponse(loaded.work),
         work_run: toWorkRunResponse(loaded.workRun),
         capture_status: 'complete',
         ...facts,
-      } as ProductWorkRun;
+      });
     },
 
     async getRunTrace(input) {
@@ -139,7 +141,7 @@ export function createProductProjection(
         workspaceId: input.workspaceId,
         runIds: runs.map((run) => run.runId),
       });
-      return {
+      return ProductRunTraceResponseSchema.parse({
         contract_status: PRODUCT_CONTRACT_STATUS,
         work: toWorkResponse(loaded.work),
         work_run: toWorkRunResponse(loaded.workRun),
@@ -158,7 +160,7 @@ export function createProductProjection(
           },
           created_at: event.createdAt,
         })),
-      } as ProductRunTrace;
+      });
     },
   };
 }

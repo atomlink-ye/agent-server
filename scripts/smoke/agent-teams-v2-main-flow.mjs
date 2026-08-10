@@ -1997,6 +1997,12 @@ async function runProductWorkDurableIdentityFlow({
   const model =
     typeof providerRuntime.model === 'string' ? providerRuntime.model : null;
   assert(provider && model, 'product_work_root_provider_evidence_missing');
+  teamRunId = (
+    await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+      firstRootTaskId,
+    ])
+  ).rows[0]?.id;
+  assert(teamRunId, 'product_work_team_run_missing');
   const productWorkRunPath = `/api/v1/works/${work.id}/runs/${firstRun.id}`;
   const productTracePath = `${productWorkRunPath}/trace`;
   const productWorkRunRaw = await request(productWorkRunPath, {
@@ -2018,8 +2024,9 @@ async function runProductWorkDurableIdentityFlow({
     'product_trace_projection_success_branch_invalid',
   );
   assert(
-    productWorkRun.messages.length === 0 && productTrace.messages.length === 0,
-    'product_projection_empty_messages_branch_invalid',
+    Array.isArray(productWorkRun.messages) &&
+      Array.isArray(productTrace.messages),
+    'product_projection_messages_branch_invalid',
   );
   const nullExecutionAttempt = productWorkRun.work_items
     .flatMap((item) => item.attempts)
@@ -2065,7 +2072,114 @@ async function runProductWorkDurableIdentityFlow({
       invalidTrace.error.code === 'invalid_request',
     'product_projection_invalid_uuid_branch_invalid',
   );
+  const healthLive = await request('/health/live', {
+    technicalIdempotency: false,
+    status: 200,
+  });
+  const serviceRevision =
+    typeof healthLive?.version === 'string' ? healthLive.version : null;
+  const correlation = (
+    await db.query(
+      `SELECT w.id AS work_id,wr.id AS work_run_id,wr.root_task_id,
+              t.id AS root_task_row_id,tr.id AS team_run_id
+         FROM works w
+         JOIN work_runs wr
+           ON wr.work_id=w.id AND wr.tenant_id=$3 AND wr.workspace_id=$4
+         JOIN tasks t
+           ON t.id=wr.root_task_id AND t.tenant_id=$3 AND t.workspace_id=$4
+         JOIN team_runs tr
+           ON tr.root_task_id=t.id
+          AND tr.tenant_id=$3 AND tr.workspace_id=$4
+        WHERE w.id=$1 AND wr.id=$2
+          AND w.tenant_id=$3 AND w.workspace_id=$4
+        LIMIT 1`,
+      [work.id, firstRun.id, tenantId, workspaceId],
+    )
+  ).rows[0];
+  assert(
+    correlation?.work_id === work.id &&
+      correlation.work_run_id === firstRun.id &&
+      correlation.root_task_id === firstRootTaskId &&
+      correlation.root_task_row_id === firstRootTaskId &&
+      correlation.team_run_id === teamRunId,
+    'product_work_db_correlation_invalid',
+  );
+  const sourceCounts = (
+    await db.query(
+      `SELECT
+          (SELECT count(*)::int FROM team_work_items
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS work_items,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS attempts,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND execution_task_id IS NULL) AS null_execution_attempts,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND feedback IS NULL AND result_summary IS NULL) AS nullable_attempt_fields,
+          (SELECT count(*)::int FROM team_messages
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS messages,
+          (SELECT count(*)::int FROM team_member_runs
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS actors,
+          (SELECT count(*)::int FROM runs r
+             JOIN tasks t ON t.id=r.task_id
+             JOIN team_runs tr
+               ON tr.root_task_id=t.root_task_id
+              AND tr.id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
+             WHERE t.root_task_id=$4
+               AND t.tenant_id=$2 AND t.workspace_id=$3) AS runs,
+          (SELECT count(*)::int FROM run_events e
+             JOIN runs r ON r.id=e.run_id
+             JOIN tasks t ON t.id=r.task_id
+             JOIN team_runs tr
+               ON tr.root_task_id=t.root_task_id
+              AND tr.id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
+             WHERE t.root_task_id=$4
+               AND t.tenant_id=$2 AND t.workspace_id=$3) AS events,
+          (SELECT count(*)::int FROM team_member_runs
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND name IS NULL) AS nullable_actor_labels`,
+      [teamRunId, tenantId, workspaceId, firstRootTaskId],
+    )
+  ).rows[0];
+  const responseAttemptCount = productWorkRun.work_items.reduce(
+    (count, item) => count + item.attempts.length,
+    0,
+  );
+  const responseNullableActorLabels = productWorkRun.actors.filter(
+    (actor) => actor.name === null,
+  ).length;
+  const responseNullableAttemptFields = productWorkRun.work_items
+    .flatMap((item) => item.attempts)
+    .filter(
+      (attempt) =>
+        attempt.feedback_summary === null && attempt.result_summary === null,
+    ).length;
+  assert(
+    Number(sourceCounts.work_items) === productWorkRun.work_items.length &&
+      Number(sourceCounts.work_items) === productTrace.work_items.length &&
+      Number(sourceCounts.attempts) === responseAttemptCount &&
+      Number(sourceCounts.messages) === productWorkRun.messages.length &&
+      Number(sourceCounts.messages) === productTrace.messages.length &&
+      Number(sourceCounts.actors) === productWorkRun.actors.length &&
+      Number(sourceCounts.actors) === productTrace.actors.length &&
+      Number(sourceCounts.nullable_actor_labels) ===
+        responseNullableActorLabels &&
+      Number(sourceCounts.nullable_attempt_fields) ===
+        responseNullableAttemptFields &&
+      Number(sourceCounts.nullable_attempt_fields) > 0 &&
+      Number(sourceCounts.null_execution_attempts) > 0 &&
+      Number(sourceCounts.runs) === productTrace.runs.length &&
+      Number(sourceCounts.events) === productTrace.events.length,
+    'product_work_projection_source_counts_mismatch',
+  );
   marker('PRODUCT_WORK_PROJECTION_HTTP_CONTRACT_PROVEN', {
+    ...(serviceRevision
+      ? {
+          service_revision: serviceRevision,
+          service_revision_capture_status: 'complete',
+        }
+      : { service_revision_capture_status: 'not_present' }),
     work_run_status: 200,
     work_run_sha256: hash(JSON.stringify(productWorkRunRaw)),
     trace_status: 200,
@@ -2076,11 +2190,41 @@ async function runProductWorkDurableIdentityFlow({
       not_found_404: true,
       invalid_uuid_400: true,
     },
-    empty_arrays_proven: true,
-    nullable_fields_proven: true,
+    empty_arrays_proven:
+      productWorkRun.messages.length === 0 ||
+      productWorkRun.work_items.some((item) => item.attempts.length === 0),
+    nullable_fields_proven:
+      Number(sourceCounts.nullable_attempt_fields) > 0 &&
+      responseNullableAttemptFields > 0,
     not_found_statuses: { work_run: 404, trace: 404 },
     invalid_uuid_statuses: { work_run: 400, trace: 400 },
     null_execution_attempt_proven: true,
+    correlation_sha256: {
+      work_id: hash(correlation.work_id),
+      work_run_id: hash(correlation.work_run_id),
+      root_task_id: hash(correlation.root_task_id),
+      team_run_id: hash(correlation.team_run_id),
+    },
+    source_row_counts: {
+      work_items: Number(sourceCounts.work_items),
+      attempts: Number(sourceCounts.attempts),
+      null_execution_attempts: Number(sourceCounts.null_execution_attempts),
+      nullable_attempt_fields: Number(sourceCounts.nullable_attempt_fields),
+      messages: Number(sourceCounts.messages),
+      actors: Number(sourceCounts.actors),
+      runs: Number(sourceCounts.runs),
+      events: Number(sourceCounts.events),
+    },
+    nullable_actor_label_evidence: {
+      source_count: Number(sourceCounts.nullable_actor_labels),
+      response_count: responseNullableActorLabels,
+      matched: true,
+    },
+    nullable_attempt_fields_evidence: {
+      source_count: Number(sourceCounts.nullable_attempt_fields),
+      response_count: responseNullableAttemptFields,
+      matched: true,
+    },
   });
   marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
     provider,
@@ -2091,12 +2235,6 @@ async function runProductWorkDurableIdentityFlow({
     provider_run_sha256: hash(providerRun.id),
     status: providerRun.status,
   });
-  teamRunId = (
-    await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
-      firstRootTaskId,
-    ])
-  ).rows[0]?.id;
-
   const { PostgresWorkIdentityRepository } =
     await import('../../src/infrastructure/postgres/postgres-work-identity-repository.ts');
   const repository = new PostgresWorkIdentityRepository(db);

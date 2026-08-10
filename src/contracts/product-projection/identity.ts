@@ -43,7 +43,7 @@ export const ProductActorSchema = z
 export const ProductMessageSchema = z
   .object({
     id: z.uuid(),
-    sender_id: z.uuid(),
+    sender_id: z.uuid().nullable(),
     recipient_id: z.uuid(),
     sender_name: z.string().nullable(),
     recipient_name: z.string().nullable(),

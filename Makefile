@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
+.PHONY: setup dev dev-api check-fast web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-test-web internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
@@ -102,6 +102,14 @@ build:
 
 check:
 	./scripts/dev/docker-run -- pnpm check
+
+# Types only. `check` also runs the web type-check, a repo-wide prettier pass,
+# a docs audit and an exec-plan audit; during MVE-stage development those gate
+# on things a backend change cannot break, and they turned a per-iteration
+# check into a multi-minute one. Use this while iterating; run the full `check`
+# once before handing work over.
+check-fast:
+	./scripts/dev/docker-run -- pnpm check:fast
 
 test:
 	./scripts/dev/docker-run -- pnpm test

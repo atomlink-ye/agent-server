@@ -43,7 +43,8 @@
     "test:paseo-smoke": "pnpm build && node scripts/smoke/paseo-opencode.mjs",
     "eval:smoke": "node --import tsx scripts/eval/memory-policy-eval.ts",
     "ci": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
-    "clean": "node scripts/dev/clean.mjs"
+    "clean": "node scripts/dev/clean.mjs",
+    "check:fast": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@getpaseo/client": "0.1.110",

@@ -96,8 +96,14 @@ if (command.length === 0) {
       process.off('SIGTERM', forwardSignal);
       process.exitCode = exitCode;
     }
-  } catch {
-    process.stderr.write('Failed to prepare container dependencies.\n');
+  } catch (error) {
+    // Print the cause. A bare "Failed to prepare container dependencies." says
+    // nothing about whether the stamp mismatched, a copy failed, or a path was
+    // unreadable, and every occurrence then costs a diagnostic round inside the
+    // container to recover information the process already had.
+    process.stderr.write(
+      `Failed to prepare container dependencies: ${error?.stack ?? error}\n`,
+    );
     process.exitCode = 1;
   }
 }

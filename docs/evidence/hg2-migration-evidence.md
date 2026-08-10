@@ -54,5 +54,64 @@ Run this repository check alongside the packet and record its output or a
 truthful `not_run` result; no execution is claimed here:
 
 ```sh
-rg -n -i 'artifact.*freeze|freeze.*artifact' docs src scripts
+rg -n \
+  'production_receipt_id, artifact_id|work_runs\.id|摘要.*Artifact|种类.*生产凭据' \
+  docs/contracts/product-work-identity.md
 ```
+
+Expected: the frozen contract states the future unique key
+`(production_receipt_id, artifact_id)`, the future FK target `work_runs.id`, and
+that Artifact computes digest/kind rather than accepting them in the receipt.
+
+## Backfill replay evidence
+
+Run these against the same migrated real PostgreSQL database and preserve each
+complete JSON line and exit code. The second write must report
+`inserted=0 conflicts=0`; a non-zero conflict count is a failure, not a warning.
+
+```sh
+node scripts/migrations/backfill-product-work-identity.mjs --dry-run
+node scripts/migrations/backfill-product-work-identity.mjs --batch-size 100
+node scripts/migrations/backfill-product-work-identity.mjs --batch-size 100
+node scripts/migrations/hg2-migration-evidence.mjs --ndjson
+```
+
+## Idempotency and binding SQL
+
+After the real provider-backed HTTP calls have produced `WORK_ID`,
+`WORK_RUN_ID`, `TRIGGER_REF`, and the technical receipt in `source_refs`, run
+the following through `psql "$DATABASE_URL" -v ON_ERROR_STOP=1`. These are
+queries only; do not replace the IDs with hand-written database rows.
+
+```sql
+SELECT id, work_id, trigger_kind, trigger_ref, root_task_id, bound_at
+FROM work_runs
+WHERE tenant_id = :'tenant_id'
+  AND workspace_id = :'workspace_id'::uuid
+  AND work_id = :'work_id'::uuid
+ORDER BY created_at, id;
+
+SELECT trigger_ref, count(*) AS rows, count(DISTINCT id) AS distinct_ids
+FROM work_runs
+WHERE tenant_id = :'tenant_id'
+  AND workspace_id = :'workspace_id'::uuid
+  AND work_id = :'work_id'::uuid
+  AND trigger_ref = :'trigger_ref'
+GROUP BY trigger_ref;
+
+SELECT root_task_id, count(*)
+FROM work_runs
+WHERE root_task_id IS NOT NULL
+GROUP BY root_task_id
+HAVING count(*) <> 1;
+
+SELECT count(*) AS expired_pending_visible_candidates
+FROM work_runs
+WHERE root_task_id IS NULL AND expires_at <= now();
+```
+
+For the two-call idempotency criterion, preserve both HTTP/MCP responses and
+assert in the evidence recorder that their product `work_run.id` values are
+byte-for-byte equal. For the one-Work/two-Runs criterion, repeat with two
+different `trigger_ref` values and assert the query returns two distinct IDs
+under one `work_id`.

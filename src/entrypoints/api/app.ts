@@ -51,6 +51,8 @@ import {
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
+import type { WorkProjectionFactsSource } from '../../application/product-projection/work-projection-facts-source.js';
+import type { WorkProjectionFactsQuery } from '../../application/work/work-projection-facts.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -77,6 +79,9 @@ export interface AppDependencies {
   readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
   readonly teamMessages?: TeamMessageRepository;
   readonly tasks?: TaskRepository;
+  /** Product Work source; no Product route is registered in this slice. */
+  readonly workProjectionFactsSource?: WorkProjectionFactsSource;
+  readonly queryWorkProjectionFacts?: WorkProjectionFactsQuery;
   readonly sessions?: SessionRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;

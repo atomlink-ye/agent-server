@@ -82,6 +82,8 @@ import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-r
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
+import { WorkProjectionFactsSource } from './application/product-projection/work-projection-facts-source.js';
+import { PostgresWorkProjectionFactsSource } from './infrastructure/postgres/postgres-work-projection-facts-source.js';
 import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
 import { TeamToolContextResolver } from './application/teams/team-tool-context.js';
@@ -89,6 +91,7 @@ import { TeamCommandService } from './application/teams/team-command-service.js'
 import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
 import { TeamDriver } from './application/teams/team-driver.js';
 import { TeamWakeReconciler } from './application/teams/team-wake-reconciler.js';
+import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
 import {
   revokeForRecoveredTeamRuns,
   revokeForTerminalTeamRun,
@@ -286,6 +289,12 @@ export async function createService(
   const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
   await applyDurableKernelMigrations(pool);
+  const queryWorkProjectionFacts = new QueryWorkProjectionFacts(
+    new PostgresWorkProjectionFactsSource(pool),
+  );
+  const workProjectionFactsSource = new WorkProjectionFactsSource(
+    queryWorkProjectionFacts,
+  );
 
   const runRepository = new PostgresRunRepository(pool);
   const taskRepository = new PostgresTaskRepository(pool);
@@ -672,6 +681,8 @@ export async function createService(
       getMemory,
       updateMemory,
     },
+    queryWorkProjectionFacts,
+    workProjectionFactsSource,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

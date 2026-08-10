@@ -186,7 +186,11 @@ export async function startPaseo({
   }
 
   try {
-    await waitForHttp(`http://127.0.0.1:${port}/api/health`, 30_000, child);
+    await waitForHttp(
+      `http://127.0.0.1:${port}/api/health`,
+      startupTimeoutMs,
+      child,
+    );
   } catch (error) {
     await stopProcessTree(child);
     throw new Error(

@@ -1878,6 +1878,36 @@ function assertProductDtoShape(value, label) {
   walk(value);
 }
 
+function assertProductProjectionDtoShape(value, label) {
+  const forbidden = new Set([
+    'caller_idempotency_key',
+    'idempotency_key',
+    'principal_id',
+    'principal_type',
+  ]);
+  const technicalIds = new Set([
+    'root_task_id',
+    'team_run_id',
+    'team_member_run_id',
+    'task_id',
+    'run_id',
+    'team_message_id',
+  ]);
+  const walk = (current, path = label) => {
+    if (!current || typeof current !== 'object') return;
+    for (const [key, child] of Object.entries(current)) {
+      assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
+      if (technicalIds.has(key))
+        assert(
+          path.endsWith('source_refs'),
+          `${label}_${path}_${key}_outside_source_refs`,
+        );
+      walk(child, `${path}.${key}`);
+    }
+  };
+  walk(value);
+}
+
 async function runProductWorkDurableIdentityFlow({
   definitionId,
   definitionVersionId,
@@ -1969,6 +1999,91 @@ async function runProductWorkDurableIdentityFlow({
     rootRunRow.id,
   );
   assert(rootExecution.claimed, 'product_work_root_run_not_claimed');
+  const firstTeamRunRow = await waitFor(
+    async () =>
+      (
+        await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+          firstRootTaskId,
+        ])
+      ).rows[0],
+    (row) => Boolean(row?.id),
+    'product_work_team_run_not_materialized',
+  );
+  teamRunId = firstTeamRunRow.id;
+
+  const captureProjection = async (workRunId, label) => {
+    const path = `/api/v1/works/${work.id}/runs/${workRunId}`;
+    const raw = await request(path, { status: 200 });
+    const traceRaw = await request(`${path}/trace`, { status: 200 });
+    assertProductProjectionDtoShape(raw, `${label}_work_run`);
+    assertProductProjectionDtoShape(traceRaw, `${label}_trace`);
+    const parsed = ProductWorkRunResponseSchema.parse(raw);
+    const traceParsed = ProductRunTraceResponseSchema.parse(traceRaw);
+    assert(
+      parsed.capture_status === 'complete' &&
+        parsed.work?.id === work.id &&
+        parsed.work_run?.id === workRunId,
+      `${label}_work_run_parse_invalid`,
+    );
+    assert(
+      traceParsed.capture_status === 'complete' &&
+        traceParsed.work?.id === work.id &&
+        traceParsed.work_run?.id === workRunId,
+      `${label}_trace_parse_invalid`,
+    );
+    return { raw, traceRaw, parsed, traceParsed };
+  };
+  const isEmptyCollectionBranch = (captured) =>
+    captured.parsed.work_items.length === 0 &&
+    captured.parsed.messages.length === 0 &&
+    captured.traceParsed.work_items.length === 0 &&
+    captured.traceParsed.messages.length === 0;
+  let emptyCollectionProjection = await captureProjection(
+    firstRun.id,
+    'product_projection_pre_provider',
+  );
+  let emptyCollectionWorkRunId = firstRun.id;
+  if (!isEmptyCollectionBranch(emptyCollectionProjection)) {
+    const secondRootTaskId =
+      secondStart.execution_receipt?.source_refs?.task_id;
+    assert(
+      secondRootTaskId && secondRootTaskId !== firstRootTaskId,
+      'product_work_second_root_task_missing_for_empty_projection',
+    );
+    const secondRootRunRow = (
+      await db.query(
+        'SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.id=$1',
+        [secondRootTaskId],
+      )
+    ).rows[0];
+    assert(secondRootRunRow?.id, 'product_work_second_root_run_missing');
+    const secondRootExecution = await service.singleRunDebug.claimAndExecute(
+      secondRootRunRow.id,
+    );
+    assert(
+      secondRootExecution.claimed,
+      'product_work_second_root_run_not_claimed',
+    );
+    await waitFor(
+      async () =>
+        (
+          await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+            secondRootTaskId,
+          ])
+        ).rows[0],
+      (row) => Boolean(row?.id),
+      'product_work_second_team_run_not_materialized',
+    );
+    emptyCollectionProjection = await captureProjection(
+      secondStart.work_run.id,
+      'product_projection_pre_provider_second_run',
+    );
+    emptyCollectionWorkRunId = secondStart.work_run.id;
+  }
+  assert(
+    isEmptyCollectionBranch(emptyCollectionProjection),
+    'product_work_empty_collection_branch_missing',
+  );
   const productLeadRunId = await queued('lead_turn');
   const providerExecution =
     await service.singleRunDebug.claimAndExecute(productLeadRunId);
@@ -1997,12 +2112,6 @@ async function runProductWorkDurableIdentityFlow({
   const model =
     typeof providerRuntime.model === 'string' ? providerRuntime.model : null;
   assert(provider && model, 'product_work_root_provider_evidence_missing');
-  teamRunId = (
-    await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
-      firstRootTaskId,
-    ])
-  ).rows[0]?.id;
-  assert(teamRunId, 'product_work_team_run_missing');
   const productWorkRunPath = `/api/v1/works/${work.id}/runs/${firstRun.id}`;
   const productTracePath = `${productWorkRunPath}/trace`;
   const productWorkRunRaw = await request(productWorkRunPath, {
@@ -2190,9 +2299,14 @@ async function runProductWorkDurableIdentityFlow({
       not_found_404: true,
       invalid_uuid_400: true,
     },
-    empty_arrays_proven:
-      productWorkRun.messages.length === 0 ||
-      productWorkRun.work_items.some((item) => item.attempts.length === 0),
+    empty_arrays_proven: isEmptyCollectionBranch(emptyCollectionProjection),
+    empty_collection_work_run_sha256: hash(
+      JSON.stringify(emptyCollectionProjection.raw),
+    ),
+    empty_collection_trace_sha256: hash(
+      JSON.stringify(emptyCollectionProjection.traceRaw),
+    ),
+    empty_collection_work_run_id_sha256: hash(emptyCollectionWorkRunId),
     nullable_fields_proven:
       Number(sourceCounts.nullable_attempt_fields) > 0 &&
       responseNullableAttemptFields > 0,

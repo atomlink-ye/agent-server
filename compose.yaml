@@ -17,6 +17,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
@@ -81,6 +85,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
@@ -111,6 +119,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true

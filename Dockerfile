@@ -73,8 +73,6 @@ RUN apt-get update \
     && ps --version \
     && python3 --version \
     && test -s /etc/ssl/certs/ca-certificates.crt \
-    && pnpm exec playwright install --with-deps --only-shell chromium \
-    && chmod -R a+rX /opt/playwright-browsers \
     && rm -rf /var/lib/apt/lists/*
 USER node
 
@@ -82,3 +80,23 @@ FROM dependencies AS development
 
 COPY --chown=node:node . .
 RUN node scripts/dev/resolve-opencode.mjs --check
+
+# Browser stage. `playwright install --with-deps` pulls a chromium shell plus
+# dozens of apt packages, and it is the single most expensive layer in this
+# image — on a fuse-overlayfs host it dominates total build time. Only the
+# browser-driven suites need it (`vitest.web.config.ts` runs vitest in browser
+# mode via playwright, and `test:e2e:web`), so it lives in its own stage and
+# every backend target builds without it.
+#
+# Consequence, on purpose: with the default `development` target,
+# `pnpm test:web` / `test:e2e:web` — and therefore `pnpm test` and `pnpm run ci`,
+# which include them — cannot run. Build with `--target web-testing`
+# (or `docker compose build --build-arg`/service override) when you need them.
+FROM development AS web-testing
+
+USER root
+RUN apt-get update \
+    && pnpm exec playwright install --with-deps --only-shell chromium \
+    && chmod -R a+rX /opt/playwright-browsers \
+    && rm -rf /var/lib/apt/lists/*
+USER node

@@ -2084,6 +2084,15 @@ async function runProductWorkDurableIdentityFlow({
     isEmptyCollectionBranch(emptyCollectionProjection),
     'product_work_empty_collection_branch_missing',
   );
+  marker('PRODUCT_WORK_PROJECTION_EMPTY_BRANCH_PROVEN', {
+    empty_arrays_proven: true,
+    work_run_status: 200,
+    trace_status: 200,
+    work_run_sha256: hash(JSON.stringify(emptyCollectionProjection.raw)),
+    trace_sha256: hash(JSON.stringify(emptyCollectionProjection.traceRaw)),
+    work_run_id_sha256: hash(emptyCollectionWorkRunId),
+    top_level_schema_parse: true,
+  });
   const productLeadRunId = await queued('lead_turn');
   const providerExecution =
     await service.singleRunDebug.claimAndExecute(productLeadRunId);

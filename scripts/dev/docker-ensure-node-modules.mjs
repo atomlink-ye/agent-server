@@ -1,16 +1,11 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 const workspaceNodeModules = '/workspace/node_modules';
 const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
-// Seeds are tar archives rather than directory trees: restoring by extracting
-// one sequential archive costs a fraction of copying ~200k small files, which
-// matters because `docker compose run --rm` gives the runner a fresh volume
-// and this restore therefore happens on every single invocation.
-const imageNodeModulesArchive = '/home/node/image-node_modules.tar';
-const imageWebNodeModulesArchive = '/home/node/image-web-node_modules.tar';
-const imageStampPath = '/home/node/image-dependencies-stamp';
+const imageNodeModules = '/home/node/image-node_modules';
+const imageWebNodeModules = '/home/node/image-web-node_modules';
 const dependencyFiles = [
   'package.json',
   'pnpm-lock.yaml',
@@ -21,22 +16,18 @@ const command = process.argv.slice(2);
 
 const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
 
-const run = (file, args) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(file, args, { stdio: ['ignore', 'ignore', 'inherit'] });
-    child.once('error', reject);
-    child.once('exit', (code, signal) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${file} exited with ${code ?? signal}`));
-    });
-  });
-
-const clearAndRestore = async (workspace, archive) => {
+const clearAndRestore = async (workspace, image) => {
   await mkdir(workspace, { recursive: true });
   for (const entry of await readdir(workspace)) {
     await rm(`${workspace}/${entry}`, { recursive: true, force: true });
   }
-  await run('tar', ['-xf', archive, '-C', workspace]);
+  for (const entry of await readdir(image)) {
+    await cp(`${image}/${entry}`, `${workspace}/${entry}`, {
+      recursive: true,
+      force: true,
+      verbatimSymlinks: true,
+    });
+  }
 };
 
 if (command.length === 0) {
@@ -51,8 +42,16 @@ if (command.length === 0) {
       dependencyHash.update(await readFile(`/workspace/${file}`));
     }
     const expectedStamp = `${dependencyHash.digest('hex')}\n`;
-    const imageStamp = await readFile(imageStampPath, 'utf8').catch(() => null);
-    if (imageStamp !== expectedStamp) {
+    const imageStamps = await Promise.all(
+      [imageNodeModules, imageWebNodeModules].map(async (nodeModules) => {
+        try {
+          return await readFile(stampPath(nodeModules), 'utf8');
+        } catch {
+          return null;
+        }
+      }),
+    );
+    if (imageStamps.some((stamp) => stamp !== expectedStamp)) {
       process.stderr.write(
         'Image dependencies are stale; run make setup or docker compose build.\n',
       );
@@ -70,11 +69,8 @@ if (command.length === 0) {
         ),
       );
       if (currentStamps.some((stamp) => stamp !== expectedStamp)) {
-        await clearAndRestore(workspaceNodeModules, imageNodeModulesArchive);
-        await clearAndRestore(
-          workspaceWebNodeModules,
-          imageWebNodeModulesArchive,
-        );
+        await clearAndRestore(workspaceNodeModules, imageNodeModules);
+        await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
         await writeFile(stampPath(workspaceNodeModules), expectedStamp, 'utf8');
         await writeFile(
           stampPath(workspaceWebNodeModules),

@@ -49,15 +49,9 @@ RUN set -eu; \
       "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" "@openai/codex@$CODEX_VERSION"; \
     /opt/providers/bin/claude --version; \
     /opt/providers/bin/codex --version
-# Seed archives, not directory copies. The container volume masks the image's
-# own node_modules, so a seed has to live somewhere else — but `cp -a` of two
-# full trees is ~200k small files, and on the sandbox host's fuse-overlayfs
-# storage driver that single layer measured 434s and dominated both the build
-# and the layer export. One sequential tar per tree is the same bytes with
-# ~1/100000th the syscalls.
-RUN tar -cf /home/node/image-node_modules.tar -C /workspace/node_modules . \
-    && tar -cf /home/node/image-web-node_modules.tar -C /workspace/apps/web/node_modules .
-RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-dependencies-stamp', stamp);"
+RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
+    && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
+RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"
 
 # Two things the slim base omits that only bite at runtime, both masked for a
 # long time because the smoke suite only ever exercised the opencode provider.

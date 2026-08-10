@@ -430,6 +430,90 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         await client.query('COMMIT');
         return mapRun(team);
       }
+      if (input.stopReason === 'succeeded_without_submit') {
+        const attempt = await client.query<AttemptRow>(
+          `SELECT a.*
+             FROM team_work_item_attempts a
+             JOIN team_work_items w
+               ON w.id=a.work_item_id AND w.team_run_id=a.team_run_id
+            WHERE a.id=$1 AND a.team_run_id=$2
+              AND ${ownerSql('a', 3)} AND ${ownerSql('w', 3)}
+            FOR UPDATE OF a,w`,
+          [input.attemptId, input.teamRunId, ...ownerValues(input.owner)],
+        );
+        if (!attempt.rows?.[0]) throw new TeamExecutionError('not_found');
+        // A canonical submit may win the race with the provider terminal
+        // callback. Preserve that completed attempt and leave the Team active.
+        if (attempt.rows[0].status === 'completed') {
+          await client.query('COMMIT');
+          return mapRun(team);
+        }
+        if (attempt.rows[0].status !== 'running')
+          throw new TeamExecutionError('invalid_transition');
+        if (attempt.rows[0].execution_task_id !== input.childTaskId)
+          throw new TeamExecutionError('invalid_transition');
+        const linkage = await client.query<{
+          task_id: string;
+          task_root_task_id: string;
+          task_team_task_kind: string | null;
+          task_team_member_run_id: string | null;
+          run_id: string;
+          run_status: string;
+        }>(
+          `SELECT task.id AS task_id, task.root_task_id AS task_root_task_id,
+                  task.team_task_kind AS task_team_task_kind,
+                  task.team_member_run_id AS task_team_member_run_id,
+                  child_run.id AS run_id, child_run.status AS run_status
+             FROM tasks task
+             JOIN runs child_run ON child_run.task_id=task.id
+             JOIN team_member_runs member
+               ON member.id=task.team_member_run_id
+              AND member.team_run_id=$5
+              AND member.role='member'
+              AND ${ownerSql('member', 6)}
+            WHERE task.id=$1 AND child_run.id=$2
+              AND task.root_task_id=$3
+              AND task.parent_run_id=$4
+              AND task.team_task_kind='work_attempt'
+              AND ${ownerSql('task', 10)}
+              AND NOT EXISTS (
+                SELECT 1 FROM runs newer
+                 WHERE newer.task_id=task.id
+                   AND newer.attempt > child_run.attempt
+              )
+            FOR UPDATE OF task,child_run,member`,
+          [
+            input.childTaskId,
+            input.childRunId,
+            team.root_task_id,
+            team.root_run_id,
+            input.teamRunId,
+            ...ownerValues(input.owner),
+            ...ownerValues(input.owner),
+          ],
+        );
+        const child = linkage.rows?.[0];
+        if (
+          !child ||
+          child.run_status !== 'succeeded' ||
+          child.task_root_task_id !== team.root_task_id ||
+          child.task_team_task_kind !== 'work_attempt' ||
+          child.task_team_member_run_id !== attempt.rows[0].assignee_member_id
+        )
+          throw new TeamExecutionError('invalid_transition');
+        const failedAttempt = await client.query(
+          `UPDATE team_work_item_attempts
+              SET status='failed', result_summary=NULL,
+                  completed_at=$2, updated_at=$2
+            WHERE id=$1 AND status='running'
+            RETURNING id`,
+          [input.attemptId, input.updatedAt],
+        );
+        if (!failedAttempt.rows?.[0]) {
+          await client.query('COMMIT');
+          return mapRun(team);
+        }
+      }
       await client.query(
         `UPDATE team_runs SET status='failed', phase='done', control_state='terminal', stop_reason=$2, updated_at=$3 WHERE id=$1`,
         [input.teamRunId, input.stopReason, input.updatedAt],
@@ -463,15 +547,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,'failed',$3::jsonb,$4 FROM run_events WHERE run_id=$2`,
         [randomUUID(), input.rootRunId, error, input.updatedAt],
       );
-      await client.query('COMMIT');
-      return mapRun(
-        (
-          await client.query<TeamRunRow>(
-            `SELECT * FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
-            [input.teamRunId, ...ownerValues(input.owner)],
-          )
-        ).rows![0]!,
+      const updatedTeam = await client.query<TeamRunRow>(
+        `SELECT * FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
+        [input.teamRunId, ...ownerValues(input.owner)],
       );
+      if (!updatedTeam.rows?.[0]) throw new Error('Team run was not found.');
+      await client.query('COMMIT');
+      return mapRun(updatedTeam.rows[0]);
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
@@ -972,6 +1054,12 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       : this.database;
     try {
       await client.query('BEGIN');
+      // Keep the Team-first lock order shared with failTeamRunAtomically so a
+      // terminal callback cannot deadlock a concurrent canonical submit.
+      await client.query(
+        `SELECT id FROM team_runs WHERE id=$1 AND ${ownerSql('', 2)} FOR UPDATE`,
+        [input.teamRunId, ...ownerValues(input.owner)],
+      );
       const eligible = await client.query<{ id: string }>(
         `SELECT a.id
            FROM team_work_item_attempts a

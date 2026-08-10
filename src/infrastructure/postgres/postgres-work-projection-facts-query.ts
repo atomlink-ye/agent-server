@@ -66,7 +66,6 @@ interface MessageRow {
   status: string;
   consumed_task_id: string | null;
   scoped_task_id: string | null;
-  consumed_run_id: string | null;
   body_present: boolean;
 }
 
@@ -129,20 +128,12 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
                   m.recipient_member_run_id,m.kind,m.status,
                   m.consumed_by_task_id AS consumed_task_id,
                   t.id AS scoped_task_id,
-                  r.consumed_run_id AS consumed_run_id,
                   (m.body IS NOT NULL) AS body_present
              FROM team_messages m
              LEFT JOIN tasks t
                ON t.id=m.consumed_by_task_id
               AND t.root_task_id=$4
               AND t.tenant_id=$2 AND t.workspace_id=$3
-             LEFT JOIN LATERAL (
-               SELECT latest_run.id AS consumed_run_id
-                 FROM runs latest_run
-                WHERE latest_run.task_id=t.id
-                ORDER BY latest_run.created_at DESC,latest_run.id DESC
-                LIMIT 1
-             ) r ON TRUE
             WHERE m.team_run_id=$1 AND m.tenant_id=$2 AND m.workspace_id=$3
             ORDER BY m.sequence,m.id`,
         [team.id, ...scope, rootTaskId],
@@ -211,9 +202,6 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
           teamRunId: team.id,
           teamMessageId: message.id,
           ...(message.scoped_task_id ? { taskId: message.scoped_task_id } : {}),
-          ...(message.consumed_run_id
-            ? { runId: message.consumed_run_id }
-            : {}),
         };
         return {
           id: message.id,

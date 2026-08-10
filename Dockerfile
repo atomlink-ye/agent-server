@@ -25,6 +25,7 @@ USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node apps/web/package.json ./apps/web/package.json
+COPY --chown=node:node patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 RUN set -eu; \
     case "$TARGETARCH" in \

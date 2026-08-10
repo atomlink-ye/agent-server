@@ -11,6 +11,25 @@ import {
 } from './safe-environment.mjs';
 
 const MAX_HTTP_ERROR_BODY_LENGTH = 4_096;
+const DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS = 30_000;
+
+export function parsePositiveSafeIntegerEnvironmentVariable(
+  name,
+  value,
+  defaultValue,
+) {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`${name} must be a positive decimal safe integer.`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive decimal safe integer.`);
+  }
+  return parsed;
+}
 
 export async function getAvailablePort() {
   const server = createServer();

@@ -36,6 +36,8 @@ const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
 const failedAttemptMode =
   process.env.AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE ?? '';
 const reworkScenario = process.env.AGENT_TEAMS_V2_SMOKE_REWORK === '1';
+const productWorkDurableIdentity =
+  process.env.PRODUCT_WORK_DURABLE_IDENTITY === '1';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const staleFixtureProbe =
@@ -1762,15 +1764,22 @@ class ScriptedRuntime {
 
 async function request(
   path,
-  { method = 'GET', body, status = 200, authToken = token } = {},
+  {
+    method = 'GET',
+    body,
+    status = 200,
+    authToken = token,
+    technicalIdempotency = true,
+  } = {},
 ) {
+  const headers = {
+    authorization: `Bearer ${authToken}`,
+    'content-type': 'application/json',
+    ...(technicalIdempotency ? { 'idempotency-key': randomUUID() } : {}),
+  };
   const response = await fetch(`${apiUrl}${path}`, {
     method,
-    headers: {
-      authorization: `Bearer ${authToken}`,
-      'content-type': 'application/json',
-      'idempotency-key': randomUUID(),
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = await response.json().catch(() => null);
@@ -1852,6 +1861,298 @@ async function expectSqlState(query, values, code) {
     return;
   }
   throw new Error(`sql_constraint_missing_${code}`);
+}
+
+function assertProductDtoShape(value, label) {
+  const forbidden = new Set([
+    'caller_idempotency_key',
+    'idempotency_key',
+    'principal_id',
+    'principal_type',
+    'root_task_id',
+  ]);
+  const walk = (current, path = label) => {
+    if (!current || typeof current !== 'object') return;
+    for (const [key, child] of Object.entries(current)) {
+      assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
+      if (key === 'task_id')
+        assert(
+          path.endsWith('source_refs'),
+          `${label}_task_id_outside_source_refs`,
+        );
+      walk(child, `${path}.${key}`);
+    }
+  };
+  walk(value);
+}
+
+async function runProductWorkDurableIdentityFlow({
+  definitionId,
+  definitionVersionId,
+}) {
+  const owner = { tenantId, workspaceId };
+  const workResponse = await request(
+    '/api/v1/works',
+    {
+      method: 'POST',
+      status: 201,
+      technicalIdempotency: false,
+      body: {
+        definition_id: definitionId,
+        definition_version_id: definitionVersionId,
+        title: `Durable identity smoke ${suffix}`,
+      },
+    },
+  );
+  const work = workResponse?.work;
+  assert(
+    work?.id && work.definition_version_id === definitionVersionId,
+    'product_work_create_invalid',
+  );
+  assertProductDtoShape(workResponse, 'http_work_create');
+
+  const triggerRef = `durable-identity-${suffix}`;
+  const startPath = `/api/v1/works/${work.id}/runs`;
+  const [firstStart, replayStart] = await Promise.all([
+    request(startPath, {
+      method: 'POST',
+      status: 202,
+      technicalIdempotency: false,
+      body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+    }),
+    request(startPath, {
+      method: 'POST',
+      status: 202,
+      technicalIdempotency: false,
+      body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+    }),
+  ]);
+  const firstRun = firstStart?.work_run;
+  const replayRun = replayStart?.work_run;
+  assert(
+    firstRun?.id && replayRun?.id && firstRun.id === replayRun.id,
+    'product_work_run_concurrent_replay_mismatch',
+  );
+  assertProductDtoShape(firstStart, 'http_work_run_start');
+  assertProductDtoShape(replayStart, 'http_work_run_replay');
+  const sameTriggerCount = await db.query(
+    'SELECT count(*)::int AS count FROM work_runs WHERE work_id=$1 AND trigger_ref=$2',
+    [work.id, triggerRef],
+  );
+  assert(
+    sameTriggerCount.rows[0].count === 1,
+    'product_work_run_replay_cardinality_invalid',
+  );
+
+  const secondTriggerRef = `durable-identity-second-${suffix}`;
+  const secondStart = await request(startPath, {
+    method: 'POST',
+    status: 202,
+    technicalIdempotency: false,
+    body: { trigger_kind: 'manual', trigger_ref: secondTriggerRef },
+  });
+  assert(
+    secondStart?.work_run?.id && secondStart.work_run.id !== firstRun.id,
+    'product_work_run_distinct_trigger_not_distinct',
+  );
+  assertProductDtoShape(secondStart, 'http_work_run_second_trigger');
+  const workRunIds = [firstRun.id, secondStart.work_run.id];
+  const runRows = await db.query(
+    'SELECT id,root_task_id,bound_at FROM work_runs WHERE id=ANY($1::uuid[]) ORDER BY id',
+    [workRunIds],
+  );
+  assert(
+    runRows.rowCount === 2 &&
+      runRows.rows.every((row) => row.root_task_id && row.bound_at),
+    'product_work_run_root_binding_missing',
+  );
+
+  const firstRootTaskId = firstRunSourceTaskId(firstStart);
+  rootTaskId = firstRootTaskId;
+  const rootRunRow = (
+    await db.query(
+      'SELECT r.id,r.status,r.runtime FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.id=$1',
+      [firstRootTaskId],
+    )
+  ).rows[0];
+  assert(rootRunRow?.id, 'product_work_root_run_missing');
+  const rootExecution = await service.singleRunDebug.claimAndExecute(rootRunRow.id);
+  assert(rootExecution.claimed, 'product_work_root_run_not_claimed');
+  const rootAfter = (
+    await db.query('SELECT id,status,runtime FROM runs WHERE id=$1', [rootRunRow.id])
+  ).rows[0];
+  assert(
+    rootAfter?.status === 'succeeded',
+    'product_work_root_run_not_succeeded',
+  );
+  const rootRuntime = rootAfter.runtime ?? {};
+  const provider =
+    typeof rootRuntime.provider === 'string' ? rootRuntime.provider : null;
+  const model =
+    typeof rootRuntime.model === 'string' ? rootRuntime.model : null;
+  assert(provider && model, 'product_work_root_provider_evidence_missing');
+  marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
+    provider,
+    model,
+    run_id: rootAfter.id,
+    status: rootAfter.status,
+  });
+  teamRunId = (
+    await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+      firstRootTaskId,
+    ])
+  ).rows[0]?.id;
+
+  const { PostgresWorkIdentityRepository } =
+    await import('../../src/infrastructure/postgres/postgres-work-identity-repository.ts');
+  const repository = new PostgresWorkIdentityRepository(db);
+  const now = new Date().toISOString();
+  const replayedBinding = await repository.bindRootTaskCas({
+    workRunId: firstRun.id,
+    rootTaskId: firstRootTaskId,
+    owner,
+    now,
+  });
+  assert(
+    replayedBinding.rootTaskId === firstRootTaskId,
+    'product_work_same_task_cas_replay_failed',
+  );
+  const secondRootTaskId = secondStart.execution_receipt?.source_refs?.task_id;
+  assert(
+    secondRootTaskId && secondRootTaskId !== firstRootTaskId,
+    'product_work_second_root_task_missing',
+  );
+  let bindingConflict = false;
+  try {
+    await repository.bindRootTaskCas({
+      workRunId: firstRun.id,
+      rootTaskId: secondRootTaskId,
+      owner,
+      now,
+    });
+  } catch (error) {
+    const { WorkRunBindingConflictError } =
+      await import('../../src/domain/work/work-run.ts');
+    bindingConflict = error instanceof WorkRunBindingConflictError;
+  }
+  assert(
+    bindingConflict,
+    'product_work_different_task_binding_conflict_missing',
+  );
+  const unchanged = await repository.findWorkRunById(firstRun.id, owner);
+  assert(
+    unchanged?.rootTaskId === firstRootTaskId,
+    'product_work_binding_conflict_mutated_original',
+  );
+  marker('PRODUCT_WORK_ROOT_TASK_CAS_EVIDENCE', {
+    same_task_replay: true,
+    different_task_binding_conflict: true,
+    original_root_task_id_unchanged: true,
+  });
+
+  const manifestBefore = await repository.getResolvedManifest(firstRun.id, owner);
+  assert(
+    manifestBefore?.entries.length === 1 &&
+      manifestBefore.entries[0].slot === 'definition' &&
+      manifestBefore.entries[0].resolvedVersionId === definitionVersionId,
+    'product_work_definition_manifest_missing',
+  );
+  const manifestReplay = await request(startPath, {
+    method: 'POST',
+    status: 202,
+    technicalIdempotency: false,
+    body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+  });
+  assert(
+    manifestReplay.execution_receipt?.reused === true,
+    'product_work_manifest_replay_not_reused',
+  );
+  const manifestAfter = await repository.getResolvedManifest(firstRun.id, owner);
+  assert(
+    JSON.stringify(manifestBefore) === JSON.stringify(manifestAfter),
+    'product_work_definition_manifest_unstable',
+  );
+  marker('PRODUCT_WORK_DEFINITION_MANIFEST_STABLE', {
+    work_run_id: firstRun.id,
+    entries: manifestAfter.entries.map((entry) => ({
+      slot: entry.slot,
+      resource_kind: entry.resourceKind,
+      requested_ref: entry.requestedRef,
+      resolved_version_id: entry.resolvedVersionId,
+    })),
+  });
+
+  const {
+    toExecutionReceiptResponse,
+    toWorkResponse,
+    toWorkRunResponse,
+  } = await import('../../src/contracts/product-work-commands.ts');
+  assertProductDtoShape(
+    {
+      work: toWorkResponse({
+        id: work.id,
+        tenantId: work.tenant_id,
+        workspaceId: work.workspace_id,
+        definitionId: work.definition_id,
+        currentDefinitionVersionId: work.definition_version_id,
+        title: work.title,
+        origin: work.origin,
+        archivedAt: work.archived_at,
+        createdAt: work.created_at,
+        updatedAt: work.updated_at,
+      }),
+    },
+    'mcp_work_create',
+  );
+  assertProductDtoShape(
+    {
+      work_run: toWorkRunResponse({
+        ...firstRun,
+        workId: firstRun.work_id,
+        definitionVersionId: firstRun.definition_version_id,
+        triggerKind: firstRun.trigger_kind,
+        triggerRef: firstRun.trigger_ref,
+        expiresAt: firstRun.expires_at,
+        boundAt: firstRun.bound_at,
+        createdAt: firstRun.created_at,
+        updatedAt: firstRun.updated_at,
+      }),
+      execution_receipt: toExecutionReceiptResponse({
+        reused: true,
+        taskId: firstRootTaskId,
+      }),
+    },
+    'mcp_work_run_start',
+  );
+  marker('PRODUCT_WORK_HTTP_MCP_DTO_CONTRACT_PROVEN', {
+    technical_idempotency_absent: true,
+    principal_fields_absent: true,
+    raw_technical_ids_absent: true,
+    task_id_only_in_source_refs: true,
+  });
+  marker('PRODUCT_WORK_EXPIRED_LIST_CAPABILITY_DEFERRED', {
+    capability_deferred: true,
+    reason: 'no_public_expired_work_run_list_entry_in_this_slice',
+  });
+  marker('PRODUCT_WORK_DURABLE_IDENTITY_PASS', {
+    work_id: work.id,
+    work_run_ids: workRunIds,
+    root_task_receipts: [
+      {
+        work_run_id: firstRun.id,
+        task_id: firstRootTaskId,
+        run_id: rootAfter.id,
+      },
+      { work_run_id: secondStart.work_run.id, task_id: secondRootTaskId },
+    ],
+  });
+  throw new RecoveryComplete();
+}
+
+function firstRunSourceTaskId(response) {
+  const taskId = response?.execution_receipt?.source_refs?.task_id;
+  assert(typeof taskId === 'string' && taskId.length > 0, 'product_work_root_task_receipt_missing');
+  return taskId;
 }
 
 try {
@@ -2072,6 +2373,15 @@ try {
     `/api/v1/team-versions/${imported.version.id}:publish`,
     { method: 'POST', body: {} },
   );
+  marker('PUBLISHED_TEAM_VERSION_READY', {
+    definition_id: published.definition_id,
+    definition_version_id: published.id,
+  });
+  if (productWorkDurableIdentity)
+    await runProductWorkDurableIdentityFlow({
+      definitionId: published.definition_id,
+      definitionVersionId: published.id,
+    });
   const invoked = await request('/api/v1/tasks:invoke', {
     method: 'POST',
     status: 202,

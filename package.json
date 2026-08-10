@@ -21,6 +21,7 @@
     "smoke:self-learning-team-phase2": "node scripts/smoke/self-learning-team-phase2-main-flow.mjs",
     "smoke:self-learning-team-phase3": "node scripts/smoke/self-learning-team-phase3-main-flow.mjs",
     "smoke:agent-teams-v2": "node scripts/smoke/agent-teams-v2-main-flow.mjs",
+    "smoke:product-work-projection": "node scripts/smoke/product-work-projection-main-flow.mjs --phase durable-identity",
     "probe:paseo-stream": "node scripts/probes/paseo-agent-stream.mjs",
     "web:dev": "pnpm --filter @atomlink-ye/agent-server-web dev",
     "web:build": "pnpm --filter @atomlink-ye/agent-server-web build",

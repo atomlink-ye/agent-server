@@ -38,6 +38,8 @@ const failedAttemptMode =
 const reworkScenario = process.env.AGENT_TEAMS_V2_SMOKE_REWORK === '1';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
+const staleFixtureProbe =
+  process.env.AGENT_TEAMS_V2_SMOKE_STALE_FIXTURE_PROBE === '1';
 const scriptedRuntime =
   requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
 const requestedProvider = process.env.PASEO_PROVIDER ?? 'opencode';
@@ -54,6 +56,8 @@ if (!['', 'lead', 'members'].includes(expiredLeaseRecovery))
   throw new Error('invalid_expired_lease_recovery');
 if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
   throw new Error('invalid_failed_attempt_mode');
+if (staleFixtureProbe && !requestedScriptedRuntime)
+  throw new Error('stale_fixture_probe_requires_scripted_runtime');
 if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
   throw new Error('rework_scenario_mode_conflict');
 const requestedModel =
@@ -94,6 +98,12 @@ const fixtureNames = Object.freeze({
   lead: 'research-lead',
   member: 'opportunity-analyst',
   observer: 'risk-reviewer',
+});
+const memberWorkDescriptions = Object.freeze({
+  member:
+    'Immediately collect and submit the required canonical snapshot evidence without creating a child subagent. You must make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid and text does not substitute for the call.',
+  observer:
+    'Perform the declared risk-reviewer preflight, then collect and submit the required canonical snapshot evidence. You must make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid and text does not substitute for the call.',
 });
 const markers = [];
 const stderr = [];
@@ -765,7 +775,7 @@ async function captureS3S4TimeoutEvidence() {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];
@@ -1275,33 +1285,38 @@ class ScriptedRuntime {
           {},
           'finish_granted_on_empty_board',
         );
-        value(
-          await session.client.callTool({
-            name: 'team_work_create',
-            arguments: {
-              subject: 'A',
-              description:
-                'Immediately collect and submit the required canonical snapshot evidence without creating a child subagent.',
-              assignee: fixtureNames.member,
-            },
-          }),
-        );
-        value(
-          await session.client.callTool({
-            name: 'team_work_create',
-            arguments: {
-              subject: 'B',
-              description: `Perform the declared ${fixtureNames.observer} preflight, then collect and submit the required canonical snapshot evidence.`,
-              assignee: fixtureNames.observer,
-            },
-          }),
-        );
-        runtimeCalls.push({
-          role: 'lead',
-          turn: 1,
-          tools: ['create_A', 'create_B_independent'],
-          zero_work_finish_absent: true,
-        });
+        if (staleFixtureProbe)
+          marker('STALE_FIXTURE_PROBE_LEAD_CREATE_SKIPPED', {
+            zero_work_finish_absent: true,
+          });
+        else {
+          value(
+            await session.client.callTool({
+              name: 'team_work_create',
+              arguments: {
+                subject: 'A',
+                description: memberWorkDescriptions.member,
+                assignee: fixtureNames.member,
+              },
+            }),
+          );
+          value(
+            await session.client.callTool({
+              name: 'team_work_create',
+              arguments: {
+                subject: 'B',
+                description: memberWorkDescriptions.observer,
+                assignee: fixtureNames.observer,
+              },
+            }),
+          );
+          runtimeCalls.push({
+            role: 'lead',
+            turn: 1,
+            tools: ['create_A', 'create_B_independent'],
+            zero_work_finish_absent: true,
+          });
+        }
       } else if (this.#leadTurns === 2 && failedAttemptMode === 'fixed') {
         assert(
           input.prompt.includes('"failure_code":"runtime_execution_failed"'),
@@ -1596,7 +1611,8 @@ class ScriptedRuntime {
             : 'finish_after_direct_delivery',
         });
       }
-      this.scheduleLeadIdle(session.client, this.#leadTurns);
+      if (!staleFixtureProbe)
+        this.scheduleLeadIdle(session.client, this.#leadTurns);
     } else {
       assert(tools.has('team_work_submit'), 'member_tools_missing');
       assert(!tools.has('team_message_send'), 'member_message_send_listed');
@@ -1793,8 +1809,8 @@ function agentYaml(name) {
   const instructions = lead
     ? reworkScenario
       ? `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Review rubric: both first attempts must complete before review. Work A is inadequate when its result omits the canonical ${canonicalSnapshotInvocation}, symbol ACME, or data_as_of 2026-07-31 evidence; request changes exactly once with substantive feedback while accepting qualifying Work B in the same control cycle. Accept corrected Work A only when all canonical evidence is present, then finish after both Work items are accepted. On the empty board create exactly Work A assigned to ${fixtureNames.member} and Work B assigned to ${fixtureNames.observer}, then stop. Never send a direct message, never invent refs, and never repeat a successful mutation.`
-      : `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to ${fixtureNames.member} with description exactly "Immediately collect and submit the required canonical snapshot evidence without creating a child subagent."; then create independent Work B assigned to ${fixtureNames.observer} with description exactly "Perform the declared observer preflight, then collect and submit the required canonical snapshot evidence."; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to ${fixtureNames.observer} with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel ${fixtureNames.observer} coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
-    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
+      : `Act directly as the Team Lead using only the canonical Team tools exposed in the current turn. A Lead control turn must never spawn or delegate to a subagent. Read the board first, perform every required canonical control action for the current state, then stop. Golden-path review rubric: a completed latest attempt whose submitted result contains the valid canonical ${canonicalSnapshotInvocation} result is qualifying and must be accepted. Do not request changes for nonblocking wording, caveats, formatting, or internal-path text; request changes remains available only for missing or invalid canonical snapshot evidence or another blocking requirement. On the empty board: create Work A assigned to ${fixtureNames.member} with description exactly "${memberWorkDescriptions.member}"; then create independent Work B assigned to ${fixtureNames.observer} with description exactly "${memberWorkDescriptions.observer}"; do not send a direct message on this turn; then stop. Never create any other Work. When work-1 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-1"} and stop, even while other members are running. When work-2 has a qualifying completed latest attempt, even though the WorkItem status remains in_progress, call team_work_accept exactly as {"work_ref":"work-2"}; only if available_coordination_commands includes team_message_send, then call team_message_send twice consecutively to ${fixtureNames.observer} with identical parameters and summary exactly the concatenation of "phase3-direct-sentinel ${fixtureNames.observer} coordination Bearer ", "canary-", and "secret /Users/canary"; do not call team_finish on this turn; then stop. On every later turn when both Work items are accepted, never send another direct message; if team_finish is exposed, call team_finish exactly once and stop. The server exposes team_finish only when delivery and completion fences are safe. Plain text is never a substitute for a required canonical action. The second identical team_message_send is the sole required idempotent replay; never repeat any other successful mutation, never invent refs, and never call a tool that is absent.`
+    : `Act directly as the assigned Team member using only the canonical Team and domain tools exposed in the current turn. ${observer ? 'You are the observer. Do not create a child subagent. Before using the canonical snapshot tool, complete exactly eight sequential preflight rounds. In each round call team_state exactly once as the only tool call in that response, wait for its result, then call team_work_list exactly once as the only tool call in the next response and wait for its result. Never batch preflight calls. After round eight, immediately continue to the canonical snapshot.' : 'You are the primary member. Do not create a child subagent; complete the canonical snapshot immediately.'} ${reworkScenario ? '' : 'HARD GATE: Pure prose is invalid. Do not end until the real canonical team_work_submit call returns a successful receipt; text does not substitute for that tool call. Call team_work_submit exactly once successfully and never repeat it.'} The member must call ${canonicalSnapshotInvocation} exactly once. Never guess fixture_ref paths or use an internal path. Include the successful canonical fixture_ref, symbol ACME, and data_as_of 2026-07-31 in the completed result, then call team_work_checkpoint once with a short safe summary and team_work_submit once with that completed result. After the first successful submit, stop all Team mutation. Never call team_message_send, never mutate another Work, never repeat a successful mutation, and never invent refs.`;
   const readableInstructions = instructions
     .replace('You are the observer.', `You are the ${fixtureNames.observer}.`)
     .replace(
@@ -2400,14 +2416,128 @@ try {
     await import('../../src/domain/teams/team-work-item.ts');
   const { createTeamMessage } =
     await import('../../src/domain/teams/team-message.ts');
+  const fixtureExecutions = new FixtureTeamExecutionRepository(queryOnly(db));
+  const fixtureMessages = new FixtureTeamMessageRepository(queryOnly(db));
   const rootTask = await new PostgresTaskRepository(queryOnly(db)).findById(
     rootTaskId,
   );
-  const staleWake = (
-    await db.query(
-      `SELECT m.id AS message_id,
+  let staleFixture = null;
+  let cleanupStaleFixture = async () => {};
+  {
+    const leadTaskId = (
+      await db.query(
+        `SELECT id FROM tasks
+          WHERE root_task_id=$1 AND team_member_run_id=$2
+            AND team_task_kind='lead_turn'
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [rootTaskId, lead.id],
+      )
+    ).rows[0]?.id;
+    assert(leadTaskId, 'stale_materialization_fixture_missing');
+    const work = createTeamWorkItem({
+      id: randomUUID(),
+      teamRunId,
+      subject: 'stale revision materialization fixture',
+      description: 'harness-owned queued wake fixture',
+      createdByMemberId: lead.id,
+      ...owner,
+    });
+    staleFixture = {
+      work,
+      attemptId: randomUUID(),
+      messageId: randomUUID(),
+      leadTaskId,
+    };
+    const createdAt = new Date().toISOString();
+    cleanupStaleFixture = async () => {
+      await db.query('BEGIN');
+      try {
+        await db.query('DELETE FROM team_messages WHERE id=$1', [
+          staleFixture.messageId,
+        ]);
+        await db.query('DELETE FROM team_work_item_attempts WHERE id=$1', [
+          staleFixture.attemptId,
+        ]);
+        await db.query('DELETE FROM team_work_items WHERE id=$1', [
+          staleFixture.work.id,
+        ]);
+        await db.query('COMMIT');
+      } catch (error) {
+        await db.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    };
+    try {
+      await db.query(
+        `INSERT INTO team_work_items
+           (id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
+            tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+        [
+          work.id,
+          work.teamRunId,
+          work.subject,
+          work.description,
+          work.status,
+          work.ownerMemberId,
+          work.createdByMemberId,
+          owner.tenantId,
+          owner.workspaceId,
+          owner.principalType,
+          owner.principalId,
+          createdAt,
+        ],
+      );
+      await db.query(
+        `INSERT INTO team_work_item_attempts
+           (id,work_item_id,team_run_id,attempt_no,assignee_member_id,
+            requested_by_lead_task_id,status,tenant_id,workspace_id,
+            principal_type,principal_id,created_at,updated_at)
+         VALUES ($1,$2,$3,1,$4,$5,'queued',$6,$7,$8,$9,$10,$10)`,
+        [
+          staleFixture.attemptId,
+          work.id,
+          teamRunId,
+          member.id,
+          leadTaskId,
+          owner.tenantId,
+          owner.workspaceId,
+          owner.principalType,
+          owner.principalId,
+          createdAt,
+        ],
+      );
+      await fixtureMessages.create(
+        createTeamMessage({
+          id: staleFixture.messageId,
+          teamRunId,
+          recipientMemberRunId: member.id,
+          workItemId: work.id,
+          attemptId: staleFixture.attemptId,
+          kind: 'wake',
+          dedupKey: `stale-materialization:${staleFixture.attemptId}`,
+          body: 'harness-owned stale revision materialization wake',
+          ...owner,
+        }),
+      );
+      marker('STALE_MATERIALIZATION_FIXTURE_SEEDED', {
+        work_item_id: work.id,
+        attempt_id: staleFixture.attemptId,
+        message_id: staleFixture.messageId,
+      });
+    } catch (error) {
+      await cleanupStaleFixture();
+      throw error;
+    }
+  }
+  try {
+    const staleWake = (
+      await db.query(
+        `SELECT m.id AS message_id,
               a.id AS attempt_id,
               a.attempt_no,
+              a.work_item_id,
               a.status AS attempt_status,
               a.execution_task_id AS attempt_execution_task_id,
               m.status AS message_status,
@@ -2416,111 +2546,123 @@ try {
          JOIN team_work_item_attempts a ON a.id=m.attempt_id
         WHERE m.team_run_id=$1 AND m.recipient_member_run_id=$2
           AND m.kind='wake'
+          AND ($3::uuid IS NULL OR m.id=$3)
         ORDER BY m.sequence DESC
         LIMIT 1`,
-      [teamRunId, member.id],
-    )
-  ).rows[0];
-  const currentRevision = (
-    await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
-  ).rows[0]?.revision;
-  assert(
-    rootTask && staleWake && Number.isInteger(currentRevision),
-    'stale_materialization_fixture_missing',
-  );
-  const staleWakeBefore = {
-    attemptStatus: staleWake.attempt_status,
-    attemptExecutionTaskId: staleWake.attempt_execution_task_id,
-    messageStatus: staleWake.message_status,
-    messageTaskId: staleWake.message_task_id,
-  };
-  const staleTask = createChildTask({
-    tenantId,
-    workspaceId,
-    principalType: 'service_account',
-    principalId,
-    policySnapshotVersion: rootTask.policySnapshotVersion,
-    rootTaskId: rootTask.id,
-    parentTaskId: rootTask.id,
-    parentRunId: (
-      await db.query('SELECT root_run_id FROM team_runs WHERE id=$1', [
-        teamRunId,
-      ])
-    ).rows[0].root_run_id,
-    invokableKind: 'agent',
-    invokableVersionId: member.agent_version_id ?? agents[fixtureNames.member],
-    inputSnapshotRef: rootTask.inputSnapshotRef,
-    inputFingerprint: rootTask.inputFingerprint,
-    logicalStepKey: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
-    nodePath: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
-    teamMemberRunId: member.id,
-    teamSequence: staleWake.attempt_no,
-    teamTaskKind: 'work_attempt',
-    sourceTeamMessageId: staleWake.message_id,
-    inputTeamMessageIds: [staleWake.message_id],
-  });
-  const staleRun = createRun('stale revision materialization smoke');
-  let staleRejected = false;
-  try {
-    await new PostgresAdmissionRepository(queryOnly(db)).withTransaction(
-      async (tx) => {
-        await tx.tasks.save(staleTask);
-        await tx.runs.save(staleRun, { taskId: staleTask.id, attempt: 1 });
-        await tx.teamExecutions.materializeAttempt({
-          attemptId: staleWake.attempt_id,
-          executionTaskId: staleTask.id,
-          teamRunId,
-          assigneeMemberId: member.id,
-          expectedRevision: currentRevision - 1,
-          owner,
-        });
-        await tx.teamMessages.bindToTask({
-          messageIds: [staleWake.message_id],
-          taskId: staleTask.id,
-          owner,
-        });
-        await tx.enqueueRunDispatch(staleRun.id, staleRun.createdAt);
-      },
+        [teamRunId, member.id, staleFixture?.messageId ?? null],
+      )
+    ).rows[0];
+    const currentRevision = (
+      await db.query('SELECT revision FROM team_runs WHERE id=$1', [teamRunId])
+    ).rows[0]?.revision;
+    assert(
+      rootTask && staleWake && Number.isInteger(currentRevision),
+      'stale_materialization_fixture_missing',
     );
-  } catch (error) {
-    staleRejected = error?.code === 'stale_state';
+    if (staleFixture)
+      assert(
+        staleWake.message_id === staleFixture.messageId &&
+          staleWake.attempt_id === staleFixture.attemptId &&
+          staleWake.work_item_id === staleFixture.work.id &&
+          staleFixture.leadTaskId,
+        'stale_materialization_fixture_seed_invalid',
+      );
+    const staleWakeBefore = {
+      attemptStatus: staleWake.attempt_status,
+      attemptExecutionTaskId: staleWake.attempt_execution_task_id,
+      messageStatus: staleWake.message_status,
+      messageTaskId: staleWake.message_task_id,
+    };
+    const staleTask = createChildTask({
+      tenantId,
+      workspaceId,
+      principalType: 'service_account',
+      principalId,
+      policySnapshotVersion: rootTask.policySnapshotVersion,
+      rootTaskId: rootTask.id,
+      parentTaskId: rootTask.id,
+      parentRunId: (
+        await db.query('SELECT root_run_id FROM team_runs WHERE id=$1', [
+          teamRunId,
+        ])
+      ).rows[0].root_run_id,
+      invokableKind: 'agent',
+      invokableVersionId:
+        member.agent_version_id ?? agents[fixtureNames.member],
+      inputSnapshotRef: rootTask.inputSnapshotRef,
+      inputFingerprint: rootTask.inputFingerprint,
+      logicalStepKey: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
+      nodePath: `member:${teamRunId}:${member.id}:stale-revision:${staleWake.attempt_id}`,
+      teamMemberRunId: member.id,
+      teamSequence: staleWake.attempt_no,
+      teamTaskKind: 'work_attempt',
+      sourceTeamMessageId: staleWake.message_id,
+      inputTeamMessageIds: [staleWake.message_id],
+    });
+    const staleRun = createRun('stale revision materialization smoke');
+    let staleRejected = false;
+    try {
+      await new PostgresAdmissionRepository(queryOnly(db)).withTransaction(
+        async (tx) => {
+          await tx.tasks.save(staleTask);
+          await tx.runs.save(staleRun, { taskId: staleTask.id, attempt: 1 });
+          await tx.teamExecutions.materializeAttempt({
+            attemptId: staleWake.attempt_id,
+            executionTaskId: staleTask.id,
+            teamRunId,
+            assigneeMemberId: member.id,
+            expectedRevision: currentRevision - 1,
+            owner,
+          });
+          await tx.teamMessages.bindToTask({
+            messageIds: [staleWake.message_id],
+            taskId: staleTask.id,
+            owner,
+          });
+          await tx.enqueueRunDispatch(staleRun.id, staleRun.createdAt);
+        },
+      );
+    } catch (error) {
+      staleRejected = error?.code === 'stale_state';
+    }
+    assert(staleRejected, 'stale_materialization_not_rejected');
+    const staleRollback = (
+      await db.query(
+        `SELECT
+           (SELECT count(*)::int FROM tasks WHERE id=$1) AS tasks,
+           (SELECT count(*)::int FROM runs WHERE id=$2) AS runs,
+           (SELECT count(*)::int FROM run_dispatches WHERE run_id=$2) AS dispatches`,
+        [staleTask.id, staleRun.id],
+      )
+    ).rows[0];
+    const staleWakeAfter = (
+      await db.query(
+        `SELECT a.status AS attempt_status,
+                a.execution_task_id AS attempt_execution_task_id,
+                m.status AS message_status,
+                m.consumed_by_task_id AS message_task_id
+           FROM team_work_item_attempts a
+           JOIN team_messages m ON m.id=$2 AND m.attempt_id=a.id
+          WHERE a.id=$1`,
+        [staleWake.attempt_id, staleWake.message_id],
+      )
+    ).rows[0];
+    assert(
+      staleRollback.tasks === 0 &&
+        staleRollback.runs === 0 &&
+        staleRollback.dispatches === 0 &&
+        staleWakeAfter?.attempt_status === staleWakeBefore.attemptStatus &&
+        staleWakeAfter?.attempt_execution_task_id ===
+          staleWakeBefore.attemptExecutionTaskId &&
+        staleWakeAfter?.message_status === staleWakeBefore.messageStatus &&
+        staleWakeAfter?.message_task_id === staleWakeBefore.messageTaskId,
+      'stale_materialization_rollback_invalid',
+    );
+    marker('STALE_REVISION_MATERIALIZATION_ROLLED_BACK');
+    if (staleFixtureProbe) throw new RecoveryComplete();
+  } finally {
+    if (staleFixture) await cleanupStaleFixture();
   }
-  assert(staleRejected, 'stale_materialization_not_rejected');
-  const staleRollback = (
-    await db.query(
-      `SELECT
-         (SELECT count(*)::int FROM tasks WHERE id=$1) AS tasks,
-         (SELECT count(*)::int FROM runs WHERE id=$2) AS runs,
-         (SELECT count(*)::int FROM run_dispatches WHERE run_id=$2) AS dispatches`,
-      [staleTask.id, staleRun.id],
-    )
-  ).rows[0];
-  const staleWakeAfter = (
-    await db.query(
-      `SELECT a.status AS attempt_status,
-              a.execution_task_id AS attempt_execution_task_id,
-              m.status AS message_status,
-              m.consumed_by_task_id AS message_task_id
-         FROM team_work_item_attempts a
-         JOIN team_messages m ON m.id=$2 AND m.attempt_id=a.id
-        WHERE a.id=$1`,
-      [staleWake.attempt_id, staleWake.message_id],
-    )
-  ).rows[0];
-  assert(
-    staleRollback.tasks === 0 &&
-      staleRollback.runs === 0 &&
-      staleRollback.dispatches === 0 &&
-      staleWakeAfter?.attempt_status === staleWakeBefore.attemptStatus &&
-      staleWakeAfter?.attempt_execution_task_id ===
-        staleWakeBefore.attemptExecutionTaskId &&
-      staleWakeAfter?.message_status === staleWakeBefore.messageStatus &&
-      staleWakeAfter?.message_task_id === staleWakeBefore.messageTaskId,
-    'stale_materialization_rollback_invalid',
-  );
-  marker('STALE_REVISION_MATERIALIZATION_ROLLED_BACK');
-  const fixtureExecutions = new FixtureTeamExecutionRepository(queryOnly(db));
-  const fixtureMessages = new FixtureTeamMessageRepository(queryOnly(db));
   const memberRunFenceMember = activateMemberRun(
     createTeamMemberRun({
       teamRunId,
@@ -3427,7 +3569,7 @@ try {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];

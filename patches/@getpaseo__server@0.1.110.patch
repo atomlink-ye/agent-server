@@ -41,7 +41,7 @@ index 47093b3872f765b19a71ff506035dc06ed2ef454..a746690dd145efacf76c04707132a699
                  const output = data.toString();
                  stdoutBuffer = appendCapped(stdoutBuffer, output);
 diff --git a/dist/server/server/agent/providers/opencode-agent.js b/dist/server/server/agent/providers/opencode-agent.js
-index 0fa7c4308107bd209a25c1da0eb307da1f8b30e3..fffc7df9902d2c1dd349517adba699b3542ed051 100644
+index 0fa7c4308107bd209a25c1da0eb307da1f8b30e3..d3ca19bf737361bc791d2b9bfaff280a2eba5e21 100644
 --- a/dist/server/server/agent/providers/opencode-agent.js
 +++ b/dist/server/server/agent/providers/opencode-agent.js
 @@ -159,6 +159,20 @@ function resolveOpenCodePermissionReply(response) {
@@ -65,7 +65,17 @@ index 0fa7c4308107bd209a25c1da0eb307da1f8b30e3..fffc7df9902d2c1dd349517adba699b3
  const OPENCODE_METADATA_CONCURRENCY = 4;
  const openCodeMetadataLimit = pLimit(OPENCODE_METADATA_CONCURRENCY);
  const OPENCODE_HANDLED_BUILTIN_SLASH_COMMANDS = [
-@@ -1152,7 +1166,8 @@ export class OpenCodeAgentClient {
+@@ -1119,7 +1133,8 @@ export class OpenCodeAgentClient {
+         }
+     }
+     async fetchModelsFromClient(client, directory) {
+-        const response = await openCodeMetadataLimit(() => withTimeout(client.provider.list({ directory }), OPENCODE_PROVIDER_LIST_TIMEOUT_MS, `OpenCode provider.list timed out after ${OPENCODE_PROVIDER_LIST_TIMEOUT_MS / 1000}s - server may not be authenticated or connected to any providers`));
++        const timeoutMs = parsePositiveSafeIntegerEnvironmentVariable("PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS", process.env.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS, OPENCODE_PROVIDER_LIST_TIMEOUT_MS);
++        const response = await openCodeMetadataLimit(() => withTimeout(client.provider.list({ directory }), timeoutMs, `OpenCode provider.list timed out after ${timeoutMs / 1000}s - server may not be authenticated or connected to any providers`));
+         if (response.error) {
+             throw new Error(`Failed to fetch OpenCode providers: ${JSON.stringify(response.error)}`);
+         }
+@@ -1152,7 +1167,8 @@ export class OpenCodeAgentClient {
          return models;
      }
      async fetchModesFromClient(client, directory) {

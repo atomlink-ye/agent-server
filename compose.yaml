@@ -140,10 +140,15 @@ services:
       PASEO_VOICE_MODE_ENABLED: 'false'
     volumes:
       - .:/workspace
-      - /workspace/node_modules
-      - /workspace/apps/web/node_modules
+      # Named, not anonymous. `docker compose run --rm` destroys anonymous
+      # volumes on exit, so every single make target used to start with an
+      # empty node_modules and re-seed ~200k files before running anything.
+      # Staleness is already handled by the dependency stamp in
+      # scripts/dev/docker-ensure-node-modules.mjs, so persisting these is safe.
+      - node-modules:/workspace/node_modules
+      - web-node-modules:/workspace/apps/web/node_modules
+      - runner-dist:/workspace/dist
       - /workspace/.local
-      - /workspace/dist
     working_dir: /workspace
 
   postgres-test:
@@ -164,5 +169,6 @@ services:
 volumes:
   node-modules:
   web-node-modules:
+  runner-dist:
   local-state:
   postgres-data:

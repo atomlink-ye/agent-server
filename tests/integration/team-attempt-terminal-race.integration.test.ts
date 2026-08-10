@@ -203,7 +203,7 @@ async function seedFixture(
       fixture.workItemId,
       fixture.teamRunId,
       fixture.memberId,
-      fixture.leadTaskId,
+      fixture.leadMemberId,
       fixture.childTaskId,
       owner.tenantId,
       owner.workspaceId,

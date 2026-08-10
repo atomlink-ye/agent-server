@@ -2625,7 +2625,6 @@ try {
       environmentVariableNames: [
         'OPENCODE_GO_API_KEY',
         'OPENCODE_CONFIG_CONTENT',
-        'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
         ...anthropicEnvironmentVariableNames,
       ],
     });

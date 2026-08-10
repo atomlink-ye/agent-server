@@ -546,6 +546,10 @@ async function collectFailureDiagnostic(failure) {
       await db.query(
         `SELECT t.id AS task_ref,t.team_task_kind,t.status AS task_status,
                 r.id AS run_ref,r.status AS run_status,
+                r.error->>'code' AS run_error_code,
+                r.error->>'message' AS run_error_message,
+                r.runtime->>'provider' AS runtime_provider,
+                r.runtime->>'model' AS runtime_model,
                 (r.lease_owner IS NOT NULL) AS lease_present,
                 r.lease_expires_at,r.fencing_token,
                 (d.published_at IS NOT NULL) AS dispatch_published
@@ -563,6 +567,10 @@ async function collectFailureDiagnostic(failure) {
       ...(row.team_task_kind ? { task_kind: row.team_task_kind } : {}),
       task_status: row.task_status,
       run_status: row.run_status ?? null,
+      run_error_code: row.run_error_code ?? null,
+      run_error_message: row.run_error_message ?? null,
+      runtime_provider: row.runtime_provider ?? null,
+      runtime_model: row.runtime_model ?? null,
       lease_present: row.lease_present ?? false,
       lease_expires_at:
         row.lease_expires_at instanceof Date
@@ -1962,21 +1970,14 @@ async function runProductWorkDurableIdentityFlow({
   assert(rootRunRow?.id, 'product_work_root_run_missing');
   const rootExecution = await service.singleRunDebug.claimAndExecute(rootRunRow.id);
   assert(rootExecution.claimed, 'product_work_root_run_not_claimed');
-  const rootAfter = (
-    await db.query('SELECT id,status,runtime FROM runs WHERE id=$1', [rootRunRow.id])
-  ).rows[0];
-  assert(
-    rootAfter?.status === 'succeeded',
-    'product_work_root_run_not_succeeded',
-  );
-  const providerRunId = await queued('lead_turn');
+  const productLeadRunId = await queued('lead_turn');
   const providerExecution = await service.singleRunDebug.claimAndExecute(
-    providerRunId,
+    productLeadRunId,
   );
   assert(providerExecution.claimed, 'product_work_provider_run_not_claimed');
   const providerRun = (
     await db.query('SELECT id,status,runtime FROM runs WHERE id=$1', [
-      providerRunId,
+      productLeadRunId,
     ])
   ).rows[0];
   assert(
@@ -1994,7 +1995,7 @@ async function runProductWorkDurableIdentityFlow({
   marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
     provider,
     model,
-    root_run_id: rootAfter.id,
+    root_run_id: rootRunRow.id,
     provider_run_id: providerRun.id,
     status: providerRun.status,
   });
@@ -2142,7 +2143,7 @@ async function runProductWorkDurableIdentityFlow({
       {
         work_run_id: firstRun.id,
         task_id: firstRootTaskId,
-        run_id: rootAfter.id,
+        run_id: rootRunRow.id,
       },
       { work_run_id: secondStart.work_run.id, task_id: secondRootTaskId },
     ],

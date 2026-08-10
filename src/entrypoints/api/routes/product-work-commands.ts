@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 
-import type { WorkIdentityApi } from '../../../application/work/work-identity-api.js';
+import { WorkIdentityApi } from '../../../application/work/work-identity-api.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   WorkIdentityConflictError,

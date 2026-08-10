@@ -1985,17 +1985,34 @@ async function runProductWorkDurableIdentityFlow({
     rootAfter?.status === 'succeeded',
     'product_work_root_run_not_succeeded',
   );
-  const rootRuntime = rootAfter.runtime ?? {};
+  const providerRunId = await queued('lead_turn');
+  const providerExecution = await service.singleRunDebug.claimAndExecute(
+    providerRunId,
+  );
+  assert(providerExecution.claimed, 'product_work_provider_run_not_claimed');
+  const providerRun = (
+    await db.query('SELECT id,status,runtime FROM runs WHERE id=$1', [
+      providerRunId,
+    ])
+  ).rows[0];
+  assert(
+    providerRun?.status === 'succeeded',
+    'product_work_provider_run_not_succeeded',
+  );
+  const providerRuntime = providerRun.runtime ?? {};
   const provider =
-    typeof rootRuntime.provider === 'string' ? rootRuntime.provider : null;
+    typeof providerRuntime.provider === 'string'
+      ? providerRuntime.provider
+      : null;
   const model =
-    typeof rootRuntime.model === 'string' ? rootRuntime.model : null;
+    typeof providerRuntime.model === 'string' ? providerRuntime.model : null;
   assert(provider && model, 'product_work_root_provider_evidence_missing');
   marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
     provider,
     model,
-    run_id: rootAfter.id,
-    status: rootAfter.status,
+    root_run_id: rootAfter.id,
+    provider_run_id: providerRun.id,
+    status: providerRun.status,
   });
   teamRunId = (
     await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [

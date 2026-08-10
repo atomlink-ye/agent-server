@@ -97,6 +97,11 @@ import {
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
+import { PostgresWorkIdentityRepository } from './infrastructure/postgres/postgres-work-identity-repository.js';
+import { WorkIdentityApi } from './application/work/work-identity-api.js';
+import { StartWorkRun } from './application/work/start-work-run.js';
+import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
+import { InvokableWorkDefinitionReadAdapter } from './application/ports/work-definition-read.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -300,6 +305,11 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
+  const workIdentityRepository = new PostgresWorkIdentityRepository(pool);
+  const workIdentity = new WorkIdentityApi(
+    workIdentityRepository,
+    new InvokableWorkDefinitionReadAdapter(invokableRepository),
+  );
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const learningProposalRepository = new PostgresLearningProposalRepository(
     pool,
@@ -380,22 +390,6 @@ export async function createService(
     teamMessages,
     teamWakeReconciler,
   );
-  const runtimeMcpServer = new RuntimeMcpServer(
-    memoryApiRepository,
-    undefined,
-    {
-      contextResolver: teamToolContextResolver,
-      commands: teamCommandService,
-    },
-    createLearningProposal,
-    new SyntheticMarketAdapter(),
-    logger,
-  );
-  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
-    config.paseo.agentCwd,
-    config.skillRegistryRoot,
-    runtimeMcpServer,
-  );
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
@@ -434,6 +428,29 @@ export async function createService(
     admissionRepository,
     invokableRepository,
     resolveAgentVersion,
+  );
+  const startWorkRun = new StartWorkRun(
+    workIdentity,
+    workIdentityRepository,
+    new InvokeTaskExecutionAdmission(invokeTask),
+  );
+  const runtimeMcpServer = new RuntimeMcpServer(
+    memoryApiRepository,
+    undefined,
+    {
+      contextResolver: teamToolContextResolver,
+      commands: teamCommandService,
+    },
+    createLearningProposal,
+    new SyntheticMarketAdapter(),
+    logger,
+    workIdentity,
+    startWorkRun,
+  );
+  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
+    config.paseo.agentCwd,
+    config.skillRegistryRoot,
+    runtimeMcpServer,
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
@@ -684,6 +701,8 @@ export async function createService(
     },
     queryWorkProjectionFacts,
     workProjectionFactsSource,
+    workIdentity,
+    startWorkRun,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

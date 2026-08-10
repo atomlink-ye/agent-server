@@ -53,6 +53,9 @@ import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team
 import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkProjectionFactsSource } from '../../application/product-projection/work-projection-facts-source.js';
 import type { WorkProjectionFactsQuery } from '../../application/work/work-projection-facts.js';
+import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
+import type { StartWorkRun } from '../../application/work/start-work-run.js';
+import { registerProductWorkCommandRoutes } from './routes/product-work-commands.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -89,6 +92,8 @@ export interface AppDependencies {
   readonly managedMemory?: ManagedMemory;
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
+  readonly workIdentity?: Pick<WorkIdentityApi, 'createWork'>;
+  readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
 }
 
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
@@ -120,6 +125,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
+  if (dependencies.workIdentity && dependencies.startWorkRun)
+    registerProductWorkCommandRoutes(app, {
+      config: dependencies.config,
+      workIdentity: dependencies.workIdentity,
+      startWorkRun: dependencies.startWorkRun,
+    });
   registerWorkspaceMemoryRoutes(app, dependencies);
   if (dependencies.memoryApi) {
     registerMemoryApiRoutes(app, {

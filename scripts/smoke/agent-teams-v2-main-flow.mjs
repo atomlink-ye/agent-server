@@ -8,6 +8,8 @@ registerTsx();
 
 const { TEAM_LEAD_CONTROL_PROTOCOL } =
   await import('../../src/application/context/runtime-prompts.ts');
+const { ProductRunTraceResponseSchema, ProductWorkRunResponseSchema } =
+  await import('../../src/contracts/product-projection/index.ts');
 
 import { serve } from '@hono/node-server';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
@@ -1881,19 +1883,16 @@ async function runProductWorkDurableIdentityFlow({
   definitionVersionId,
 }) {
   const owner = { tenantId, workspaceId };
-  const workResponse = await request(
-    '/api/v1/works',
-    {
-      method: 'POST',
-      status: 201,
-      technicalIdempotency: false,
-      body: {
-        definition_id: definitionId,
-        definition_version_id: definitionVersionId,
-        title: `Durable identity smoke ${suffix}`,
-      },
+  const workResponse = await request('/api/v1/works', {
+    method: 'POST',
+    status: 201,
+    technicalIdempotency: false,
+    body: {
+      definition_id: definitionId,
+      definition_version_id: definitionVersionId,
+      title: `Durable identity smoke ${suffix}`,
     },
-  );
+  });
   const work = workResponse?.work;
   assert(
     work?.id && work.definition_version_id === definitionVersionId,
@@ -1966,12 +1965,13 @@ async function runProductWorkDurableIdentityFlow({
     )
   ).rows[0];
   assert(rootRunRow?.id, 'product_work_root_run_missing');
-  const rootExecution = await service.singleRunDebug.claimAndExecute(rootRunRow.id);
+  const rootExecution = await service.singleRunDebug.claimAndExecute(
+    rootRunRow.id,
+  );
   assert(rootExecution.claimed, 'product_work_root_run_not_claimed');
   const productLeadRunId = await queued('lead_turn');
-  const providerExecution = await service.singleRunDebug.claimAndExecute(
-    productLeadRunId,
-  );
+  const providerExecution =
+    await service.singleRunDebug.claimAndExecute(productLeadRunId);
   assert(providerExecution.claimed, 'product_work_provider_run_not_claimed');
   const providerRun = (
     await db.query(
@@ -1997,6 +1997,91 @@ async function runProductWorkDurableIdentityFlow({
   const model =
     typeof providerRuntime.model === 'string' ? providerRuntime.model : null;
   assert(provider && model, 'product_work_root_provider_evidence_missing');
+  const productWorkRunPath = `/api/v1/works/${work.id}/runs/${firstRun.id}`;
+  const productTracePath = `${productWorkRunPath}/trace`;
+  const productWorkRunRaw = await request(productWorkRunPath, {
+    status: 200,
+  });
+  const productTraceRaw = await request(productTracePath, { status: 200 });
+  const productWorkRun = ProductWorkRunResponseSchema.parse(productWorkRunRaw);
+  const productTrace = ProductRunTraceResponseSchema.parse(productTraceRaw);
+  assert(
+    productWorkRun.capture_status === 'complete' &&
+      productWorkRun.work?.id === work.id &&
+      productWorkRun.work_run?.id === firstRun.id,
+    'product_work_projection_success_branch_invalid',
+  );
+  assert(
+    productTrace.capture_status === 'complete' &&
+      productTrace.work?.id === work.id &&
+      productTrace.work_run?.id === firstRun.id,
+    'product_trace_projection_success_branch_invalid',
+  );
+  assert(
+    productWorkRun.messages.length === 0 && productTrace.messages.length === 0,
+    'product_projection_empty_messages_branch_invalid',
+  );
+  const nullExecutionAttempt = productWorkRun.work_items
+    .flatMap((item) => item.attempts)
+    .find((attempt) => !('task_id' in attempt.source_refs));
+  assert(
+    nullExecutionAttempt &&
+      nullExecutionAttempt.feedback_summary === null &&
+      nullExecutionAttempt.result_summary === null,
+    'product_projection_null_execution_attempt_missing',
+  );
+  const notFoundWorkRunRaw = await request(
+    `/api/v1/works/${randomUUID()}/runs/${randomUUID()}`,
+    { status: 404 },
+  );
+  const notFoundTraceRaw = await request(
+    `/api/v1/works/${randomUUID()}/runs/${randomUUID()}/trace`,
+    { status: 404 },
+  );
+  const notFoundWorkRun =
+    ProductWorkRunResponseSchema.parse(notFoundWorkRunRaw);
+  const notFoundTrace = ProductRunTraceResponseSchema.parse(notFoundTraceRaw);
+  assert(
+    'error' in notFoundWorkRun &&
+      notFoundWorkRun.error.code === 'work_run_not_found' &&
+      'error' in notFoundTrace &&
+      notFoundTrace.error.code === 'work_run_not_found',
+    'product_projection_not_found_branch_invalid',
+  );
+  const invalidWorkRunRaw = await request(
+    `/api/v1/works/not-a-uuid/runs/${firstRun.id}`,
+    { status: 400 },
+  );
+  const invalidTraceRaw = await request(
+    `/api/v1/works/${work.id}/runs/not-a-uuid/trace`,
+    { status: 400 },
+  );
+  const invalidWorkRun = ProductWorkRunResponseSchema.parse(invalidWorkRunRaw);
+  const invalidTrace = ProductRunTraceResponseSchema.parse(invalidTraceRaw);
+  assert(
+    'error' in invalidWorkRun &&
+      invalidWorkRun.error.code === 'invalid_request' &&
+      'error' in invalidTrace &&
+      invalidTrace.error.code === 'invalid_request',
+    'product_projection_invalid_uuid_branch_invalid',
+  );
+  marker('PRODUCT_WORK_PROJECTION_HTTP_CONTRACT_PROVEN', {
+    work_run_status: 200,
+    work_run_sha256: hash(JSON.stringify(productWorkRunRaw)),
+    trace_status: 200,
+    trace_sha256: hash(JSON.stringify(productTraceRaw)),
+    branches: {
+      work_run_success: true,
+      trace_success: true,
+      not_found_404: true,
+      invalid_uuid_400: true,
+    },
+    empty_arrays_proven: true,
+    nullable_fields_proven: true,
+    not_found_statuses: { work_run: 404, trace: 404 },
+    invalid_uuid_statuses: { work_run: 400, trace: 400 },
+    null_execution_attempt_proven: true,
+  });
   marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
     provider,
     model,
@@ -2059,7 +2144,10 @@ async function runProductWorkDurableIdentityFlow({
     original_root_task_id_unchanged: true,
   });
 
-  const manifestBefore = await repository.getResolvedManifest(firstRun.id, owner);
+  const manifestBefore = await repository.getResolvedManifest(
+    firstRun.id,
+    owner,
+  );
   assert(
     manifestBefore?.entries.length === 1 &&
       manifestBefore.entries[0].slot === 'definition' &&
@@ -2076,7 +2164,10 @@ async function runProductWorkDurableIdentityFlow({
     manifestReplay.execution_receipt?.reused === true,
     'product_work_manifest_replay_not_reused',
   );
-  const manifestAfter = await repository.getResolvedManifest(firstRun.id, owner);
+  const manifestAfter = await repository.getResolvedManifest(
+    firstRun.id,
+    owner,
+  );
   assert(
     JSON.stringify(manifestBefore) === JSON.stringify(manifestAfter),
     'product_work_definition_manifest_unstable',
@@ -2091,11 +2182,8 @@ async function runProductWorkDurableIdentityFlow({
     })),
   });
 
-  const {
-    toExecutionReceiptResponse,
-    toWorkResponse,
-    toWorkRunResponse,
-  } = await import('../../src/contracts/product-work-commands.ts');
+  const { toExecutionReceiptResponse, toWorkResponse, toWorkRunResponse } =
+    await import('../../src/contracts/product-work-commands.ts');
   assertProductDtoShape(
     {
       work: toWorkResponse({
@@ -2165,7 +2253,10 @@ async function runProductWorkDurableIdentityFlow({
 
 function firstRunSourceTaskId(response) {
   const taskId = response?.execution_receipt?.source_refs?.task_id;
-  assert(typeof taskId === 'string' && taskId.length > 0, 'product_work_root_task_receipt_missing');
+  assert(
+    typeof taskId === 'string' && taskId.length > 0,
+    'product_work_root_task_receipt_missing',
+  );
   return taskId;
 }
 

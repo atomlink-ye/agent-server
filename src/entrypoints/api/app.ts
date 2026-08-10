@@ -54,6 +54,8 @@ import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { StartWorkRun } from '../../application/work/start-work-run.js';
 import { registerProductWorkCommandRoutes } from './routes/product-work-commands.js';
+import { registerProductWorkRoutes } from './routes/product-work.js';
+import type { ProductProjectionApi } from '../../application/product-projection/product-projection.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -89,6 +91,7 @@ export interface AppDependencies {
   readonly version?: string;
   readonly workIdentity?: Pick<WorkIdentityApi, 'createWork'>;
   readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
+  readonly productProjection?: ProductProjectionApi;
 }
 
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
@@ -125,6 +128,11 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       config: dependencies.config,
       workIdentity: dependencies.workIdentity,
       startWorkRun: dependencies.startWorkRun,
+    });
+  if (dependencies.productProjection)
+    registerProductWorkRoutes(app, {
+      config: dependencies.config,
+      productProjection: dependencies.productProjection,
     });
   registerWorkspaceMemoryRoutes(app, dependencies);
   if (dependencies.memoryApi) {

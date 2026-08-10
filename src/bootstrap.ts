@@ -95,8 +95,13 @@ import {
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import { PostgresWorkIdentityRepository } from './infrastructure/postgres/postgres-work-identity-repository.js';
+import { PostgresWorkProjectionFactsQuery } from './infrastructure/postgres/postgres-work-projection-facts-query.js';
+import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { WorkIdentityApi } from './application/work/work-identity-api.js';
 import { StartWorkRun } from './application/work/start-work-run.js';
+import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
+import { WorkProjectionFactsSource } from './application/product-projection/work-projection-facts-source.js';
+import { createProductProjection } from './application/product-projection/product-projection.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { InvokableWorkDefinitionReadAdapter } from './application/ports/work-definition-read.js';
 import {
@@ -301,6 +306,13 @@ export async function createService(
     workIdentityRepository,
     new InvokableWorkDefinitionReadAdapter(invokableRepository),
   );
+  const productProjection = createProductProjection({
+    workIdentity: workIdentityRepository,
+    workFacts: new WorkProjectionFactsSource(
+      new QueryWorkProjectionFacts(new PostgresWorkProjectionFactsQuery(pool)),
+    ),
+    executionFacts: new PostgresExecutionFactQuery(pool),
+  });
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const learningProposalRepository = new PostgresLearningProposalRepository(
     pool,
@@ -691,6 +703,7 @@ export async function createService(
     },
     workIdentity,
     startWorkRun,
+    productProjection,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

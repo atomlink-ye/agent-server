@@ -134,6 +134,16 @@ const EDGE_FIELDS = {
   ],
 } as const;
 
+const FOLLOW_UP_READ_FIELDS = [
+  'id',
+  'method',
+  'missing_fields[]',
+  'path',
+  'resource',
+  'source_ref.root_task_id',
+  'source_ref.team_run_id',
+] as const;
+
 type EdgeKind = keyof typeof EDGE_FIELDS;
 
 const withSourceRefs = (
@@ -176,6 +186,10 @@ const tracePaths = (includeIdentity: boolean): string[] => [
     ),
   ]),
 ];
+
+const followUpReadPaths = FOLLOW_UP_READ_FIELDS.map(
+  (field) => `follow_up_reads[].${field}`,
+);
 
 const column = (
   table: string,
@@ -480,20 +494,34 @@ const derivation = (
       'capture_status(redacted_or_absent)',
       ['team_messages.body'],
     );
-  if (relativePath === 'runs[].provider' || relativePath === 'runs[].model') {
-    const field = relativePath.slice('runs[].'.length);
+  if (
+    relativePath === 'follow_up_reads[].source_ref.root_task_id' ||
+    relativePath === 'follow_up_reads[].source_ref.team_run_id'
+  ) {
+    return {
+      kind: 'source_ref',
+      table: relativePath.endsWith('root_task_id') ? 'tasks' : 'team_runs',
+      column: 'id',
+    };
+  }
+  if (relativePath.startsWith('follow_up_reads[].')) {
+    const field = relativePath.slice('follow_up_reads[].'.length);
     return rule(
-      'run_runtime_field_v1',
-      `json_extract(runtime, '$.${field}')`,
-      ['runs.runtime'],
+      `follow_up_read_${field.replace(/[^a-z]+/gu, '_')}_v1`,
+      field === 'id' ? 'source_ref_id' : `constant(${field})`,
+      field === 'id' ? ['tasks.id', 'team_runs.id'] : [],
     );
   }
+  if (relativePath === 'runs[].provider' || relativePath === 'runs[].model') {
+    const field = relativePath.slice('runs[].'.length);
+    return rule('run_runtime_field_v1', `json_extract(runtime, '$.${field}')`, [
+      'runs.runtime',
+    ]);
+  }
   if (relativePath === 'runs[].error_code')
-    return rule(
-      'run_error_code_v1',
-      "json_extract(error, '$.code')",
-      ['runs.error'],
-    );
+    return rule('run_error_code_v1', "json_extract(error, '$.code')", [
+      'runs.error',
+    ]);
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind && (path.endsWith('.kind') || path.endsWith('.guarantee')))
     return rule(
@@ -556,6 +584,7 @@ export const PRODUCT_PROJECTION_LINEAGE_MANIFEST = {
   ...manifestFor('work_run_response', 'success', [
     'capture_status',
     'contract_status',
+    ...followUpReadPaths,
     ...basePaths(true),
   ]),
   ...manifestFor('work_run_response', 'not_found', [
@@ -567,6 +596,7 @@ export const PRODUCT_PROJECTION_LINEAGE_MANIFEST = {
   ...manifestFor('run_trace_response', 'success', [
     'capture_status',
     'contract_status',
+    ...followUpReadPaths,
     ...tracePaths(true),
   ]),
   ...manifestFor('run_trace_response', 'not_found', [

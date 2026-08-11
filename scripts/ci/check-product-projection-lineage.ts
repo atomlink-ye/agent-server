@@ -152,7 +152,10 @@ export function productProjectionSchemaPaths(): string[] {
 function isTechnicalIdentityPath(path: string, container: string): boolean {
   const parts = path.split('.');
   return parts.some(
-    (part) => part === container || part.startsWith(`${container}{`),
+    (part) =>
+      part === container ||
+      part.startsWith(`${container}{`) ||
+      (part === 'source_ref' && path.includes('follow_up_reads[]')),
   );
 }
 
@@ -164,7 +167,10 @@ export function scanProductProjectionVocabulary(
     let inSourceRefs = false;
     return vocabulary.forbiddenLeafPrefixes.some((prefix) =>
       path.split(/[.{]/u).some((part) => {
-        if (part === vocabulary.technicalIdContainer) {
+        if (
+          part === vocabulary.technicalIdContainer ||
+          (part === 'source_ref' && path.includes('follow_up_reads[]'))
+        ) {
           inSourceRefs = true;
           return false;
         }

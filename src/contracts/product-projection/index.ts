@@ -28,8 +28,35 @@ const ProductWorkRunBaseSchema = z
   })
   .merge(ProductProjectionIdentitySchema);
 
+const ProductProjectionFollowUpReadSchema = z
+  .object({
+    id: z.string().min(1),
+    resource: z.string().min(1),
+    missing_fields: z.array(z.string().min(1)).min(1),
+    method: z.literal('GET'),
+    path: z.string().min(1),
+    source_ref: z
+      .object({
+        root_task_id: z.string().min(1).optional(),
+        team_run_id: z.string().min(1).optional(),
+      })
+      .strict()
+      .refine(
+        (value) =>
+          (value.root_task_id !== undefined) !==
+          (value.team_run_id !== undefined),
+        'follow_up_read_source_ref_must_have_one_id',
+      ),
+  })
+  .strict();
+
+export const ProductProjectionFollowUpReadsSchema = z
+  .array(ProductProjectionFollowUpReadSchema)
+  .length(2);
+
 export const ProductWorkRunSuccessSchema = ProductWorkRunBaseSchema.extend({
   capture_status: z.literal('complete'),
+  follow_up_reads: ProductProjectionFollowUpReadsSchema,
 }).strict();
 
 export const ProductWorkRunNullSchema = z
@@ -67,6 +94,7 @@ export const ProductWorkRunResponseSchema = z.union([
 
 export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
   capture_status: z.literal('complete'),
+  follow_up_reads: ProductProjectionFollowUpReadsSchema,
   runs: z.array(ExecutionRunSchema),
   events: ExecutionEventsSchema,
   edges: ProductTraceEdgesSchema,

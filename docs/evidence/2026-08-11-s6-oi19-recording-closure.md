@@ -85,9 +85,50 @@ The flagged content was neither printed nor copied into this packet. The
 sanitizer was not loosened, and no assembled bundle was presented as a clean
 recorder artifact.
 
+### Why degradation level ② was skipped
+
+Level ② (assemble a provenance-labelled bundle from real DB rows) was **not
+executed**. The conclusion that it would hit the same gate is a code inference,
+not an empirical validation of a level-② artifact. Both the official capture
+path and the independent validator pass `db/run_events.json` payloads through
+`sanitizeRunEventPayload`, which delegates every string to the same
+`SECRET_VALUE` check. The offending persisted event would therefore be rejected
+again unless the assembled data were redacted, removed, or the sanitizer were
+changed. Those actions would either stop being an unmodified DB-row assembly or
+violate the instruction not to loosen/edit around the safety gate. For that
+reason the work moved directly from the failed official capture (①) to the
+evidence-only closure (③), without claiming that ② had been run.
+
+### Sensitive-value hit classification
+
+The persisted value itself was never printed, logged, written to this file, or
+sent through the companion channel. Read-only SQL and an in-container equality
+probe returned only these shape facts:
+
+- Rule: `SECRET_VALUE`, specifically the alternative matching a credential-like
+  label followed by `:` or `=` and a non-whitespace value. The Bearer-token and
+  local-filesystem-path alternatives did not match.
+- The complete `detail.content` string is 7,843 characters, printable text, and
+  is not a single base64-like or all-uppercase-underscore token.
+- It contains two matches. Their labels are `authorization` and `token`; each
+  matched right-hand candidate is 10 characters. Neither candidate is
+  base64-like, while both have a local/test-style marker.
+- A comparison performed without emitting either side found that neither
+  candidate contains any configured provider credential or the configured
+  local service-account token.
+- Event shape: `run_events.type=output`, payload `kind=tool_status`,
+  `detail_kind=read`, `category=read`. Its Run belongs to a `work_attempt`.
+  This is provider-generated read-tool output persisted as an output event, not
+  a lead prompt and not runtime metadata.
+
+**Classification: pattern false positive, not credential persistence.** The
+generic assignment-text rule encountered credential-shaped example/local text
+inside a long read-tool result. This does not justify weakening the safety rule;
+it identifies a fixture/sanitizer representation issue for a later recording
+round. No fix is included here.
+
 ## Relevant commits
 
 - `dba5245` — OI-19 state transition and real-PostgreSQL race coverage.
 - `c46d0ea` — `EXECUTION_BUDGET_EFFECTIVE` use-point observability.
 - `c71ab7c` — configurable Paseo client session RPC timeout, default unchanged.
-

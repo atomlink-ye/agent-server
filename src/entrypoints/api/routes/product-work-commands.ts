@@ -9,6 +9,7 @@ import { ServiceAccountAuthenticator } from '../../../application/control-plane/
 import {
   WorkIdentityConflictError,
   WorkNotFoundError,
+  WorkWorkspaceScopeUnavailableError,
 } from '../../../domain/work/work.js';
 import {
   PendingWorkRunExpiredError,
@@ -134,6 +135,8 @@ export function registerProductWorkCommandRoutes(
         throw new HttpError(404, 'work_not_found', error.message);
       if (error instanceof WorkIdentityConflictError)
         throw new HttpError(409, 'work_identity_conflict', error.message);
+      if (error instanceof WorkWorkspaceScopeUnavailableError)
+        throw new HttpError(409, 'workspace_scope_unavailable', error.message);
       if (error instanceof WorkDefinitionValidationError)
         throw new HttpError(400, error.code, error.message);
       throw error;

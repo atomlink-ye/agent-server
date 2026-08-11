@@ -49,6 +49,13 @@ export class WorkIdentityConflictError extends Error {
   }
 }
 
+export class WorkWorkspaceScopeUnavailableError extends Error {
+  public constructor() {
+    super('The authenticated workspace scope is not provisioned.');
+    this.name = 'WorkWorkspaceScopeUnavailableError';
+  }
+}
+
 export function createWork(input: CreateWorkInput): Work {
   const title = input.title.trim();
   if (!input.id || !input.owner.tenantId || !input.owner.workspaceId)
@@ -71,4 +78,3 @@ export function createWork(input: CreateWorkInput): Work {
     updatedAt: input.updatedAt ?? now,
   };
 }
-

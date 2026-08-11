@@ -69,7 +69,7 @@ services:
       PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:-}
       PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:-}
       PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:-}
-      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-workspace_main}","policyVersion":"policy-local"}]'
+      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace
       - node-modules:/workspace/node_modules

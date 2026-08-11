@@ -21,6 +21,7 @@ import {
 import {
   WorkIdentityConflictError,
   WorkNotFoundError,
+  WorkWorkspaceScopeUnavailableError,
   type Work,
 } from '../../domain/work/work.js';
 import {
@@ -161,24 +162,31 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
   public constructor(private readonly database: Database) {}
 
   public async createWork(work: Work): Promise<Work> {
-    const inserted = await this.database.query<WorkRow>(
-      `INSERT INTO works (${workColumns})
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT (id) DO NOTHING
-       RETURNING ${workColumns}`,
-      [
-        work.id,
-        work.tenantId,
-        work.workspaceId,
-        work.definitionId,
-        work.currentDefinitionVersionId,
-        work.title,
-        work.origin,
-        work.archivedAt,
-        work.createdAt,
-        work.updatedAt,
-      ],
-    );
+    let inserted: { readonly rows?: readonly WorkRow[] };
+    try {
+      inserted = await this.database.query<WorkRow>(
+        `INSERT INTO works (${workColumns})
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING ${workColumns}`,
+        [
+          work.id,
+          work.tenantId,
+          work.workspaceId,
+          work.definitionId,
+          work.currentDefinitionVersionId,
+          work.title,
+          work.origin,
+          work.archivedAt,
+          work.createdAt,
+          work.updatedAt,
+        ],
+      );
+    } catch (error) {
+      if (isWorkspaceScopeUnavailable(error))
+        throw new WorkWorkspaceScopeUnavailableError();
+      throw error;
+    }
     const row =
       inserted.rows?.[0] ??
       (
@@ -631,6 +639,18 @@ function isRootTaskUniqueViolation(error: unknown): boolean {
   return (
     value?.code === '23505' &&
     value.constraint === 'work_runs_root_task_bound_unique'
+  );
+}
+
+function isWorkspaceScopeUnavailable(error: unknown): boolean {
+  const value = error as {
+    readonly code?: string;
+    readonly constraint?: string;
+  };
+  return (
+    value?.code === '22P02' ||
+    (value?.code === '23503' &&
+      value.constraint === 'works_workspace_id_tenant_id_fkey')
   );
 }
 

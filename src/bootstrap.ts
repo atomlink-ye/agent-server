@@ -95,6 +95,7 @@ import {
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
 import { createPostgresWorkIdentityModule } from './infrastructure/postgres/postgres-work-identity-repository.js';
+import { ensureServiceAccountWorkspaces } from './infrastructure/postgres/postgres-service-account-workspace-bootstrap.js';
 import { PostgresWorkProjectionFactsQuery } from './infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
@@ -294,6 +295,7 @@ export async function createService(
   const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
   await applyDurableKernelMigrations(pool);
+  await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
 
   const runRepository = new PostgresRunRepository(pool);
   const taskRepository = new PostgresTaskRepository(pool);

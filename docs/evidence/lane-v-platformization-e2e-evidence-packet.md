@@ -1,18 +1,20 @@
 # Lane V platformization HTTP E2E acceptance evidence
 
-Status: **FAIL — steps 1-3 pass; step 4 starts but the real WorkRun fails; steps 5-6 are only partially testable on the failed run**
+Status: **PARTIAL PASS — a pure-HTTP WorkRun succeeded and most read surfaces are usable, but Timeline completeness is false and three required isolation/pagination/edge cases remain unverified**
 
-Acceptance base: `verify/round-merged@aa13455c5f415be233909efcf885034e38b794f0`
+Acceptance base: `verify/round-merged@8f14455`
 
-Final evidence label: `lane-v-final-aa13455`
+Final Lane V evidence label: `lane-v-final-dda1b85-20260811`
 
 ## Conclusion
 
-An external user can now validate/import Definitions, publish them, create a Work in the server-derived default workspace, and receive a bound WorkRun. The real provider-backed execution does not complete: the Lead runtime child fails after about 61 seconds while Paseo continues the same agent-creation request and completes it after 96.858 seconds.
+An external user can now perform the main journey through HTTP only: validate/import five Definitions, publish them, create a Work in the server-derived default workspace, start a real provider-backed WorkRun, reach a successful TeamRun, and enumerate Work/WorkRun/Task/TeamRun/Run/event/trace records. WorkRun cursor pagination also works across two records.
 
-The complete six-step journey therefore does **not** pass. It reaches step 4 of 6. The failed run's trace and record endpoints are readable, but the trace has no Team state or typed edges and cannot by itself explain the actual TeamRun failure. A successful four-edge Timeline, WorkRun/event cross-page coverage, and owner-scope isolation remain unverified.
+The journey is not fully accepted because its primary Timeline contract is misleading. On a successful WorkRun with nine succeeded technical Runs, 97 events, two accepted work items, and seven edges, both the exact WorkRun projection and trace return `capture_status=complete` while `root_task=null` and `team_run=null`. The exact projection additionally returns empty Run/event arrays. Trace alone cannot say that the TeamRun succeeded or provide the root Task result. This confirms and materially upgrades OI-31 with a positive real-execution sample.
 
-No internal function, MCP tool, smoke shortcut, DB write, direct DB seed, or configuration restart was used to advance a journey step. All product mutations and reads in steps 1-6 were HTTP calls.
+Three required cases remain unverified: true event pagination (no Run exceeded 16 events), `declared_dependency` edges (the Lead never created the requested C item), and foreign-owner isolation (no second token was provisioned). The other three edge kinds, ordering, guarantees, and event equality were verified. A separate cancellation defect was observed: `POST /tasks/:id:cancel` returned HTTP 200 with `status=terminal`, but the active Task was not cancelled and later succeeded.
+
+No internal function, MCP tool, smoke shortcut, DB write, direct DB seed, or configuration restart was used to advance a journey step. All product mutations and reads in steps 1-6 were HTTP calls. Container and PostgreSQL logs were read only after an HTTP outage to diagnose it; those logs did not advance the journey and are not used as API-contract evidence.
 
 ## Environment and startup acceptance
 
@@ -21,9 +23,9 @@ No internal function, MCP tool, smoke shortcut, DB write, direct DB seed, or con
 - image: `agent-server-runner:latest`
 - dependency stamp: `f3af85b97dea77f4acf7f72780d9df692cf81ed8c4c47e47a0a016e9c5112286`
 - provider credential: local and remote files matched at 88 bytes, SHA-256 prefix `a165a35f`, mode `600`; the value was never printed or recorded.
-- final `docker compose ps`: Postgres and agent-server both healthy.
 - final `GET /health/ready`: 200; `paseo_websocket`, `paseo_workspace`, and `opencode_model` all `ready`.
-- Lane F's running container had non-committed enlarged startup/provider timeout environment. Lane V did not rebuild or restart it.
+- final committed defaults include `PASEO_SESSION_RPC_TIMEOUT_MS=300000`, `PASEO_EXECUTION_TIMEOUT_MS=150000`, explicit forwarding to the API child, blank/whitespace filtering, and a 45-minute healthcheck start period.
+- Lane V did not rebuild, restart, or change environment/configuration after the Cube was handed back.
 
 ### Startup defect: blank Compose environment defaults
 
@@ -71,7 +73,107 @@ The query only verified the API-visible default scope. It did not create, bind, 
 
 The known larger limitation remains: an API-created workspace still cannot be selected/bound for the Definition→Work chain. This is OI-27's explicitly deferred multi-workspace capability gap, not a new Lane V defect.
 
-## Step-by-step HTTP evidence
+## Final six-step HTTP result at `8f14455`
+
+All requests used `Authorization: Bearer <redacted>`. Lane V created this data under the label `lane-v-final-dda1b85-20260811`; no Lane F evidence directory was reused.
+
+### 1. Validate and import Definitions — PASS
+
+Every validate endpoint returned 200 with `valid=true` and a `sha256:` fingerprint. Every import endpoint returned 201 with coherent draft lineage.
+
+| Definition | Validate/import | Definition ID | Version ID |
+| --- | --- | --- | --- |
+| Environment | `POST /api/v1/environment-packages:validate` → 200; `POST /api/v1/environments:import` → 201 | `27ddce9d-9644-465d-abfc-90f878105060` | `1aaab93a-0bbf-4fa3-a838-2c8642fa19ba` |
+| Lead | `POST /api/v1/agent-packages:validate` → 200; `POST /api/v1/agents:import` → 201 | `e581863d-d238-4f69-a77e-f691dd366daa` | `fc045b18-9f21-4220-b610-63af94dab577` |
+| Worker | same endpoints → 200/201 | `a99b6133-f14f-4dac-a99b-15560bb3e355` | `123436b9-85c7-4d3e-ae00-2b62c68bbad5` |
+| Reviewer | same endpoints → 200/201 | `364ac446-2751-4c95-99ca-b86680bb9b26` | `4774ef54-5a28-429a-8c23-51dcdf70cf68` |
+| Team | `POST /api/v1/team-packages:validate` → 200; `POST /api/v1/teams:import` → 201 | `27be3897-92b9-46d6-bc2e-7b71f62ad3bd` | `b4ca2272-2d2a-452a-abce-36eb5c46c04c` |
+
+### 2. Publish versions — PASS
+
+The five Environment/Agent/Team publish endpoints all returned 200 with `status=published`, preserved lineage, and non-null `published_at`.
+
+### 3. Create Work — PASS
+
+`POST /api/v1/works` returned 201 for the main Work `17aebf08-0fe6-4900-bb61-69bd5e2b4cbb` and sibling Works `446b3cbd-a44f-41ed-8e7e-b2ea784ac222` and `67574878-3dc1-410b-9e1d-ebe10dadd357`. The main response used the server-derived default workspace `00000000-0000-4000-8000-000000000001`; the request contained no `workspace_id`.
+
+### 4. Run WorkRun — PASS with one infrastructure-interrupted run and one successful run
+
+The first `POST /api/v1/works/17aebf08-.../runs` returned 202:
+
+- WorkRun `f3697347-2b8e-4db6-a732-7bdd9fdbc46c`;
+- root Task `ba0d5360-6ff5-4914-849b-72d24577b932`;
+- TeamRun `57d0530d-400f-4388-a056-ddf8ff684ce6`.
+
+That run had real execution: four technical Runs, 19 events, two work items, and member provider activity. At 09:35:48 UTC PostgreSQL received the quick-exit mechanism corresponding to SIGQUIT, terminated all connections, and did crash recovery. The agent-server pg pool then emitted an unhandled `Connection terminated unexpectedly`; HTTP became unavailable. After Manager-authorized recovery, HTTP showed the root Task failed with `The Team could not recover an expired turn`, and TeamRun ended `turn_lease_expired`. The PostgreSQL/log inspection was diagnostic only; all state reads remained HTTP.
+
+Lane V then created a second WorkRun through the public endpoint for pagination coverage. It returned 202:
+
+- WorkRun `731e1303-e32d-4ad5-b786-1c40380c4c4f`;
+- root Task `7fe6d87a-821e-410d-815f-61b9f9f49add`;
+- TeamRun `a57c0757-faa4-45c7-be88-0ea7aa1cc5f7`.
+
+This run reached a genuine positive terminal state through HTTP:
+
+- root Task `completed`; root technical Run `de7d250e-7359-443a-8088-5c1569e98db8` `succeeded`;
+- Task result: `Called team_finish successfully. All accepted, no active attempts, and no authorized actions remain.`;
+- TeamRun `succeeded`, `phase=done`, revision 12, five Lead turns;
+- Task tree contained nine unique completed Tasks;
+- trace contained nine succeeded Runs, including populated real runtime labels, and 97 events.
+
+The final timeout repair is therefore independently effective on the main path: agent creation and member execution crossed the former 60/120-second danger windows without `runtime_timed_out` in this successful WorkRun.
+
+### 5. Timeline/trace — DATA PRESENT, CONTRACT FAIL (OI-31)
+
+`GET /api/v1/works/17aebf08-.../runs/731e1303-.../trace` returned 200 and `capture_status=complete`.
+
+Positive evidence:
+
+- nine succeeded Runs and 97 globally ordered events;
+- two accepted work items, A and B;
+- A had two attempts; attempt 2 had honestly redacted feedback;
+- B had one completed attempt;
+- seven ordered edges;
+- edge kinds present: `assignment`, `feedback`, `observed_message`;
+- guarantees matched kinds, assignments exactly covered all attempts, and feedback correlated exactly to A attempt 2;
+- public Run-event pages exactly matched all 97 trace `(run_id, sequence)` keys.
+
+OI-31 still fails on this rich success sample:
+
+- trace says `capture_status=complete` but `root_task=null` and `team_run=null`;
+- the exact WorkRun projection also says `capture_status=complete`, has the two work items, but returns `root_task=null`, `team_run=null`, `runs=[]`, and `events=[]`;
+- trace does not contain the TeamRun success state or root Task result;
+- the earlier clean `lead_no_progress` WorkRun showed the same null root/team fields and additionally showed terminal Team work items as `in_progress`.
+
+Timeline-only narrative verdict: **fail**. A user can say that A and B were assigned, A was retried after feedback, and nine technical Runs succeeded. From trace alone the user cannot say that the TeamRun succeeded, quote the root result, or explain a Team failure such as `lead_no_progress`/`turn_lease_expired`. Separate Task and TeamRun endpoints are required to recover those facts, even though trace claims completeness.
+
+`declared_dependency` was not observed. The Lead never created the Definition-requested C item, so there was no dependency relationship to capture. Lane V did not repeat stochastic provider runs merely to manufacture that positive sample. Four-edge coverage is therefore 3/4, not a pass.
+
+### 6. Enumerate interface records — PARTIAL PASS
+
+All relevant reads returned 200: Works, WorkRuns, exact WorkRun, trace, Task/tree, TeamRun/members/tasks/direct-messages, technical Runs, and Run events.
+
+- WorkRun pagination passed: `limit=1` page 1 returned `f3697347-...`, its cursor returned `731e1303-...` on page 2, with no duplicate/loss and final `next_cursor=null`.
+- Success trace/public-event equality passed for all nine Runs and 97 event keys.
+- True event cross-page coverage remains unverified: the largest Run contained 16 events and every events response had `next_cursor=null`.
+- Team member reads returned Lead/Worker/Reviewer idle after success; Team tasks returned A/B accepted; the Definition-requested C and direct-message marker were absent.
+- Foreign-owner isolation remains unverified because no second token was provisioned. No internal credential or DB workaround was used.
+
+### Additional defect: Task cancel reports terminal but does not cancel
+
+Immediately after the second WorkRun was accepted, Lane V called `POST /api/v1/tasks/7fe6d87a-...:cancel` through HTTP. It returned 200:
+
+```json
+{
+  "task_id": "7fe6d87a-821e-410d-815f-61b9f9f49add",
+  "run_id": "de7d250e-7359-443a-8088-5c1569e98db8",
+  "status": "terminal"
+}
+```
+
+Subsequent `GET /tasks/:id` still showed `active/waiting_children`; the Task continued executing for about six minutes and finally succeeded. Thus the public cancel response neither describes the contemporaneous Task state nor results in cancellation. Lane V sent no second cancel and did not use an internal cleanup path.
+
+## Earlier `aa13455` baseline evidence
 
 All requests used `Authorization: Bearer <redacted>` and JSON unless noted.
 
@@ -215,4 +317,4 @@ No PostgreSQL write was performed. Two task-owner-authorized read-only checks we
 
 Neither query supplied an ID to a later request, created a workspace, changed credential scope, or replaced an API step.
 
-Other non-API evidence was limited to Compose/container health, logs, mount ownership, committed-code inspection, and the dependency client's configured timeout after an API-observed failure. Those checks diagnosed causes; they did not advance the journey.
+Other non-API evidence was limited to Compose/container health, logs, mount ownership, committed-code inspection, and configured timeout values after API-observed failures. PostgreSQL/agent-server logs were read only to explain the 09:35 UTC HTTP outage. Those checks diagnosed causes; they did not advance the journey or supply product records. No database query was used during the final successful WorkRun/trace/read-surface verification.

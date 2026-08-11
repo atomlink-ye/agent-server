@@ -94,6 +94,15 @@ import {
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
+import { createPostgresWorkIdentityModule } from './infrastructure/postgres/postgres-work-identity-repository.js';
+import { ensureServiceAccountWorkspaces } from './infrastructure/postgres/postgres-service-account-workspace-bootstrap.js';
+import { PostgresWorkProjectionFactsQuery } from './infrastructure/postgres/postgres-work-projection-facts-query.js';
+import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
+import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
+import { WorkProjectionFactsSource } from './application/product-projection/work-projection-facts-source.js';
+import { createProductProjection } from './application/product-projection/product-projection.js';
+import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
+import { InvokableWorkDefinitionReadAdapter } from './application/ports/work-definition-read.js';
 import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -286,6 +295,7 @@ export async function createService(
   const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
   await applyDurableKernelMigrations(pool);
+  await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
 
   const runRepository = new PostgresRunRepository(pool);
   const taskRepository = new PostgresTaskRepository(pool);
@@ -371,22 +381,6 @@ export async function createService(
     teamMessages,
     teamWakeReconciler,
   );
-  const runtimeMcpServer = new RuntimeMcpServer(
-    memoryApiRepository,
-    undefined,
-    {
-      contextResolver: teamToolContextResolver,
-      commands: teamCommandService,
-    },
-    createLearningProposal,
-    new SyntheticMarketAdapter(),
-    logger,
-  );
-  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
-    config.paseo.agentCwd,
-    config.skillRegistryRoot,
-    runtimeMcpServer,
-  );
   const resolveAgentVersion = new ResolveAgentVersion(
     agentRegistry,
     invokableRepository,
@@ -403,6 +397,7 @@ export async function createService(
         ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
         connectTimeoutMs: config.paseo.connectTimeoutMs,
         executionTimeoutMs: config.paseo.executionTimeoutMs,
+        executionTimeoutSource: config.paseo.executionTimeoutSource,
       },
       logger,
     );
@@ -424,6 +419,37 @@ export async function createService(
     admissionRepository,
     invokableRepository,
     resolveAgentVersion,
+  );
+  const { workIdentity, workIdentityQuery, startWorkRun } =
+    createPostgresWorkIdentityModule({
+      database: pool,
+      definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),
+      execution: new InvokeTaskExecutionAdmission(invokeTask),
+    });
+  const productProjection = createProductProjection({
+    workIdentity: workIdentityQuery,
+    workFacts: new WorkProjectionFactsSource(
+      new QueryWorkProjectionFacts(new PostgresWorkProjectionFactsQuery(pool)),
+    ),
+    executionFacts: new PostgresExecutionFactQuery(pool),
+  });
+  const runtimeMcpServer = new RuntimeMcpServer(
+    memoryApiRepository,
+    undefined,
+    {
+      contextResolver: teamToolContextResolver,
+      commands: teamCommandService,
+    },
+    createLearningProposal,
+    new SyntheticMarketAdapter(),
+    logger,
+    workIdentity,
+    startWorkRun,
+  );
+  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
+    config.paseo.agentCwd,
+    config.skillRegistryRoot,
+    runtimeMcpServer,
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
@@ -672,6 +698,9 @@ export async function createService(
       getMemory,
       updateMemory,
     },
+    workIdentity,
+    startWorkRun,
+    productProjection,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

@@ -286,13 +286,37 @@ export class TeamDriver {
     if (input.task.teamTaskKind === 'work_attempt') {
       const attempt = attempts.find((a) => a.executionTaskId === input.task.id);
       if (!attempt) throw new Error('Agentic work attempt linkage is missing.');
-      if (attempt.status !== 'completed' && attempt.status !== 'failed')
+      if (input.run.status === 'succeeded') {
+        if (attempt.status === 'running') {
+          const failedTeam = await this.executions.failTeamRunAtomically({
+            teamRunId: input.team.id,
+            rootRunId: input.team.rootRunId,
+            rootTaskId: input.team.rootTaskId,
+            owner,
+            updatedAt: this.now().toISOString(),
+            stopReason: 'succeeded_without_submit',
+            attemptId: attempt.id,
+            childTaskId: input.task.id,
+            childRunId: input.run.id,
+            failure: {
+              code: 'runtime_execution_failed',
+              message:
+                'The runtime completed successfully yet required canonical work submit did not occur.',
+            },
+          });
+          if (failedTeam.status !== 'active') return;
+        }
+      } else if (
+        attempt.status !== 'completed' &&
+        attempt.status !== 'failed'
+      ) {
         await this.executions.updateAttemptStatus(
           attempt.id,
           'failed',
           null,
           owner,
         );
+      }
     }
     const fresh = await this.executions.findTeamRunById(input.team.id, owner);
     if (!fresh || fresh.status !== 'active') return;

@@ -1,0 +1,87 @@
+diff --git a/dist/server/server/agent/providers/opencode/server-manager.js b/dist/server/server/agent/providers/opencode/server-manager.js
+index 47093b3872f765b19a71ff506035dc06ed2ef454..a746690dd145efacf76c04707132a6993005f0a9 100644
+--- a/dist/server/server/agent/providers/opencode/server-manager.js
++++ b/dist/server/server/agent/providers/opencode/server-manager.js
+@@ -9,6 +9,20 @@ import { createProviderEnvSpec, resolveProviderCommandPrefix, } from "../../prov
+ import { resolveOpenCodeHomeDir } from "./paths.js";
+ const OPENCODE_SERVER_GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000;
+ const OPENCODE_SERVER_FORCE_SHUTDOWN_TIMEOUT_MS = 1000;
++const DEFAULT_OPENCODE_SERVER_STARTUP_TIMEOUT_MS = 30000;
++function parsePositiveSafeIntegerEnvironmentVariable(name, value, defaultValue) {
++    if (value === undefined) {
++        return defaultValue;
++    }
++    if (!/^\d+$/.test(value)) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    const parsed = Number(value);
++    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    return parsed;
++}
+ export class OpenCodeServerManager {
+     constructor(options) {
+         this.currentServer = null;
+@@ -180,6 +194,7 @@ export class OpenCodeServerManager {
+         }
+     }
+     async startServer(launchEnv) {
++        const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable("PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS", process.env.PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS, DEFAULT_OPENCODE_SERVER_STARTUP_TIMEOUT_MS);
+         const port = await this.portAllocator();
+         const url = `http://127.0.0.1:${port}`;
+         const launchPrefix = await this.resolveCommandPrefix();
+@@ -257,7 +272,7 @@ export class OpenCodeServerManager {
+                 if (!started) {
+                     failStartup(new Error(buildStartupErrorMessage("OpenCode server startup timeout")));
+                 }
+-            }, 30000);
++            }, startupTimeoutMs);
+             serverProcess.stdout?.on("data", (data) => {
+                 const output = data.toString();
+                 stdoutBuffer = appendCapped(stdoutBuffer, output);
+diff --git a/dist/server/server/agent/providers/opencode-agent.js b/dist/server/server/agent/providers/opencode-agent.js
+index 0fa7c4308107bd209a25c1da0eb307da1f8b30e3..d3ca19bf737361bc791d2b9bfaff280a2eba5e21 100644
+--- a/dist/server/server/agent/providers/opencode-agent.js
++++ b/dist/server/server/agent/providers/opencode-agent.js
+@@ -159,6 +159,20 @@ function resolveOpenCodePermissionReply(response) {
+ }
+ const MCP_ALREADY_PRESENT_ERROR_TOKENS = ["already", "exists", "connected"];
+ const OPENCODE_PROVIDER_LIST_TIMEOUT_MS = 30000;
++const DEFAULT_OPENCODE_APP_AGENTS_TIMEOUT_MS = 10000;
++function parsePositiveSafeIntegerEnvironmentVariable(name, value, defaultValue) {
++    if (value === undefined) {
++        return defaultValue;
++    }
++    if (!/^\d+$/.test(value)) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    const parsed = Number(value);
++    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    return parsed;
++}
+ const OPENCODE_METADATA_CONCURRENCY = 4;
+ const openCodeMetadataLimit = pLimit(OPENCODE_METADATA_CONCURRENCY);
+ const OPENCODE_HANDLED_BUILTIN_SLASH_COMMANDS = [
+@@ -1119,7 +1133,8 @@ export class OpenCodeAgentClient {
+         }
+     }
+     async fetchModelsFromClient(client, directory) {
+-        const response = await openCodeMetadataLimit(() => withTimeout(client.provider.list({ directory }), OPENCODE_PROVIDER_LIST_TIMEOUT_MS, `OpenCode provider.list timed out after ${OPENCODE_PROVIDER_LIST_TIMEOUT_MS / 1000}s - server may not be authenticated or connected to any providers`));
++        const timeoutMs = parsePositiveSafeIntegerEnvironmentVariable("PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS", process.env.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS, OPENCODE_PROVIDER_LIST_TIMEOUT_MS);
++        const response = await openCodeMetadataLimit(() => withTimeout(client.provider.list({ directory }), timeoutMs, `OpenCode provider.list timed out after ${timeoutMs / 1000}s - server may not be authenticated or connected to any providers`));
+         if (response.error) {
+             throw new Error(`Failed to fetch OpenCode providers: ${JSON.stringify(response.error)}`);
+         }
+@@ -1152,7 +1167,8 @@ export class OpenCodeAgentClient {
+         return models;
+     }
+     async fetchModesFromClient(client, directory) {
+-        const response = await openCodeMetadataLimit(() => withTimeout(client.app.agents({ directory }), 10000, "OpenCode app.agents timed out after 10s"));
++        const timeoutMs = parsePositiveSafeIntegerEnvironmentVariable("PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS", process.env.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS, DEFAULT_OPENCODE_APP_AGENTS_TIMEOUT_MS);
++        const response = await openCodeMetadataLimit(() => withTimeout(client.app.agents({ directory }), timeoutMs, `OpenCode app.agents timed out after ${timeoutMs}ms`));
+         if (response.error || !response.data) {
+             // Discovery failed — return an empty list rather than fabricating
+             // modes. OpenCode users can rename or delete any agent (including

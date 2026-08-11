@@ -14,9 +14,14 @@ services:
       retries: 30
 
   agent-server:
+    image: agent-server-runner:latest
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
@@ -35,6 +40,14 @@ services:
       SERVICE_NAME: agent-server
       OPENCODE_GO_API_KEY:
       PASEO_MODEL: ${PASEO_MODEL:-opencode-go/deepseek-v4-flash}
+      PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
+      PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:-}
+      # A coarse upper bound while the daemon TCP connection remains alive
+      # and a request is stuck; it is not latency tuning or a death detector.
+      # A disconnected daemon immediately rejects pending waiters; this does
+      # not distinguish a busy request from a deadlock.
+      # Keep it at least twice the 150s execution timeout.
+      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:-300000}
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
@@ -56,11 +69,24 @@ services:
       # The Paseo daemon runs inside this container, so exporting this on the
       # host does nothing unless compose forwards it. Off unless set to '1'.
       PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
-      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-workspace_main}","policyVersion":"policy-local"}]'
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:-}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:-}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:-}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:-}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:-}
+      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace
-      - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -76,11 +102,16 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+      start_period: 45m
 
   web:
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
@@ -99,8 +130,16 @@ services:
       AGENT_SERVER_SERVICE_TOKEN: ${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}
     volumes:
       - .:/workspace
-      - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -108,9 +147,19 @@ services:
 
   runner:
     shm_size: 1gb
+    # Explicit image name so the tag no longer depends on the compose project
+    # name. The project name is what isolates concurrent lanes sharing one
+    # sandbox (it scopes containers and volumes), but it also used to decide the
+    # image tag — which meant either the lanes collided or the prebuilt image in
+    # the sandbox template was missed. Naming the image here separates the two.
+    image: agent-server-runner:latest
     build:
       context: .
       dockerfile: Dockerfile
+      # Explicit because `web-testing` is now the last stage in the Dockerfile
+      # and an unpinned build would pick it up, reintroducing the chromium layer
+      # this split exists to avoid.
+      target: development
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
@@ -128,10 +177,23 @@ services:
       PASEO_VOICE_MODE_ENABLED: 'false'
     volumes:
       - .:/workspace
-      - /workspace/node_modules
-      - /workspace/apps/web/node_modules
+      # Named, not anonymous. `docker compose run --rm` destroys anonymous
+      # volumes on exit, so every single make target used to start with an
+      # empty node_modules and re-seed ~200k files before running anything.
+      # Staleness is already handled by the dependency stamp in
+      # scripts/dev/docker-ensure-node-modules.mjs, so persisting these is safe.
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
+      - runner-dist:/workspace/dist
       - /workspace/.local
-      - /workspace/dist
     working_dir: /workspace
 
   postgres-test:
@@ -151,6 +213,11 @@ services:
 
 volumes:
   node-modules:
+    name: ${NODE_MODULES_VOLUME:?docker-compose wrapper must provide NODE_MODULES_VOLUME}
+    external: true
   web-node-modules:
+    name: ${WEB_NODE_MODULES_VOLUME:?docker-compose wrapper must provide WEB_NODE_MODULES_VOLUME}
+    external: true
+  runner-dist:
   local-state:
   postgres-data:

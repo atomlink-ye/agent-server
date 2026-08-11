@@ -47,6 +47,13 @@ export type FailTeamRunInput = Readonly<{
         stopReason: 'lead_turn_limit' | 'lead_run_failed';
         expectedRevision?: never;
       }>
+    | Readonly<{
+        stopReason: 'succeeded_without_submit';
+        attemptId: string;
+        childTaskId: string;
+        childRunId: string;
+        expectedRevision?: never;
+      }>
   );
 
 export interface TeamExecutionRepository {

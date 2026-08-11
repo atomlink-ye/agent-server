@@ -730,6 +730,150 @@ describe('ExecuteRun', () => {
     expect(lateFailTeamRunAtomically).not.toHaveBeenCalled();
   });
 
+  it('fails a successful work attempt when the runtime never submits canonical work', async () => {
+    const now = () => new Date('2026-07-23T00:00:00.000Z');
+    const team = createTeamRun({
+      id: 'team-without-submit',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      rootTaskId: 'root-task-without-submit',
+      rootRunId: 'root-run-without-submit',
+      teamVersionId: 'team-version-1',
+      environmentVersionId: 'environment-version-1',
+      now,
+    });
+    const task = createChildTask({
+      id: 'work-attempt-task-without-submit',
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      policySnapshotVersion: 'policy-1',
+      rootTaskId: team.rootTaskId,
+      parentTaskId: team.rootTaskId,
+      parentRunId: team.rootRunId,
+      invokableKind: 'agent',
+      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
+        prompt: 'prepare the report',
+      }),
+      inputFingerprint: 'fingerprint-1',
+      logicalStepKey: 'member:team-without-submit:member-1:attempt:1',
+      nodePath: 'member-attempt-1',
+      teamMemberRunId: 'member-1',
+      teamSequence: 1,
+      teamTaskKind: 'work_attempt',
+      now,
+    });
+    const run = transitionRun(
+      transitionRun(
+        createRun('prepare the report', {
+          id: 'work-attempt-run-without-submit',
+          now,
+        }),
+        'running',
+        {},
+        now,
+      ),
+      'succeeded',
+      {
+        runtime: { provider: 'test-provider', model: 'test-model' },
+        result: { text: 'provider finished without using team.submit' },
+      },
+      now,
+    );
+    const attempt = {
+      id: 'attempt-without-submit',
+      workItemId: 'work-1',
+      teamRunId: team.id,
+      attemptNo: 1,
+      assigneeMemberId: 'member-1',
+      requestedByLeadTaskId: 'lead-task-1',
+      feedback: null,
+      executionTaskId: task.id,
+      status: 'running' as const,
+      resultSummary: null,
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      completedAt: null,
+    };
+    const lead = createTeamMemberRun({
+      id: 'lead-1',
+      teamRunId: team.id,
+      name: 'lead',
+      role: 'lead',
+      agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      now,
+    });
+    const failTeamRunAtomically = vi.fn(async () => team);
+    const updateAttemptStatus = vi.fn(async () => attempt);
+    const submitCurrentAttempt = vi.fn();
+    const executions = {
+      findAttemptsByTeamRunId: vi.fn(async () => [attempt]),
+      findTeamRunById: vi.fn(async () => team),
+      findMembersByTeamRunId: vi.fn(async () => [lead]),
+      findWorkItemsByTeamRunId: vi.fn(async () => [
+        {
+          id: 'work-1',
+          teamRunId: team.id,
+          status: 'in_progress',
+        },
+      ]),
+      findWorkDependenciesByTeamRunId: vi.fn(async () => []),
+      updateAttemptStatus,
+      failTeamRunAtomically,
+      submitCurrentAttempt,
+    };
+    const driver = new TeamDriver(
+      executions as never,
+      {
+        findByRootTaskIdForOwner: vi.fn(async () => []),
+      } as never,
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      now,
+    );
+
+    await driver.handleTerminalRun({ team, task, run });
+
+    expect(failTeamRunAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamRunId: team.id,
+        attemptId: attempt.id,
+        childTaskId: task.id,
+        childRunId: run.id,
+        stopReason: 'succeeded_without_submit',
+        failure: expect.objectContaining({
+          code: 'runtime_execution_failed',
+          message: expect.stringMatching(
+            /^(?=.*runtime)(?=.*(?:succeed|success|complet|finish))(?=.*(?:without|did not|never))(?=.*submit)(?=.*work).*$/i,
+          ),
+        }),
+      }),
+    );
+    expect(updateAttemptStatus).not.toHaveBeenCalled();
+    expect(submitCurrentAttempt).not.toHaveBeenCalled();
+    expect(executions.findTeamRunById).toHaveBeenCalledWith(
+      team.id,
+      expect.objectContaining({
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+      }),
+    );
+  });
+
   it('atomically admits a scheduled Lead turn through the transaction-scoped Team repository', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
     const parent = createTask();

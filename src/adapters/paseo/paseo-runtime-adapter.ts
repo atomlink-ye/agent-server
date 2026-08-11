@@ -43,6 +43,7 @@ export interface PaseoRuntimeOptions {
   readonly requestedModel?: string;
   readonly connectTimeoutMs: number;
   readonly executionTimeoutMs: number;
+  readonly executionTimeoutSource?: 'env' | 'default';
 }
 
 const MEMORY_ARTIFACT_MAX_BYTES = 64 * 1024;
@@ -1419,9 +1420,16 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         status: 'started',
       });
       try {
+        const executionTimeoutMs = this.#options.executionTimeoutMs;
+        this.#logger.log('info', 'runtime.execution_budget.effective', {
+          marker: 'EXECUTION_BUDGET_EFFECTIVE',
+          run_id: input.runId,
+          source: this.#options.executionTimeoutSource ?? 'default',
+          value_ms: executionTimeoutMs,
+        });
         finished = await this.#client.waitForFinish(
           agent.id,
-          this.#options.executionTimeoutMs,
+          executionTimeoutMs,
         );
         this.#logger.log('info', 'runtime.wait.completed', {
           run_id: input.runId,

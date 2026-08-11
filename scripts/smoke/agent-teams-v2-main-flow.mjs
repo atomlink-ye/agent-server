@@ -3,11 +3,14 @@ import { chmod, mkdir, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register as registerTsx } from 'tsx/esm/api';
+import { recordProductLineageGolden } from './product-lineage-golden-recorder.mjs';
 
 registerTsx();
 
 const { TEAM_LEAD_CONTROL_PROTOCOL } =
   await import('../../src/application/context/runtime-prompts.ts');
+const { ProductRunTraceResponseSchema, ProductWorkRunResponseSchema } =
+  await import('../../src/contracts/product-projection/index.ts');
 
 import { serve } from '@hono/node-server';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
@@ -36,6 +39,8 @@ const forceStall = process.env.AGENT_TEAMS_V2_SMOKE_FORCE_STALL === '1';
 const failedAttemptMode =
   process.env.AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE ?? '';
 const reworkScenario = process.env.AGENT_TEAMS_V2_SMOKE_REWORK === '1';
+const productWorkDurableIdentity =
+  process.env.PRODUCT_WORK_DURABLE_IDENTITY === '1';
 const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
@@ -544,6 +549,9 @@ async function collectFailureDiagnostic(failure) {
       await db.query(
         `SELECT t.id AS task_ref,t.team_task_kind,t.status AS task_status,
                 r.id AS run_ref,r.status AS run_status,
+                r.error->>'code' AS run_error_code,
+                r.runtime->>'provider' AS runtime_provider,
+                r.runtime->>'model' AS runtime_model,
                 (r.lease_owner IS NOT NULL) AS lease_present,
                 r.lease_expires_at,r.fencing_token,
                 (d.published_at IS NOT NULL) AS dispatch_published
@@ -561,6 +569,9 @@ async function collectFailureDiagnostic(failure) {
       ...(row.team_task_kind ? { task_kind: row.team_task_kind } : {}),
       task_status: row.task_status,
       run_status: row.run_status ?? null,
+      run_error_code: row.run_error_code ?? null,
+      runtime_provider: row.runtime_provider ?? null,
+      runtime_model: row.runtime_model ?? null,
       lease_present: row.lease_present ?? false,
       lease_expires_at:
         row.lease_expires_at instanceof Date
@@ -765,7 +776,7 @@ async function captureS3S4TimeoutEvidence() {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];
@@ -1746,15 +1757,22 @@ class ScriptedRuntime {
 
 async function request(
   path,
-  { method = 'GET', body, status = 200, authToken = token } = {},
+  {
+    method = 'GET',
+    body,
+    status = 200,
+    authToken = token,
+    technicalIdempotency = true,
+  } = {},
 ) {
+  const headers = {
+    authorization: `Bearer ${authToken}`,
+    'content-type': 'application/json',
+    ...(technicalIdempotency ? { 'idempotency-key': randomUUID() } : {}),
+  };
   const response = await fetch(`${apiUrl}${path}`, {
     method,
-    headers: {
-      authorization: `Bearer ${authToken}`,
-      'content-type': 'application/json',
-      'idempotency-key': randomUUID(),
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = await response.json().catch(() => null);
@@ -1836,6 +1854,774 @@ async function expectSqlState(query, values, code) {
     return;
   }
   throw new Error(`sql_constraint_missing_${code}`);
+}
+
+function assertProductDtoShape(value, label) {
+  const forbidden = new Set([
+    'caller_idempotency_key',
+    'idempotency_key',
+    'principal_id',
+    'principal_type',
+    'root_task_id',
+  ]);
+  const walk = (current, path = label) => {
+    if (!current || typeof current !== 'object') return;
+    for (const [key, child] of Object.entries(current)) {
+      assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
+      if (key === 'task_id')
+        assert(
+          path.endsWith('source_refs'),
+          `${label}_task_id_outside_source_refs`,
+        );
+      walk(child, `${path}.${key}`);
+    }
+  };
+  walk(value);
+}
+
+function assertProductProjectionDtoShape(value, label) {
+  const forbidden = new Set([
+    'caller_idempotency_key',
+    'idempotency_key',
+    'principal_id',
+    'principal_type',
+  ]);
+  const technicalIds = new Set([
+    'root_task_id',
+    'team_run_id',
+    'team_member_run_id',
+    'task_id',
+    'run_id',
+    'team_message_id',
+  ]);
+  const walk = (current, path = label) => {
+    if (!current || typeof current !== 'object') return;
+    for (const [key, child] of Object.entries(current)) {
+      assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
+      if (technicalIds.has(key))
+        assert(
+          path.endsWith('source_refs'),
+          `${label}_${path}_${key}_outside_source_refs`,
+        );
+      walk(child, `${path}.${key}`);
+    }
+  };
+  walk(value);
+}
+
+async function runProductWorkDurableIdentityFlow({
+  definitionId,
+  definitionVersionId,
+}) {
+  const owner = { tenantId, workspaceId };
+  const workResponse = await request('/api/v1/works', {
+    method: 'POST',
+    status: 201,
+    technicalIdempotency: false,
+    body: {
+      definition_id: definitionId,
+      definition_version_id: definitionVersionId,
+      title: `Durable identity smoke ${suffix}`,
+    },
+  });
+  const work = workResponse?.work;
+  assert(
+    work?.id && work.definition_version_id === definitionVersionId,
+    'product_work_create_invalid',
+  );
+  assertProductDtoShape(workResponse, 'http_work_create');
+
+  const triggerRef = `durable-identity-${suffix}`;
+  const startPath = `/api/v1/works/${work.id}/runs`;
+  const [firstStart, replayStart] = await Promise.all([
+    request(startPath, {
+      method: 'POST',
+      status: 202,
+      technicalIdempotency: false,
+      body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+    }),
+    request(startPath, {
+      method: 'POST',
+      status: 202,
+      technicalIdempotency: false,
+      body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+    }),
+  ]);
+  const firstRun = firstStart?.work_run;
+  const replayRun = replayStart?.work_run;
+  assert(
+    firstRun?.id && replayRun?.id && firstRun.id === replayRun.id,
+    'product_work_run_concurrent_replay_mismatch',
+  );
+  assertProductDtoShape(firstStart, 'http_work_run_start');
+  assertProductDtoShape(replayStart, 'http_work_run_replay');
+  const sameTriggerCount = await db.query(
+    'SELECT count(*)::int AS count FROM work_runs WHERE work_id=$1 AND trigger_ref=$2',
+    [work.id, triggerRef],
+  );
+  assert(
+    sameTriggerCount.rows[0].count === 1,
+    'product_work_run_replay_cardinality_invalid',
+  );
+
+  const secondTriggerRef = `durable-identity-second-${suffix}`;
+  const secondStart = await request(startPath, {
+    method: 'POST',
+    status: 202,
+    technicalIdempotency: false,
+    body: { trigger_kind: 'manual', trigger_ref: secondTriggerRef },
+  });
+  assert(
+    secondStart?.work_run?.id && secondStart.work_run.id !== firstRun.id,
+    'product_work_run_distinct_trigger_not_distinct',
+  );
+  assertProductDtoShape(secondStart, 'http_work_run_second_trigger');
+  const workRunIds = [firstRun.id, secondStart.work_run.id];
+  const runRows = await db.query(
+    'SELECT id,root_task_id,bound_at FROM work_runs WHERE id=ANY($1::uuid[]) ORDER BY id',
+    [workRunIds],
+  );
+  assert(
+    runRows.rowCount === 2 &&
+      runRows.rows.every((row) => row.root_task_id && row.bound_at),
+    'product_work_run_root_binding_missing',
+  );
+
+  const firstRootTaskId = firstRunSourceTaskId(firstStart);
+  rootTaskId = firstRootTaskId;
+  const rootRunRow = (
+    await db.query(
+      'SELECT r.id,r.status,r.runtime FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.id=$1',
+      [firstRootTaskId],
+    )
+  ).rows[0];
+  assert(rootRunRow?.id, 'product_work_root_run_missing');
+  const rootExecution = await service.singleRunDebug.claimAndExecute(
+    rootRunRow.id,
+  );
+  assert(rootExecution.claimed, 'product_work_root_run_not_claimed');
+  const firstTeamRunRow = await waitFor(
+    async () =>
+      (
+        await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+          firstRootTaskId,
+        ])
+      ).rows[0],
+    (row) => Boolean(row?.id),
+    'product_work_team_run_not_materialized',
+  );
+  teamRunId = firstTeamRunRow.id;
+
+  const captureProjection = async (workRunId, label) => {
+    const path = `/api/v1/works/${work.id}/runs/${workRunId}`;
+    const raw = await request(path, { status: 200 });
+    const traceRaw = await request(`${path}/trace`, { status: 200 });
+    assertProductProjectionDtoShape(raw, `${label}_work_run`);
+    assertProductProjectionDtoShape(traceRaw, `${label}_trace`);
+    const parsed = ProductWorkRunResponseSchema.parse(raw);
+    const traceParsed = ProductRunTraceResponseSchema.parse(traceRaw);
+    assert(
+      parsed.capture_status === 'complete' &&
+        parsed.work?.id === work.id &&
+        parsed.work_run?.id === workRunId,
+      `${label}_work_run_parse_invalid`,
+    );
+    assert(
+      traceParsed.capture_status === 'complete' &&
+        traceParsed.work?.id === work.id &&
+        traceParsed.work_run?.id === workRunId,
+      `${label}_trace_parse_invalid`,
+    );
+    return { raw, traceRaw, parsed, traceParsed };
+  };
+  const isEmptyCollectionBranch = (captured) =>
+    captured.parsed.work_items.length === 0 &&
+    captured.parsed.messages.length === 0 &&
+    captured.traceParsed.work_items.length === 0 &&
+    captured.traceParsed.messages.length === 0;
+  let emptyCollectionProjection = await captureProjection(
+    firstRun.id,
+    'product_projection_pre_provider',
+  );
+  let emptyCollectionWorkRunId = firstRun.id;
+  if (!isEmptyCollectionBranch(emptyCollectionProjection)) {
+    const secondRootTaskId =
+      secondStart.execution_receipt?.source_refs?.task_id;
+    assert(
+      secondRootTaskId && secondRootTaskId !== firstRootTaskId,
+      'product_work_second_root_task_missing_for_empty_projection',
+    );
+    const secondRootRunRow = (
+      await db.query(
+        'SELECT r.id FROM runs r JOIN tasks t ON t.id=r.task_id WHERE t.id=$1',
+        [secondRootTaskId],
+      )
+    ).rows[0];
+    assert(secondRootRunRow?.id, 'product_work_second_root_run_missing');
+    const secondRootExecution = await service.singleRunDebug.claimAndExecute(
+      secondRootRunRow.id,
+    );
+    assert(
+      secondRootExecution.claimed,
+      'product_work_second_root_run_not_claimed',
+    );
+    await waitFor(
+      async () =>
+        (
+          await db.query('SELECT id FROM team_runs WHERE root_task_id=$1', [
+            secondRootTaskId,
+          ])
+        ).rows[0],
+      (row) => Boolean(row?.id),
+      'product_work_second_team_run_not_materialized',
+    );
+    emptyCollectionProjection = await captureProjection(
+      secondStart.work_run.id,
+      'product_projection_pre_provider_second_run',
+    );
+    emptyCollectionWorkRunId = secondStart.work_run.id;
+  }
+  assert(
+    isEmptyCollectionBranch(emptyCollectionProjection),
+    'product_work_empty_collection_branch_missing',
+  );
+  marker('PRODUCT_WORK_PROJECTION_EMPTY_BRANCH_PROVEN', {
+    empty_arrays_proven: true,
+    work_run_status: 200,
+    trace_status: 200,
+    work_run_sha256: hash(JSON.stringify(emptyCollectionProjection.raw)),
+    trace_sha256: hash(JSON.stringify(emptyCollectionProjection.traceRaw)),
+    work_run_id_sha256: hash(emptyCollectionWorkRunId),
+    top_level_schema_parse: true,
+  });
+  const productLeadRunId = await queued('lead_turn');
+  const providerExecution =
+    await service.singleRunDebug.claimAndExecute(productLeadRunId);
+  assert(providerExecution.claimed, 'product_work_provider_run_not_claimed');
+  const providerRun = (
+    await db.query(
+      `SELECT r.id,r.status,r.runtime,t.root_task_id
+         FROM runs r JOIN tasks t ON t.id=r.task_id
+        WHERE r.id=$1`,
+      [productLeadRunId],
+    )
+  ).rows[0];
+  assert(
+    providerRun?.status === 'succeeded',
+    'product_work_provider_run_not_succeeded',
+  );
+  assert(
+    providerRun.root_task_id === firstRootTaskId,
+    'product_work_provider_root_task_mismatch',
+  );
+  const providerRuntime = providerRun.runtime ?? {};
+  const provider =
+    typeof providerRuntime.provider === 'string'
+      ? providerRuntime.provider
+      : null;
+  const model =
+    typeof providerRuntime.model === 'string' ? providerRuntime.model : null;
+  assert(provider && model, 'product_work_root_provider_evidence_missing');
+  const productWorkRunPath = `/api/v1/works/${work.id}/runs/${firstRun.id}`;
+  const productTracePath = `${productWorkRunPath}/trace`;
+  const productWorkRunRaw = await request(productWorkRunPath, {
+    status: 200,
+  });
+  const productTraceRaw = await request(productTracePath, { status: 200 });
+  const productWorkRun = ProductWorkRunResponseSchema.parse(productWorkRunRaw);
+  const productTrace = ProductRunTraceResponseSchema.parse(productTraceRaw);
+  assert(
+    productWorkRun.capture_status === 'complete' &&
+      productWorkRun.work?.id === work.id &&
+      productWorkRun.work_run?.id === firstRun.id,
+    'product_work_projection_success_branch_invalid',
+  );
+  assert(
+    productTrace.capture_status === 'complete' &&
+      productTrace.work?.id === work.id &&
+      productTrace.work_run?.id === firstRun.id,
+    'product_trace_projection_success_branch_invalid',
+  );
+  assert(
+    Array.isArray(productWorkRun.messages) &&
+      Array.isArray(productTrace.messages),
+    'product_projection_messages_branch_invalid',
+  );
+  const nullExecutionAttempt = productWorkRun.work_items
+    .flatMap((item) => item.attempts)
+    .find((attempt) => !('task_id' in attempt.source_refs));
+  assert(
+    nullExecutionAttempt &&
+      nullExecutionAttempt.feedback_summary === null &&
+      nullExecutionAttempt.result_summary === null,
+    'product_projection_null_execution_attempt_missing',
+  );
+  const notFoundWorkRunRaw = await request(
+    `/api/v1/works/${randomUUID()}/runs/${randomUUID()}`,
+    { status: 404 },
+  );
+  const notFoundTraceRaw = await request(
+    `/api/v1/works/${randomUUID()}/runs/${randomUUID()}/trace`,
+    { status: 404 },
+  );
+  const notFoundWorkRun =
+    ProductWorkRunResponseSchema.parse(notFoundWorkRunRaw);
+  const notFoundTrace = ProductRunTraceResponseSchema.parse(notFoundTraceRaw);
+  assert(
+    'error' in notFoundWorkRun &&
+      notFoundWorkRun.error.code === 'work_run_not_found' &&
+      'error' in notFoundTrace &&
+      notFoundTrace.error.code === 'work_run_not_found',
+    'product_projection_not_found_branch_invalid',
+  );
+  const invalidWorkRunRaw = await request(
+    `/api/v1/works/not-a-uuid/runs/${firstRun.id}`,
+    { status: 400 },
+  );
+  const invalidTraceRaw = await request(
+    `/api/v1/works/${work.id}/runs/not-a-uuid/trace`,
+    { status: 400 },
+  );
+  const invalidWorkRun = ProductWorkRunResponseSchema.parse(invalidWorkRunRaw);
+  const invalidTrace = ProductRunTraceResponseSchema.parse(invalidTraceRaw);
+  assert(
+    'error' in invalidWorkRun &&
+      invalidWorkRun.error.code === 'invalid_request' &&
+      'error' in invalidTrace &&
+      invalidTrace.error.code === 'invalid_request',
+    'product_projection_invalid_uuid_branch_invalid',
+  );
+  const healthLive = await request('/health/live', {
+    technicalIdempotency: false,
+    status: 200,
+  });
+  const serviceRevision =
+    typeof healthLive?.version === 'string' ? healthLive.version : null;
+  const correlation = (
+    await db.query(
+      `SELECT w.id AS work_id,wr.id AS work_run_id,wr.root_task_id,
+              t.id AS root_task_row_id,tr.id AS team_run_id
+         FROM works w
+         JOIN work_runs wr
+           ON wr.work_id=w.id AND wr.tenant_id=$3 AND wr.workspace_id=$4::uuid
+         JOIN tasks t
+           ON t.id=wr.root_task_id AND t.tenant_id=$3 AND t.workspace_id=$4::text
+         JOIN team_runs tr
+           ON tr.root_task_id=t.id
+          AND tr.tenant_id=$3 AND tr.workspace_id=$4::text
+        WHERE w.id=$1 AND wr.id=$2
+          AND w.tenant_id=$3 AND w.workspace_id=$4::uuid
+        LIMIT 1`,
+      [work.id, firstRun.id, tenantId, workspaceId],
+    )
+  ).rows[0];
+  assert(
+    correlation?.work_id === work.id &&
+      correlation.work_run_id === firstRun.id &&
+      correlation.root_task_id === firstRootTaskId &&
+      correlation.root_task_row_id === firstRootTaskId &&
+      correlation.team_run_id === teamRunId,
+    'product_work_db_correlation_invalid',
+  );
+  const sourceCounts = (
+    await db.query(
+      `SELECT
+          (SELECT count(*)::int FROM team_work_items
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS work_items,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS attempts,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND execution_task_id IS NULL) AS null_execution_attempts,
+          (SELECT count(*)::int FROM team_work_item_attempts
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND feedback IS NULL AND result_summary IS NULL) AS nullable_attempt_fields,
+          (SELECT count(*)::int FROM team_messages
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS messages,
+          (SELECT count(*)::int FROM team_member_runs
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3) AS actors,
+          (SELECT count(*)::int FROM runs r
+             JOIN tasks t ON t.id=r.task_id
+             JOIN team_runs tr
+               ON tr.root_task_id=t.root_task_id
+              AND tr.id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
+             WHERE t.root_task_id=$4
+               AND t.tenant_id=$2 AND t.workspace_id=$3) AS runs,
+          (SELECT count(*)::int FROM run_events e
+             JOIN runs r ON r.id=e.run_id
+             JOIN tasks t ON t.id=r.task_id
+             JOIN team_runs tr
+               ON tr.root_task_id=t.root_task_id
+              AND tr.id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
+             WHERE t.root_task_id=$4
+               AND t.tenant_id=$2 AND t.workspace_id=$3) AS events,
+          (SELECT count(*)::int FROM team_member_runs
+             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
+               AND name IS NULL) AS nullable_actor_labels`,
+      [teamRunId, tenantId, workspaceId, firstRootTaskId],
+    )
+  ).rows[0];
+  const responseAttemptCount = productWorkRun.work_items.reduce(
+    (count, item) => count + item.attempts.length,
+    0,
+  );
+  const responseNullableActorLabels = productWorkRun.actors.filter(
+    (actor) => actor.name === null,
+  ).length;
+  const responseNullableAttemptFields = productWorkRun.work_items
+    .flatMap((item) => item.attempts)
+    .filter(
+      (attempt) =>
+        attempt.feedback_summary === null && attempt.result_summary === null,
+    ).length;
+  assert(
+    Number(sourceCounts.work_items) === productWorkRun.work_items.length &&
+      Number(sourceCounts.work_items) === productTrace.work_items.length &&
+      Number(sourceCounts.attempts) === responseAttemptCount &&
+      Number(sourceCounts.messages) === productWorkRun.messages.length &&
+      Number(sourceCounts.messages) === productTrace.messages.length &&
+      Number(sourceCounts.actors) === productWorkRun.actors.length &&
+      Number(sourceCounts.actors) === productTrace.actors.length &&
+      Number(sourceCounts.nullable_actor_labels) ===
+        responseNullableActorLabels &&
+      Number(sourceCounts.nullable_attempt_fields) ===
+        responseNullableAttemptFields &&
+      Number(sourceCounts.nullable_attempt_fields) > 0 &&
+      Number(sourceCounts.null_execution_attempts) > 0 &&
+      Number(sourceCounts.runs) === productTrace.runs.length &&
+      Number(sourceCounts.events) === productTrace.events.length,
+    'product_work_projection_source_counts_mismatch',
+  );
+  marker('PRODUCT_WORK_PROJECTION_HTTP_CONTRACT_PROVEN', {
+    ...(serviceRevision
+      ? {
+          service_revision: serviceRevision,
+          service_revision_capture_status: 'complete',
+        }
+      : { service_revision_capture_status: 'not_present' }),
+    work_run_status: 200,
+    work_run_sha256: hash(JSON.stringify(productWorkRunRaw)),
+    trace_status: 200,
+    trace_sha256: hash(JSON.stringify(productTraceRaw)),
+    branches: {
+      work_run_success: true,
+      trace_success: true,
+      not_found_404: true,
+      invalid_uuid_400: true,
+    },
+    empty_arrays_proven: isEmptyCollectionBranch(emptyCollectionProjection),
+    empty_collection_work_run_sha256: hash(
+      JSON.stringify(emptyCollectionProjection.raw),
+    ),
+    empty_collection_trace_sha256: hash(
+      JSON.stringify(emptyCollectionProjection.traceRaw),
+    ),
+    empty_collection_work_run_id_sha256: hash(emptyCollectionWorkRunId),
+    nullable_fields_proven:
+      Number(sourceCounts.nullable_attempt_fields) > 0 &&
+      responseNullableAttemptFields > 0,
+    not_found_statuses: { work_run: 404, trace: 404 },
+    invalid_uuid_statuses: { work_run: 400, trace: 400 },
+    null_execution_attempt_proven: true,
+    correlation_sha256: {
+      work_id: hash(correlation.work_id),
+      work_run_id: hash(correlation.work_run_id),
+      root_task_id: hash(correlation.root_task_id),
+      team_run_id: hash(correlation.team_run_id),
+    },
+    source_row_counts: {
+      work_items: Number(sourceCounts.work_items),
+      attempts: Number(sourceCounts.attempts),
+      null_execution_attempts: Number(sourceCounts.null_execution_attempts),
+      nullable_attempt_fields: Number(sourceCounts.nullable_attempt_fields),
+      messages: Number(sourceCounts.messages),
+      actors: Number(sourceCounts.actors),
+      runs: Number(sourceCounts.runs),
+      events: Number(sourceCounts.events),
+    },
+    nullable_actor_label_evidence: {
+      source_count: Number(sourceCounts.nullable_actor_labels),
+      response_count: responseNullableActorLabels,
+      matched: true,
+    },
+    nullable_attempt_fields_evidence: {
+      source_count: Number(sourceCounts.nullable_attempt_fields),
+      response_count: responseNullableAttemptFields,
+      matched: true,
+    },
+  });
+  marker('PRODUCT_WORK_ROOT_PROVIDER_EVIDENCE', {
+    provider,
+    model,
+    root_run_id: rootRunRow.id,
+    root_run_sha256: hash(rootRunRow.id),
+    provider_run_id: providerRun.id,
+    provider_run_sha256: hash(providerRun.id),
+    status: providerRun.status,
+  });
+  if (process.env.PRODUCT_LINEAGE_GOLDEN_OUTPUT && !scriptedRuntime) {
+    const recording = await recordProductLineageGolden({
+      db,
+      rootTaskId: firstRootTaskId,
+      teamRunId,
+      providerRun: 'real',
+      serviceRevision:
+        process.env.PRODUCT_LINEAGE_SOURCE_REVISION ??
+        process.env.GIT_SHA ??
+        serviceRevision ??
+        '',
+      productWorkRunRaw,
+      productTraceRaw,
+      correlation: {
+        ...correlation,
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        principal_type: 'service_account',
+        principal_id: principalId,
+      },
+      sourceCounts,
+      providerEvidence: {
+        provider,
+        model,
+        root_run_sha256: hash(rootRunRow.id),
+        provider_run_sha256: hash(providerRun.id),
+      },
+    });
+    marker('PRODUCT_LINEAGE_GOLDEN_RECORDED', recording);
+  }
+  const { PostgresWorkIdentityRepository } =
+    await import('../../src/infrastructure/postgres/postgres-work-identity-repository.ts');
+  const repository = new PostgresWorkIdentityRepository(db);
+  const now = new Date().toISOString();
+  const replayedBinding = await repository.bindRootTaskCas({
+    workRunId: firstRun.id,
+    rootTaskId: firstRootTaskId,
+    owner,
+    now,
+  });
+  assert(
+    replayedBinding.rootTaskId === firstRootTaskId,
+    'product_work_same_task_cas_replay_failed',
+  );
+  const secondRootTaskId = secondStart.execution_receipt?.source_refs?.task_id;
+  assert(
+    secondRootTaskId && secondRootTaskId !== firstRootTaskId,
+    'product_work_second_root_task_missing',
+  );
+  let bindingConflict = false;
+  try {
+    await repository.bindRootTaskCas({
+      workRunId: firstRun.id,
+      rootTaskId: secondRootTaskId,
+      owner,
+      now,
+    });
+  } catch (error) {
+    const { WorkRunBindingConflictError } =
+      await import('../../src/domain/work/work-run.ts');
+    bindingConflict = error instanceof WorkRunBindingConflictError;
+  }
+  assert(
+    bindingConflict,
+    'product_work_different_task_binding_conflict_missing',
+  );
+  const unchanged = await repository.findWorkRunById(firstRun.id, owner);
+  assert(
+    unchanged?.rootTaskId === firstRootTaskId,
+    'product_work_binding_conflict_mutated_original',
+  );
+  marker('PRODUCT_WORK_ROOT_TASK_CAS_EVIDENCE', {
+    same_task_replay: true,
+    different_task_binding_conflict: true,
+    original_root_task_id_unchanged: true,
+  });
+
+  const manifestBefore = await repository.getResolvedManifest(
+    firstRun.id,
+    owner,
+  );
+  assert(
+    manifestBefore?.entries.length === 1 &&
+      manifestBefore.entries[0].slot === 'definition' &&
+      manifestBefore.entries[0].resolvedVersionId === definitionVersionId,
+    'product_work_definition_manifest_missing',
+  );
+  const manifestReplay = await request(startPath, {
+    method: 'POST',
+    status: 202,
+    technicalIdempotency: false,
+    body: { trigger_kind: 'manual', trigger_ref: triggerRef },
+  });
+  assert(
+    manifestReplay.execution_receipt?.reused === true,
+    'product_work_manifest_replay_not_reused',
+  );
+  const manifestAfter = await repository.getResolvedManifest(
+    firstRun.id,
+    owner,
+  );
+  assert(
+    JSON.stringify(manifestBefore) === JSON.stringify(manifestAfter),
+    'product_work_definition_manifest_unstable',
+  );
+  marker('PRODUCT_WORK_DEFINITION_MANIFEST_STABLE', {
+    work_run_id: firstRun.id,
+    entries: manifestAfter.entries.map((entry) => ({
+      slot: entry.slot,
+      resource_kind: entry.resourceKind,
+      requested_ref: entry.requestedRef,
+      resolved_version_id: entry.resolvedVersionId,
+    })),
+  });
+
+  const { toExecutionReceiptResponse, toWorkResponse, toWorkRunResponse } =
+    await import('../../src/contracts/product-work-commands.ts');
+  assertProductDtoShape(
+    {
+      work: toWorkResponse({
+        id: work.id,
+        tenantId: work.tenant_id,
+        workspaceId: work.workspace_id,
+        definitionId: work.definition_id,
+        currentDefinitionVersionId: work.definition_version_id,
+        title: work.title,
+        origin: work.origin,
+        archivedAt: work.archived_at,
+        createdAt: work.created_at,
+        updatedAt: work.updated_at,
+      }),
+    },
+    'mcp_work_create',
+  );
+  assertProductDtoShape(
+    {
+      work_run: toWorkRunResponse({
+        ...firstRun,
+        workId: firstRun.work_id,
+        definitionVersionId: firstRun.definition_version_id,
+        triggerKind: firstRun.trigger_kind,
+        triggerRef: firstRun.trigger_ref,
+        expiresAt: firstRun.expires_at,
+        boundAt: firstRun.bound_at,
+        createdAt: firstRun.created_at,
+        updatedAt: firstRun.updated_at,
+      }),
+      execution_receipt: toExecutionReceiptResponse({
+        reused: true,
+        taskId: firstRootTaskId,
+      }),
+    },
+    'mcp_work_run_start',
+  );
+  marker('PRODUCT_WORK_HTTP_MCP_DTO_CONTRACT_PROVEN', {
+    technical_idempotency_absent: true,
+    principal_fields_absent: true,
+    raw_technical_ids_absent: true,
+    task_id_only_in_source_refs: true,
+  });
+  const siblingWorks = [];
+  for (const ordinal of [2, 3]) {
+    const created = await request('/api/v1/works', {
+      method: 'POST',
+      status: 201,
+      technicalIdempotency: false,
+      body: {
+        definition_id: definitionId,
+        definition_version_id: definitionVersionId,
+        title: `Durable identity enumeration ${ordinal} ${suffix}`,
+      },
+    });
+    siblingWorks.push(created.work);
+  }
+  const expectedWorkIds = (
+    await db.query(
+      `SELECT id FROM works WHERE tenant_id=$1 AND workspace_id=$2 AND archived_at IS NULL ORDER BY created_at ASC,id ASC`,
+      [tenantId, workspaceId],
+    )
+  ).rows.map((row) => row.id);
+  const workPageOne = await request('/api/v1/works?limit=2', {
+    technicalIdempotency: false,
+  });
+  assert(workPageOne.next_cursor, 'product_work_first_page_cursor_missing');
+  const workPageTwo = await request(
+    `/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`,
+    { technicalIdempotency: false },
+  );
+  const enumeratedWorkIds = [
+    ...workPageOne.works.map((item) => item.id),
+    ...workPageTwo.works.map((item) => item.id),
+  ];
+  assert(JSON.stringify(enumeratedWorkIds) === JSON.stringify(expectedWorkIds), 'product_work_two_page_id_set_mismatch');
+  assert(new Set(enumeratedWorkIds).size === enumeratedWorkIds.length, 'product_work_two_page_duplicate_id');
+  assert(workPageTwo.next_cursor === null, 'product_work_unexpected_third_page');
+  const expectedRunIds = (
+    await db.query(
+      `SELECT id FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3 AND (root_task_id IS NOT NULL OR expires_at > now()) ORDER BY created_at ASC,id ASC`,
+      [tenantId, workspaceId, work.id],
+    )
+  ).rows.map((row) => row.id);
+  const runPageOne = await request(`/api/v1/works/${work.id}/runs?limit=1`, { technicalIdempotency: false });
+  assert(runPageOne.next_cursor, 'product_work_run_first_page_cursor_missing');
+  const runPageTwo = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(runPageOne.next_cursor)}`, { technicalIdempotency: false });
+  const enumeratedRunIds = [
+    ...runPageOne.work_runs.map((item) => item.id),
+    ...runPageTwo.work_runs.map((item) => item.id),
+  ];
+  assert(JSON.stringify(enumeratedRunIds) === JSON.stringify(expectedRunIds), 'product_work_run_two_page_id_set_mismatch');
+  assert(new Set(enumeratedRunIds).size === enumeratedRunIds.length, 'product_work_run_two_page_duplicate_id');
+  assert(runPageTwo.next_cursor === null, 'product_work_run_unexpected_third_page');
+  const foreignWorks = await request('/api/v1/works?limit=100', { authToken: foreignToken, technicalIdempotency: false });
+  const foreignRuns = await request(`/api/v1/works/${work.id}/runs?limit=100`, { authToken: foreignToken, technicalIdempotency: false });
+  assert(foreignWorks.works.length === 0 && foreignRuns.work_runs.length === 0, 'product_work_owner_scope_leak');
+  const foreignCursor = await request(`/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { authToken: foreignToken, status: 400, technicalIdempotency: false });
+  assert(foreignCursor.error?.code === 'invalid_cursor', 'product_work_cursor_owner_not_bound');
+  const wrongKindCursor = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { status: 400, technicalIdempotency: false });
+  assert(wrongKindCursor.error?.code === 'invalid_cursor', 'product_work_cursor_kind_not_bound');
+  marker('PRODUCT_WORK_ENUMERATION_PASS', {
+    owner_work_count: expectedWorkIds.length,
+    work_page_ids: [workPageOne.works.map((item) => item.id), workPageTwo.works.map((item) => item.id)],
+    work_ids_exact_match: true,
+    work_ids_unique: true,
+    owner_run_count: expectedRunIds.length,
+    run_page_ids: [runPageOne.work_runs.map((item) => item.id), runPageTwo.work_runs.map((item) => item.id)],
+    run_ids_exact_match: true,
+    run_ids_unique: true,
+    foreign_work_count: foreignWorks.works.length,
+    foreign_run_count: foreignRuns.work_runs.length,
+    cursor_owner_bound: true,
+    cursor_kind_bound: true,
+  });
+  marker('PRODUCT_WORK_EXPIRED_LIST_CAPABILITY_DEFERRED', {
+    capability_deferred: true,
+    reason: 'no_public_expired_work_run_list_entry_in_this_slice',
+  });
+  marker('PRODUCT_WORK_DURABLE_IDENTITY_PASS', {
+    work_id: work.id,
+    work_sha256: hash(work.id),
+    work_run_ids: workRunIds,
+    work_run_sha256s: workRunIds.map((id) => hash(id)),
+    root_task_sha256s: [firstRootTaskId, secondRootTaskId].map((id) =>
+      hash(id),
+    ),
+    root_task_receipts: [
+      {
+        work_run_id: firstRun.id,
+        task_id: firstRootTaskId,
+        run_id: rootRunRow.id,
+      },
+      { work_run_id: secondStart.work_run.id, task_id: secondRootTaskId },
+    ],
+  });
+  throw new RecoveryComplete();
+}
+
+function firstRunSourceTaskId(response) {
+  const taskId = response?.execution_receipt?.source_refs?.task_id;
+  assert(
+    typeof taskId === 'string' && taskId.length > 0,
+    'product_work_root_task_receipt_missing',
+  );
+  return taskId;
 }
 
 try {
@@ -2056,6 +2842,15 @@ try {
     `/api/v1/team-versions/${imported.version.id}:publish`,
     { method: 'POST', body: {} },
   );
+  marker('PUBLISHED_TEAM_VERSION_READY', {
+    definition_id: published.definition_id,
+    definition_version_id: published.id,
+  });
+  if (productWorkDurableIdentity)
+    await runProductWorkDurableIdentityFlow({
+      definitionId: published.definition_id,
+      definitionVersionId: published.id,
+    });
   const invoked = await request('/api/v1/tasks:invoke', {
     method: 'POST',
     status: 202,
@@ -3427,7 +4222,7 @@ try {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];

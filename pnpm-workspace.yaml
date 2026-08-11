@@ -9,3 +9,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - prettier@3.9.6
   - '@modelcontextprotocol/sdk@1.30.0'
+patchedDependencies:
+  '@getpaseo/client@0.1.110': patches/@getpaseo__client@0.1.110.patch
+  '@getpaseo/server@0.1.110': patches/@getpaseo__server@0.1.110.patch

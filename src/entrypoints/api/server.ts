@@ -29,6 +29,23 @@ const server = serve(
       host: address.address,
       port: address.port,
       environment: config.nodeEnv,
+      timeout_windows: [
+        {
+          name: 'PASEO_CONNECT_TIMEOUT_MS',
+          value_ms: config.paseo.connectTimeoutMs,
+          source: config.paseo.connectTimeoutSource,
+        },
+        {
+          name: 'PASEO_EXECUTION_TIMEOUT_MS',
+          value_ms: config.paseo.executionTimeoutMs,
+          source: config.paseo.executionTimeoutSource,
+        },
+        {
+          name: 'PASEO_SESSION_RPC_TIMEOUT_MS',
+          value_ms: config.paseo.sessionRpcTimeoutMs,
+          source: config.paseo.sessionRpcTimeoutSource,
+        },
+      ],
     });
   },
 );

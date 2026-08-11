@@ -136,18 +136,28 @@ const ConfigSchema = z
       .default('.local/skill-registry'),
     PASEO_WORKSPACE_TITLE: z.string().min(1).default('Agent Server Baseline'),
     PASEO_MODEL: z.string().trim().min(1).optional(),
-    PASEO_CONNECT_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(100)
-      .max(60_000)
-      .default(10_000),
-    PASEO_EXECUTION_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(1_000)
-      .max(600_000)
-      .default(120_000),
+    PASEO_CONNECT_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(100).max(60_000).default(10_000),
+    ),
+    PASEO_EXECUTION_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(1_000).max(600_000).default(150_000),
+    ),
+    // This is a coarse upper bound for a stuck daemon RPC, not a latency
+    // tuning knob; keep it at least twice the execution timeout.
+    PASEO_SESSION_RPC_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(Number.MAX_SAFE_INTEGER)
+        .default(300_000),
+    ),
     AGENT_SERVER_DISPATCHER_CONCURRENCY: z.coerce
       .number()
       .int()
@@ -264,7 +274,11 @@ export type AppConfig = Readonly<{
     workspaceTitle: string;
     model?: string;
     connectTimeoutMs: number;
+    connectTimeoutSource: 'env' | 'default';
     executionTimeoutMs: number;
+    executionTimeoutSource: 'env' | 'default';
+    sessionRpcTimeoutMs: number;
+    sessionRpcTimeoutSource: 'env' | 'default';
   };
 }>;
 export class ConfigurationError extends Error {
@@ -284,6 +298,12 @@ export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,
   workingDirectory: string = process.cwd(),
 ): AppConfig {
+  const connectTimeoutSource: 'env' | 'default' =
+    environment.PASEO_CONNECT_TIMEOUT_MS?.trim() ? 'env' : 'default';
+  const executionTimeoutSource: 'env' | 'default' =
+    environment.PASEO_EXECUTION_TIMEOUT_MS?.trim() ? 'env' : 'default';
+  const sessionRpcTimeoutSource: 'env' | 'default' =
+    environment.PASEO_SESSION_RPC_TIMEOUT_MS?.trim() ? 'env' : 'default';
   const parsed = ConfigSchema.safeParse(environment);
 
   if (!parsed.success) {
@@ -350,7 +370,11 @@ export function loadConfig(
       workspaceTitle: parsed.data.PASEO_WORKSPACE_TITLE,
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,
+      connectTimeoutSource,
       executionTimeoutMs: parsed.data.PASEO_EXECUTION_TIMEOUT_MS,
+      executionTimeoutSource,
+      sessionRpcTimeoutMs: parsed.data.PASEO_SESSION_RPC_TIMEOUT_MS,
+      sessionRpcTimeoutSource,
     },
   });
 }

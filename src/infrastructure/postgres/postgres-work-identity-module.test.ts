@@ -1,0 +1,87 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  createPostgresWorkIdentityModule,
+  PostgresWorkIdentityRepository,
+} from './postgres-work-identity-repository.js';
+import { WorkWorkspaceScopeUnavailableError } from '../../domain/work/work.js';
+
+describe('Postgres Work identity module', () => {
+  it('does not let the raw write repository escape through its query facade', () => {
+    const module = createPostgresWorkIdentityModule({
+      database: {
+        async query<Row>() {
+          return { rows: [] as Row[] };
+        },
+      },
+      definitions: {
+        findTeamDefinitionById: async () => null,
+        findPublishedTeamVersionById: async () => null,
+      },
+      execution: {
+        admitRoot: async () => {
+          throw new Error('not called by module construction');
+        },
+      },
+    });
+
+    expect(Object.keys(module.workIdentityQuery).sort()).toEqual([
+      'findWorkById',
+      'findWorkRunById',
+    ]);
+    expect(module.workIdentityQuery).not.toHaveProperty('createWork');
+    expect(module.workIdentityQuery).not.toHaveProperty('bindRootTaskCas');
+    expect(module.workIdentityQuery).not.toHaveProperty(
+      'appendResolvedManifest',
+    );
+  });
+
+  it.each([
+    [{ code: '22P02' }],
+    [{ code: '23503', constraint: 'works_workspace_id_tenant_id_fkey' }],
+  ])('maps workspace scope persistence failures safely: %j', async (error) => {
+    const repository = new PostgresWorkIdentityRepository({
+      query: vi.fn().mockRejectedValue(error),
+    });
+
+    await expect(repository.createWork(work())).rejects.toBeInstanceOf(
+      WorkWorkspaceScopeUnavailableError,
+    );
+  });
+
+  it('preserves unrelated work persistence failures', async () => {
+    const error = new Error('database unavailable');
+    const repository = new PostgresWorkIdentityRepository({
+      query: vi.fn().mockRejectedValue(error),
+    });
+
+    await expect(repository.createWork(work())).rejects.toBe(error);
+  });
+
+  it('preserves unrelated foreign-key failures', async () => {
+    const error = {
+      code: '23503',
+      constraint: 'works_definition_id_fkey',
+    };
+    const repository = new PostgresWorkIdentityRepository({
+      query: vi.fn().mockRejectedValue(error),
+    });
+
+    await expect(repository.createWork(work())).rejects.toBe(error);
+  });
+});
+
+function work() {
+  return {
+    id: '00000000-0000-4000-8000-000000000101',
+    tenantId: 'tenant-1',
+    workspaceId: '00000000-0000-4000-8000-000000000102',
+    definitionId: '00000000-0000-4000-8000-000000000103',
+    currentDefinitionVersionId: '00000000-0000-4000-8000-000000000104',
+    title: 'Work',
+    origin: 'created' as const,
+    archivedAt: null,
+    createdAt: '2026-08-11T00:00:00.000Z',
+    updatedAt: '2026-08-11T00:00:00.000Z',
+  };
+}

@@ -1,0 +1,35 @@
+diff --git a/dist/daemon-client.js b/dist/daemon-client.js
+index 1f47b92b5f44a691f65dd2710874f1968bf1fba3..8d2d64d4db1e9d7d478be7200025601352f136cd 100644
+--- a/dist/daemon-client.js
++++ b/dist/daemon-client.js
+@@ -74,6 +74,20 @@ function toTimeoutError(error, label, timeoutMs) {
+ const DEFAULT_RECONNECT_BASE_DELAY_MS = 1500;
+ const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
+-const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60000;
++const DEFAULT_SESSION_RPC_TIMEOUT_MS = 300000;
++function parsePositiveSafeIntegerEnvironmentVariable(name, value, defaultValue) {
++    if (value === undefined) {
++        return defaultValue;
++    }
++    if (!/^\d+$/.test(value)) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    const parsed = Number(value);
++    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
++        throw new Error(`${name} must be a positive decimal safe integer.`);
++    }
++    return parsed;
++}
++const SESSION_RPC_TIMEOUT_MS = parsePositiveSafeIntegerEnvironmentVariable("PASEO_SESSION_RPC_TIMEOUT_MS", process.env.PASEO_SESSION_RPC_TIMEOUT_MS, DEFAULT_SESSION_RPC_TIMEOUT_MS);
+ const DEFAULT_CONNECT_TIMEOUT_MS = 15000;
+ const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
+ const LIVENESS_HEARTBEAT_INTERVAL_MS = 10000;
+@@ -627,7 +641,7 @@ export class DaemonClient {
+         }
+     }
+     async sendRequest(params) {
+-        const timeout = params.timeout ?? DEFAULT_SESSION_RPC_TIMEOUT_MS;
++        const timeout = params.timeout ?? SESSION_RPC_TIMEOUT_MS;
+         const { promise, cancel } = this.waitForWithCancel((msg) => {
+             if (msg.type === "rpc_error" && msg.payload.requestId === params.requestId) {
+                 return {

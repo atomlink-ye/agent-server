@@ -24,7 +24,11 @@ describe('loadConfig', () => {
         runtimeCellRoot: '/repo/.local/runtime-cells',
         workspaceTitle: 'Agent Server Baseline',
         connectTimeoutMs: 10_000,
-        executionTimeoutMs: 120_000,
+        connectTimeoutSource: 'default',
+        executionTimeoutMs: 150_000,
+        executionTimeoutSource: 'default',
+        sessionRpcTimeoutMs: 300_000,
+        sessionRpcTimeoutSource: 'default',
       },
     });
   });
@@ -39,6 +43,70 @@ describe('loadConfig', () => {
         ?.concurrency,
     ).toBe(7);
   });
+
+  it.each(['', ' ', '\t\n'])(
+    'uses timeout defaults and default source for blank values %j',
+    (blankValue) => {
+      expect(
+        loadConfig({
+          PASEO_CONNECT_TIMEOUT_MS: blankValue,
+          PASEO_EXECUTION_TIMEOUT_MS: blankValue,
+          PASEO_SESSION_RPC_TIMEOUT_MS: blankValue,
+        }).paseo,
+      ).toMatchObject({
+        connectTimeoutMs: 10_000,
+        connectTimeoutSource: 'default',
+        executionTimeoutMs: 150_000,
+        executionTimeoutSource: 'default',
+        sessionRpcTimeoutMs: 300_000,
+        sessionRpcTimeoutSource: 'default',
+      });
+    },
+  );
+
+  it('reports configured timeout sources', () => {
+    expect(
+      loadConfig({
+        PASEO_CONNECT_TIMEOUT_MS: '12000',
+        PASEO_EXECUTION_TIMEOUT_MS: '150000',
+        PASEO_SESSION_RPC_TIMEOUT_MS: '300000',
+      }).paseo,
+    ).toMatchObject({
+      connectTimeoutMs: 12_000,
+      connectTimeoutSource: 'env',
+      executionTimeoutMs: 150_000,
+      executionTimeoutSource: 'env',
+      sessionRpcTimeoutMs: 300_000,
+      sessionRpcTimeoutSource: 'env',
+    });
+  });
+
+  it.each(['invalid', '0', '60001'])(
+    'rejects invalid connect timeout value %j',
+    (value) => {
+      expect(() => loadConfig({ PASEO_CONNECT_TIMEOUT_MS: value })).toThrow(
+        ConfigurationError,
+      );
+    },
+  );
+
+  it.each(['invalid', '999', '600001'])(
+    'rejects invalid execution timeout value %j',
+    (value) => {
+      expect(() => loadConfig({ PASEO_EXECUTION_TIMEOUT_MS: value })).toThrow(
+        ConfigurationError,
+      );
+    },
+  );
+
+  it.each(['invalid', '0', '1.5'])(
+    'rejects invalid session RPC timeout value %j',
+    (value) => {
+      expect(() => loadConfig({ PASEO_SESSION_RPC_TIMEOUT_MS: value })).toThrow(
+        ConfigurationError,
+      );
+    },
+  );
 
   it('parses explicit Team completion approval enablement', () => {
     expect(

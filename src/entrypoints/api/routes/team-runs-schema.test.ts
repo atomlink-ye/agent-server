@@ -19,6 +19,8 @@ const timestamp = '2026-08-07T00:00:00.000Z';
 describe('agentic team project route contract', () => {
   it('accepts the complete snake_case projection including revision, stop reason, descriptions, attempts, and turn runtime', () => {
     const response = {
+      stuck: false,
+      decision_capture_status: 'not_captured',
       project: {
         root_task_id: ids.rootTask,
         team_run_id: ids.teamRun,
@@ -126,6 +128,8 @@ describe('agentic team project route contract', () => {
 
   it('maps the camelCase projection through the public route mapper without dropping S4 fields', () => {
     const projection = {
+      stuck: false,
+      decisionCapture: { status: 'not_captured' as const },
       project: {
         rootTaskId: ids.rootTask,
         teamRunId: ids.teamRun,
@@ -207,6 +211,8 @@ describe('agentic team project route contract', () => {
 
     const response = toAgenticTeamProjectResponse(projection as never);
     expect(response).toMatchObject({
+      stuck: false,
+      decision_capture_status: 'not_captured',
       project: { revision: 42, stop_reason: 'lead_turn_limit' },
       work_items: [
         expect.objectContaining({
@@ -227,5 +233,29 @@ describe('agentic team project route contract', () => {
         },
       ],
     });
+    expect('decisions' in response).toBe(false);
+  });
+
+  it('distinguishes reported none from unavailable decision capture', () => {
+    const unavailable = toAgenticTeamProjectResponse(null);
+    expect(unavailable).toMatchObject({
+      decision_capture_status: 'not_captured',
+    });
+    expect('decisions' in unavailable).toBe(false);
+
+    const reportedNone = {
+      ...unavailable,
+      decision_capture_status: 'reported' as const,
+      decisions: [],
+    };
+    expect(() =>
+      AgenticTeamProjectResponseSchema.parse(reportedNone),
+    ).not.toThrow();
+    expect(() =>
+      AgenticTeamProjectResponseSchema.parse({
+        ...unavailable,
+        decisions: [],
+      }),
+    ).toThrow();
   });
 });

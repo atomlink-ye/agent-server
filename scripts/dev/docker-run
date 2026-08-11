@@ -43,7 +43,13 @@ done
 
 (($#)) || { printf '%s\n' 'docker-run: a command is required after --' >&2; exit 2; }
 
-compose=(docker compose)
+# Deliberately NOT pinning COMPOSE_PROJECT_NAME. The project name scopes
+# containers and volumes, so two lanes sharing one sandbox need different ones;
+# compose derives it from the working directory, which gives exactly that. The
+# image tag is pinned in compose.yaml instead, so a distinct project name no
+# longer misses the prebuilt image baked into the sandbox template.
+
+compose=("$PWD/scripts/dev/docker-compose")
 existing_postgres_test_id=''
 started_postgres_test=0
 if ((postgres)); then

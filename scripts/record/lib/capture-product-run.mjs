@@ -1,0 +1,382 @@
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { Client } from 'pg';
+import { validateRecording } from '../../ci/validate-product-recording.mjs';
+import {
+  assertNoEnvironmentValues,
+  sanitizeRecording,
+  sanitizeRunEventPayload,
+  sha256,
+  stableStringify,
+} from './sanitize-recording.mjs';
+
+const QUERY_DEFINITIONS = Object.freeze({
+  team_runs: `SELECT tr.id,tr.tenant_id,tr.workspace_id,tr.principal_type,tr.principal_id,tr.root_task_id,tr.root_run_id,tr.team_version_id,tr.environment_version_id,tr.status,tr.phase,tr.final_text,tr.control_state,tr.revision,tr.lead_turn_count,tr.stop_reason,tr.completion_requested_by_run_id,tr.completion_approval_required,tr.created_at,tr.updated_at
+    FROM team_runs tr WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY tr.created_at,tr.id`,
+  team_work_items: `SELECT w.id,w.team_run_id,w.subject,w.description,w.status,w.owner_member_id,w.created_by_member_id,w.completion_summary,w.execution_task_id,w.tenant_id,w.workspace_id,w.principal_type,w.principal_id,w.created_at,w.updated_at,w.completed_at
+    FROM team_work_items w JOIN team_runs tr ON tr.id=w.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND w.tenant_id=$2 AND w.workspace_id=$3 AND w.principal_type=$4 AND w.principal_id=$5 ORDER BY w.created_at,w.id`,
+  team_work_item_attempts: `SELECT a.id,a.work_item_id,a.team_run_id,a.attempt_no,a.assignee_member_id,a.requested_by_lead_task_id,a.feedback,a.execution_task_id,a.status,a.result_summary,a.tenant_id,a.workspace_id,a.principal_type,a.principal_id,a.created_at,a.updated_at,a.completed_at
+    FROM team_work_item_attempts a JOIN team_runs tr ON tr.id=a.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND a.tenant_id=$2 AND a.workspace_id=$3 AND a.principal_type=$4 AND a.principal_id=$5 ORDER BY a.work_item_id,a.attempt_no,a.id`,
+  team_messages: `SELECT m.id,m.team_run_id,m.tenant_id,m.workspace_id,m.principal_type,m.principal_id,m.sequence,m.sender_member_run_id,m.recipient_member_run_id,m.work_item_id,m.attempt_id,m.kind,m.status,m.consumed_by_task_id,m.created_at,m.consumed_at
+    FROM team_messages m JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND m.tenant_id=$2 AND m.workspace_id=$3 AND m.principal_type=$4 AND m.principal_id=$5 ORDER BY m.sequence,m.id`,
+  run_events: `SELECT e.id,e.run_id,e.sequence,e.type,e.payload,e.created_at
+    FROM run_events e JOIN runs r ON r.id=e.run_id JOIN tasks t ON t.id=r.task_id JOIN team_runs tr ON tr.root_task_id=t.root_task_id
+    WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3 AND t.principal_type=$4 AND t.principal_id=$5 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY e.run_id,e.sequence,e.id`,
+});
+
+const IDENTIFIER =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const scenarioNames = new Set([
+  'parallel-success',
+  'rework-once',
+  'lead-never-accept',
+]);
+export const SUBMIT_INSTRUCTION_PROFILE =
+  'canonical-team-work-submit-hard-gate/v1';
+const expectedMemberCompositions = Object.freeze({
+  'parallel-success': [
+    'projection-lead',
+    'projection-worker-a',
+    'projection-worker-b',
+  ],
+  'rework-once': [
+    'projection-lead',
+    'projection-worker',
+    'projection-reviewer',
+  ],
+  'lead-never-accept': [
+    'projection-lead',
+    'projection-worker',
+    'projection-observer',
+  ],
+});
+
+function assertInput(options) {
+  for (const key of [
+    'baseUrl',
+    'token',
+    'rootTaskId',
+    'tenantId',
+    'workspaceId',
+    'principalId',
+    'scenario',
+  ])
+    if (!options[key]) throw new Error(`capture_${key}_required`);
+  if (!IDENTIFIER.test(options.rootTaskId))
+    throw new Error('capture_root_task_id_invalid');
+  if (!scenarioNames.has(options.scenario))
+    throw new Error('capture_scenario_invalid');
+  const expectedComposition = expectedMemberCompositions[options.scenario];
+  if (
+    !Array.isArray(options.memberComposition) ||
+    options.memberComposition.join('\n') !== expectedComposition.join('\n')
+  )
+    throw new Error('capture_member_composition_invalid');
+  if (options.submitInstructionProfile !== SUBMIT_INSTRUCTION_PROFILE)
+    throw new Error('capture_submit_instruction_profile_invalid');
+  const provider = String(
+    options.providerKind ?? process.env.PASEO_PROVIDER ?? '',
+  );
+  if (!provider || /fake|scripted|stub|mock/iu.test(provider))
+    throw new Error('fake_or_scripted_provider_rejected');
+  return provider;
+}
+
+async function getJson(baseUrl, token, path) {
+  const response = await fetch(new URL(path, baseUrl), {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(`capture_http_${response.status}`);
+  return body;
+}
+
+async function queryRows(client, sql, values, name) {
+  const result = await client.query(sql, values);
+  return {
+    name,
+    sql: sql.replace(/\s+/gu, ' ').trim(),
+    rows: result.rows,
+    row_count: result.rowCount ?? result.rows.length,
+  };
+}
+
+function runEventProjection(rows) {
+  return rows.map((row) => ({
+    ...row,
+    payload: sanitizeRunEventPayload(
+      row.payload,
+      `run_events.${row.id}.payload`,
+    ),
+  }));
+}
+
+function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
+  if (scenario === 'parallel-success') {
+    const accepted = workRows.filter((row) => row.status === 'accepted');
+    const completed = attemptRows.filter(
+      (row) => row.status === 'completed' && row.completed_at,
+    );
+    const overlap = completed.some((left, index) =>
+      completed
+        .slice(index + 1)
+        .some(
+          (right) =>
+            left.work_item_id !== right.work_item_id &&
+            new Date(left.created_at) <= new Date(right.completed_at) &&
+            new Date(right.created_at) <= new Date(left.completed_at),
+        ),
+    );
+    if (
+      teamRows.every((row) => row.status === 'succeeded') &&
+      accepted.length >= 2 &&
+      overlap
+    )
+      return;
+    throw new Error('parallel_success_live_predicate_failed');
+  }
+  if (scenario === 'rework-once') {
+    const attemptsByWork = new Map();
+    for (const row of attemptRows) {
+      const attempts = attemptsByWork.get(row.work_item_id) ?? [];
+      attempts.push(row);
+      attemptsByWork.set(row.work_item_id, attempts);
+    }
+    const reworked = [...attemptsByWork.entries()].some(
+      ([workId, attempts]) => {
+        const ordered = attempts.sort(
+          (left, right) => left.attempt_no - right.attempt_no,
+        );
+        return (
+          ordered.length >= 2 &&
+          ordered[0].feedback &&
+          ordered[1].status === 'completed' &&
+          workRows.some(
+            (work) => work.id === workId && work.status === 'accepted',
+          )
+        );
+      },
+    );
+    if (teamRows.every((row) => row.status === 'succeeded') && reworked) return;
+    throw new Error('rework_once_live_predicate_failed');
+  }
+  if (
+    teamRows.every((row) => ['active', 'waiting'].includes(row.status)) &&
+    workRows.some((row) => row.status === 'completed') &&
+    workRows.every((row) => row.status !== 'accepted')
+  )
+    return;
+  throw new Error('lead_never_accept_live_predicate_failed');
+}
+
+async function writeJson(path, value) {
+  const safe = sanitizeRecording(value, path, {
+    allowProviderSummary:
+      path.endsWith('/trace.json') ||
+      path.endsWith('/manifest.json') ||
+      path.endsWith('/run_events.json'),
+  });
+  assertNoEnvironmentValues(safe);
+  await writeFile(path, stableStringify(safe), { mode: 0o600 });
+}
+
+function recordingName(recordedAt, rootTaskId) {
+  return `${recordedAt.replace(/[-:.]/gu, '').replace(/Z$/u, 'Z')}-${rootTaskId}`;
+}
+
+export async function capturePreIdentity(options) {
+  const providerKind = assertInput(options);
+  const baseUrl = new URL(options.baseUrl);
+  const outputRoot = resolve(
+    options.outputRoot ??
+      new URL(
+        '../../../fixtures/product-projection/recordings',
+        import.meta.url,
+      ).pathname,
+  );
+  const recordedAt = new Date().toISOString();
+  const target = join(
+    outputRoot,
+    options.scenario,
+    recordingName(recordedAt, options.rootTaskId),
+  );
+  const temporary = `${target}.tmp-${process.pid}-${randomUUID()}`;
+  const sqlValues = [
+    options.rootTaskId,
+    options.tenantId,
+    options.workspaceId,
+    options.principalType ?? 'service_account',
+    options.principalId,
+  ];
+  const client =
+    options.client ??
+    new Client({
+      connectionString:
+        options.databaseUrl ??
+        process.env.DATABASE_URL ??
+        process.env.POSTGRES_URL,
+    });
+  let connected = false;
+  try {
+    if (!options.client) {
+      await client.connect();
+      connected = true;
+    }
+    const captures = [];
+    for (const [name, sql] of Object.entries(QUERY_DEFINITIONS))
+      captures.push(await queryRows(client, sql, sqlValues, name));
+    const teamRows = captures.find((entry) => entry.name === 'team_runs').rows;
+    if (!teamRows.length) throw new Error('capture_team_run_missing');
+    if (
+      !teamRows.every(
+        (row) =>
+          row.root_task_id === options.rootTaskId &&
+          row.tenant_id === options.tenantId &&
+          row.workspace_id === options.workspaceId,
+      )
+    )
+      throw new Error('capture_scope_mismatch');
+    const byName = new Map(captures.map((entry) => [entry.name, entry.rows]));
+    assertScenarioPredicate(
+      options.scenario,
+      teamRows,
+      byName.get('team_work_items'),
+      byName.get('team_work_item_attempts'),
+    );
+    const trace = {
+      task: await getJson(
+        baseUrl,
+        options.token,
+        `/api/v1/tasks/${options.rootTaskId}`,
+      ),
+      tree: await getJson(
+        baseUrl,
+        options.token,
+        `/api/v1/tasks/${options.rootTaskId}/tree`,
+      ),
+      team_run: await getJson(
+        baseUrl,
+        options.token,
+        `/api/v1/tasks/${options.rootTaskId}/team-run`,
+      ),
+      project:
+        options.project ??
+        (await getJson(
+          baseUrl,
+          options.token,
+          `/api/v1/team-runs:project?root_task_id=${encodeURIComponent(options.rootTaskId)}`,
+        )),
+    };
+    await mkdir(join(temporary, 'api'), { recursive: true, mode: 0o700 });
+    await mkdir(join(temporary, 'db'), { recursive: true, mode: 0o700 });
+    await writeJson(join(temporary, 'api/trace.json'), trace);
+    for (const name of [
+      'team_runs',
+      'team_work_items',
+      'team_work_item_attempts',
+      'team_messages',
+    ])
+      await writeJson(join(temporary, `db/${name}.json`), byName.get(name));
+    await writeJson(
+      join(temporary, 'db/run_events.json'),
+      runEventProjection(byName.get('run_events')),
+    );
+    const startedAt =
+      options.startedAt ??
+      teamRows.reduce(
+        (min, row) =>
+          new Date(row.created_at) < new Date(min) ? row.created_at : min,
+        teamRows[0].created_at,
+      );
+    const manifest = {
+      format_version: 'product-projection-recording/v1',
+      mode: 'pre-identity',
+      scenario: options.scenario,
+      scenario_definition: true,
+      member_composition: options.memberComposition,
+      submit_instruction_profile: options.submitInstructionProfile,
+      definition_hash: options.definitionHash ?? 'unrecorded',
+      provider_run: 'real',
+      provider: {
+        kind: providerKind,
+        model:
+          options.providerModel ?? process.env.PASEO_MODEL ?? '[configured]',
+      },
+      root_task_id: options.rootTaskId,
+      work_id: { capture_status: 'not_applicable' },
+      work_run_id: { capture_status: 'not_applicable' },
+      tenant_id: options.tenantId,
+      workspace_id: options.workspaceId,
+      principal_type: options.principalType ?? 'service_account',
+      principal_id: options.principalId,
+      started_at: new Date(startedAt).toISOString(),
+      recorded_at: recordedAt,
+      service_revision:
+        options.serviceRevision ?? process.env.SERVICE_REVISION ?? 'unknown',
+      predicate_evidence: options.predicateEvidence ?? {},
+      files: {},
+      queries: captures.map(({ name, sql, row_count }) => ({
+        name,
+        sql,
+        parameters: [
+          '$1:<redacted>',
+          '$2:<redacted>',
+          '$3:<redacted>',
+          '$4:<redacted>',
+          '$5:<redacted>',
+        ],
+        row_count,
+      })),
+    };
+    for (const name of [
+      'api/trace.json',
+      'db/team_runs.json',
+      'db/team_work_items.json',
+      'db/team_work_item_attempts.json',
+      'db/team_messages.json',
+      'db/run_events.json',
+    ]) {
+      const bytes = await readFile(join(temporary, name));
+      manifest.files[name] = {
+        row_count: name === 'api/trace.json' ? 1 : JSON.parse(bytes).length,
+        sha256: sha256(bytes),
+      };
+    }
+    await writeJson(join(temporary, 'manifest.json'), manifest);
+    const checksumFiles = ['manifest.json', ...Object.keys(manifest.files)];
+    const checksums = [];
+    for (const name of checksumFiles)
+      checksums.push(
+        `${sha256(await readFile(join(temporary, name)))}  ${name}`,
+      );
+    await writeFile(
+      join(temporary, 'SHA256SUMS'),
+      `${checksums.join('\n')}\n`,
+      { mode: 0o600 },
+    );
+    const validation = await validateRecording(temporary, 'pre-identity');
+    await mkdir(resolve(target, '..'), { recursive: true, mode: 0o700 });
+    await rename(temporary, target);
+    return {
+      directory: target,
+      rootTaskId: options.rootTaskId,
+      scenario: options.scenario,
+      providerKind,
+      validation,
+    };
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
+    throw error;
+  } finally {
+    if (connected) await client.end();
+  }
+}
+
+export const captureProductRun = async () => {
+  throw new Error(
+    'product_mode_not_implemented: use --mode pre-identity until Product Work endpoints exist',
+  );
+};

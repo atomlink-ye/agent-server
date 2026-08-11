@@ -232,8 +232,13 @@ export const AgenticTeamProjectSessionSchema = z
   })
   .strict();
 
-export const AgenticTeamProjectResponseSchema = z
+const AgenticTeamProjectResponseBaseSchema = z
   .object({
+    stuck: z
+      .boolean()
+      .describe(
+        "True exactly when team.status='active' && no_active_attempts && all_members_idle && !all_work_accepted.",
+      ),
     project: z
       .object({
         root_task_id: uuid,
@@ -304,6 +309,19 @@ export const AgenticTeamProjectResponseSchema = z
     sessions: z.array(AgenticTeamProjectSessionSchema),
   })
   .strict();
+
+export const AgenticTeamProjectResponseSchema = z.discriminatedUnion(
+  'decision_capture_status',
+  [
+    AgenticTeamProjectResponseBaseSchema.extend({
+      decision_capture_status: z.literal('not_captured'),
+    }).strict(),
+    AgenticTeamProjectResponseBaseSchema.extend({
+      decision_capture_status: z.literal('reported'),
+      decisions: z.array(z.never()),
+    }).strict(),
+  ],
+);
 
 export type AgenticTeamProjectResponse = z.infer<
   typeof AgenticTeamProjectResponseSchema

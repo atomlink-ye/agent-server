@@ -16,7 +16,11 @@ const baseConfig: AppConfig = {
     provider: 'opencode',
     workspaceTitle: 'test',
     connectTimeoutMs: 100,
+    connectTimeoutSource: 'default',
     executionTimeoutMs: 1000,
+    executionTimeoutSource: 'default',
+    sessionRpcTimeoutMs: 2000,
+    sessionRpcTimeoutSource: 'default',
   },
 };
 

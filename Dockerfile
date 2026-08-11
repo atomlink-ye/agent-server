@@ -25,6 +25,7 @@ USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node apps/web/package.json ./apps/web/package.json
+COPY --chown=node:node patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 RUN set -eu; \
     case "$TARGETARCH" in \
@@ -51,7 +52,9 @@ RUN set -eu; \
     /opt/providers/bin/codex --version
 RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
     && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
-RUN node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFile, writeFile } from 'node:fs/promises'; const hash = createHash('sha256'); for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web/package.json']) hash.update(await readFile('/workspace/' + file)); const stamp = hash.digest('hex') + '\\n'; await writeFile('/home/node/image-node_modules/.docker-dependencies-stamp', stamp); await writeFile('/home/node/image-web-node_modules/.docker-dependencies-stamp', stamp);"
+COPY --chown=node:node scripts/dev/dependency-stamp.mjs ./scripts/dev/dependency-stamp.mjs
+RUN node scripts/dev/dependency-stamp.mjs /workspace > /home/node/image-node_modules/.docker-dependencies-stamp \
+    && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-node_modules/.docker-dependencies-stamp
 
 # Two things the slim base omits that only bite at runtime, both masked for a
 # long time because the smoke suite only ever exercised the opencode provider.
@@ -73,8 +76,6 @@ RUN apt-get update \
     && ps --version \
     && python3 --version \
     && test -s /etc/ssl/certs/ca-certificates.crt \
-    && pnpm exec playwright install --with-deps --only-shell chromium \
-    && chmod -R a+rX /opt/playwright-browsers \
     && rm -rf /var/lib/apt/lists/*
 USER node
 
@@ -82,3 +83,23 @@ FROM dependencies AS development
 
 COPY --chown=node:node . .
 RUN node scripts/dev/resolve-opencode.mjs --check
+
+# Browser stage. `playwright install --with-deps` pulls a chromium shell plus
+# dozens of apt packages, and it is the single most expensive layer in this
+# image — on a fuse-overlayfs host it dominates total build time. Only the
+# browser-driven suites need it (`vitest.web.config.ts` runs vitest in browser
+# mode via playwright, and `test:e2e:web`), so it lives in its own stage and
+# every backend target builds without it.
+#
+# Consequence, on purpose: with the default `development` target,
+# `pnpm test:web` / `test:e2e:web` — and therefore `pnpm test` and `pnpm run ci`,
+# which include them — cannot run. Build with `--target web-testing`
+# (or `docker compose build --build-arg`/service override) when you need them.
+FROM development AS web-testing
+
+USER root
+RUN apt-get update \
+    && pnpm exec playwright install --with-deps --only-shell chromium \
+    && chmod -R a+rX /opt/playwright-browsers \
+    && rm -rf /var/lib/apt/lists/*
+USER node

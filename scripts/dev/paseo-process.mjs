@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -11,6 +12,45 @@ import {
 } from './safe-environment.mjs';
 
 const MAX_HTTP_ERROR_BODY_LENGTH = 4_096;
+const DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS = 30_000;
+
+export function classifyDaemonStartupFailure(child) {
+  return child && child.exitCode !== null
+    ? `daemon exited with exitCode=${child.exitCode}`
+    : 'daemon remained running but unhealthy';
+}
+
+export async function tailFile(path, lineCount = 30) {
+  try {
+    const content = await readFile(path, 'utf8');
+    const lines = content.split(/\r?\n/);
+    if (lines.at(-1) === '') lines.pop();
+    return lines.slice(-lineCount).join('\n') || '[daemon log is empty]';
+  } catch (error) {
+    return `[daemon log unavailable: ${error instanceof Error ? error.message : String(error)}]`;
+  }
+}
+
+export function parsePositiveSafeIntegerEnvironmentVariable(
+  name,
+  value,
+  defaultValue,
+) {
+  if (
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
+    return defaultValue;
+  }
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`${name} must be a positive decimal safe integer.`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive decimal safe integer.`);
+  }
+  return parsed;
+}
 
 export async function getAvailablePort() {
   const server = createServer();
@@ -66,15 +106,68 @@ export async function startPaseo({
   listenHost = '127.0.0.1',
   environmentVariableNames = [],
 }) {
+  const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+    process.env.PASEO_DAEMON_STARTUP_TIMEOUT_MS,
+    DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS,
+  );
+  const openCodeStartupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+    process.env.PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS,
+    undefined,
+  );
+  const providerRefreshTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
+    'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+    process.env.PASEO_PROVIDER_REFRESH_TIMEOUT_MS,
+    undefined,
+  );
+  const openCodeAppAgentsTimeoutMs =
+    parsePositiveSafeIntegerEnvironmentVariable(
+      'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+      process.env.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS,
+      undefined,
+    );
+  const openCodeProviderListTimeoutMs =
+    parsePositiveSafeIntegerEnvironmentVariable(
+      'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+      process.env.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS,
+      undefined,
+    );
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
   const log = openSync(logPath, 'a');
   const hostnames = process.env.PASEO_HOSTNAMES;
-  const hostnameArguments = hostnames ? ['--hostnames', hostnames] : [];
+  const hostnameArguments = hostnames?.trim() ? ['--hostnames', hostnames] : [];
   const environment = {
     ...isolated.environment,
     ...copyNamedEnvironment(process.env, environmentVariableNames),
+    ...(openCodeStartupTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: String(
+            openCodeStartupTimeoutMs,
+          ),
+        }),
+    ...(providerRefreshTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_PROVIDER_REFRESH_TIMEOUT_MS: String(providerRefreshTimeoutMs),
+        }),
+    ...(openCodeAppAgentsTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: String(
+            openCodeAppAgentsTimeoutMs,
+          ),
+        }),
+    ...(openCodeProviderListTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: String(
+            openCodeProviderListTimeoutMs,
+          ),
+        }),
     PWD: repositoryRoot,
   };
 
@@ -114,11 +207,21 @@ export async function startPaseo({
   }
 
   try {
-    await waitForHttp(`http://127.0.0.1:${port}/api/health`, 30_000, child);
+    await waitForHttp(
+      `http://127.0.0.1:${port}/api/health`,
+      startupTimeoutMs,
+      child,
+    );
   } catch (error) {
-    await stopProcessTree(child);
+    const failureState = classifyDaemonStartupFailure(child);
+    try {
+      await stopProcessTree(child);
+    } catch {
+      // Preserve the original startup failure and include the log tail below.
+    }
+    const logTail = await tailFile(logPath);
     throw new Error(
-      `Paseo did not become healthy. See ${logPath}. ${error instanceof Error ? error.message : String(error)}`,
+      `Paseo did not become healthy (${failureState}). See ${logPath}. ${error instanceof Error ? error.message : String(error)}\nLast daemon log lines:\n${logTail}`,
     );
   }
 

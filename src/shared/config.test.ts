@@ -41,6 +41,40 @@ describe('loadConfig', () => {
     ).toBe(7);
   });
 
+  it.each(['', ' ', '\t\n'])(
+    'uses timeout defaults and default source for blank values %j',
+    (blankValue) => {
+      expect(
+        loadConfig({
+          PASEO_CONNECT_TIMEOUT_MS: blankValue,
+          PASEO_EXECUTION_TIMEOUT_MS: blankValue,
+        }).paseo,
+      ).toMatchObject({
+        connectTimeoutMs: 10_000,
+        executionTimeoutMs: 120_000,
+        executionTimeoutSource: 'default',
+      });
+    },
+  );
+
+  it.each(['invalid', '0', '60001'])(
+    'rejects invalid connect timeout value %j',
+    (value) => {
+      expect(() => loadConfig({ PASEO_CONNECT_TIMEOUT_MS: value })).toThrow(
+        ConfigurationError,
+      );
+    },
+  );
+
+  it.each(['invalid', '999', '600001'])(
+    'rejects invalid execution timeout value %j',
+    (value) => {
+      expect(() => loadConfig({ PASEO_EXECUTION_TIMEOUT_MS: value })).toThrow(
+        ConfigurationError,
+      );
+    },
+  );
+
   it('parses explicit Team completion approval enablement', () => {
     expect(
       loadConfig({

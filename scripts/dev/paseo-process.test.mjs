@@ -2,7 +2,27 @@ import { createServer } from 'node:http';
 
 import { describe, expect, it } from 'vitest';
 
-import { waitForHttp } from './paseo-process.mjs';
+import {
+  parsePositiveSafeIntegerEnvironmentVariable,
+  waitForHttp,
+} from './paseo-process.mjs';
+
+describe('parsePositiveSafeIntegerEnvironmentVariable', () => {
+  it.each([undefined, '', ' ', '\t\n'])(
+    'uses the default for blank value %j',
+    (value) => {
+      expect(
+        parsePositiveSafeIntegerEnvironmentVariable('TIMEOUT', value, 123),
+      ).toBe(123);
+    },
+  );
+
+  it.each(['abc', '0', '-1', '1.5'])('rejects invalid value %j', (value) => {
+    expect(() =>
+      parsePositiveSafeIntegerEnvironmentVariable('TIMEOUT', value, 123),
+    ).toThrow('TIMEOUT must be a positive decimal safe integer.');
+  });
+});
 
 describe('waitForHttp', () => {
   it('includes an unhealthy response body when readiness times out', async () => {

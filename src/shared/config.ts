@@ -136,18 +136,16 @@ const ConfigSchema = z
       .default('.local/skill-registry'),
     PASEO_WORKSPACE_TITLE: z.string().min(1).default('Agent Server Baseline'),
     PASEO_MODEL: z.string().trim().min(1).optional(),
-    PASEO_CONNECT_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(100)
-      .max(60_000)
-      .default(10_000),
-    PASEO_EXECUTION_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(1_000)
-      .max(600_000)
-      .default(120_000),
+    PASEO_CONNECT_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(100).max(60_000).default(10_000),
+    ),
+    PASEO_EXECUTION_TIMEOUT_MS: z.preprocess(
+      (value) =>
+        typeof value === 'string' && value.trim() === '' ? undefined : value,
+      z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+    ),
     AGENT_SERVER_DISPATCHER_CONCURRENCY: z.coerce
       .number()
       .int()
@@ -286,7 +284,7 @@ export function loadConfig(
   workingDirectory: string = process.cwd(),
 ): AppConfig {
   const executionTimeoutSource: 'env' | 'default' =
-    environment.PASEO_EXECUTION_TIMEOUT_MS === undefined ? 'default' : 'env';
+    environment.PASEO_EXECUTION_TIMEOUT_MS?.trim() ? 'env' : 'default';
   const parsed = ConfigSchema.safeParse(environment);
 
   if (!parsed.success) {

@@ -18,7 +18,10 @@ export function parsePositiveSafeIntegerEnvironmentVariable(
   value,
   defaultValue,
 ) {
-  if (value === undefined || value === '') {
+  if (
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
     return defaultValue;
   }
   if (!/^\d+$/.test(value)) {
@@ -117,7 +120,7 @@ export async function startPaseo({
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
   const log = openSync(logPath, 'a');
   const hostnames = process.env.PASEO_HOSTNAMES;
-  const hostnameArguments = hostnames ? ['--hostnames', hostnames] : [];
+  const hostnameArguments = hostnames?.trim() ? ['--hostnames', hostnames] : [];
   const environment = {
     ...isolated.environment,
     ...copyNamedEnvironment(process.env, environmentVariableNames),

@@ -460,10 +460,14 @@ const derivation = (
         ? 'feedback_reviewer_v1'
         : 'redacted_optional_text_v1',
       relativePath.endsWith('.reviewer_actor_id')
-        ? 'lookup_reviewer_actor'
+        ? 'join(requested_by_lead_task_id,tasks.id)->tasks.team_member_run_id'
         : 'capture_to_null',
       relativePath.endsWith('.reviewer_actor_id')
-        ? ['team_work_item_attempts.reviewer_member_id']
+        ? [
+            'team_work_item_attempts.requested_by_lead_task_id',
+            'tasks.id',
+            'tasks.team_member_run_id',
+          ]
         : relativePath.endsWith('.feedback_summary')
           ? ['team_work_item_attempts.feedback']
           : relativePath.endsWith('.result_summary')

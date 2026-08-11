@@ -55,6 +55,17 @@ function asText(value) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+function asRecordedValue(table, key, value) {
+  if (
+    key === 'sequence' &&
+    (table === 'team_messages' || table === 'run_events') &&
+    typeof value === 'string' &&
+    /^\d+$/u.test(value)
+  )
+    return Number(value);
+  return asText(value);
+}
+
 async function writeAtomicFile(path, value) {
   const tmp = `${path}.tmp-${process.pid}-${randomUUID()}`;
   await writeFile(tmp, value, { mode: 0o600 });
@@ -220,16 +231,22 @@ export async function recordProductLineageGolden({
       correlation.work_id,
       correlation.work_run_id,
     ];
+    const bindCount = table === 'work_runs' ? 8 : table === 'works' ? 7 : 6;
     const select = [...selected.map(quoteIdentifier), ...presence].join(',');
     queryNames[table] = `golden.${table}`;
     const result = await db.query(
       `SELECT ${select || '1'} FROM ${quoteIdentifier(table)} ${where}`,
-      args,
+      args.slice(0, bindCount),
     );
     queryRowCounts[table] = result.rows.length;
     // Convert postgres Date values before deterministic serialization.
     tables[table] = result.rows.map((row) =>
-      Object.fromEntries(Object.entries(row).map(([key, value]) => [key, asText(value)])),
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          asRecordedValue(table, key, value),
+        ]),
+      ),
     );
   }
 

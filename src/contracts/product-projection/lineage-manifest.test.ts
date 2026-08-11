@@ -172,6 +172,16 @@ describe('S8 product projection lineage', () => {
         formula: 'presence_to_redaction_status',
         inputs: ['team_work_item_attempts.result_summary'],
       },
+      'run_trace_response.success::edges[]{kind=feedback}.reviewer_actor_id': {
+        name: 'feedback_reviewer_v1',
+        formula:
+          'join(requested_by_lead_task_id,tasks.id)->tasks.team_member_run_id',
+        inputs: [
+          'team_work_item_attempts.requested_by_lead_task_id',
+          'tasks.id',
+          'tasks.team_member_run_id',
+        ],
+      },
     } as const;
 
     for (const [path, expected] of Object.entries(expectedDerivations)) {

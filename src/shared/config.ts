@@ -144,7 +144,7 @@ const ConfigSchema = z
     PASEO_EXECUTION_TIMEOUT_MS: z.preprocess(
       (value) =>
         typeof value === 'string' && value.trim() === '' ? undefined : value,
-      z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+      z.coerce.number().int().min(1_000).max(600_000).default(150_000),
     ),
     AGENT_SERVER_DISPATCHER_CONCURRENCY: z.coerce
       .number()

@@ -24,7 +24,7 @@ describe('loadConfig', () => {
         runtimeCellRoot: '/repo/.local/runtime-cells',
         workspaceTitle: 'Agent Server Baseline',
         connectTimeoutMs: 10_000,
-        executionTimeoutMs: 120_000,
+        executionTimeoutMs: 150_000,
         executionTimeoutSource: 'default',
       },
     });
@@ -51,7 +51,7 @@ describe('loadConfig', () => {
         }).paseo,
       ).toMatchObject({
         connectTimeoutMs: 10_000,
-        executionTimeoutMs: 120_000,
+        executionTimeoutMs: 150_000,
         executionTimeoutSource: 'default',
       });
     },

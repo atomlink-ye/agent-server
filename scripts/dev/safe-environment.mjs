@@ -51,7 +51,7 @@ export function copyNamedEnvironment(source, names) {
   const selected = {};
   for (const name of names) {
     const value = source[name];
-    if (value !== undefined) {
+    if (value !== undefined && value.trim() !== '') {
       selected[name] = value;
     }
   }

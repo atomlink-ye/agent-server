@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@getpaseo/client@0.1.110': 288399d52363af2388b53b726c2fdad42a69d955a0b8fb08aef9fb066506e0bf
+  '@getpaseo/client@0.1.110': f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e
   '@getpaseo/server@0.1.110': 54cdd6211afa5e95138006c8ea57dd65b13d0cd7533627c896ac48b0fea88236
 
 importers:
@@ -14,7 +14,7 @@ importers:
     dependencies:
       '@getpaseo/client':
         specifier: 0.1.110
-        version: 0.1.110(patch_hash=288399d52363af2388b53b726c2fdad42a69d955a0b8fb08aef9fb066506e0bf)
+        version: 0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)
       '@hono/node-server':
         specifier: 2.0.11
         version: 2.0.11(hono@4.12.31)
@@ -3103,7 +3103,7 @@ snapshots:
   '@getpaseo/cli@0.1.110(@codemirror/autocomplete@6.20.3)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6)(@lezer/lr@1.4.10)':
     dependencies:
       '@clack/prompts': 1.7.0
-      '@getpaseo/client': 0.1.110(patch_hash=288399d52363af2388b53b726c2fdad42a69d955a0b8fb08aef9fb066506e0bf)
+      '@getpaseo/client': 0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)
       '@getpaseo/protocol': 0.1.110
       '@getpaseo/server': 0.1.110(patch_hash=54cdd6211afa5e95138006c8ea57dd65b13d0cd7533627c896ac48b0fea88236)(@codemirror/autocomplete@6.20.3)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6)(@lezer/lr@1.4.10)
       chalk: 5.6.2
@@ -3125,7 +3125,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@getpaseo/client@0.1.110(patch_hash=288399d52363af2388b53b726c2fdad42a69d955a0b8fb08aef9fb066506e0bf)':
+  '@getpaseo/client@0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)':
     dependencies:
       '@getpaseo/protocol': 0.1.110
       '@getpaseo/relay': 0.1.110
@@ -3179,7 +3179,7 @@ snapshots:
       '@agentclientprotocol/sdk': 0.17.1(zod@4.4.3)
       '@anthropic-ai/claude-agent-sdk': 0.3.216(@anthropic-ai/sdk@0.104.2(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@anthropic-ai/sdk': 0.104.2(zod@4.4.3)
-      '@getpaseo/client': 0.1.110(patch_hash=288399d52363af2388b53b726c2fdad42a69d955a0b8fb08aef9fb066506e0bf)
+      '@getpaseo/client': 0.1.110(patch_hash=f375cd7e38e4811684ebc6945ce99b85aed00b625b30bb50956a79d609a5774e)
       '@getpaseo/highlight': 0.1.110(@codemirror/autocomplete@6.20.3)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6)(@lezer/lr@1.4.10)
       '@getpaseo/protocol': 0.1.110
       '@getpaseo/relay': 0.1.110

@@ -92,8 +92,11 @@ export const testConfig = {
     provider: 'opencode',
     workspaceTitle: 'Agent Server Test',
     connectTimeoutMs: 1_000,
+    connectTimeoutSource: 'default',
     executionTimeoutMs: 1_000,
     executionTimeoutSource: 'default',
+    sessionRpcTimeoutMs: 2_000,
+    sessionRpcTimeoutSource: 'default',
   },
 } as const;
 

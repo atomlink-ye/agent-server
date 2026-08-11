@@ -42,7 +42,12 @@ services:
       PASEO_MODEL: ${PASEO_MODEL:-opencode-go/deepseek-v4-flash}
       PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
       PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:-}
-      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:-120000}
+      # A coarse upper bound while the daemon TCP connection remains alive
+      # and a request is stuck; it is not latency tuning or a death detector.
+      # A disconnected daemon immediately rejects pending waiters; this does
+      # not distinguish a busy request from a deadlock.
+      # Keep it at least twice the 150s execution timeout.
+      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:-300000}
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
@@ -89,6 +94,7 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+      start_period: 45m
 
   web:
     build:

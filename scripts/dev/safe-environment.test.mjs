@@ -29,9 +29,19 @@ describe('runtime environment isolation', () => {
   it('copies only explicitly named application configuration', () => {
     expect(
       copyNamedEnvironment(
-        { PORT: '4000', PASEO_MODEL: 'opencode/free', TOKEN: 'secret' },
-        ['PORT', 'PASEO_MODEL'],
+        {
+          PORT: '4000',
+          PASEO_MODEL: 'opencode/free',
+          EMPTY: '',
+          WHITESPACE: ' \t\n',
+          TOKEN: 'secret',
+        },
+        ['PORT', 'PASEO_MODEL', 'EMPTY', 'WHITESPACE', 'TOKEN'],
       ),
-    ).toEqual({ PORT: '4000', PASEO_MODEL: 'opencode/free' });
+    ).toEqual({
+      PORT: '4000',
+      PASEO_MODEL: 'opencode/free',
+      TOKEN: 'secret',
+    });
   });
 });

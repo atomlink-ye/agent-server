@@ -60,6 +60,9 @@ if (command.length === 0) {
         ),
       );
       if (currentStamps.some((stamp) => stamp !== expectedStamp)) {
+        process.stderr.write(
+          'Restoring node_modules from the image; this may take a while...\n',
+        );
         await clearAndRestore(workspaceNodeModules, imageNodeModules);
         await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
         await writeFile(stampPath(workspaceNodeModules), expectedStamp, 'utf8');

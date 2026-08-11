@@ -1,9 +1,14 @@
 import { createServer } from 'node:http';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyDaemonStartupFailure,
   parsePositiveSafeIntegerEnvironmentVariable,
+  tailFile,
   waitForHttp,
 } from './paseo-process.mjs';
 import { createApplicationEnvironment } from './with-paseo-environment.mjs';
@@ -41,6 +46,32 @@ describe('parsePositiveSafeIntegerEnvironmentVariable', () => {
     expect(() =>
       parsePositiveSafeIntegerEnvironmentVariable('TIMEOUT', value, 123),
     ).toThrow('TIMEOUT must be a positive decimal safe integer.');
+  });
+});
+
+describe('daemon startup diagnostics', () => {
+  it('classifies an exited daemon before process cleanup', () => {
+    expect(classifyDaemonStartupFailure({ exitCode: 17 })).toBe(
+      'daemon exited with exitCode=17',
+    );
+    expect(classifyDaemonStartupFailure({ exitCode: null })).toBe(
+      'daemon remained running but unhealthy',
+    );
+  });
+
+  it('returns the last requested log lines and an unavailable placeholder', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'paseo-daemon-test-'));
+    const path = join(directory, 'daemon.log');
+    try {
+      await writeFile(path, 'one\ntwo\nthree\nfour\n');
+      await expect(tailFile(path, 2)).resolves.toBe('three\nfour');
+      await rm(path);
+      await expect(tailFile(path, 2)).resolves.toContain(
+        '[daemon log unavailable:',
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

@@ -140,6 +140,7 @@ async function verifyHashes(sample, manifest) {
     throw new Error('manifest_db_file_not_hashed');
   if (!isObject(manifest.file_sha256)) throw new Error('manifest_file_sha256_missing');
   const sumPaths = new Set(lines.map((line) => line.replace(/^[a-f0-9]{64}  /u, '')));
+  if (sumPaths.size !== lines.length) throw new Error('sha256sums_duplicate_path');
   const requiredSumPaths = new Set(['manifest.json', ...(manifest.api_files ?? []), ...(manifest.db_files ?? [])]);
   if (sumPaths.size !== requiredSumPaths.size || [...requiredSumPaths].some((path) => !sumPaths.has(path)))
     throw new Error('sha256sums_file_set_invalid');
@@ -166,6 +167,9 @@ async function main() {
   const sample = resolve(samplePath);
   let manifest;
   try {
+    const sampleStat = await lstat(sample);
+    if (!sampleStat.isDirectory() || sampleStat.isSymbolicLink())
+      throw new Error('golden_sample_not_real_directory');
     manifest = await readJson(join(sample, 'manifest.json'));
     if (!isObject(manifest) || manifest.format_version !== 'product-lineage-golden-v1')
       throw new Error('manifest_format_invalid');

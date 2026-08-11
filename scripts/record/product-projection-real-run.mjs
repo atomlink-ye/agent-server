@@ -97,6 +97,8 @@ function scenarioInstructions(scenario, role) {
       return 'Use only canonical Team tools. Submit marker REVIEW_REJECT with exact blocking reason "worker attempt 1 omits ACCEPTANCE_SENTINEL". Never accept Work and never repeat a successful submit.';
     if (scenario === 'parallel-success')
       return `HARD GATE: Pure prose is invalid. You are ${role}; use only canonical Team tools. Do not end until the real canonical team_work_submit call returns a successful receipt; text does not substitute for that tool call. Complete the assigned Work, call team_work_submit exactly once successfully, and never repeat a successful submit. Scenario is ${scenario}.`;
+    if (scenario === 'lead-never-accept')
+      return `HARD GATE: Pure prose is invalid. You are ${role}; use only canonical Team tools. Complete the assigned Work, call team_work_submit exactly once, and do not end until that real call returns a successful receipt. Never repeat a successful submit.`;
     return `You are ${role}. Use only canonical Team tools. Complete the assigned Work and submit a concise bounded result. Scenario is ${scenario}.`;
   }
   if (scenario === 'parallel-success')
@@ -171,8 +173,21 @@ async function main() {
     ready.checks.some((check) => check.status !== 'ready')
   )
     fail('provider_binding_health_not_ready');
+  const packageSuffix =
+    mode === 'state-canary' ? `-${randomUUID().slice(0, 8)}` : '';
   const definitionPath = resolve(DEFINITION_DIR, `${scenario}.team.yaml`);
-  const template = await readFile(definitionPath, 'utf8');
+  let template = await readFile(definitionPath, 'utf8');
+  if (mode === 'state-canary') {
+    template = template
+      .replace(
+        'name: product-projection-lead-never-accept-v1',
+        `name: product-projection-state-honesty${packageSuffix}`,
+      )
+      .replace(
+        /\n    - name: projection-observer\n      agentVersionId: 00000000-0000-0000-0000-000000000000/u,
+        '',
+      );
+  }
   const environment = await http(url, token, '/api/v1/environments:import', {
     method: 'POST',
     body: { source: environmentYaml() },
@@ -184,13 +199,13 @@ async function main() {
     { method: 'POST', body: {} },
   );
   const names =
-    scenario === 'parallel-success'
-      ? ['projection-worker-a', 'projection-worker-b']
-      : scenario === 'rework-once'
-        ? ['projection-worker', 'projection-reviewer']
-        : ['projection-worker', 'projection-observer'];
-  const packageSuffix =
-    mode === 'state-canary' ? `-${randomUUID().slice(0, 8)}` : '';
+    mode === 'state-canary'
+      ? ['projection-worker']
+      : scenario === 'parallel-success'
+        ? ['projection-worker-a', 'projection-worker-b']
+        : scenario === 'rework-once'
+          ? ['projection-worker', 'projection-reviewer']
+          : ['projection-worker', 'projection-observer'];
   const versions = { members: [] };
   const lead = await http(url, token, '/api/v1/agents:import', {
     method: 'POST',

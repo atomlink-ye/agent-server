@@ -89,7 +89,7 @@ export interface AppDependencies {
   readonly managedMemory?: ManagedMemory;
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
-  readonly workIdentity?: Pick<WorkIdentityApi, 'createWork'>;
+  readonly workIdentity?: Pick<WorkIdentityApi, 'createWork' | 'listWorks' | 'listWorkRuns'>;
   readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
   readonly productProjection?: ProductProjectionApi;
 }

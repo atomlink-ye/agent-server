@@ -9,6 +9,10 @@ import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
 import { safeText } from './safe-team-text.js';
 
 export interface AgenticTeamProject {
+  readonly stuck: boolean;
+  readonly decisionCapture:
+    | { readonly status: 'not_captured' }
+    | { readonly status: 'reported'; readonly decisions: readonly never[] };
   readonly project: {
     readonly rootTaskId: string;
     readonly teamRunId: string;
@@ -208,7 +212,14 @@ export class ProjectAgenticTeam {
       .every(
         (member) => member.status === 'idle' || member.status === 'stopped',
       );
+    const stuck =
+      team.status === 'active' &&
+      noActiveAttempts &&
+      allMembersIdle &&
+      !allWorkAccepted;
     return {
+      stuck,
+      decisionCapture: { status: 'not_captured' },
       project: {
         rootTaskId: team.rootTaskId,
         teamRunId: team.id,

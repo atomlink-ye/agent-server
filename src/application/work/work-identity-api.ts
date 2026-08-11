@@ -6,7 +6,11 @@ import type {
   BindRootTaskCasInput,
   WorkIdentityRepository,
   WorkIdentityOwnerScope,
+  WorkIdentityListQuery,
+  WorkListPage,
+  WorkRunListPage,
 } from '../ports/work-identity-repository.js';
+import { InvalidWorkListCursorError } from '../ports/work-identity-repository.js';
 import { createWork, WorkNotFoundError } from '../../domain/work/work.js';
 import type { Work } from '../../domain/work/work.js';
 import type { BoundWorkRun, WorkRun } from '../../domain/work/work-run.js';
@@ -44,6 +48,8 @@ export interface UpdateWorkDefinitionVersionInput {
   readonly workId: string;
   readonly definitionVersionId: string;
 }
+export interface ListWorksInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; }
+export interface ListWorkRunsInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; readonly workId: string; }
 
 export class WorkIdentityApi {
   private readonly now: () => Date;
@@ -207,6 +213,22 @@ export class WorkIdentityApi {
     return this.repository.appendResolvedManifest(input);
   }
 
+  public async listWorks(input: ListWorksInput): Promise<WorkListPage> {
+    this.assertAccessOwner(input.owner, input.accessContext);
+    if (!this.repository.listWorks) throw new Error('Work listing is unavailable.');
+    return this.repository.listWorks(input.owner, { limit: input.limit, cursor: input.cursor });
+  }
+  public async listWorkRuns(input: ListWorkRunsInput): Promise<WorkRunListPage> {
+    this.assertAccessOwner(input.owner, input.accessContext);
+    if (!this.repository.listWorkRuns) throw new Error('Work run listing is unavailable.');
+    return this.repository.listWorkRuns(input.owner, input.workId, { limit: input.limit, cursor: input.cursor });
+  }
+  private assertAccessOwner(owner: WorkIdentityOwnerScope, accessContext: AccessContext): void {
+    const accessOwner = WorkIdentityApi.ownerFromAccessContext(accessContext);
+    if (owner.tenantId !== accessOwner.tenantId || owner.workspaceId !== accessOwner.workspaceId)
+      throw new WorkDefinitionValidationError();
+  }
+
   /** Converts an authenticated service-account context to the product owner scope. */
   public static ownerFromAccessContext(
     accessContext: AccessContext,
@@ -274,3 +296,5 @@ export class InvalidWorkRunTriggerError extends Error {
     this.name = 'InvalidWorkRunTriggerError';
   }
 }
+
+export { InvalidWorkListCursorError } from '../ports/work-identity-repository.js';

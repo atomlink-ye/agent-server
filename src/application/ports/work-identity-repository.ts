@@ -33,6 +33,17 @@ export interface FindWorkRunByIdempotencyKeyInput {
   readonly idempotencyKey: string;
 }
 
+export interface WorkIdentityListQuery {
+  readonly limit: number;
+  readonly cursor: string | null;
+}
+export interface WorkListPage { readonly items: readonly Work[]; readonly nextCursor: string | null; }
+export interface WorkRunListPage { readonly items: readonly WorkRun[]; readonly nextCursor: string | null; }
+export class InvalidWorkListCursorError extends Error {
+  public readonly code = 'invalid_cursor';
+  public constructor() { super('The requested Work list cursor is invalid.'); this.name = 'InvalidWorkListCursorError'; }
+}
+
 export interface BindRootTaskCasInput {
   readonly workRunId: string;
   readonly rootTaskId: string;
@@ -71,10 +82,8 @@ export interface WorkIdentityRepository {
     workRunId: string,
     owner: WorkIdentityOwnerScope,
   ): Promise<ResolvedResourceManifest | null>;
-  listWorkRuns?(
-    owner: WorkIdentityOwnerScope,
-    options?: { readonly includePending?: boolean },
-  ): Promise<readonly WorkRun[]>;
+  listWorks?(owner: WorkIdentityOwnerScope, query: WorkIdentityListQuery): Promise<WorkListPage>;
+  listWorkRuns?(owner: WorkIdentityOwnerScope, workId: string, query: WorkIdentityListQuery): Promise<WorkRunListPage>;
 }
 
 export type WorkIdentityQuery = Pick<

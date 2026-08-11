@@ -66,25 +66,24 @@ export class PostgresRunEventRepository implements RunEventRepository {
     payload: RunEvent['payload'],
   ) {
     const boundedPayload = boundedRunEventPayload(payload);
-    const r = await this.db.query<any>(
-      `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 RETURNING id,run_id,sequence,type,payload,created_at`,
-      [
-        randomUUID(),
-        runId,
-        type,
-        JSON.stringify(boundedPayload),
-        new Date().toISOString(),
-      ],
-    );
-    const x = r.rows![0]!;
-    return {
-      id: x.id,
-      runId: x.run_id,
-      sequence: Number(x.sequence),
-      type: x.type,
-      payload: boundedRunEventPayload(x.payload),
-      createdAt: new Date(x.created_at).toISOString(),
-    };
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    for (;;) {
+      const r = await this.db.query<any>(
+        `INSERT INTO run_events(id,run_id,sequence,type,payload,created_at) SELECT $1,$2,COALESCE(MAX(sequence),0)+1,$3,$4::jsonb,$5 FROM run_events WHERE run_id=$2 ON CONFLICT (run_id,sequence) DO NOTHING RETURNING id,run_id,sequence,type,payload,created_at`,
+        [id, runId, type, JSON.stringify(boundedPayload), createdAt],
+      );
+      const x = r.rows?.[0];
+      if (!x) continue;
+      return {
+        id: x.id,
+        runId: x.run_id,
+        sequence: Number(x.sequence),
+        type: x.type,
+        payload: boundedRunEventPayload(x.payload),
+        createdAt: new Date(x.created_at).toISOString(),
+      };
+    }
   }
   async list(runId: string, after: number, limit = 100) {
     const r = await this.db.query<any>(

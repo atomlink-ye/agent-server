@@ -395,6 +395,7 @@ export async function createService(
         ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
         connectTimeoutMs: config.paseo.connectTimeoutMs,
         executionTimeoutMs: config.paseo.executionTimeoutMs,
+        executionTimeoutSource: config.paseo.executionTimeoutSource,
       },
       logger,
     );

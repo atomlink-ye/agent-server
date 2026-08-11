@@ -27,6 +27,8 @@ const startInput = {
 };
 const strictCreateInput = z.strictObject(createInput);
 const strictStartInput = z.strictObject(startInput);
+type CreateInput = z.infer<typeof strictCreateInput>;
+type StartInput = z.infer<typeof strictStartInput>;
 
 export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
@@ -43,7 +45,7 @@ export function registerProductWorkMcpTools(input: {
         description: 'Create a durable product Work.',
         inputSchema: strictCreateInput,
       },
-      async (args) => {
+      async (args: CreateInput) => {
         const current = grants.get(grant.grantId);
         if (!current || !grants.isToolAllowed(current.grantId, PRODUCT_WORK_CREATE_TOOL_REF))
           return { isError: true, content: [{ type: 'text', text: 'not_found' }] };
@@ -75,7 +77,7 @@ export function registerProductWorkMcpTools(input: {
         description: 'Start a durable product WorkRun.',
         inputSchema: strictStartInput,
       },
-      async (args) => {
+      async (args: StartInput) => {
         const current = grants.get(grant.grantId);
         if (!current || !grants.isToolAllowed(current.grantId, PRODUCT_WORK_RUN_START_TOOL_REF))
           return { isError: true, content: [{ type: 'text', text: 'not_found' }] };

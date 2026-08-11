@@ -25,6 +25,7 @@ describe('loadConfig', () => {
         workspaceTitle: 'Agent Server Baseline',
         connectTimeoutMs: 10_000,
         executionTimeoutMs: 120_000,
+        executionTimeoutSource: 'default',
       },
     });
   });

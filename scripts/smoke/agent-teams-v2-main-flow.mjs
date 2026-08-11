@@ -2519,6 +2519,78 @@ async function runProductWorkDurableIdentityFlow({
     raw_technical_ids_absent: true,
     task_id_only_in_source_refs: true,
   });
+  const siblingWorks = [];
+  for (const ordinal of [2, 3]) {
+    const created = await request('/api/v1/works', {
+      method: 'POST',
+      status: 201,
+      technicalIdempotency: false,
+      body: {
+        definition_id: definitionId,
+        definition_version_id: definitionVersionId,
+        title: `Durable identity enumeration ${ordinal} ${suffix}`,
+      },
+    });
+    siblingWorks.push(created.work);
+  }
+  const expectedWorkIds = (
+    await db.query(
+      `SELECT id FROM works WHERE tenant_id=$1 AND workspace_id=$2 AND archived_at IS NULL ORDER BY created_at ASC,id ASC`,
+      [tenantId, workspaceId],
+    )
+  ).rows.map((row) => row.id);
+  const workPageOne = await request('/api/v1/works?limit=2', {
+    technicalIdempotency: false,
+  });
+  assert(workPageOne.next_cursor, 'product_work_first_page_cursor_missing');
+  const workPageTwo = await request(
+    `/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`,
+    { technicalIdempotency: false },
+  );
+  const enumeratedWorkIds = [
+    ...workPageOne.works.map((item) => item.id),
+    ...workPageTwo.works.map((item) => item.id),
+  ];
+  assert(JSON.stringify(enumeratedWorkIds) === JSON.stringify(expectedWorkIds), 'product_work_two_page_id_set_mismatch');
+  assert(new Set(enumeratedWorkIds).size === enumeratedWorkIds.length, 'product_work_two_page_duplicate_id');
+  assert(workPageTwo.next_cursor === null, 'product_work_unexpected_third_page');
+  const expectedRunIds = (
+    await db.query(
+      `SELECT id FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3 AND (root_task_id IS NOT NULL OR expires_at > now()) ORDER BY created_at ASC,id ASC`,
+      [tenantId, workspaceId, work.id],
+    )
+  ).rows.map((row) => row.id);
+  const runPageOne = await request(`/api/v1/works/${work.id}/runs?limit=1`, { technicalIdempotency: false });
+  assert(runPageOne.next_cursor, 'product_work_run_first_page_cursor_missing');
+  const runPageTwo = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(runPageOne.next_cursor)}`, { technicalIdempotency: false });
+  const enumeratedRunIds = [
+    ...runPageOne.work_runs.map((item) => item.id),
+    ...runPageTwo.work_runs.map((item) => item.id),
+  ];
+  assert(JSON.stringify(enumeratedRunIds) === JSON.stringify(expectedRunIds), 'product_work_run_two_page_id_set_mismatch');
+  assert(new Set(enumeratedRunIds).size === enumeratedRunIds.length, 'product_work_run_two_page_duplicate_id');
+  assert(runPageTwo.next_cursor === null, 'product_work_run_unexpected_third_page');
+  const foreignWorks = await request('/api/v1/works?limit=100', { authToken: foreignToken, technicalIdempotency: false });
+  const foreignRuns = await request(`/api/v1/works/${work.id}/runs?limit=100`, { authToken: foreignToken, technicalIdempotency: false });
+  assert(foreignWorks.works.length === 0 && foreignRuns.work_runs.length === 0, 'product_work_owner_scope_leak');
+  const foreignCursor = await request(`/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { authToken: foreignToken, status: 400, technicalIdempotency: false });
+  assert(foreignCursor.error?.code === 'invalid_cursor', 'product_work_cursor_owner_not_bound');
+  const wrongKindCursor = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { status: 400, technicalIdempotency: false });
+  assert(wrongKindCursor.error?.code === 'invalid_cursor', 'product_work_cursor_kind_not_bound');
+  marker('PRODUCT_WORK_ENUMERATION_PASS', {
+    owner_work_count: expectedWorkIds.length,
+    work_page_ids: [workPageOne.works.map((item) => item.id), workPageTwo.works.map((item) => item.id)],
+    work_ids_exact_match: true,
+    work_ids_unique: true,
+    owner_run_count: expectedRunIds.length,
+    run_page_ids: [runPageOne.work_runs.map((item) => item.id), runPageTwo.work_runs.map((item) => item.id)],
+    run_ids_exact_match: true,
+    run_ids_unique: true,
+    foreign_work_count: foreignWorks.works.length,
+    foreign_run_count: foreignRuns.work_runs.length,
+    cursor_owner_bound: true,
+    cursor_kind_bound: true,
+  });
   marker('PRODUCT_WORK_EXPIRED_LIST_CAPABILITY_DEFERRED', {
     capability_deferred: true,
     reason: 'no_public_expired_work_run_list_entry_in_this_slice',

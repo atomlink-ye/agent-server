@@ -14,6 +14,7 @@ services:
       retries: 30
 
   agent-server:
+    image: agent-server-runner:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -39,6 +40,9 @@ services:
       SERVICE_NAME: agent-server
       OPENCODE_GO_API_KEY:
       PASEO_MODEL: ${PASEO_MODEL:-opencode-go/deepseek-v4-flash}
+      PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
+      PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:-}
+      PASEO_SESSION_RPC_TIMEOUT_MS:
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
@@ -60,6 +64,11 @@ services:
       # The Paseo daemon runs inside this container, so exporting this on the
       # host does nothing unless compose forwards it. Off unless set to '1'.
       PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:-}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:-}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:-}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:-}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:-}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-workspace_main}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace

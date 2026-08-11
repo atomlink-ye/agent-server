@@ -102,7 +102,7 @@ export function mapWorkProjectionFacts(
     })),
     messages: facts.messages.map((message) => ({
       id: message.id,
-      sender_id: message.senderId,
+      sender_id: requireSenderId(message.id, message.senderId),
       recipient_id: message.recipientId,
       sender_name: safeText(message.senderName),
       recipient_name: safeText(message.recipientName),
@@ -112,4 +112,9 @@ export function mapWorkProjectionFacts(
       source_refs: refs(message.sourceRefs),
     })),
   });
+}
+
+function requireSenderId(messageId: string, senderId: string | null): string {
+  if (senderId === null) throw new Error(`product_message_sender_id_missing:${messageId}`);
+  return senderId;
 }

@@ -106,6 +106,12 @@ export async function startPaseo({
       process.env.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS,
       undefined,
     );
+  const openCodeProviderListTimeoutMs =
+    parsePositiveSafeIntegerEnvironmentVariable(
+      'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+      process.env.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS,
+      undefined,
+    );
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
@@ -132,6 +138,13 @@ export async function startPaseo({
       : {
           PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: String(
             openCodeAppAgentsTimeoutMs,
+          ),
+        }),
+    ...(openCodeProviderListTimeoutMs === undefined
+      ? {}
+      : {
+          PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: String(
+            openCodeProviderListTimeoutMs,
           ),
         }),
     PWD: repositoryRoot,

@@ -8,10 +8,10 @@ import {
   readdir,
   rm,
   rmdir,
-  setTimeout as delay,
   writeFile,
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { computeDependencyStamp } from './dependency-stamp.mjs';
 

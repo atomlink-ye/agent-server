@@ -18,7 +18,7 @@ export function parsePositiveSafeIntegerEnvironmentVariable(
   value,
   defaultValue,
 ) {
-  if (value === undefined) {
+  if (value === undefined || value === '') {
     return defaultValue;
   }
   if (!/^\d+$/.test(value)) {

@@ -49,7 +49,7 @@ done
 # image tag is pinned in compose.yaml instead, so a distinct project name no
 # longer misses the prebuilt image baked into the sandbox template.
 
-compose=(docker compose)
+compose=("$PWD/scripts/dev/docker-compose")
 existing_postgres_test_id=''
 started_postgres_test=0
 if ((postgres)); then

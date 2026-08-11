@@ -3,6 +3,7 @@ import { chmod, mkdir, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register as registerTsx } from 'tsx/esm/api';
+import { recordProductLineageGolden } from './product-lineage-golden-recorder.mjs';
 
 registerTsx();
 
@@ -2358,6 +2359,36 @@ async function runProductWorkDurableIdentityFlow({
     provider_run_sha256: hash(providerRun.id),
     status: providerRun.status,
   });
+  if (process.env.PRODUCT_LINEAGE_GOLDEN_OUTPUT && !scriptedRuntime) {
+    const recording = await recordProductLineageGolden({
+      db,
+      rootTaskId: firstRootTaskId,
+      teamRunId,
+      providerRun: 'real',
+      serviceRevision:
+        process.env.PRODUCT_LINEAGE_SOURCE_REVISION ??
+        process.env.GIT_SHA ??
+        serviceRevision ??
+        '',
+      productWorkRunRaw,
+      productTraceRaw,
+      correlation: {
+        ...correlation,
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        principal_type: 'service_account',
+        principal_id: principalId,
+      },
+      sourceCounts,
+      providerEvidence: {
+        provider,
+        model,
+        root_run_sha256: hash(rootRunRow.id),
+        provider_run_sha256: hash(providerRun.id),
+      },
+    });
+    marker('PRODUCT_LINEAGE_GOLDEN_RECORDED', recording);
+  }
   const { PostgresWorkIdentityRepository } =
     await import('../../src/infrastructure/postgres/postgres-work-identity-repository.ts');
   const repository = new PostgresWorkIdentityRepository(db);

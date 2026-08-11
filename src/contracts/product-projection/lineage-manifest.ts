@@ -419,7 +419,13 @@ const derivation = (
     return rule(
       'redaction_capture_status_v1',
       'presence_to_redaction_status',
-      [],
+      relativePath.endsWith('.feedback_capture_status')
+        ? ['team_work_item_attempts.feedback']
+        : relativePath.endsWith('.result_capture_status')
+          ? relativePath.startsWith('runs[].')
+            ? ['runs.result']
+            : ['team_work_item_attempts.result_summary']
+          : ['run_events.payload'],
     );
   if (variant === 'not_found' && relativePath.includes('[]'))
     return rule(
@@ -458,13 +464,31 @@ const derivation = (
         : 'capture_to_null',
       relativePath.endsWith('.reviewer_actor_id')
         ? ['team_work_item_attempts.reviewer_member_id']
-        : ['redaction_status'],
+        : relativePath.endsWith('.feedback_summary')
+          ? ['team_work_item_attempts.feedback']
+          : relativePath.endsWith('.result_summary')
+            ? ['team_work_item_attempts.result_summary']
+            : ['team_messages.body'],
     );
   if (relativePath.endsWith('.summary_capture_status'))
     return rule(
       'summary_capture_status_v1',
       'capture_status(redacted_or_absent)',
-      [],
+      ['team_messages.body'],
+    );
+  if (relativePath === 'runs[].provider' || relativePath === 'runs[].model') {
+    const field = relativePath.slice('runs[].'.length);
+    return rule(
+      'run_runtime_field_v1',
+      `json_extract(runtime, '$.${field}')`,
+      ['runs.runtime'],
+    );
+  }
+  if (relativePath === 'runs[].error_code')
+    return rule(
+      'run_error_code_v1',
+      "json_extract(error, '$.code')",
+      ['runs.error'],
     );
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind && (path.endsWith('.kind') || path.endsWith('.guarantee')))

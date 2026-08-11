@@ -128,4 +128,65 @@ describe('S8 product projection lineage', () => {
       name: 'not_found_empty_collection_v1',
     });
   });
+
+  it('records derived fields against their durable JSON or text inputs', () => {
+    const manifest = PRODUCT_PROJECTION_LINEAGE_MANIFEST;
+    const expectedDerivations = {
+      'run_trace_response.success::runs[].provider': {
+        name: 'run_runtime_field_v1',
+        formula: "json_extract(runtime, '$.provider')",
+        inputs: ['runs.runtime'],
+      },
+      'run_trace_response.success::runs[].model': {
+        name: 'run_runtime_field_v1',
+        formula: "json_extract(runtime, '$.model')",
+        inputs: ['runs.runtime'],
+      },
+      'run_trace_response.success::runs[].error_code': {
+        name: 'run_error_code_v1',
+        formula: "json_extract(error, '$.code')",
+        inputs: ['runs.error'],
+      },
+      'run_trace_response.success::runs[].result_capture_status': {
+        name: 'redaction_capture_status_v1',
+        formula: 'presence_to_redaction_status',
+        inputs: ['runs.result'],
+      },
+      'run_trace_response.success::events[].payload_capture_status': {
+        name: 'redaction_capture_status_v1',
+        formula: 'presence_to_redaction_status',
+        inputs: ['run_events.payload'],
+      },
+      'work_run_response.success::messages[].summary_capture_status': {
+        name: 'summary_capture_status_v1',
+        formula: 'capture_status(redacted_or_absent)',
+        inputs: ['team_messages.body'],
+      },
+      'work_run_response.success::work_items[].attempts[].feedback_capture_status': {
+        name: 'redaction_capture_status_v1',
+        formula: 'presence_to_redaction_status',
+        inputs: ['team_work_item_attempts.feedback'],
+      },
+      'work_run_response.success::work_items[].attempts[].result_capture_status': {
+        name: 'redaction_capture_status_v1',
+        formula: 'presence_to_redaction_status',
+        inputs: ['team_work_item_attempts.result_summary'],
+      },
+    } as const;
+
+    for (const [path, expected] of Object.entries(expectedDerivations)) {
+      expect(manifest[path as keyof typeof manifest]).toMatchObject({
+        kind: 'derivation',
+        ...expected,
+      });
+    }
+
+    for (const [path, value] of Object.entries(manifest)) {
+      if (value.kind === 'derivation' && !value.formula.startsWith('constant('))
+        expect(value.inputs, path).not.toHaveLength(0);
+    }
+
+    for (const path of Object.keys(expectedDerivations))
+      expect(manifest[path as keyof typeof manifest].kind).toBe('derivation');
+  });
 });

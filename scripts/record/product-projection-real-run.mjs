@@ -89,13 +89,13 @@ function agentYaml(name, instructions, packageName = name) {
 function environmentYaml() {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
-function scenarioInstructions(scenario, role) {
+function scenarioInstructions(scenario, role, mode) {
   if (role !== 'lead') {
     if (scenario === 'rework-once' && role === 'projection-worker')
       return 'Use only canonical Team tools. On attempt 1, submit exactly marker WORKER_SUBMIT_V1 and omit ACCEPTANCE_SENTINEL. After request_changes feedback, submit exactly WORKER_SUBMIT_V2 ACCEPTANCE_SENTINEL. Never repeat a successful submit.';
     if (scenario === 'rework-once' && role === 'projection-reviewer')
       return 'Use only canonical Team tools. Submit marker REVIEW_REJECT with exact blocking reason "worker attempt 1 omits ACCEPTANCE_SENTINEL". Never accept Work and never repeat a successful submit.';
-    if (scenario === 'parallel-success')
+    if (scenario === 'parallel-success' || mode === 'state-canary')
       return `HARD GATE: Pure prose is invalid. You are ${role}; use only canonical Team tools. Do not end until the real canonical team_work_submit call returns a successful receipt; text does not substitute for that tool call. Complete the assigned Work, call team_work_submit exactly once successfully, and never repeat a successful submit. Scenario is ${scenario}.`;
     if (scenario === 'lead-never-accept')
       return `HARD GATE: Pure prose is invalid. You are ${role}; use only canonical Team tools. Complete the assigned Work, call team_work_submit exactly once, and do not end until that real call returns a successful receipt. Never repeat a successful submit.`;
@@ -105,6 +105,8 @@ function scenarioInstructions(scenario, role) {
     return 'Act as lead using only canonical Team tools. HARD CARDINALITY GATE: the final board must contain exactly two Work items total, never three. Inspect the initially empty board, call team_work_create exactly twice total—once for projection-worker-a and once for projection-worker-b—and never call team_work_create again after those two receipts. Make the two Work items independent, with descriptions that each require the assignee to make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid and text never substitutes for the call. Wake both, accept both completed submissions, verify the board still contains exactly two accepted Work items, then finish exactly once. Do not use provider subagents or shell.';
   if (scenario === 'rework-once')
     return 'Act as lead using only canonical Team tools. On the empty board create exactly two independent Work items: work-1 assigned to projection-worker requiring ACCEPTANCE_SENTINEL, and work-2 assigned to projection-reviewer requiring review of that exact sentinel rule. After both first submissions, accept reviewer work, then request changes exactly once on worker work with feedback "worker attempt 1 omits ACCEPTANCE_SENTINEL". Accept worker work only when attempt 2 contains WORKER_SUBMIT_V2 ACCEPTANCE_SENTINEL, then finish exactly once. Never repeat a successful mutation.';
+  if (mode === 'state-canary')
+    return 'Act as lead using only canonical Team tools. HARD CARDINALITY GATE: create exactly two independent Work items total, one assigned to projection-worker-a and one to projection-worker-b. Each description must require the assignee to make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid. Wake both members. Accept no submission, request no changes, cancel nothing, and never call team_finish. After both members have submitted, make no further mutation and leave the Team active.';
   return 'Act as lead using only canonical Team tools. Create one Work for worker, accept no submission, and leave the run waiting or active after the worker has submitted. Never finish or accept.';
 }
 function resolveDefinition(source, environmentVersionId, versions) {
@@ -175,18 +177,16 @@ async function main() {
     fail('provider_binding_health_not_ready');
   const packageSuffix =
     mode === 'state-canary' ? `-${randomUUID().slice(0, 8)}` : '';
-  const definitionPath = resolve(DEFINITION_DIR, `${scenario}.team.yaml`);
+  const definitionPath = resolve(
+    DEFINITION_DIR,
+    `${mode === 'state-canary' ? 'parallel-success' : scenario}.team.yaml`,
+  );
   let template = await readFile(definitionPath, 'utf8');
   if (mode === 'state-canary') {
-    template = template
-      .replace(
-        'name: product-projection-lead-never-accept-v1',
-        `name: product-projection-state-honesty${packageSuffix}`,
-      )
-      .replace(
-        /\n    - name: projection-observer\n      agentVersionId: 00000000-0000-0000-0000-000000000000/u,
-        '',
-      );
+    template = template.replace(
+      'name: product-projection-parallel-success-v1',
+      `name: product-projection-state-honesty${packageSuffix}`,
+    );
   }
   const environment = await http(url, token, '/api/v1/environments:import', {
     method: 'POST',
@@ -200,7 +200,7 @@ async function main() {
   );
   const names =
     mode === 'state-canary'
-      ? ['projection-worker']
+      ? ['projection-worker-a', 'projection-worker-b']
       : scenario === 'parallel-success'
         ? ['projection-worker-a', 'projection-worker-b']
         : scenario === 'rework-once'
@@ -212,7 +212,7 @@ async function main() {
     body: {
       source: agentYaml(
         'projection-lead',
-        scenarioInstructions(scenario, 'lead'),
+        scenarioInstructions(scenario, 'lead', mode),
         `projection-lead${packageSuffix}`,
       ),
     },
@@ -228,7 +228,7 @@ async function main() {
       body: {
         source: agentYaml(
           name,
-          scenarioInstructions(scenario, name),
+          scenarioInstructions(scenario, name, mode),
           `${name}${packageSuffix}`,
         ),
       },
@@ -408,11 +408,10 @@ async function proveStateHonestyCanary(input) {
               attempt.id AS attempt_id,
               work.status AS work_status,
               technical_run.id AS technical_run_id,
-              EXISTS (
-                SELECT 1 FROM team_command_receipts receipt
-                 WHERE receipt.source_run_id=technical_run.id
-                   AND receipt.command_name='team_work_submit'
-              ) AS submit_receipt_exists,
+              attempt.status='completed'
+                AND technical_run.status='succeeded'
+                AND length(trim(coalesce(attempt.result_summary,'')))>0
+                AS canonical_submit_committed,
               (SELECT count(*)::integer FROM run_events event
                 WHERE event.run_id=technical_run.id) AS run_events_count
          FROM team_runs tr
@@ -421,7 +420,7 @@ async function proveStateHonestyCanary(input) {
          JOIN team_work_items work
            ON work.id=attempt.work_item_id AND work.status<>'accepted'
          JOIN LATERAL (
-           SELECT run.id
+           SELECT run.id,run.status
              FROM runs run
             WHERE run.task_id=attempt.execution_task_id
             ORDER BY run.attempt DESC,run.id DESC
@@ -443,8 +442,8 @@ async function proveStateHonestyCanary(input) {
       fail('state_canary_member_idle_gate_not_clear');
     if (stuck.all_work_accepted !== false)
       fail('state_canary_acceptance_gate_not_blocked');
-    if (stuck.submit_receipt_exists !== true)
-      fail('state_canary_submit_receipt_missing');
+    if (stuck.canonical_submit_committed !== true)
+      fail('state_canary_canonical_submit_not_committed');
     if (!(stuck.run_events_count > 0)) fail('state_canary_run_events_missing');
     const apiGates = input.project.gates;
     if (
@@ -490,7 +489,7 @@ async function proveStateHonestyCanary(input) {
           all_work_accepted: stuck.all_work_accepted,
         },
         work_status: stuck.work_status,
-        submit_receipt_exists: stuck.submit_receipt_exists,
+        canonical_submit_committed: stuck.canonical_submit_committed,
         run_events_count: stuck.run_events_count,
         stuck: true,
         normal_team_run_id: normal.team_run_id,

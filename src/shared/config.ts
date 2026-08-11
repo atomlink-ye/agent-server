@@ -265,6 +265,7 @@ export type AppConfig = Readonly<{
     model?: string;
     connectTimeoutMs: number;
     executionTimeoutMs: number;
+    executionTimeoutSource: 'env' | 'default';
   };
 }>;
 export class ConfigurationError extends Error {
@@ -284,6 +285,8 @@ export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,
   workingDirectory: string = process.cwd(),
 ): AppConfig {
+  const executionTimeoutSource: 'env' | 'default' =
+    environment.PASEO_EXECUTION_TIMEOUT_MS === undefined ? 'default' : 'env';
   const parsed = ConfigSchema.safeParse(environment);
 
   if (!parsed.success) {
@@ -351,6 +354,7 @@ export function loadConfig(
       ...(parsed.data.PASEO_MODEL ? { model: parsed.data.PASEO_MODEL } : {}),
       connectTimeoutMs: parsed.data.PASEO_CONNECT_TIMEOUT_MS,
       executionTimeoutMs: parsed.data.PASEO_EXECUTION_TIMEOUT_MS,
+      executionTimeoutSource,
     },
   });
 }

@@ -93,6 +93,7 @@ export const testConfig = {
     workspaceTitle: 'Agent Server Test',
     connectTimeoutMs: 1_000,
     executionTimeoutMs: 1_000,
+    executionTimeoutSource: 'default',
   },
 } as const;
 

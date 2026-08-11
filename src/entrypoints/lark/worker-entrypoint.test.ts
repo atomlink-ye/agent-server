@@ -17,6 +17,7 @@ const baseConfig: AppConfig = {
     workspaceTitle: 'test',
     connectTimeoutMs: 100,
     executionTimeoutMs: 1000,
+    executionTimeoutSource: 'default',
   },
 };
 

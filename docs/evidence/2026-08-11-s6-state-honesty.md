@@ -4,6 +4,12 @@ Recorded on 2026-08-11. This packet does not treat a successful technical Run
 as proof of canonical submit. Submit is inferred only by the post-OI-19 durable
 write invariant documented below.
 
+The sandbox-local database rows needed to preserve the OI-24/OI-25 scene are
+archived in `2026-08-11-s6-db-state-snapshots.json`. That snapshot is
+metadata-only: it records state, IDs, timestamps, boolean summary presence, and
+`run_events` counts, while excluding summary content, transcripts, credentials,
+and all event payloads.
+
 ## Canonical-submit discriminator
 
 The canary uses this SQL predicate for a Work attempt:

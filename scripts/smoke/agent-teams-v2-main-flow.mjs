@@ -776,7 +776,7 @@ async function captureS3S4TimeoutEvidence() {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];
@@ -4222,7 +4222,7 @@ try {
     projectedTurns.map((turn) => `${turn.provider}/${turn.model}`),
   );
   const expectedRuntimeLabels = [
-    'opencode/opencode-go/deepseek-v4-flash',
+    `${requestedProvider}/${requestedModel}`,
     'claude/deepseek-v4-flash',
     'codex/deepseek-v4-flash',
   ];

@@ -8,22 +8,7 @@ import {
   startPaseo,
   stopProcessTree,
 } from './paseo-process.mjs';
-import { copyNamedEnvironment } from './safe-environment.mjs';
-
-const applicationEnvironmentNames = [
-  'NODE_ENV',
-  'HOST',
-  'PORT',
-  'LOG_LEVEL',
-  'SERVICE_NAME',
-  'PASEO_MODEL',
-  'PASEO_CONNECT_TIMEOUT_MS',
-  'PASEO_EXECUTION_TIMEOUT_MS',
-  'AGENT_SERVER_DISPATCHER_CONCURRENCY',
-  'DATABASE_URL',
-  'POSTGRES_URL',
-  'SERVICE_ACCOUNTS_JSON',
-];
+import { createApplicationEnvironment } from './with-paseo-environment.mjs';
 const paseoEnvironmentNames = [
   'OPENCODE_GO_API_KEY',
   'OPENCODE_CONFIG_CONTENT',
@@ -125,13 +110,12 @@ if (command.length === 0) {
 
   const child = spawn(command[0], command.slice(1), {
     cwd: repositoryRoot,
-    env: {
-      ...paseo.environment,
-      ...copyNamedEnvironment(process.env, applicationEnvironmentNames),
-      PASEO_WS_URL: paseo.wsUrl,
-      PASEO_AGENT_CWD: agentWorkspace,
-      PASEO_WORKSPACE_TITLE: 'Agent Server Development',
-    },
+    env: createApplicationEnvironment({
+      paseoEnvironment: paseo.environment,
+      environment: process.env,
+      paseoWsUrl: paseo.wsUrl,
+      agentWorkspace,
+    }),
     detached: process.platform !== 'win32',
     stdio: 'inherit',
   });

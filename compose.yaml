@@ -77,8 +77,16 @@ services:
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"}]'
     volumes:
       - .:/workspace
-      - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -122,8 +130,16 @@ services:
       AGENT_SERVER_SERVICE_TOKEN: ${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}
     volumes:
       - .:/workspace
-      - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
@@ -166,8 +182,16 @@ services:
       # empty node_modules and re-seed ~200k files before running anything.
       # Staleness is already handled by the dependency stamp in
       # scripts/dev/docker-ensure-node-modules.mjs, so persisting these is safe.
-      - node-modules:/workspace/node_modules
-      - web-node-modules:/workspace/apps/web/node_modules
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
       - runner-dist:/workspace/dist
       - /workspace/.local
     working_dir: /workspace
@@ -189,7 +213,11 @@ services:
 
 volumes:
   node-modules:
+    name: ${NODE_MODULES_VOLUME:?docker-compose wrapper must provide NODE_MODULES_VOLUME}
+    external: true
   web-node-modules:
+    name: ${WEB_NODE_MODULES_VOLUME:?docker-compose wrapper must provide WEB_NODE_MODULES_VOLUME}
+    external: true
   runner-dist:
   local-state:
   postgres-data:

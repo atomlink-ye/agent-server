@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+dependency_stamp="$(node scripts/dev/dependency-stamp.mjs "$repo_root" | tr -d '\r\n')"
+[[ "$dependency_stamp" =~ ^[0-9a-f]{64}$ ]] || {
+  printf '%s\n' 'docker-compose: dependency stamp is not a sha256 digest' >&2
+  exit 1
+}
+arch="$(uname -m)"
+case "$arch" in
+  x86_64) arch=amd64 ;;
+  aarch64) arch=arm64 ;;
+esac
+node_abi="${AGENT_SERVER_NODE_ABI:-137}"
+node_abi="${node_abi//[^A-Za-z0-9._-]/-}"
+volume_prefix="agent-server-cache-v1-node24-abi${node_abi}-${arch}-${dependency_stamp}"
+root_volume="${volume_prefix}-root"
+web_volume="${volume_prefix}-web"
+
+export NODE_MODULES_VOLUME="$root_volume"
+export WEB_NODE_MODULES_VOLUME="$web_volume"
+export NODE_MODULES_EXTERNAL=true
+export WEB_NODE_MODULES_EXTERNAL=true
+
+docker volume create "$root_volume" >/dev/null
+docker volume create "$web_volume" >/dev/null
+
+raw_compose=(docker compose)
+compose_command=''
+skip_next=0
+for arg in "$@"; do
+  if ((skip_next)); then
+    skip_next=0
+    continue
+  fi
+  case "$arg" in
+    -f|--file|-p|--project-name|--project-directory|--env-file|--profile|--ansi|--progress)
+      skip_next=1
+      continue
+      ;;
+    --*) continue ;;
+    -*) continue ;;
+  esac
+  compose_command="$arg"
+  break
+done
+should_provision=1
+case "$compose_command" in
+  build|config|images|ps|version|volume|down|rm|logs|top|port|events|wait) should_provision=0 ;;
+esac
+
+has_build=0
+for arg in "$@"; do
+  [[ "$arg" == "--build" ]] && has_build=1
+done
+
+if ((should_provision)); then
+  # Ensure the existing project image is available for the one-shot root
+  # ownership provisioning command. This keeps `up --build` compatible with
+  # the prebuilt agent-server-runner:latest image without adding an image.
+  if ((has_build)); then
+    "${raw_compose[@]}" build runner
+  fi
+  "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh runner -c \
+    'chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules'
+fi
+
+exec "${raw_compose[@]}" "$@"

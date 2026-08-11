@@ -47,7 +47,15 @@ export const ProductWorkRunNullSchema = z
 export const ProductWorkRunErrorSchema = z
   .object({
     contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
-    error: z.object({ code: z.string(), message: z.string() }).strict(),
+    error: z
+      .object({
+        code: z.string(),
+        message: z.string(),
+        reason: z
+          .enum(['event_page_limit', 'event_page_order_invalid'])
+          .optional(),
+      })
+      .strict(),
   })
   .strict();
 

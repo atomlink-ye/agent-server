@@ -59,6 +59,17 @@ export class ProductProjectionUnavailableError extends Error {
   }
 }
 
+export class ProductProjectionInvalidError extends Error {
+  public readonly code = 'projection_invalid';
+
+  public constructor(
+    public readonly reason: 'event_page_limit' | 'event_page_order_invalid',
+  ) {
+    super(`The WorkRun projection is invalid: ${reason}.`);
+    this.name = 'ProductProjectionInvalidError';
+  }
+}
+
 interface LoadedProductWorkRun {
   readonly work: Work;
   readonly workRun: WorkRun & {
@@ -146,7 +157,7 @@ export function createProductProjection(
         });
       } catch (error) {
         if (error instanceof ExecutionFactQueryError)
-          throw new ProductProjectionUnavailableError();
+          throw new ProductProjectionInvalidError(error.reason);
         throw error;
       }
       const mappedEvents = events

@@ -108,20 +108,29 @@ function mapProjectionError(
     typeof error === 'object' &&
     'name' in error &&
     ((error as Error).name === 'ProductProjectionNotFoundError' ||
-      (error as Error).name === 'ProductProjectionUnavailableError')
+      (error as Error).name === 'ProductProjectionUnavailableError' ||
+      (error as Error).name === 'ProductProjectionInvalidError')
   ) {
+    const invalid = (error as Error).name === 'ProductProjectionInvalidError';
     const unavailable =
       (error as Error).name === 'ProductProjectionUnavailableError';
     const body = schema.parse({
       contract_status: PRODUCT_CONTRACT_STATUS,
       error: {
-        code: unavailable ? 'projection_unavailable' : 'work_run_not_found',
-        message: unavailable
-          ? 'The WorkRun projection is temporarily unavailable.'
-          : 'The WorkRun was not found for the requested workspace.',
+        code: invalid
+          ? 'projection_invalid'
+          : unavailable
+            ? 'projection_unavailable'
+            : 'work_run_not_found',
+        message: invalid
+          ? 'The WorkRun projection cannot be represented correctly.'
+          : unavailable
+            ? 'The WorkRun projection is temporarily unavailable.'
+            : 'The WorkRun was not found for the requested workspace.',
+        ...(invalid && 'reason' in error ? { reason: error.reason } : {}),
       },
     });
-    return context.json(body, unavailable ? 503 : 404);
+    return context.json(body, invalid ? 500 : unavailable ? 503 : 404);
   }
   if (error instanceof HttpError) throw error;
   throw error;

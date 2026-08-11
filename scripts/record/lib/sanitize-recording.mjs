@@ -41,6 +41,7 @@ export const RUN_EVENT_PAYLOAD_KEYS = new Set([
   'code',
   'message',
   'failure_code',
+  'member',
 ]);
 
 export class RecordingSecretError extends Error {

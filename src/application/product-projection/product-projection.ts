@@ -4,6 +4,7 @@ import type {
   ExecutionFactQuery,
   ExecutionRunFact,
 } from '../ports/execution-fact-query.js';
+import { ExecutionFactQueryError } from '../ports/execution-fact-query.js';
 import type { WorkProjectionFactsSource } from './work-projection-facts-source.js';
 import {
   toWorkResponse,
@@ -136,11 +137,18 @@ export function createProductProjection(
           rootTaskId: loaded.workRun.rootTaskId,
         }),
       ]);
-      const events = await options.executionFacts.listRunEvents({
-        tenantId: input.tenantId,
-        workspaceId: input.workspaceId,
-        runIds: runs.map((run) => run.runId),
-      });
+      let events;
+      try {
+        events = await options.executionFacts.listRunEvents({
+          tenantId: input.tenantId,
+          workspaceId: input.workspaceId,
+          runIds: runs.map((run) => run.runId),
+        });
+      } catch (error) {
+        if (error instanceof ExecutionFactQueryError)
+          throw new ProductProjectionUnavailableError();
+        throw error;
+      }
       const mappedEvents = events
         .map((event) => mapEvent(event, loaded.workRun.rootTaskId))
         .sort(compareEvents);

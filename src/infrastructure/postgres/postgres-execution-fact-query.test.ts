@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { PostgresExecutionFactQuery } from './postgres-execution-fact-query.js';
+import { ExecutionFactQueryError } from '../../application/ports/execution-fact-query.js';
 
 describe('PostgresExecutionFactQuery event history', () => {
   it('reads every run in pages and applies the stable cross-run display order', async () => {
@@ -70,13 +71,13 @@ describe('PostgresExecutionFactQuery event history', () => {
       maxEventPagesPerRun: 1,
     });
 
-    await expect(
-      facts.listRunEvents({
-        tenantId: 'tenant-1',
-        workspaceId: 'workspace-1',
-        runIds: ['run-a'],
-      }),
-    ).rejects.toThrow('execution_event_page_limit_exceeded');
+    const failure = facts.listRunEvents({
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      runIds: ['run-a'],
+    });
+    await expect(failure).rejects.toBeInstanceOf(ExecutionFactQueryError);
+    await expect(failure).rejects.toMatchObject({ reason: 'event_page_limit' });
   });
 });
 

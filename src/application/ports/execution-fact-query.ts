@@ -32,6 +32,16 @@ export interface ExecutionEventFact {
   readonly createdAt: string;
 }
 
+export type ExecutionFactQueryFailureReason =
+  'event_page_limit' | 'event_page_order_invalid';
+
+export class ExecutionFactQueryError extends Error {
+  public constructor(public readonly reason: ExecutionFactQueryFailureReason) {
+    super(`execution_fact_query_failed:${reason}`);
+    this.name = 'ExecutionFactQueryError';
+  }
+}
+
 export interface ExecutionFactQuery {
   listRunsByRootTask(
     input: ExecutionFactOwnerScope & { readonly rootTaskId: string },

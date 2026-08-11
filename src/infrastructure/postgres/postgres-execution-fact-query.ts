@@ -4,6 +4,7 @@ import type {
   ExecutionFactQuery,
   ExecutionRunFact,
 } from '../../application/ports/execution-fact-query.js';
+import { ExecutionFactQueryError } from '../../application/ports/execution-fact-query.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -124,7 +125,7 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
         if (rows.length === 0) break;
         pagesRead += 1;
         if (pagesRead > this.#maxEventPagesPerRun)
-          throw new Error('execution_event_page_limit_exceeded');
+          throw new ExecutionFactQueryError('event_page_limit');
         for (const row of rows) {
           const sequence = Number(row.sequence);
           if (
@@ -132,7 +133,7 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
             !Number.isSafeInteger(sequence) ||
             sequence <= after
           )
-            throw new Error('execution_event_page_order_invalid');
+            throw new ExecutionFactQueryError('event_page_order_invalid');
           events.push({
             id: row.id,
             runId: row.run_id,

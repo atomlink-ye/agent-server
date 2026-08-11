@@ -8,6 +8,13 @@ import {
   ProductProjectionIdentitySchema,
   type ProductProjectionIdentity,
 } from '../../contracts/product-projection/identity.js';
+import type { ProductTraceEdge } from '../../contracts/product-projection/edges.js';
+import {
+  projectAssignmentEdges,
+  projectDependencyEdges,
+  projectFeedbackEdges,
+  projectMessageEdges,
+} from './edges/index.js';
 import { safeText } from '../teams/safe-team-text.js';
 
 export class WorkProjectionFactsSource {
@@ -16,10 +23,33 @@ export class WorkProjectionFactsSource {
   public async getByRootTask(
     owner: WorkProjectionWorkspaceScope,
     rootTaskId: string,
-  ): Promise<ProductProjectionIdentity | null> {
+  ): Promise<ProductProjectionFactsSlice | null> {
     const facts = await this.query.getByRootTask({ ...owner, rootTaskId });
-    return facts ? mapWorkProjectionFacts(facts) : null;
+    if (!facts) return null;
+    const identity = mapWorkProjectionFacts(facts);
+    const messages = projectMessageEdges(facts.messages);
+    const dependencies = projectDependencyEdges(facts.dependencies);
+    const assignments = projectAssignmentEdges(
+      facts.workItems.flatMap((item) => item.attempts),
+    );
+    const feedback = projectFeedbackEdges(
+      facts.workItems.flatMap((item) => item.attempts),
+    );
+    return {
+      identity,
+      edges: [
+        ...messages.edges,
+        ...dependencies.edges,
+        ...assignments.edges,
+        ...feedback.edges,
+      ] as ProductTraceEdge[],
+    };
   }
+}
+
+export interface ProductProjectionFactsSlice {
+  readonly identity: ProductProjectionIdentity;
+  readonly edges: readonly ProductTraceEdge[];
 }
 
 export function mapWorkProjectionFacts(

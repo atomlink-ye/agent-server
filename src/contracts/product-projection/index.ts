@@ -12,39 +12,13 @@ import {
   WorkResponseSchema,
   WorkRunResponseSchema,
 } from '../product-work-commands.js';
-import { ProductSourceRefsSchema } from '../product-source-refs.js';
-
-// S4 provisional composition; S10 owns acceptance and versioning.
-const ExecutionRunSchema = z
-  .object({
-    status: z.enum([
-      'queued',
-      'running',
-      'waiting_children',
-      'succeeded',
-      'failed',
-      'timed_out',
-      'cancelled',
-    ]),
-    provider: z.string().nullable(),
-    model: z.string().nullable(),
-    result_capture_status: z.enum(['not_present', 'redacted']),
-    error_code: z.string().nullable(),
-    source_refs: ProductSourceRefsSchema,
-    created_at: z.string().datetime(),
-    updated_at: z.string().datetime(),
-  })
-  .strict();
-
-const ExecutionEventSchema = z
-  .object({
-    sequence: z.number().int().positive(),
-    type: z.enum(['started', 'output', 'succeeded', 'failed', 'cancelled']),
-    payload_capture_status: z.enum(['not_present', 'redacted']),
-    source_refs: ProductSourceRefsSchema,
-    created_at: z.string().datetime(),
-  })
-  .strict();
+import {
+  ExecutionEventSchema,
+  ExecutionEventsSchema,
+  ExecutionRunSchema,
+  ProductTraceEdgesSchema,
+  ProductTraceEdgeSchema,
+} from './edges.js';
 
 const ProductWorkRunBaseSchema = z
   .object({
@@ -86,7 +60,8 @@ export const ProductWorkRunResponseSchema = z.union([
 export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
   capture_status: z.literal('complete'),
   runs: z.array(ExecutionRunSchema),
-  events: z.array(ExecutionEventSchema),
+  events: ExecutionEventsSchema,
+  edges: ProductTraceEdgesSchema,
 }).strict();
 
 export const ProductRunTraceNullSchema = z
@@ -96,7 +71,8 @@ export const ProductRunTraceNullSchema = z
     work_run: z.null(),
     capture_status: z.literal('not_found'),
     runs: z.array(ExecutionRunSchema),
-    events: z.array(ExecutionEventSchema),
+    events: ExecutionEventsSchema,
+    edges: ProductTraceEdgesSchema,
   })
   .strict();
 
@@ -119,4 +95,9 @@ export {
   ProductMessageSchema,
   ProductProjectionIdentitySchema,
   ProductWorkItemSchema,
+  ExecutionEventSchema,
+  ExecutionEventsSchema,
+  ExecutionRunSchema,
+  ProductTraceEdgeSchema,
+  ProductTraceEdgesSchema,
 };

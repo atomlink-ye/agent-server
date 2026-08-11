@@ -10,7 +10,7 @@ describe('PostgresExecutionFactQuery event history', () => {
       event('run-a', 2, '2026-08-11T00:00:00.000Z'),
       event('run-a', 3, '2026-08-11T00:00:01.000Z'),
     ];
-    const query = vi.fn(
+    const queryMock = vi.fn(
       async (_sql: string, values: readonly unknown[] | undefined) => {
         const [runId, , , after, limit] = values ?? [];
         return {
@@ -24,10 +24,15 @@ describe('PostgresExecutionFactQuery event history', () => {
         };
       },
     );
-    const facts = new PostgresExecutionFactQuery(
-      { query },
-      { eventPageSize: 2 },
-    );
+    const database = {
+      async query<Row>(sql: string, values?: readonly unknown[]) {
+        const result = await queryMock(sql, values);
+        return { rows: result.rows as Row[] };
+      },
+    };
+    const facts = new PostgresExecutionFactQuery(database, {
+      eventPageSize: 2,
+    });
 
     const result = await facts.listRunEvents({
       tenantId: 'tenant-1',
@@ -42,7 +47,7 @@ describe('PostgresExecutionFactQuery event history', () => {
       ['run-a', 3],
     ]);
     expect(
-      query.mock.calls.map(([, values]) => [values?.[0], values?.[3]]),
+      queryMock.mock.calls.map(([, values]) => [values?.[0], values?.[3]]),
     ).toEqual([
       ['run-a', 0],
       ['run-a', 2],
@@ -51,13 +56,19 @@ describe('PostgresExecutionFactQuery event history', () => {
   });
 
   it('fails explicitly instead of truncating at the page limit', async () => {
-    const query = vi.fn(async () => ({
+    const queryMock = vi.fn(async () => ({
       rows: [event('run-a', 1, '2026-08-11T00:00:00.000Z')],
     }));
-    const facts = new PostgresExecutionFactQuery(
-      { query },
-      { eventPageSize: 1, maxEventPagesPerRun: 1 },
-    );
+    const database = {
+      async query<Row>() {
+        const result = await queryMock();
+        return { rows: result.rows as Row[] };
+      },
+    };
+    const facts = new PostgresExecutionFactQuery(database, {
+      eventPageSize: 1,
+      maxEventPagesPerRun: 1,
+    });
 
     await expect(
       facts.listRunEvents({

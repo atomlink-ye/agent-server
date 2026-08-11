@@ -67,8 +67,14 @@ describe('PostgresWorkProjectionFactsQuery S5 source facts', () => {
         ],
       },
     ];
-    const query = vi.fn(async () => results.shift() ?? { rows: [] });
-    const facts = new PostgresWorkProjectionFactsQuery({ query });
+    const queryMock = vi.fn(async () => results.shift() ?? { rows: [] });
+    const database = {
+      async query<Row>() {
+        const result = await queryMock();
+        return { rows: result.rows as Row[] };
+      },
+    };
+    const facts = new PostgresWorkProjectionFactsQuery(database);
 
     const result = await facts.getByRootTask(
       { tenantId: 'tenant-1', workspaceId: 'workspace-1' },

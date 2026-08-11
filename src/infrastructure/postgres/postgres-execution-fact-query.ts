@@ -37,8 +37,28 @@ interface EventRow {
   created_at: string | Date;
 }
 
+export interface PostgresExecutionFactQueryOptions {
+  readonly eventPageSize?: number;
+  readonly maxEventPagesPerRun?: number;
+}
+
 export class PostgresExecutionFactQuery implements ExecutionFactQuery {
-  public constructor(private readonly database: Queryable) {}
+  readonly #eventPageSize: number;
+  readonly #maxEventPagesPerRun: number;
+
+  public constructor(
+    private readonly database: Queryable,
+    options: PostgresExecutionFactQueryOptions = {},
+  ) {
+    this.#eventPageSize = positiveInteger(
+      options.eventPageSize ?? 100,
+      'eventPageSize',
+    );
+    this.#maxEventPagesPerRun = positiveInteger(
+      options.maxEventPagesPerRun ?? 1_000,
+      'maxEventPagesPerRun',
+    );
+  }
 
   public async listRunsByRootTask(
     input: ExecutionFactOwnerScope & { readonly rootTaskId: string },
@@ -76,26 +96,57 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
     input: ExecutionFactOwnerScope & { readonly runIds: readonly string[] },
   ): Promise<readonly ExecutionEventFact[]> {
     if (input.runIds.length === 0) return [];
-    const result = await this.database.query<EventRow>(
-      `SELECT e.id,e.run_id,e.sequence,e.type,
-              (e.payload <> '{}'::jsonb) AS payload_present,e.created_at
-         FROM run_events e
-         JOIN runs r ON r.id=e.run_id
-         JOIN tasks t ON t.id=r.task_id
-         JOIN team_runs tr ON tr.root_task_id=t.root_task_id
-                           AND tr.tenant_id=$2 AND tr.workspace_id=$3
-        WHERE e.run_id=ANY($1::uuid[])
-        ORDER BY e.run_id,e.sequence`,
-      [input.runIds, input.tenantId, input.workspaceId],
-    );
-    return (result.rows ?? []).map((row) => ({
-      id: row.id,
-      runId: row.run_id,
-      sequence: Number(row.sequence),
-      type: row.type,
-      payloadPresent: row.payload_present ?? false,
-      createdAt: toIso(row.created_at),
-    }));
+    const events: ExecutionEventFact[] = [];
+    for (const runId of [...new Set(input.runIds)].sort()) {
+      let after = 0;
+      let pagesRead = 0;
+      while (true) {
+        const result = await this.database.query<EventRow>(
+          `SELECT e.id,e.run_id,e.sequence,e.type,
+                  (e.payload <> '{}'::jsonb) AS payload_present,e.created_at
+             FROM run_events e
+             JOIN runs r ON r.id=e.run_id
+             JOIN tasks t ON t.id=r.task_id
+             JOIN team_runs tr ON tr.root_task_id=t.root_task_id
+                               AND tr.tenant_id=$2 AND tr.workspace_id=$3
+            WHERE e.run_id=$1 AND e.sequence>$4
+            ORDER BY e.sequence
+            LIMIT $5`,
+          [
+            runId,
+            input.tenantId,
+            input.workspaceId,
+            after,
+            this.#eventPageSize,
+          ],
+        );
+        const rows = result.rows ?? [];
+        if (rows.length === 0) break;
+        pagesRead += 1;
+        if (pagesRead > this.#maxEventPagesPerRun)
+          throw new Error('execution_event_page_limit_exceeded');
+        for (const row of rows) {
+          const sequence = Number(row.sequence);
+          if (
+            row.run_id !== runId ||
+            !Number.isSafeInteger(sequence) ||
+            sequence <= after
+          )
+            throw new Error('execution_event_page_order_invalid');
+          events.push({
+            id: row.id,
+            runId: row.run_id,
+            sequence,
+            type: row.type,
+            payloadPresent: row.payload_present ?? false,
+            createdAt: toIso(row.created_at),
+          });
+          after = sequence;
+        }
+        if (rows.length < this.#eventPageSize) break;
+      }
+    }
+    return events.sort(compareExecutionEvents);
   }
 }
 
@@ -103,4 +154,21 @@ function toIso(value: string | Date): string {
   return value instanceof Date
     ? value.toISOString()
     : new Date(value).toISOString();
+}
+
+function compareExecutionEvents(
+  left: ExecutionEventFact,
+  right: ExecutionEventFact,
+): number {
+  return (
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.runId.localeCompare(right.runId) ||
+    left.sequence - right.sequence
+  );
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new Error(`${name} must be a positive safe integer`);
+  return value;
 }

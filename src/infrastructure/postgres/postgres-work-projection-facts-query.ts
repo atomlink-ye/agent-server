@@ -46,14 +46,20 @@ interface AttemptRow {
   team_run_id: string;
   attempt_no: number;
   status: WorkProjectionAttemptFact['status'];
+  assignee_member_id: string;
+  requested_by_lead_task_id: string;
+  reviewer_member_id: string | null;
+  created_at: string | Date;
   feedback_present: boolean;
   result_present: boolean;
   execution_task_id: string | null;
 }
 
 interface DependencyRow {
+  team_run_id: string;
   work_item_id: string;
   depends_on_work_item_id: string;
+  created_at: string | Date;
 }
 
 interface MessageRow {
@@ -62,11 +68,14 @@ interface MessageRow {
   sequence: number;
   sender_member_run_id: string | null;
   recipient_member_run_id: string;
+  work_item_id: string | null;
+  attempt_id: string | null;
   kind: string;
   status: string;
   consumed_task_id: string | null;
   scoped_task_id: string | null;
   body_present: boolean;
+  created_at: string | Date;
 }
 
 export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsReader {
@@ -107,17 +116,24 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
         [team.id, ...scope],
       ),
       this.database.query<AttemptRow>(
-        `SELECT id,work_item_id,team_run_id,attempt_no,status,
-                  (feedback IS NOT NULL) AS feedback_present,
-                  (result_summary IS NOT NULL) AS result_present,
-                  execution_task_id
-             FROM team_work_item_attempts
-            WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
-            ORDER BY created_at,attempt_no,id`,
-        [team.id, ...scope],
+        `SELECT a.id,a.work_item_id,a.team_run_id,a.attempt_no,a.status,
+                  a.assignee_member_id,a.requested_by_lead_task_id,
+                  reviewer.team_member_run_id AS reviewer_member_id,
+                  a.created_at,
+                  (a.feedback IS NOT NULL) AS feedback_present,
+                  (a.result_summary IS NOT NULL) AS result_present,
+                  a.execution_task_id
+             FROM team_work_item_attempts a
+             LEFT JOIN tasks reviewer
+               ON reviewer.id=a.requested_by_lead_task_id
+              AND reviewer.root_task_id=$4
+              AND reviewer.tenant_id=$2 AND reviewer.workspace_id=$3
+            WHERE a.team_run_id=$1 AND a.tenant_id=$2 AND a.workspace_id=$3
+            ORDER BY a.created_at,a.attempt_no,a.id`,
+        [team.id, ...scope, rootTaskId],
       ),
       this.database.query<DependencyRow>(
-        `SELECT work_item_id,depends_on_work_item_id
+        `SELECT team_run_id,work_item_id,depends_on_work_item_id,created_at
              FROM team_work_item_dependencies
             WHERE team_run_id=$1 AND tenant_id=$2 AND workspace_id=$3
             ORDER BY work_item_id,depends_on_work_item_id`,
@@ -125,7 +141,8 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
       ),
       this.database.query<MessageRow>(
         `SELECT m.id,m.team_run_id,m.sequence,m.sender_member_run_id,
-                  m.recipient_member_run_id,m.kind,m.status,
+                  m.recipient_member_run_id,m.work_item_id,m.attempt_id,
+                  m.kind,m.status,m.created_at,
                   m.consumed_by_task_id AS consumed_task_id,
                   t.id AS scoped_task_id,
                   (m.body IS NOT NULL) AS body_present
@@ -164,6 +181,10 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
         workItemId: attempt.work_item_id,
         attemptNo: attempt.attempt_no,
         status: attempt.status,
+        assigneeActorId: attempt.assignee_member_id,
+        requestedByLeadTaskId: attempt.requested_by_lead_task_id,
+        reviewerActorId: attempt.reviewer_member_id ?? null,
+        createdAt: toIso(attempt.created_at),
         feedbackCapture: attempt.feedback_present ? 'present' : 'absent',
         resultCapture: attempt.result_present ? 'present' : 'absent',
         sourceRefs: {
@@ -187,8 +208,10 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
     }));
     const dependencyFacts: WorkProjectionDependencyFact[] = dependencies.map(
       (dependency) => ({
+        teamRunId: dependency.team_run_id,
         sourceWorkItemId: dependency.work_item_id,
         dependencyWorkItemId: dependency.depends_on_work_item_id,
+        createdAt: toIso(dependency.created_at),
       }),
     );
     const messageFacts: WorkProjectionMessageFact[] = messages.map(
@@ -207,6 +230,10 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
           id: message.id,
           senderId: message.sender_member_run_id ?? null,
           recipientId: message.recipient_member_run_id,
+          workItemId: message.work_item_id ?? null,
+          attemptId: message.attempt_id ?? null,
+          sequence: message.sequence,
+          createdAt: toIso(message.created_at),
           senderName: sender?.name ?? null,
           recipientName: recipient?.name ?? null,
           bodyCapture: message.body_present ? 'present' : 'absent',
@@ -222,4 +249,10 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
       messages: messageFacts,
     };
   }
+}
+
+function toIso(value: string | Date): string {
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }

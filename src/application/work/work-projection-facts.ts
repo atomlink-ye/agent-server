@@ -20,6 +20,10 @@ export interface WorkProjectionAttemptFact {
   readonly workItemId: string;
   readonly attemptNo: number;
   readonly status: WorkProjectionAttemptStatus;
+  readonly assigneeActorId: string;
+  readonly requestedByLeadTaskId: string;
+  readonly reviewerActorId: string | null;
+  readonly createdAt: string;
   readonly feedbackCapture: 'present' | 'absent';
   readonly resultCapture: 'present' | 'absent';
   readonly sourceRefs: WorkProjectionSourceRefs;
@@ -42,14 +46,20 @@ export interface WorkProjectionActorFact {
 }
 
 export interface WorkProjectionDependencyFact {
+  readonly teamRunId: string;
   readonly sourceWorkItemId: string;
   readonly dependencyWorkItemId: string;
+  readonly createdAt: string;
 }
 
 export interface WorkProjectionMessageFact {
   readonly id: string;
   readonly senderId: string | null;
   readonly recipientId: string;
+  readonly workItemId: string | null;
+  readonly attemptId: string | null;
+  readonly sequence: number;
+  readonly createdAt: string;
   readonly senderName: string | null;
   readonly recipientName: string | null;
   readonly bodyCapture: 'present' | 'absent';

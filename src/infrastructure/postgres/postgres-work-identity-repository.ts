@@ -93,9 +93,14 @@ export function createPostgresWorkIdentityModule(
     ...(options.now ? { now: options.now } : {}),
   };
   const startWorkRun = new StartWorkRun(startWorkRunOptions);
+  const workIdentityQuery: PostgresWorkIdentityModule['workIdentityQuery'] = {
+    findWorkById: (id, owner) => workIdentityRepository.findWorkById(id, owner),
+    findWorkRunById: (id, owner) =>
+      workIdentityRepository.findWorkRunById(id, owner),
+  };
   return {
     workIdentity,
-    workIdentityQuery: workIdentityRepository,
+    workIdentityQuery,
     startWorkRun,
   };
 }

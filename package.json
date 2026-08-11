@@ -24,6 +24,7 @@
     "record:product-run": "node scripts/record/product-projection-real-run.mjs",
     "smoke:product-work-projection": "node scripts/smoke/product-work-durable-identity-main-flow.mjs --phase durable-identity",
     "smoke:product-run-state": "node scripts/smoke/product-run-state-canary.mjs",
+    "smoke:s6-state-honesty-negative": "node scripts/smoke/s6-state-honesty-negative.mjs",
     "probe:paseo-stream": "node scripts/probes/paseo-agent-stream.mjs",
     "web:dev": "pnpm --filter @atomlink-ye/agent-server-web dev",
     "web:build": "pnpm --filter @atomlink-ye/agent-server-web build",

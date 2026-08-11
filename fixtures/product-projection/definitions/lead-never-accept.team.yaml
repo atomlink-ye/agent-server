@@ -1,0 +1,19 @@
+# scenario: lead-never-accept
+# definition_version: 1
+# definition_hash: computed-after-resolution
+apiVersion: agent-server/v1alpha1
+kind: ManagedTeam
+metadata:
+  name: product-projection-lead-never-accept-v1
+spec:
+  environmentVersionId: 00000000-0000-0000-0000-000000000000
+  lead:
+    name: projection-lead
+    agentVersionId: 00000000-0000-0000-0000-000000000000
+  roster:
+    - name: projection-worker
+      agentVersionId: 00000000-0000-0000-0000-000000000000
+    - name: projection-observer
+      agentVersionId: 00000000-0000-0000-0000-000000000000
+  coordination:
+    taskAssignment: lead_or_self_claim

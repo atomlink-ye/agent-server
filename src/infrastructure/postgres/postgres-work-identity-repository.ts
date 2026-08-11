@@ -1,8 +1,12 @@
+import { InvalidWorkListCursorError } from '../../application/ports/work-identity-repository.js';
 import type {
   WorkIdentityRepository,
   WorkIdentityOwnerScope,
   CreateOrLoadPendingWorkRunInput,
   BindRootTaskCasInput,
+  WorkIdentityListQuery,
+  WorkListPage,
+  WorkRunListPage,
 } from '../../application/ports/work-identity-repository.js';
 import {
   WorkIdentityConflictError,
@@ -28,7 +32,10 @@ export interface WorkIdentityQueryable {
   query<Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 export interface WorkIdentityClient extends WorkIdentityQueryable {
@@ -111,17 +118,23 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
         work.updatedAt,
       ],
     );
-    const row = inserted.rows?.[0] ?? (await this.database.query<WorkRow>(
-      `SELECT ${workColumns} FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
-      [work.id, work.tenantId, work.workspaceId],
-    )).rows?.[0];
+    const row =
+      inserted.rows?.[0] ??
+      (
+        await this.database.query<WorkRow>(
+          `SELECT ${workColumns} FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
+          [work.id, work.tenantId, work.workspaceId],
+        )
+      ).rows?.[0];
     if (!row) {
       const existing = await this.database.query<{ id: string }>(
         'SELECT id FROM works WHERE id=$1',
         [work.id],
       );
       if (existing.rows?.[0])
-        throw new WorkIdentityConflictError('The work id belongs to another owner scope.');
+        throw new WorkIdentityConflictError(
+          'The work id belongs to another owner scope.',
+        );
       throw new Error('The work could not be persisted.');
     }
     const result = mapWork(row);
@@ -185,14 +198,21 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
         input.idempotencyKey,
         input.expiresAt,
         input.createdAt ?? input.now ?? new Date().toISOString(),
-        input.updatedAt ?? input.now ?? input.createdAt ?? new Date().toISOString(),
+        input.updatedAt ??
+          input.now ??
+          input.createdAt ??
+          new Date().toISOString(),
       ],
     );
-    const row = inserted.rows?.[0] ?? (await this.database.query<WorkRunRow>(
-      `SELECT ${runColumns} FROM work_runs
+    const row =
+      inserted.rows?.[0] ??
+      (
+        await this.database.query<WorkRunRow>(
+          `SELECT ${runColumns} FROM work_runs
        WHERE tenant_id=$1 AND workspace_id=$2 AND idempotency_key=$3`,
-      [input.owner.tenantId, input.owner.workspaceId, input.idempotencyKey],
-    )).rows?.[0];
+          [input.owner.tenantId, input.owner.workspaceId, input.idempotencyKey],
+        )
+      ).rows?.[0];
     if (!row) throw new Error('The pending work run could not be persisted.');
     const run = mapWorkRun(row);
     if (
@@ -208,7 +228,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     return run;
   }
 
-  public startPendingWorkRun(input: CreateOrLoadPendingWorkRunInput): Promise<WorkRun> {
+  public startPendingWorkRun(
+    input: CreateOrLoadPendingWorkRunInput,
+  ): Promise<WorkRun> {
     return this.createOrLoadPending(input);
   }
 
@@ -236,7 +258,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     return result.rows?.[0] ? mapWorkRun(result.rows[0]) : null;
   }
 
-  public async bindRootTaskCas(input: BindRootTaskCasInput): Promise<BoundWorkRun> {
+  public async bindRootTaskCas(
+    input: BindRootTaskCasInput,
+  ): Promise<BoundWorkRun> {
     let updated: { readonly rows?: readonly WorkRunRow[] };
     try {
       updated = await this.database.query<WorkRunRow>(
@@ -245,16 +269,17 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
        WHERE id=$3 AND tenant_id=$4 AND workspace_id=$5
          AND (root_task_id=$1 OR (root_task_id IS NULL AND expires_at>$2))
        RETURNING ${runColumns}`,
-      [
-        input.rootTaskId,
-        input.now,
-        input.workRunId,
-        input.owner.tenantId,
-        input.owner.workspaceId,
+        [
+          input.rootTaskId,
+          input.now,
+          input.workRunId,
+          input.owner.tenantId,
+          input.owner.workspaceId,
         ],
       );
     } catch (error) {
-      if (isRootTaskUniqueViolation(error)) throw new WorkRunBindingConflictError();
+      if (isRootTaskUniqueViolation(error))
+        throw new WorkRunBindingConflictError();
       throw error;
     }
     if (updated.rows?.[0]) return asBoundWorkRun(mapWorkRun(updated.rows[0]));
@@ -264,7 +289,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     if (existing.rootTaskId === input.rootTaskId)
       return asBoundWorkRun(existing);
     if (!existing.rootTaskId) {
-      if (new Date(existing.expiresAt).getTime() <= new Date(input.now).getTime())
+      if (
+        new Date(existing.expiresAt).getTime() <= new Date(input.now).getTime()
+      )
         throw new PendingWorkRunExpiredError();
       throw new WorkRunBindingConflictError();
     }
@@ -283,13 +310,15 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     let committed = false;
     try {
       await client.query('BEGIN');
-      const run = await client.query<{ id: string; root_task_id: string | null }>(
+      const run = await client.query<{
+        id: string;
+        root_task_id: string | null;
+      }>(
         `SELECT id,root_task_id FROM work_runs WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 FOR UPDATE`,
         [input.workRunId, input.owner.tenantId, input.owner.workspaceId],
       );
       if (!run.rows?.[0]) throw new WorkRunNotFoundError();
-      if (!run.rows[0].root_task_id)
-        throw new WorkRunBindingConflictError();
+      if (!run.rows[0].root_task_id) throw new WorkRunBindingConflictError();
       const existingRows = await client.query<ManifestRow>(
         `SELECT ${manifestColumns} FROM work_run_resource_manifest
          WHERE work_run_id=$1 AND tenant_id=$2 AND workspace_id=$3 ORDER BY slot FOR UPDATE`,
@@ -381,24 +410,92 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     };
   }
 
+  public async listWorks(
+    owner: WorkIdentityOwnerScope,
+    query: WorkIdentityListQuery,
+  ): Promise<WorkListPage> {
+    assertListLimit(query.limit);
+    const cursor = query.cursor
+      ? decodeWorkCursor(query.cursor, 'works', owner)
+      : null;
+    const values: unknown[] = [
+      owner.tenantId,
+      owner.workspaceId,
+      query.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ' AND (created_at,id) > ($4::timestamptz,$5::uuid)'
+      : '';
+    if (cursor) values.push(cursor.createdAt, cursor.id);
+    const result = await this.database.query<WorkRow>(
+      `SELECT ${workColumns} FROM works
+       WHERE tenant_id=$1 AND workspace_id=$2 AND archived_at IS NULL${cursorSql}
+       ORDER BY created_at ASC,id ASC LIMIT $3`,
+      values,
+    );
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > query.limit;
+    const items = rows.slice(0, query.limit).map(mapWork);
+    const last = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last
+          ? encodeWorkCursor('works', owner, last.createdAt, last.id)
+          : null,
+    };
+  }
+
   public async listWorkRuns(
     owner: WorkIdentityOwnerScope,
-    options: { readonly includePending?: boolean } = {},
-  ): Promise<readonly WorkRun[]> {
-    const predicate = options.includePending
-      ? '(root_task_id IS NOT NULL OR expires_at > now())'
-      : 'root_task_id IS NOT NULL';
-    const rows = await this.database.query<WorkRunRow>(
+    workId: string,
+    query: WorkIdentityListQuery,
+  ): Promise<WorkRunListPage> {
+    assertListLimit(query.limit);
+    const cursor = query.cursor
+      ? decodeWorkCursor(query.cursor, 'work_runs', owner, workId)
+      : null;
+    const values: unknown[] = [
+      owner.tenantId,
+      owner.workspaceId,
+      workId,
+      query.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ' AND (created_at,id) > ($5::timestamptz,$6::uuid)'
+      : '';
+    if (cursor) values.push(cursor.createdAt, cursor.id);
+    const result = await this.database.query<WorkRunRow>(
       `SELECT ${runColumns} FROM work_runs
-       WHERE tenant_id=$1 AND workspace_id=$2 AND ${predicate}
-       ORDER BY created_at DESC, id DESC`,
-      [owner.tenantId, owner.workspaceId],
+       WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
+         AND (root_task_id IS NOT NULL OR expires_at > now())${cursorSql}
+       ORDER BY created_at ASC,id ASC LIMIT $4`,
+      values,
     );
-    return (rows.rows ?? []).map(mapWorkRun);
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > query.limit;
+    const items = rows.slice(0, query.limit).map(mapWorkRun);
+    const last = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last
+          ? encodeWorkCursor(
+              'work_runs',
+              owner,
+              last.createdAt,
+              last.id,
+              workId,
+            )
+          : null,
+    };
   }
 
   private async transactionClient(): Promise<WorkIdentityClient> {
-    if ('connect' in this.database && typeof this.database.connect === 'function')
+    if (
+      'connect' in this.database &&
+      typeof this.database.connect === 'function'
+    )
       return this.database.connect();
     return this.database as WorkIdentityClient;
   }
@@ -474,7 +571,8 @@ function assertWorkEquivalent(expected: Work, actual: Work): void {
 }
 
 function asBoundWorkRun(run: WorkRun): BoundWorkRun {
-  if (!run.rootTaskId || !run.boundAt) throw new Error('Expected a bound work run.');
+  if (!run.rootTaskId || !run.boundAt)
+    throw new Error('Expected a bound work run.');
   return run as BoundWorkRun;
 }
 
@@ -500,11 +598,118 @@ function manifestEntriesEqual(
   const orderedRight = [...right].sort((a, b) => a.slot.localeCompare(b.slot));
   return (
     orderedLeft.length === orderedRight.length &&
-    orderedLeft.every((entry, index) => manifestEntryEqual(entry, orderedRight[index]!))
+    orderedLeft.every((entry, index) =>
+      manifestEntryEqual(entry, orderedRight[index]!),
+    )
   );
 }
 
 function isRootTaskUniqueViolation(error: unknown): boolean {
-  const value = error as { readonly code?: string; readonly constraint?: string };
-  return value?.code === '23505' && value.constraint === 'work_runs_root_task_bound_unique';
+  const value = error as {
+    readonly code?: string;
+    readonly constraint?: string;
+  };
+  return (
+    value?.code === '23505' &&
+    value.constraint === 'work_runs_root_task_bound_unique'
+  );
+}
+
+type WorkCursorKind = 'works' | 'work_runs';
+type WorkCursor = {
+  readonly kind: WorkCursorKind;
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly createdAt: string;
+  readonly id: string;
+  readonly workId?: string;
+};
+
+function encodeWorkCursor(
+  kind: WorkCursorKind,
+  owner: WorkIdentityOwnerScope,
+  createdAt: string,
+  id: string,
+  workId?: string,
+): string {
+  const payload: WorkCursor = {
+    kind,
+    tenantId: owner.tenantId,
+    workspaceId: owner.workspaceId,
+    createdAt,
+    id,
+    ...(workId !== undefined ? { workId } : {}),
+  };
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeWorkCursor(
+  value: string,
+  kind: WorkCursorKind,
+  owner: WorkIdentityOwnerScope,
+  workId?: string,
+): WorkCursor {
+  try {
+    if (
+      value.length === 0 ||
+      value.length > 1024 ||
+      !/^[A-Za-z0-9_-]+$/.test(value)
+    )
+      throw new Error();
+    const decoded = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as unknown;
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded))
+      throw new Error();
+    const payload = decoded as Record<string, unknown>;
+    const requiredKeys =
+      kind === 'works'
+        ? ['createdAt', 'id', 'kind', 'tenantId', 'workspaceId']
+        : ['createdAt', 'id', 'kind', 'tenantId', 'workId', 'workspaceId'];
+    const actualKeys = Object.keys(payload).sort();
+    if (
+      actualKeys.length !== requiredKeys.length ||
+      actualKeys.some(
+        (key, index) => key !== requiredKeys.slice().sort()[index],
+      )
+    )
+      throw new Error();
+    if (
+      payload.kind !== kind ||
+      payload.tenantId !== owner.tenantId ||
+      payload.workspaceId !== owner.workspaceId ||
+      (kind === 'work_runs' && payload.workId !== workId) ||
+      typeof payload.tenantId !== 'string' ||
+      payload.tenantId.length === 0 ||
+      typeof payload.workspaceId !== 'string' ||
+      !isCanonicalUuid(payload.workspaceId) ||
+      typeof payload.createdAt !== 'string' ||
+      payload.createdAt !== new Date(payload.createdAt).toISOString() ||
+      typeof payload.id !== 'string' ||
+      !isCanonicalUuid(payload.id) ||
+      (kind === 'work_runs' &&
+        (typeof payload.workId !== 'string' ||
+          !isCanonicalUuid(payload.workId)))
+    )
+      throw new Error();
+    if (
+      Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url') !==
+      value
+    )
+      throw new Error();
+    return payload as unknown as WorkCursor;
+  } catch {
+    throw new InvalidWorkListCursorError();
+  }
+}
+
+function assertListLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw new Error('The requested Work list limit is invalid.');
+}
+
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

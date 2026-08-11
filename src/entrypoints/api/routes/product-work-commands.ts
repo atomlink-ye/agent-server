@@ -1,6 +1,10 @@
 import type { Hono } from 'hono';
 
-import type { WorkIdentityApi } from '../../../application/work/work-identity-api.js';
+import {
+  InvalidWorkListCursorError,
+  WorkDefinitionValidationError,
+  WorkIdentityApi,
+} from '../../../application/work/work-identity-api.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   WorkIdentityConflictError,
@@ -11,10 +15,11 @@ import {
   WorkRunBindingConflictError,
 } from '../../../domain/work/work-run.js';
 import type { StartWorkRun } from '../../../application/work/start-work-run.js';
-import { WorkDefinitionValidationError } from '../../../application/work/work-identity-api.js';
 import {
   CreateWorkRequestSchema,
   StartWorkRunRequestSchema,
+  WorkListResponseSchema,
+  WorkRunListResponseSchema,
   toExecutionReceiptResponse,
   toWorkResponse,
   toWorkRunResponse,
@@ -30,7 +35,10 @@ import { readBoundedJson } from '../read-bounded-json.js';
 
 export interface ProductWorkCommandDependencies {
   readonly config: AppConfig;
-  readonly workIdentity: Pick<WorkIdentityApi, 'createWork'>;
+  readonly workIdentity: Pick<
+    WorkIdentityApi,
+    'createWork' | 'listWorks' | 'listWorkRuns'
+  >;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
 }
 
@@ -44,19 +52,77 @@ export function registerProductWorkCommandRoutes(
   app.use('/api/v1/works', requireServiceAccountAccess(authenticator));
   app.use('/api/v1/works/*', requireServiceAccountAccess(authenticator));
 
+  app.get('/api/v1/works', async (context) => {
+    const { limit, cursor } = parseListQuery(context.req.url);
+    const accessContext = getAuthenticatedAccessContext(context);
+    try {
+      const page = await dependencies.workIdentity.listWorks({
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
+        accessContext,
+        limit,
+        cursor,
+      });
+      return context.json(
+        WorkListResponseSchema.parse({
+          works: page.items.map(toWorkResponse),
+          next_cursor: page.nextCursor,
+        }),
+        200,
+      );
+    } catch (error) {
+      if (error instanceof InvalidWorkListCursorError)
+        throw new HttpError(400, error.code, error.message);
+      if (error instanceof WorkDefinitionValidationError)
+        throw new HttpError(400, error.code, error.message);
+      throw error;
+    }
+  });
+
+  app.get('/api/v1/works/:workId/runs', async (context) => {
+    const workId = context.req.param('workId');
+    if (!isCanonicalUuid(workId))
+      throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
+    const { limit, cursor } = parseListQuery(context.req.url);
+    const accessContext = getAuthenticatedAccessContext(context);
+    try {
+      const page = await dependencies.workIdentity.listWorkRuns({
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
+        accessContext,
+        workId,
+        limit,
+        cursor,
+      });
+      return context.json(
+        WorkRunListResponseSchema.parse({
+          work_runs: page.items.map(toWorkRunResponse),
+          next_cursor: page.nextCursor,
+        }),
+        200,
+      );
+    } catch (error) {
+      if (error instanceof InvalidWorkListCursorError)
+        throw new HttpError(400, error.code, error.message);
+      if (error instanceof WorkDefinitionValidationError)
+        throw new HttpError(400, error.code, error.message);
+      throw error;
+    }
+  });
+
   app.post('/api/v1/works', async (context) => {
     rejectTechnicalIdempotencyHeader(context);
     const accessContext = getAuthenticatedAccessContext(context);
     const parsed = CreateWorkRequestSchema.safeParse(
-      await readBoundedJson(context.req.raw),
+      await readBoundedJson(context.req.raw, 64 * 1024),
     );
     if (!parsed.success)
-      throw new HttpError(400, 'invalid_request', 'A valid Work request is required.');
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'A valid Work request is required.',
+      );
     try {
       const work = await dependencies.workIdentity.createWork({
-        owner: WorkIdentityApi.ownerFromAccessContext(
-          accessContext,
-        ),
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
         accessContext,
         definitionId: parsed.data.definition_id,
         definitionVersionId: parsed.data.definition_version_id,
@@ -77,19 +143,25 @@ export function registerProductWorkCommandRoutes(
   app.post('/api/v1/works/:workId/runs', async (context) => {
     rejectTechnicalIdempotencyHeader(context);
     const workId = context.req.param('workId');
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workId))
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        workId,
+      )
+    )
       throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
     const accessContext = getAuthenticatedAccessContext(context);
     const parsed = StartWorkRunRequestSchema.safeParse(
-      await readBoundedJson(context.req.raw),
+      await readBoundedJson(context.req.raw, 64 * 1024),
     );
     if (!parsed.success)
-      throw new HttpError(400, 'invalid_request', 'A valid WorkRun request is required.');
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'A valid WorkRun request is required.',
+      );
     try {
       const result = await dependencies.startWorkRun.execute({
-        owner: WorkIdentityApi.ownerFromAccessContext(
-          accessContext,
-        ),
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
         accessContext,
         workId,
         triggerKind: parsed.data.trigger_kind,
@@ -120,7 +192,68 @@ export function registerProductWorkCommandRoutes(
   });
 }
 
-function rejectTechnicalIdempotencyHeader(context: { req: { header(name: string): string | undefined }; }) {
+function rejectTechnicalIdempotencyHeader(context: {
+  req: { header(name: string): string | undefined };
+}) {
   if (context.req.header('idempotency-key') !== undefined)
-    throw new HttpError(400, 'invalid_request', 'idempotency-key is not accepted for product Work commands.');
+    throw new HttpError(
+      400,
+      'invalid_request',
+      'idempotency-key is not accepted for product Work commands.',
+    );
+}
+
+function parseListQuery(url: string): {
+  readonly limit: number;
+  readonly cursor: string | null;
+} {
+  const params = new URL(url).searchParams;
+  for (const key of params.keys()) {
+    if (key !== 'limit' && key !== 'cursor')
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'The query parameters are invalid.',
+      );
+  }
+  const limitValues = params.getAll('limit');
+  const cursorValues = params.getAll('cursor');
+  if (limitValues.length > 1 || cursorValues.length > 1)
+    throw new HttpError(
+      400,
+      'invalid_request',
+      'The query parameters are invalid.',
+    );
+  const cursor = cursorValues[0] ?? null;
+  if (cursor === '')
+    throw new HttpError(
+      400,
+      'invalid_cursor',
+      'The requested list cursor is invalid.',
+    );
+  const rawLimit = limitValues[0];
+  if (rawLimit === undefined) return { limit: 20, cursor };
+  if (!/^(?:0|[1-9][0-9]*)$/.test(rawLimit))
+    throw new HttpError(
+      400,
+      'invalid_limit',
+      'The requested list limit is invalid.',
+    );
+  const limit = Number(rawLimit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw new HttpError(
+      400,
+      'invalid_limit',
+      'The requested list limit is invalid.',
+    );
+  return { limit, cursor };
+}
+
+function isCanonicalUuid(value: string | undefined): value is string {
+  return (
+    value !== undefined &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  );
 }

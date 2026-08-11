@@ -64,10 +64,26 @@ export const StartWorkRunResponseSchema = z
   })
   .strict();
 
+export const WorkListResponseSchema = z
+  .object({
+    works: z.array(WorkResponseSchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+
+export const WorkRunListResponseSchema = z
+  .object({
+    work_runs: z.array(WorkRunResponseSchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+
 export type CreateWorkRequest = z.infer<typeof CreateWorkRequestSchema>;
 export type StartWorkRunRequest = z.infer<typeof StartWorkRunRequestSchema>;
 export type WorkResponse = z.infer<typeof WorkResponseSchema>;
 export type WorkRunResponse = z.infer<typeof WorkRunResponseSchema>;
+export type WorkListResponse = z.infer<typeof WorkListResponseSchema>;
+export type WorkRunListResponse = z.infer<typeof WorkRunListResponseSchema>;
 
 export function toWorkResponse(work: {
   readonly id: string;

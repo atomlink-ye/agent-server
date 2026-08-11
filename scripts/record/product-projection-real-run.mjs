@@ -72,7 +72,7 @@ async function waitFor(load, predicate, timeoutMs) {
   }
   fail('scenario_predicate_timeout');
 }
-function agentYaml(name, instructions) {
+function agentYaml(name, instructions, packageName = name) {
   const refs =
     name === 'projection-lead'
       ? [
@@ -84,7 +84,7 @@ function agentYaml(name, instructions) {
           'team-finish',
         ]
       : ['team-state', 'team-work-list', 'team-work-submit'];
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Product Projection real-run recording role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${packageName}\nspec:\n  description: Product Projection real-run recording role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 function environmentYaml() {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
@@ -189,6 +189,8 @@ async function main() {
       : scenario === 'rework-once'
         ? ['projection-worker', 'projection-reviewer']
         : ['projection-worker', 'projection-observer'];
+  const packageSuffix =
+    mode === 'state-canary' ? `-${randomUUID().slice(0, 8)}` : '';
   const versions = { members: [] };
   const lead = await http(url, token, '/api/v1/agents:import', {
     method: 'POST',
@@ -196,6 +198,7 @@ async function main() {
       source: agentYaml(
         'projection-lead',
         scenarioInstructions(scenario, 'lead'),
+        `projection-lead${packageSuffix}`,
       ),
     },
   });
@@ -207,7 +210,13 @@ async function main() {
   for (const name of names) {
     const member = await http(url, token, '/api/v1/agents:import', {
       method: 'POST',
-      body: { source: agentYaml(name, scenarioInstructions(scenario, name)) },
+      body: {
+        source: agentYaml(
+          name,
+          scenarioInstructions(scenario, name),
+          `${name}${packageSuffix}`,
+        ),
+      },
     });
     await http(
       url,

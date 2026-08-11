@@ -40,6 +40,8 @@ export function toAgenticTeamProjectResponse(
 ): AgenticTeamProjectResponse {
   if (!projection)
     return {
+      stuck: false,
+      decision_capture_status: 'not_captured',
       project: null,
       work_items: [],
       gates: {
@@ -52,6 +54,13 @@ export function toAgenticTeamProjectResponse(
       sessions: [],
     };
   return {
+    stuck: projection.stuck,
+    ...(projection.decisionCapture.status === 'reported'
+      ? {
+          decision_capture_status: 'reported' as const,
+          decisions: [...projection.decisionCapture.decisions],
+        }
+      : { decision_capture_status: 'not_captured' as const }),
     project: {
       root_task_id: projection.project.rootTaskId,
       team_run_id: projection.project.teamRunId,

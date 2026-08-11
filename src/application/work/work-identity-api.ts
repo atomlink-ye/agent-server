@@ -3,12 +3,17 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AccessContext } from '../control-plane/access-context.js';
 import type { WorkDefinitionReadPort } from '../ports/work-definition-read.js';
 import type {
+  BindRootTaskCasInput,
   WorkIdentityRepository,
   WorkIdentityOwnerScope,
 } from '../ports/work-identity-repository.js';
 import { createWork, WorkNotFoundError } from '../../domain/work/work.js';
 import type { Work } from '../../domain/work/work.js';
-import type { WorkRun } from '../../domain/work/work-run.js';
+import type { BoundWorkRun, WorkRun } from '../../domain/work/work-run.js';
+import type {
+  RecordResolvedManifestInput,
+  ResolvedResourceManifest,
+} from '../../domain/work/resolved-resource-manifest.js';
 
 export interface CreateWorkInput {
   readonly owner: WorkIdentityOwnerScope;
@@ -27,6 +32,8 @@ export interface StartPendingWorkRunInput {
 }
 
 export interface WorkIdentityApiOptions {
+  readonly repository: WorkIdentityRepository;
+  readonly definitions: WorkDefinitionReadPort;
   readonly now?: () => Date;
   readonly pendingTtlMs?: number;
 }
@@ -42,23 +49,28 @@ export class WorkIdentityApi {
   private readonly now: () => Date;
   private readonly pendingTtlMs: number;
 
-  public constructor(
-    private readonly repository: WorkIdentityRepository,
-    private readonly definitions: WorkDefinitionReadPort,
-    options: WorkIdentityApiOptions = {},
-  ) {
+  public constructor(options: WorkIdentityApiOptions) {
+    this.repository = options.repository;
+    this.definitions = options.definitions;
     this.now = options.now ?? (() => new Date());
     this.pendingTtlMs = options.pendingTtlMs ?? 15 * 60 * 1000;
   }
 
+  private readonly repository: WorkIdentityRepository;
+  private readonly definitions: WorkDefinitionReadPort;
+
   public async createWork(input: CreateWorkInput): Promise<Work> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(input.accessContext);
+    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
+      input.accessContext,
+    );
     if (
       input.owner.tenantId !== accessOwner.tenantId ||
       input.owner.workspaceId !== accessOwner.workspaceId
     )
       throw new WorkDefinitionValidationError();
-    const definition = await this.definitions.findTeamDefinitionById(input.definitionId);
+    const definition = await this.definitions.findTeamDefinitionById(
+      input.definitionId,
+    );
     const version = await this.definitions.findPublishedTeamVersionById(
       input.definitionVersionId,
       input.accessContext,
@@ -84,21 +96,20 @@ export class WorkIdentityApi {
     );
   }
 
-  public async startWorkRun(
-    input: StartPendingWorkRunInput,
-  ): Promise<WorkRun> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(input.accessContext);
+  public async startWorkRun(input: StartPendingWorkRunInput): Promise<WorkRun> {
+    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
+      input.accessContext,
+    );
     if (
       input.owner.tenantId !== accessOwner.tenantId ||
       input.owner.workspaceId !== accessOwner.workspaceId
     )
       throw new WorkDefinitionValidationError();
-    const work = await this.repository.findWorkById(
-      input.workId,
-      input.owner,
-    );
+    const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
-    const definition = await this.definitions.findTeamDefinitionById(work.definitionId);
+    const definition = await this.definitions.findTeamDefinitionById(
+      work.definitionId,
+    );
     const version = await this.definitions.findPublishedTeamVersionById(
       work.currentDefinitionVersionId,
       input.accessContext,
@@ -134,7 +145,9 @@ export class WorkIdentityApi {
   public async updateCurrentDefinitionVersion(
     input: UpdateWorkDefinitionVersionInput,
   ): Promise<Work> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(input.accessContext);
+    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
+      input.accessContext,
+    );
     if (
       input.owner.tenantId !== accessOwner.tenantId ||
       input.owner.workspaceId !== accessOwner.workspaceId
@@ -142,7 +155,9 @@ export class WorkIdentityApi {
       throw new WorkDefinitionValidationError();
     const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
-    const definition = await this.definitions.findTeamDefinitionById(work.definitionId);
+    const definition = await this.definitions.findTeamDefinitionById(
+      work.definitionId,
+    );
     const version = await this.definitions.findPublishedTeamVersionById(
       input.definitionVersionId,
       input.accessContext,
@@ -172,6 +187,26 @@ export class WorkIdentityApi {
     return this.repository.findWorkRunById(id, owner);
   }
 
+  /** Binds the technical root Task while keeping repository writes behind this seam. */
+  public bindRootTaskCas(input: BindRootTaskCasInput): Promise<BoundWorkRun> {
+    return this.repository.bindRootTaskCas(input);
+  }
+
+  public getResolvedManifest(
+    workRunId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<ResolvedResourceManifest | null> {
+    return this.repository.getResolvedManifest(workRunId, owner);
+  }
+
+  public recordResolvedManifest(
+    input: RecordResolvedManifestInput,
+  ): Promise<ResolvedResourceManifest> {
+    if (this.repository.recordResolvedManifest)
+      return this.repository.recordResolvedManifest(input);
+    return this.repository.appendResolvedManifest(input);
+  }
+
   /** Converts an authenticated service-account context to the product owner scope. */
   public static ownerFromAccessContext(
     accessContext: AccessContext,
@@ -184,8 +219,12 @@ export class WorkIdentityApi {
 }
 
 function assertPublishedDefinition(
-  definition: Awaited<ReturnType<WorkDefinitionReadPort['findTeamDefinitionById']>>,
-  version: Awaited<ReturnType<WorkDefinitionReadPort['findPublishedTeamVersionById']>>,
+  definition: Awaited<
+    ReturnType<WorkDefinitionReadPort['findTeamDefinitionById']>
+  >,
+  version: Awaited<
+    ReturnType<WorkDefinitionReadPort['findPublishedTeamVersionById']>
+  >,
   definitionId: string,
   owner: WorkIdentityOwnerScope,
 ): asserts definition is NonNullable<typeof definition> {
@@ -206,7 +245,9 @@ function assertPublishedDefinition(
 export class WorkDefinitionValidationError extends Error {
   public readonly code = 'invalid_work_definition';
   public constructor() {
-    super('The definition and published version must belong to this owner scope and lineage.');
+    super(
+      'The definition and published version must belong to this owner scope and lineage.',
+    );
     this.name = 'WorkDefinitionValidationError';
   }
 }

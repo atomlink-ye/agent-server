@@ -4,6 +4,16 @@ import type {
   CreateOrLoadPendingWorkRunInput,
   BindRootTaskCasInput,
 } from '../../application/ports/work-identity-repository.js';
+import type { ExecutionAdmission } from '../../application/ports/execution-admission.js';
+import type { WorkDefinitionReadPort } from '../../application/ports/work-definition-read.js';
+import {
+  WorkIdentityApi,
+  type WorkIdentityApiOptions,
+} from '../../application/work/work-identity-api.js';
+import {
+  StartWorkRun,
+  type StartWorkRunOptions,
+} from '../../application/work/start-work-run.js';
 import {
   WorkIdentityConflictError,
   WorkNotFoundError,
@@ -28,7 +38,10 @@ export interface WorkIdentityQueryable {
   query<Row = Record<string, unknown>>(
     sql: string,
     values?: readonly unknown[],
-  ): Promise<{ readonly rows?: readonly Row[]; readonly rowCount?: number | null }>;
+  ): Promise<{
+    readonly rows?: readonly Row[];
+    readonly rowCount?: number | null;
+  }>;
 }
 
 export interface WorkIdentityClient extends WorkIdentityQueryable {
@@ -40,6 +53,52 @@ export interface WorkIdentityConnectable extends WorkIdentityQueryable {
 }
 
 type Database = WorkIdentityQueryable | WorkIdentityConnectable;
+
+export interface PostgresWorkIdentityModuleOptions {
+  readonly database: Database;
+  readonly definitions: WorkDefinitionReadPort;
+  readonly execution: ExecutionAdmission;
+  readonly now?: () => Date;
+  readonly pendingTtlMs?: number;
+}
+
+export interface PostgresWorkIdentityModule {
+  readonly workIdentity: WorkIdentityApi;
+  readonly workIdentityQuery: Pick<
+    WorkIdentityRepository,
+    'findWorkById' | 'findWorkRunById'
+  >;
+  readonly startWorkRun: StartWorkRun;
+}
+
+/** Composes the production Work identity application module over PostgreSQL. */
+export function createPostgresWorkIdentityModule(
+  options: PostgresWorkIdentityModuleOptions,
+): PostgresWorkIdentityModule {
+  const workIdentityRepository = new PostgresWorkIdentityRepository(
+    options.database,
+  );
+  const identityOptions: WorkIdentityApiOptions = {
+    repository: workIdentityRepository,
+    definitions: options.definitions,
+    ...(options.now ? { now: options.now } : {}),
+    ...(options.pendingTtlMs !== undefined
+      ? { pendingTtlMs: options.pendingTtlMs }
+      : {}),
+  };
+  const workIdentity = new WorkIdentityApi(identityOptions);
+  const startWorkRunOptions: StartWorkRunOptions = {
+    identity: workIdentity,
+    execution: options.execution,
+    ...(options.now ? { now: options.now } : {}),
+  };
+  const startWorkRun = new StartWorkRun(startWorkRunOptions);
+  return {
+    workIdentity,
+    workIdentityQuery: workIdentityRepository,
+    startWorkRun,
+  };
+}
 
 type WorkRow = {
   id: string;
@@ -111,17 +170,23 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
         work.updatedAt,
       ],
     );
-    const row = inserted.rows?.[0] ?? (await this.database.query<WorkRow>(
-      `SELECT ${workColumns} FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
-      [work.id, work.tenantId, work.workspaceId],
-    )).rows?.[0];
+    const row =
+      inserted.rows?.[0] ??
+      (
+        await this.database.query<WorkRow>(
+          `SELECT ${workColumns} FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
+          [work.id, work.tenantId, work.workspaceId],
+        )
+      ).rows?.[0];
     if (!row) {
       const existing = await this.database.query<{ id: string }>(
         'SELECT id FROM works WHERE id=$1',
         [work.id],
       );
       if (existing.rows?.[0])
-        throw new WorkIdentityConflictError('The work id belongs to another owner scope.');
+        throw new WorkIdentityConflictError(
+          'The work id belongs to another owner scope.',
+        );
       throw new Error('The work could not be persisted.');
     }
     const result = mapWork(row);
@@ -185,14 +250,21 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
         input.idempotencyKey,
         input.expiresAt,
         input.createdAt ?? input.now ?? new Date().toISOString(),
-        input.updatedAt ?? input.now ?? input.createdAt ?? new Date().toISOString(),
+        input.updatedAt ??
+          input.now ??
+          input.createdAt ??
+          new Date().toISOString(),
       ],
     );
-    const row = inserted.rows?.[0] ?? (await this.database.query<WorkRunRow>(
-      `SELECT ${runColumns} FROM work_runs
+    const row =
+      inserted.rows?.[0] ??
+      (
+        await this.database.query<WorkRunRow>(
+          `SELECT ${runColumns} FROM work_runs
        WHERE tenant_id=$1 AND workspace_id=$2 AND idempotency_key=$3`,
-      [input.owner.tenantId, input.owner.workspaceId, input.idempotencyKey],
-    )).rows?.[0];
+          [input.owner.tenantId, input.owner.workspaceId, input.idempotencyKey],
+        )
+      ).rows?.[0];
     if (!row) throw new Error('The pending work run could not be persisted.');
     const run = mapWorkRun(row);
     if (
@@ -208,7 +280,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     return run;
   }
 
-  public startPendingWorkRun(input: CreateOrLoadPendingWorkRunInput): Promise<WorkRun> {
+  public startPendingWorkRun(
+    input: CreateOrLoadPendingWorkRunInput,
+  ): Promise<WorkRun> {
     return this.createOrLoadPending(input);
   }
 
@@ -236,7 +310,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     return result.rows?.[0] ? mapWorkRun(result.rows[0]) : null;
   }
 
-  public async bindRootTaskCas(input: BindRootTaskCasInput): Promise<BoundWorkRun> {
+  public async bindRootTaskCas(
+    input: BindRootTaskCasInput,
+  ): Promise<BoundWorkRun> {
     let updated: { readonly rows?: readonly WorkRunRow[] };
     try {
       updated = await this.database.query<WorkRunRow>(
@@ -245,16 +321,17 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
        WHERE id=$3 AND tenant_id=$4 AND workspace_id=$5
          AND (root_task_id=$1 OR (root_task_id IS NULL AND expires_at>$2))
        RETURNING ${runColumns}`,
-      [
-        input.rootTaskId,
-        input.now,
-        input.workRunId,
-        input.owner.tenantId,
-        input.owner.workspaceId,
+        [
+          input.rootTaskId,
+          input.now,
+          input.workRunId,
+          input.owner.tenantId,
+          input.owner.workspaceId,
         ],
       );
     } catch (error) {
-      if (isRootTaskUniqueViolation(error)) throw new WorkRunBindingConflictError();
+      if (isRootTaskUniqueViolation(error))
+        throw new WorkRunBindingConflictError();
       throw error;
     }
     if (updated.rows?.[0]) return asBoundWorkRun(mapWorkRun(updated.rows[0]));
@@ -264,7 +341,9 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     if (existing.rootTaskId === input.rootTaskId)
       return asBoundWorkRun(existing);
     if (!existing.rootTaskId) {
-      if (new Date(existing.expiresAt).getTime() <= new Date(input.now).getTime())
+      if (
+        new Date(existing.expiresAt).getTime() <= new Date(input.now).getTime()
+      )
         throw new PendingWorkRunExpiredError();
       throw new WorkRunBindingConflictError();
     }
@@ -283,13 +362,15 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     let committed = false;
     try {
       await client.query('BEGIN');
-      const run = await client.query<{ id: string; root_task_id: string | null }>(
+      const run = await client.query<{
+        id: string;
+        root_task_id: string | null;
+      }>(
         `SELECT id,root_task_id FROM work_runs WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 FOR UPDATE`,
         [input.workRunId, input.owner.tenantId, input.owner.workspaceId],
       );
       if (!run.rows?.[0]) throw new WorkRunNotFoundError();
-      if (!run.rows[0].root_task_id)
-        throw new WorkRunBindingConflictError();
+      if (!run.rows[0].root_task_id) throw new WorkRunBindingConflictError();
       const existingRows = await client.query<ManifestRow>(
         `SELECT ${manifestColumns} FROM work_run_resource_manifest
          WHERE work_run_id=$1 AND tenant_id=$2 AND workspace_id=$3 ORDER BY slot FOR UPDATE`,
@@ -398,7 +479,10 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
   }
 
   private async transactionClient(): Promise<WorkIdentityClient> {
-    if ('connect' in this.database && typeof this.database.connect === 'function')
+    if (
+      'connect' in this.database &&
+      typeof this.database.connect === 'function'
+    )
       return this.database.connect();
     return this.database as WorkIdentityClient;
   }
@@ -474,7 +558,8 @@ function assertWorkEquivalent(expected: Work, actual: Work): void {
 }
 
 function asBoundWorkRun(run: WorkRun): BoundWorkRun {
-  if (!run.rootTaskId || !run.boundAt) throw new Error('Expected a bound work run.');
+  if (!run.rootTaskId || !run.boundAt)
+    throw new Error('Expected a bound work run.');
   return run as BoundWorkRun;
 }
 
@@ -500,11 +585,19 @@ function manifestEntriesEqual(
   const orderedRight = [...right].sort((a, b) => a.slot.localeCompare(b.slot));
   return (
     orderedLeft.length === orderedRight.length &&
-    orderedLeft.every((entry, index) => manifestEntryEqual(entry, orderedRight[index]!))
+    orderedLeft.every((entry, index) =>
+      manifestEntryEqual(entry, orderedRight[index]!),
+    )
   );
 }
 
 function isRootTaskUniqueViolation(error: unknown): boolean {
-  const value = error as { readonly code?: string; readonly constraint?: string };
-  return value?.code === '23505' && value.constraint === 'work_runs_root_task_bound_unique';
+  const value = error as {
+    readonly code?: string;
+    readonly constraint?: string;
+  };
+  return (
+    value?.code === '23505' &&
+    value.constraint === 'work_runs_root_task_bound_unique'
+  );
 }

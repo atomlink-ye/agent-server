@@ -1,6 +1,5 @@
 import type { AccessContext } from '../control-plane/access-context.js';
 import type { ExecutionAdmission } from '../ports/execution-admission.js';
-import type { WorkIdentityRepository } from '../ports/work-identity-repository.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
 import {
   PendingWorkRunExpiredError,
@@ -30,15 +29,26 @@ export interface StartWorkRunResult {
   };
 }
 
-export class StartWorkRun {
-  public constructor(
-    private readonly identity: WorkIdentityApi,
-    private readonly repository: WorkIdentityRepository,
-    private readonly execution: ExecutionAdmission,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+export interface StartWorkRunOptions {
+  readonly identity: WorkIdentityApi;
+  readonly execution: ExecutionAdmission;
+  readonly now?: () => Date;
+}
 
-  public async execute(input: StartWorkRunRequest): Promise<StartWorkRunResult> {
+export class StartWorkRun {
+  private readonly identity: WorkIdentityApi;
+  private readonly execution: ExecutionAdmission;
+  private readonly now: () => Date;
+
+  public constructor(options: StartWorkRunOptions) {
+    this.identity = options.identity;
+    this.execution = options.execution;
+    this.now = options.now ?? (() => new Date());
+  }
+
+  public async execute(
+    input: StartWorkRunRequest,
+  ): Promise<StartWorkRunResult> {
     const owner = WorkIdentityApi.ownerFromAccessContext(input.accessContext);
     if (
       input.owner &&
@@ -77,7 +87,7 @@ export class StartWorkRun {
     });
 
     try {
-      const bound = await this.repository.bindRootTaskCas({
+      const bound = await this.identity.bindRootTaskCas({
         workRunId: pending.id,
         rootTaskId: receipt.taskId,
         owner,
@@ -99,9 +109,11 @@ export class StartWorkRun {
     owner: { readonly tenantId: string; readonly workspaceId: string },
   ): Promise<void> {
     const requestedRef = `team_version:${workRun.definitionVersionId}`;
-    const existing = await this.repository.getResolvedManifest(workRun.id, owner);
+    const existing = await this.identity.getResolvedManifest(workRun.id, owner);
     if (existing) {
-      const definition = existing.entries.find((entry) => entry.slot === 'definition');
+      const definition = existing.entries.find(
+        (entry) => entry.slot === 'definition',
+      );
       if (
         existing.entries.length === 1 &&
         definition?.resourceKind === 'definition' &&
@@ -109,7 +121,9 @@ export class StartWorkRun {
         definition.requestedRef === requestedRef
       )
         return;
-      throw new Error('The WorkRun resolved manifest conflicts with its pinned definition.');
+      throw new Error(
+        'The WorkRun resolved manifest conflicts with its pinned definition.',
+      );
     }
     const input = {
       workRunId: workRun.id,
@@ -125,8 +139,6 @@ export class StartWorkRun {
         },
       ],
     } as const;
-    if (this.repository.recordResolvedManifest)
-      await this.repository.recordResolvedManifest(input);
-    else await this.repository.appendResolvedManifest(input);
+    await this.identity.recordResolvedManifest(input);
   }
 }

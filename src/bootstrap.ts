@@ -94,11 +94,9 @@ import {
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
-import { PostgresWorkIdentityRepository } from './infrastructure/postgres/postgres-work-identity-repository.js';
+import { createPostgresWorkIdentityModule } from './infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresWorkProjectionFactsQuery } from './infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
-import { WorkIdentityApi } from './application/work/work-identity-api.js';
-import { StartWorkRun } from './application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
 import { WorkProjectionFactsSource } from './application/product-projection/work-projection-facts-source.js';
 import { createProductProjection } from './application/product-projection/product-projection.js';
@@ -301,18 +299,6 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
-  const workIdentityRepository = new PostgresWorkIdentityRepository(pool);
-  const workIdentity = new WorkIdentityApi(
-    workIdentityRepository,
-    new InvokableWorkDefinitionReadAdapter(invokableRepository),
-  );
-  const productProjection = createProductProjection({
-    workIdentity: workIdentityRepository,
-    workFacts: new WorkProjectionFactsSource(
-      new QueryWorkProjectionFacts(new PostgresWorkProjectionFactsQuery(pool)),
-    ),
-    executionFacts: new PostgresExecutionFactQuery(pool),
-  });
   const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
   const learningProposalRepository = new PostgresLearningProposalRepository(
     pool,
@@ -431,11 +417,19 @@ export async function createService(
     invokableRepository,
     resolveAgentVersion,
   );
-  const startWorkRun = new StartWorkRun(
-    workIdentity,
-    workIdentityRepository,
-    new InvokeTaskExecutionAdmission(invokeTask),
-  );
+  const { workIdentity, workIdentityQuery, startWorkRun } =
+    createPostgresWorkIdentityModule({
+      database: pool,
+      definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),
+      execution: new InvokeTaskExecutionAdmission(invokeTask),
+    });
+  const productProjection = createProductProjection({
+    workIdentity: workIdentityQuery,
+    workFacts: new WorkProjectionFactsSource(
+      new QueryWorkProjectionFacts(new PostgresWorkProjectionFactsQuery(pool)),
+    ),
+    executionFacts: new PostgresExecutionFactQuery(pool),
+  });
   const runtimeMcpServer = new RuntimeMcpServer(
     memoryApiRepository,
     undefined,

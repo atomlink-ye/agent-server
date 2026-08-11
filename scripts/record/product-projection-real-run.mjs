@@ -78,6 +78,7 @@ function agentYaml(name, instructions, packageName = name) {
       ? [
           'team-state',
           'team-work-list',
+          'team-message-send',
           'team-work-create',
           'team-work-accept-v2',
           'team-work-request-changes',
@@ -106,7 +107,7 @@ function scenarioInstructions(scenario, role, mode) {
   if (scenario === 'rework-once')
     return 'Act as lead using only canonical Team tools. On the empty board create exactly two independent Work items: work-1 assigned to projection-worker requiring ACCEPTANCE_SENTINEL, and work-2 assigned to projection-reviewer requiring review of that exact sentinel rule. After both first submissions, accept reviewer work, then request changes exactly once on worker work with feedback "worker attempt 1 omits ACCEPTANCE_SENTINEL". Accept worker work only when attempt 2 contains WORKER_SUBMIT_V2 ACCEPTANCE_SENTINEL, then finish exactly once. Never repeat a successful mutation.';
   if (mode === 'state-canary')
-    return 'Act as lead using only canonical Team tools. HARD CARDINALITY GATE: create exactly two independent Work items total, one assigned to projection-worker-a and one to projection-worker-b. Each description must require the assignee to make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid. Wake both members. Accept no submission, request no changes, cancel nothing, and never call team_finish. After both members have submitted, make no further mutation and leave the Team active.';
+    return 'Act as lead using only canonical Team tools. HARD CARDINALITY GATE: create exactly two independent Work items total, one assigned to projection-worker-a and one to projection-worker-b. Each description must require the assignee to make the real canonical team_work_submit call and wait for its successful receipt; pure prose is invalid. Wake both members. Accept no submission, request no changes, cancel nothing, and never call team_finish. If exactly one member has submitted, send exactly one canonical direct message to the unfinished member telling it to complete and submit; this is required durable progress for that Lead turn. After both members have submitted, make no further mutation and leave the Team active.';
   return 'Act as lead using only canonical Team tools. Create one Work for worker, accept no submission, and leave the run waiting or active after the worker has submitted. Never finish or accept.';
 }
 function resolveDefinition(source, environmentVersionId, versions) {
@@ -312,6 +313,20 @@ async function main() {
           works.filter((work) => (work.attempts ?? []).length === 2).length ===
             1
         );
+      if (mode === 'state-canary')
+        return (
+          status === 'active' &&
+          value?.stuck === true &&
+          value?.gates?.no_active_attempts === true &&
+          value?.gates?.all_members_idle === true &&
+          value?.gates?.all_work_accepted === false &&
+          works.length === 2 &&
+          works.every(
+            (work) =>
+              work.status === 'completed' &&
+              work.latest_attempt?.status === 'completed',
+          )
+        );
       return (
         ['waiting', 'active'].includes(status) &&
         works.some((work) => work.status === 'completed') &&
@@ -338,6 +353,7 @@ async function main() {
       tenantId,
       workspaceId,
       principalId,
+      principalType: process.env.AGENT_PRINCIPAL_TYPE ?? 'service_account',
       databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
     });
     return;
@@ -428,10 +444,16 @@ async function proveStateHonestyCanary(input) {
          ) technical_run ON true
         WHERE tr.id=$1
           AND tr.tenant_id=$2 AND tr.workspace_id=$3
-          AND tr.principal_type='service' AND tr.principal_id=$4
+          AND tr.principal_type=$4 AND tr.principal_id=$5
         ORDER BY attempt.attempt_no DESC,attempt.id DESC
         LIMIT 1`,
-      [teamRunId, input.tenantId, input.workspaceId, input.principalId],
+      [
+        teamRunId,
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+      ],
     );
     const stuck = stuckResult.rows[0];
     if (!stuck) fail('state_canary_submitted_unaccepted_attempt_missing');
@@ -457,11 +479,16 @@ async function proveStateHonestyCanary(input) {
       `SELECT id AS team_run_id,root_task_id
          FROM team_runs
         WHERE tenant_id=$1 AND workspace_id=$2
-          AND principal_type='service' AND principal_id=$3
+          AND principal_type=$3 AND principal_id=$4
           AND status='succeeded'
         ORDER BY updated_at DESC,id DESC
         LIMIT 1`,
-      [input.tenantId, input.workspaceId, input.principalId],
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.principalType,
+        input.principalId,
+      ],
     );
     const normal = normalResult.rows[0];
     if (!normal) fail('state_canary_normal_run_missing');

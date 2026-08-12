@@ -1,80 +1,90 @@
 #!/usr/bin/env node
 
-import { access, readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { register as registerTsx, tsImport } from 'tsx/esm/api';
 
+// Keep this smoke as a plain .mjs entry point while importing the actual web
+// decoder and shared TypeScript contract through tsx's ESM loader API.
 registerTsx();
 
-function fail(code) {
-  process.stderr.write(`${code}\n`);
-  process.exitCode = 1;
-  throw new Error(code);
-}
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
-function arg(name) {
+function option(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
-function decoderFrom(module) {
-  for (const name of [
-    'decodeProductWorkRun',
-    'ProductWorkRunConsumerDecoder',
-    'ProductWorkRunConsumerSchema',
-    'ProductWorkRunResponseConsumerSchema',
-  ]) {
-    const candidate = module[name];
-    if (typeof candidate === 'function') return (value) => candidate(value);
-    if (candidate && typeof candidate.parse === 'function')
-      return (value) => candidate.parse(value);
-  }
-  return null;
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-async function loadDecoder() {
-  const candidates = [
-    'src/contracts/product-projection/consumer.ts',
-    'src/contracts/product-projection/decoder.ts',
-    'src/contracts/product-projection/index.ts',
-  ];
-  for (const relative of candidates) {
-    const path = resolve(relative);
-    try {
-      await access(path);
-      const module = await tsImport(path, import.meta.url);
-      const decoder = decoderFrom(module);
-      if (decoder) return decoder;
-    } catch {
-      // Try the next shared-contract export; a missing decoder is a hard failure below.
-    }
-  }
-  fail('consumer_decoder_missing');
+async function readWorkRun(recording) {
+  const path = join(resolve(recording), 'api/work-run.json');
+  return JSON.parse(await readFile(path, 'utf8'));
 }
 
-const recording = arg('--recording');
-if (!recording) fail('recording_required');
-const responsePath = resolve(recording, 'api/work-run.json');
-const response = JSON.parse(await readFile(responsePath, 'utf8'));
-const decode = await loadDecoder();
+async function main() {
+  const recording = option('--recording');
+  if (!recording) throw new Error('recording_required: use --recording <dir>');
 
-let additiveExit = 0;
-try {
-  decode({ ...response, future_optional_probe: { added_by_server: true } });
-} catch {
-  additiveExit = 1;
+  const raw = await readWorkRun(recording);
+  if (!isRecord(raw) || !Object.hasOwn(raw, 'work_run'))
+    throw new Error('baseline_work_run_required');
+
+  const contract = await tsImport(
+    join(root, 'src/contracts/product-projection/index.ts'),
+    import.meta.url,
+  );
+  const webDecoder = await tsImport(
+    join(root, 'apps/web/lib/product-api-decoder.ts'),
+    import.meta.url,
+  );
+  const schema = contract.ProductWorkRunResponseSchema;
+  const decodeProductResponse = webDecoder.decodeProductResponse;
+
+  const baselineStrict = schema.safeParse(raw);
+  const baselineDecoded = decodeProductResponse(raw, schema);
+  const additiveRaw = {
+    ...raw,
+    future_optional_probe: { added_by_server: true },
+  };
+  const additiveStrict = schema.safeParse(additiveRaw);
+  const additiveDecoded = decodeProductResponse(additiveRaw, schema);
+  const missingRequiredRaw = { ...raw };
+  delete missingRequiredRaw.work_run;
+  const missingRequiredDecoded = decodeProductResponse(
+    missingRequiredRaw,
+    schema,
+  );
+
+  const baselineOk = baselineStrict.success && baselineDecoded.success;
+  const additiveOk =
+    !additiveStrict.success &&
+    additiveDecoded.success &&
+    baselineDecoded.success &&
+    isDeepStrictEqual(additiveDecoded.data, baselineDecoded.data);
+  const requiredOk = !missingRequiredDecoded.success;
+
+  const strictExit = additiveStrict.success ? 0 : 1;
+  const additiveExit = additiveOk ? 0 : 1;
+  const requiredExit = requiredOk ? 1 : 0;
+  const overallOk =
+    baselineOk && strictExit === 1 && additiveExit === 0 && requiredExit === 1;
+
+  process.stdout.write(`STRICT_ADDITIVE_EXIT=${strictExit}\n`);
+  process.stdout.write(`ADDITIVE_FIELD_EXIT=${additiveExit}\n`);
+  process.stdout.write(`REQUIRED_FIELD_EXIT=${requiredExit}\n`);
+  process.stdout.write(`EXIT=${overallOk ? 0 : 1}\n`);
+  if (!overallOk) process.exitCode = 1;
 }
-process.stdout.write(`ADDITIVE_FIELD_EXIT=${additiveExit}\n`);
 
-let requiredExit = 0;
-try {
-  const missing = { ...response };
-  delete missing.work_run;
-  decode(missing);
-} catch {
-  requiredExit = 1;
-}
-process.stdout.write(`REQUIRED_FIELD_EXIT=${requiredExit}\n`);
-
-if (additiveExit !== 0 || requiredExit !== 1) fail('consumer_compatibility_probe_failed');
-process.stdout.write('EXIT=0\n');
+main().catch((error) => {
+  process.stderr.write(
+    `ERROR=${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  process.stdout.write('EXIT=1\n');
+  process.exitCode = 1;
+});

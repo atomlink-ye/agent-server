@@ -10,11 +10,14 @@ export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
 
-export async function GET({
-  params,
-}: {
-  params: Promise<{ work_id: string; work_run_id: string }>;
-}) {
+export async function GET(
+  _request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{ work_id: string; work_run_id: string }>;
+  },
+) {
   const { work_id: workId, work_run_id: workRunId } = await params;
   if (
     !GetWorkRunRequestSchema.safeParse({

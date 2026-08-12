@@ -119,7 +119,7 @@ const MCP_TOOL_FIELDS = [
   'chat_detail.method',
   'chat_detail.path',
   'chat_detail.target.activity_id',
-  'chat_detail.target.run_id',
+  'chat_detail.target.source_refs.run_id',
   'chat_detail.target.sequence',
   'kind',
   'provenance',
@@ -578,10 +578,6 @@ const derivation = (
     if (relativePath.endsWith('.chat_detail.target.activity_id'))
       return rule('mcp_chat_detail_target_v1', 'run_event_activity_id', [
         'run_events.payload',
-      ]);
-    if (relativePath.endsWith('.chat_detail.target.run_id'))
-      return rule('mcp_chat_detail_target_v1', 'run_event_run_id', [
-        'run_events.run_id',
       ]);
     if (relativePath.endsWith('.chat_detail.target.sequence'))
       return rule('mcp_chat_detail_target_v1', 'run_event_sequence', [

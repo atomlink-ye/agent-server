@@ -63,6 +63,8 @@ describeRealPostgres(
         workIdentity: {
           findWorkById: (id, owner) => repository.findWorkById(id, owner),
           findWorkRunById: (id, owner) => repository.findWorkRunById(id, owner),
+          findLatestVisibleWorkRun: (workId, owner) =>
+            repository.findLatestVisibleWorkRun(workId, owner),
         },
         workFacts: new WorkProjectionFactsSource(
           new QueryWorkProjectionFacts(
@@ -133,6 +135,7 @@ describeRealPostgres(
         config,
         workIdentity: workIdentity as never,
         workExists: projection.getWork,
+        workListProjection: projection.getWorkListItem,
         startWorkRun: {
           execute: async () => {
             throw new Error('not used');

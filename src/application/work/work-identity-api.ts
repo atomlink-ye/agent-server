@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../control-plane/access-context.js';
+import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
+import type { TeamVersion } from '../../domain/invokables/team-version.js';
 import type { WorkDefinitionReadPort } from '../ports/work-definition-read.js';
 import type {
   BindRootTaskCasInput,
@@ -50,6 +52,17 @@ export interface UpdateWorkDefinitionVersionInput {
 }
 export interface ListWorksInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; }
 export interface ListWorkRunsInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; readonly workId: string; }
+
+export interface GetWorkDefinitionInput {
+  readonly owner: WorkIdentityOwnerScope;
+  readonly accessContext: AccessContext;
+  readonly workId: string;
+}
+
+export interface WorkDefinitionBinding {
+  readonly definition: TeamDefinition;
+  readonly version: TeamVersion;
+}
 
 export class WorkIdentityApi {
   private readonly now: () => Date;
@@ -222,6 +235,33 @@ export class WorkIdentityApi {
     this.assertAccessOwner(input.owner, input.accessContext);
     if (!this.repository.listWorkRuns) throw new Error('Work run listing is unavailable.');
     return this.repository.listWorkRuns(input.owner, input.workId, { limit: input.limit, cursor: input.cursor });
+  }
+
+  public async getWorkDefinition(
+    input: GetWorkDefinitionInput,
+  ): Promise<WorkDefinitionBinding> {
+    this.assertAccessOwner(input.owner, input.accessContext);
+    const work = await this.repository.findWorkById(input.workId, input.owner);
+    if (!work) throw new WorkNotFoundError();
+    const definition = await this.definitions.findTeamDefinitionById(
+      work.definitionId,
+    );
+    const version = await this.definitions.findPublishedTeamVersionById(
+      work.currentDefinitionVersionId,
+      input.accessContext,
+    );
+    if (
+      !definition ||
+      !version ||
+      version.definitionId !== work.definitionId ||
+      definition.tenantId !== input.owner.tenantId ||
+      definition.workspaceId !== input.owner.workspaceId ||
+      version.tenantId !== input.owner.tenantId ||
+      version.workspaceId !== input.owner.workspaceId ||
+      version.status !== 'published'
+    )
+      throw new WorkNotFoundError();
+    return { definition, version };
   }
   private assertAccessOwner(owner: WorkIdentityOwnerScope, accessContext: AccessContext): void {
     const accessOwner = WorkIdentityApi.ownerFromAccessContext(accessContext);

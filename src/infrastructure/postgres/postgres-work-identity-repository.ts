@@ -72,6 +72,10 @@ export interface PostgresWorkIdentityModule {
   readonly workIdentityQuery: {
     readonly findWorkById: WorkIdentityRepository['findWorkById'];
     readonly findWorkRunById: WorkIdentityRepository['findWorkRunById'];
+    readonly findLatestVisibleWorkRun: (
+      workId: string,
+      owner: WorkIdentityOwnerScope,
+    ) => Promise<WorkRun | null>;
   };
   readonly startWorkRun: StartWorkRun;
 }
@@ -102,6 +106,8 @@ export function createPostgresWorkIdentityModule(
     findWorkById: (id, owner) => workIdentityRepository.findWorkById(id, owner),
     findWorkRunById: (id, owner) =>
       workIdentityRepository.findWorkRunById(id, owner),
+    findLatestVisibleWorkRun: (workId, owner) =>
+      workIdentityRepository.findLatestVisibleWorkRun(workId, owner),
   };
   return {
     workIdentity,
@@ -311,6 +317,20 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
       `SELECT ${runColumns} FROM work_runs
        WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3`,
       [id, owner.tenantId, owner.workspaceId],
+    );
+    return result.rows?.[0] ? mapWorkRun(result.rows[0]) : null;
+  }
+
+  public async findLatestVisibleWorkRun(
+    workId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null> {
+    const result = await this.database.query<WorkRunRow>(
+      `SELECT ${runColumns} FROM work_runs
+       WHERE work_id=$1 AND tenant_id=$2 AND workspace_id=$3
+         AND (root_task_id IS NOT NULL OR expires_at > now())
+       ORDER BY created_at DESC,id DESC LIMIT 1`,
+      [workId, owner.tenantId, owner.workspaceId],
     );
     return result.rows?.[0] ? mapWorkRun(result.rows[0]) : null;
   }

@@ -91,7 +91,7 @@ export interface AppDependencies {
   readonly version?: string;
   readonly workIdentity?: Pick<
     WorkIdentityApi,
-    'createWork' | 'listWorks' | 'listWorkRuns'
+    'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
   >;
   readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
   readonly productProjection?: ProductProjectionApi;
@@ -126,11 +126,16 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  if (dependencies.workIdentity && dependencies.startWorkRun)
+  if (
+    dependencies.workIdentity &&
+    dependencies.startWorkRun &&
+    dependencies.productProjection
+  )
     registerProductWorkCommandRoutes(app, {
       config: dependencies.config,
       workIdentity: dependencies.workIdentity,
       startWorkRun: dependencies.startWorkRun,
+      workListProjection: dependencies.productProjection.getWorkListItem,
       ...(dependencies.productProjection
         ? { workExists: dependencies.productProjection.getWork }
         : {}),

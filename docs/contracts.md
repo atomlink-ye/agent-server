@@ -160,6 +160,20 @@ a supported field:
 }
 ```
 
+`GET /api/v1/works` preserves the frozen `limit` 1–100 and opaque cursor
+pagination, and each Work item adds only `product_state` plus nullable
+`latest_run_summary`. The state uses the closed
+`running|needs_you|complete|problem|not_captured` vocabulary. The latest
+summary is the strict object `{id,updated_at,result_summary,
+result_capture_status}`; it does not expose provider, model, Task, root Task,
+or execution details.
+
+`GET /api/v1/works/{work_id}/definition` returns the owner-scoped Work's
+current `{definition,version}` using the existing safe Team definition and
+published Team version response shapes. It is a single-resource wrapper, not a
+version list, and therefore has no pagination. Missing, foreign, or mismatched
+definition lineage is hidden as the same `404 work_not_found` response.
+
 The minimum lane has one active root. Later Messages are durable queued roots
 ordered by `(generation, sequence)`. Terminal completion promotes the oldest
 eligible queued root and clears the reset cancellation request. Responses never

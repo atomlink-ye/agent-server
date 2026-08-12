@@ -65,6 +65,10 @@ export interface WorkIdentityRepository {
   /** Alias retained for coordinators that use the domain wording. */
   startPendingWorkRun?(input: CreateOrLoadPendingWorkRunInput): Promise<WorkRun>;
   findWorkRunById(id: string, owner: WorkIdentityOwnerScope): Promise<WorkRun | null>;
+  findLatestVisibleWorkRun?(
+    workId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null>;
   findWorkRunByIdempotencyKey(
     input: FindWorkRunByIdempotencyKeyInput,
   ): Promise<WorkRun | null>;

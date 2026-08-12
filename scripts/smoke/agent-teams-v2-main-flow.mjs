@@ -1907,7 +1907,9 @@ function assertProductProjectionDtoShape(value, label) {
       assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
       if (technicalIds.has(key))
         assert(
-          path.endsWith('source_refs'),
+          path.endsWith('source_refs') ||
+            path.endsWith('source_ref') ||
+            path.endsWith('chat_detail.target'),
           `${label}_${path}_${key}_outside_source_refs`,
         );
       walk(child, `${path}.${key}`);

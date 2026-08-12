@@ -154,9 +154,21 @@ function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
             new Date(right.created_at) <= new Date(left.completed_at),
         ),
     );
+    const attemptsByWork = new Map();
+    for (const row of attemptRows) {
+      const attempts = attemptsByWork.get(row.work_item_id) ?? [];
+      attempts.push(row);
+      attemptsByWork.set(row.work_item_id, attempts);
+    }
     if (
       teamRows.every((row) => row.status === 'succeeded') &&
       accepted.length >= 2 &&
+      workRows.length === 2 &&
+      workRows.every((row) => row.status === 'accepted') &&
+      workRows.every(
+        (row) => (attemptsByWork.get(row.id) ?? []).length >= 1,
+      ) &&
+      attemptRows.every((row) => !String(row.feedback ?? '').trim()) &&
       overlap
     )
       return;

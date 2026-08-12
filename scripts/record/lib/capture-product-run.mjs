@@ -13,16 +13,33 @@ import {
 
 const QUERY_DEFINITIONS = Object.freeze({
   team_runs: `SELECT tr.id,tr.tenant_id,tr.workspace_id,tr.principal_type,tr.principal_id,tr.root_task_id,tr.root_run_id,tr.team_version_id,tr.environment_version_id,tr.status,tr.phase,tr.final_text,tr.control_state,tr.revision,tr.lead_turn_count,tr.stop_reason,tr.completion_requested_by_run_id,tr.completion_approval_required,tr.created_at,tr.updated_at
-    FROM team_runs tr WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY tr.created_at,tr.id`,
+    FROM team_runs tr WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY tr.id`,
   team_work_items: `SELECT w.id,w.team_run_id,w.subject,w.description,w.status,w.owner_member_id,w.created_by_member_id,w.completion_summary,w.execution_task_id,w.tenant_id,w.workspace_id,w.principal_type,w.principal_id,w.created_at,w.updated_at,w.completed_at
-    FROM team_work_items w JOIN team_runs tr ON tr.id=w.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND w.tenant_id=$2 AND w.workspace_id=$3 AND w.principal_type=$4 AND w.principal_id=$5 ORDER BY w.created_at,w.id`,
+    FROM team_work_items w JOIN team_runs tr ON tr.id=w.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND w.tenant_id=$2 AND w.workspace_id=$3 AND w.principal_type=$4 AND w.principal_id=$5 ORDER BY w.id`,
   team_work_item_attempts: `SELECT a.id,a.work_item_id,a.team_run_id,a.attempt_no,a.assignee_member_id,a.requested_by_lead_task_id,a.feedback,a.execution_task_id,a.status,a.result_summary,a.tenant_id,a.workspace_id,a.principal_type,a.principal_id,a.created_at,a.updated_at,a.completed_at
-    FROM team_work_item_attempts a JOIN team_runs tr ON tr.id=a.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND a.tenant_id=$2 AND a.workspace_id=$3 AND a.principal_type=$4 AND a.principal_id=$5 ORDER BY a.work_item_id,a.attempt_no,a.id`,
+    FROM team_work_item_attempts a JOIN team_runs tr ON tr.id=a.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND a.tenant_id=$2 AND a.workspace_id=$3 AND a.principal_type=$4 AND a.principal_id=$5 ORDER BY a.id`,
   team_messages: `SELECT m.id,m.team_run_id,m.tenant_id,m.workspace_id,m.principal_type,m.principal_id,m.sequence,m.sender_member_run_id,m.recipient_member_run_id,m.work_item_id,m.attempt_id,m.kind,m.status,m.consumed_by_task_id,m.created_at,m.consumed_at
-    FROM team_messages m JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND m.tenant_id=$2 AND m.workspace_id=$3 AND m.principal_type=$4 AND m.principal_id=$5 ORDER BY m.sequence,m.id`,
+    FROM team_messages m JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND m.tenant_id=$2 AND m.workspace_id=$3 AND m.principal_type=$4 AND m.principal_id=$5 ORDER BY m.id`,
   run_events: `SELECT e.id,e.run_id,e.sequence,e.type,e.payload,e.created_at
     FROM run_events e JOIN runs r ON r.id=e.run_id JOIN tasks t ON t.id=r.task_id JOIN team_runs tr ON tr.root_task_id=t.root_task_id
-    WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3 AND t.principal_type=$4 AND t.principal_id=$5 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY e.run_id,e.sequence,e.id`,
+    WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3 AND t.principal_type=$4 AND t.principal_id=$5 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY e.id`,
+});
+
+const PRODUCT_QUERY_DEFINITIONS = Object.freeze({
+  ...QUERY_DEFINITIONS,
+  works: `SELECT w.id,w.tenant_id,w.workspace_id,w.definition_id,w.current_definition_version_id,w.title,w.origin,w.archived_at,w.created_at,w.updated_at
+    FROM works w JOIN work_runs wr ON wr.work_id=w.id
+    WHERE wr.root_task_id=$1 AND w.tenant_id=$2 AND w.workspace_id=$3
+      AND wr.tenant_id=$2 AND wr.workspace_id=$3
+    ORDER BY w.id`,
+  work_runs: `SELECT wr.id,wr.tenant_id,wr.workspace_id,wr.work_id,wr.definition_version_id,wr.trigger_kind,wr.trigger_ref,wr.root_task_id,wr.expires_at,wr.bound_at,wr.created_at,wr.updated_at
+    FROM work_runs wr WHERE wr.root_task_id=$1 AND wr.tenant_id=$2 AND wr.workspace_id=$3
+    ORDER BY wr.id`,
+  work_run_resource_manifest: `SELECT m.work_run_id,m.tenant_id,m.workspace_id,m.slot,m.resource_kind,m.requested_ref,m.resolved_version_id,m.resolved_fingerprint,m.resolved_at
+    FROM work_run_resource_manifest m JOIN work_runs wr ON wr.id=m.work_run_id
+    WHERE wr.root_task_id=$1 AND m.tenant_id=$2 AND m.workspace_id=$3
+      AND wr.tenant_id=$2 AND wr.workspace_id=$3
+    ORDER BY m.work_run_id,m.slot`,
 });
 
 const IDENTIFIER =
@@ -304,6 +321,7 @@ export async function capturePreIdentity(options) {
           options.providerModel ?? process.env.PASEO_MODEL ?? '[configured]',
       },
       root_task_id: options.rootTaskId,
+      git_sha: options.gitSha ?? process.env.GIT_SHA ?? process.env.PRODUCT_LINEAGE_SOURCE_REVISION ?? options.serviceRevision ?? 'unknown',
       work_id: { capture_status: 'not_applicable' },
       work_run_id: { capture_status: 'not_applicable' },
       tenant_id: options.tenantId,
@@ -375,8 +393,111 @@ export async function capturePreIdentity(options) {
   }
 }
 
-export const captureProductRun = async () => {
-  throw new Error(
-    'product_mode_not_implemented: use --mode pre-identity until Product Work endpoints exist',
+export async function captureProductRun(options) {
+  const providerKind = assertInput(options);
+  if (!options.workId || !IDENTIFIER.test(options.workId))
+    throw new Error('capture_work_id_required');
+  if (!options.workRunId || !IDENTIFIER.test(options.workRunId))
+    throw new Error('capture_work_run_id_required');
+  if (!options.work || !options.workRun || !options.trace)
+    throw new Error('capture_product_api_response_required');
+  if (options.work.id !== options.workId)
+    throw new Error('capture_work_identity_mismatch');
+  if (options.workRun.id !== options.workRunId || options.workRun.work_id !== options.workId)
+    throw new Error('capture_work_run_identity_mismatch');
+
+  const baseUrl = new URL(options.baseUrl);
+  const outputRoot = resolve(
+    options.outputRoot ??
+      new URL('../../../fixtures/product-projection/recordings', import.meta.url).pathname,
   );
-};
+  const recordedAt = new Date().toISOString();
+  const target = join(outputRoot, options.scenario, recordingName(recordedAt, options.rootTaskId));
+  const temporary = `${target}.tmp-${process.pid}-${randomUUID()}`;
+  const sqlValues = [
+    options.rootTaskId,
+    options.tenantId,
+    options.workspaceId,
+    options.principalType ?? 'service_account',
+    options.principalId,
+  ];
+  const client = options.client ?? new Client({
+    connectionString: options.databaseUrl ?? process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+  });
+  let connected = false;
+  try {
+    if (!options.client) {
+      await client.connect();
+      connected = true;
+    }
+    const captures = [];
+    for (const [name, sql] of Object.entries(PRODUCT_QUERY_DEFINITIONS))
+      captures.push(await queryRows(client, sql, sqlValues, name));
+    const byName = new Map(captures.map((entry) => [entry.name, entry.rows]));
+    const teamRows = byName.get('team_runs');
+    if (!teamRows?.length) throw new Error('capture_team_run_missing');
+    if (!teamRows.every((row) => row.root_task_id === options.rootTaskId && row.tenant_id === options.tenantId && row.workspace_id === options.workspaceId))
+      throw new Error('capture_scope_mismatch');
+    const works = byName.get('works');
+    const workRuns = byName.get('work_runs');
+    const resources = byName.get('work_run_resource_manifest');
+    if (!works.some((row) => row.id === options.workId) || !workRuns.some((row) => row.id === options.workRunId) || resources.some((row) => row.work_run_id !== options.workRunId))
+      throw new Error('capture_product_db_identity_mismatch');
+    assertScenarioPredicate(options.scenario, teamRows, byName.get('team_work_items'), byName.get('team_work_item_attempts'));
+    await mkdir(join(temporary, 'api'), { recursive: true, mode: 0o700 });
+    await mkdir(join(temporary, 'db'), { recursive: true, mode: 0o700 });
+    await writeJson(join(temporary, 'api/work.json'), options.work);
+    await writeJson(join(temporary, 'api/work-run.json'), options.workRun);
+    await writeJson(join(temporary, 'api/trace.json'), options.trace);
+    for (const name of ['team_runs', 'team_work_items', 'team_work_item_attempts', 'team_messages', 'works', 'work_runs', 'work_run_resource_manifest'])
+      await writeJson(join(temporary, `db/${name}.json`), byName.get(name));
+    await writeJson(join(temporary, 'db/run_events.json'), runEventProjection(byName.get('run_events')));
+    const startedAt = teamRows.reduce((min, row) => new Date(row.created_at) < new Date(min) ? row.created_at : min, teamRows[0].created_at);
+    const manifest = {
+      format_version: 'product-projection-recording/v1',
+      mode: 'product',
+      scenario: options.scenario,
+      scenario_definition: true,
+      member_composition: options.memberComposition,
+      submit_instruction_profile: options.submitInstructionProfile,
+      definition_hash: options.definitionHash ?? 'unrecorded',
+      provider_run: 'real',
+      provider: { kind: providerKind, model: options.providerModel ?? process.env.PASEO_MODEL ?? '[configured]' },
+      root_task_id: options.rootTaskId,
+      git_sha: options.gitSha ?? process.env.GIT_SHA ?? process.env.PRODUCT_LINEAGE_SOURCE_REVISION ?? options.serviceRevision ?? 'unknown',
+      work_id: options.workId,
+      work_run_id: options.workRunId,
+      tenant_id: options.tenantId,
+      workspace_id: options.workspaceId,
+      principal_type: options.principalType ?? 'service_account',
+      principal_id: options.principalId,
+      started_at: new Date(startedAt).toISOString(),
+      recorded_at: recordedAt,
+      service_revision: options.serviceRevision ?? process.env.SERVICE_REVISION ?? 'unknown',
+      predicate_evidence: options.predicateEvidence ?? {},
+      accepted_subset: {
+        endpoint_count: 7,
+        endpoints: ['GET /api/v1/works', 'GET /api/v1/works/{work_id}', 'POST /api/v1/works', 'GET /api/v1/works/{work_id}/runs', 'POST /api/v1/works/{work_id}/runs', 'GET /api/v1/works/{work_id}/runs/{work_run_id}', 'GET /api/v1/works/{work_id}/runs/{work_run_id}/trace'],
+        controls: { cancel_work_run: 'explicitly_unavailable', decide_completion: 'explicitly_unavailable' },
+      },
+      files: {},
+      queries: captures.map(({ name, sql, row_count }) => ({ name, sql: sql.replace(/\s+/gu, ' ').trim(), parameters: ['$1:<redacted>', '$2:<redacted>', '$3:<redacted>', '$4:<redacted>', '$5:<redacted>'], row_count })),
+    };
+    for (const name of ['api/work.json', 'api/work-run.json', 'api/trace.json', 'db/team_runs.json', 'db/team_work_items.json', 'db/team_work_item_attempts.json', 'db/team_messages.json', 'db/run_events.json', 'db/works.json', 'db/work_runs.json', 'db/work_run_resource_manifest.json']) {
+      const bytes = await readFile(join(temporary, name));
+      manifest.files[name] = { row_count: name.startsWith('db/') ? JSON.parse(bytes).length : 1, sha256: sha256(bytes) };
+    }
+    await writeJson(join(temporary, 'manifest.json'), manifest);
+    const checksumFiles = ['manifest.json', ...Object.keys(manifest.files)];
+    await writeFile(join(temporary, 'SHA256SUMS'), `${(await Promise.all(checksumFiles.map(async (name) => `${sha256(await readFile(join(temporary, name)))}  ${name}`))).join('\n')}\n`, { mode: 0o600 });
+    const validation = await validateRecording(temporary, 'product');
+    await mkdir(resolve(target, '..'), { recursive: true, mode: 0o700 });
+    await rename(temporary, target);
+    return { directory: target, rootTaskId: options.rootTaskId, workId: options.workId, workRunId: options.workRunId, scenario: options.scenario, providerKind, validation };
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  } finally {
+    if (connected) await client.end();
+  }
+}

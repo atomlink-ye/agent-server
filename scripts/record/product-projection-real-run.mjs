@@ -449,6 +449,7 @@ async function main() {
       predicateEvidence: { parallel_attempts_observed: parallelAttemptsObserved },
       serviceRevision: live.version,
       databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+      outputRoot: process.env.PRODUCT_RECORDINGS_ROOT,
     });
     process.stdout.write(
       `${JSON.stringify({ provider: 'real', mode, scenario, root_task_id: rootTaskId, work_id: workId, work_run_id: workRunId, recording: capture.directory, secret_hits: capture.validation.secret_hits, hash_mismatches: capture.validation.hash_mismatches })}\n`,
@@ -472,6 +473,7 @@ async function main() {
     project,
     serviceRevision: live.version,
     databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+    outputRoot: process.env.PRODUCT_RECORDINGS_ROOT,
   });
   process.stdout.write(
     `${JSON.stringify({ provider: 'real', scenario, root_task_id: rootTaskId, work_id: { capture_status: 'not_applicable' }, work_run_id: { capture_status: 'not_applicable' }, api_files: capture.validation.api_files, db_tables: capture.validation.db_tables, predicate: project?.project?.status, recording: capture.directory, secret_hits: capture.validation.secret_hits, hash_mismatches: capture.validation.hash_mismatches })}\n`,

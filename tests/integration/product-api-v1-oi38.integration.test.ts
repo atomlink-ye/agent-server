@@ -181,15 +181,17 @@ describeRealPostgres(
       );
       expect(foreign.status).toBe(404);
       expect(missing.status).toBe(404);
-      const foreignError = normalizeError(await foreign.json());
-      const missingError = normalizeError(await missing.json());
-      expect(foreignError).toEqual(missingError);
-      expect(foreignError).toEqual({
-        error: {
-          code: 'work_not_found',
-          message: 'The requested Work was not found.',
-        },
-      });
+      const foreignError = await normalizeErrorJson(foreign);
+      const missingError = await normalizeErrorJson(missing);
+      expect(foreignError).toBe(missingError);
+      expect(foreignError).toBe(
+        JSON.stringify({
+          error: {
+            code: 'work_not_found',
+            message: 'The requested Work was not found.',
+          },
+        }),
+      );
     });
 
     it('fails closed for mismatched Work/WorkRun detail and trace', async () => {
@@ -199,12 +201,14 @@ describeRealPostgres(
           tokenA,
         );
         expect(response.status).toBe(404);
-        expect(normalizeError(await response.json())).toEqual({
-          error: {
-            code: 'work_run_not_found',
-            message: 'The WorkRun was not found for the requested workspace.',
-          },
-        });
+        expect(await normalizeErrorJson(response)).toBe(
+          JSON.stringify({
+            error: {
+              code: 'work_run_not_found',
+              message: 'The WorkRun was not found for the requested workspace.',
+            },
+          }),
+        );
       }
     });
   },
@@ -216,9 +220,11 @@ async function request(path: string, token: string): Promise<Response> {
   });
 }
 
-function normalizeError(value: unknown) {
-  const parsed = ErrorResponseSchema.parse(value);
-  return { error: { code: parsed.error.code, message: parsed.error.message } };
+async function normalizeErrorJson(response: Response): Promise<string> {
+  const parsed = ErrorResponseSchema.parse(await response.json());
+  return JSON.stringify({
+    error: { code: parsed.error.code, message: parsed.error.message },
+  });
 }
 
 async function seedIdentityRows(pool: Pool): Promise<void> {

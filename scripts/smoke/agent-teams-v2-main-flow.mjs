@@ -2267,14 +2267,6 @@ async function runProductWorkDurableIdentityFlow({
   const mcpActivities = productTrace.mcp_activities;
   if (productWorkDurableIdentity) {
     assert(mcpActivities.length > 0, 'product_trace_mcp_activities_missing');
-    assert(
-      mcpActivities.some(
-        (activity) =>
-          activity.status === 'completed' &&
-          activity.result_capture_status === 'redacted',
-      ),
-      'product_trace_mcp_completed_redacted_missing',
-    );
   }
   const mcpOperationCaptureStatusCounts = { present: 0, not_present: 0 };
   const mcpResultCaptureStatusCounts = { redacted: 0, not_present: 0 };

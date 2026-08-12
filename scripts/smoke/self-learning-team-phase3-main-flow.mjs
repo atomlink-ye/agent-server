@@ -14,8 +14,17 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
+import {
+  createOpenCodeConfigContent,
+  loadRealProviderDefaults,
+} from '../dev/real-provider-defaults.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const realProviderDefaults = loadRealProviderDefaults();
+process.env.PASEO_PROVIDER =
+  process.env.PASEO_PROVIDER?.trim() || realProviderDefaults.PASEO_PROVIDER;
+process.env.PASEO_MODEL =
+  process.env.PASEO_MODEL?.trim() || realProviderDefaults.PASEO_MODEL;
 const adminUrl = process.env.POSTGRES_ADMIN_URL;
 const token = `phase3-${randomUUID()}`;
 const tenantId = 'tenant_self_learning_phase3';
@@ -50,29 +59,25 @@ try {
     'self-learning-market-research',
   ]);
 
-  const useGo = Boolean(process.env.OPENCODE_GO_API_KEY);
+  const useGo =
+    Boolean(process.env.OPENCODE_GO_API_KEY?.trim()) &&
+    process.env.PASEO_MODEL.startsWith('opencode-go/');
   if (useGo)
-    process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-      $schema: 'https://opencode.ai/config.json',
-      provider: {
-        'opencode-go': {
-          npm: '@ai-sdk/openai-compatible',
-          name: 'OpenCode Go',
-          options: {
-            baseURL: 'https://opencode.ai/zen/go/v1',
-            apiKey: '{env:OPENCODE_GO_API_KEY}',
-          },
-          models: { 'deepseek-v4-flash': { name: 'deepseek-v4-flash' } },
-        },
-      },
+    process.env.OPENCODE_CONFIG_CONTENT = createOpenCodeConfigContent({
+      model: process.env.PASEO_MODEL,
     });
   paseo = await startPaseo({
     repositoryRoot: root,
     runtimeRoot,
     port: await getAvailablePort(),
     environmentVariableNames: useGo
-      ? ['OPENCODE_GO_API_KEY', 'OPENCODE_CONFIG_CONTENT']
-      : [],
+      ? [
+          'PASEO_PROVIDER',
+          'PASEO_MODEL',
+          'OPENCODE_GO_API_KEY',
+          'OPENCODE_CONFIG_CONTENT',
+        ]
+      : ['PASEO_PROVIDER', 'PASEO_MODEL'],
   });
   const apiPort = await getAvailablePort();
   Object.assign(process.env, {

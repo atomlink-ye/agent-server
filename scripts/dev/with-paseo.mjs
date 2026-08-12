@@ -8,6 +8,11 @@ import {
   startPaseo,
   stopProcessTree,
 } from './paseo-process.mjs';
+import {
+  createOpenCodeConfigContent,
+  deriveOpenCodeGoModelId,
+  loadRealProviderDefaults,
+} from './real-provider-defaults.mjs';
 import { createApplicationEnvironment } from './with-paseo-environment.mjs';
 const paseoEnvironmentNames = [
   'PASEO_PROVIDER',
@@ -24,14 +29,20 @@ const paseoEnvironmentNames = [
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ];
 
+const realProviderDefaults = loadRealProviderDefaults();
+const openCodeGoModel = realProviderDefaults.PASEO_MODEL.startsWith(
+  'opencode-go/',
+)
+  ? deriveOpenCodeGoModelId(realProviderDefaults.PASEO_MODEL)
+  : realProviderDefaults.PASEO_MODEL;
 const anthropicDefaults = {
   ANTHROPIC_BASE_URL: 'https://opencode.ai/zen/go',
-  ANTHROPIC_MODEL: 'deepseek-v4-flash',
-  ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
-  ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-flash',
-  ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-flash',
-  ANTHROPIC_SMALL_FAST_MODEL: 'deepseek-v4-flash',
-  CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-v4-flash',
+  ANTHROPIC_MODEL: openCodeGoModel,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: openCodeGoModel,
+  ANTHROPIC_DEFAULT_SONNET_MODEL: openCodeGoModel,
+  ANTHROPIC_DEFAULT_OPUS_MODEL: openCodeGoModel,
+  ANTHROPIC_SMALL_FAST_MODEL: openCodeGoModel,
+  CLAUDE_CODE_SUBAGENT_MODEL: openCodeGoModel,
 };
 
 const repositoryRoot = resolve(
@@ -47,7 +58,7 @@ if (command.length === 0) {
   process.exitCode = 2;
 } else {
   if (
-    process.env.PASEO_MODEL?.trim().startsWith('opencode-go/') &&
+    realProviderDefaults.PASEO_MODEL.startsWith('opencode-go/') &&
     !process.env.OPENCODE_GO_API_KEY?.trim()
   ) {
     process.stderr.write(
@@ -70,22 +81,8 @@ if (command.length === 0) {
   const paseoListenHost = process.env.PASEO_LISTEN_HOST ?? '127.0.0.1';
   if (process.env.OPENCODE_GO_API_KEY?.trim()) {
     if (!process.env.OPENCODE_CONFIG_CONTENT?.trim()) {
-      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-        $schema: 'https://opencode.ai/config.json',
-        agent: { build: { permission: 'allow' } },
-        provider: {
-          'opencode-go': {
-            npm: '@ai-sdk/openai-compatible',
-            name: 'OpenCode Go',
-            options: {
-              baseURL: 'https://opencode.ai/zen/go/v1',
-              apiKey: '{env:OPENCODE_GO_API_KEY}',
-            },
-            models: {
-              'deepseek-v4-flash': { name: 'deepseek-v4-flash' },
-            },
-          },
-        },
+      process.env.OPENCODE_CONFIG_CONTENT = createOpenCodeConfigContent({
+        model: realProviderDefaults.PASEO_MODEL,
       });
     }
     for (const [name, value] of Object.entries({

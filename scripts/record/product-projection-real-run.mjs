@@ -99,8 +99,8 @@ function agentYaml(name, instructions, packageName = name) {
       : ['team-state', 'team-work-list', 'team-work-submit'];
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${packageName}\nspec:\n  description: Product Projection real-run recording role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
-function environmentYaml() {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
+function environmentYaml(provider) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: ${provider}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
 function scenarioInstructions(scenario, role, mode) {
   if (role !== 'lead') {
@@ -168,7 +168,7 @@ async function main() {
     process.env.AGENT_SERVER_SERVICE_ACCOUNT_ID;
   if (!tenantId || !workspaceId || !principalId)
     fail('authenticated_scope_environment_required');
-  providerGuard();
+  const provider = providerGuard();
   const url = new URL(baseUrl);
   const liveResponse = await fetch(new URL('/health/live', url));
   const live = await liveResponse.json().catch(() => null);
@@ -199,7 +199,7 @@ async function main() {
   }
   const environment = await http(url, token, '/api/v1/environments:import', {
     method: 'POST',
-    body: { source: environmentYaml() },
+    body: { source: environmentYaml(provider) },
   });
   await http(
     url,

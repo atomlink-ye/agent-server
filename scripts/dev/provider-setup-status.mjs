@@ -1,5 +1,5 @@
-import { statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { constants as fsConstants, lstatSync } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import {
   loadRealProviderDefaults,
   REAL_PROVIDER_DEFAULTS_PATH,
@@ -28,14 +28,24 @@ if (key) {
 const providerFile =
   process.env.AGENT_SERVER_PROVIDER_ENV_FILE?.trim() ||
   `${process.env.XDG_CONFIG_HOME || `${process.env.HOME || ''}/.config`}/agent-server/provider.env`;
-let mode;
+const credentialInstructions =
+  `请将 OPENCODE_GO_API_KEY 写入仓库外的 regular mode-0600 文件：${providerFile}\n` +
+  `然后执行：set -a; . '${providerFile.replaceAll("'", "'\\''")}'; set +a\n`;
+let providerStat;
 try {
-  mode = statSync(providerFile).mode & 0o777;
+  providerStat = lstatSync(providerFile);
 } catch (error) {
   if (error?.code !== 'ENOENT') {
     process.stderr.write(`provider credentials unreadable: ${providerFile}\n`);
     process.exit(1);
   }
+}
+const mode = providerStat ? providerStat.mode & 0o777 : undefined;
+if (providerStat && !providerStat.isFile()) {
+  process.stderr.write(
+    `provider credentials file must be a regular file: ${providerFile}\n`,
+  );
+  process.exit(1);
 }
 if (mode !== undefined && mode !== 0o600) {
   process.stderr.write(
@@ -46,6 +56,7 @@ if (mode !== undefined && mode !== 0o600) {
 if (mode === 0o600) {
   let hasKey = false;
   try {
+    await access(providerFile, fsConstants.R_OK);
     const declaration = (await readFile(providerFile, 'utf8'))
       .split(/\r?\n/u)
       .find((line) =>
@@ -62,17 +73,20 @@ if (mode === 0o600) {
       }
       hasKey = value.length > 0 && !value.startsWith('#');
     }
-  } catch {}
+  } catch (error) {
+    process.stderr.write(`provider credentials unreadable: ${providerFile}\n`);
+    process.exit(1);
+  }
   if (hasKey)
     process.stdout.write(
-      `配置已就位，凭据文件存在但未导出：set -a; source ${providerFile}; set +a\n`,
+      `配置已就位，凭据文件存在但未导出。\n${credentialInstructions}`,
     );
   else
     process.stdout.write(
-      `配置已就位，凭据缺失，不能跑真实 provider。\nset -a; source ${providerFile}; set +a\n`,
+      `配置已就位但不能跑真实 provider：缺少 OPENCODE_GO_API_KEY。\n${credentialInstructions}`,
     );
 } else {
   process.stdout.write(
-    `配置已就位，凭据缺失，不能跑真实 provider。\nset -a; source ${providerFile}; set +a\n`,
+    `配置已就位但不能跑真实 provider：缺少 OPENCODE_GO_API_KEY。\n${credentialInstructions}`,
   );
 }

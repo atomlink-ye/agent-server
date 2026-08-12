@@ -8,8 +8,6 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Page, type Response } from 'playwright';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const requiredProvider = 'opencode';
-const requiredModel = 'opencode-go/deepseek-v4-flash';
 const baseUrlEnv = process.env.WEB_E2E_BASE_URL;
 const providerEnv = process.env.WEB_E2E_PROVIDER;
 const modelEnv = process.env.WEB_E2E_MODEL;
@@ -19,14 +17,6 @@ const configuredEnvironmentCount = [baseUrlEnv, providerEnv, modelEnv].filter(
 if (configuredEnvironmentCount !== 0 && configuredEnvironmentCount !== 3) {
   throw new Error(
     'WEB_E2E_BASE_URL, WEB_E2E_PROVIDER, and WEB_E2E_MODEL must be set together',
-  );
-}
-if (
-  configuredEnvironmentCount === 3 &&
-  (providerEnv !== requiredProvider || modelEnv !== requiredModel)
-) {
-  throw new Error(
-    `WEB_E2E_PROVIDER and WEB_E2E_MODEL are pinned to ${requiredProvider} and ${requiredModel}`,
   );
 }
 const baseUrl = baseUrlEnv?.replace(/\/$/u, '');
@@ -319,8 +309,8 @@ describe.skipIf(baseUrlEnv === undefined)(
               `${JSON.stringify(
                 {
                   ok: true,
-                  provider: requiredProvider,
-                  model: requiredModel,
+                  provider: providerEnv!,
+                  model: modelEnv!,
                   session_id: expectedSession,
                   post_session_id: postSessionId,
                   run_id: expectedRun,
@@ -368,8 +358,8 @@ describe.skipIf(baseUrlEnv === undefined)(
           throw new Error(
             [
               `web ProductSession E2E failed during ${phase}`,
-              `provider=${requiredProvider}`,
-              `model=${requiredModel}`,
+              `provider=${providerEnv}`,
+              `model=${modelEnv}`,
               `sessionId=${sessionId ?? '<unknown>'}`,
               `runId=${runId ?? '<unknown>'}`,
               `reason=${redactSecrets(error instanceof Error ? error.message : 'unknown failure').slice(0, 240)}`,

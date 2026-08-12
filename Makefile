@@ -81,10 +81,12 @@ mixed-team-journey:
 			echo 'agent-server dispatcher did not start with concurrency=3' >&2; \
 			exit 1; \
 		}
-	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose run --rm --no-deps \
+	@. ./scripts/dev/source-real-provider-defaults; AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose run --rm --no-deps \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
 		-e AGENT_SERVER_WORKSPACE_ID="$${AGENT_SERVER_WORKSPACE_ID:-workspace_main}" \
+		-e PASEO_PROVIDER="$$PASEO_PROVIDER" \
+		-e PASEO_MODEL="$$PASEO_MODEL" \
 		-e DATABASE_URL=postgresql://agent:agent@postgres:5432/agent_server \
 		-e POSTGRES_URL=postgresql://agent:agent@postgres:5432/agent_server \
 		-e AGENT_SERVER_DISPATCHER_CONCURRENCY=3 \
@@ -165,6 +167,8 @@ provider-smoke:
 	@trap 'rc=$$?; if [ "$$rc" -ne 0 ]; then echo "provider-smoke agent-server log tail:"; ./scripts/dev/docker-compose logs --no-color --no-log-prefix --tail=40 agent-server 2>/dev/null || true; fi; exit "$$rc"' EXIT; ./scripts/dev/docker-compose run --rm --no-deps --entrypoint node \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
+		-e PASEO_PROVIDER="$${PASEO_PROVIDER}" \
+		-e PASEO_MODEL="$${PASEO_MODEL}" \
 		runner scripts/smoke/agent-server-provider-main-flow.mjs
 
 clean:

@@ -4,4 +4,3 @@ services:
       PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
       PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:?OPENCODE_GO_API_KEY is required}
-      OPENCODE_CONFIG_CONTENT: '{"$$schema":"https://opencode.ai/config.json","provider":{"opencode-go":{"npm":"@ai-sdk/openai-compatible","name":"OpenCode Go","options":{"baseURL":"https://opencode.ai/zen/go/v1","apiKey":"{env:OPENCODE_GO_API_KEY}"},"models":{"deepseek-v4-flash":{"name":"deepseek-v4-flash"}}}}}'

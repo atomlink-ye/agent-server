@@ -66,4 +66,43 @@ export function checkRealProviderDefaults() {
   return parse(readFileSync(REAL_PROVIDER_DEFAULTS_PATH, 'utf8'));
 }
 
+export function deriveOpenCodeGoModelId(
+  model = loadRealProviderDefaults().PASEO_MODEL,
+) {
+  const value = String(model ?? '').trim();
+  const prefix = 'opencode-go/';
+  if (!value.startsWith(prefix)) {
+    throw new Error(
+      `PASEO_MODEL must use the ${prefix}<model> form for OpenCode Go`,
+    );
+  }
+  const modelId = value.slice(prefix.length);
+  if (!/^[A-Za-z0-9._-]+$/u.test(modelId)) {
+    throw new Error('OpenCode Go model id must be a simple model identifier');
+  }
+  return modelId;
+}
+
+export function createOpenCodeConfigContent({
+  model = loadRealProviderDefaults().PASEO_MODEL,
+  apiKeyEnv = 'OPENCODE_GO_API_KEY',
+} = {}) {
+  const modelId = deriveOpenCodeGoModelId(model);
+  return JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    agent: { build: { permission: 'allow' } },
+    provider: {
+      'opencode-go': {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'OpenCode Go',
+        options: {
+          baseURL: 'https://opencode.ai/zen/go/v1',
+          apiKey: `{env:${apiKeyEnv}}`,
+        },
+        models: { [modelId]: { name: modelId } },
+      },
+    },
+  });
+}
+
 export const realProviderDefaultNames = EXPECTED;

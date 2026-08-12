@@ -95,6 +95,18 @@ const principalId = 'svc_agent_teams_v2';
 const workspaceId = randomUUID();
 const canonicalSnapshotInvocation =
   'synthetic_stock_snapshot({fixture_ref:"fixture://self-learning-market-research/acme-v1",symbol:"ACME"})';
+const canonicalTeamMcpNames = new Set([
+  'team_state',
+  'team_work_list',
+  'team_work_create',
+  'team_work_request_changes',
+  'team_work_cancel',
+  'team_work_accept',
+  'team_finish',
+  'team_work_checkpoint',
+  'team_work_submit',
+  'team_message_send',
+]);
 const fixtureNames = Object.freeze({
   lead: 'research-lead',
   member: 'opportunity-analyst',
@@ -1110,6 +1122,41 @@ class ScriptedRuntime {
           input.paseoWorkspaceId ?? `scripted-workspace-${randomUUID()}`,
         provider,
         model,
+      };
+      const callTool = session.client.callTool.bind(session.client);
+      let canonicalActivitySequence = 0;
+      session.client.callTool = async (request) => {
+        const activityId = `scripted-team-${++canonicalActivitySequence}`;
+        if (canonicalTeamMcpNames.has(request.name))
+          await sink?.emit({
+            kind: 'tool_status',
+            activityId,
+            category: 'other',
+            status: 'running',
+            label: 'Scripted Team MCP tool',
+            summary: 'Scripted Team MCP lifecycle',
+            toolName: request.name,
+            resultObserved: false,
+            provider,
+          });
+        const response = await callTool(request);
+        if (canonicalTeamMcpNames.has(request.name)) {
+          const failed = Boolean(
+            response.isError || response.structuredContent?.error,
+          );
+          await sink?.emit({
+            kind: 'tool_status',
+            activityId,
+            category: 'other',
+            status: failed ? 'failed' : 'completed',
+            label: 'Scripted Team MCP tool',
+            summary: 'Scripted Team MCP lifecycle',
+            toolName: request.name,
+            resultObserved: true,
+            provider,
+          });
+        }
+        return response;
       };
       this.#sessions.set(providerAgentId, session);
       await input.onProviderBinding?.({
@@ -2218,6 +2265,17 @@ async function runProductWorkDurableIdentityFlow({
       );
   }
   const mcpActivities = productTrace.mcp_activities;
+  if (productWorkDurableIdentity) {
+    assert(mcpActivities.length > 0, 'product_trace_mcp_activities_missing');
+    assert(
+      mcpActivities.some(
+        (activity) =>
+          activity.status === 'completed' &&
+          activity.result_capture_status === 'redacted',
+      ),
+      'product_trace_mcp_completed_redacted_missing',
+    );
+  }
   const mcpOperationCaptureStatusCounts = { present: 0, not_present: 0 };
   const mcpResultCaptureStatusCounts = { redacted: 0, not_present: 0 };
   for (const activity of mcpActivities) {
@@ -2257,8 +2315,13 @@ async function runProductWorkDurableIdentityFlow({
     mcpOperationCaptureStatusCounts[activity.operation_capture_status] += 1;
     mcpResultCaptureStatusCounts[activity.result_capture_status] += 1;
     assert(
-      activity.operation_capture_status === 'not_present' &&
-        activity.result_capture_status === 'not_present',
+      activity.provenance === 'server_authorized_team_mcp_catalog' &&
+        activity.tool_identity_capture_status === 'present' &&
+        activity.operation_capture_status === 'not_present' &&
+        activity.result_capture_status ===
+          (activity.status === 'completed' ? 'redacted' : 'not_present') &&
+        !Object.prototype.hasOwnProperty.call(activity, 'detail') &&
+        !Object.prototype.hasOwnProperty.call(activity, 'result'),
       'product_trace_mcp_activity_capture_status_not_honest',
     );
   }

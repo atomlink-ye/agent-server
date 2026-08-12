@@ -571,6 +571,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           ...((toolName ?? previous?.toolName)
             ? { toolName: toolName ?? previous?.toolName }
             : {}),
+          resultObserved: hasObservedToolResult(bestDetail),
           ...(bestDetail ? { detail: bestDetail } : {}),
           provider: activeProvider,
         });
@@ -2284,6 +2285,15 @@ function normalizeUsage(
 
 function isTerminalToolStatus(status: string): boolean {
   return ['completed', 'failed', 'cancelled'].includes(status);
+}
+
+function hasObservedToolResult(detail: RuntimeToolDetail | undefined): boolean {
+  if (!detail) return false;
+  return ['output', 'result', 'content', 'log', 'error'].some(
+    (field) =>
+      Object.prototype.hasOwnProperty.call(detail, field) &&
+      (detail as unknown as Record<string, unknown>)[field] !== undefined,
+  );
 }
 
 function delay(milliseconds: number): Promise<void> {

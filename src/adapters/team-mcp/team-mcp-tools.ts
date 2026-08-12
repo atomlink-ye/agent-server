@@ -3,7 +3,10 @@ import type {
   McpServer,
   RegisteredTool,
 } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../application/agents/built-in-skills.js';
+import {
+  AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES,
+  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
+} from '../../application/agents/built-in-skills.js';
 import type { TeamCommandService } from '../../application/teams/team-command-service.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import type { RuntimeToolGrant } from '../../application/extensions/runtime-tool-grant-service.js';
@@ -65,7 +68,7 @@ export function registerTeamMcpTools(
 
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
-    'team_state',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.state,
     {
       description: 'Read current Team state.',
       inputSchema: {},
@@ -78,7 +81,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
-    'team_work_list',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.workList,
     {
       description: 'List Team work.',
       inputSchema: {},
@@ -91,7 +94,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
-    'team_work_create',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.workCreate,
     {
       description: 'Create Team work.',
       inputSchema: {
@@ -125,7 +128,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
-    'team_message_send',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.messageSend,
     {
       description: 'Send an addressed direct Team message.',
       inputSchema: {
@@ -140,7 +143,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
-    'team_work_accept',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.accept,
     {
       description: 'Accept submitted work.',
       inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
@@ -152,7 +155,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
-    'team_work_request_changes',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.requestChanges,
     {
       description: 'Request changes.',
       inputSchema: {
@@ -172,7 +175,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
-    'team_work_cancel',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.cancel,
     {
       description: 'Abandon failed work.',
       inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
@@ -184,7 +187,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
-    'team_finish',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.finish,
     { description: 'Finish Team.', inputSchema: {} },
     () =>
       current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish, (ctx) =>
@@ -193,7 +196,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
-    'team_work_checkpoint',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.checkpoint,
     {
       description: 'Record a safe work checkpoint.',
       inputSchema: { summary: z.string().min(1) },
@@ -205,7 +208,7 @@ export function registerTeamMcpTools(
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
-    'team_work_submit',
+    AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.submit,
     {
       description: 'Submit the current work attempt.',
       inputSchema: { summary: z.string().min(1) },

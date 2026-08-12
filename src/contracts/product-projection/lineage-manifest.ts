@@ -110,11 +110,13 @@ const MCP_TOOL_FIELDS = [
   'chat_detail.target.run_id',
   'chat_detail.target.sequence',
   'kind',
+  'provenance',
   'operation_capture_status',
   'result_capture_status',
   'sequence',
   'status',
   'tool_name',
+  'tool_identity_capture_status',
 ] as const;
 
 const MCP_SOURCE_REF_KEYS = [
@@ -376,9 +378,11 @@ const directColumnName = (path: string): string | null => {
   if (
     path.includes('mcp_activities[].') &&
     (path.endsWith('.activity_id') ||
+      path.endsWith('.provenance') ||
       path.endsWith('.operation_capture_status') ||
       path.endsWith('.result_capture_status') ||
-      path.endsWith('.tool_name'))
+      path.endsWith('.tool_name') ||
+      path.endsWith('.tool_identity_capture_status'))
   )
     return null;
   if (path.endsWith('.reviewer_actor_id')) return null;
@@ -616,7 +620,23 @@ const derivation = (
         relativePath.endsWith('.operation_capture_status')
           ? 'mcp_operation_capture_status_v1'
           : 'mcp_result_capture_status_v1',
-        'constant(not_present)',
+        relativePath.endsWith('.operation_capture_status')
+          ? 'constant(not_present)'
+          : 'response_observed_to_capture_status',
+        relativePath.endsWith('.operation_capture_status')
+          ? []
+          : ['run_events.payload'],
+      );
+    if (relativePath.endsWith('.provenance'))
+      return rule(
+        'mcp_provenance_v1',
+        'constant(server_authorized_team_mcp_catalog)',
+        [],
+      );
+    if (relativePath.endsWith('.tool_identity_capture_status'))
+      return rule(
+        'mcp_tool_identity_capture_status_v1',
+        'constant(present)',
         [],
       );
     if (relativePath.endsWith('.tool_name'))

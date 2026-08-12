@@ -2957,7 +2957,7 @@ try {
   await waitForHttp(`${apiUrl}/health/ready`, 10_000);
   marker('REAL_SERVER_READY');
   await db.query(
-    'INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,now(),now())',
+    'INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,now(),now()) ON CONFLICT (id) DO NOTHING',
     [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
   );
   const agents = {};

@@ -6,7 +6,10 @@
     "revision": "Product-Contract-Revision",
     "status": "Product-Contract-Status"
   },
-  "owner_scope": ["tenant_id", "workspace_id"],
+  "owner_scope": [
+    "tenant_id",
+    "workspace_id"
+  ],
   "endpoints": [
     {
       "id": "create_work",
@@ -21,7 +24,10 @@
         }
       ],
       "errors": [],
-      "capabilities": ["work_identity", "workspace_scope"],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
       "schema_sha256": "c99887fc8188a11b7278fed6aa1a554dfbe8e9b85ef6e1940fe8bb2ff502548d"
     },
     {
@@ -54,7 +60,10 @@
           "code": "projection_unavailable"
         }
       ],
-      "capabilities": ["chat_detail_pointer", "mcp_only_timeline"],
+      "capabilities": [
+        "chat_detail_pointer",
+        "mcp_only_timeline"
+      ],
       "schema_sha256": "eb2c80a98d0c31c96a66359feb9b0c6425df1ba8bcb2153a735f884b0d00cd6c"
     },
     {
@@ -79,7 +88,10 @@
           "code": "work_not_found"
         }
       ],
-      "capabilities": ["work_identity", "workspace_scope"],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
       "schema_sha256": "c99887fc8188a11b7278fed6aa1a554dfbe8e9b85ef6e1940fe8bb2ff502548d"
     },
     {
@@ -149,7 +161,11 @@
           "code": "work_not_found"
         }
       ],
-      "capabilities": ["opaque_pagination", "work_identity", "workspace_scope"],
+      "capabilities": [
+        "opaque_pagination",
+        "work_identity",
+        "workspace_scope"
+      ],
       "schema_sha256": "77e12935d4fbd59e14bf5c4465bd529f0077b0267ec099a0556db9eb18c47b54"
     },
     {
@@ -178,7 +194,10 @@
           "code": "invalid_request"
         }
       ],
-      "capabilities": ["opaque_pagination", "work_identity"],
+      "capabilities": [
+        "opaque_pagination",
+        "work_identity"
+      ],
       "schema_sha256": "069130efb1ff675bb90fa3bfcb0ef932e42edaa1b7301325105e7451b1f29d0f"
     },
     {
@@ -219,7 +238,10 @@
           "code": "work_run_binding_conflict"
         }
       ],
-      "capabilities": ["work_identity", "workspace_scope"],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
       "schema_sha256": "edc4d971c20ef2154d5d680de39c73be3d5ea74338c53f559c33ec31bdf3583a"
     }
   ]

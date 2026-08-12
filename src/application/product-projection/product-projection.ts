@@ -379,14 +379,14 @@ function applyExecutionTiming(
         attempts: item.attempts.map((attempt) => {
           const taskId = attempt.source_refs.task_id;
           const taskRuns = taskId ? (runsByTask.get(taskId) ?? []) : [];
-          return { ...attempt, ...timingForRuns(taskRuns) };
+          return { ...attempt, ...attemptTimingForRuns(taskRuns) };
         }),
       })),
     },
   };
 }
 
-function timingForRuns(runs: readonly ExecutionRunFact[]) {
+export function attemptTimingForRuns(runs: readonly ExecutionRunFact[]) {
   if (runs.length !== 1)
     return {
       started_at: null,

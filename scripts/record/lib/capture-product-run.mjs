@@ -5,6 +5,9 @@ import { Client } from 'pg';
 import { validateRecording } from '../../ci/validate-product-recording.mjs';
 import {
   assertNoEnvironmentValues,
+  createRecordingSanitizerAudit,
+  finalizeRecordingSanitizerAudit,
+  recordingSanitizerAuditEnabled,
   sanitizeRecording,
   sanitizeRunEventPayload,
   sha256,
@@ -128,12 +131,13 @@ async function queryRows(client, sql, values, name) {
   };
 }
 
-function runEventProjection(rows) {
+export function runEventProjection(rows, collector) {
   return rows.map((row) => ({
     ...row,
     payload: sanitizeRunEventPayload(
       row.payload,
       `run_events.${row.id}.payload`,
+      { collector },
     ),
   }));
 }
@@ -208,15 +212,26 @@ function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
   throw new Error('lead_never_accept_live_predicate_failed');
 }
 
-async function writeJson(path, value) {
-  const safe = sanitizeRecording(value, path, {
+export async function writeJson(path, value, collector) {
+  if (collector)
+    assertNoEnvironmentValues(value, process.env, { collector });
+  const scanPath = collector ? auditPath(path) : path;
+  const safe = sanitizeRecording(value, scanPath, {
     allowProviderSummary:
       path.endsWith('/trace.json') ||
       path.endsWith('/manifest.json') ||
       path.endsWith('/run_events.json'),
+    collector,
   });
-  assertNoEnvironmentValues(safe);
+  if (!collector) assertNoEnvironmentValues(safe);
   await writeFile(path, stableStringify(safe), { mode: 0o600 });
+}
+
+function auditPath(path) {
+  const marker = path.lastIndexOf('.tmp-');
+  if (marker < 0) return path;
+  const separator = path.indexOf('/', marker);
+  return separator < 0 ? path : path.slice(separator + 1);
 }
 
 function recordingName(recordedAt, rootTaskId) {
@@ -225,6 +240,7 @@ function recordingName(recordedAt, rootTaskId) {
 
 export async function capturePreIdentity(options) {
   const providerKind = assertInput(options);
+  const audit = recordingSanitizerAuditEnabled() ? createRecordingSanitizerAudit() : null;
   const baseUrl = new URL(options.baseUrl);
   const outputRoot = resolve(
     options.outputRoot ??
@@ -308,17 +324,18 @@ export async function capturePreIdentity(options) {
     };
     await mkdir(join(temporary, 'api'), { recursive: true, mode: 0o700 });
     await mkdir(join(temporary, 'db'), { recursive: true, mode: 0o700 });
-    await writeJson(join(temporary, 'api/trace.json'), trace);
+    await writeJson(join(temporary, 'api/trace.json'), trace, audit);
     for (const name of [
       'team_runs',
       'team_work_items',
       'team_work_item_attempts',
       'team_messages',
     ])
-      await writeJson(join(temporary, `db/${name}.json`), byName.get(name));
+      await writeJson(join(temporary, `db/${name}.json`), byName.get(name), audit);
     await writeJson(
       join(temporary, 'db/run_events.json'),
-      runEventProjection(byName.get('run_events')),
+      runEventProjection(byName.get('run_events'), audit),
+      audit,
     );
     const startedAt =
       options.startedAt ??
@@ -382,7 +399,8 @@ export async function capturePreIdentity(options) {
         sha256: sha256(bytes),
       };
     }
-    await writeJson(join(temporary, 'manifest.json'), manifest);
+    await writeJson(join(temporary, 'manifest.json'), manifest, audit);
+    if (audit) finalizeRecordingSanitizerAudit(audit);
     const checksumFiles = ['manifest.json', ...Object.keys(manifest.files)];
     const checksums = [];
     for (const name of checksumFiles)
@@ -416,6 +434,7 @@ export async function capturePreIdentity(options) {
 
 export async function captureProductRun(options) {
   const providerKind = assertInput(options);
+  const audit = recordingSanitizerAuditEnabled() ? createRecordingSanitizerAudit() : null;
   if (!options.workId || !IDENTIFIER.test(options.workId))
     throw new Error('capture_work_id_required');
   if (!options.workRunId || !IDENTIFIER.test(options.workRunId))
@@ -467,12 +486,12 @@ export async function captureProductRun(options) {
     assertScenarioPredicate(options.scenario, teamRows, byName.get('team_work_items'), byName.get('team_work_item_attempts'));
     await mkdir(join(temporary, 'api'), { recursive: true, mode: 0o700 });
     await mkdir(join(temporary, 'db'), { recursive: true, mode: 0o700 });
-    await writeJson(join(temporary, 'api/work.json'), options.work);
-    await writeJson(join(temporary, 'api/work-run.json'), options.workRun);
-    await writeJson(join(temporary, 'api/trace.json'), options.trace);
+    await writeJson(join(temporary, 'api/work.json'), options.work, audit);
+    await writeJson(join(temporary, 'api/work-run.json'), options.workRun, audit);
+    await writeJson(join(temporary, 'api/trace.json'), options.trace, audit);
     for (const name of ['team_runs', 'team_work_items', 'team_work_item_attempts', 'team_messages', 'works', 'work_runs', 'work_run_resource_manifest'])
-      await writeJson(join(temporary, `db/${name}.json`), byName.get(name));
-    await writeJson(join(temporary, 'db/run_events.json'), runEventProjection(byName.get('run_events')));
+      await writeJson(join(temporary, `db/${name}.json`), byName.get(name), audit);
+    await writeJson(join(temporary, 'db/run_events.json'), runEventProjection(byName.get('run_events'), audit), audit);
     const startedAt = teamRows.reduce((min, row) => new Date(row.created_at) < new Date(min) ? row.created_at : min, teamRows[0].created_at);
     const manifest = {
       format_version: 'product-projection-recording/v1',
@@ -508,7 +527,8 @@ export async function captureProductRun(options) {
       const bytes = await readFile(join(temporary, name));
       manifest.files[name] = { row_count: name.startsWith('db/') ? JSON.parse(bytes).length : 1, sha256: sha256(bytes) };
     }
-    await writeJson(join(temporary, 'manifest.json'), manifest);
+    await writeJson(join(temporary, 'manifest.json'), manifest, audit);
+    if (audit) finalizeRecordingSanitizerAudit(audit);
     const checksumFiles = ['manifest.json', ...Object.keys(manifest.files)];
     await writeFile(join(temporary, 'SHA256SUMS'), `${(await Promise.all(checksumFiles.map(async (name) => `${sha256(await readFile(join(temporary, name)))}  ${name}`))).join('\n')}\n`, { mode: 0o600 });
     const validation = await validateRecording(temporary, 'product');

@@ -43,7 +43,11 @@ import {
   type TeamPromptRosterMember,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
+import {
+  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
+  canonicalTeamMcpName,
+  canonicalTeamMcpRefForName,
+} from '../agents/built-in-skills.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
@@ -1083,7 +1087,14 @@ export class ExecuteRun {
       ? {
           emit: async (event: RuntimeEvent) => {
             await this.events!.append(claim.run.id, 'output', {
-              ...runtimeEventPayload(event),
+              ...runtimeEventPayload(event, {
+                isTeamMember: member != null,
+                runtimeToolRefs,
+                catalogTools:
+                  member?.role === 'lead'
+                    ? leadCatalogToolRefs
+                    : runtimeToolRefs,
+              }),
             });
           },
         }
@@ -1682,6 +1693,11 @@ function isSafeRuntimeCandidate(candidate: {
 
 export function runtimeEventPayload(
   event: import('../ports/agent-runtime.js').RuntimeEvent,
+  context?: {
+    readonly isTeamMember: boolean;
+    readonly runtimeToolRefs: readonly string[];
+    readonly catalogTools: readonly string[];
+  },
 ): RunEventPayload {
   switch (event.kind) {
     case 'assistant_text':
@@ -1693,6 +1709,27 @@ export function runtimeEventPayload(
         ...(event.text ? { text: event.text } : {}),
       };
     case 'tool_status':
+      const canonicalTeamToolName = canonicalTeamMcpName(event.toolName);
+      const canonicalTeamToolRef = canonicalTeamToolName
+        ? canonicalTeamMcpRefForName(canonicalTeamToolName)
+        : null;
+      const authorizedTeamTool =
+        Boolean(context?.isTeamMember) &&
+        canonicalTeamToolRef !== null &&
+        context?.runtimeToolRefs.includes(canonicalTeamToolRef) === true &&
+        context?.catalogTools.includes(canonicalTeamToolRef) === true;
+      if (canonicalTeamToolName && authorizedTeamTool) {
+        return {
+          kind: event.kind,
+          activity_id: event.activityId,
+          category: event.category,
+          status: event.status,
+          tool_name: canonicalTeamToolName,
+          provenance: 'server_authorized_team_mcp_catalog',
+          tool_identity_capture_status: 'present',
+          response_observed: event.resultObserved === true,
+        };
+      }
       return {
         kind: event.kind,
         activity_id: event.activityId,

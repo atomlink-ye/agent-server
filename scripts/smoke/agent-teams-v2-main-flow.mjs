@@ -95,6 +95,18 @@ const principalId = 'svc_agent_teams_v2';
 const workspaceId = randomUUID();
 const canonicalSnapshotInvocation =
   'synthetic_stock_snapshot({fixture_ref:"fixture://self-learning-market-research/acme-v1",symbol:"ACME"})';
+const canonicalTeamMcpNames = new Set([
+  'team_state',
+  'team_work_list',
+  'team_work_create',
+  'team_work_request_changes',
+  'team_work_cancel',
+  'team_work_accept',
+  'team_finish',
+  'team_work_checkpoint',
+  'team_work_submit',
+  'team_message_send',
+]);
 const fixtureNames = Object.freeze({
   lead: 'research-lead',
   member: 'opportunity-analyst',
@@ -425,6 +437,13 @@ function smokeFailure(error) {
 }
 function marker(name, fields = {}) {
   const entry = safe({ marker: name, at: new Date().toISOString(), ...fields });
+  markers.push(entry);
+  process.stdout.write(`${JSON.stringify(entry)}\n`);
+}
+// Product trace acceptance artifacts are already schema-validated and must
+// retain their real identity/pointer fields for the remote acceptance log.
+function markerRaw(name, fields = {}) {
+  const entry = { marker: name, at: new Date().toISOString(), ...fields };
   markers.push(entry);
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 }
@@ -1103,6 +1122,41 @@ class ScriptedRuntime {
           input.paseoWorkspaceId ?? `scripted-workspace-${randomUUID()}`,
         provider,
         model,
+      };
+      const callTool = session.client.callTool.bind(session.client);
+      let canonicalActivitySequence = 0;
+      session.client.callTool = async (request) => {
+        const activityId = `scripted-team-${++canonicalActivitySequence}`;
+        if (canonicalTeamMcpNames.has(request.name))
+          await sink?.emit({
+            kind: 'tool_status',
+            activityId,
+            category: 'other',
+            status: 'running',
+            label: 'Scripted Team MCP tool',
+            summary: 'Scripted Team MCP lifecycle',
+            toolName: request.name,
+            resultObserved: false,
+            provider,
+          });
+        const response = await callTool(request);
+        if (canonicalTeamMcpNames.has(request.name)) {
+          const failed = Boolean(
+            response.isError || response.structuredContent?.error,
+          );
+          await sink?.emit({
+            kind: 'tool_status',
+            activityId,
+            category: 'other',
+            status: failed ? 'failed' : 'completed',
+            label: 'Scripted Team MCP tool',
+            summary: 'Scripted Team MCP lifecycle',
+            toolName: request.name,
+            resultObserved: true,
+            provider,
+          });
+        }
+        return response;
       };
       this.#sessions.set(providerAgentId, session);
       await input.onProviderBinding?.({
@@ -1900,7 +1954,9 @@ function assertProductProjectionDtoShape(value, label) {
       assert(!forbidden.has(key), `${label}_${path}_${key}_leaked`);
       if (technicalIds.has(key))
         assert(
-          path.endsWith('source_refs'),
+          path.endsWith('source_refs') ||
+            path.endsWith('source_ref') ||
+            path.endsWith('chat_detail.target'),
           `${label}_${path}_${key}_outside_source_refs`,
         );
       walk(child, `${path}.${key}`);
@@ -2021,13 +2077,13 @@ async function runProductWorkDurableIdentityFlow({
     const parsed = ProductWorkRunResponseSchema.parse(raw);
     const traceParsed = ProductRunTraceResponseSchema.parse(traceRaw);
     assert(
-      parsed.capture_status === 'complete' &&
+      parsed.projection_status === 'internally_anchored' &&
         parsed.work?.id === work.id &&
         parsed.work_run?.id === workRunId,
       `${label}_work_run_parse_invalid`,
     );
     assert(
-      traceParsed.capture_status === 'complete' &&
+      traceParsed.projection_status === 'internally_anchored' &&
         traceParsed.work?.id === work.id &&
         traceParsed.work_run?.id === workRunId,
       `${label}_trace_parse_invalid`,
@@ -2131,13 +2187,13 @@ async function runProductWorkDurableIdentityFlow({
   const productWorkRun = ProductWorkRunResponseSchema.parse(productWorkRunRaw);
   const productTrace = ProductRunTraceResponseSchema.parse(productTraceRaw);
   assert(
-    productWorkRun.capture_status === 'complete' &&
+    productWorkRun.projection_status === 'internally_anchored' &&
       productWorkRun.work?.id === work.id &&
       productWorkRun.work_run?.id === firstRun.id,
     'product_work_projection_success_branch_invalid',
   );
   assert(
-    productTrace.capture_status === 'complete' &&
+    productTrace.projection_status === 'internally_anchored' &&
       productTrace.work?.id === work.id &&
       productTrace.work_run?.id === firstRun.id,
     'product_trace_projection_success_branch_invalid',
@@ -2147,6 +2203,144 @@ async function runProductWorkDurableIdentityFlow({
       Array.isArray(productTrace.messages),
     'product_projection_messages_branch_invalid',
   );
+  const expectedTimelineCoverage = {
+    scope: 'mcp_dispatch_and_confirmation',
+    completeness: 'mcp_only',
+    excluded_execution: [
+      'direct_shell',
+      'direct_file_edit',
+      'other_non_mcp_execution',
+    ],
+  };
+  assert(
+    JSON.stringify(productTrace.timeline_coverage) ===
+      JSON.stringify(expectedTimelineCoverage),
+    'product_trace_d18_1_timeline_coverage_invalid',
+  );
+  const traceActorIds = new Set(productTrace.actors.map((actor) => actor.id));
+  const traceWorkItemsById = new Map(
+    productTrace.work_items.map((item) => [item.id, item]),
+  );
+  const traceWorkItemIds = new Set(
+    productTrace.work_items.map((item) => item.id),
+  );
+  const traceRunsById = new Map(
+    productTrace.runs.map((run) => [run.source_refs.run_id, run]),
+  );
+  for (const run of productTrace.runs) {
+    assert(
+      run.source_refs.root_task_id === firstRootTaskId &&
+        run.source_refs.task_id &&
+        run.source_refs.run_id,
+      'product_trace_run_source_refs_invalid',
+    );
+    if (run.actor_id !== null)
+      assert(
+        traceActorIds.has(run.actor_id),
+        'product_trace_run_actor_link_invalid',
+      );
+    if (run.work_item_id !== null)
+      assert(
+        traceWorkItemIds.has(run.work_item_id) &&
+          traceWorkItemsById.get(run.work_item_id)?.actor_id === run.actor_id,
+        'product_trace_run_work_item_link_invalid',
+      );
+    if (run.started_at !== null)
+      assert(
+        !Number.isNaN(Date.parse(run.started_at)),
+        'product_trace_run_started_at_invalid',
+      );
+    if (run.ended_at !== null) {
+      assert(
+        run.started_at !== null &&
+          !Number.isNaN(Date.parse(run.ended_at)) &&
+          new Date(run.ended_at) >= new Date(run.started_at),
+        'product_trace_run_ended_at_invalid',
+      );
+    }
+    if (['succeeded', 'failed', 'cancelled'].includes(run.status))
+      assert(
+        run.started_at !== null && run.ended_at !== null,
+        'product_trace_terminal_run_timing_missing',
+      );
+  }
+  const mcpActivities = productTrace.mcp_activities;
+  if (productWorkDurableIdentity) {
+    assert(mcpActivities.length > 0, 'product_trace_mcp_activities_missing');
+  }
+  const mcpOperationCaptureStatusCounts = { present: 0, not_present: 0 };
+  const mcpResultCaptureStatusCounts = { redacted: 0, not_present: 0 };
+  for (const activity of mcpActivities) {
+    const run = traceRunsById.get(activity.source_refs.run_id);
+    assert(run, 'product_trace_mcp_activity_run_pointer_invalid');
+    assert(
+      activity.source_refs.root_task_id === firstRootTaskId &&
+        activity.source_refs.task_id === run.source_refs.task_id &&
+        activity.chat_detail.method === 'GET' &&
+        activity.chat_detail.path ===
+          `/api/v1/runs/${activity.source_refs.run_id}/events?after=${activity.sequence - 1}` &&
+        activity.chat_detail.target.run_id === activity.source_refs.run_id &&
+        activity.chat_detail.target.sequence === activity.sequence &&
+        activity.chat_detail.target.activity_id === activity.activity_id,
+      'product_trace_mcp_activity_pointer_invalid',
+    );
+    if (run.actor_id !== null)
+      assert(
+        activity.source_refs.actor_id === run.actor_id,
+        'product_trace_mcp_activity_actor_link_invalid',
+      );
+    else
+      assert(
+        activity.source_refs.actor_id === undefined,
+        'product_trace_mcp_activity_unexpected_actor_link',
+      );
+    if (run.work_item_id !== null)
+      assert(
+        activity.source_refs.work_item_id === run.work_item_id,
+        'product_trace_mcp_activity_work_item_link_invalid',
+      );
+    else
+      assert(
+        activity.source_refs.work_item_id === undefined,
+        'product_trace_mcp_activity_unexpected_work_item_link',
+      );
+    mcpOperationCaptureStatusCounts[activity.operation_capture_status] += 1;
+    mcpResultCaptureStatusCounts[activity.result_capture_status] += 1;
+    assert(
+      activity.provenance === 'server_authorized_team_mcp_catalog' &&
+        activity.tool_identity_capture_status === 'present' &&
+        activity.operation_capture_status === 'not_present' &&
+        ['redacted', 'not_present'].includes(activity.result_capture_status) &&
+        !Object.prototype.hasOwnProperty.call(activity, 'detail') &&
+        !Object.prototype.hasOwnProperty.call(activity, 'result'),
+      'product_trace_mcp_activity_capture_status_not_honest',
+    );
+  }
+  if (productWorkDurableIdentity) {
+    assert(
+      mcpResultCaptureStatusCounts.redacted >= 1,
+      'product_trace_mcp_result_capture_chain_inactive',
+    );
+    assert(
+      mcpResultCaptureStatusCounts.redacted +
+        mcpResultCaptureStatusCounts.not_present ===
+        mcpActivities.length,
+      'product_trace_mcp_result_capture_status_count_mismatch',
+    );
+  }
+  markerRaw('PRODUCT_RUN_TRACE_ACCEPTANCE_ARTIFACT', {
+    work_id: work.id,
+    work_run_id: firstRun.id,
+    root_task_id: firstRootTaskId,
+    product_trace_path: productTracePath,
+    trace_json: productTraceRaw,
+    projection_status: productTrace.projection_status,
+    timeline_coverage: productTrace.timeline_coverage,
+    mcp_activities_count: mcpActivities.length,
+    mcp_activities_status: mcpActivities.length > 0 ? 'present' : 'not_present',
+    mcp_operation_capture_status_counts: mcpOperationCaptureStatusCounts,
+    mcp_result_capture_status_counts: mcpResultCaptureStatusCounts,
+  });
   const nullExecutionAttempt = productWorkRun.work_items
     .flatMap((item) => item.attempts)
     .find((attempt) => !('task_id' in attempt.source_refs));
@@ -2569,21 +2763,51 @@ async function runProductWorkDurableIdentityFlow({
   ];
   assert(JSON.stringify(enumeratedRunIds) === JSON.stringify(expectedRunIds), 'product_work_run_two_page_id_set_mismatch');
   assert(new Set(enumeratedRunIds).size === enumeratedRunIds.length, 'product_work_run_two_page_duplicate_id');
-  assert(runPageTwo.next_cursor === null, 'product_work_run_unexpected_third_page');
-  const foreignWorks = await request('/api/v1/works?limit=100', { authToken: foreignToken, technicalIdempotency: false });
-  const foreignRuns = await request(`/api/v1/works/${work.id}/runs?limit=100`, { authToken: foreignToken, technicalIdempotency: false });
-  assert(foreignWorks.works.length === 0 && foreignRuns.work_runs.length === 0, 'product_work_owner_scope_leak');
-  const foreignCursor = await request(`/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { authToken: foreignToken, status: 400, technicalIdempotency: false });
-  assert(foreignCursor.error?.code === 'invalid_cursor', 'product_work_cursor_owner_not_bound');
-  const wrongKindCursor = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(workPageOne.next_cursor)}`, { status: 400, technicalIdempotency: false });
-  assert(wrongKindCursor.error?.code === 'invalid_cursor', 'product_work_cursor_kind_not_bound');
+  assert(
+    runPageTwo.next_cursor === null,
+    'product_work_run_unexpected_third_page',
+  );
+  const foreignWorks = await request('/api/v1/works?limit=100', {
+    authToken: foreignToken,
+    technicalIdempotency: false,
+  });
+  const foreignRuns = await request(`/api/v1/works/${work.id}/runs?limit=100`, {
+    authToken: foreignToken,
+    technicalIdempotency: false,
+  });
+  assert(
+    foreignWorks.works.length === 0 && foreignRuns.work_runs.length === 0,
+    'product_work_owner_scope_leak',
+  );
+  const foreignCursor = await request(
+    `/api/v1/works?limit=2&cursor=${encodeURIComponent(workPageOne.next_cursor)}`,
+    { authToken: foreignToken, status: 400, technicalIdempotency: false },
+  );
+  assert(
+    foreignCursor.error?.code === 'invalid_cursor',
+    'product_work_cursor_owner_not_bound',
+  );
+  const wrongKindCursor = await request(
+    `/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(workPageOne.next_cursor)}`,
+    { status: 400, technicalIdempotency: false },
+  );
+  assert(
+    wrongKindCursor.error?.code === 'invalid_cursor',
+    'product_work_cursor_kind_not_bound',
+  );
   marker('PRODUCT_WORK_ENUMERATION_PASS', {
     owner_work_count: expectedWorkIds.length,
-    work_page_ids: [workPageOne.works.map((item) => item.id), workPageTwo.works.map((item) => item.id)],
+    work_page_ids: [
+      workPageOne.works.map((item) => item.id),
+      workPageTwo.works.map((item) => item.id),
+    ],
     work_ids_exact_match: true,
     work_ids_unique: true,
     owner_run_count: expectedRunIds.length,
-    run_page_ids: [runPageOne.work_runs.map((item) => item.id), runPageTwo.work_runs.map((item) => item.id)],
+    run_page_ids: [
+      runPageOne.work_runs.map((item) => item.id),
+      runPageTwo.work_runs.map((item) => item.id),
+    ],
     run_ids_exact_match: true,
     run_ids_unique: true,
     foreign_work_count: foreignWorks.works.length,
@@ -2801,7 +3025,7 @@ try {
   await waitForHttp(`${apiUrl}/health/ready`, 10_000);
   marker('REAL_SERVER_READY');
   await db.query(
-    'INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,now(),now())',
+    'INSERT INTO workspaces(id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,now(),now()) ON CONFLICT (id) DO NOTHING',
     [workspaceId, tenantId, 'service_account', principalId, 'V2 smoke'],
   );
   const agents = {};

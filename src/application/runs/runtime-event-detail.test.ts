@@ -457,6 +457,7 @@ describe('typed Paseo detail round-trip', () => {
         RuntimeEvent,
         { kind: 'tool_status' }
       >;
+      expect(typedEvent.resultObserved).toBe(category !== 'edit');
       const payload: RunEventPayload = runtimeEventPayload(typedEvent);
       const flatText =
         category === 'shell' ? 'provider detail text' : 'provider detail text';
@@ -555,6 +556,88 @@ describe('typed Paseo detail round-trip', () => {
     expect(Object.prototype.hasOwnProperty.call(payload, 'detail_kind')).toBe(
       false,
     );
+  });
+
+  it('records canonical Team MCP provenance without provider detail', () => {
+    const authorization = {
+      isTeamMember: true,
+      runtimeToolRefs: ['agent-server/team-state'],
+      catalogTools: ['agent-server/team-state'],
+    };
+    const completed = runtimeEventPayload(
+      {
+        kind: 'tool_status',
+        activityId: 'activity-team-1',
+        category: 'other',
+        status: 'completed',
+        label: 'provider-controlled label',
+        summary: 'provider-controlled summary',
+        toolName: 'team_state',
+        provider: 'untrusted-provider',
+        resultObserved: true,
+        detail: { kind: 'shell', output: 'must not persist' },
+      },
+      authorization,
+    );
+    expect(completed).toEqual({
+      kind: 'tool_status',
+      activity_id: 'activity-team-1',
+      category: 'other',
+      status: 'completed',
+      tool_name: 'team_state',
+      provenance: 'server_authorized_team_mcp_catalog',
+      tool_identity_capture_status: 'present',
+      response_observed: true,
+    });
+
+    const running = runtimeEventPayload(
+      {
+        kind: 'tool_status',
+        activityId: 'activity-team-1',
+        category: 'other',
+        status: 'running',
+        label: 'provider-controlled label',
+        summary: 'provider-controlled summary',
+        toolName: 'team_state',
+        provider: 'untrusted-provider',
+        resultObserved: false,
+      },
+      authorization,
+    );
+    expect(running).toMatchObject({
+      provenance: 'server_authorized_team_mcp_catalog',
+      response_observed: false,
+    });
+    expect(
+      runtimeEventPayload({
+        kind: 'tool_status',
+        activityId: 'activity-team-no-context',
+        category: 'other',
+        status: 'completed',
+        label: 'provider-controlled label',
+        summary: 'provider-controlled summary',
+        toolName: 'team_state',
+        provider: 'untrusted-provider',
+        resultObserved: true,
+      }),
+    ).not.toHaveProperty('provenance');
+
+    const spoofed = runtimeEventPayload(
+      {
+        kind: 'tool_status',
+        activityId: 'activity-spoofed',
+        category: 'other',
+        status: 'completed',
+        label: 'team_state',
+        summary: 'team_state',
+        toolName: 'team_state_evil',
+        provider: 'untrusted-provider',
+        resultObserved: true,
+      },
+      authorization,
+    );
+    expect(spoofed).not.toHaveProperty('provenance');
+    expect(spoofed).not.toHaveProperty('tool_name');
   });
 
   it('uses the provider returned by createAgent for runtime events', async () => {

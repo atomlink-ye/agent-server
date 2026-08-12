@@ -19,6 +19,10 @@ export interface ExecutionRunFact {
   readonly model: string | null;
   readonly resultPresent: boolean;
   readonly errorCode: string | null;
+  readonly actorId: string | null;
+  readonly workItemId: string | null;
+  readonly startedAt: string | null;
+  readonly endedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -29,6 +33,18 @@ export interface ExecutionEventFact {
   readonly sequence: number;
   readonly type: 'started' | 'output' | 'succeeded' | 'failed' | 'cancelled';
   readonly payloadPresent: boolean;
+  readonly taskId: string;
+  readonly rootTaskId: string;
+  readonly actorId: string | null;
+  readonly workItemId: string | null;
+  readonly activityId: string | null;
+  readonly activityKind: 'tool_status' | 'permission' | null;
+  readonly activityCategory: string | null;
+  readonly activityStatus: string | null;
+  readonly toolName: string | null;
+  readonly provenance: string | null;
+  readonly toolIdentityCaptureStatus: string | null;
+  readonly responseObserved: boolean | null;
   readonly createdAt: string;
 }
 

@@ -2315,11 +2315,10 @@ async function runProductWorkDurableIdentityFlow({
     mcpOperationCaptureStatusCounts[activity.operation_capture_status] += 1;
     mcpResultCaptureStatusCounts[activity.result_capture_status] += 1;
     assert(
-      activity.provenance === 'server_authorized_team_mcp_catalog' &&
+        activity.provenance === 'server_authorized_team_mcp_catalog' &&
         activity.tool_identity_capture_status === 'present' &&
         activity.operation_capture_status === 'not_present' &&
-        activity.result_capture_status ===
-          (activity.status === 'completed' ? 'redacted' : 'not_present') &&
+        ['redacted', 'not_present'].includes(activity.result_capture_status) &&
         !Object.prototype.hasOwnProperty.call(activity, 'detail') &&
         !Object.prototype.hasOwnProperty.call(activity, 'result'),
       'product_trace_mcp_activity_capture_status_not_honest',

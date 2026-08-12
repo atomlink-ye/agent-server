@@ -143,6 +143,23 @@ Workspace. Foreign or missing resources are hidden as `404`.
 | `POST` | `/api/v1/sessions/{session_id}/messages` | `202`   | Admits Message, root Task, Run attempt 1, idempotency record, dispatch intent, and lane metadata in one transaction.                                               |
 | `POST` | `/api/v1/sessions/{session_id}:reset`    | `200`   | Increments generation; requests cancellation for the active old-generation root and cancels only non-active queued old-generation roots with `cancelled_by_reset`. |
 
+Phase C workspace boundary: multi-workspace/requested-workspace authorization
+applies only to Session and Memory resources. Work and its Definition are
+workspace-scoped, but their workspace is derived from the authenticated
+service-account binding; callers cannot request a Work workspace. An
+API-created Workspace currently cannot hold or be used for Work.
+
+The Work-create request is the exact strict object below; `workspace_id` is not
+a supported field:
+
+```json
+{
+  "definition_id": "...",
+  "definition_version_id": "...",
+  "title": "..."
+}
+```
+
 The minimum lane has one active root. Later Messages are durable queued roots
 ordered by `(generation, sequence)`. Terminal completion promotes the oldest
 eligible queued root and clears the reset cancellation request. Responses never

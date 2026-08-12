@@ -99,6 +99,37 @@ function agentYaml(name, instructions, packageName = name) {
       : ['team-state', 'team-work-list', 'team-work-submit'];
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${packageName}\nspec:\n  description: Product Projection real-run recording role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
+function nonblank(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
+}
+function attemptField(attempt, ...names) {
+  for (const name of names) {
+    if (attempt?.[name] !== undefined) return attempt[name];
+  }
+  return null;
+}
+function parallelPredicateEvidence(works) {
+  return (Array.isArray(works) ? works : []).map((work) => {
+    const attempts = Array.isArray(work?.attempts) ? work.attempts : [];
+    return {
+      work_id: attemptField(work, 'id', 'work_id', 'work_ref'),
+      attempt_count: attempts.length,
+      attempts: attempts.map((attempt) => ({
+        attempt_no: attemptField(
+          attempt,
+          'attempt_no',
+          'attemptNo',
+          'attempt_number',
+          'attemptNumber',
+        ),
+        status: attemptField(attempt, 'status', 'attempt_status', 'attemptStatus'),
+      })),
+      request_changes_observed: attempts.some((attempt) =>
+        nonblank(attemptField(attempt, 'feedbackSummary', 'feedback_summary')),
+      ),
+    };
+  });
+}
 function environmentYaml(provider) {
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: ${provider}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
@@ -338,10 +369,25 @@ async function main() {
           works.length === 2 &&
           parallelAttemptsObserved &&
           works.every(
-            (work) =>
-              work.status === 'accepted' &&
-              work.dependency_refs?.length === 0 &&
-              work.attempts?.length === 1,
+            (work) => {
+              const attempts = Array.isArray(work.attempts)
+                ? work.attempts
+                : [];
+              return (
+                work.status === 'accepted' &&
+                work.dependency_refs?.length === 0 &&
+                attempts.length >= 1 &&
+                !attempts.some((attempt) =>
+                  nonblank(
+                    attemptField(
+                      attempt,
+                      'feedbackSummary',
+                      'feedback_summary',
+                    ),
+                  ),
+                )
+              );
+            },
           )
         );
       if (scenario === 'rework-once')
@@ -454,6 +500,13 @@ async function main() {
       definitionHash,
       predicateEvidence: {
         parallel_attempts_observed: parallelAttemptsObserved,
+        ...(scenario === 'parallel-success'
+          ? {
+              parallel_work_attempts: parallelPredicateEvidence(
+                project?.work_items,
+              ),
+            }
+          : {}),
       },
       serviceRevision: live.version,
       databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
@@ -477,7 +530,16 @@ async function main() {
     providerKind: providerKinds.join(','),
     providerModel: providerModels.join(','),
     definitionHash,
-    predicateEvidence: { parallel_attempts_observed: parallelAttemptsObserved },
+    predicateEvidence: {
+      parallel_attempts_observed: parallelAttemptsObserved,
+      ...(scenario === 'parallel-success'
+        ? {
+            parallel_work_attempts: parallelPredicateEvidence(
+              project?.work_items,
+            ),
+          }
+        : {}),
+    },
     project,
     serviceRevision: live.version,
     databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,

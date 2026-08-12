@@ -38,6 +38,8 @@ const workB = '00000000-0000-4000-8000-0000000b0381';
 const runA = '00000000-0000-4000-8000-0000000a0382';
 const definitionA = '00000000-0000-4000-8000-0000000a0383';
 const versionA = '00000000-0000-4000-8000-0000000a0384';
+const environmentDefinitionA = '00000000-0000-4000-8000-0000000a0385';
+const environmentVersionA = '00000000-0000-4000-8000-0000000a0386';
 const tokenA = 'oi38-token-owner-a';
 const tokenB = 'oi38-token-owner-b';
 let httpBaseUrl = '';
@@ -200,6 +202,12 @@ async function seedIdentityRows(pool: Pool): Promise<void> {
   await pool.query('DELETE FROM works WHERE id IN ($1,$2)', [workA, workB]);
   await pool.query('DELETE FROM team_versions WHERE id=$1', [versionA]);
   await pool.query('DELETE FROM team_definitions WHERE id=$1', [definitionA]);
+  await pool.query('DELETE FROM environment_versions WHERE id=$1', [
+    environmentVersionA,
+  ]);
+  await pool.query('DELETE FROM environment_definitions WHERE id=$1', [
+    environmentDefinitionA,
+  ]);
   await pool.query(
     'DELETE FROM workspaces WHERE id IN ($1,$2) AND tenant_id=$3',
     [workspaceA, workspaceB, tenantId],
@@ -232,8 +240,34 @@ async function seedIdentityRows(pool: Pool): Promise<void> {
     ],
   );
   await pool.query(
-    `INSERT INTO team_versions(id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,description,graph,created_at,updated_at,published_at,execution_mode,collaboration_spec)
-     VALUES ($1,$2,$3,$4,$5,$6,'published',$7,$8,NULL,$9,$9,$9,'collaborative_mve',$10)`,
+    'INSERT INTO environment_definitions(id,tenant_id,principal_type,principal_id,normalized_name,display_name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$7)',
+    [
+      environmentDefinitionA,
+      tenantId,
+      'service_account',
+      'oi38-owner-a',
+      'oi38-environment',
+      'OI38 Environment',
+      now,
+    ],
+  );
+  await pool.query(
+    "INSERT INTO environment_versions(id,definition_id,tenant_id,principal_type,principal_id,status,display_name,canonical_package,fingerprint,created_at,updated_at,published_at) VALUES($1,$2,$3,$4,$5,'published',$6,$7,$8,$9,$9,$9)",
+    [
+      environmentVersionA,
+      environmentDefinitionA,
+      tenantId,
+      'service_account',
+      'oi38-owner-a',
+      'OI38 Environment',
+      { apiVersion: 'agent-server/v1alpha1', kind: 'ManagedEnvironment' },
+      'sha256:oi38-environment',
+      now,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO team_versions(id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,description,spec,environment_version_id,created_at,updated_at,published_at)
+     VALUES ($1,$2,$3,$4,$5,$6,'published',$7,$8,$9,$10,$11,$11,$11)`,
     [
       versionA,
       definitionA,
@@ -243,8 +277,13 @@ async function seedIdentityRows(pool: Pool): Promise<void> {
       'oi38-owner-a',
       'OI38 Version',
       'test',
+      {
+        lead: { name: 'lead', agentVersionId: 'oi38-lead-agent' },
+        roster: [{ name: 'member', agentVersionId: 'oi38-member-agent' }],
+        environmentVersionId: environmentVersionA,
+      },
+      environmentVersionA,
       now,
-      { roster: [] },
     ],
   );
   for (const [id, workspace, title] of [

@@ -10,6 +10,7 @@ import {
   recordingSanitizerAuditEnabled,
   sanitizeRecording,
   sanitizeRunEventPayload,
+  RUN_EVENT_PAYLOAD_KEYS,
   sha256,
   stableStringify,
 } from './sanitize-recording.mjs';
@@ -216,11 +217,16 @@ export async function writeJson(path, value, collector) {
   if (collector)
     assertNoEnvironmentValues(value, process.env, { collector });
   const scanPath = collector ? auditPath(path) : path;
+  const isRunEvents =
+    path === 'run_events.json' || path.endsWith('/run_events.json');
+  const isManifest =
+    path === 'manifest.json' || path.endsWith('/manifest.json');
   const safe = sanitizeRecording(value, scanPath, {
-    allowProviderSummary:
-      path.endsWith('/trace.json') ||
-      path.endsWith('/manifest.json') ||
-      path.endsWith('/run_events.json'),
+    allowKeys: isRunEvents ? RUN_EVENT_PAYLOAD_KEYS : undefined,
+    allowExactValues: isManifest
+      ? new Map([['provider_run', new Set(['real'])]])
+      : undefined,
+    allowProviderSummary: path.endsWith('/trace.json') || isManifest,
     collector,
   });
   if (!collector) assertNoEnvironmentValues(safe);

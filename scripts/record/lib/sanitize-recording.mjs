@@ -79,6 +79,22 @@ export const RUN_EVENT_PAYLOAD_KEYS = new Set([
   'message',
   'failure_code',
   'member',
+  'provenance',
+  'tool_identity_capture_status',
+  'response_observed',
+]);
+
+const RUN_EVENT_PAYLOAD_EXACT_VALUES = new Map([
+  ['provenance', new Set(['server_authorized_team_mcp_catalog'])],
+  ['tool_identity_capture_status', new Set(['present'])],
+  ['response_observed', new Set([true, false])],
+]);
+const RUN_EVENT_NUMERIC_METRIC_KEYS = new Set([
+  'input_tokens',
+  'cached_input_tokens',
+  'output_tokens',
+  'context_window_max_tokens',
+  'context_window_used_tokens',
 ]);
 
 export class RecordingSecretError extends Error {
@@ -147,6 +163,7 @@ export function sanitizeRecording(value, path = '$', options = {}) {
   const {
     allowKeys = new Set(),
     allowProviderSummary = false,
+    allowExactValues = new Map(),
     collector,
   } = options;
   if (value instanceof Date) return value.toISOString();
@@ -159,9 +176,17 @@ export function sanitizeRecording(value, path = '$', options = {}) {
     for (const [key, item] of Object.entries(value)) {
       const normalized = key.replace(/[^a-z0-9]/giu, '').toLowerCase();
       const keyAllowed = allowKeys.has(key) || allowKeys.has(normalized);
+      const exactValueAllowed =
+        allowExactValues.get(key)?.has(item) ||
+        allowExactValues.get(normalized)?.has(item);
       const providerSummaryAllowed =
         allowProviderSummary && (key === 'provider' || key === 'model');
-      if (!keyAllowed && !providerSummaryAllowed && SECRET_KEY.test(key)) {
+      if (
+        !keyAllowed &&
+        !exactValueAllowed &&
+        !providerSummaryAllowed &&
+        SECRET_KEY.test(key)
+      ) {
         const keyPath = `${path}.${key}`;
         report(collector, keyPath, 'sensitive_key');
         if (collector) {
@@ -202,6 +227,16 @@ export function sanitizeRunEventPayload(
   for (const [key, value] of Object.entries(payload)) {
     if (!RUN_EVENT_PAYLOAD_KEYS.has(key)) {
       report(options.collector, `${path}.${key}`, 'run_event_payload_key');
+    }
+    const exactValues = RUN_EVENT_PAYLOAD_EXACT_VALUES.get(key);
+    const invalidNumericMetric =
+      RUN_EVENT_NUMERIC_METRIC_KEYS.has(key) &&
+      (!Number.isSafeInteger(value) || value < 0);
+    if ((exactValues && !exactValues.has(value)) || invalidNumericMetric) {
+      const valuePath = `${path}.${key}`;
+      report(options.collector, valuePath, 'run_event_payload_value');
+      projected[key] = RECORDING_REDACTION_PLACEHOLDER;
+      continue;
     }
     projected[key] = value;
   }

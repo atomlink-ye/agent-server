@@ -7,6 +7,7 @@ import {
   createRecordingSanitizerAudit,
   finalizeRecordingSanitizerAudit,
   RecordingSecretError,
+  RUN_EVENT_PAYLOAD_KEYS,
   sanitizeRecording,
   sanitizeRunEventPayload,
 } from './sanitize-recording.mjs';
@@ -185,6 +186,117 @@ test('normal sanitizer mode remains fail-fast', () => {
     () => sanitizeRunEventPayload({ unknown_field: true }),
     /recording_secret_detected:run_event_payload_key:\$\.payload\.unknown_field/,
   );
+});
+
+test('allows the canonical run-event identity domains and numeric usage metrics', () => {
+  const payload = {
+    provenance: 'server_authorized_team_mcp_catalog',
+    tool_identity_capture_status: 'present',
+    response_observed: true,
+    input_tokens: 12,
+    cached_input_tokens: 3,
+    output_tokens: 4,
+    context_window_max_tokens: 1000,
+    context_window_used_tokens: 250,
+  };
+
+  assert.deepEqual(sanitizeRunEventPayload(payload), payload);
+  assert.deepEqual(sanitizeRunEventPayload({ response_observed: false }), {
+    response_observed: false,
+  });
+  assert.deepEqual(
+    sanitizeRecording({ payload }, '$.db.run_events', {
+      allowKeys: RUN_EVENT_PAYLOAD_KEYS,
+    }),
+    { payload },
+  );
+});
+
+test('rejects poisoned run-event identity domains without exposing values', () => {
+  const cases = [
+    ['provenance', 'untrusted_catalog'],
+    ['tool_identity_capture_status', 'missing'],
+    ['response_observed', 'true'],
+  ];
+
+  for (const [key, value] of cases) {
+    assert.throws(
+      () => sanitizeRunEventPayload({ [key]: value }),
+      (error) =>
+        error instanceof RecordingSecretError &&
+        error.message ===
+          `recording_secret_detected:run_event_payload_value:$.payload.${key}`,
+      key,
+    );
+  }
+
+  const audit = createRecordingSanitizerAudit();
+  for (const [key, value] of cases)
+    sanitizeRunEventPayload({ [key]: value }, '$.payload', {
+      collector: audit,
+    });
+  assert.deepEqual(audit.entries(), [
+    { reason: 'run_event_payload_value', path: '$.payload.provenance' },
+    {
+      reason: 'run_event_payload_value',
+      path: '$.payload.response_observed',
+    },
+    {
+      reason: 'run_event_payload_value',
+      path: '$.payload.tool_identity_capture_status',
+    },
+  ]);
+  const serialized = JSON.stringify(audit.entries());
+  assert.equal(serialized.includes('untrusted_catalog'), false);
+  assert.equal(serialized.includes('missing'), false);
+  assert.equal(serialized.includes('true'), false);
+});
+
+test('rejects non-numeric or negative run-event usage metrics', () => {
+  for (const [key, value] of [
+    ['input_tokens', '12'],
+    ['cached_input_tokens', -1],
+    ['output_tokens', 1.5],
+    ['context_window_max_tokens', Number.NaN],
+    ['context_window_used_tokens', Number.POSITIVE_INFINITY],
+  ]) {
+    assert.throws(
+      () => sanitizeRunEventPayload({ [key]: value }),
+      (error) =>
+        error instanceof RecordingSecretError &&
+        error.message ===
+          `recording_secret_detected:run_event_payload_value:$.payload.${key}`,
+      key,
+    );
+  }
+});
+
+test('allows only the exact manifest provider_run value', () => {
+  const allowExactValues = new Map([['provider_run', new Set(['real'])]]);
+  assert.deepEqual(
+    sanitizeRecording({ provider_run: 'real' }, '$.manifest', {
+      allowExactValues,
+    }),
+    { provider_run: 'real' },
+  );
+
+  assert.throws(
+    () =>
+      sanitizeRecording({ provider_run: 'fake' }, '$.manifest', {
+        allowExactValues,
+      }),
+    /recording_secret_detected:sensitive_key:\$\.manifest\.provider_run/,
+  );
+
+  const audit = createRecordingSanitizerAudit();
+  sanitizeRecording({ provider_run: 'fake' }, '$.manifest', {
+    allowExactValues,
+    collector: audit,
+  });
+  assert.deepEqual(audit.entries(), [
+    { reason: 'sensitive_key', path: '$.manifest.provider_run' },
+  ]);
+  assert.equal(JSON.stringify(audit.entries()).includes('fake'), false);
 });
 
 test('audit finalization precedes checksum validation and rename', async () => {

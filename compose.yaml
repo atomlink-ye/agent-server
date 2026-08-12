@@ -47,8 +47,8 @@ services:
       # and a request is stuck; it is not latency tuning or a death detector.
       # A disconnected daemon immediately rejects pending waiters; this does
       # not distinguish a busy request from a deadlock.
-      # Keep it at least twice the 150s execution timeout.
-      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:-300000}
+      # Keep it at least twice the 300s real-provider execution timeout.
+      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:-900000}
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: '0.0.0.0'
@@ -75,6 +75,7 @@ services:
       PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: ${PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"},{"serviceAccountId":"svc_local_2","token":"token-local-dev-2","tenantId":"tenant_local_2","workspaceId":"${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}","policyVersion":"policy-local-2"}]'
     volumes:
       - .:/workspace

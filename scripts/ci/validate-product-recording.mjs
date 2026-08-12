@@ -3,6 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   sha256,
+  stableStringify,
   sanitizeRecording,
   sanitizeRunEventPayload,
   assertNoEnvironmentValues,

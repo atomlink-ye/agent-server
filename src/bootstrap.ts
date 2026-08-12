@@ -212,6 +212,10 @@ function safeLifecycleError(label: string, error: unknown): Error {
   return safe;
 }
 
+function turnLeaseDurationMs(executionTimeoutMs: number): number {
+  return Math.max(executionTimeoutMs * 2 + 300_000, 30_000);
+}
+
 export function createLarkIngressWorker(
   repository: Pick<
     PostgresChannelRepository,
@@ -283,6 +287,7 @@ export async function createService(
   )
     throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
+  const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
   await registerSkill({
     registryRoot: config.skillRegistryRoot,
     ref: AGENT_SERVER_MEMORY_API_SKILL_REF,
@@ -551,7 +556,7 @@ export async function createService(
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
       workerId,
-      leaseDurationMs: Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+      leaseDurationMs,
     }),
     executeRun,
     logger,
@@ -627,7 +632,7 @@ export async function createService(
       logger,
       {
         workerId: `${workerId}:lark`,
-        leaseMs: Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+        leaseMs: leaseDurationMs,
       },
     );
     larkOutboxWorker = createLarkOutboxWorker(
@@ -650,7 +655,7 @@ export async function createService(
       logger,
       {
         workerId: `${workerId}:lark-outbox`,
-        leaseMs: Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+        leaseMs: leaseDurationMs,
       },
     );
     larkReceiver = createLarkWebsocketReceiver({
@@ -726,8 +731,7 @@ export async function createService(
               activationId: randomUUID(),
               claimedAt: claimedAt.toISOString(),
               leaseExpiresAt: new Date(
-                claimedAt.getTime() +
-                  Math.max(config.paseo.executionTimeoutMs * 2, 30_000),
+                claimedAt.getTime() + leaseDurationMs,
               ).toISOString(),
             });
             if (!claim) return { claimed: false };

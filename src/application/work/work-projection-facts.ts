@@ -26,6 +26,10 @@ export interface WorkProjectionAttemptFact {
   readonly createdAt: string;
   readonly feedbackCapture: 'present' | 'absent';
   readonly resultCapture: 'present' | 'absent';
+  /** Populated by a run-aware projection layer; zero is fail-closed. */
+  readonly executionRunCount?: number;
+  readonly startedAt?: string | null;
+  readonly endedAt?: string | null;
   readonly sourceRefs: WorkProjectionSourceRefs;
 }
 
@@ -70,6 +74,14 @@ export interface WorkProjectionFacts {
   readonly rootTaskId: string;
   /** The TeamRun row selected while loading the existing projection facts. */
   readonly teamRunId: string;
+  readonly teamRunStatus?: 'active' | 'waiting' | 'succeeded' | 'failed' | null;
+  readonly teamRunPhase?: string | null;
+  readonly teamRunRevision?: number | null;
+  readonly completionApprovalRequired?: boolean | null;
+  readonly completionRequestedByRunId?: string | null;
+  readonly approvalAccepted?: boolean;
+  readonly finalText?: string | null;
+  readonly finalTextPresent?: boolean;
   readonly workItems: readonly WorkProjectionWorkItemFact[];
   readonly actors: readonly WorkProjectionActorFact[];
   readonly dependencies: readonly WorkProjectionDependencyFact[];

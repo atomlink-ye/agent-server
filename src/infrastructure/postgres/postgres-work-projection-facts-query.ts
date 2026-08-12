@@ -23,6 +23,13 @@ interface Queryable {
 interface TeamRunRow {
   id: string;
   root_task_id: string;
+  status: WorkProjectionFacts['teamRunStatus'];
+  phase: string | null;
+  revision: number | string | null;
+  completion_approval_required: boolean | null;
+  completion_requested_by_run_id: string | null;
+  final_text: string | null;
+  approval_accepted: boolean | null;
 }
 
 interface MemberRow {
@@ -87,8 +94,19 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
   ): Promise<WorkProjectionFacts | null> {
     const scope = [owner.tenantId, owner.workspaceId] as const;
     const teamResult = await this.database.query<TeamRunRow>(
-      `SELECT id,root_task_id FROM team_runs
-        WHERE root_task_id=$1 AND tenant_id=$2 AND workspace_id=$3
+      `SELECT tr.id,tr.root_task_id,tr.status,tr.phase,tr.revision,
+              tr.completion_approval_required,
+              tr.completion_requested_by_run_id,tr.final_text,
+              (NOT tr.completion_approval_required OR EXISTS (
+                SELECT 1
+                  FROM team_completion_decisions d
+                 WHERE d.team_run_id=tr.id
+                   AND d.completion_requested_by_run_id=tr.completion_requested_by_run_id
+                   AND d.decision='approve'
+                   AND d.tenant_id=$2 AND d.workspace_id=$3
+              )) AS approval_accepted
+         FROM team_runs tr
+        WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
         LIMIT 1`,
       [rootTaskId, ...scope],
     );
@@ -187,6 +205,9 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
         createdAt: toIso(attempt.created_at),
         feedbackCapture: attempt.feedback_present ? 'present' : 'absent',
         resultCapture: attempt.result_present ? 'present' : 'absent',
+        executionRunCount: 0,
+        startedAt: null,
+        endedAt: null,
         sourceRefs: {
           rootTaskId: team.root_task_id,
           teamRunId: team.id,
@@ -244,6 +265,18 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
     return {
       rootTaskId: team.root_task_id,
       teamRunId: team.id,
+      teamRunStatus: team.status ?? null,
+      teamRunPhase: team.phase ?? null,
+      teamRunRevision:
+        team.revision === null || team.revision === undefined
+          ? null
+          : Number(team.revision),
+      completionApprovalRequired: team.completion_approval_required ?? null,
+      completionRequestedByRunId: team.completion_requested_by_run_id ?? null,
+      approvalAccepted: team.approval_accepted ?? false,
+      finalText: team.final_text ?? null,
+      finalTextPresent:
+        team.final_text !== null && team.final_text !== undefined,
       workItems,
       actors,
       dependencies: dependencyFacts,

@@ -15,6 +15,29 @@ export const StartWorkRunRequestSchema = z
   })
   .strict();
 
+export const ListWorksRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().min(1).nullable().optional(),
+  })
+  .strict();
+
+export const GetWorkRequestSchema = z.object({ work_id: z.uuid() }).strict();
+
+export const ListWorkRunsRequestSchema = z
+  .object({
+    work_id: z.uuid(),
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().min(1).nullable().optional(),
+  })
+  .strict();
+
+export const GetWorkRunRequestSchema = z
+  .object({ work_id: z.uuid(), work_run_id: z.uuid() })
+  .strict();
+
+export const GetRunTraceRequestSchema = GetWorkRunRequestSchema;
+
 export const WorkResponseSchema = z
   .object({
     id: z.uuid(),
@@ -30,7 +53,7 @@ export const WorkResponseSchema = z
   })
   .strict();
 
-export const WorkRunResponseSchema = z
+export const WorkRunSummarySchema = z
   .object({
     id: z.uuid(),
     work_id: z.uuid(),
@@ -50,7 +73,7 @@ export const CreateWorkResponseSchema = z
 
 export const StartWorkRunResponseSchema = z
   .object({
-    work_run: WorkRunResponseSchema,
+    work_run: WorkRunSummarySchema,
     execution_receipt: z
       .object({
         reused: z.boolean(),
@@ -64,15 +87,34 @@ export const StartWorkRunResponseSchema = z
   })
   .strict();
 
-export const WorkListResponseSchema = z.object({ works: z.array(WorkResponseSchema), next_cursor: z.string().nullable() }).strict();
-export const WorkRunListResponseSchema = z.object({ work_runs: z.array(WorkRunResponseSchema), next_cursor: z.string().nullable() }).strict();
+export const WorkListResponseSchema = z
+  .object({
+    works: z.array(WorkResponseSchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+export const WorkRunListResponseSchema = z
+  .object({
+    work_runs: z.array(WorkRunSummarySchema),
+    next_cursor: z.string().nullable(),
+  })
+  .strict();
+
+export const GetWorkResponseSchema = z
+  .object({ work: WorkResponseSchema })
+  .strict();
+
+/** Backwards-compatible name for the summary DTO. */
+export const WorkRunResponseSchema = WorkRunSummarySchema;
 
 export type CreateWorkRequest = z.infer<typeof CreateWorkRequestSchema>;
 export type StartWorkRunRequest = z.infer<typeof StartWorkRunRequestSchema>;
 export type WorkResponse = z.infer<typeof WorkResponseSchema>;
-export type WorkRunResponse = z.infer<typeof WorkRunResponseSchema>;
+export type WorkRunSummary = z.infer<typeof WorkRunSummarySchema>;
+export type WorkRunResponse = WorkRunSummary;
 export type WorkListResponse = z.infer<typeof WorkListResponseSchema>;
 export type WorkRunListResponse = z.infer<typeof WorkRunListResponseSchema>;
+export type GetWorkResponse = z.infer<typeof GetWorkResponseSchema>;
 
 export function toWorkResponse(work: {
   readonly id: string;
@@ -110,7 +152,7 @@ export function toWorkRunResponse(run: {
   readonly boundAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
-}): WorkRunResponse {
+}): WorkRunSummary {
   return {
     id: run.id,
     work_id: run.workId,
@@ -123,6 +165,8 @@ export function toWorkRunResponse(run: {
     updated_at: run.updatedAt,
   };
 }
+
+export const toWorkRunSummaryResponse = toWorkRunResponse;
 
 export function toExecutionReceiptResponse(receipt: {
   readonly reused: boolean;

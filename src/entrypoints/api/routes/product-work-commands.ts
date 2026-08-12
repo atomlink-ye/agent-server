@@ -1,4 +1,6 @@
 import type { Hono } from 'hono';
+import type { ProductProjectionApi } from '../../../application/product-projection/product-projection.js';
+import { ProductProjectionNotFoundError } from '../../../application/product-projection/product-projection.js';
 
 import {
   InvalidWorkListCursorError,
@@ -41,6 +43,7 @@ export interface ProductWorkCommandDependencies {
     'createWork' | 'listWorks' | 'listWorkRuns'
   >;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+  readonly workExists?: ProductProjectionApi['getWork'];
 }
 
 export function registerProductWorkCommandRoutes(
@@ -86,6 +89,23 @@ export function registerProductWorkCommandRoutes(
     const { limit, cursor } = parseListQuery(context.req.url);
     const accessContext = getAuthenticatedAccessContext(context);
     try {
+      if (dependencies.workExists) {
+        try {
+          await dependencies.workExists({
+            tenantId: accessContext.tenantId,
+            workspaceId: accessContext.workspaceId,
+            workId,
+          });
+        } catch (error) {
+          if (error instanceof ProductProjectionNotFoundError)
+            throw new HttpError(
+              404,
+              'work_not_found',
+              'The requested Work was not found.',
+            );
+          throw error;
+        }
+      }
       const page = await dependencies.workIdentity.listWorkRuns({
         owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
         accessContext,

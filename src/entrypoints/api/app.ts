@@ -89,7 +89,10 @@ export interface AppDependencies {
   readonly managedMemory?: ManagedMemory;
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
-  readonly workIdentity?: Pick<WorkIdentityApi, 'createWork' | 'listWorks' | 'listWorkRuns'>;
+  readonly workIdentity?: Pick<
+    WorkIdentityApi,
+    'createWork' | 'listWorks' | 'listWorkRuns'
+  >;
   readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
   readonly productProjection?: ProductProjectionApi;
 }
@@ -128,6 +131,9 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       config: dependencies.config,
       workIdentity: dependencies.workIdentity,
       startWorkRun: dependencies.startWorkRun,
+      ...(dependencies.productProjection
+        ? { workExists: dependencies.productProjection.getWork }
+        : {}),
     });
   if (dependencies.productProjection)
     registerProductWorkRoutes(app, {

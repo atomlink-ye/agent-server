@@ -45,6 +45,7 @@ export class WorkProjectionFactsSource {
         ...assignments.edges,
         ...feedback.edges,
       ] as ProductTraceEdge[],
+      product: mapProductDurableFacts(facts),
     };
   }
 }
@@ -54,6 +55,18 @@ export interface ProductProjectionFactsSlice {
   readonly rootTaskId: string;
   readonly teamRunId: string;
   readonly edges: readonly ProductTraceEdge[];
+  readonly product: ProductProjectionDurableFacts;
+}
+
+export interface ProductProjectionDurableFacts {
+  readonly status: 'active' | 'waiting' | 'succeeded' | 'failed' | null;
+  readonly phase: string | null;
+  readonly revision: number | null;
+  readonly completionApprovalRequired: boolean | null;
+  readonly completionRequestedByRunId: string | null;
+  readonly approvalAccepted: boolean;
+  readonly finalText: string | null;
+  readonly finalTextPresent: boolean;
 }
 
 export function mapWorkProjectionFacts(
@@ -89,6 +102,7 @@ export function mapWorkProjectionFacts(
         id: attempt.id,
         attempt_no: attempt.attemptNo,
         status: attempt.status,
+        ...attemptTiming(attempt),
         feedback_summary: null,
         result_summary: null,
         feedback_capture_status:
@@ -122,4 +136,53 @@ function requireSenderId(messageId: string, senderId: string | null): string {
   if (senderId === null)
     throw new Error(`product_message_sender_id_missing:${messageId}`);
   return senderId;
+}
+
+interface AttemptWithTiming {
+  readonly executionRunCount?: number | null;
+  readonly startedAt?: string | null;
+  readonly endedAt?: string | null;
+}
+
+function attemptTiming(attempt: unknown) {
+  const value = attempt as AttemptWithTiming;
+  const count = Number(value.executionRunCount ?? 0);
+  if (count !== 1)
+    return {
+      started_at: null,
+      ended_at: null,
+      duration_ms: null,
+      timing_capture_status: 'not_captured' as const,
+    };
+  const startedAt = value.startedAt ?? null;
+  const endedAt = value.endedAt ?? null;
+  return {
+    started_at: startedAt,
+    ended_at: endedAt,
+    duration_ms:
+      startedAt && endedAt
+        ? Math.max(
+            0,
+            new Date(endedAt).getTime() - new Date(startedAt).getTime(),
+          )
+        : null,
+    timing_capture_status: 'captured' as const,
+  };
+}
+
+function mapProductDurableFacts(
+  facts: WorkProjectionFacts,
+): ProductProjectionDurableFacts {
+  return {
+    status: facts.teamRunStatus ?? null,
+    phase: facts.teamRunPhase ?? null,
+    revision: facts.teamRunRevision ?? null,
+    completionApprovalRequired: facts.completionApprovalRequired ?? null,
+    completionRequestedByRunId: facts.completionRequestedByRunId ?? null,
+    approvalAccepted: facts.approvalAccepted ?? false,
+    finalText: facts.finalText ?? null,
+    finalTextPresent:
+      facts.finalTextPresent ??
+      (facts.finalText !== null && facts.finalText !== undefined),
+  };
 }

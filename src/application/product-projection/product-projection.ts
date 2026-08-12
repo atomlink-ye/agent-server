@@ -7,24 +7,27 @@ import type {
 import { ExecutionFactQueryError } from '../ports/execution-fact-query.js';
 import type { WorkProjectionFactsSource } from './work-projection-facts-source.js';
 import {
+  GetWorkResponseSchema,
   toWorkResponse,
   toWorkRunResponse,
 } from '../../contracts/product-work-commands.js';
+import type { GetWorkResponse } from '../../contracts/product-work-commands.js';
 import {
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
-  ProductProjectionFollowUpReadsSchema,
 } from '../../contracts/product-projection/index.js';
 import type {
   ExecutionEvent,
   McpActivity,
 } from '../../contracts/product-projection/edges.js';
-import type { ProductProjectionFactsSlice } from './work-projection-facts-source.js';
+import type {
+  ProductProjectionDurableFacts,
+  ProductProjectionFactsSlice,
+} from './work-projection-facts-source.js';
 import type {
   ProductRunTrace,
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
-import { PRODUCT_CONTRACT_STATUS } from '../../contracts/product-contract-policy.js';
 import { canonicalTeamMcpName } from '../agents/built-in-skills.js';
 
 export interface ProductProjectionOwnerScope {
@@ -84,6 +87,9 @@ interface LoadedProductWorkRun {
 }
 
 export interface ProductProjectionApi {
+  getWork(
+    input: ProductProjectionOwnerScope & { workId: string },
+  ): Promise<GetWorkResponse>;
   getWorkRun(
     input: ProductProjectionOwnerScope & { workId: string; workRunId: string },
   ): Promise<ProductWorkRun>;
@@ -130,15 +136,37 @@ export function createProductProjection(
     return facts;
   };
 
+  const loadFactsAndRuns = async (
+    loaded: LoadedProductWorkRun,
+    owner: ProductProjectionOwnerScope,
+  ) => {
+    const [facts, runs] = await Promise.all([
+      loadFacts(loaded, owner),
+      options.executionFacts.listRunsByRootTask({
+        tenantId: owner.tenantId,
+        workspaceId: owner.workspaceId,
+        rootTaskId: loaded.workRun.rootTaskId,
+      }),
+    ]);
+    return { facts: applyExecutionTiming(facts, runs), runs };
+  };
+
   return {
+    async getWork(input) {
+      const work = await options.workIdentity.findWorkById(input.workId, {
+        tenantId: input.tenantId,
+        workspaceId: input.workspaceId,
+      });
+      if (!work) throw new ProductProjectionNotFoundError();
+      return GetWorkResponseSchema.parse({ work: toWorkResponse(work) });
+    },
     async getWorkRun(input) {
       const loaded = await load(input);
-      const facts = await loadFacts(loaded, input);
+      const { facts, runs } = await loadFactsAndRuns(loaded, input);
       const capture = buildCaptureMetadata(loaded, facts);
       return ProductWorkRunResponseSchema.parse({
-        contract_status: PRODUCT_CONTRACT_STATUS,
         work: toWorkResponse(loaded.work),
-        work_run: toWorkRunResponse(loaded.workRun),
+        work_run: buildWorkRunDetail(loaded, facts.product, runs),
         ...capture,
         ...facts.identity,
       });
@@ -146,14 +174,7 @@ export function createProductProjection(
 
     async getRunTrace(input) {
       const loaded = await load(input);
-      const [facts, runs] = await Promise.all([
-        loadFacts(loaded, input),
-        options.executionFacts.listRunsByRootTask({
-          tenantId: input.tenantId,
-          workspaceId: input.workspaceId,
-          rootTaskId: loaded.workRun.rootTaskId,
-        }),
-      ]);
+      const { facts, runs } = await loadFactsAndRuns(loaded, input);
       let events;
       try {
         events = await options.executionFacts.listRunEvents({
@@ -172,9 +193,8 @@ export function createProductProjection(
       const mappedEdges = [...facts.edges].sort(compareEdges);
       const capture = buildCaptureMetadata(loaded, facts);
       return ProductRunTraceResponseSchema.parse({
-        contract_status: PRODUCT_CONTRACT_STATUS,
         work: toWorkResponse(loaded.work),
-        work_run: toWorkRunResponse(loaded.workRun),
+        work_run: buildWorkRunDetail(loaded, facts.product, runs),
         ...capture,
         ...facts.identity,
         runs: runs.map((run) => mapRun(run, loaded.workRun.rootTaskId)),
@@ -196,67 +216,27 @@ function buildCaptureMetadata(
 ) {
   if (facts.rootTaskId !== loaded.workRun.rootTaskId)
     throw new ProductProjectionUnavailableError();
-  const followUpReads = buildFollowUpReads(
-    loaded.workRun.rootTaskId,
-    facts.teamRunId,
-  );
   return {
     projection_status: deriveCaptureStatus(
       facts.identity,
-      followUpReads,
       loaded.workRun.rootTaskId,
       facts.teamRunId,
     ),
-    follow_up_reads: followUpReads,
   } as const;
-}
-
-function buildFollowUpReads(rootTaskId: string, teamRunId: string) {
-  const result = ProductProjectionFollowUpReadsSchema.safeParse([
-    {
-      id: rootTaskId,
-      resource: 'root_task',
-      missing_fields: ['result'],
-      method: 'GET',
-      path: `/api/v1/tasks/${rootTaskId}`,
-      source_ref: { root_task_id: rootTaskId },
-    },
-    {
-      id: teamRunId,
-      resource: 'team_run',
-      missing_fields: [
-        'status',
-        'phase',
-        'control_state',
-        'final_text',
-        'stop_reason',
-      ],
-      method: 'GET',
-      path: `/api/v1/team-runs/${teamRunId}`,
-      source_ref: { team_run_id: teamRunId },
-    },
-  ]);
-  if (!result.success) throw new ProductProjectionUnavailableError();
-  return result.data;
 }
 
 function deriveCaptureStatus(
   identity: ProductProjectionFactsSlice['identity'],
-  followUpReads: ReturnType<typeof buildFollowUpReads>,
   rootTaskId: string,
   teamRunId: string,
 ): 'internally_anchored' {
-  // `internally_anchored` promises only that the projected identity collections and the
-  // two remediation descriptors are present and internally anchored. It does
-  // not promise that either follow-up endpoint's omitted facts are captured.
+  // `internally_anchored` promises only that the projected identity collections
+  // contain durable source references for both aggregate identities.
   const identityComplete =
     Array.isArray(identity.work_items) &&
     Array.isArray(identity.actors) &&
     Array.isArray(identity.messages);
-  const followUpsComplete =
-    ProductProjectionFollowUpReadsSchema.safeParse(followUpReads).success;
-  if (!identityComplete || !followUpsComplete)
-    throw new ProductProjectionUnavailableError();
+  if (!identityComplete) throw new ProductProjectionUnavailableError();
   const sourceRefs = [
     ...identity.work_items.flatMap((item) => [
       item.source_refs,
@@ -265,21 +245,169 @@ function deriveCaptureStatus(
     ...identity.actors.map((actor) => actor.source_refs),
     ...identity.messages.map((message) => message.source_refs),
   ];
-  const rootRead = followUpReads.find((read) => read.resource === 'root_task');
-  const teamRead = followUpReads.find((read) => read.resource === 'team_run');
   const refsComplete =
     sourceRefs.some((refs) => refs.root_task_id === rootTaskId) &&
     sourceRefs.some((refs) => refs.team_run_id === teamRunId);
-  const remediationAnchorsComplete =
-    rootRead?.id === rootTaskId &&
-    rootRead.path === `/api/v1/tasks/${rootTaskId}` &&
-    rootRead.source_ref.root_task_id === rootTaskId &&
-    teamRead?.id === teamRunId &&
-    teamRead.path === `/api/v1/team-runs/${teamRunId}` &&
-    teamRead.source_ref.team_run_id === teamRunId;
-  if (!refsComplete || !remediationAnchorsComplete)
-    throw new ProductProjectionUnavailableError();
+  if (!refsComplete) throw new ProductProjectionUnavailableError();
   return 'internally_anchored';
+}
+
+function buildWorkRunDetail(
+  loaded: LoadedProductWorkRun,
+  product: ProductProjectionDurableFacts,
+  runs: readonly ExecutionRunFact[],
+) {
+  const summary = toWorkRunResponse(loaded.workRun);
+  const state = deriveProductState(product, runs);
+  if (state === 'not_captured')
+    return {
+      ...summary,
+      product_state: 'not_captured' as const,
+      problem_kind: 'not_captured' as const,
+      attention_reason: 'not_captured' as const,
+      result_summary: null,
+      result_capture_status: 'not_captured' as const,
+      control_revision: null,
+      cancel_availability: 'not_captured' as const,
+      completion_decision_availability: 'not_captured' as const,
+    };
+
+  const approvalPending = isApprovalPending(product);
+  const resultPresent = product.finalText !== null;
+  return {
+    ...summary,
+    product_state: state,
+    problem_kind: state === 'problem' ? ('failed' as const) : null,
+    attention_reason: approvalPending
+      ? ('completion_approval_pending' as const)
+      : null,
+    result_summary:
+      state === 'complete' && resultPresent ? product.finalText : null,
+    result_capture_status:
+      state === 'complete' && resultPresent
+        ? ('present' as const)
+        : ('not_present' as const),
+    control_revision: product.revision,
+    // OI-33 cancellation controls are not part of this projection slice.
+    cancel_availability: 'not_captured' as const,
+    completion_decision_availability: approvalPending
+      ? ('available' as const)
+      : ('not_available' as const),
+  };
+}
+
+function deriveProductState(
+  product: ProductProjectionDurableFacts,
+  runs: readonly ExecutionRunFact[],
+): 'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured' {
+  if (hasProductFactConflict(product, runs)) return 'not_captured';
+  if (isApprovalPending(product)) return 'needs_you';
+  if (
+    product.status === 'succeeded' &&
+    product.phase === 'done' &&
+    approvalSatisfied(product)
+  )
+    return 'complete';
+  if (
+    product.status === 'failed' ||
+    runs.some((run) => run.status === 'failed' || run.status === 'timed_out')
+  )
+    return 'problem';
+  if (
+    runs.some(
+      (run) => run.status === 'running' || run.status === 'waiting_children',
+    )
+  )
+    return 'running';
+  return 'not_captured';
+}
+
+function hasProductFactConflict(
+  product: ProductProjectionDurableFacts,
+  _runs: readonly ExecutionRunFact[],
+): boolean {
+  if (
+    product.status === null ||
+    product.phase === null ||
+    product.revision === null ||
+    product.completionApprovalRequired === null
+  )
+    return true;
+  if (product.finalTextPresent !== (product.finalText !== null)) return true;
+  if (
+    product.completionApprovalRequired === false &&
+    product.completionRequestedByRunId !== null
+  )
+    return true;
+  return (
+    product.completionApprovalRequired === true &&
+    product.approvalAccepted &&
+    product.completionRequestedByRunId === null
+  );
+}
+
+function isApprovalPending(product: ProductProjectionDurableFacts): boolean {
+  return (
+    product.completionApprovalRequired === true &&
+    product.completionRequestedByRunId !== null &&
+    !product.approvalAccepted
+  );
+}
+
+function approvalSatisfied(product: ProductProjectionDurableFacts): boolean {
+  return (
+    product.completionApprovalRequired === false || product.approvalAccepted
+  );
+}
+
+function applyExecutionTiming(
+  facts: ProductProjectionFactsSlice,
+  runs: readonly ExecutionRunFact[],
+): ProductProjectionFactsSlice {
+  const runsByTask = new Map<string, ExecutionRunFact[]>();
+  for (const run of runs) {
+    const bucket = runsByTask.get(run.taskId) ?? [];
+    bucket.push(run);
+    runsByTask.set(run.taskId, bucket);
+  }
+  return {
+    ...facts,
+    identity: {
+      ...facts.identity,
+      work_items: facts.identity.work_items.map((item) => ({
+        ...item,
+        attempts: item.attempts.map((attempt) => {
+          const taskId = attempt.source_refs.task_id;
+          const taskRuns = taskId ? (runsByTask.get(taskId) ?? []) : [];
+          return { ...attempt, ...timingForRuns(taskRuns) };
+        }),
+      })),
+    },
+  };
+}
+
+function timingForRuns(runs: readonly ExecutionRunFact[]) {
+  if (runs.length !== 1)
+    return {
+      started_at: null,
+      ended_at: null,
+      duration_ms: null,
+      timing_capture_status: 'not_captured' as const,
+    };
+  const run = runs[0]!;
+  const startedAt = run.startedAt;
+  const endedAt = run.endedAt;
+  const startMs = startedAt ? new Date(startedAt).getTime() : NaN;
+  const endMs = endedAt ? new Date(endedAt).getTime() : NaN;
+  return {
+    started_at: startedAt,
+    ended_at: endedAt,
+    duration_ms:
+      Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? Math.max(0, endMs - startMs)
+        : null,
+    timing_capture_status: 'captured' as const,
+  };
 }
 
 function mapEvent(

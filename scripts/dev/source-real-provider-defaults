@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Callers enter the repository root before sourcing this file. Keep this POSIX
+# so it also works inside multi-line Make recipes whose shell is /bin/sh.
+defaults_file="${REAL_PROVIDER_DEFAULTS_FILE:-config/real-provider-defaults.env}"
+defaults_content=$(sed -n '/^[[:space:]]*#/d;/^[[:space:]]*$/d;p' "$defaults_file")
+while IFS='=' read -r name value; do
+  case "$name" in
+    PASEO_PROVIDER|PASEO_MODEL|PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS|PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS|PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS|PASEO_PROVIDER_REFRESH_TIMEOUT_MS|PASEO_DAEMON_STARTUP_TIMEOUT_MS) ;;
+    *) continue ;;
+  esac
+  eval "is_set=\${$name+x}"
+  if [ -z "$is_set" ]; then export "$name=$value"; fi
+done <<EOF
+$defaults_content
+EOF

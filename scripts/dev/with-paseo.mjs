@@ -10,6 +10,8 @@ import {
 } from './paseo-process.mjs';
 import { createApplicationEnvironment } from './with-paseo-environment.mjs';
 const paseoEnvironmentNames = [
+  'PASEO_PROVIDER',
+  'PASEO_MODEL',
   'OPENCODE_GO_API_KEY',
   'OPENCODE_CONFIG_CONTENT',
   'ANTHROPIC_BASE_URL',
@@ -44,6 +46,15 @@ if (command.length === 0) {
   );
   process.exitCode = 2;
 } else {
+  if (
+    process.env.PASEO_MODEL?.trim().startsWith('opencode-go/') &&
+    !process.env.OPENCODE_GO_API_KEY?.trim()
+  ) {
+    process.stderr.write(
+      'OPENCODE_GO_API_KEY is required when PASEO_MODEL uses opencode-go/*.\n',
+    );
+    process.exit(1);
+  }
   const runtimeRoot = join(repositoryRoot, '.local', 'dev-runtime');
   const agentWorkspace = join(repositoryRoot, '.local', 'agent-workspace');
   await Promise.all([

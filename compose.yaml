@@ -38,8 +38,9 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
-      OPENCODE_GO_API_KEY:
-      PASEO_MODEL: ${PASEO_MODEL:-opencode-go/deepseek-v4-flash}
+      PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
+      PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
+      OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:-}
       PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
       PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:-}
       # A coarse upper bound while the daemon TCP connection remains alive
@@ -69,11 +70,11 @@ services:
       # The Paseo daemon runs inside this container, so exporting this on the
       # host does nothing unless compose forwards it. Off unless set to '1'.
       PASEO_DEV_WEB_UI: ${PASEO_DEV_WEB_UI:-}
-      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:-}
-      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:-}
-      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:-}
-      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:-}
-      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:-}
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"},{"serviceAccountId":"svc_local_2","token":"token-local-dev-2","tenantId":"tenant_local_2","workspaceId":"${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}","policyVersion":"policy-local-2"}]'
     volumes:
       - .:/workspace
@@ -90,7 +91,22 @@ services:
       - local-state:/workspace/.local
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
-    command: ['node', 'scripts/dev/with-paseo.mjs', '--', 'pnpm', 'dev:api']
+    # Keep this equivalent to package.json dev:api without invoking pnpm's
+    # command shim. On a restored named volume pnpm can decide to relink the
+    # entire dependency tree before running a script (8 minutes on
+    # fuse-overlayfs), even though the repository bootstrap already verified
+    # the stamp and critical executables.
+    command:
+      [
+        'node',
+        'scripts/dev/with-paseo.mjs',
+        '--',
+        'node',
+        '--import',
+        'tsx',
+        '--watch',
+        'src/entrypoints/api/server.ts',
+      ]
     healthcheck:
       test:
         [

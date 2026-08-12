@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { resolveOpenCodeBinary } from './resolve-opencode.mjs';
@@ -10,14 +10,33 @@ import {
   copyNamedEnvironment,
   createSafeRuntimeEnvironment,
 } from './safe-environment.mjs';
+import { loadRealProviderDefaults } from './real-provider-defaults.mjs';
 
 const MAX_HTTP_ERROR_BODY_LENGTH = 4_096;
-const DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS = 30_000;
+const REAL_PROVIDER_DEFAULTS = loadRealProviderDefaults();
 
 export function classifyDaemonStartupFailure(child) {
   return child && child.exitCode !== null
     ? `daemon exited with exitCode=${child.exitCode}`
     : 'daemon remained running but unhealthy';
+}
+
+export function classifyPaseoStartupGate(logTail, budgets) {
+  if (/OpenCode app\.agents timed out/iu.test(logTail)) {
+    return `PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS gate timed out after ${budgets.openCodeAppAgentsTimeoutMs}ms`;
+  }
+  if (/OpenCode provider\.list timed out/iu.test(logTail)) {
+    return `PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS gate timed out after ${budgets.openCodeProviderListTimeoutMs}ms`;
+  }
+  if (/OpenCode server startup timeout/iu.test(logTail)) {
+    return `PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS gate timed out after ${budgets.openCodeStartupTimeoutMs}ms`;
+  }
+  if (
+    /Timed out (?:checking .* availability|refreshing .*) after/iu.test(logTail)
+  ) {
+    return `PASEO_PROVIDER_REFRESH_TIMEOUT_MS gate timed out after ${budgets.providerRefreshTimeoutMs}ms`;
+  }
+  return null;
 }
 
 export async function tailFile(path, lineCount = 30) {
@@ -99,6 +118,83 @@ export async function createIsolatedRuntimeEnvironment(runtimeRoot) {
   return { environment, home, paseoHome, openCodeBinary };
 }
 
+/**
+ * A persisted Paseo home can outlive the container that created it. Only a
+ * parseable marker with a non-empty hostname from a different container is
+ * safe to remove; an unreadable or same-host marker may describe a live
+ * daemon and is therefore left untouched.
+ */
+export async function removeStalePaseoPid(paseoHome) {
+  const pidPath = join(paseoHome, 'paseo.pid');
+  let content;
+  try {
+    content = await readFile(pidPath, 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      process.stderr.write(
+        'Paseo stale-pid check: paseo.pid could not be read; left untouched.\n',
+      );
+    }
+    return false;
+  }
+
+  let marker;
+  try {
+    marker = JSON.parse(content);
+  } catch {
+    process.stderr.write(
+      'Paseo stale-pid check: paseo.pid is not parseable; left untouched.\n',
+    );
+    return false;
+  }
+  const recordedHostname =
+    marker && typeof marker === 'object' && typeof marker.hostname === 'string'
+      ? marker.hostname.trim()
+      : '';
+  const recordedPid =
+    marker && typeof marker === 'object' ? marker.pid : undefined;
+  const parsedPid =
+    typeof recordedPid === 'number'
+      ? recordedPid
+      : typeof recordedPid === 'string' && /^\d+$/u.test(recordedPid.trim())
+        ? Number(recordedPid.trim())
+        : NaN;
+  const currentHostname = hostname().trim();
+  if (!recordedHostname || !Number.isSafeInteger(parsedPid) || parsedPid <= 0) {
+    process.stderr.write(
+      'Paseo stale-pid check: paseo.pid has no valid pid/hostname; left untouched.\n',
+    );
+    return false;
+  }
+  if (!currentHostname) {
+    process.stderr.write(
+      'Paseo stale-pid check: current container hostname is unavailable; left untouched.\n',
+    );
+    return false;
+  }
+  if (recordedHostname === currentHostname) {
+    process.stderr.write(
+      'Paseo stale-pid check: paseo.pid hostname matches this container; left untouched.\n',
+    );
+    return false;
+  }
+
+  try {
+    await unlink(pidPath);
+    process.stderr.write(
+      'Paseo stale-pid check: paseo.pid belongs to a different container; removed stale marker.\n',
+    );
+    return true;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      process.stderr.write(
+        'Paseo stale-pid check: stale paseo.pid could not be removed; left untouched.\n',
+      );
+    }
+    return false;
+  }
+}
+
 export async function startPaseo({
   repositoryRoot,
   runtimeRoot,
@@ -109,34 +205,37 @@ export async function startPaseo({
   const startupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
     'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
     process.env.PASEO_DAEMON_STARTUP_TIMEOUT_MS,
-    DEFAULT_PASEO_DAEMON_STARTUP_TIMEOUT_MS,
+    Number(REAL_PROVIDER_DEFAULTS.PASEO_DAEMON_STARTUP_TIMEOUT_MS),
   );
   const openCodeStartupTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
     'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
     process.env.PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS,
-    undefined,
+    Number(REAL_PROVIDER_DEFAULTS.PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS),
   );
   const providerRefreshTimeoutMs = parsePositiveSafeIntegerEnvironmentVariable(
     'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
     process.env.PASEO_PROVIDER_REFRESH_TIMEOUT_MS,
-    undefined,
+    Number(REAL_PROVIDER_DEFAULTS.PASEO_PROVIDER_REFRESH_TIMEOUT_MS),
   );
   const openCodeAppAgentsTimeoutMs =
     parsePositiveSafeIntegerEnvironmentVariable(
       'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
       process.env.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS,
-      undefined,
+      Number(REAL_PROVIDER_DEFAULTS.PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS),
     );
   const openCodeProviderListTimeoutMs =
     parsePositiveSafeIntegerEnvironmentVariable(
       'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
       process.env.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS,
-      undefined,
+      Number(REAL_PROVIDER_DEFAULTS.PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS),
     );
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
+  await removeStalePaseoPid(isolated.paseoHome);
   const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
-  const log = openSync(logPath, 'a');
+  // One file represents one attempt. Appending lets an old timeout or SIGTERM
+  // misclassify a later failure whose own log contains no such event.
+  const log = openSync(logPath, 'w');
   const hostnames = process.env.PASEO_HOSTNAMES;
   const hostnameArguments = hostnames?.trim() ? ['--hostnames', hostnames] : [];
   const environment = {
@@ -220,8 +319,21 @@ export async function startPaseo({
       // Preserve the original startup failure and include the log tail below.
     }
     const logTail = await tailFile(logPath);
+    const startupGate = classifyPaseoStartupGate(logTail, {
+      startupTimeoutMs,
+      openCodeStartupTimeoutMs,
+      providerRefreshTimeoutMs,
+      openCodeAppAgentsTimeoutMs,
+      openCodeProviderListTimeoutMs,
+    });
+    const probeFailure = error instanceof Error ? error.message : String(error);
+    const failureCause = startupGate
+      ? startupGate
+      : probeFailure.startsWith('timed out waiting for ')
+        ? `PASEO_DAEMON_STARTUP_TIMEOUT_MS gate timed out after ${startupTimeoutMs}ms`
+        : `daemon failed before the startup deadline (${probeFailure})`;
     throw new Error(
-      `Paseo did not become healthy (${failureState}). See ${logPath}. ${error instanceof Error ? error.message : String(error)}\nLast daemon log lines:\n${logTail}`,
+      `Paseo startup failed: ${failureCause}; process state: ${failureState}. Last health probe: ${probeFailure}. See ${logPath}.\nLast daemon log lines:\n${logTail}`,
     );
   }
 

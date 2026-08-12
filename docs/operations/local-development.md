@@ -6,6 +6,29 @@
 - Linux or macOS, x64 or arm64.
 - Network access for image/package installation and live OpenCode smoke.
 
+## Real provider bootstrap
+
+Use the canonical one-command path after loading credentials from an external
+mode-0600 file (the repository does not generate or store provider keys):
+
+```bash
+set -a; . /path/to/provider.env; set +a
+make provider-smoke
+```
+
+This loads provider, model, and bounded startup defaults from the single source
+`config/real-provider-defaults.env`, waits for `/health/ready`, then submits and
+polls one authenticated `/api/v1/runs` request. The runner receives
+only the in-network base URL and local service token; the provider key remains
+host-side and is forwarded only to the Agent Server service. Missing
+`OPENCODE_GO_API_KEY` fails fast. Cloning the repository without credentials
+does not provide real-provider access.
+
+Cold provider discovery budgets are defined only in
+`config/real-provider-defaults.env`. Each remains overridable through its named
+environment variable; `make provider-smoke` deliberately sets none of them, so
+it exercises the checked-in defaults.
+
 The image pins Node `24.18.0`, pnpm `11.7.0`, Paseo client/CLI `0.1.110`, and
 OpenCode `1.18.4`. The current-architecture OpenCode package is explicitly
 installed and verified in the image; host optional binaries are never used.

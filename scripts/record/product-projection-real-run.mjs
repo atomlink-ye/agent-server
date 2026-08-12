@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 import {
   captureProductRun,
   capturePreIdentity,
@@ -16,12 +17,18 @@ const SCENARIOS = new Set([
   'rework-once',
   'lead-never-accept',
 ]);
+const realProviderDefaults = loadRealProviderDefaults();
 
 function fail(code, message = '') {
   throw new Error(`${code}${message ? `:${message}` : ''}`);
 }
 function parseArgs(argv) {
-  const allowed = new Set(['--mode', '--scenario', '--base-url', '--work-run-id']);
+  const allowed = new Set([
+    '--mode',
+    '--scenario',
+    '--base-url',
+    '--work-run-id',
+  ]);
   const parsed = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
@@ -33,7 +40,8 @@ function parseArgs(argv) {
   return parsed;
 }
 function providerGuard() {
-  const provider = process.env.PASEO_PROVIDER ?? 'opencode';
+  const provider =
+    process.env.PASEO_PROVIDER ?? realProviderDefaults.PASEO_PROVIDER;
   const mode = process.env.PASEO_RUNTIME_MODE ?? '';
   const fakeMarker = process.env[`PASEO_${'FAKE'}_OK`];
   if (
@@ -396,15 +404,13 @@ async function main() {
   ].sort();
   if (mode === 'product') {
     const workId = productContext.created.work.id;
-    const workRunId = args['--work-run-id'] ?? productContext.started.work_run.id;
+    const workRunId =
+      args['--work-run-id'] ?? productContext.started.work_run.id;
     const product = await waitFor(
       () =>
-        http(
-          url,
-          token,
-          `/api/v1/works/${workId}/runs/${workRunId}`,
-          { technicalIdempotency: false },
-        ),
+        http(url, token, `/api/v1/works/${workId}/runs/${workRunId}`, {
+          technicalIdempotency: false,
+        }),
       (value) =>
         value?.projection_status === 'internally_anchored' &&
         value?.work_run?.id === workRunId,
@@ -446,7 +452,9 @@ async function main() {
       providerKind: providerKinds.join(','),
       providerModel: providerModels.join(','),
       definitionHash,
-      predicateEvidence: { parallel_attempts_observed: parallelAttemptsObserved },
+      predicateEvidence: {
+        parallel_attempts_observed: parallelAttemptsObserved,
+      },
       serviceRevision: live.version,
       databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
       outputRoot: process.env.PRODUCT_RECORDINGS_ROOT,

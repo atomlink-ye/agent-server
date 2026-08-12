@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 postgres=0
 bind_local=0
+real_provider_defaults=0
 pass_env=()
 publish_port=''
 
@@ -14,6 +15,10 @@ while (($#)); do
       ;;
     --bind-local)
       bind_local=1
+      shift
+      ;;
+    --real-provider-defaults)
+      real_provider_defaults=1
       shift
       ;;
     --pass-env)
@@ -35,13 +40,17 @@ while (($#)); do
       break
       ;;
     *)
-      printf '%s\n' 'docker-run: expected --postgres, --bind-local, --pass-env NAME, --publish PORT, or --' >&2
+      printf '%s\n' 'docker-run: expected --postgres, --bind-local, --real-provider-defaults, --pass-env NAME, --publish PORT, or --' >&2
       exit 2
       ;;
   esac
 done
 
 (($#)) || { printf '%s\n' 'docker-run: a command is required after --' >&2; exit 2; }
+
+if ((real_provider_defaults)); then
+  . "$PWD/scripts/dev/source-real-provider-defaults"
+fi
 
 # Deliberately NOT pinning COMPOSE_PROJECT_NAME. The project name scopes
 # containers and volumes, so two lanes sharing one sandbox need different ones;
@@ -103,6 +112,14 @@ if ((${#pass_env[@]})); then
       env_args+=(-e "$name=${!name}")
     fi
   done
+fi
+if ((real_provider_defaults)); then
+  for name in PASEO_PROVIDER PASEO_MODEL PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS PASEO_PROVIDER_REFRESH_TIMEOUT_MS PASEO_DAEMON_STARTUP_TIMEOUT_MS; do
+    env_args+=(-e "$name=${!name}")
+  done
+  if [[ -n ${OPENCODE_GO_API_KEY:-} ]]; then
+    env_args+=(-e "OPENCODE_GO_API_KEY=${OPENCODE_GO_API_KEY}")
+  fi
 fi
 run_args=(run --rm --no-deps)
 if [[ -n "$publish_port" ]]; then

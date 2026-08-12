@@ -26,6 +26,11 @@ type ManifestEndpoint = Omit<AcceptedEndpoint, 'responseSchema'> & {
   readonly schema_sha256: string;
 };
 
+type CapabilityStatus = {
+  readonly id: string;
+  readonly availability: 'available' | 'explicitly_unavailable';
+};
+
 type Manifest = {
   readonly api_major: 'v1';
   readonly accepted_revision: 1;
@@ -35,6 +40,7 @@ type Manifest = {
     readonly status: 'Product-Contract-Status';
   };
   readonly owner_scope: readonly ['tenant_id', 'workspace_id'];
+  readonly capability_status: readonly CapabilityStatus[];
   readonly endpoints: readonly ManifestEndpoint[];
 };
 
@@ -71,7 +77,46 @@ function sortedEndpoint(endpoint: ManifestEndpoint): ManifestEndpoint {
   };
 }
 
-async function loadEndpoints(): Promise<ManifestEndpoint[]> {
+function sortedCapabilityStatus(
+  capability: CapabilityStatus,
+): CapabilityStatus {
+  return { id: capability.id, availability: capability.availability };
+}
+
+function capabilityStatuses(
+  endpoints: readonly ManifestEndpoint[],
+  controls: readonly CapabilityStatus[],
+): CapabilityStatus[] {
+  const statuses = new Map<string, CapabilityStatus>();
+  for (const capability of endpoints.flatMap(
+    (endpoint) => endpoint.capabilities,
+  )) {
+    const existing = statuses.get(capability);
+    if (existing && existing.availability !== 'available')
+      fail(`capability_conflict:${capability}`);
+    statuses.set(capability, { id: capability, availability: 'available' });
+  }
+  for (const capability of controls) {
+    if (
+      !capability ||
+      typeof capability.id !== 'string' ||
+      !capability.id ||
+      (capability.availability !== 'available' &&
+        capability.availability !== 'explicitly_unavailable')
+    )
+      fail('capability_status');
+    const existing = statuses.get(capability.id);
+    if (existing && existing.availability !== capability.availability)
+      fail(`capability_conflict:${capability.id}`);
+    statuses.set(capability.id, sortedCapabilityStatus(capability));
+  }
+  return [...statuses.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+async function loadFragments(): Promise<{
+  readonly endpoints: ManifestEndpoint[];
+  readonly controls: CapabilityStatus[];
+}> {
   const endpoints = PRODUCT_ACCEPTED_SUBSET_READ_ENDPOINTS.map((endpoint) => ({
     id: endpoint.id,
     method: endpoint.method,
@@ -83,7 +128,7 @@ async function loadEndpoints(): Promise<ManifestEndpoint[]> {
     capabilities: endpoint.capabilities,
     schema_sha256: schemaHash(endpoint.responseSchema),
   }));
-  const controls = resolve(
+  const controlsPath = resolve(
     fileURLToPath(
       new URL(
         '../../src/contracts/product-accepted-subset/controls.ts',
@@ -91,11 +136,16 @@ async function loadEndpoints(): Promise<ManifestEndpoint[]> {
       ),
     ),
   );
+  const controlCapabilities: CapabilityStatus[] = [];
   try {
-    await access(controls);
-    const module = (await import(pathToFileURL(controls).href)) as {
+    await access(controlsPath);
+    const module = (await import(pathToFileURL(controlsPath).href)) as {
       PRODUCT_ACCEPTED_SUBSET_CONTROL_ENDPOINTS?: readonly AcceptedEndpoint[];
+      PRODUCT_ACCEPTED_SUBSET_CONTROL_CAPABILITIES?: readonly CapabilityStatus[];
     };
+    controlCapabilities.push(
+      ...(module.PRODUCT_ACCEPTED_SUBSET_CONTROL_CAPABILITIES ?? []),
+    );
     for (const endpoint of module.PRODUCT_ACCEPTED_SUBSET_CONTROL_ENDPOINTS ??
       [])
       endpoints.push({
@@ -112,10 +162,16 @@ async function loadEndpoints(): Promise<ManifestEndpoint[]> {
   } catch {
     // Controls are an independent lane and are absent until its go/no-go branch.
   }
-  return endpoints.sort((a, b) => a.id.localeCompare(b.id)).map(sortedEndpoint);
+  return {
+    endpoints: endpoints
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(sortedEndpoint),
+    controls: controlCapabilities,
+  };
 }
 
 export async function buildManifest(): Promise<Manifest> {
+  const fragments = await loadFragments();
   return {
     api_major: 'v1',
     accepted_revision: 1,
@@ -125,7 +181,11 @@ export async function buildManifest(): Promise<Manifest> {
       status: 'Product-Contract-Status',
     },
     owner_scope: ['tenant_id', 'workspace_id'],
-    endpoints: await loadEndpoints(),
+    capability_status: capabilityStatuses(
+      fragments.endpoints,
+      fragments.controls,
+    ),
+    endpoints: fragments.endpoints,
   };
 }
 
@@ -148,6 +208,26 @@ export function validateManifest(
     JSON.stringify(['tenant_id', 'workspace_id'])
   )
     fail('owner_scope');
+  if (!Array.isArray(value.capability_status)) fail('capability_status');
+  let previousCapability = '';
+  const capabilityIds = new Set<string>();
+  for (const capability of value.capability_status) {
+    if (!capability || typeof capability !== 'object')
+      fail('capability_status_entry');
+    const current = capability as CapabilityStatus;
+    if (
+      typeof current.id !== 'string' ||
+      !current.id ||
+      (current.availability !== 'available' &&
+        current.availability !== 'explicitly_unavailable')
+    )
+      fail('capability_status_value');
+    if (current.id <= previousCapability) fail('capability_status_order');
+    if (capabilityIds.has(current.id))
+      fail(`capability_status_duplicate:${current.id}`);
+    capabilityIds.add(current.id);
+    previousCapability = current.id;
+  }
   if (
     JSON.stringify(value.headers) !==
     JSON.stringify({

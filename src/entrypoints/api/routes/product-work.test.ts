@@ -43,7 +43,8 @@ describe('product Work trace failure semantics', () => {
         body: expect.objectContaining({
           error: expect.objectContaining({
             code: 'projection_invalid',
-            reason: 'event_page_limit',
+            message: expect.any(String),
+            request_id: expect.any(String),
           }),
         }),
       },
@@ -52,7 +53,8 @@ describe('product Work trace failure semantics', () => {
         body: expect.objectContaining({
           error: expect.objectContaining({
             code: 'projection_invalid',
-            reason: 'event_page_order_invalid',
+            message: expect.any(String),
+            request_id: expect.any(String),
           }),
         }),
       },

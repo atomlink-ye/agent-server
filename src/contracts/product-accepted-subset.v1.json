@@ -10,6 +10,48 @@
     "tenant_id",
     "workspace_id"
   ],
+  "capability_status": [
+    {
+      "id": "attempt_timing",
+      "availability": "available"
+    },
+    {
+      "id": "cancel_work_run",
+      "availability": "explicitly_unavailable"
+    },
+    {
+      "id": "chat_detail_pointer",
+      "availability": "available"
+    },
+    {
+      "id": "decide_completion",
+      "availability": "explicitly_unavailable"
+    },
+    {
+      "id": "mcp_only_timeline",
+      "availability": "available"
+    },
+    {
+      "id": "opaque_pagination",
+      "availability": "available"
+    },
+    {
+      "id": "rework_attempt_identity",
+      "availability": "available"
+    },
+    {
+      "id": "terminal_outcome",
+      "availability": "available"
+    },
+    {
+      "id": "work_identity",
+      "availability": "available"
+    },
+    {
+      "id": "workspace_scope",
+      "availability": "available"
+    }
+  ],
   "endpoints": [
     {
       "id": "create_work",

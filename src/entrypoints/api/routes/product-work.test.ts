@@ -65,13 +65,16 @@ describe('product Work trace failure semantics', () => {
 function createTestApp(error: Error) {
   const app = new Hono<ApiEnvironment>();
   const productProjection = {
+    async getWork() {
+      throw error;
+    },
     async getWorkRun() {
       throw error;
     },
     async getRunTrace() {
       throw error;
     },
-  } as ProductProjectionApi;
+  } as unknown as ProductProjectionApi;
   registerProductWorkRoutes(app, {
     config: {
       serviceAccounts: [

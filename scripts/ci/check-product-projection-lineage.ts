@@ -151,6 +151,7 @@ export function productProjectionSchemaPaths(): string[] {
 }
 
 function isTechnicalIdentityPath(path: string, container: string): boolean {
+  if (path.includes('.chat_detail.target.')) return true;
   const parts = path.split('.');
   return parts.some(
     (part) =>

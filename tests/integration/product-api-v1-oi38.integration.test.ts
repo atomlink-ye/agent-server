@@ -108,6 +108,7 @@ describeRealPostgres(
       registerProductWorkCommandRoutes(app, {
         config,
         workIdentity: workIdentity as never,
+        workExists: projection.getWork,
         startWorkRun: {
           execute: async () => {
             throw new Error('not used');

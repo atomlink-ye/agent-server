@@ -25,6 +25,7 @@ import type {
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
 import { PRODUCT_CONTRACT_STATUS } from '../../contracts/product-contract-policy.js';
+import { canonicalTeamMcpName } from '../agents/built-in-skills.js';
 
 export interface ProductProjectionOwnerScope {
   readonly tenantId: string;
@@ -304,7 +305,13 @@ function mapMcpActivity(
     !event.taskId
   )
     return null;
-  if (!isSafeMcpToolName(event.toolName)) return null;
+  const canonicalToolName = canonicalTeamMcpName(event.toolName);
+  if (
+    !canonicalToolName ||
+    event.provenance !== 'server_authorized_team_mcp_catalog' ||
+    event.toolIdentityCaptureStatus !== 'present'
+  )
+    return null;
   const sourceRefs = {
     root_task_id: event.rootTaskId || rootTaskId,
     task_id: event.taskId,
@@ -325,9 +332,14 @@ function mapMcpActivity(
     activity_id: event.activityId,
     sequence: event.sequence,
     operation_capture_status: 'not_present' as const,
-    result_capture_status: 'not_present' as const,
+    result_capture_status:
+      event.responseObserved === true
+        ? ('redacted' as const)
+        : ('not_present' as const),
     source_refs: sourceRefs,
     chat_detail: chatDetail,
+    provenance: 'server_authorized_team_mcp_catalog' as const,
+    tool_identity_capture_status: 'present' as const,
   };
   if (event.activityKind === 'tool_status') {
     if (
@@ -340,22 +352,10 @@ function mapMcpActivity(
       kind: 'tool_status',
       status: event.activityStatus,
       category: event.activityCategory,
-      tool_name: event.toolName,
+      tool_name: canonicalToolName,
     };
   }
   return null;
-}
-
-const SAFE_MCP_TOOL_NAMES = new Set([
-  'synthetic_stock_snapshot',
-  'synthetic_event_batch',
-  'synthetic_analog_summary',
-  'learning_proposal_create',
-  'agent_server_memory_read',
-]);
-
-function isSafeMcpToolName(value: string | null): value is string {
-  return value !== null && SAFE_MCP_TOOL_NAMES.has(value);
 }
 
 function isToolActivityStatus(

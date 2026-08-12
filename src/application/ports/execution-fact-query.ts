@@ -42,6 +42,9 @@ export interface ExecutionEventFact {
   readonly activityCategory: string | null;
   readonly activityStatus: string | null;
   readonly toolName: string | null;
+  readonly provenance: string | null;
+  readonly toolIdentityCaptureStatus: string | null;
+  readonly responseObserved: boolean | null;
   readonly createdAt: string;
 }
 

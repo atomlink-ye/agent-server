@@ -474,6 +474,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       parentActivityId?: string,
       quality = 0,
       detail?: RuntimeToolDetail,
+      resultObserved?: boolean,
     ): void => {
       const previous = activityStates.get(activityId);
       const detailImproved =
@@ -571,6 +572,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           ...((toolName ?? previous?.toolName)
             ? { toolName: toolName ?? previous?.toolName }
             : {}),
+          resultObserved: resultObserved ?? hasObservedToolResult(bestDetail),
           ...(bestDetail ? { detail: bestDetail } : {}),
           provider: activeProvider,
         });
@@ -635,6 +637,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
           undefined,
           presentation.quality,
           presentation.detail,
+          call.resultObserved,
         );
       publishToolState(
         activityId,
@@ -646,6 +649,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         parentActivityId,
         presentation.quality,
         presentation.detail,
+        call.resultObserved,
       );
       if (!parentActivityId && activityStates.has(activityId))
         publishedParentActivities.add(activityId);
@@ -2284,6 +2288,15 @@ function normalizeUsage(
 
 function isTerminalToolStatus(status: string): boolean {
   return ['completed', 'failed', 'cancelled'].includes(status);
+}
+
+function hasObservedToolResult(detail: RuntimeToolDetail | undefined): boolean {
+  if (!detail) return false;
+  return ['output', 'result', 'content', 'log', 'error'].some(
+    (field) =>
+      Object.prototype.hasOwnProperty.call(detail, field) &&
+      (detail as unknown as Record<string, unknown>)[field] !== undefined,
+  );
 }
 
 function delay(milliseconds: number): Promise<void> {

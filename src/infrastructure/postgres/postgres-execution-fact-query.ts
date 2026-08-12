@@ -48,6 +48,9 @@ interface EventRow {
   activity_category: string | null;
   activity_status: string | null;
   tool_name: string | null;
+  provenance: string | null;
+  tool_identity_capture_status: string | null;
+  response_observed: boolean | null;
   created_at: string | Date;
 }
 
@@ -141,7 +144,24 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
                   e.payload->>'category' AS activity_category,
                   e.payload->>'status' AS activity_status,
                   CASE WHEN e.payload->>'kind'='tool_status'
+                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'tool_identity_capture_status'='present'
                        THEN e.payload->>'tool_name' ELSE NULL END AS tool_name,
+                  CASE WHEN e.payload->>'kind'='tool_status'
+                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'tool_identity_capture_status'='present'
+                       THEN e.payload->>'provenance' ELSE NULL END AS provenance,
+                  CASE WHEN e.payload->>'kind'='tool_status'
+                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'tool_identity_capture_status'='present'
+                       THEN e.payload->>'tool_identity_capture_status' ELSE NULL END
+                       AS tool_identity_capture_status,
+                  CASE WHEN e.payload->>'kind'='tool_status'
+                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'tool_identity_capture_status'='present'
+                       AND e.payload->>'response_observed' IN ('true','false')
+                       THEN (e.payload->>'response_observed')::boolean ELSE NULL END
+                       AS response_observed,
                   e.created_at
              FROM run_events e
              JOIN runs r ON r.id=e.run_id
@@ -190,6 +210,9 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
             activityCategory: row.activity_category ?? null,
             activityStatus: row.activity_status ?? null,
             toolName: row.tool_name ?? null,
+            provenance: row.provenance ?? null,
+            toolIdentityCaptureStatus: row.tool_identity_capture_status ?? null,
+            responseObserved: row.response_observed ?? null,
             createdAt: toIso(row.created_at),
           });
           after = sequence;

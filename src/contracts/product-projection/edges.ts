@@ -230,6 +230,8 @@ const McpActivityBaseSchema = z
   .object({
     activity_id: z.string().min(1),
     sequence: z.number().int().positive(),
+    provenance: z.literal('server_authorized_team_mcp_catalog'),
+    tool_identity_capture_status: z.literal('present'),
     operation_capture_status: z.enum(['present', 'not_present']),
     result_capture_status: z.enum(['not_present', 'redacted']),
     source_refs: McpActivitySourceRefsSchema,

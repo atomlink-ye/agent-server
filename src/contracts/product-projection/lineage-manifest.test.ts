@@ -72,8 +72,8 @@ describe('S8 product projection lineage', () => {
       vocabulary,
     );
     expect(result).toMatchObject({
-      schemaPaths: 362,
-      manifestKeys: 362,
+      schemaPaths: 366,
+      manifestKeys: 366,
       missing: [],
       extra: [],
       forbiddenPrefixHits: [],
@@ -201,6 +201,6 @@ describe('S8 product projection lineage', () => {
     }
 
     for (const path of Object.keys(expectedDerivations))
-      expect(manifest[path as keyof typeof manifest].kind).toBe('derivation');
+      expect(manifest[path as keyof typeof manifest]!.kind).toBe('derivation');
   });
 });

@@ -207,7 +207,11 @@ const trace = {
       chat_detail: {
         method: 'GET' as const,
         path: '/api/runs/detail-1',
-        target: { run_id: finalRunId, sequence: 1, activity_id: 'activity-1' },
+        target: {
+          source_refs: { run_id: finalRunId },
+          sequence: 1,
+          activity_id: 'activity-1',
+        },
       },
       kind: 'tool_status' as const,
       status: 'completed' as const,

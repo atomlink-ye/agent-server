@@ -12,6 +12,7 @@ import {
   WorkListResponseSchema,
   WorkRunListResponseSchema,
   StartWorkRunResponseSchema,
+  WorkDefinitionResponseSchema,
 } from '../product-work-commands.js';
 import {
   ProductRunTraceResponseSchema,
@@ -65,6 +66,20 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_ENDPOINTS = [
     request_schema: 'GetWorkRequestSchema',
     response_schema: 'GetWorkResponseSchema',
     responseSchema: GetWorkResponseSchema,
+    success: [{ status: 200, variant: 'found' }],
+    errors: [
+      { status: 400, code: 'invalid_request' },
+      { status: 404, code: 'work_not_found' },
+    ],
+    capabilities: ['work_identity', 'workspace_scope'],
+  }),
+  read({
+    id: 'get_work_definition',
+    method: 'GET',
+    path: '/api/v1/works/{work_id}/definition',
+    request_schema: 'GetWorkRequestSchema',
+    response_schema: 'WorkDefinitionResponseSchema',
+    responseSchema: WorkDefinitionResponseSchema,
     success: [{ status: 200, variant: 'found' }],
     errors: [
       { status: 400, code: 'invalid_request' },
@@ -169,6 +184,7 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_SCHEMAS = {
   GetRunTraceRequestSchema,
   WorkListResponseSchema,
   GetWorkResponseSchema,
+  WorkDefinitionResponseSchema,
   CreateWorkResponseSchema,
   WorkRunListResponseSchema,
   StartWorkRunResponseSchema,

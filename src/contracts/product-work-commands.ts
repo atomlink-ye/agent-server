@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+import {
+  TeamDefinitionResponseSchema,
+  TeamVersionResponseSchema,
+} from './teams.js';
+import { ProductStateSchema } from './product-projection/product-state.js';
+
 export const CreateWorkRequestSchema = z
   .object({
     definition_id: z.uuid(),
@@ -53,6 +59,25 @@ export const WorkResponseSchema = z
   })
   .strict();
 
+export const LatestWorkRunSummarySchema = z
+  .object({
+    id: z.uuid(),
+    updated_at: z.string().datetime(),
+    result_summary: z.string().nullable(),
+    result_capture_status: z.enum([
+      'present',
+      'not_present',
+      'redacted',
+      'not_captured',
+    ]),
+  })
+  .strict();
+
+export const WorkListItemSchema = WorkResponseSchema.extend({
+  product_state: ProductStateSchema,
+  latest_run_summary: LatestWorkRunSummarySchema.nullable(),
+}).strict();
+
 export const WorkRunSummarySchema = z
   .object({
     id: z.uuid(),
@@ -89,7 +114,7 @@ export const StartWorkRunResponseSchema = z
 
 export const WorkListResponseSchema = z
   .object({
-    works: z.array(WorkResponseSchema),
+    works: z.array(WorkListItemSchema),
     next_cursor: z.string().nullable(),
   })
   .strict();
@@ -110,11 +135,87 @@ export const WorkRunResponseSchema = WorkRunSummarySchema;
 export type CreateWorkRequest = z.infer<typeof CreateWorkRequestSchema>;
 export type StartWorkRunRequest = z.infer<typeof StartWorkRunRequestSchema>;
 export type WorkResponse = z.infer<typeof WorkResponseSchema>;
+export type WorkListItem = z.infer<typeof WorkListItemSchema>;
+export type LatestWorkRunSummary = z.infer<typeof LatestWorkRunSummarySchema>;
 export type WorkRunSummary = z.infer<typeof WorkRunSummarySchema>;
 export type WorkRunResponse = WorkRunSummary;
 export type WorkListResponse = z.infer<typeof WorkListResponseSchema>;
 export type WorkRunListResponse = z.infer<typeof WorkRunListResponseSchema>;
 export type GetWorkResponse = z.infer<typeof GetWorkResponseSchema>;
+
+export const WorkDefinitionResponseSchema = z
+  .object({
+    definition: TeamDefinitionResponseSchema,
+    version: TeamVersionResponseSchema,
+  })
+  .strict();
+
+export type WorkDefinitionResponse = z.infer<
+  typeof WorkDefinitionResponseSchema
+>;
+
+export function toWorkDefinitionResponse(input: {
+  readonly definition: {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string | null;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+  readonly version: {
+    readonly id: string;
+    readonly definitionId: string;
+    readonly status: 'draft' | 'published';
+    readonly name: string;
+    readonly description: string | null;
+    readonly environmentVersionId: string;
+    readonly spec: {
+      readonly lead: {
+        readonly name: string;
+        readonly agentVersionId: string;
+      };
+      readonly roster: readonly {
+        readonly name: string;
+        readonly agentVersionId: string;
+      }[];
+      readonly environmentVersionId: string;
+    };
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly publishedAt: string | null;
+  };
+}): WorkDefinitionResponse {
+  const { definition, version } = input;
+  return WorkDefinitionResponseSchema.parse({
+    definition: {
+      id: definition.id,
+      name: definition.name,
+      description: definition.description,
+      created_at: definition.createdAt,
+      updated_at: definition.updatedAt,
+      links: {
+        self: `/api/v1/teams/${definition.id}`,
+        versions: `/api/v1/teams/${definition.id}/versions`,
+      },
+    },
+    version: {
+      id: version.id,
+      definition_id: version.definitionId,
+      status: version.status,
+      name: version.name,
+      description: version.description,
+      environment_version_id: version.environmentVersionId,
+      spec: version.spec,
+      created_at: version.createdAt,
+      updated_at: version.updatedAt,
+      published_at: version.publishedAt,
+      links: {
+        self: `/api/v1/team-versions/${version.id}`,
+        definition: `/api/v1/teams/${version.definitionId}`,
+      },
+    },
+  });
+}
 
 export function toWorkResponse(work: {
   readonly id: string;

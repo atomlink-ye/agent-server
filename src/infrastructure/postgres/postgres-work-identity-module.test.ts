@@ -26,6 +26,7 @@ describe('Postgres Work identity module', () => {
     });
 
     expect(Object.keys(module.workIdentityQuery).sort()).toEqual([
+      'findLatestVisibleWorkRun',
       'findWorkById',
       'findWorkRunById',
     ]);
@@ -34,6 +35,29 @@ describe('Postgres Work identity module', () => {
     expect(module.workIdentityQuery).not.toHaveProperty(
       'appendResolvedManifest',
     );
+  });
+
+  it('selects the latest visible WorkRun without using the paginated list', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const repository = new PostgresWorkIdentityRepository({ query });
+
+    await repository.findLatestVisibleWorkRun(work().id, {
+      tenantId: work().tenantId,
+      workspaceId: work().workspaceId,
+    });
+
+    expect(query).toHaveBeenCalledOnce();
+    expect(query.mock.calls[0]![0]).toContain(
+      'ORDER BY created_at DESC,id DESC LIMIT 1',
+    );
+    expect(query.mock.calls[0]![0]).toContain(
+      '(root_task_id IS NOT NULL OR expires_at > now())',
+    );
+    expect(query.mock.calls[0]![1]).toEqual([
+      work().id,
+      work().tenantId,
+      work().workspaceId,
+    ]);
   });
 
   it.each([

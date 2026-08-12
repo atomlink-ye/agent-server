@@ -22,15 +22,13 @@ import {
   McpActivitiesSchema,
   TimelineCoverageSchema,
 } from './edges.js';
+import { ProductStateSchema } from './product-state.js';
+
+export { ProductStateSchema } from './product-state.js';
+export type { ProductState } from './product-state.js';
 
 export const ProductWorkRunDetailSchema = WorkRunSummarySchema.extend({
-  product_state: z.enum([
-    'running',
-    'needs_you',
-    'complete',
-    'problem',
-    'not_captured',
-  ]),
+  product_state: ProductStateSchema,
   problem_kind: z.enum(['failed', 'cancelled', 'not_captured']).nullable(),
   attention_reason: z
     .enum(['completion_approval_pending', 'not_captured'])

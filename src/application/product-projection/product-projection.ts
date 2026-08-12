@@ -8,10 +8,14 @@ import { ExecutionFactQueryError } from '../ports/execution-fact-query.js';
 import type { WorkProjectionFactsSource } from './work-projection-facts-source.js';
 import {
   GetWorkResponseSchema,
+  WorkListItemSchema,
   toWorkResponse,
   toWorkRunResponse,
 } from '../../contracts/product-work-commands.js';
-import type { GetWorkResponse } from '../../contracts/product-work-commands.js';
+import type {
+  GetWorkResponse,
+  WorkListItem,
+} from '../../contracts/product-work-commands.js';
 import {
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
@@ -38,6 +42,10 @@ export interface ProductProjectionOwnerScope {
 export interface ProductWorkIdentityQuery {
   findWorkById(id: string, owner: WorkOwnerScope): Promise<Work | null>;
   findWorkRunById(id: string, owner: WorkOwnerScope): Promise<WorkRun | null>;
+  findLatestVisibleWorkRun(
+    workId: string,
+    owner: WorkOwnerScope,
+  ): Promise<WorkRun | null>;
 }
 
 export type WorkIdentityQuery = ProductWorkIdentityQuery;
@@ -90,6 +98,9 @@ export interface ProductProjectionApi {
   getWork(
     input: ProductProjectionOwnerScope & { workId: string },
   ): Promise<GetWorkResponse>;
+  getWorkListItem(
+    input: ProductProjectionOwnerScope & { work: Work },
+  ): Promise<WorkListItem>;
   getWorkRun(
     input: ProductProjectionOwnerScope & { workId: string; workRunId: string },
   ): Promise<ProductWorkRun>;
@@ -159,6 +170,59 @@ export function createProductProjection(
       });
       if (!work) throw new ProductProjectionNotFoundError();
       return GetWorkResponseSchema.parse({ work: toWorkResponse(work) });
+    },
+    async getWorkListItem(input) {
+      if (
+        input.work.tenantId !== input.tenantId ||
+        input.work.workspaceId !== input.workspaceId
+      )
+        throw new ProductProjectionNotFoundError();
+      const owner = {
+        tenantId: input.tenantId,
+        workspaceId: input.workspaceId,
+      };
+      const latestRun = await options.workIdentity.findLatestVisibleWorkRun(
+        input.work.id,
+        owner,
+      );
+      let productState: WorkListItem['product_state'] = 'not_captured';
+      let latestRunSummary: WorkListItem['latest_run_summary'] = latestRun
+        ? {
+            id: latestRun.id,
+            updated_at: latestRun.updatedAt,
+            result_summary: null,
+            result_capture_status: 'not_captured',
+          }
+        : null;
+      if (
+        latestRun &&
+        latestRun.rootTaskId !== null &&
+        latestRun.boundAt !== null
+      ) {
+        try {
+          const loaded = {
+            work: input.work,
+            workRun: latestRun as LoadedProductWorkRun['workRun'],
+          };
+          const { facts, runs } = await loadFactsAndRuns(loaded, owner);
+          const detail = buildWorkRunDetail(loaded, facts.product, runs);
+          productState = detail.product_state;
+          latestRunSummary = {
+            id: latestRun.id,
+            updated_at: latestRun.updatedAt,
+            result_summary: detail.result_summary,
+            result_capture_status: detail.result_capture_status,
+          };
+        } catch (error) {
+          if (!(error instanceof ProductProjectionUnavailableError))
+            throw error;
+        }
+      }
+      return WorkListItemSchema.parse({
+        ...toWorkResponse(input.work),
+        product_state: productState,
+        latest_run_summary: latestRunSummary,
+      });
     },
     async getWorkRun(input) {
       const loaded = await load(input);
@@ -451,7 +515,7 @@ function mapMcpActivity(
     method: 'GET' as const,
     path: `/api/v1/runs/${event.runId}/events?after=${event.sequence - 1}`,
     target: {
-      run_id: event.runId,
+      source_refs: { run_id: event.runId },
       sequence: event.sequence,
       activity_id: event.activityId,
     },

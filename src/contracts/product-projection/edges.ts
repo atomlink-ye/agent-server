@@ -218,7 +218,11 @@ const McpActivityChatDetailSchema = z
     path: z.string().min(1),
     target: z
       .object({
-        run_id: z.uuid(),
+        source_refs: z
+          .object({
+            run_id: z.uuid(),
+          })
+          .strict(),
         sequence: z.number().int().positive(),
         activity_id: z.string().min(1),
       })

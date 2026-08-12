@@ -156,6 +156,31 @@ describe('S8 product projection lineage', () => {
     ).toEqual(['work_run_response.success::work.source_refs.secret_id']);
   });
 
+  it('keeps MCP chat detail run identity inside source_refs', () => {
+    const barePath =
+      'run_trace_response.success::mcp_activities[].chat_detail.target.run_id';
+    const sourceRefPath =
+      'run_trace_response.success::mcp_activities[].chat_detail.target.source_refs.run_id';
+
+    expect(
+      scanProductProjectionVocabulary([barePath], vocabulary)
+        .forbiddenIdentityHits,
+    ).toEqual([barePath]);
+    expect(
+      scanProductProjectionVocabulary([sourceRefPath], vocabulary),
+    ).toMatchObject({
+      forbiddenPrefixHits: [],
+      forbiddenIdentityHits: [],
+      forbiddenSourceRefHits: [],
+    });
+    expect(Object.keys(PRODUCT_PROJECTION_LINEAGE_MANIFEST)).toContain(
+      sourceRefPath,
+    );
+    expect(Object.keys(PRODUCT_PROJECTION_LINEAGE_MANIFEST)).not.toContain(
+      barePath,
+    );
+  });
+
   it('keeps every manifest value within the machine-readable categories', () => {
     for (const value of Object.values(PRODUCT_PROJECTION_LINEAGE_MANIFEST)) {
       expect(['column', 'source_ref', 'derivation']).toContain(value.kind);

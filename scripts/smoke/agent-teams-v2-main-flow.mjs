@@ -2282,7 +2282,8 @@ async function runProductWorkDurableIdentityFlow({
         activity.chat_detail.method === 'GET' &&
         activity.chat_detail.path ===
           `/api/v1/runs/${activity.source_refs.run_id}/events?after=${activity.sequence - 1}` &&
-        activity.chat_detail.target.run_id === activity.source_refs.run_id &&
+        activity.chat_detail.target.source_refs.run_id ===
+          activity.source_refs.run_id &&
         activity.chat_detail.target.sequence === activity.sequence &&
         activity.chat_detail.target.activity_id === activity.activity_id,
       'product_trace_mcp_activity_pointer_invalid',

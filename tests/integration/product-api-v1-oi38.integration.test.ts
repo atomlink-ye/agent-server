@@ -181,10 +181,10 @@ describeRealPostgres(
       );
       expect(foreign.status).toBe(404);
       expect(missing.status).toBe(404);
-      expect(normalizeError(await foreign.json())).toEqual(
-        normalizeError(await missing.json()),
-      );
-      expect(normalizeError(await foreign.json())).toEqual({
+      const foreignError = normalizeError(await foreign.json());
+      const missingError = normalizeError(await missing.json());
+      expect(foreignError).toEqual(missingError);
+      expect(foreignError).toEqual({
         error: {
           code: 'work_not_found',
           message: 'The requested Work was not found.',

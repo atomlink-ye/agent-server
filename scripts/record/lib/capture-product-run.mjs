@@ -29,16 +29,25 @@ const PRODUCT_QUERY_DEFINITIONS = Object.freeze({
   ...QUERY_DEFINITIONS,
   works: `SELECT w.id,w.tenant_id,w.workspace_id,w.definition_id,w.current_definition_version_id,w.title,w.origin,w.archived_at,w.created_at,w.updated_at
     FROM works w JOIN work_runs wr ON wr.work_id=w.id
+      JOIN tasks t ON t.id=wr.root_task_id
     WHERE wr.root_task_id=$1 AND w.tenant_id=$2 AND w.workspace_id=$3
       AND wr.tenant_id=$2 AND wr.workspace_id=$3
+      AND t.tenant_id=$2 AND t.workspace_id=$3::text
+      AND t.principal_type=$4 AND t.principal_id=$5
     ORDER BY w.id`,
   work_runs: `SELECT wr.id,wr.tenant_id,wr.workspace_id,wr.work_id,wr.definition_version_id,wr.trigger_kind,wr.trigger_ref,wr.root_task_id,wr.expires_at,wr.bound_at,wr.created_at,wr.updated_at
-    FROM work_runs wr WHERE wr.root_task_id=$1 AND wr.tenant_id=$2 AND wr.workspace_id=$3
+    FROM work_runs wr JOIN tasks t ON t.id=wr.root_task_id
+    WHERE wr.root_task_id=$1 AND wr.tenant_id=$2 AND wr.workspace_id=$3
+      AND t.tenant_id=$2 AND t.workspace_id=$3::text
+      AND t.principal_type=$4 AND t.principal_id=$5
     ORDER BY wr.id`,
   work_run_resource_manifest: `SELECT m.work_run_id,m.tenant_id,m.workspace_id,m.slot,m.resource_kind,m.requested_ref,m.resolved_version_id,m.resolved_fingerprint,m.resolved_at
     FROM work_run_resource_manifest m JOIN work_runs wr ON wr.id=m.work_run_id
+      JOIN tasks t ON t.id=wr.root_task_id
     WHERE wr.root_task_id=$1 AND m.tenant_id=$2 AND m.workspace_id=$3
       AND wr.tenant_id=$2 AND wr.workspace_id=$3
+      AND t.tenant_id=$2 AND t.workspace_id=$3::text
+      AND t.principal_type=$4 AND t.principal_id=$5
     ORDER BY m.work_run_id,m.slot`,
 });
 

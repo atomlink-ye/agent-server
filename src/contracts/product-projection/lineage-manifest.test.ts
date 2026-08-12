@@ -21,6 +21,8 @@ const vocabulary = {
     'task_id',
     'run_id',
     'team_message_id',
+    'actor_id',
+    'work_item_id',
   ],
   forbiddenProductIdentityKeys: [
     'root_task_id',
@@ -70,8 +72,8 @@ describe('S8 product projection lineage', () => {
       vocabulary,
     );
     expect(result).toMatchObject({
-      schemaPaths: 298,
-      manifestKeys: 298,
+      schemaPaths: 366,
+      manifestKeys: 366,
       missing: [],
       extra: [],
       forbiddenPrefixHits: [],
@@ -162,16 +164,18 @@ describe('S8 product projection lineage', () => {
         formula: 'capture_status(redacted_or_absent)',
         inputs: ['team_messages.body'],
       },
-      'work_run_response.success::work_items[].attempts[].feedback_capture_status': {
-        name: 'redaction_capture_status_v1',
-        formula: 'presence_to_redaction_status',
-        inputs: ['team_work_item_attempts.feedback'],
-      },
-      'work_run_response.success::work_items[].attempts[].result_capture_status': {
-        name: 'redaction_capture_status_v1',
-        formula: 'presence_to_redaction_status',
-        inputs: ['team_work_item_attempts.result_summary'],
-      },
+      'work_run_response.success::work_items[].attempts[].feedback_capture_status':
+        {
+          name: 'redaction_capture_status_v1',
+          formula: 'presence_to_redaction_status',
+          inputs: ['team_work_item_attempts.feedback'],
+        },
+      'work_run_response.success::work_items[].attempts[].result_capture_status':
+        {
+          name: 'redaction_capture_status_v1',
+          formula: 'presence_to_redaction_status',
+          inputs: ['team_work_item_attempts.result_summary'],
+        },
       'run_trace_response.success::edges[]{kind=feedback}.reviewer_actor_id': {
         name: 'feedback_reviewer_v1',
         formula:
@@ -197,6 +201,6 @@ describe('S8 product projection lineage', () => {
     }
 
     for (const path of Object.keys(expectedDerivations))
-      expect(manifest[path as keyof typeof manifest].kind).toBe('derivation');
+      expect(manifest[path as keyof typeof manifest]!.kind).toBe('derivation');
   });
 });

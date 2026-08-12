@@ -243,6 +243,7 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
     );
     return {
       rootTaskId: team.root_task_id,
+      teamRunId: team.id,
       workItems,
       actors,
       dependencies: dependencyFacts,

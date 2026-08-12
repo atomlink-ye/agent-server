@@ -116,6 +116,7 @@ export interface PaseoToolCall {
   /** Internal correlation only; never emitted in RuntimeToolDetail. */
   readonly childSessionId?: string | undefined;
   readonly detail?: PaseoToolDetail;
+  readonly resultObserved?: boolean;
   readonly error?: string;
 }
 
@@ -674,6 +675,7 @@ export function projectPaseoToolCall(
       readonly title?: string | undefined;
       readonly childSessionId?: string | undefined;
       readonly detail?: PaseoToolDetail;
+      readonly resultObserved?: boolean;
       readonly error?: string;
     }
   | undefined {
@@ -691,15 +693,18 @@ export function projectPaseoToolCall(
   const type = stringValue(
     value.detail && isRecord(value.detail) ? value.detail.type : undefined,
   );
+  const resultObserved = hasObservedPaseoResult(value);
   if (!type)
     return {
       ...(title ? { title } : {}),
+      ...(resultObserved ? { resultObserved: true } : {}),
       ...(typeof failedError === 'string' ? { error: failedError } : {}),
     };
   const raw = value.detail;
   if (!isRecord(raw))
     return {
       ...(title ? { title } : {}),
+      ...(resultObserved ? { resultObserved: true } : {}),
       ...(typeof failedError === 'string' ? { error: failedError } : {}),
     };
   const stringField = (key: string): string | undefined =>
@@ -851,8 +856,35 @@ export function projectPaseoToolCall(
       ? { childSessionId: stringField('childSessionId') }
       : {}),
     ...(detail ? { detail } : {}),
+    ...(resultObserved ? { resultObserved: true } : {}),
     ...(typeof failedError === 'string' ? { error: failedError } : {}),
   };
+}
+
+function hasObservedPaseoResult(value: unknown, depth = 0): boolean {
+  if (!isRecord(value) || depth > 2) return false;
+  for (const field of [
+    'output',
+    'result',
+    'content',
+    'structuredContent',
+    'log',
+    'error',
+  ]) {
+    if (
+      Object.prototype.hasOwnProperty.call(value, field) &&
+      value[field] !== undefined
+    )
+      return true;
+  }
+  for (const container of ['detail', 'state', 'response', 'metadata']) {
+    if (
+      isRecord(value[container]) &&
+      hasObservedPaseoResult(value[container], depth + 1)
+    )
+      return true;
+  }
+  return false;
 }
 
 function safePreview(value: string, max: number): string | undefined {

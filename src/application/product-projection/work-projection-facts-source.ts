@@ -37,6 +37,8 @@ export class WorkProjectionFactsSource {
     );
     return {
       identity,
+      rootTaskId: facts.rootTaskId,
+      teamRunId: facts.teamRunId,
       edges: [
         ...messages.edges,
         ...dependencies.edges,
@@ -49,6 +51,8 @@ export class WorkProjectionFactsSource {
 
 export interface ProductProjectionFactsSlice {
   readonly identity: ProductProjectionIdentity;
+  readonly rootTaskId: string;
+  readonly teamRunId: string;
   readonly edges: readonly ProductTraceEdge[];
 }
 
@@ -115,6 +119,7 @@ export function mapWorkProjectionFacts(
 }
 
 function requireSenderId(messageId: string, senderId: string | null): string {
-  if (senderId === null) throw new Error(`product_message_sender_id_missing:${messageId}`);
+  if (senderId === null)
+    throw new Error(`product_message_sender_id_missing:${messageId}`);
   return senderId;
 }

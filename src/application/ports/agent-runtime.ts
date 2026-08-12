@@ -135,6 +135,8 @@ export type RuntimeEvent =
       readonly label: string;
       readonly summary: string;
       readonly toolName?: string | undefined;
+      /** Adapter-derived observation that a result-bearing detail field existed. */
+      readonly resultObserved?: boolean;
       readonly parentActivityId?: string;
       readonly provider: string;
       readonly detail?: RuntimeToolDetail;

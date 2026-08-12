@@ -6,15 +6,22 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:3000}"
 TOKEN="${TOKEN:-token-local-dev}"
+TOKEN2="${TOKEN2:-token-local-dev-2}"
+EXPECTED_WORKSPACE_ID="${EXPECTED_WORKSPACE_ID:-${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}}"
+EXPECTED_WORKSPACE_ID_2="${EXPECTED_WORKSPACE_ID_2:-${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}}"
 FOREIGN_TOKEN="${FOREIGN_TOKEN:-}"
 FOREIGN_OWNER_ASSERTION="${FOREIGN_OWNER_ASSERTION:-}"
-WORKSPACE_MODE="${WORKSPACE_MODE:-create}"
+WORKSPACE_MODE="${WORKSPACE_MODE:-token}"
 LABEL="${LABEL:-lane-v-$(date -u +%Y%m%dT%H%M%SZ)}"
 EVIDENCE_DIR="${EVIDENCE_DIR:-/workspace/.local/lane-v-http-evidence/$LABEL}"
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+DATABASE_URL="${DATABASE_URL:-postgresql://agent:agent@postgres:5432/agent_server}"
 POLL_SECONDS="${POLL_SECONDS:-5}"
 POLL_LIMIT="${POLL_LIMIT:-240}"
 NEEDS_HUMAN_REVIEW=false
 BASE_URL="${BASE_URL%/}"
+PUBLISH_STATE_PREFIX=""
+REQUEST_NAMESPACE=""
 
 if [[ ! "$LABEL" =~ ^[a-zA-Z0-9._-]+$ ]]; then
   printf 'LABEL must contain only letters, digits, dot, underscore, or dash.\n' >&2
@@ -33,6 +40,14 @@ require_tool() {
 
 require_tool curl
 require_tool jq
+
+state_key() {
+  printf '%s%s' "$PUBLISH_STATE_PREFIX" "$1"
+}
+
+request_name() {
+  printf '%s%s' "$REQUEST_NAMESPACE" "$1"
+}
 
 next_index() {
   local value
@@ -147,29 +162,29 @@ publish_source() {
       ;;
   esac
 
-  source_request="$EVIDENCE_DIR/request-$kind-source.json"
+  source_request="$EVIDENCE_DIR/request-$(request_name "$kind")-source.json"
   jq -n --arg source "$source" '{source:$source}' >"$source_request"
-  validate_response="$(request_json "$kind-validate" POST "$validate_path" 200 "$source_request")"
+  validate_response="$(request_json "$(request_name "$kind")-validate" POST "$validate_path" 200 "$source_request")"
   assert_jq "$validate_response" '.valid == true and (.fingerprint | startswith("sha256:"))' "$kind package validates"
 
-  import_response="$(request_json "$kind-import" POST "$import_path" 201 "$source_request" "$LABEL-$kind-import")"
+  import_response="$(request_json "$(request_name "$kind")-import" POST "$import_path" 201 "$source_request" "$LABEL-$(request_name "$kind")-import")"
   version_id="$(jq -er '.version.id' "$import_response")"
   definition_id="$(jq -er --arg field "$import_definition_field" '.[$field].id' "$import_response")"
   assert_jq "$import_response" \
     ".version.id == \"$version_id\" and .version.definition_id == \"$definition_id\" and .version.status == \"draft\"" \
     "$kind import returns coherent draft lineage"
 
-  publish_response="$(request_json "$kind-publish" POST "$publish_prefix/$version_id:publish" 200 "$EVIDENCE_DIR/empty.json" "$LABEL-$kind-publish")"
+  publish_response="$(request_json "$(request_name "$kind")-publish" POST "$publish_prefix/$version_id:publish" 200 "$EVIDENCE_DIR/empty.json" "$LABEL-$(request_name "$kind")-publish")"
   assert_jq "$publish_response" \
     ".id == \"$version_id\" and .definition_id == \"$definition_id\" and .status == \"published\" and .published_at != null" \
     "$kind publish preserves lineage and reaches published"
   if [[ "$kind" == 'team' ]]; then
     assert_jq "$publish_response" \
-      ".environment_version_id == \"$(state_get environment_version_id)\" and .spec.environmentVersionId == \"$(state_get environment_version_id)\" and .spec.lead.agentVersionId == \"$(state_get lead_version_id)\" and ([.spec.roster[].agentVersionId] | sort) == ([\"$(state_get worker_version_id)\",\"$(state_get reviewer_version_id)\"] | sort)" \
+      ".environment_version_id == \"$(state_get "$(state_key environment_version_id)")\" and .spec.environmentVersionId == \"$(state_get "$(state_key environment_version_id)")\" and .spec.lead.agentVersionId == \"$(state_get "$(state_key lead_version_id)")\" and ([.spec.roster[].agentVersionId] | sort) == ([\"$(state_get "$(state_key worker_version_id)")\",\"$(state_get "$(state_key reviewer_version_id)")\"] | sort)" \
       'published Team resolves the exact Environment and Agent versions'
   fi
-  state_set "${kind}_definition_id" "$definition_id"
-  state_set "${kind}_version_id" "$version_id"
+  state_set "$(state_key "${kind}_definition_id")" "$definition_id"
+  state_set "$(state_key "${kind}_version_id")" "$version_id"
 }
 
 prepare_definitions() {
@@ -389,8 +404,156 @@ spec:
   coordination:
     taskAssignment: lead_or_self_claim
 EOF
-)"
+  )"
   publish_source team "$team_source"
+  prepare_secondary_definitions
+}
+
+prepare_secondary_definitions() {
+  local primary_token="$TOKEN" primary_prefix="$PUBLISH_STATE_PREFIX" primary_namespace="$REQUEST_NAMESPACE"
+  local environment_source lead_source worker_source reviewer_source team_source
+  TOKEN="$TOKEN2"
+  PUBLISH_STATE_PREFIX='token2_'
+  REQUEST_NAMESPACE='token2-'
+
+  environment_source="$(jq -er '.source' "$EVIDENCE_DIR/request-environment-source.json")"
+  lead_source="$(jq -er '.source' "$EVIDENCE_DIR/request-lead-source.json")"
+  worker_source="$(jq -er '.source' "$EVIDENCE_DIR/request-worker-source.json")"
+  reviewer_source="$(jq -er '.source' "$EVIDENCE_DIR/request-reviewer-source.json")"
+  publish_source environment "$environment_source"
+  publish_source lead "$lead_source"
+  publish_source worker "$worker_source"
+  publish_source reviewer "$reviewer_source"
+
+  team_source="$(cat <<EOF
+apiVersion: agent-server/v1alpha1
+kind: ManagedTeam
+metadata:
+  name: $LABEL-team
+spec:
+  environmentVersionId: $(state_get "$(state_key environment_version_id)")
+  lead:
+    name: lead
+    agentVersionId: $(state_get "$(state_key lead_version_id)")
+  roster:
+    - name: worker
+      agentVersionId: $(state_get "$(state_key worker_version_id)")
+    - name: reviewer
+      agentVersionId: $(state_get "$(state_key reviewer_version_id)")
+  coordination:
+    taskAssignment: lead_or_self_claim
+EOF
+  )"
+  publish_source team "$team_source"
+
+  TOKEN="$primary_token"
+  PUBLISH_STATE_PREFIX="$primary_prefix"
+  REQUEST_NAMESPACE="$primary_namespace"
+}
+
+assert_phase_c_contracts() {
+  local primary_token="$TOKEN" primary_team_id primary_team_version token2_team_id token2_team_version
+  local work_request primary_response token2_response api_workspace_response api_workspace_id
+  local invalid_response token2_list token2_runs works_count
+  local schema_file="$REPO_ROOT/src/contracts/product-work-commands.ts"
+  local contract_file="$REPO_ROOT/docs/contracts.md"
+
+  if [[ "$TOKEN2" == "$TOKEN" ]]; then
+    printf 'TOKEN2 must differ from TOKEN for the dual-token assertions.\n' >&2
+    return 2
+  fi
+
+  primary_team_id="$(state_get team_definition_id)"
+  primary_team_version="$(state_get team_version_id)"
+  token2_team_id="$(state_get token2_team_definition_id)"
+  token2_team_version="$(state_get token2_team_version_id)"
+
+  # A: each service-account token creates a Work in its own configured scope.
+  work_request="$(json_request_file work-dual-primary --arg definition_id "$primary_team_id" --arg definition_version_id "$primary_team_version" --arg title "$LABEL dual primary" '{definition_id:$definition_id,definition_version_id:$definition_version_id,title:$title}')"
+  primary_response="$(request_json work-dual-primary-create POST /api/v1/works 201 "$work_request")"
+  state_set dual_primary_work_id "$(jq -er '.work.id' "$primary_response")"
+  assert_jq "$primary_response" ".work.workspace_id == \"$EXPECTED_WORKSPACE_ID\" and .work.definition_id == \"$primary_team_id\" and .work.definition_version_id == \"$primary_team_version\"" 'A token 1 Work uses its configured workspace'
+
+  TOKEN="$TOKEN2"
+  work_request="$(json_request_file work-dual-token2 --arg definition_id "$token2_team_id" --arg definition_version_id "$token2_team_version" --arg title "$LABEL dual token2" '{definition_id:$definition_id,definition_version_id:$definition_version_id,title:$title}')"
+  token2_response="$(request_json work-dual-token2-create POST /api/v1/works 201 "$work_request")"
+  state_set dual_token2_work_id "$(jq -er '.work.id' "$token2_response")"
+  assert_jq "$token2_response" ".work.workspace_id == \"$EXPECTED_WORKSPACE_ID_2\" and .work.definition_id == \"$token2_team_id\" and .work.definition_version_id == \"$token2_team_version\"" 'A token 2 Work uses its configured workspace'
+  if [[ "$(jq -er '.work.workspace_id' "$primary_response")" == "$(jq -er '.work.workspace_id' "$token2_response")" ]]; then
+    printf 'Assertion failed: A token workspaces must differ.\n' >&2
+    return 1
+  fi
+  printf '%s\n' 'A dual-token Work workspace differential is distinct' >>"$EVIDENCE_DIR/assertions-passed.txt"
+  TOKEN="$primary_token"
+
+  # D: expected: API-created workspace holds no Work (known-stable Phase C gap).
+  if [[ "$(jq -r '.created_workspace_id // empty' "$STATE_FILE")" != '' ]]; then
+    api_workspace_id="$(state_get created_workspace_id)"
+  else
+    work_request="$(json_request_file workspace-contract --arg name "$LABEL API-created contract workspace" '{name:$name}')"
+    api_workspace_response="$(request_json workspace-contract-create POST /api/v1/workspaces 201 "$work_request")"
+    api_workspace_id="$(jq -er '.workspace_id' "$api_workspace_response")"
+    request_json workspace-contract-read GET "/api/v1/workspaces/$api_workspace_id" 200 >/dev/null
+  fi
+  state_set api_created_workspace_id "$api_workspace_id"
+  works_count="$(node --input-type=module - "$DATABASE_URL" "$api_workspace_id" <<'NODE'
+import pg from 'pg';
+
+const client = new pg.Client({ connectionString: process.argv[2] });
+try {
+  await client.connect();
+  const result = await client.query(
+    'SELECT count(*) FROM works WHERE workspace_id = $1',
+    [process.argv[3]],
+  );
+  process.stdout.write(String(result.rows[0]?.count ?? ''));
+} finally {
+  await client.end().catch(() => undefined);
+}
+NODE
+  )"
+  if [[ "$works_count" != '0' ]]; then
+    printf 'Assertion failed: expected: API-created workspace holds no Work (workspace=%s count=%s).\n' "$api_workspace_id" "$works_count" >&2
+    return 1
+  fi
+  printf '%s\n' 'expected: API-created workspace holds no Work' >>"$EVIDENCE_DIR/assertions-passed.txt"
+
+  # B: workspace_id is not a supported Work-create request field.
+  work_request="$(json_request_file work-with-workspace-id --arg definition_id "$primary_team_id" --arg definition_version_id "$primary_team_version" --arg title "$LABEL invalid workspace field" --arg workspace_id "$api_workspace_id" '{definition_id:$definition_id,definition_version_id:$definition_version_id,title:$title,workspace_id:$workspace_id}')"
+  invalid_response="$(request_json work-create-with-workspace-id POST /api/v1/works 400 "$work_request")"
+  assert_jq "$invalid_response" '.error.code == "invalid_request" or .code == "invalid_request"' 'B Work-create workspace_id is rejected as invalid_request'
+
+  # C: token 2 cannot read token 1 Work resources or enumerate token 1 Work.
+  TOKEN="$TOKEN2"
+  token2_runs="$(request_json token2-primary-work-runs GET "/api/v1/works/$(state_get dual_primary_work_id)/runs" 404)"
+  assert_jq "$token2_runs" '.error.code == "work_not_found" or .code == "work_not_found"' 'C token 2 cannot read token 1 Work runs'
+  token2_list="$(request_json token2-works-list GET /api/v1/works?limit=100 200)"
+  assert_jq "$token2_list" ".works | all(.[]; .id != \"$(state_get dual_primary_work_id)\")" 'C token 2 Work list omits token 1 Work'
+  TOKEN="$primary_token"
+
+  # E: schema and contract documentation expose the same exact Work-create fields.
+  local schema_fields docs_fields expected_fields='definition_id,definition_version_id,title'
+  schema_fields="$(awk '/CreateWorkRequestSchema = z/{seen=1} seen && /\.object\(\{/{inside=1; next} inside && /^[[:space:]]*\}\)/{exit} inside{print}' "$schema_file" | sed -n 's/^[[:space:]]*\([a-z_][a-z_]*\):.*/\1/p' | sort | paste -sd, -)"
+  docs_fields="$(awk '/The Work-create request is the exact strict object below;/{seen=1} seen && /^```json$/{inside=1; next} inside && /^```$/{exit} inside{print}' "$contract_file" | sed -n 's/^[[:space:]]*"\([a-z_][a-z_]*\)"[[:space:]]*:.*/\1/p' | sort | paste -sd, -)"
+  if [[ "$schema_fields" != "$expected_fields" ]]; then
+    printf 'Assertion failed: extracted Work-create schema fields=%s expected=%s\n' "$schema_fields" "$expected_fields" >&2
+    return 1
+  fi
+  if [[ "$docs_fields" != "$expected_fields" ]]; then
+    printf 'Assertion failed: extracted Work-create docs fields=%s expected=%s\n' "$docs_fields" "$expected_fields" >&2
+    return 1
+  fi
+  grep -Fq '.strict()' "$schema_file" || {
+    printf 'Assertion failed: Work-create schema must remain strict.\n' >&2
+    return 1
+  }
+  if awk '/The Work-create request is the exact strict object below;/{in_block=1; next} in_block && /^```/{fences++; if (fences == 2) exit} in_block && /workspace_id/{found=1} END{exit found ? 1 : 0}' "$contract_file"; then
+    :
+  else
+    printf 'Assertion failed: documented Work-create field block must not contain workspace_id.\n' >&2
+    return 1
+  fi
+  printf '%s\n' 'E Work-create schema/docs fields match exactly' >>"$EVIDENCE_DIR/assertions-passed.txt"
 }
 
 start_journey() {
@@ -402,12 +565,8 @@ start_journey() {
   work_request="$(json_request_file work-main --arg definition_id "$team_id" --arg definition_version_id "$team_version" --arg title "$LABEL main" '{definition_id:$definition_id,definition_version_id:$definition_version_id,title:$title}')"
   work_response="$(request_json work-create-main POST /api/v1/works 201 "$work_request")"
   work_id="$(jq -er '.work.id' "$work_response")"
-  if [[ "$(jq -r '.created_workspace_id // empty' "$STATE_FILE")" != '' ]]; then
-    assert_jq "$work_response" ".work.definition_id == \"$team_id\" and .work.definition_version_id == \"$team_version\" and .work.workspace_id == \"$(state_get created_workspace_id)\" and .work.origin == \"created\"" 'main Work belongs to the API-created workspace and published Team identity'
-  else
-    assert_jq "$work_response" ".work.definition_id == \"$team_id\" and .work.definition_version_id == \"$team_version\" and (.work.workspace_id | test(\"^[0-9a-fA-F-]{36}$\")) and .work.origin == \"created\"" 'main Work belongs to the token default scope and published Team identity'
-    state_set effective_workspace_id "$(jq -er '.work.workspace_id' "$work_response")"
-  fi
+  assert_jq "$work_response" ".work.definition_id == \"$team_id\" and .work.definition_version_id == \"$team_version\" and .work.workspace_id == \"$EXPECTED_WORKSPACE_ID\" and .work.origin == \"created\"" 'main Work belongs to the service-account workspace and published Team identity'
+  state_set effective_workspace_id "$(jq -er '.work.workspace_id' "$work_response")"
   state_set work_id "$work_id"
 
   for sibling in 1 2; do
@@ -685,6 +844,7 @@ case "${1:-all}" in
     ;;
   all)
     prepare_definitions
+    assert_phase_c_contracts
     start_journey
     poll_terminal
     collect_records_and_trace

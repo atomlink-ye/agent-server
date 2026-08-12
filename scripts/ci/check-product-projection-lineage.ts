@@ -32,6 +32,7 @@ export type ProductWorkVocabulary = {
 
 const TOP_VARIANT_NAMES: Record<string, string> = {
   complete: 'success',
+  internally_anchored: 'success',
 };
 
 function nonNullBranches(schema: JsonSchema): JsonSchema[] {
@@ -150,9 +151,13 @@ export function productProjectionSchemaPaths(): string[] {
 }
 
 function isTechnicalIdentityPath(path: string, container: string): boolean {
+  if (path.includes('.chat_detail.target.')) return true;
   const parts = path.split('.');
   return parts.some(
-    (part) => part === container || part.startsWith(`${container}{`),
+    (part) =>
+      part === container ||
+      part.startsWith(`${container}{`) ||
+      (part === 'source_ref' && path.includes('follow_up_reads[]')),
   );
 }
 
@@ -164,7 +169,10 @@ export function scanProductProjectionVocabulary(
     let inSourceRefs = false;
     return vocabulary.forbiddenLeafPrefixes.some((prefix) =>
       path.split(/[.{]/u).some((part) => {
-        if (part === vocabulary.technicalIdContainer) {
+        if (
+          part === vocabulary.technicalIdContainer ||
+          (part === 'source_ref' && path.includes('follow_up_reads[]'))
+        ) {
           inSourceRefs = true;
           return false;
         }

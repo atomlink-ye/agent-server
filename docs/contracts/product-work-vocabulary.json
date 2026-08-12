@@ -33,7 +33,9 @@
     "team_member_run_id",
     "task_id",
     "run_id",
-    "team_message_id"
+    "team_message_id",
+    "actor_id",
+    "work_item_id"
   ],
   "ownerScopeColumns": {
     "tenant_id": "text",

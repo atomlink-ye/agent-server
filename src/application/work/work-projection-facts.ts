@@ -68,6 +68,8 @@ export interface WorkProjectionMessageFact {
 
 export interface WorkProjectionFacts {
   readonly rootTaskId: string;
+  /** The TeamRun row selected while loading the existing projection facts. */
+  readonly teamRunId: string;
   readonly workItems: readonly WorkProjectionWorkItemFact[];
   readonly actors: readonly WorkProjectionActorFact[];
   readonly dependencies: readonly WorkProjectionDependencyFact[];

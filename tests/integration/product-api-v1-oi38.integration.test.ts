@@ -17,7 +17,7 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 import { registerProductWorkCommandRoutes } from '../../src/entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../src/entrypoints/api/routes/product-work.js';
-import { ErrorResponseSchema } from '../../src/contracts/http.js';
+import { ErrorResponseSchema, HttpError } from '../../src/contracts/http.js';
 import type { ApiEnvironment } from '../../src/entrypoints/api/http-types.js';
 import type { AppConfig } from '../../src/shared/config.js';
 
@@ -96,6 +96,30 @@ describeRealPostgres(
         context.set('requestId', requestId);
         context.header('x-request-id', requestId);
         await next();
+      });
+      app.onError((error, context) => {
+        const requestId = context.get('requestId');
+        if (error instanceof HttpError)
+          return context.json(
+            {
+              error: {
+                code: error.code,
+                message: error.message,
+                request_id: requestId,
+              },
+            },
+            error.status,
+          );
+        return context.json(
+          {
+            error: {
+              code: 'internal_error',
+              message: 'The request could not be completed.',
+              request_id: requestId,
+            },
+          },
+          500,
+        );
       });
       const workIdentity = {
         listWorks: (input: any) => repository.listWorks(input.owner, input),

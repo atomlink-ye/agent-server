@@ -48,8 +48,6 @@ interface EventRow {
   activity_category: string | null;
   activity_status: string | null;
   tool_name: string | null;
-  operation_present: boolean;
-  result_present: boolean;
   created_at: string | Date;
 }
 
@@ -144,11 +142,6 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
                   e.payload->>'status' AS activity_status,
                   CASE WHEN e.payload->>'kind'='tool_status'
                        THEN e.payload->>'tool_name' ELSE NULL END AS tool_name,
-                  (e.payload ? 'tool_name') AS operation_present,
-                  (e.payload ? 'detail_text' OR
-                   (jsonb_typeof(e.payload->'detail')='object' AND
-                    (e.payload->'detail') ?| ARRAY['output','result','content','log']))
-                    AS result_present,
                   e.created_at
              FROM run_events e
              JOIN runs r ON r.id=e.run_id
@@ -197,8 +190,6 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
             activityCategory: row.activity_category ?? null,
             activityStatus: row.activity_status ?? null,
             toolName: row.tool_name ?? null,
-            operationPresent: row.operation_present ?? false,
-            resultPresent: row.result_present ?? false,
             createdAt: toIso(row.created_at),
           });
           after = sequence;

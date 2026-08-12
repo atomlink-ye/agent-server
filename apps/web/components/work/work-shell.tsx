@@ -112,7 +112,7 @@ function WorkDetail({ data }: { readonly data: WorkDetailData }) {
       <section aria-labelledby="result-heading">
         <h2 id="result-heading">Latest result</h2>
         <p data-testid="latest-result-summary">
-          Summary: {run.work_run.result_summary ?? 'not captured'}
+          Summary: {run.work_run.result_summary ?? 'not_captured'}
         </p>
         <p data-testid="latest-result-capture-status">
           Capture status: {run.work_run.result_capture_status}

@@ -59,7 +59,7 @@ it('renders decoded Work outcome, rework attempts, timing, and MCP coverage', as
       expect((await response.value).status, 'not_implemented').not.toBe(501);
     }
     expect(host.textContent).toContain('complete');
-    expect(host.textContent).toContain('completion_approval_pending');
+    expect(host.textContent).toContain('Attention basis: not specified');
     expect(host.textContent).toContain('Final answer');
     expect(host.textContent).toContain(`Attempt ID: ${firstAttemptId}`);
     expect(host.textContent).toContain(`Attempt ID: ${secondAttemptId}`);
@@ -172,7 +172,7 @@ const workRunDetail = {
     ...workRun(finalRunId, '2026-08-12T11:00:00.000Z'),
     product_state: 'complete' as const,
     problem_kind: null,
-    attention_reason: 'completion_approval_pending' as const,
+    attention_reason: null,
     result_summary: 'Final answer.',
     result_capture_status: 'present' as const,
     control_revision: 1,

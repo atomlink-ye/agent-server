@@ -81,13 +81,17 @@ const MESSAGE_FIELDS = [
 ] as const;
 
 const RUN_FIELDS = [
+  'actor_id',
   'created_at',
+  'ended_at',
   'error_code',
   'model',
   'provider',
   'result_capture_status',
   'status',
+  'started_at',
   'updated_at',
+  'work_item_id',
 ] as const;
 
 const EVENT_FIELDS = [
@@ -95,6 +99,30 @@ const EVENT_FIELDS = [
   'payload_capture_status',
   'sequence',
   'type',
+] as const;
+
+const MCP_TOOL_FIELDS = [
+  'activity_id',
+  'category',
+  'chat_detail.method',
+  'chat_detail.path',
+  'chat_detail.target.activity_id',
+  'chat_detail.target.run_id',
+  'chat_detail.target.sequence',
+  'kind',
+  'operation_capture_status',
+  'result_capture_status',
+  'sequence',
+  'status',
+  'tool_name',
+] as const;
+
+const MCP_SOURCE_REF_KEYS = [
+  'root_task_id',
+  'task_id',
+  'run_id',
+  'actor_id',
+  'work_item_id',
 ] as const;
 
 const EDGE_FIELDS = {
@@ -185,6 +213,13 @@ const tracePaths = (includeIdentity: boolean): string[] => [
           : ['team_run_id', 'task_id'],
     ),
   ]),
+  ...MCP_TOOL_FIELDS.map((field) => `mcp_activities[].${field}`),
+  ...MCP_SOURCE_REF_KEYS.map(
+    (field) => `mcp_activities[].source_refs.${field}`,
+  ),
+  'timeline_coverage.completeness',
+  'timeline_coverage.excluded_execution',
+  'timeline_coverage.scope',
 ];
 
 const followUpReadPaths = FOLLOW_UP_READ_FIELDS.map(
@@ -221,6 +256,7 @@ const sourceTableForPath = (path: string): string => {
   if (path.startsWith('messages[].')) return 'team_messages';
   if (path.startsWith('runs[].')) return 'runs';
   if (path.startsWith('events[].')) return 'run_events';
+  if (path.startsWith('mcp_activities[]')) return 'run_events';
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind === 'declared_dependency') return 'team_work_item_dependencies';
   if (edgeKind === 'observed_message') return 'team_messages';
@@ -286,6 +322,19 @@ const sourceRefTarget = (path: string): [string, string] | null => {
         ? ['runs', 'id']
         : null;
   }
+  if (entity.startsWith('mcp_activities[]')) {
+    return key === 'root_task_id'
+      ? ['tasks', 'root_task_id']
+      : key === 'task_id'
+        ? ['tasks', 'id']
+        : key === 'run_id'
+          ? ['runs', 'id']
+          : key === 'actor_id'
+            ? ['team_member_runs', 'id']
+            : key === 'work_item_id'
+              ? ['team_work_items', 'id']
+              : null;
+  }
   const edgeKind = entity.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind === 'observed_message') {
     return key === 'team_run_id'
@@ -323,6 +372,15 @@ const directColumnName = (path: string): string | null => {
   )
     return null;
   if (path.endsWith('.payload_capture_status')) return null;
+  if (path.includes('mcp_activities[].chat_detail')) return null;
+  if (
+    path.includes('mcp_activities[].') &&
+    (path.endsWith('.activity_id') ||
+      path.endsWith('.operation_capture_status') ||
+      path.endsWith('.result_capture_status') ||
+      path.endsWith('.tool_name'))
+  )
+    return null;
   if (path.endsWith('.reviewer_actor_id')) return null;
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}\.([^.[{]+)$/u);
   if (edgeKind) {
@@ -402,6 +460,12 @@ const directColumnName = (path: string): string | null => {
     EVENT_FIELDS.includes(field as (typeof EVENT_FIELDS)[number])
   )
     return field;
+  if (path.startsWith('mcp_activities[].')) {
+    if (path.endsWith('.category')) return 'category';
+    if (path.endsWith('.kind')) return 'kind';
+    if (path.endsWith('.sequence')) return 'sequence';
+    if (path.endsWith('.status')) return 'status';
+  }
   return null;
 };
 
@@ -417,12 +481,14 @@ const derivation = (
   )
     return rule('projection_contract_status_v1', 'constant(provisional)', []);
   if (
-    relativePath === 'capture_status' ||
-    relativePath.endsWith('.capture_status')
+    relativePath === 'projection_status' ||
+    relativePath.endsWith('.projection_status')
   )
     return rule(
-      'capture_status_v1',
-      variant === 'not_found' ? 'constant(not_found)' : 'constant(complete)',
+      'projection_status_v1',
+      variant === 'not_found'
+        ? 'constant(not_found)'
+        : 'constant(internally_anchored)',
       [],
     );
   if (
@@ -522,6 +588,61 @@ const derivation = (
     return rule('run_error_code_v1', "json_extract(error, '$.code')", [
       'runs.error',
     ]);
+  if (relativePath.startsWith('mcp_activities[].')) {
+    if (relativePath.endsWith('.chat_detail.method'))
+      return rule('mcp_chat_detail_method_v1', 'constant(GET)', []);
+    if (relativePath.endsWith('.chat_detail.path'))
+      return rule('mcp_chat_detail_path_v1', 'derive_run_event_read_path', [
+        'run_events.run_id',
+        'run_events.sequence',
+      ]);
+    if (relativePath.endsWith('.chat_detail.target.activity_id'))
+      return rule('mcp_chat_detail_target_v1', 'run_event_activity_id', [
+        'run_events.payload',
+      ]);
+    if (relativePath.endsWith('.chat_detail.target.run_id'))
+      return rule('mcp_chat_detail_target_v1', 'run_event_run_id', [
+        'run_events.run_id',
+      ]);
+    if (relativePath.endsWith('.chat_detail.target.sequence'))
+      return rule('mcp_chat_detail_target_v1', 'run_event_sequence', [
+        'run_events.sequence',
+      ]);
+    if (
+      relativePath.endsWith('.operation_capture_status') ||
+      relativePath.endsWith('.result_capture_status')
+    )
+      return rule(
+        relativePath.endsWith('.operation_capture_status')
+          ? 'mcp_operation_capture_status_v1'
+          : 'mcp_result_capture_status_v1',
+        'constant(not_present)',
+        [],
+      );
+    if (relativePath.endsWith('.tool_name'))
+      return rule('mcp_tool_name_v1', 'safe_tool_name', ['run_events.payload']);
+    if (
+      relativePath.endsWith('.activity_id') ||
+      relativePath.endsWith('.category') ||
+      relativePath.endsWith('.kind') ||
+      relativePath.endsWith('.status')
+    )
+      return rule('mcp_activity_payload_field_v1', 'json_extract(payload)', [
+        'run_events.payload',
+      ]);
+    if (relativePath.endsWith('.sequence'))
+      return column('run_events', 'sequence');
+  }
+  if (relativePath.startsWith('timeline_coverage.')) {
+    const field = relativePath.slice('timeline_coverage.'.length);
+    return rule(
+      `timeline_coverage_${field.replace(/[^a-z]+/gu, '_')}_v1`,
+      field === 'excluded_execution'
+        ? 'constant(closed_exclusions)'
+        : `constant(${field === 'scope' ? 'mcp_dispatch_and_confirmation' : 'mcp_only'})`,
+      [],
+    );
+  }
   const edgeKind = path.match(/edges\[\]\{kind=([^}]+)\}/u)?.[1];
   if (edgeKind && (path.endsWith('.kind') || path.endsWith('.guarantee')))
     return rule(
@@ -582,25 +703,25 @@ const workRunErrorPaths = [
  */
 export const PRODUCT_PROJECTION_LINEAGE_MANIFEST = {
   ...manifestFor('work_run_response', 'success', [
-    'capture_status',
+    'projection_status',
     'contract_status',
     ...followUpReadPaths,
     ...basePaths(true),
   ]),
   ...manifestFor('work_run_response', 'not_found', [
-    'capture_status',
+    'projection_status',
     'contract_status',
     ...identityPaths,
   ]),
   ...manifestFor('work_run_response', 'error', workRunErrorPaths),
   ...manifestFor('run_trace_response', 'success', [
-    'capture_status',
+    'projection_status',
     'contract_status',
     ...followUpReadPaths,
     ...tracePaths(true),
   ]),
   ...manifestFor('run_trace_response', 'not_found', [
-    'capture_status',
+    'projection_status',
     'contract_status',
     ...tracePaths(false).filter(
       (path) => !path.startsWith('work.') && !path.startsWith('work_run.'),

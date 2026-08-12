@@ -27,6 +27,8 @@ interface RunRow {
   error_code: string | null;
   actor_id: string | null;
   work_item_id: string | null;
+  started_at: string | Date | null;
+  ended_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
 }
@@ -85,6 +87,11 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
               r.error->>'code' AS error_code,
               t.team_member_run_id AS actor_id,
               attempt.work_item_id AS work_item_id,
+              (SELECT MIN(se.created_at) FROM run_events se
+                WHERE se.run_id=r.id AND se.type='started') AS started_at,
+              (SELECT MAX(ee.created_at) FROM run_events ee
+                WHERE ee.run_id=r.id
+                  AND ee.type IN ('succeeded','failed','cancelled')) AS ended_at,
               r.created_at,r.updated_at
          FROM runs r
          JOIN tasks t ON t.id=r.task_id
@@ -108,6 +115,8 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
       errorCode: row.error_code ?? null,
       actorId: row.actor_id ?? null,
       workItemId: row.work_item_id ?? null,
+      startedAt: row.started_at ? toIso(row.started_at) : null,
+      endedAt: row.ended_at ? toIso(row.ended_at) : null,
       createdAt: toIso(row.created_at),
       updatedAt: toIso(row.updated_at),
     }));
@@ -136,7 +145,10 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
                   CASE WHEN e.payload->>'kind'='tool_status'
                        THEN e.payload->>'tool_name' ELSE NULL END AS tool_name,
                   (e.payload ? 'tool_name') AS operation_present,
-                  (e.payload ? 'detail_text' OR e.payload ? 'detail') AS result_present,
+                  (e.payload ? 'detail_text' OR
+                   (jsonb_typeof(e.payload->'detail')='object' AND
+                    (e.payload->'detail') ?| ARRAY['output','result','content','log']))
+                    AS result_present,
                   e.created_at
              FROM run_events e
              JOIN runs r ON r.id=e.run_id

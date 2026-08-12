@@ -300,11 +300,11 @@ function mapMcpActivity(
 ): McpActivity | null {
   if (
     !event.activityId ||
-    (event.activityKind !== 'tool_status' &&
-      event.activityKind !== 'permission') ||
+    event.activityKind !== 'tool_status' ||
     !event.taskId
   )
     return null;
+  if (!isSafeMcpToolName(event.toolName)) return null;
   const sourceRefs = {
     root_task_id: event.rootTaskId || rootTaskId,
     task_id: event.taskId,
@@ -324,13 +324,8 @@ function mapMcpActivity(
   const common = {
     activity_id: event.activityId,
     sequence: event.sequence,
-    operation_capture_status:
-      event.operationPresent && isSafeMcpToolName(event.toolName)
-        ? ('present' as const)
-        : ('not_present' as const),
-    result_capture_status: event.resultPresent
-      ? ('redacted' as const)
-      : ('not_present' as const),
+    operation_capture_status: 'not_present' as const,
+    result_capture_status: 'not_present' as const,
     source_refs: sourceRefs,
     chat_detail: chatDetail,
   };
@@ -345,35 +340,22 @@ function mapMcpActivity(
       kind: 'tool_status',
       status: event.activityStatus,
       category: event.activityCategory,
-      ...(isSafeMcpToolName(event.toolName)
-        ? { tool_name: event.toolName }
-        : {}),
+      tool_name: event.toolName,
     };
   }
-  if (
-    !isPermissionActivityStatus(event.activityStatus) ||
-    !isPermissionActivityCategory(event.activityCategory)
-  )
-    return null;
-  return {
-    ...common,
-    kind: 'permission',
-    status: event.activityStatus,
-    category: event.activityCategory,
-  };
+  return null;
 }
 
+const SAFE_MCP_TOOL_NAMES = new Set([
+  'synthetic_stock_snapshot',
+  'synthetic_event_batch',
+  'synthetic_analog_summary',
+  'learning_proposal_create',
+  'agent_server_memory_read',
+]);
+
 function isSafeMcpToolName(value: string | null): value is string {
-  return (
-    value !== null &&
-    new Set([
-      'synthetic_stock_snapshot',
-      'synthetic_event_batch',
-      'synthetic_analog_summary',
-      'learning_proposal_create',
-      'agent_server_memory_read',
-    ]).has(value)
-  );
+  return value !== null && SAFE_MCP_TOOL_NAMES.has(value);
 }
 
 function isToolActivityStatus(
@@ -406,24 +388,6 @@ function isToolActivityCategory(
     value === 'search' ||
     value === 'fetch' ||
     value === 'subagent' ||
-    value === 'other'
-  );
-}
-
-function isPermissionActivityStatus(
-  value: string | null,
-): value is 'requested' | 'resolved' {
-  return value === 'requested' || value === 'resolved';
-}
-
-function isPermissionActivityCategory(
-  value: string | null,
-): value is 'tool' | 'plan' | 'question' | 'mode' | 'other' {
-  return (
-    value === 'tool' ||
-    value === 'plan' ||
-    value === 'question' ||
-    value === 'mode' ||
     value === 'other'
   );
 }
@@ -489,6 +453,8 @@ function mapRun(run: ExecutionRunFact, rootTaskId: string) {
     },
     actor_id: run.actorId ?? null,
     work_item_id: run.workItemId ?? null,
+    started_at: run.startedAt ?? null,
+    ended_at: run.endedAt ?? null,
     created_at: run.createdAt,
     updated_at: run.updatedAt,
   };

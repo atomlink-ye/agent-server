@@ -21,6 +21,8 @@ export interface ExecutionRunFact {
   readonly errorCode: string | null;
   readonly actorId: string | null;
   readonly workItemId: string | null;
+  readonly startedAt: string | null;
+  readonly endedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

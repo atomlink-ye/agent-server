@@ -195,6 +195,8 @@ export const ExecutionRunSchema = z
     actor_id: z.uuid().nullable(),
     work_item_id: z.uuid().nullable(),
     source_refs: ProductSourceRefsSchema,
+    started_at: z.string().datetime().nullable(),
+    ended_at: z.string().datetime().nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
   })
@@ -248,19 +250,10 @@ export const McpToolActivitySchema = McpActivityBaseSchema.extend({
     'subagent',
     'other',
   ]),
-  tool_name: z.string().min(1).optional(),
+  tool_name: z.string().min(1),
 }).strict();
 
-export const McpPermissionActivitySchema = McpActivityBaseSchema.extend({
-  kind: z.literal('permission'),
-  status: z.enum(['requested', 'resolved']),
-  category: z.enum(['tool', 'plan', 'question', 'mode', 'other']),
-}).strict();
-
-export const McpActivitySchema = z.discriminatedUnion('kind', [
-  McpToolActivitySchema,
-  McpPermissionActivitySchema,
-]);
+export const McpActivitySchema = McpToolActivitySchema;
 
 export const McpActivitiesSchema = z
   .array(McpActivitySchema)

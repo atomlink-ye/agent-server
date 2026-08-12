@@ -32,6 +32,7 @@ export type ProductWorkVocabulary = {
 
 const TOP_VARIANT_NAMES: Record<string, string> = {
   complete: 'success',
+  internally_anchored: 'success',
 };
 
 function nonNullBranches(schema: JsonSchema): JsonSchema[] {

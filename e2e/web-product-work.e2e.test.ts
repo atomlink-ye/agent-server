@@ -28,7 +28,7 @@ describe.skipIf(baseUrl === undefined || workId === undefined)(
       browser = undefined;
     });
 
-    it('captures the Work page and its same-origin BFF read request', async () => {
+    it('proves the Work page uses same-origin BFF reads and renders the product projection', async () => {
       const browserOrigin = new URL(baseUrl!).origin;
       const browserHostname = new URL(baseUrl!).hostname;
       if (!browserHostname.endsWith('.localhost'))
@@ -56,8 +56,32 @@ describe.skipIf(baseUrl === undefined || workId === undefined)(
         timeout: testTimeout,
       });
       const bffResponse = await bffResponsePromise;
-      expect(capture.bffRequests.length).toBeGreaterThan(0);
-      expect(capture.bffResponses.length).toBeGreaterThan(0);
+      expect(bffResponse.status(), 'not_implemented').not.toBe(501);
+      expect(bffResponse.ok(), 'not_implemented').toBe(true);
+      await page.getByTestId('outcome-product-state').waitFor({
+        state: 'visible',
+        timeout: testTimeout,
+      });
+      expect(capture.bffRequests.length, 'display_bug').toBeGreaterThan(0);
+      expect(capture.bffResponses.length, 'display_bug').toBeGreaterThan(0);
+      expect(
+        capture.bffResponses
+          .filter((response) => response.status >= 200 && response.status < 300)
+          .every(
+            (response) =>
+              response.headers['x-agent-server-upstream'] === 'fetched',
+          ),
+        'not_implemented',
+      ).toBe(true);
+      expect(
+        capture.bffResponses.some(
+          (response) =>
+            response.status >= 200 &&
+            response.status < 300 &&
+            response.headers['x-agent-server-upstream'] === 'fetched',
+        ),
+        'not_implemented',
+      ).toBe(true);
       expect(
         await page.getByTestId('work-detail-shell').isVisible(),
         'display_bug',
@@ -73,27 +97,56 @@ describe.skipIf(baseUrl === undefined || workId === undefined)(
         'display_bug',
       ).toBe(true);
 
-      if (bffResponse.status() === 501) {
-        expect(await bffResponse.json(), 'not_implemented').toEqual({
-          error: 'not_implemented',
-        });
-      } else {
-        expect(bffResponse.ok(), 'not_implemented').toBe(true);
-      }
+      expect(
+        await page.getByTestId('outcome-product-state').isVisible(),
+        'display_bug',
+      ).toBe(true);
+      expect(
+        await page.getByTestId('attention-basis').isVisible(),
+        'display_bug',
+      ).toBe(true);
+      expect(
+        await page.locator('[data-testid="attempt-id"]').count(),
+        'display_bug',
+      ).toBeGreaterThanOrEqual(2);
+      const attemptIds = await page
+        .locator('[data-testid="attempt-id"]')
+        .allTextContents();
+      expect(new Set(attemptIds).size, 'display_bug').toBeGreaterThanOrEqual(2);
+      expect(
+        await page.getByTestId('longest-attempt').isVisible(),
+        'display_bug',
+      ).toBe(true);
+      expect(
+        await page.getByTestId('longest-attempt').textContent(),
+        'display_bug',
+      ).toMatch(/Longest captured attempt: .+ (?:ms|not captured)/u);
+      expect(
+        await page.getByTestId('mcp-only-warning').isVisible(),
+        'display_bug',
+      ).toBe(true);
     });
   },
 );
 
 function captureSameOriginNetwork(page: Page, origin: string) {
   const requests: Array<{ method: string; url: string }> = [];
-  const responses: Array<{ status: number; url: string }> = [];
+  const responses: Array<{
+    status: number;
+    url: string;
+    headers: Record<string, string>;
+  }> = [];
   page.on('request', (request) => {
     if (sameOrigin(request.url(), origin))
       requests.push({ method: request.method(), url: request.url() });
   });
   page.on('response', (response) => {
     if (sameOrigin(response.url(), origin))
-      responses.push({ status: response.status(), url: response.url() });
+      responses.push({
+        status: response.status(),
+        url: response.url(),
+        headers: response.headers(),
+      });
   });
   return {
     requests,

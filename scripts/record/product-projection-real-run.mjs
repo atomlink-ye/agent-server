@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import {
+  captureProductRun,
   capturePreIdentity,
   SUBMIT_INSTRUCTION_PROFILE,
 } from './lib/capture-product-run.mjs';
@@ -20,7 +21,7 @@ function fail(code, message = '') {
   throw new Error(`${code}${message ? `:${message}` : ''}`);
 }
 function parseArgs(argv) {
-  const allowed = new Set(['--mode', '--scenario', '--base-url']);
+  const allowed = new Set(['--mode', '--scenario', '--base-url', '--work-run-id']);
   const parsed = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
@@ -44,14 +45,17 @@ function providerGuard() {
   return provider;
 }
 async function http(baseUrl, token, path, options = {}) {
+  const headers = {
+    ...(options.technicalIdempotency === false
+      ? {}
+      : { 'idempotency-key': randomUUID() }),
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+    accept: 'application/json',
+  };
   const response = await fetch(new URL(path, baseUrl), {
     method: options.method ?? 'GET',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'idempotency-key': randomUUID(),
-    },
+    headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const body = await response.json().catch(() => null);
@@ -144,10 +148,6 @@ async function main() {
     process.env.SERVICE_ACCOUNT_TOKEN;
   if (!['pre-identity', 'product', 'state-canary'].includes(mode))
     fail('invalid_mode');
-  if (mode === 'product')
-    fail(
-      'product_mode_not_implemented: Product Work endpoints are not available in S0',
-    );
   if (!SCENARIOS.has(scenario)) fail('invalid_scenario');
   if (!baseUrl || !token) fail('base_url_and_agent_server_token_required');
   const tenantId =
@@ -266,17 +266,47 @@ async function main() {
     resolvedAgentVersionIds.join('\n') !== expectedAgentVersionIds.join('\n')
   )
     fail('published_definition_resolution_mismatch');
-  const invocation = await http(url, token, '/api/v1/tasks:invoke', {
-    method: 'POST',
-    body: {
-      workspace_id: workspaceId,
-      invokable: { kind: 'team', version_id: published.id },
-      input: {
-        text: `Product Projection recording scenario ${scenario}. Execute the dedicated scenario definition exactly.`,
+  let productContext = null;
+  let rootTaskId;
+  if (mode === 'product') {
+    const created = await http(url, token, '/api/v1/works', {
+      method: 'POST',
+      technicalIdempotency: false,
+      body: {
+        definition_id: published.definition_id,
+        definition_version_id: published.id,
+        title: `Product Projection ${scenario} ${randomUUID().slice(0, 8)}`,
       },
-    },
-  });
-  const rootTaskId = invocation.task_id;
+    });
+    const started = await http(
+      url,
+      token,
+      `/api/v1/works/${created.work.id}/runs`,
+      {
+        method: 'POST',
+        technicalIdempotency: false,
+        body: {
+          trigger_kind: 'manual',
+          trigger_ref: `product-projection:${scenario}:${randomUUID()}`,
+        },
+      },
+    );
+    rootTaskId = started.execution_receipt?.source_refs?.task_id;
+    if (!rootTaskId) fail('product_execution_receipt_task_id_missing');
+    productContext = { created, started };
+  } else {
+    const invocation = await http(url, token, '/api/v1/tasks:invoke', {
+      method: 'POST',
+      body: {
+        workspace_id: workspaceId,
+        invokable: { kind: 'team', version_id: published.id },
+        input: {
+          text: `Product Projection recording scenario ${scenario}. Execute the dedicated scenario definition exactly.`,
+        },
+      },
+    });
+    rootTaskId = invocation.task_id;
+  }
   const timeoutMs = Number(process.env.PRODUCT_RECORD_TIMEOUT_MS ?? 180_000);
   let parallelAttemptsObserved = false;
   const project = await waitFor(
@@ -364,6 +394,67 @@ async function main() {
   const providerModels = [
     ...new Set(runtimes.map((turn) => turn.model)),
   ].sort();
+  if (mode === 'product') {
+    const workId = productContext.created.work.id;
+    const workRunId = args['--work-run-id'] ?? productContext.started.work_run.id;
+    const product = await waitFor(
+      () =>
+        http(
+          url,
+          token,
+          `/api/v1/works/${workId}/runs/${workRunId}`,
+          { technicalIdempotency: false },
+        ),
+      (value) =>
+        value?.projection_status === 'internally_anchored' &&
+        value?.work_run?.id === workRunId,
+      timeoutMs,
+    );
+    const trace = await http(
+      url,
+      token,
+      `/api/v1/works/${workId}/runs/${workRunId}/trace`,
+      { technicalIdempotency: false },
+    );
+    if (scenario === 'parallel-success') {
+      const activities = trace?.mcp_activities;
+      if (!Array.isArray(activities) || activities.length < 1)
+        fail('parallel_mcp_activities_missing');
+      if (
+        activities.some(
+          (activity) =>
+            activity.provenance !== 'server_authorized_team_mcp_catalog',
+        )
+      )
+        fail('parallel_mcp_provenance_invalid');
+    }
+    const capture = await captureProductRun({
+      baseUrl: url,
+      token,
+      rootTaskId,
+      workId,
+      workRunId,
+      work: product.work,
+      workRun: product.work_run,
+      trace,
+      tenantId,
+      workspaceId,
+      principalId,
+      scenario,
+      memberComposition: ['projection-lead', ...names],
+      submitInstructionProfile: SUBMIT_INSTRUCTION_PROFILE,
+      providerKind: providerKinds.join(','),
+      providerModel: providerModels.join(','),
+      definitionHash,
+      predicateEvidence: { parallel_attempts_observed: parallelAttemptsObserved },
+      serviceRevision: live.version,
+      databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+    });
+    process.stdout.write(
+      `${JSON.stringify({ provider: 'real', mode, scenario, root_task_id: rootTaskId, work_id: workId, work_run_id: workRunId, recording: capture.directory, secret_hits: capture.validation.secret_hits, hash_mismatches: capture.validation.hash_mismatches })}\n`,
+    );
+    return;
+  }
   const capture = await capturePreIdentity({
     baseUrl: url,
     token,

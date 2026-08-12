@@ -6,6 +6,42 @@ const SECRET_VALUE =
   /(?:bearer\s+[a-z0-9._~+/=-]{8,}|(?:token|secret|password|credential|api[_ -]?key|authorization|cookie)\s*[:=]\s*[^\s,}]+|(?:\/Users\/|\/Volumes\/|\/private\/var\/|[A-Za-z]:[\\/]))/iu;
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu;
 
+// These are public local fixture values, not name-based exemptions. A value
+// from one of these environment variables is safe only when it is an exact
+// member of its intentionally small, checked-in class.
+const SAFE_ENVIRONMENT_VALUES = new Map([
+  ['AGENT_PRINCIPAL_TYPE', new Set(['service_account'])],
+  ['NODE_ENV', new Set(['development', 'test', 'production'])],
+  ['PASEO_PROVIDER', new Set(['opencode', 'claude', 'codex'])],
+  ['PASEO_MODEL', new Set(['opencode-go/deepseek-v4-flash'])],
+  ['AGENT_TENANT_ID', new Set(['tenant_local'])],
+  ['AGENT_SERVER_TENANT_ID', new Set(['tenant_local'])],
+  ['AGENT_WORKSPACE_ID', new Set(['00000000-0000-4000-8000-000000000001'])],
+  [
+    'AGENT_SERVER_WORKSPACE_ID',
+    new Set(['00000000-0000-4000-8000-000000000001']),
+  ],
+  ['AGENT_PRINCIPAL_ID', new Set(['svc_local'])],
+  ['SERVICE_ACCOUNT_ID', new Set(['svc_local'])],
+  ['AGENT_SERVER_SERVICE_ACCOUNT_ID', new Set(['svc_local'])],
+]);
+
+// Former name-only exemptions stay on the scan path. Known recorder scope
+// names also bypass the historical short-value optimization so poisoned
+// values such as "prod" or "svc" cannot evade the exact-value classes above.
+const ENVIRONMENT_NAMES_WITH_REQUIRED_SCAN = new Set([
+  ...SAFE_ENVIRONMENT_VALUES.keys(),
+  'PATH',
+  'PWD',
+  'OLDPWD',
+  'HOME',
+  'SHELL',
+  'TERM',
+  'LANG',
+  'TZ',
+  'SERVICE_REVISION',
+]);
+
 export const RUN_EVENT_PAYLOAD_KEYS = new Set([
   'event',
   'kind',
@@ -143,12 +179,10 @@ export function scanSecretText(value, path = '$') {
 export function assertNoEnvironmentValues(value, environment = process.env) {
   const serialized = stableStringify(value);
   for (const [name, candidate] of Object.entries(environment)) {
-    if (!candidate || candidate.length < 8) continue;
-    if (
-      /^(?:NODE_ENV|PATH|PWD|OLDPWD|HOME|SHELL|TERM|LANG|TZ|PASEO_PROVIDER|PASEO_MODEL|SERVICE_REVISION|AGENT_TENANT_ID|AGENT_WORKSPACE_ID|AGENT_PRINCIPAL_ID|SERVICE_ACCOUNT_ID)$/u.test(
-        name,
-      )
-    )
+    if (!candidate) continue;
+    const safeValues = SAFE_ENVIRONMENT_VALUES.get(name);
+    if (safeValues?.has(candidate)) continue;
+    if (candidate.length < 8 && !ENVIRONMENT_NAMES_WITH_REQUIRED_SCAN.has(name))
       continue;
     if (serialized.includes(candidate))
       throw new RecordingSecretError(`$env.${name}`, 'environment_value');

@@ -15,7 +15,10 @@ import {
   ProductWorkRunResponseSchema,
   ProductProjectionFollowUpReadsSchema,
 } from '../../contracts/product-projection/index.js';
-import type { ExecutionEvent } from '../../contracts/product-projection/edges.js';
+import type {
+  ExecutionEvent,
+  McpActivity,
+} from '../../contracts/product-projection/edges.js';
 import type { ProductProjectionFactsSlice } from './work-projection-facts-source.js';
 import type {
   ProductRunTrace,
@@ -176,6 +179,11 @@ export function createProductProjection(
         runs: runs.map((run) => mapRun(run, loaded.workRun.rootTaskId)),
         events: mappedEvents,
         edges: mappedEdges,
+        mcp_activities: events
+          .map((event) => mapMcpActivity(event, loaded.workRun.rootTaskId))
+          .filter((activity): activity is McpActivity => activity !== null)
+          .sort(compareMcpActivities),
+        timeline_coverage: timelineCoverage(),
       });
     },
   };
@@ -192,7 +200,7 @@ function buildCaptureMetadata(
     facts.teamRunId,
   );
   return {
-    capture_status: deriveCaptureStatus(
+    projection_status: deriveCaptureStatus(
       facts.identity,
       followUpReads,
       loaded.workRun.rootTaskId,
@@ -236,8 +244,8 @@ function deriveCaptureStatus(
   followUpReads: ReturnType<typeof buildFollowUpReads>,
   rootTaskId: string,
   teamRunId: string,
-): 'complete' {
-  // `complete` promises only that the projected identity collections and the
+): 'internally_anchored' {
+  // `internally_anchored` promises only that the projected identity collections and the
   // two remediation descriptors are present and internally anchored. It does
   // not promise that either follow-up endpoint's omitted facts are captured.
   const identityComplete =
@@ -270,7 +278,7 @@ function deriveCaptureStatus(
     teamRead.source_ref.team_run_id === teamRunId;
   if (!refsComplete || !remediationAnchorsComplete)
     throw new ProductProjectionUnavailableError();
-  return 'complete';
+  return 'internally_anchored';
 }
 
 function mapEvent(
@@ -283,6 +291,160 @@ function mapEvent(
     payload_capture_status: event.payloadPresent ? 'redacted' : 'not_present',
     source_refs: { root_task_id: rootTaskId, run_id: event.runId },
     created_at: event.createdAt,
+  };
+}
+
+function mapMcpActivity(
+  event: Awaited<ReturnType<ExecutionFactQuery['listRunEvents']>>[number],
+  rootTaskId: string,
+): McpActivity | null {
+  if (
+    !event.activityId ||
+    (event.activityKind !== 'tool_status' &&
+      event.activityKind !== 'permission') ||
+    !event.taskId
+  )
+    return null;
+  const sourceRefs = {
+    root_task_id: event.rootTaskId || rootTaskId,
+    task_id: event.taskId,
+    run_id: event.runId,
+    ...(event.actorId ? { actor_id: event.actorId } : {}),
+    ...(event.workItemId ? { work_item_id: event.workItemId } : {}),
+  };
+  const chatDetail = {
+    method: 'GET' as const,
+    path: `/api/v1/runs/${event.runId}/events?after=${event.sequence - 1}`,
+    target: {
+      run_id: event.runId,
+      sequence: event.sequence,
+      activity_id: event.activityId,
+    },
+  };
+  const common = {
+    activity_id: event.activityId,
+    sequence: event.sequence,
+    operation_capture_status:
+      event.operationPresent && isSafeMcpToolName(event.toolName)
+        ? ('present' as const)
+        : ('not_present' as const),
+    result_capture_status: event.resultPresent
+      ? ('redacted' as const)
+      : ('not_present' as const),
+    source_refs: sourceRefs,
+    chat_detail: chatDetail,
+  };
+  if (event.activityKind === 'tool_status') {
+    if (
+      !isToolActivityStatus(event.activityStatus) ||
+      !isToolActivityCategory(event.activityCategory)
+    )
+      return null;
+    return {
+      ...common,
+      kind: 'tool_status',
+      status: event.activityStatus,
+      category: event.activityCategory,
+      ...(isSafeMcpToolName(event.toolName)
+        ? { tool_name: event.toolName }
+        : {}),
+    };
+  }
+  if (
+    !isPermissionActivityStatus(event.activityStatus) ||
+    !isPermissionActivityCategory(event.activityCategory)
+  )
+    return null;
+  return {
+    ...common,
+    kind: 'permission',
+    status: event.activityStatus,
+    category: event.activityCategory,
+  };
+}
+
+function isSafeMcpToolName(value: string | null): value is string {
+  return (
+    value !== null &&
+    new Set([
+      'synthetic_stock_snapshot',
+      'synthetic_event_batch',
+      'synthetic_analog_summary',
+      'learning_proposal_create',
+      'agent_server_memory_read',
+    ]).has(value)
+  );
+}
+
+function isToolActivityStatus(
+  value: string | null,
+): value is 'running' | 'completed' | 'failed' | 'cancelled' {
+  return (
+    value === 'running' ||
+    value === 'completed' ||
+    value === 'failed' ||
+    value === 'cancelled'
+  );
+}
+
+function isToolActivityCategory(
+  value: string | null,
+): value is
+  | 'shell'
+  | 'read'
+  | 'edit'
+  | 'write'
+  | 'search'
+  | 'fetch'
+  | 'subagent'
+  | 'other' {
+  return (
+    value === 'shell' ||
+    value === 'read' ||
+    value === 'edit' ||
+    value === 'write' ||
+    value === 'search' ||
+    value === 'fetch' ||
+    value === 'subagent' ||
+    value === 'other'
+  );
+}
+
+function isPermissionActivityStatus(
+  value: string | null,
+): value is 'requested' | 'resolved' {
+  return value === 'requested' || value === 'resolved';
+}
+
+function isPermissionActivityCategory(
+  value: string | null,
+): value is 'tool' | 'plan' | 'question' | 'mode' | 'other' {
+  return (
+    value === 'tool' ||
+    value === 'plan' ||
+    value === 'question' ||
+    value === 'mode' ||
+    value === 'other'
+  );
+}
+
+function compareMcpActivities(left: McpActivity, right: McpActivity): number {
+  return (
+    left.source_refs.run_id.localeCompare(right.source_refs.run_id) ||
+    left.sequence - right.sequence ||
+    left.activity_id.localeCompare(right.activity_id)
+  );
+}
+
+function timelineCoverage() {
+  return {
+    scope: 'mcp_dispatch_and_confirmation' as const,
+    completeness: 'mcp_only' as const,
+    excluded_execution: [
+      'direct_shell',
+      'direct_file_edit',
+      'other_non_mcp_execution',
+    ] as const,
   };
 }
 
@@ -325,6 +487,8 @@ function mapRun(run: ExecutionRunFact, rootTaskId: string) {
       task_id: run.taskId,
       run_id: run.runId,
     },
+    actor_id: run.actorId ?? null,
+    work_item_id: run.workItemId ?? null,
     created_at: run.createdAt,
     updated_at: run.updatedAt,
   };

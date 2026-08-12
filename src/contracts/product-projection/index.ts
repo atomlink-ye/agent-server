@@ -18,6 +18,8 @@ import {
   ExecutionRunSchema,
   ProductTraceEdgesSchema,
   ProductTraceEdgeSchema,
+  McpActivitiesSchema,
+  TimelineCoverageSchema,
 } from './edges.js';
 
 const ProductWorkRunBaseSchema = z
@@ -55,7 +57,7 @@ export const ProductProjectionFollowUpReadsSchema = z
   .length(2);
 
 export const ProductWorkRunSuccessSchema = ProductWorkRunBaseSchema.extend({
-  capture_status: z.literal('complete'),
+  projection_status: z.literal('internally_anchored'),
   follow_up_reads: ProductProjectionFollowUpReadsSchema,
 }).strict();
 
@@ -64,7 +66,7 @@ export const ProductWorkRunNullSchema = z
     contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
     work: z.null(),
     work_run: z.null(),
-    capture_status: z.literal('not_found'),
+    projection_status: z.literal('not_found'),
     work_items: z.array(ProductWorkItemSchema),
     actors: z.array(ProductActorSchema),
     messages: z.array(ProductMessageSchema),
@@ -93,11 +95,13 @@ export const ProductWorkRunResponseSchema = z.union([
 ]);
 
 export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
-  capture_status: z.literal('complete'),
+  projection_status: z.literal('internally_anchored'),
   follow_up_reads: ProductProjectionFollowUpReadsSchema,
   runs: z.array(ExecutionRunSchema),
   events: ExecutionEventsSchema,
   edges: ProductTraceEdgesSchema,
+  mcp_activities: McpActivitiesSchema,
+  timeline_coverage: TimelineCoverageSchema,
 }).strict();
 
 export const ProductRunTraceNullSchema = z
@@ -105,10 +109,12 @@ export const ProductRunTraceNullSchema = z
     contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
     work: z.null(),
     work_run: z.null(),
-    capture_status: z.literal('not_found'),
+    projection_status: z.literal('not_found'),
     runs: z.array(ExecutionRunSchema),
     events: ExecutionEventsSchema,
     edges: ProductTraceEdgesSchema,
+    mcp_activities: McpActivitiesSchema,
+    timeline_coverage: TimelineCoverageSchema,
   })
   .strict();
 
@@ -134,6 +140,8 @@ export {
   ExecutionEventSchema,
   ExecutionEventsSchema,
   ExecutionRunSchema,
+  McpActivitiesSchema,
+  TimelineCoverageSchema,
   ProductTraceEdgeSchema,
   ProductTraceEdgesSchema,
 };

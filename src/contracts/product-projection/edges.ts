@@ -192,11 +192,113 @@ export const ExecutionRunSchema = z
     model: z.string().nullable(),
     result_capture_status: z.enum(['not_present', 'redacted']),
     error_code: z.string().nullable(),
+    actor_id: z.uuid().nullable(),
+    work_item_id: z.uuid().nullable(),
     source_refs: ProductSourceRefsSchema,
     created_at: z.string().datetime(),
     updated_at: z.string().datetime(),
   })
   .strict();
 
+const McpActivitySourceRefsSchema = z
+  .object({
+    root_task_id: z.uuid(),
+    task_id: z.uuid(),
+    run_id: z.uuid(),
+    actor_id: z.uuid().optional(),
+    work_item_id: z.uuid().optional(),
+  })
+  .strict();
+
+const McpActivityChatDetailSchema = z
+  .object({
+    method: z.literal('GET'),
+    path: z.string().min(1),
+    target: z
+      .object({
+        run_id: z.uuid(),
+        sequence: z.number().int().positive(),
+        activity_id: z.string().min(1),
+      })
+      .strict(),
+  })
+  .strict();
+
+const McpActivityBaseSchema = z
+  .object({
+    activity_id: z.string().min(1),
+    sequence: z.number().int().positive(),
+    operation_capture_status: z.enum(['present', 'not_present']),
+    result_capture_status: z.enum(['not_present', 'redacted']),
+    source_refs: McpActivitySourceRefsSchema,
+    chat_detail: McpActivityChatDetailSchema,
+  })
+  .strict();
+
+export const McpToolActivitySchema = McpActivityBaseSchema.extend({
+  kind: z.literal('tool_status'),
+  status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+  category: z.enum([
+    'shell',
+    'read',
+    'edit',
+    'write',
+    'search',
+    'fetch',
+    'subagent',
+    'other',
+  ]),
+  tool_name: z.string().min(1).optional(),
+}).strict();
+
+export const McpPermissionActivitySchema = McpActivityBaseSchema.extend({
+  kind: z.literal('permission'),
+  status: z.enum(['requested', 'resolved']),
+  category: z.enum(['tool', 'plan', 'question', 'mode', 'other']),
+}).strict();
+
+export const McpActivitySchema = z.discriminatedUnion('kind', [
+  McpToolActivitySchema,
+  McpPermissionActivitySchema,
+]);
+
+export const McpActivitiesSchema = z
+  .array(McpActivitySchema)
+  .superRefine((activities, ctx) => {
+    for (let index = 1; index < activities.length; index += 1) {
+      const previous = activities[index - 1]!;
+      const current = activities[index]!;
+      const previousRun = previous.source_refs.run_id;
+      const currentRun = current.source_refs.run_id;
+      if (
+        previousRun.localeCompare(currentRun) > 0 ||
+        (previousRun === currentRun &&
+          (previous.sequence > current.sequence ||
+            (previous.sequence === current.sequence &&
+              previous.activity_id.localeCompare(current.activity_id) > 0)))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'mcp_activities must be sorted by (source_refs.run_id, sequence, activity_id)',
+          path: [index],
+        });
+      }
+    }
+  });
+
+export const TimelineCoverageSchema = z
+  .object({
+    scope: z.literal('mcp_dispatch_and_confirmation'),
+    completeness: z.literal('mcp_only'),
+    excluded_execution: z.tuple([
+      z.literal('direct_shell'),
+      z.literal('direct_file_edit'),
+      z.literal('other_non_mcp_execution'),
+    ]),
+  })
+  .strict();
+
 export type ExecutionEvent = z.infer<typeof ExecutionEventSchema>;
 export type ExecutionRun = z.infer<typeof ExecutionRunSchema>;
+export type McpActivity = z.infer<typeof McpActivitySchema>;

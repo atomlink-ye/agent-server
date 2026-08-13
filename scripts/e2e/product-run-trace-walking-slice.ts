@@ -353,6 +353,7 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     if (canonical(work.data) !== canonical({ work: loaded.work })) mismatches.push('work');
     if (canonical(runList.data) !== canonical(loaded.runList)) mismatches.push('work_run_list');
     if (canonical(run.data) !== canonical(loaded.run)) mismatches.push('work_run');
+    if (canonical(actual) !== canonical(loaded.trace)) mismatches.push('trace');
     if (!compareRecordedFacts(loaded.trace, actual)) mismatches.push('trace_facts');
     const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
     if (

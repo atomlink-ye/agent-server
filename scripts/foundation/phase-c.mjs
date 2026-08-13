@@ -454,9 +454,13 @@ function git(...args) {
 function evaluateE6(options) {
   const expectation = readJson(join(ROOT, EXPECTATION_PATH));
   if (expectation.__error) return result('E6', 'MISSING', expectation.__error);
-  const committed = JSON.parse(
-    git('show', `${EXPECTATION_COMMIT}:${EXPECTATION_PATH}`),
-  );
+  const committedBytes = execFileSync('git', [
+    '-C',
+    ROOT,
+    'show',
+    `${EXPECTATION_COMMIT}:${EXPECTATION_PATH}`,
+  ]);
+  const committed = JSON.parse(committedBytes.toString('utf8'));
   if (
     sha256(JSON.stringify(committed)) !== sha256(JSON.stringify(expectation))
   ) {
@@ -497,6 +501,13 @@ function evaluateE6(options) {
   if (required.some((value) => !nonempty(value)))
     return result('E6', 'MISSING', 'required proof identity is empty');
   const failures = [];
+  if (
+    proof.expectation_commit !== EXPECTATION_COMMIT ||
+    proof.expectation_git_object_sha256 !== sha256(committedBytes) ||
+    proof.expectation_git_object_sha256 !==
+      '0b466be1ecb4cfe715dd4e019249b8b454f1c61adb1a782c86295f72925d42d3'
+  )
+    failures.push('expectation_git_object_provenance');
   if (!/^[0-9a-f]{40}$/u.test(proof.candidate_sha ?? ''))
     failures.push('candidate_sha');
   if (proof.terminal_state !== expectation.expected_terminal_state)

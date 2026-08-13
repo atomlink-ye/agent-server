@@ -34,11 +34,9 @@ const composeEnvironment = {
     nodeAbi: process.env.AGENT_SERVER_NODE_ABI ?? '137',
   })),
 };
-const candidateSha = spawnSync('git', ['-C', ROOT, 'rev-parse', 'HEAD'], {
-  encoding: 'utf8',
-}).stdout.trim();
+const candidateSha = process.env.FOUNDATION_CANDIDATE_SHA?.trim() ?? '';
 if (!/^[0-9a-f]{40}$/u.test(candidateSha))
-  throw new Error('candidate_sha_missing');
+  throw new Error('FOUNDATION_CANDIDATE_SHA must be an exact 40-hex Git SHA');
 
 function run(command, args, { allow = [0], env = composeEnvironment } = {}) {
   const value = spawnSync(command, args, {
@@ -381,6 +379,9 @@ try {
     missing: false,
   };
   proof.candidate_sha = candidateSha;
+  proof.expectation_commit = '99fd40e2ebbe0830ddf30a04676687008fe2a2ea';
+  proof.expectation_git_object_sha256 =
+    '0b466be1ecb4cfe715dd4e019249b8b454f1c61adb1a782c86295f72925d42d3';
   proof.agent_server_container_id =
     runtimeRecord.runtime_inspection.agent_server.container_id;
   proof.paseo_runtime_container_id =

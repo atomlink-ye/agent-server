@@ -37,8 +37,8 @@ const expectedArms = [
   ['work-registration-http-control', 0],
   ['wrong-work-id-fail', 1],
   ['wrong-work-id-http-control', 0],
+  ['bootstrap-direct-work-independent-guard-bypassed', 0],
   ['bootstrap-direct-work-e5-fail', 1],
-  ['bootstrap-direct-work-structural-control', 1],
   ['bootstrap-direct-work-type-control', 0],
   ['bootstrap-direct-work-http-control', 0],
 ];

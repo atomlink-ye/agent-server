@@ -189,7 +189,25 @@ mutate(
     );
     if (changed === text) fail('bootstrap_direct_work_call_anchor_missing', 2);
     fs.writeFileSync(source, changed);
+    const structuralGuard = path.join(
+      repo,
+      'scripts/ci/check-work-import-boundary.mjs',
+    );
+    const structuralGuardOriginal = fs.readFileSync(structuralGuard, 'utf8');
+    fs.writeFileSync(
+      structuralGuard,
+      `#!/usr/bin/env node\nconsole.log('work_import_boundary_bypassed:evidence_ownership_dual');\n`,
+    );
     try {
+      arms.push(
+        runArm(
+          'bootstrap-direct-work-independent-guard-bypassed',
+          'pnpm',
+          ['modularization:verify:work-boundary'],
+          0,
+          ['work_import_boundary_bypassed:evidence_ownership_dual'],
+        ),
+      );
       arms.push(
         runArm(
           'bootstrap-direct-work-e5-fail',
@@ -198,17 +216,6 @@ mutate(
           1,
           [
             'work_bootstrap_boundary_violation:file=src/bootstrap.ts:marker=createPostgresWorkIdentityModule',
-          ],
-        ),
-      );
-      arms.push(
-        runArm(
-          'bootstrap-direct-work-structural-control',
-          'pnpm',
-          ['modularization:verify:work-boundary'],
-          1,
-          [
-            'work_import_boundary_violation:importer=src/bootstrap.ts:target=src/infrastructure/postgres/postgres-work-identity-repository.ts',
           ],
         ),
       );
@@ -229,7 +236,11 @@ mutate(
         ),
       );
     } finally {
-      fs.writeFileSync(source, text);
+      try {
+        fs.writeFileSync(structuralGuard, structuralGuardOriginal);
+      } finally {
+        fs.writeFileSync(source, text);
+      }
     }
   },
 );

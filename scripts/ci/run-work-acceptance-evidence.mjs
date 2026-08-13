@@ -45,10 +45,40 @@ arms.push(
       '--',
       'node',
       '-e',
-      `console.error('work_http_projection_installer_missing');process.exit(1)`,
+      `console.error('WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]');process.exit(1)`,
     ],
     2,
     ['work_acceptance_missing:kind=http-projection'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-near-miss-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('not_WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]_suffix');process.exit(1)`,
+    ],
+    1,
+    ['not_WORK_ACCEPTANCE_MISSING'],
+  ),
+);
+arms.push(
+  runArm(
+    'verifier-input-missing',
+    'node',
+    [
+      'scripts/ci/verify-work-acceptance-evidence.mjs',
+      '--input',
+      '/tmp/mgr-b-work-e45-deliberately-absent.json',
+    ],
+    2,
+    ['work_acceptance_evidence_missing:path='],
   ),
 );
 arms.push(
@@ -124,7 +154,7 @@ mutate(
         2,
         [
           'runs the real HTTP create, start, and read path',
-          'work_http_projection_installer_missing',
+          'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
         ],
       ),
     );
@@ -182,7 +212,7 @@ mutate(
         2,
         [
           'creates through real MCP and reads the same Work through HTTP',
-          'work_mcp_registration_missing:product_work_create',
+          'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
         ],
       ),
     );
@@ -359,6 +389,48 @@ mutate(
     } finally {
       fs.writeFileSync(source, imported);
     }
+  },
+);
+
+mutate(
+  'bootstrap-template-interpolation-fail',
+  'src/bootstrap.ts',
+  `  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `  const forbiddenTemplate = \`${'${`nested:${({ startWorkRun: workModule.contributeRuntime }).startWorkRun}`}'}\`;\n  void forbiddenTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  () => {
+    withIndependentBoundaryBypassed(() => {
+      arms.push(
+        runArm(
+          'bootstrap-template-independent-guard-bypassed',
+          'pnpm',
+          ['modularization:verify:work-boundary'],
+          0,
+          ['work_import_boundary_bypassed:evidence_ownership_dual'],
+        ),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-template-e5-fail',
+          'pnpm',
+          ['modularization:acceptance:work-mcp'],
+          1,
+          [
+            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=startWorkRun',
+          ],
+        ),
+      );
+      arms.push(
+        runArm('bootstrap-template-type-control', 'pnpm', ['check:types'], 0),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-template-http-control',
+          'pnpm',
+          ['modularization:acceptance:work-http'],
+          0,
+        ),
+      );
+    });
   },
 );
 

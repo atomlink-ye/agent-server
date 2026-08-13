@@ -46,7 +46,11 @@ function executableIdentifiers(text) {
       continue;
     }
     const character = text[index];
-    if (character === "'" || character === '"' || character === '`') {
+    if (character === '`') {
+      index = scanTemplate(text, index, result);
+      continue;
+    }
+    if (character === "'" || character === '"') {
       index = skipString(text, index, character);
       continue;
     }
@@ -60,6 +64,54 @@ function executableIdentifiers(text) {
     index++;
   }
   return result;
+}
+
+function scanTemplate(text, start, result) {
+  let index = start + 1;
+  while (index < text.length) {
+    if (text[index] === '\\') {
+      index += 2;
+      continue;
+    }
+    if (text[index] === '`') return index + 1;
+    if (text.startsWith('${', index)) {
+      const expressionEnd = findExpressionEnd(text, index + 2, result);
+      result.push(
+        ...executableIdentifiers(text.slice(index + 2, expressionEnd)),
+      );
+      index = expressionEnd + 1;
+      continue;
+    }
+    index++;
+  }
+  return text.length;
+}
+
+function findExpressionEnd(text, start, result) {
+  let depth = 1;
+  let index = start;
+  while (index < text.length) {
+    if (text.startsWith('//', index)) {
+      index = skipUntil(text, index + 2, '\n');
+      continue;
+    }
+    if (text.startsWith('/*', index)) {
+      index = skipUntil(text, index + 2, '*/');
+      continue;
+    }
+    if (text[index] === "'" || text[index] === '"') {
+      index = skipString(text, index, text[index]);
+      continue;
+    }
+    if (text[index] === '`') {
+      index = scanTemplate(text, index, result);
+      continue;
+    }
+    if (text[index] === '{') depth++;
+    if (text[index] === '}' && --depth === 0) return index;
+    index++;
+  }
+  return text.length;
 }
 
 function skipUntil(text, start, terminator) {

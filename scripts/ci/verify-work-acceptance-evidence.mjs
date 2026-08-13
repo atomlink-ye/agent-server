@@ -26,6 +26,8 @@ try {
 }
 const expectedArms = [
   ['classifier-recognized-missing', 2],
+  ['classifier-near-miss-fail', 1],
+  ['verifier-input-missing', 2],
   ['classifier-unmarked-exit-two-fail', 1],
   ['classifier-arbitrary-nonzero-fail', 1],
   ['baseline-http', 0],
@@ -48,6 +50,10 @@ const expectedArms = [
   ['bootstrap-direct-transfer-e5-fail', 1],
   ['bootstrap-direct-transfer-type-control', 0],
   ['bootstrap-direct-transfer-http-control', 0],
+  ['bootstrap-template-independent-guard-bypassed', 0],
+  ['bootstrap-template-e5-fail', 1],
+  ['bootstrap-template-type-control', 0],
+  ['bootstrap-template-http-control', 0],
 ];
 const failures = [];
 assert(evidence.schema === 'mgr-b-work-e4-e5-runtime-v1', 'schema');

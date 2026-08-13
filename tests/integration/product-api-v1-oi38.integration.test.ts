@@ -231,7 +231,9 @@ describeRealPostgres(
       expect(((await runs.json()) as any).work_runs).toHaveLength(1);
       const read = await request(`/api/v1/works/${workId}`, tokenA);
       if (read.status === 404)
-        throw new Error('work_http_projection_installer_missing');
+        throw new Error(
+          'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+        );
       expect(read.status).toBe(200);
       expect(((await read.json()) as any).work.id).toBe(workId);
     });
@@ -265,10 +267,14 @@ describeRealPostgres(
           }) as never,
         );
         const tools = await client.listTools().catch(() => {
-          throw new Error('work_mcp_registration_missing:product_work_create');
+          throw new Error(
+            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+          );
         });
         if (!tools.tools.some((tool) => tool.name === 'product_work_create'))
-          throw new Error('work_mcp_registration_missing:product_work_create');
+          throw new Error(
+            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+          );
         const result = await client.callTool({
           name: 'product_work_create',
           arguments: {

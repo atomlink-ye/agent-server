@@ -28,7 +28,14 @@ process.stderr.write(stderr);
 
 const rawExit = result.status;
 const combined = `${stdout}\n${stderr}`;
-const exactMarkerPresent = combined.includes(exactMarker);
+const taggedMarker = `WORK_ACCEPTANCE_MISSING[${exactMarker}]`;
+const exactMarkerPresent = combined
+  .split(/\r?\n/)
+  .some((line) =>
+    new RegExp(
+      `(?:^|[^A-Za-z0-9_])${escapeRegExp(taggedMarker)}(?:$|[^A-Za-z0-9_])`,
+    ).test(line),
+  );
 if (rawExit === 0) process.exit(0);
 if (exactMarkerPresent) {
   console.error(`work_acceptance_missing:kind=${kind}:marker=${exactMarker}`);
@@ -45,4 +52,8 @@ function option(name) {
 function fail(message, exit) {
   console.error(`work_acceptance_classifier_invalid:${message}`);
   process.exit(exit);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

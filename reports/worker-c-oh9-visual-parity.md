@@ -20,7 +20,7 @@ Status: C-owned implementation complete. Stop condition: none; all requested reg
 
 - 028c2ec8d929557e33ccdf16550b08fe7f17851d — fix(frontend): align B0 B1 B2 B5 B8 trace visuals; stop condition none — 4 files, 127 insertions(+), 128 deletions(-).
 - fdefa2d6e374bb2cd399b2093120d6cac1e22912 — docs(frontend): record B0 B1 B2 B5 B8 parity evidence — 1 file, 38 insertions(+).
-- Final report correction is included in the handoff commit; its full SHA/diffstat is recorded in the handoff message.
+- 59e1559cfd7b4f13c29d58e6bd0904e44d31af3b — docs(frontend): finalize O-H9 parity handoff — 1 file, 2 insertions(+), 2 deletions(-).
 
 ## Exact files
 

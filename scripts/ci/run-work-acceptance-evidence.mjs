@@ -393,10 +393,43 @@ mutate(
 );
 
 mutate(
+  'bootstrap-template-static-text-control',
+  'src/bootstrap.ts',
+  `  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `  const safeTemplate = \`static workIdentity startWorkRun createPostgresWorkIdentityModule createProductProjection\`;\n  void safeTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  () => {
+    arms.push(
+      runArm(
+        'bootstrap-template-static-text-e5-control',
+        'pnpm',
+        ['modularization:acceptance:work-mcp'],
+        0,
+      ),
+    );
+    arms.push(
+      runArm(
+        'bootstrap-template-static-text-type-control',
+        'pnpm',
+        ['check:types'],
+        0,
+      ),
+    );
+    arms.push(
+      runArm(
+        'bootstrap-template-static-text-http-control',
+        'pnpm',
+        ['modularization:acceptance:work-http'],
+        0,
+      ),
+    );
+  },
+);
+
+mutate(
   'bootstrap-template-interpolation-fail',
   'src/bootstrap.ts',
   `  const runtimeMcpServer = new RuntimeMcpServer(`,
-  `  const forbiddenTemplate = \`${'${`nested:${({ startWorkRun: workModule.contributeRuntime }).startWorkRun}`}'}\`;\n  void forbiddenTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `  const forbiddenTemplate = \`${'${/}/.test("x") ? startWorkRun : undefined}'}\`;\n  const startWorkRun = workModule.contributeRuntime;\n  void forbiddenTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
   () => {
     withIndependentBoundaryBypassed(() => {
       arms.push(

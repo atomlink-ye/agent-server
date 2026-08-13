@@ -49,12 +49,8 @@
 .run-trace__attempt:nth-of-type(3n + 1) { background: #eef1f8; border-left-color: var(--trace-blue); }
 .run-trace__attempt[aria-pressed='true'] { border: 2px solid var(--trace-blue); border-left-width: 3px; }
 .run-trace__attempt-label { font-size: 10px; font-weight: 500; white-space: nowrap; }
-.run-trace__feedback-line { border-top: 1px solid #7b6d56; left: var(--feedback-left); position: absolute; top: 5px; width: var(--feedback-width); }
-.run-trace__feedback-line::before, .run-trace__feedback-line::after { background: #7b6d56; border-radius: 50%; content: ''; height: 5px; position: absolute; top: -3px; width: 5px; }
-.run-trace__feedback-line::before { left: 0; }
-.run-trace__feedback-line::after { right: 0; }
-.run-trace__feedback-line span { background: var(--trace-canvas); color: var(--trace-muted); font-size: 9px; left: 50%; padding: 0 4px; position: absolute; top: -10px; transform: translateX(-50%); white-space: nowrap; }
-.run-trace__feedback-marker { border: 1px solid #7b6d56; border-radius: 50%; height: 7px; left: var(--feedback-left); position: absolute; top: 4px; width: 7px; }
+.run-trace__feedback-marker { background: var(--trace-canvas); border: 1px solid #7b6d56; border-radius: 50%; height: 7px; left: var(--feedback-left); position: absolute; top: 4px; transform: translateX(-50%); width: 7px; }
+.run-trace__feedback-marker span { background: var(--trace-canvas); color: var(--trace-muted); font-size: 9px; left: 50%; padding: 0 4px; position: absolute; top: -11px; transform: translateX(-50%); white-space: nowrap; }
 
 .run-trace__inspector { border-left: 1px solid var(--trace-line); min-width: 0; padding: 18px 16px; }
 .run-trace__inspector h3 { font-size: 12px; margin: 0 0 12px; }

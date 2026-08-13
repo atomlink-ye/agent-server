@@ -28,7 +28,7 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
       <button aria-selected={view === 'timeline'} className="run-trace__tab" onClick={() => setView('timeline')} role="tab" type="button">Timeline</button>
       <button aria-selected={view === 'events'} className="run-trace__tab" onClick={() => setView('events')} role="tab" type="button">Events</button>
     </div>
-    {view === 'timeline' ? <div className="run-trace__body"><div className="run-trace__canvas"><div className="run-trace__timeline" data-testid="trace-timeline"><TimeAxis range={capturedRange} /><div className="run-trace__lanes">{actorRows.map((actor) => <div className="run-trace__actor" key={actor.key}><div className="run-trace__lane-name">{actor.name}</div><div className="run-trace__actor-rows">{actor.items.map((workItem) => <div className="run-trace__item-row" key={workItem.id}><div className="run-trace__item-name">{workItem.subject}</div><div className="run-trace__track">{workItem.attempts.map((attempt) => <AttemptSpan attempt={attempt} geometry={geometry.get(attempt.id)} key={attempt.id} selected={selectedAttemptKey === attempt.id} onSelect={setSelectedAttemptKey} subject={workItem.subject} />)}{feedback.filter((edge) => edge.work_item_id === workItem.id).map((edge) => <FeedbackRelation edge={edge} attempts={workItem.attempts} geometry={geometry} key={`${edge.attempt_id}-${edge.source_created_at}`} />)}</div></div>)}</div></div>)}</div></div></div><Inspector selectedAttempt={selectedAttempt} trace={trace} /></div> : <Events trace={trace} />}
+    {view === 'timeline' ? <div className="run-trace__body"><div className="run-trace__canvas"><div className="run-trace__timeline" data-testid="trace-timeline"><TimeAxis range={capturedRange} /><div className="run-trace__lanes">{actorRows.map((actor) => <div className="run-trace__actor" key={actor.key}><div className="run-trace__lane-name">{actor.name}</div><div className="run-trace__actor-rows">{actor.items.map((workItem) => <div className="run-trace__item-row" key={workItem.id}><div className="run-trace__item-name">{workItem.subject}</div><div className="run-trace__track">{workItem.attempts.map((attempt) => <AttemptSpan attempt={attempt} geometry={geometry.get(attempt.id)} key={attempt.id} selected={selectedAttemptKey === attempt.id} onSelect={setSelectedAttemptKey} subject={workItem.subject} />)}{feedback.filter((edge) => edge.work_item_id === workItem.id).map((edge) => <FeedbackRelation edge={edge} geometry={geometry} key={`${edge.attempt_id}-${edge.source_created_at}`} />)}</div></div>)}</div></div>)}</div></div></div><Inspector selectedAttempt={selectedAttempt} trace={trace} /></div> : <Events trace={trace} />}
     <aside className="run-trace__coverage" data-testid="trace-coverage-disclosure"><strong>MCP-only coverage.</strong> {humanize(trace.timeline_coverage.scope)}; other execution sources are not represented in this recording.</aside>
   </section>;
 }
@@ -38,12 +38,10 @@ function TimeAxis({ range }: { readonly range: ReturnType<typeof capturedTimelin
   return <div className="run-trace__axis" aria-label="Recorded time axis">{ticks.map((tick) => <span key={tick.position} style={{ '--tick-position': `${tick.position}%` } as CSSProperties}>{tick.label}</span>)}</div>;
 }
 
-function FeedbackRelation({ edge, attempts, geometry }: { readonly edge: Extract<Trace['edges'][number], { kind: 'feedback' }>; readonly attempts: readonly Attempt[]; readonly geometry: ReadonlyMap<string, Geometry> }) {
+function FeedbackRelation({ edge, geometry }: { readonly edge: Extract<Trace['edges'][number], { kind: 'feedback' }>; readonly geometry: ReadonlyMap<string, Geometry> }) {
   const source = geometry.get(edge.attempt_id);
-  const related = attempts.filter((attempt) => attempt.id !== edge.attempt_id && attempt.attempt_no > (attempts.find((candidate) => candidate.id === edge.attempt_id)?.attempt_no ?? 0)).sort((left, right) => left.attempt_no - right.attempt_no)[0];
-  const target = related ? geometry.get(related.id) : undefined;
-  if (!source || !target) return <span aria-label="Recorded feedback relation" className="run-trace__feedback-marker" />;
-  return <span aria-label="Recorded feedback relation" className="run-trace__feedback-line" style={{ '--feedback-left': `${source.left + source.width}%`, '--feedback-width': `${Math.max(3, target.left - source.left - source.width)}%` } as CSSProperties}><span>Recorded feedback relation</span></span>;
+  if (!source) return null;
+  return <span aria-label="Recorded feedback relation" className="run-trace__feedback-marker" style={{ '--feedback-left': `${source.left + source.width / 2}%` } as CSSProperties}><span>Recorded feedback relation</span></span>;
 }
 
 function AttemptSpan({ attempt, geometry, selected, onSelect, subject }: { readonly attempt: Attempt; readonly geometry: Geometry | undefined; readonly selected: boolean; readonly onSelect: (id: string) => void; readonly subject: string }) {

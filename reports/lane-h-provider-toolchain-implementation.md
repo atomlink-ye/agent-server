@@ -67,31 +67,41 @@ provider config checker correctly rejected TypeScript mutation
 ### 2. 三个 provider 均由 Paseo 创建 session
 
 同一 release 的真实路径是 `openProject → listProviderModels → createAgent →
-sendAgentMessage → waitForFinish → fetchAgentTimeline`，不是 `--version`。OpenCode 完整通过；
-新 Cube 没有 `OPENCODE_GO_API_KEY`、`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`CODEX_API_KEY`，
-也没有 Claude/Codex 登录文件，因此后两条能创建 agent、发送 turn，但无法完成精确回复。这项
-验收据实标为 **部分通过 / 外部凭据阻塞**，不伪造全绿：
+sendAgentMessage → waitForFinish → fetchAgentTimeline`，不是 `--version`。OpenCode、Claude、
+Codex 三条均完整通过。Claude/Codex 使用 OpenCode Go 官方网关和
+`deepseek-v4-flash`：Anthropic base URL 为 `https://opencode.ai/zen/go`（SDK 自行拼
+`/v1/messages`），Codex base URL 为 `https://opencode.ai/zen/go/v1` 且
+`wire_api="responses"`。Claude 的六个模型入口全部由 env 覆写；凭据没有写入 settings、命令行、
+日志、workspace、归档或 git。
+
+Claude Code 拒绝 root 下的 `bypassPermissions`，最终正例以应用容器相同的 uid 1000 运行；
+这不是放宽模式，而是恢复真实运行身份。正向判据除精确回复和 timeline marker 外，还强制
+`inputTokens > 0 && outputTokens > 0`，因此“没有报认证错误但实际未调用模型”不能假绿：
 
 ```text
 $ ./scripts/dev/provider-session-probe.mjs opencode
 rc=0
 {"outcome":"PASS","provider":"opencode","model":"opencode/laguna-s-2.1-free",...,"status":"idle","exactReply":true,"timelineMarker":true}
 
-$ ./scripts/dev/provider-session-probe.mjs claude
-rc=1
-Error: provider_session_turn_failed: claude
+$ PROVIDER_SESSION_MODEL=deepseek-v4-flash ./scripts/dev/provider-session-probe.mjs claude
+rc=0
+{"outcome":"PASS","provider":"claude","model":"deepseek-v4-flash",...,"status":"idle","exactReply":true,"timelineMarker":true,"positiveUsage":true,"usage":{"inputTokens":26658,"outputTokens":86}}
 
-$ ./scripts/dev/provider-session-probe.mjs codex
-rc=1
-Error: provider_session_turn_failed: codex
+$ PROVIDER_SESSION_MODEL=deepseek-v4-flash ./scripts/dev/provider-session-probe.mjs codex
+rc=0
+{"outcome":"PASS","provider":"codex","model":"deepseek-v4-flash",...,"status":"idle","exactReply":true,"timelineMarker":true,"positiveUsage":true,"usage":{"inputTokens":10506,"outputTokens":47}}
 
 $ OPENCODE_BIN=/tmp/missing-opencode PROVIDER_SESSION_MUTATION=provider-binary-missing ./scripts/dev/provider-session-probe.mjs opencode
 rc=1
 Error: provider_environment_invalid: opencode not found in PATH
 ```
 
-归档内原始目录分别是 `lane-h3-provider-acceptance-final/26-provider-session-opencode`、
-`lane-h3-provider-session-attempts/{claude,codex}` 和 `lane-h3-provider-session-mutation`。
+补充凭据轮原始证据在
+`tasks/archive/agent-server-implementation-20260722/lane-h/cube-provider-credentials/lane-h-provider-credential-evidence-20260813.tar.gz`，
+SHA-256 `668d28d319b6cb45ffbd3065847df84933c7b7ca8732bdfd06f75a310af28e12`。
+`environment-verification.txt` 只记录权限、字节数和 SHA-256 前缀；归档、runtime 和 workspace
+按真实 key 扫描的命中文件数均为 0。原 OpenCode 正例仍在主验收归档的
+`lane-h3-provider-acceptance-final/26-provider-session-opencode`。
 
 ### 3. OpenCode 只走 PATH
 

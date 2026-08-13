@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
-import { access, mkdir } from 'node:fs/promises';
+import { access, chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,6 +13,7 @@ import {
 const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const provider = process.argv[2]?.trim();
 if (!provider) throw new Error('usage: provider-session-probe.mjs <provider>');
+const requestedModel = process.env.PROVIDER_SESSION_MODEL?.trim() || null;
 
 let clientModule;
 try {
@@ -80,6 +81,26 @@ let client;
 
 try {
   await mkdir(projectRoot, { recursive: true });
+  if (provider === 'codex') {
+    const codexHome = join(runRoot, 'home', '.codex');
+    const codexConfig = join(codexHome, 'config.toml');
+    await mkdir(codexHome, { recursive: true, mode: 0o700 });
+    await writeFile(
+      codexConfig,
+      [
+        'model_provider = "opencode-go"',
+        '',
+        '[model_providers.opencode-go]',
+        'name = "OpenCode Go"',
+        'base_url = "https://opencode.ai/zen/go/v1"',
+        'env_key = "OPENCODE_GO_API_KEY"',
+        'wire_api = "responses"',
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+    await chmod(codexConfig, 0o600);
+  }
   paseo = await startPaseo({
     repositoryRoot,
     runtimeRoot: runRoot,
@@ -98,7 +119,14 @@ try {
   const workspace = await client.openProject(projectRoot);
   if (!workspace.workspace?.id) throw new Error('provider_session_workspace_unavailable');
   const models = await client.listProviderModels(provider, { cwd: projectRoot });
-  const model = models.models?.find((candidate) => candidate?.id)?.id;
+  const catalogModel = models.models?.find((candidate) => candidate?.id)?.id;
+  if (!catalogModel)
+    throw new Error(`provider_session_model_catalog_unavailable: ${provider}`);
+  // Claude's catalog retains Claude-shaped display IDs even when its complete
+  // env override redirects every model tier to an OpenCode Go model. An
+  // explicit acceptance model is therefore authoritative after the real
+  // provider catalog call has proved readiness.
+  const model = requestedModel ?? catalogModel;
   if (!model) throw new Error(`provider_session_model_unavailable: ${provider}`);
   const agent = await client.createAgent({
     provider,
@@ -126,15 +154,36 @@ try {
     projection: 'projected',
   });
   const reply = finished.lastMessage?.trim() ?? '';
+  const rawUsage = finished.final?.lastUsage ?? finished.usage ?? null;
+  const usage = {
+    inputTokens:
+      typeof rawUsage?.inputTokens === 'number' &&
+      Number.isFinite(rawUsage.inputTokens)
+        ? rawUsage.inputTokens
+        : 0,
+    outputTokens:
+      typeof rawUsage?.outputTokens === 'number' &&
+      Number.isFinite(rawUsage.outputTokens)
+        ? rawUsage.outputTokens
+        : 0,
+  };
+  const positiveUsage = usage.inputTokens > 0 && usage.outputTokens > 0;
   const timelineMarker = (timeline.entries ?? []).some(
     (entry) =>
       entry.item?.type === 'assistant_message' &&
       entry.item.text?.trim() === marker,
   );
-  if (finished.status !== 'idle' || reply !== marker || !timelineMarker)
-    throw new Error(`provider_session_turn_failed: ${provider}`);
+  if (
+    finished.status !== 'idle' ||
+    reply !== marker ||
+    !timelineMarker ||
+    !positiveUsage
+  )
+    throw new Error(
+      `provider_session_turn_failed: ${provider} status=${finished.status} exactReply=${reply === marker} timelineMarker=${timelineMarker} inputTokens=${usage.inputTokens} outputTokens=${usage.outputTokens}`,
+    );
   process.stdout.write(
-    `${JSON.stringify({ outcome: 'PASS', provider, model, agentId: agent.id, workspaceId: workspace.workspace.id, status: finished.status, exactReply: true, timelineMarker: true })}\n`,
+    `${JSON.stringify({ outcome: 'PASS', provider, model, agentId: agent.id, workspaceId: workspace.workspace.id, status: finished.status, exactReply: true, timelineMarker: true, positiveUsage: true, usage })}\n`,
   );
 } finally {
   if (client) await client.close().catch(() => undefined);

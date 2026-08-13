@@ -7,6 +7,7 @@ import {
   createCommandRunner,
   secretValuesFromEnvironment,
 } from './lib/phase-c-command-capture.mjs';
+import { collectComposeFailureDiagnostics } from './lib/phase-c-compose-diagnostics.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -54,6 +55,30 @@ const run = createCommandRunner({
   transcriptSink: scannedTranscripts,
   artifactSink: capturedArtifactPaths,
 });
+
+function runCriticalCompose(
+  command,
+  args,
+  options,
+  composeCommand,
+  runProject,
+) {
+  try {
+    return run(command, args, options);
+  } catch (firstFailure) {
+    try {
+      collectComposeFailureDiagnostics({
+        run,
+        composeCommand,
+        project: runProject,
+        artifactRoot,
+      });
+    } catch {
+      // Diagnostic collection is secondary; preserve the original failure.
+    }
+    throw firstFailure;
+  }
+}
 
 function sanitizeService(name, service) {
   return {
@@ -228,7 +253,7 @@ try {
     .map(([name, service]) => sanitizeService(name, service))
     .sort((left, right) => left.name.localeCompare(right.name));
 
-  run(
+  runCriticalCompose(
     wrapper,
     [
       ...composeFiles,
@@ -244,6 +269,8 @@ try {
       'agent-server',
     ],
     { identity: 'compose-up-build-wait' },
+    rawCompose,
+    project,
   );
   const runtimeRecord = {
     schema: 'agent-server.foundation.phase-c-runtime-record',
@@ -301,7 +328,7 @@ try {
         },
       ).stdout,
     );
-    run(
+    runCriticalCompose(
       wrapper,
       [
         ...mutationFiles,
@@ -316,6 +343,8 @@ try {
         'agent-server',
       ],
       { identity: 'mutation-compose-up-wait' },
+      mutationCompose,
+      mutationProject,
     );
     mutationRecordPath = resolve(artifactRoot, 'e4-mutation-record.json');
     mutationRecord = {

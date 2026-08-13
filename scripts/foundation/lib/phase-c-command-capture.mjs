@@ -85,9 +85,12 @@ export function createCommandRunner({
     let sanitizedStdout;
     let sanitizedStderr;
     try {
-      sanitizedStdout = captureStdout
-        ? redact(value.stdout)
-        : '[OMITTED: effective Compose configuration is never persisted]\n';
+      sanitizedStdout =
+        typeof captureStdout === 'function'
+          ? redact(captureStdout(value.stdout ?? ''))
+          : captureStdout
+            ? redact(value.stdout)
+            : '[OMITTED: effective Compose configuration is never persisted]\n';
       sanitizedStderr = redact(value.stderr);
       writeFileSync(stdoutPath, sanitizedStdout, { mode: 0o600 });
       writeFileSync(stderrPath, sanitizedStderr, { mode: 0o600 });

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { createCommandRunner } from './lib/phase-c-command-capture.mjs';
+import { safeContainerStateProjection } from './lib/phase-c-compose-diagnostics.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const artifactRoot = mkdtempSync(join(tmpdir(), 'phase-c-command-capture-'));
@@ -72,6 +73,39 @@ try {
   );
   if (omitted.includes('services') || omitted.includes(secret))
     throw new Error('forbidden effective config was persisted');
+  const inspectFixture = JSON.stringify([
+    {
+      Name: '/fixture',
+      Config: { Labels: { 'com.docker.compose.service': 'paseo-runtime' } },
+      State: {
+        Status: 'exited',
+        ExitCode: 1,
+        Error: `token=${secret}`,
+        Health: {
+          Status: 'unhealthy',
+          Log: [{ Output: `Bearer ${secret}`, ExitCode: 1 }],
+        },
+      },
+    },
+  ]);
+  run(
+    process.execPath,
+    ['-e', `process.stdout.write(${JSON.stringify(inspectFixture)})`],
+    {
+      identity: 'fixture-inspect-projection',
+      captureStdout: (stdout) =>
+        JSON.stringify(safeContainerStateProjection(JSON.parse(stdout)[0])),
+    },
+  );
+  const projected = readFileSync(
+    join(
+      artifactRoot,
+      'command-logs/003-fixture-inspect-projection.stdout.log',
+    ),
+    'utf8',
+  );
+  if (projected.includes(secret) || !projected.includes('[REDACTED]'))
+    throw new Error('projected inspect output was not redacted');
   try {
     run(process.execPath, ['-e', 'process.exit(19)'], {
       identity: 'fixture-cleanup-failure',
@@ -85,7 +119,7 @@ try {
   if (preserved.raw_exit !== 17)
     throw new Error('later failure overwrote the first failure record');
   process.stdout.write(
-    `${JSON.stringify({ status: 'PASS', raw_exit: record.raw_exit, streams_split: true, stderr_tail_bounded: true, secret_redacted: true, modes_0600: true, effective_config_omitted: true, first_failure_preserved: true })}\n`,
+    `${JSON.stringify({ status: 'PASS', raw_exit: record.raw_exit, streams_split: true, stderr_tail_bounded: true, secret_redacted: true, projected_inspect_redacted: true, modes_0600: true, effective_config_omitted: true, first_failure_preserved: true })}\n`,
   );
 } finally {
   rmSync(artifactRoot, { recursive: true, force: true });

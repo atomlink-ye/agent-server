@@ -1,9 +1,12 @@
-import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { arch } from 'node:os';
 
 import { deriveComposeVolumeEnvironment } from '../dev/compose-volume-environment.mjs';
+import {
+  createCommandRunner,
+  secretValuesFromEnvironment,
+} from './lib/phase-c-command-capture.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -26,6 +29,7 @@ const composeFiles = [
 const wrapper = resolve(ROOT, 'scripts/dev/docker-compose');
 const rawCompose = ['compose', '-p', project, ...composeFiles];
 const scannedTranscripts = [];
+const capturedArtifactPaths = [];
 const composeEnvironment = {
   ...process.env,
   ...(await deriveComposeVolumeEnvironment({
@@ -38,21 +42,18 @@ const composeEnvironment = {
 const candidateSha = process.env.FOUNDATION_CANDIDATE_SHA?.trim() ?? '';
 if (!/^[0-9a-f]{40}$/u.test(candidateSha))
   throw new Error('FOUNDATION_CANDIDATE_SHA must be an exact 40-hex Git SHA');
-
-function run(command, args, { allow = [0], env = composeEnvironment } = {}) {
-  const value = spawnSync(command, args, {
-    cwd: ROOT,
-    env,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (!allow.includes(value.status))
-    throw new Error(
-      `child_command_failed:status=${value.status ?? 'spawn_error'}`,
-    );
-  scannedTranscripts.push(value.stdout, value.stderr);
-  return value;
-}
+const run = createCommandRunner({
+  root: ROOT,
+  artifactRoot,
+  defaultEnvironment: composeEnvironment,
+  secretValues: [
+    ...secretValuesFromEnvironment(composeEnvironment),
+    'token-local-dev',
+    'token-local-dev-2',
+  ],
+  transcriptSink: scannedTranscripts,
+  artifactSink: capturedArtifactPaths,
+});
 
 function sanitizeService(name, service) {
   return {
@@ -218,6 +219,8 @@ try {
           ...composeEnvironment,
           OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
         },
+        identity: 'compose-effective-config',
+        captureStdout: false,
       },
     ).stdout,
   );
@@ -225,19 +228,23 @@ try {
     .map(([name, service]) => sanitizeService(name, service))
     .sort((left, right) => left.name.localeCompare(right.name));
 
-  run(wrapper, [
-    ...composeFiles,
-    '-p',
-    project,
-    'up',
-    '--build',
-    '-d',
-    '--wait',
-    'postgres',
-    'provider-toolchain-init',
-    'paseo-runtime',
-    'agent-server',
-  ]);
+  run(
+    wrapper,
+    [
+      ...composeFiles,
+      '-p',
+      project,
+      'up',
+      '--build',
+      '-d',
+      '--wait',
+      'postgres',
+      'provider-toolchain-init',
+      'paseo-runtime',
+      'agent-server',
+    ],
+    { identity: 'compose-up-build-wait' },
+  );
   const runtimeRecord = {
     schema: 'agent-server.foundation.phase-c-runtime-record',
     version: 1,
@@ -289,21 +296,27 @@ try {
             ...composeEnvironment,
             OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
           },
+          identity: 'mutation-compose-effective-config',
+          captureStdout: false,
         },
       ).stdout,
     );
-    run(wrapper, [
-      ...mutationFiles,
-      '-p',
-      mutationProject,
-      'up',
-      '-d',
-      '--wait',
-      'postgres',
-      'provider-toolchain-init',
-      'paseo-runtime',
-      'agent-server',
-    ]);
+    run(
+      wrapper,
+      [
+        ...mutationFiles,
+        '-p',
+        mutationProject,
+        'up',
+        '-d',
+        '--wait',
+        'postgres',
+        'provider-toolchain-init',
+        'paseo-runtime',
+        'agent-server',
+      ],
+      { identity: 'mutation-compose-up-wait' },
+    );
     mutationRecordPath = resolve(artifactRoot, 'e4-mutation-record.json');
     mutationRecord = {
       schema: 'agent-server.foundation.phase-c-runtime-record',
@@ -425,13 +438,18 @@ try {
   const negative = run(
     process.execPath,
     ['scripts/foundation/phase-c-real-run.mjs', '--negative-control'],
-    { allow: [1], env: runEnvironment },
+    {
+      allow: [1],
+      env: runEnvironment,
+      identity: 'product-negative-control',
+    },
   );
   const negativeResult = JSON.parse(negative.stdout.trim().split('\n').at(-1));
   if (negative.status !== 1 || negativeResult.status !== 'FAIL')
     throw new Error('negative_control_not_red');
   run(process.execPath, ['scripts/foundation/phase-c-real-run.mjs'], {
     env: runEnvironment,
+    identity: 'product-positive-run',
   });
   const proof = JSON.parse(readFileSync(proofPath, 'utf8'));
   proof.negative_control = {
@@ -457,7 +475,12 @@ try {
   proof.e4_mutation = { ...mutation, cleanup: mutationCleanup };
   proof.accepted_e4_projection = runtimeRecord.effective_compose;
   proof.cleanup = cleanup();
-  const serialized = [runtimePath, mutationRecordPath, proofPath]
+  const serialized = [
+    runtimePath,
+    mutationRecordPath,
+    proofPath,
+    ...capturedArtifactPaths,
+  ]
     .map((path) =>
       path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8'),
     )

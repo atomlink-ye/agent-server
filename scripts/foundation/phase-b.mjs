@@ -70,13 +70,14 @@ function valueAfter(flag) {
 
 function validateCandidateSha(value) {
   if (!value || !/^[0-9a-f]{40}$/u.test(value)) return null;
+  const detachedE1 = single && selected.length === 1 && selected[0] === 'E1';
   try {
     const resolved = git(['rev-parse', '--verify', `${value}^{commit}`]);
     const head = git(['rev-parse', 'HEAD']);
-    if (resolved !== value || head !== value) return null;
+    if (resolved !== value || (!detachedE1 && head !== value)) return null;
     return resolved;
   } catch {
-    return null;
+    return detachedE1 ? value : null;
   }
 }
 
@@ -85,12 +86,6 @@ async function runSuite(suite, commit) {
     return status(2, 'candidate SHA must be the 40-hex clean HEAD commit', {
       suite,
     });
-  if (suite === 'E1')
-    return status(
-      2,
-      'E1 Docker acceptance is deferred to the acceptance runner',
-      { suite },
-    );
   const positiveRoot = await materialize(commit);
   try {
     const positive = await invokeUnchangedEvaluator(
@@ -105,7 +100,9 @@ async function runSuite(suite, commit) {
         ? ['add-setup', 'restore-compose-and-check']
         : suite === 'E3'
           ? ['remove-e2e-include', 'bad-baseline-spec']
-          : ['restore', 'generated-consumer'];
+          : suite === 'E1'
+            ? ['restore-provider']
+            : ['restore', 'generated-consumer'];
     const mutations = [];
     for (const mutation of mutationNames) {
       const mutated = await createMutation(suite, commit, mutation);
@@ -132,7 +129,7 @@ async function runSuite(suite, commit) {
       positiveRoot,
       commit,
     );
-    const expected = suite === 'E3' ? [1, 2] : suite === 'E8' ? [1, 2] : [1, 1];
+    const expected = suite === 'E3' ? [1, 2] : suite === 'E8' ? [1, 2] : [1];
     const mutationOk = mutations.every(
       (item, index) => item.code === expected[index],
     );
@@ -181,7 +178,10 @@ async function invokeUnchangedEvaluator(
   const result = spawnSync(argv[0], argv.slice(1), {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, FOUNDATION_CHILD: '1' },
+    env:
+      suite === 'E1'
+        ? e1ChildEnvironment(candidateRoot)
+        : { ...process.env, FOUNDATION_CHILD: '1' },
   });
   const raw = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   let parsed;
@@ -212,12 +212,7 @@ async function invokeUnchangedEvaluator(
 
 async function evaluateSuite(suite, candidateRoot, candidateCommit) {
   try {
-    if (suite === 'E1')
-      return status(
-        2,
-        'E1 Docker acceptance is deferred to the acceptance runner',
-        { suite },
-      );
+    if (suite === 'E1') return await evaluateE1(candidateRoot);
     if (suite === 'E2') return await evaluateE2(candidateRoot);
     if (suite === 'E3') return await evaluateE3(candidateRoot);
     return await evaluateE8(candidateCommit, candidateRoot);
@@ -227,6 +222,303 @@ async function evaluateSuite(suite, candidateRoot, candidateCommit) {
       `evaluator unavailable: ${error instanceof Error ? error.message : String(error)}`,
       { suite },
     );
+  }
+}
+
+function e1ChildEnvironment(candidateRoot) {
+  const environment = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (
+      /^(?:PASEO_|PROVIDER_|OPENCODE_|ANTHROPIC_|REAL_PROVIDER_DEFAULTS_FILE$)/u.test(
+        name,
+      )
+    )
+      continue;
+    if (/^(?:PROVIDER|OPENCODE|PASEO|REAL_PROVIDER)/u.test(name)) continue;
+    environment[name] = value;
+  }
+  environment.FOUNDATION_CHILD = '1';
+  environment.REAL_PROVIDER_DEFAULTS_FILE = join(
+    candidateRoot,
+    '.foundation-no-provider-defaults',
+  );
+  return environment;
+}
+
+function e1Identity(candidateRoot) {
+  const sha = candidateSha ?? 'missing';
+  const abi = String(process.versions.modules).replace(/[^A-Za-z0-9-]/gu, '-');
+  const short = sha.slice(0, 12).replace(/[^a-z0-9-]/gu, 'x');
+  const suffix = String(process.pid).replace(/[^0-9]/gu, '0');
+  return {
+    abi,
+    project: `foundation-e1-${short}-${suffix}`.slice(0, 63),
+    nodeVolume: `foundation-e1-${short}-${abi}-${suffix}-node`,
+    webVolume: `foundation-e1-${short}-${abi}-${suffix}-web`,
+    providerVolume: `foundation-e1-${short}-${abi}-${suffix}-provider`,
+    candidateRoot,
+  };
+}
+
+function e1Compose(identity) {
+  return [
+    'docker',
+    'compose',
+    '--project-name',
+    identity.project,
+    '--project-directory',
+    identity.candidateRoot,
+    '-f',
+    'compose.yaml',
+  ];
+}
+
+function e1Command(argv, cwd, environment) {
+  const child = spawnSync(argv[0], argv.slice(1), {
+    cwd,
+    env: environment,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return {
+    argv,
+    exit: child.status ?? 2,
+    raw: `${child.stdout ?? ''}${child.stderr ?? ''}`,
+  };
+}
+
+function e1NoSecretFacts(command) {
+  return { argv: command.argv, exit: command.exit };
+}
+
+function e1VolumePresent(name, environment) {
+  return (
+    e1Command(['docker', 'volume', 'inspect', name], root, environment).exit ===
+    0
+  );
+}
+
+async function evaluateE1(candidateRoot) {
+  const identity = e1Identity(candidateRoot);
+  const environment = e1ChildEnvironment(candidateRoot);
+  environment.NODE_MODULES_VOLUME = identity.nodeVolume;
+  environment.WEB_NODE_MODULES_VOLUME = identity.webVolume;
+  environment.NODE_MODULES_EXTERNAL = 'true';
+  environment.WEB_NODE_MODULES_EXTERNAL = 'true';
+  environment.COMPOSE_PROJECT_NAME = identity.project;
+  const compose = e1Compose(identity);
+  const composeFile = await readFile(
+    join(candidateRoot, 'compose.yaml'),
+    'utf8',
+  );
+  const mutationFindings = [];
+  if (
+    /provider-toolchain-init|provider-toolchain:|PASEO_PROVIDER|PASEO_MODEL|\/opt\/provider-toolchain-volume/u.test(
+      composeFile,
+    )
+  ) {
+    mutationFindings.push('provider declaration/mount in base compose');
+  }
+  if (mutationFindings.length) {
+    return status(
+      1,
+      'provider declaration or mount is present in base composition',
+      {
+        suite: 'E1',
+        path: mutationFindings,
+        project: identity.project,
+      },
+    );
+  }
+  const commands = [];
+  const cleanupFacts = {
+    project: identity.project,
+    providerVolume: identity.providerVolume,
+  };
+  let cleanupInstalled = false;
+  const cleanup = () => {
+    const down = e1Command(
+      [...compose, 'down', '--remove-orphans', '--volumes'],
+      candidateRoot,
+      environment,
+    );
+    const removed = [];
+    for (const volume of [
+      identity.nodeVolume,
+      identity.webVolume,
+      identity.providerVolume,
+    ]) {
+      const result = e1Command(
+        ['docker', 'volume', 'rm', '-f', volume],
+        root,
+        environment,
+      );
+      removed.push({ volume, exit: result.exit });
+    }
+    cleanupFacts.down = e1NoSecretFacts(down);
+    cleanupFacts.removed = removed;
+    const projectResources = e1Command(
+      [...compose, 'ps', '-aq'],
+      candidateRoot,
+      environment,
+    );
+    cleanupFacts.projectResources = e1NoSecretFacts(projectResources);
+    cleanupFacts.projectResourcesEmpty = !/[0-9a-f]{12,64}/u.test(
+      projectResources.raw,
+    );
+    cleanupFacts.providerPresentAtEnd = e1VolumePresent(
+      identity.providerVolume,
+      environment,
+    );
+  };
+  try {
+    cleanupInstalled = true;
+    cleanupFacts.providerPresentBeforeCleanup = e1VolumePresent(
+      identity.providerVolume,
+      environment,
+    );
+    const precleanup = e1Command(
+      [...compose, 'down', '--remove-orphans', '--volumes'],
+      candidateRoot,
+      environment,
+    );
+    cleanupFacts.precleanup = e1NoSecretFacts(precleanup);
+    cleanupFacts.providerPresentAtStart =
+      cleanupFacts.providerPresentBeforeCleanup;
+    cleanupFacts.providerPresentAfterPrecleanup = e1VolumePresent(
+      identity.providerVolume,
+      environment,
+    );
+    if (
+      cleanupFacts.providerPresentAtStart ||
+      cleanupFacts.providerPresentAfterPrecleanup
+    )
+      return status(2, 'provider sentinel volume exists before acceptance', {
+        suite: 'E1',
+        cleanupFacts,
+      });
+
+    const config = e1Command(
+      [...compose, 'config', '--format', 'json'],
+      candidateRoot,
+      environment,
+    );
+    commands.push(e1NoSecretFacts(config));
+    if (config.exit !== 0)
+      return status(2, 'base compose config failed with provider unset', {
+        suite: 'E1',
+        commands,
+        cleanupFacts,
+      });
+    let parsed;
+    try {
+      parsed = JSON.parse(config.raw);
+    } catch {
+      return status(2, 'compose config was not JSON', {
+        suite: 'E1',
+        commands,
+        cleanupFacts,
+      });
+    }
+    const services =
+      parsed?.services && typeof parsed.services === 'object'
+        ? parsed.services
+        : {};
+    const serviceNames = Object.keys(services);
+    if (
+      !serviceNames.length ||
+      serviceNames.some((name) => /provider/u.test(name))
+    )
+      return status(1, 'provider service present in base compose config', {
+        suite: 'E1',
+        services: serviceNames,
+        cleanupFacts,
+      });
+    const runner = services.runner;
+    const mounts = Array.isArray(runner?.volumes) ? runner.volumes : [];
+    if (
+      !mounts.length ||
+      mounts.some((mount) =>
+        /provider|\/opt\/provider/u.test(JSON.stringify(mount)),
+      )
+    )
+      return status(1, 'runner config mounts are empty or provider-backed', {
+        suite: 'E1',
+        mounts: mounts.length,
+        cleanupFacts,
+      });
+
+    for (const target of ['test-unit', 'check-fast']) {
+      const result = e1Command(['make', target], candidateRoot, environment);
+      commands.push(e1NoSecretFacts(result));
+      if (result.exit !== 0)
+        return status(2, `make ${target} failed in provider-free harness`, {
+          suite: 'E1',
+          commands,
+          cleanupFacts,
+        });
+    }
+    const created = e1Command(
+      [...compose, 'create', '--no-build', 'runner'],
+      candidateRoot,
+      environment,
+    );
+    commands.push(e1NoSecretFacts(created));
+    if (created.exit !== 0)
+      return status(2, 'raw compose runner creation failed', {
+        suite: 'E1',
+        commands,
+        cleanupFacts,
+      });
+    const ids = e1Command(
+      [...compose, 'ps', '-aq', 'runner'],
+      candidateRoot,
+      environment,
+    );
+    commands.push(e1NoSecretFacts(ids));
+    const containers = ids.raw
+      .split(/\s+/u)
+      .filter((value) => /^[0-9a-f]{12,64}$/u.test(value));
+    if (containers.length !== 1)
+      return status(2, 'runner container resolution was not unique', {
+        suite: 'E1',
+        commands,
+        cleanupFacts,
+      });
+    const inspected = e1Command(
+      ['docker', 'inspect', '--format', '{{json .Mounts}}', containers[0]],
+      root,
+      environment,
+    );
+    commands.push(e1NoSecretFacts(inspected));
+    let runnerMounts;
+    try {
+      runnerMounts = JSON.parse(inspected.raw);
+    } catch {
+      runnerMounts = null;
+    }
+    if (
+      !Array.isArray(runnerMounts) ||
+      !runnerMounts.length ||
+      runnerMounts.some((mount) =>
+        /provider|\/opt\/provider/u.test(JSON.stringify(mount)),
+      )
+    )
+      return status(1, 'created runner has an empty or provider mount table', {
+        suite: 'E1',
+        mountCount: Array.isArray(runnerMounts) ? runnerMounts.length : 0,
+        cleanupFacts,
+      });
+    return status(0, 'provider-free Docker acceptance passed', {
+      suite: 'E1',
+      project: identity.project,
+      abi: identity.abi,
+      commands,
+      cleanupFacts,
+      startProviderAbsent: !cleanupFacts.providerPresentAtStart,
+    });
+  } finally {
+    if (cleanupInstalled) cleanup();
   }
 }
 
@@ -849,6 +1141,8 @@ async function createMutation(suite, commit, mutation) {
       join(directory, 'baseline-source-spec.json'),
       JSON.stringify({ source: 'current-tree', revision: 'generated' }),
     );
+  } else if (suite === 'E1' && mutation === 'restore-provider') {
+    await restoreE1ProviderDeclaration(directory, commit);
   } else if (suite === 'E8') {
     return createGitMutation(commit, mutation, directory);
   }
@@ -858,6 +1152,27 @@ async function createMutation(suite, commit, mutation) {
     cleanup: directory,
     digest: await treeDigest(directory),
   };
+}
+
+async function restoreE1ProviderDeclaration(directory, commit) {
+  const path = join(directory, 'compose.yaml');
+  const original = await readFile(path, 'utf8');
+  const sentinel = `foundation-e1-${commit.slice(0, 12)}-provider`;
+  const runnerMarker = '      - .:/workspace\n';
+  if (!original.includes(runnerMarker))
+    throw new Error('runner bind mount marker missing');
+  const runnerMount = `${runnerMarker}      - ${sentinel}:/opt/provider-toolchain-volume:ro\n`;
+  const service = `\n  foundation-e1-provider:\n    image: busybox:1.36\n    command: ['sleep', '30']\n    volumes:\n      - ${sentinel}:/opt/provider-toolchain-volume\n`;
+  const volumeMarker = '\nvolumes:\n';
+  if (!original.includes(volumeMarker))
+    throw new Error('top-level volume marker missing');
+  const declaration = `${volumeMarker}  ${sentinel}:\n    name: ${sentinel}\n`;
+  const withRunner = original.replace(runnerMarker, runnerMount);
+  const withService = withRunner.replace(
+    volumeMarker,
+    `${service}${volumeMarker}`,
+  );
+  await writeFile(path, withService + declaration);
 }
 
 async function createGitMutation(commit, mutation, directory) {

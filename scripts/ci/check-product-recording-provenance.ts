@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -15,6 +15,8 @@ const PASS = 0;
 const FAIL = 1;
 const MISSING = 2;
 const WREC_DIRECTORY = 'wrec-third-oi38-20260813';
+const WREC_WORK_ID = '315df1a1-2a2f-4e10-a8ba-9f310bc42aed';
+const WREC_WORK_RUN_ID = 'cdeecf2b-b8c8-4929-ae48-8522768605af';
 const OH2_DECISION =
   '/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/DECISIONS-2026-08-13-owner-handover.md#O-H2';
 
@@ -30,10 +32,6 @@ const legacyRoot = resolve(
 const legacySourceRoot = resolve(
   repoRoot,
   '../../../../tasks/active/agent-server-implementation-20260722/rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/recordings',
-);
-const wrecSourceRoot = resolve(
-  repoRoot,
-  '../../../../tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-third-recording/recording-artifacts/wrec-third/oi38-negative/20260813T213910949Z-c5f4a431-02ab-44e5-acd8-49d775db83ea',
 );
 
 const oldRecorders = [
@@ -106,14 +104,78 @@ type ProvenanceCheckResult = {
     readonly work: ParseStatus;
   };
   readonly inputsVerified: boolean;
-  readonly sourceStatus: Status;
-  readonly fixtureStatus: Status;
-  readonly boundaryStatus: Status;
-  readonly oi38Status: Status;
+  readonly sourceStatus?: Status;
+  readonly fixtureStatus?: Status;
+  readonly boundaryStatus?: Status;
+  readonly boundaryScanScope?: readonly string[];
+  readonly boundaryScanFileCount?: number;
+  readonly boundaryScanHits?: readonly string[];
+  readonly oi38Status?: Status;
+};
+
+type BoundaryScanResult = {
+  readonly status: Status;
+  readonly scope: readonly string[];
+  readonly fileCount: number;
+  readonly hits: readonly string[];
+};
+
+type CheckerOptions = {
+  readonly bundleRoot: string;
+  readonly sourceRoot: string;
 };
 
 function statusForCode(code: number): Status {
   return code === PASS ? 'PASS' : code === MISSING ? 'MISSING' : 'FAIL';
+}
+
+function usageError(message: string): never {
+  throw new Error(
+    `${message}; usage: check-product-recording-provenance.ts [--bundle-root <path>] [--source-root <path>]`,
+  );
+}
+
+function checkerOptions(): CheckerOptions {
+  let bundleRoot: string | undefined;
+  let sourceRoot: string | undefined;
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const argument = process.argv[index];
+    if (argument === '--bundle-root' || argument === '--source-root') {
+      const value = process.argv[index + 1];
+      if (!value || value.startsWith('--'))
+        usageError(`${argument} requires a non-option value`);
+      if (argument === '--bundle-root') {
+        if (bundleRoot !== undefined) usageError('duplicate --bundle-root');
+        bundleRoot = value;
+      } else {
+        if (sourceRoot !== undefined) usageError('duplicate --source-root');
+        sourceRoot = value;
+      }
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('--bundle-root=') || argument.startsWith('--source-root=')) {
+      const [name, value] = argument.split('=', 2);
+      if (!value || value.startsWith('--')) usageError(`${name} requires a non-option value`);
+      if (name === '--bundle-root') {
+        if (bundleRoot !== undefined) usageError('duplicate --bundle-root');
+        bundleRoot = value;
+      } else {
+        if (sourceRoot !== undefined) usageError('duplicate --source-root');
+        sourceRoot = value;
+      }
+      continue;
+    }
+    usageError(`unknown or malformed argument: ${argument}`);
+  }
+
+  const resolvedBundleRoot = resolve(
+    bundleRoot ?? process.env.PRODUCT_RECORDING_BUNDLE_ROOT ?? resolve(fixtureRoot, WREC_DIRECTORY),
+  );
+  const sourceOverride = sourceRoot ?? process.env.PRODUCT_RECORDING_SOURCE_ROOT;
+  if (!sourceOverride)
+    usageError('PRODUCT_RECORDING_SOURCE_ROOT or --source-root is required');
+  return { bundleRoot: resolvedBundleRoot, sourceRoot: resolve(sourceOverride) };
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -267,18 +329,61 @@ async function checkOi38Predicate(bundleRoot: string): Promise<Status> {
   }
 }
 
-async function checkProjectionBoundary(): Promise<Status> {
+const boundaryScanRoots = [
+  'apps/web/lib',
+  'apps/web/features/run-trace',
+  'apps/web/components/work',
+] as const;
+
+async function scanBoundaryFiles(root: string, prefix = ''): Promise<string[]> {
+  const entries = await readdir(resolve(root, prefix), { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const absolutePath = resolve(root, relativePath);
+    if (
+      entry.isDirectory() &&
+      absolutePath === resolve(fixtureRoot)
+    )
+      continue;
+    if (entry.isDirectory())
+      files.push(...(await scanBoundaryFiles(root, relativePath)));
+    else files.push(relativePath);
+  }
+  return files.sort();
+}
+
+async function checkProjectionBoundary(): Promise<BoundaryScanResult> {
   try {
-    const files = [
-      resolve(repoRoot, 'apps/web/lib/product-recording-projections.ts'),
-      resolve(repoRoot, 'apps/web/features/run-trace/frame-contract-map.md'),
-    ];
-    const contents = await Promise.all(files.map((file) => readFile(file, 'utf8')));
-    return contents.some((content) => content.includes(WREC_DIRECTORY))
-      ? 'FAIL'
-      : 'PASS';
+    const files = (
+      await Promise.all(
+        boundaryScanRoots.map(async (root) => {
+          const absoluteRoot = resolve(repoRoot, root);
+          const relativeFiles = await scanBoundaryFiles(absoluteRoot);
+          return relativeFiles.map((file) => join(root, file));
+        }),
+      )
+    ).flat();
+    const needles = [WREC_DIRECTORY, WREC_WORK_ID, WREC_WORK_RUN_ID];
+    const hits: string[] = [];
+    for (const file of files) {
+      const contents = await readFile(resolve(repoRoot, file), 'utf8');
+      for (const needle of needles)
+        if (contents.includes(needle)) hits.push(`${file}:${needle}`);
+    }
+    return {
+      status: files.length === 0 ? 'MISSING' : hits.length === 0 ? 'PASS' : 'FAIL',
+      scope: boundaryScanRoots,
+      fileCount: files.length,
+      hits,
+    };
   } catch {
-    return 'MISSING';
+    return {
+      status: 'MISSING',
+      scope: boundaryScanRoots,
+      fileCount: 0,
+      hits: [],
+    };
   }
 }
 
@@ -324,20 +429,7 @@ async function checkLegacyInputs(): Promise<boolean> {
 }
 
 async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResult> {
-  const bundleArgIndex = process.argv.findIndex(
-    (argument) => argument === '--bundle-root' || argument.startsWith('--bundle-root='),
-  );
-  const bundleArgument =
-    bundleArgIndex < 0
-      ? undefined
-      : process.argv[bundleArgIndex]!.startsWith('--bundle-root=')
-        ? process.argv[bundleArgIndex]!.slice('--bundle-root='.length)
-        : process.argv[bundleArgIndex + 1];
-  const bundleOverride =
-    bundleArgument ?? process.env.PRODUCT_RECORDING_BUNDLE_ROOT;
-  const bundleRoot = resolve(
-    bundleOverride ?? resolve(fixtureRoot, WREC_DIRECTORY),
-  );
+  const { bundleRoot, sourceRoot } = checkerOptions();
 
   // O-H14: parse the complete current schemas before any path/hash/count check.
   const tracePath = resolve(bundleRoot, 'api/trace.json');
@@ -355,23 +447,22 @@ async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResu
     workRun: workRun.status,
     work: work.status,
   };
-  const boundaryStatus = await checkProjectionBoundary();
-  const oi38Status = await checkOi38Predicate(bundleRoot);
-  const [sourceStatus, fixtureStatus] = await Promise.all([
-    verifyWrecTree(wrecSourceRoot, { allowChecksumFile: true }),
-    verifyWrecTree(bundleRoot),
-  ]);
-
-  if (Object.values(parse).some((status) => status !== 'PASS'))
+  if (Object.values(parse).some((status) => status !== 'PASS')) {
+    const code = Object.values(parse).includes('MISSING') ? MISSING : FAIL;
     return {
-      code: Object.values(parse).includes('MISSING') ? MISSING : FAIL,
+      code,
       parse,
       inputsVerified: false,
-      sourceStatus,
-      fixtureStatus,
-      boundaryStatus,
-      oi38Status,
     };
+  }
+
+  const boundary = await checkProjectionBoundary();
+  const boundaryStatus = boundary.status;
+  const oi38Status = await checkOi38Predicate(bundleRoot);
+  const [sourceStatus, fixtureStatus] = await Promise.all([
+    verifyWrecTree(sourceRoot, { allowChecksumFile: true }),
+    verifyWrecTree(bundleRoot),
+  ]);
 
   if (sourceStatus !== 'PASS' || fixtureStatus !== 'PASS') {
     const code =
@@ -383,6 +474,9 @@ async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResu
       sourceStatus,
       fixtureStatus,
       boundaryStatus,
+      boundaryScanScope: boundary.scope,
+      boundaryScanFileCount: boundary.fileCount,
+      boundaryScanHits: boundary.hits,
       oi38Status,
     };
   }
@@ -396,6 +490,9 @@ async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResu
         sourceStatus,
         fixtureStatus,
         boundaryStatus,
+        boundaryScanScope: boundary.scope,
+        boundaryScanFileCount: boundary.fileCount,
+        boundaryScanHits: boundary.hits,
         oi38Status,
       };
   } catch {
@@ -406,6 +503,9 @@ async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResu
       sourceStatus,
       fixtureStatus,
       boundaryStatus,
+      boundaryScanScope: boundary.scope,
+      boundaryScanFileCount: boundary.fileCount,
+      boundaryScanHits: boundary.hits,
       oi38Status,
     };
   }
@@ -433,23 +533,35 @@ export async function checkProductRecordingProvenance(): Promise<number> {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   evaluateProductRecordingProvenance()
     .then((result) => {
-      console.log('recorder_count=3');
-      console.log('negative_control_count=1');
-      console.log('old_oi38_summary_counted_as_recorder=false');
-      console.log(
-        `third_recorder_slot=${result.code === PASS ? 'PASS' : statusForCode(result.code)}`,
-      );
       console.log(`trace_parse_status=${result.parse.trace}`);
       console.log(`work_run_parse_status=${result.parse.workRun}`);
       console.log(`work_parse_status=${result.parse.work}`);
-      console.log(`wrec_schema_status=${Object.values(result.parse).every((status) => status === 'PASS') ? 'PASS' : 'FAIL'}`);
-      console.log(`wrec_source_verified=${result.sourceStatus === 'PASS'}`);
-      console.log(`wrec_fixture_verified=${result.fixtureStatus === 'PASS'}`);
-      console.log(`provenance_inputs_verified=${result.inputsVerified}`);
-      console.log(`provenance_status=${statusForCode(result.code)}`);
-      console.log(`oi38_foreign_missing_404_equivalent=${result.oi38Status}`);
-      console.log(`product_projection_boundary_status=${result.boundaryStatus}`);
-      console.log(`o_h2_decision=${OH2_DECISION}`);
+      const schemasPass = Object.values(result.parse).every(
+        (status) => status === 'PASS',
+      );
+      console.log(`wrec_schema_status=${schemasPass ? 'PASS' : 'FAIL'}`);
+      if (schemasPass) {
+        console.log('recorder_count=3');
+        console.log('negative_control_count=1');
+        console.log('old_oi38_summary_counted_as_recorder=false');
+        console.log(
+          `third_recorder_slot=${result.code === PASS ? 'PASS' : statusForCode(result.code)}`,
+        );
+        console.log(`wrec_source_verified=${result.sourceStatus === 'PASS'}`);
+        console.log(`wrec_fixture_verified=${result.fixtureStatus === 'PASS'}`);
+        console.log(`provenance_inputs_verified=${result.inputsVerified}`);
+        console.log(`provenance_status=${statusForCode(result.code)}`);
+        console.log(`oi38_foreign_missing_404_equivalent=${result.oi38Status}`);
+        console.log(`product_projection_boundary_status=${result.boundaryStatus}`);
+        console.log(`product_projection_boundary_scope=${result.boundaryScanScope?.join(',') ?? ''}`);
+        console.log(`product_projection_boundary_file_count=${result.boundaryScanFileCount ?? 0}`);
+        console.log(`product_projection_boundary_hits=${result.boundaryScanHits?.join(',') ?? ''}`);
+        console.log(`o_h2_decision=${OH2_DECISION}`);
+      } else {
+        console.log(`third_recorder_slot=${statusForCode(result.code)}`);
+        console.log('provenance_inputs_verified=false');
+        console.log(`provenance_status=${statusForCode(result.code)}`);
+      }
       console.log(`product_recording_provenance_exit=${result.code}`);
       process.exitCode = result.code;
     })

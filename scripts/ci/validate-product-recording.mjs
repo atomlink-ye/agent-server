@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { register as registerTsx } from 'tsx/esm/api';
 import {
   sha256,
   stableStringify,
@@ -9,6 +10,10 @@ import {
   sanitizeRunEventPayload,
   assertNoEnvironmentValues,
 } from '../record/lib/sanitize-recording.mjs';
+
+registerTsx();
+const { ProductRunTraceResponseSchema, ProductWorkRunResponseSchema } =
+  await import('../../src/contracts/product-projection/index.ts');
 
 const PRE_FILES = Object.freeze([
   'manifest.json',
@@ -334,6 +339,17 @@ export async function validateRecording(directory, mode = 'pre-identity') {
     const text = await readFile(join(root, file), 'utf8');
     parsed[file] = parseJson(text, file);
     if (stableStringify(parsed[file]) !== text) fail('noncanonical_json', file);
+  }
+  if (mode === 'product') {
+    ProductRunTraceResponseSchema.parse(parsed['api/trace.json']);
+    ProductWorkRunResponseSchema.parse({
+      work: parsed['api/work.json'],
+      work_run: parsed['api/work-run.json'],
+      projection_status: parsed['api/trace.json']?.projection_status,
+      work_items: parsed['api/trace.json']?.work_items,
+      actors: parsed['api/trace.json']?.actors,
+      messages: parsed['api/trace.json']?.messages,
+    });
   }
   let secretHits = 0;
   for (const [file, value] of Object.entries(parsed)) {

@@ -355,7 +355,7 @@ function runLineageTier() {
           .filter((part) => part !== 'pnpm guard:product-accepted-subset')
           .join(' && ');
       },
-      'guard_wiring_invalid:check_backend_guard_missing',
+      'guard_wiring_invalid:check_backend_guard_order_or_membership',
     ),
   );
   arms.push(

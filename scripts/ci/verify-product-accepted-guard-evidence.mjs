@@ -225,7 +225,8 @@ const ARM_REQUIREMENTS = Object.freeze({
     {
       name: 'wiring-mutation-remove-check-backend-guard',
       expectedExitCode: 1,
-      outputMarker: 'guard_wiring_invalid:check_backend_guard_missing',
+      outputMarker:
+        'guard_wiring_invalid:check_backend_guard_order_or_membership',
     },
     {
       name: 'wiring-mutation-conditional-accepted-guard',

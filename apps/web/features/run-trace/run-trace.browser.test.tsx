@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
-import { RunTrace, attemptsFrom, timelineGeometry } from './run-trace';
+import { RunTrace, attemptsFrom } from './run-trace';
 import { parseRecordedTrace } from './recording-test-helpers';
 
 (
@@ -20,19 +20,24 @@ function mountTrace(trace: ReturnType<typeof parseRecordedTrace>) {
   return { host, root, trace };
 }
 
-function expectedWidth(
-  attempt: {
-    started_at: string | null;
-    ended_at: string | null;
-    duration_ms: number | null;
-  },
-  attempts: readonly ReturnType<typeof attemptsFrom>[number][],
+type RecordedAttempt = ReturnType<typeof attemptsFrom>[number];
+
+function recordedAttempts(
+  trace: ReturnType<typeof parseRecordedTrace>,
+): readonly RecordedAttempt[] {
+  return trace.work_items.flatMap((workItem) =>
+    workItem.attempts.map((attempt) => ({ workItem, attempt })),
+  );
+}
+
+function expectedGeometryFromRecording(
+  attempts: readonly RecordedAttempt[],
 ) {
   const captured = attempts.filter(
-    ({ attempt: candidate }) =>
-      candidate.started_at &&
-      candidate.ended_at &&
-      candidate.duration_ms !== null,
+    ({ attempt }) =>
+      attempt.started_at &&
+      attempt.ended_at &&
+      attempt.duration_ms !== null,
   );
   const start = Math.min(
     ...captured.map(({ attempt: candidate }) =>
@@ -42,7 +47,26 @@ function expectedWidth(
   const end = Math.max(
     ...captured.map(({ attempt: candidate }) => Date.parse(candidate.ended_at!)),
   );
-  return ((attempt.duration_ms! / (end - start)) * 100);
+  const range = end - start;
+  return new Map(
+    captured.map(({ attempt }) => [
+      attempt.id,
+      {
+        left: range
+          ? ((Date.parse(attempt.started_at!) - start) / range) * 100
+          : 0,
+        width: range ? (attempt.duration_ms! / range) * 100 : 100,
+      },
+    ]),
+  );
+}
+
+function stylePercent(button: HTMLButtonElement, property: string): number {
+  const value = button.style.getPropertyValue(property);
+  expect(value, `${property} must be present on rendered span`).toMatch(
+    /^-?\d+(?:\.\d+)?%$/u,
+  );
+  return Number.parseFloat(value);
 }
 
 it('E3 renders recorder-backed proportional normal and rework geometry', async () => {
@@ -52,8 +76,8 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
   ];
 
   for (const trace of traces) {
-    const entries = attemptsFrom(trace);
-    const geometry = timelineGeometry(entries);
+    const entries = recordedAttempts(trace);
+    const expectedGeometry = expectedGeometryFromRecording(entries);
     if (trace === traces[0])
       expect(entries.map(({ attempt }) => attempt.duration_ms).sort((a, b) => (a ?? 0) - (b ?? 0)))
         .toEqual([308425, 312707]);
@@ -63,16 +87,10 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
           .filter(({ workItem }) => workItem.attempts.length === 2)
           .map(({ attempt }) => attempt.duration_ms),
       ).toEqual([177206, 19179]);
-    const captured = entries.filter(
-      ({ attempt }) => attempt.timing_capture_status === 'captured',
+    const captured = entries.filter(({ attempt }) =>
+      attempt.timing_capture_status === 'captured',
     );
     expect(captured.length).toBeGreaterThan(0);
-    for (const { attempt } of captured) {
-      expect(geometry.get(attempt.id)?.width).toBeCloseTo(
-        expectedWidth(attempt, entries),
-        8,
-      );
-    }
 
     const { host, root } = mountTrace(trace);
     try {
@@ -86,6 +104,66 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
         ),
       ];
       expect(attemptButtons.length).toBe(entries.length);
+      const domGeometry = attemptButtons.map((button) => ({
+        button,
+        left: stylePercent(button, '--attempt-left'),
+        width: stylePercent(button, '--attempt-width'),
+      }));
+      for (const { workItem, attempt } of entries) {
+        const expected = expectedGeometry.get(attempt.id);
+        expect(expected).toBeDefined();
+        if (!expected) continue;
+        const button = attemptButtons.find(
+          (candidate) => candidate.title === workItem.subject &&
+            candidate.getAttribute('aria-label')?.includes(
+              `Attempt ${attempt.attempt_no}`,
+            ),
+        );
+        expect(button).toBeDefined();
+        const rendered = domGeometry.find(({ button: candidate }) =>
+          candidate === button,
+        );
+        expect(rendered).toBeDefined();
+        if (!rendered) continue;
+        expect(rendered.left).toBeCloseTo(expected.left, 6);
+        expect(rendered.width).toBeCloseTo(expected.width, 6);
+      }
+      expect(new Set(domGeometry.map(({ left }) => left)).size).toBeGreaterThan(
+        1,
+      );
+      const laneNodes = [
+        ...host.querySelectorAll<HTMLElement>('.run-trace__lane'),
+      ];
+      expect(laneNodes).toHaveLength(trace.actors.length);
+      for (const actor of trace.actors) {
+        const lane = laneNodes.find(
+          (candidate) =>
+            candidate.querySelector('.run-trace__lane-name')?.textContent ===
+            (actor.name ?? 'Name not captured'),
+        );
+        expect(lane).toBeDefined();
+        if (!lane) continue;
+        for (const entry of entries.filter(
+          ({ workItem }) => workItem.actor_id === actor.id,
+        )) {
+          const button = attemptButtons.find(
+            (candidate) => candidate.title === entry.workItem.subject &&
+              candidate.getAttribute('aria-label')?.includes(
+                `Attempt ${entry.attempt.attempt_no}`,
+              ),
+          );
+          expect(button).toBeDefined();
+          if (button) expect(lane.contains(button)).toBe(true);
+        }
+      }
+      if (trace === traces[0]) {
+        expect(laneNodes).toHaveLength(3);
+        expect(
+          laneNodes.map(
+            (lane) => lane.querySelector('.run-trace__lane-name')?.textContent,
+          ),
+        ).toEqual(trace.actors.map((actor) => actor.name ?? 'Name not captured'));
+      }
       expect(
         attemptButtons.every(
           (button) =>

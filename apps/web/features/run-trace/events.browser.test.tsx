@@ -38,8 +38,11 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
         ...host.querySelectorAll<HTMLButtonElement>('.run-trace__event'),
       ];
       expect(eventButtons).toHaveLength(count);
-      expect(eventButtons.map((button) => Number(button.querySelector('strong')?.textContent?.replace('#', ''))))
-        .toEqual(trace.mcp_activities.map((activity) => activity.sequence));
+      expect(
+        eventButtons.map((button) =>
+          Number(button.querySelector('strong')?.textContent?.replace('#', '')),
+        ),
+      ).toEqual(trace.mcp_activities.map((activity) => activity.sequence));
       expect(
         eventButtons.every(
           (button) =>
@@ -80,11 +83,37 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
       expect(firstButton?.textContent).toContain('MCP activity:');
       expect(firstButton?.textContent).toContain('Result:');
 
+      const sequenceCounts = new Map<number, number>();
+      for (const activity of trace.mcp_activities)
+        sequenceCounts.set(
+          activity.sequence,
+          (sequenceCounts.get(activity.sequence) ?? 0) + 1,
+        );
+      const duplicateSequence = [...sequenceCounts.entries()].find(
+        ([, count]) => count > 1,
+      )?.[0];
+      expect(duplicateSequence).toBeDefined();
+      if (duplicateSequence === undefined) continue;
+      const duplicateRows = eventButtons.filter(
+        (button) =>
+          button.querySelector('strong')?.textContent ===
+          `#${duplicateSequence}`,
+      );
+      expect(duplicateRows.length).toBeGreaterThan(1);
+      const duplicateSelection = duplicateRows[1];
+      expect(duplicateSelection).toBeDefined();
+      if (!duplicateSelection) continue;
+
       await act(async () => {
-        firstButton?.focus();
-        firstButton?.click();
+        duplicateSelection.focus();
+        duplicateSelection.click();
       });
-      expect(firstButton?.getAttribute('aria-pressed')).toBe('true');
+      expect(
+        eventButtons.filter(
+          (button) => button.getAttribute('aria-pressed') === 'true',
+        ),
+      ).toHaveLength(1);
+      expect(duplicateSelection.getAttribute('aria-pressed')).toBe('true');
     } finally {
       await act(async () => root.unmount());
       host.remove();

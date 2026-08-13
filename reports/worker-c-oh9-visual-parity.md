@@ -21,6 +21,8 @@ Status: C-owned implementation complete. B2 cross-Attempt connection stop condit
 - 028c2ec8d929557e33ccdf16550b08fe7f17851d — fix(frontend): align B0 B1 B2 B5 B8 trace visuals; initial stop condition none — 4 files, 127 insertions(+), 128 deletions(-).
 - fdefa2d6e374bb2cd399b2093120d6cac1e22912 — docs(frontend): record B0 B1 B2 B5 B8 parity evidence — 1 file, 38 insertions(+).
 - 59e1559cfd7b4f13c29d58e6bd0904e44d31af3b — docs(frontend): finalize O-H9 parity handoff — 1 file, 2 insertions(+), 2 deletions(-).
+- 0a7d6cdf54bdb5ac2fbea2ef8552799892e4549a — fix(frontend): correct B2 feedback target; stop condition deferred — 2 files, 6 insertions(+), 12 deletions(-).
+- 152b0a006d48c60b10e630d6488e0b0bf76cefd9 — fix(frontend): correct B2 feedback target and uncaptured timing — 3 files, 6 insertions(+), 4 deletions(-).
 
 ## Exact files
 

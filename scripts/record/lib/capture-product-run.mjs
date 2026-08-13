@@ -61,6 +61,7 @@ const scenarioNames = new Set([
   'parallel-success',
   'rework-once',
   'lead-never-accept',
+  'oi38-negative',
 ]);
 export const SUBMIT_INSTRUCTION_PROFILE =
   'canonical-team-work-submit-hard-gate/v1';
@@ -79,6 +80,11 @@ const expectedMemberCompositions = Object.freeze({
     'projection-lead',
     'projection-worker',
     'projection-observer',
+  ],
+  'oi38-negative': [
+    'projection-lead',
+    'projection-worker-a',
+    'projection-worker-b',
   ],
 });
 
@@ -133,14 +139,24 @@ async function queryRows(client, sql, values, name) {
 }
 
 export function runEventProjection(rows, collector) {
-  return rows.map((row) => ({
-    ...row,
-    payload: sanitizeRunEventPayload(
-      row.payload,
-      `run_events.${row.id}.payload`,
-      { collector },
-    ),
-  }));
+  return rows.map((row) => {
+    const payload = structuredClone(row.payload);
+    if (
+      payload?.detail &&
+      typeof payload.detail === 'object' &&
+      !Array.isArray(payload.detail) &&
+      Object.hasOwn(payload.detail, 'content')
+    )
+      payload.detail.content = '[REDACTED]';
+    return {
+      ...row,
+      payload: sanitizeRunEventPayload(
+        payload,
+        `run_events.${row.id}.payload`,
+        { collector },
+      ),
+    };
+  });
 }
 
 export function assertScenarioPredicate(
@@ -149,7 +165,9 @@ export function assertScenarioPredicate(
   workRows,
   attemptRows,
 ) {
-  if (scenario === 'parallel-success') {
+  const predicateScenario =
+    scenario === 'oi38-negative' ? 'parallel-success' : scenario;
+  if (predicateScenario === 'parallel-success') {
     const accepted = workRows.filter((row) => row.status === 'accepted');
     const completed = attemptRows.filter(
       (row) => row.status === 'completed' && row.completed_at,
@@ -182,7 +200,7 @@ export function assertScenarioPredicate(
       return;
     throw new Error('parallel_success_live_predicate_failed');
   }
-  if (scenario === 'rework-once') {
+  if (predicateScenario === 'rework-once') {
     const attemptsByWork = new Map();
     for (const row of attemptRows) {
       const attempts = attemptsByWork.get(row.work_item_id) ?? [];
@@ -219,6 +237,82 @@ export function assertScenarioPredicate(
   )
     return;
   throw new Error('lead_never_accept_live_predicate_failed');
+}
+
+function assertOi38PredicateEvidence(
+  evidence,
+  workId,
+  work,
+  workRun,
+  workRows,
+  workRunRows,
+) {
+  if (!evidence || evidence.owner_work_id !== workId)
+    throw new Error('capture_oi38_owner_work_id_mismatch');
+  if (!IDENTIFIER.test(evidence.missing_work_id) || evidence.missing_work_id === workId)
+    throw new Error('capture_oi38_missing_work_id_invalid');
+  if (work?.id !== workId || workRun?.work_id !== workId)
+    throw new Error('capture_oi38_api_lineage_mismatch');
+  if (
+    !workRows.some(
+      (row) =>
+        row.id === workId &&
+        row.tenant_id === work.tenant_id &&
+        row.workspace_id === work.workspace_id,
+    ) ||
+    !workRunRows.some(
+      (row) =>
+        row.id === workRun.id &&
+        row.work_id === workId &&
+        row.tenant_id === work.tenant_id &&
+        row.workspace_id === work.workspace_id,
+    )
+  )
+    throw new Error('capture_oi38_db_lineage_mismatch');
+  for (const name of ['owner', 'foreign', 'missing']) {
+    const response = evidence[name];
+    if (
+      !response ||
+      !Number.isInteger(response.status) ||
+      !response.body ||
+      typeof response.body !== 'object' ||
+      Array.isArray(response.body)
+    )
+      throw new Error(`capture_oi38_${name}_response_incomplete`);
+  }
+  const ownerRuns = evidence.owner.body.work_runs;
+  if (
+    evidence.owner.status !== 200 ||
+    !Array.isArray(ownerRuns) ||
+    ownerRuns.length < 1 ||
+    !Object.hasOwn(evidence.owner.body, 'next_cursor') ||
+    ownerRuns.some((row) => row?.work_id !== workId) ||
+    ownerRuns.some(
+      (row) =>
+        !workRunRows.some(
+          (dbRow) => dbRow.id === row.id && dbRow.work_id === workId,
+        ),
+    )
+  )
+    throw new Error('capture_oi38_owner_response_lineage_mismatch');
+  if (
+    evidence.foreign.status !== 404 ||
+    evidence.missing.status !== 404 ||
+    evidence.foreign.body.error?.code !== 'work_not_found' ||
+    evidence.missing.body.error?.code !== 'work_not_found' ||
+    typeof evidence.foreign.body.error?.request_id !== 'string' ||
+    !evidence.foreign.body.error.request_id ||
+    typeof evidence.missing.body.error?.request_id !== 'string' ||
+    !evidence.missing.body.error.request_id
+  )
+    throw new Error('capture_oi38_negative_control_invalid');
+  const normalize = (response) => {
+    const body = structuredClone(response.body);
+    if (body?.error) delete body.error.request_id;
+    return stableStringify(body);
+  };
+  if (normalize(evidence.foreign) !== normalize(evidence.missing))
+    throw new Error('capture_oi38_negative_envelope_mismatch');
 }
 
 export async function writeJson(path, value, collector) {
@@ -530,8 +624,19 @@ export async function captureProductRun(options) {
     const workRuns = byName.get('work_runs');
     const resources = byName.get('work_run_resource_manifest');
     if (
-      !works.some((row) => row.id === options.workId) ||
-      !workRuns.some((row) => row.id === options.workRunId) ||
+      !works.some(
+        (row) =>
+          row.id === options.workId &&
+          row.tenant_id === options.tenantId &&
+          row.workspace_id === options.workspaceId,
+      ) ||
+      !workRuns.some(
+        (row) =>
+          row.id === options.workRunId &&
+          row.work_id === options.workId &&
+          row.tenant_id === options.tenantId &&
+          row.workspace_id === options.workspaceId,
+      ) ||
       resources.some((row) => row.work_run_id !== options.workRunId)
     )
       throw new Error('capture_product_db_identity_mismatch');
@@ -541,6 +646,15 @@ export async function captureProductRun(options) {
       byName.get('team_work_items'),
       byName.get('team_work_item_attempts'),
     );
+    if (options.scenario === 'oi38-negative')
+      assertOi38PredicateEvidence(
+        options.predicateEvidence?.oi38,
+        options.workId,
+        options.work,
+        options.workRun,
+        works,
+        workRuns,
+      );
     await mkdir(join(temporary, 'api'), { recursive: true, mode: 0o700 });
     await mkdir(join(temporary, 'db'), { recursive: true, mode: 0o700 });
     await writeJson(join(temporary, 'api/work.json'), options.work, audit);

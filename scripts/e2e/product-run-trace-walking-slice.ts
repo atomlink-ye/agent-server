@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 import {
+  GetWorkResponseSchema,
   ProductRunTraceResponseSchema,
+  ProductWorkRunResponseSchema,
   WorkListResponseSchema,
   WorkRunListResponseSchema,
   type ProductRunTrace,
@@ -42,6 +44,8 @@ type ResponseLike = {
   status: () => number;
   json: () => Promise<unknown>;
 };
+
+const SKIP_SCENARIO = 3;
 
 function scenarios(): readonly RecordingScenario[] {
   const requested = process.env.C4_REPLAY_SCENARIO;
@@ -110,6 +114,15 @@ function scenarioPredicate(scenario: RecordingScenario, trace: AnchoredTrace): b
   );
 }
 
+function mutationApplicable(mutation: ReplayMutation, trace: AnchoredTrace): boolean {
+  if (mutation === 'none') return true;
+  if (mutation === 'omit-feedback')
+    return trace.edges.some((edge) => edge.kind === 'feedback');
+  return trace.work_items.some((item) =>
+    item.attempts.some((attempt) => attempt.duration_ms !== null && attempt.duration_ms !== 1),
+  );
+}
+
 async function waitForExit(child: ChildProcess | undefined): Promise<void> {
   if (!child || child.exitCode !== null) return;
   await new Promise<void>((resolveExit) => {
@@ -130,6 +143,7 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
   try {
     const loaded = await loadStaticReplayRecording(scenario);
     if (!scenarioPredicate(scenario, loaded.trace)) return MISSING;
+    if (!mutationApplicable(redArm, loaded.trace)) return SKIP_SCENARIO;
     replay = await launchReplay();
     app = await launchApp(replay.url);
     browser = await loadChromium();
@@ -147,7 +161,11 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     });
     await page.goto(`${appUrl}/works`, { waitUntil: 'domcontentloaded', timeout: startupTimeoutMs });
     const worksPath = '/api/works';
-    const link = page.locator('a[href^="/works/"]').first();
+    const expectedWorkId = loaded.work.id;
+    const expectedHref = `/works/${encodeURIComponent(expectedWorkId)}`;
+    const link = page.getByRole('link', { name: loaded.work.title, exact: true });
+    if ((await link.count()) !== 1) return MISSING;
+    if ((await link.getAttribute('href')) !== expectedHref) return FAIL;
     await link.waitFor({ state: 'visible', timeout: startupTimeoutMs });
     await Promise.all([
       page.waitForURL(/\/works\/[^/]+$/u, { timeout: startupTimeoutMs }),
@@ -161,26 +179,38 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     await Promise.all(pending);
 
     const workList = WorkListResponseSchema.safeParse(responses.get(worksPath));
-    const workId = loaded.work.id;
-    const runListPath = `/api/works/${workId}/runs`;
-    const runPath = `/api/works/${workId}/runs/${loaded.run.work_run.id}`;
+    const workPath = `/api/works/${expectedWorkId}`;
+    const runListPath = `/api/works/${expectedWorkId}/runs`;
+    const runPath = `/api/works/${expectedWorkId}/runs/${loaded.run.work_run.id}`;
     const tracePath = `${runPath}/trace`;
+    const work = GetWorkResponseSchema.safeParse(responses.get(workPath));
     const runList = WorkRunListResponseSchema.safeParse(responses.get(runListPath));
+    const run = ProductWorkRunResponseSchema.safeParse(responses.get(runPath));
     const trace = ProductRunTraceResponseSchema.safeParse(responses.get(tracePath));
-    if (!workList.success || !runList.success || !trace.success)
+    if (!workList.success || !work.success || !runList.success || !run.success || !trace.success)
       return MISSING;
     if (trace.data.projection_status !== 'internally_anchored') return MISSING;
-    if (workList.data.works.length !== loaded.workList.works.length) return FAIL;
-    if (canonical(runList.data) !== canonical(loaded.runList)) return FAIL;
     const actual = trace.data;
-    if (actual.projection_status !== 'internally_anchored') return FAIL;
+    const mismatches: string[] = [];
+    if (canonical(workList.data) !== canonical(loaded.workList)) mismatches.push('work_list');
+    if (canonical(work.data) !== canonical({ work: loaded.work })) mismatches.push('work');
+    if (canonical(runList.data) !== canonical(loaded.runList)) mismatches.push('work_run_list');
+    if (canonical(run.data) !== canonical(loaded.run)) mismatches.push('work_run');
     const factsMatch = compareRecordedFacts(loaded.trace, actual);
+    if (!factsMatch) mismatches.push('trace_facts');
     const attemptCount = loaded.trace.work_items.reduce((count, item) => count + item.attempts.length, 0);
     const renderedAttempts = await page.locator('[data-testid="trace-attempt"]').count();
-    if (renderedAttempts !== attemptCount) return FAIL;
+    if (renderedAttempts !== attemptCount) mismatches.push('rendered_attempt_count');
     await page.getByRole('button', { name: 'Events', exact: true }).click();
     const renderedActivities = await page.locator('.run-trace__event').count();
-    if (renderedActivities !== loaded.trace.mcp_activities.length) return FAIL;
+    if (renderedActivities !== loaded.trace.mcp_activities.length)
+      mismatches.push('rendered_activity_count');
+    const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
+    if (
+      detailPath.length !== 2 ||
+      decodeURIComponent(detailPath[1] ?? '') !== expectedWorkId
+    )
+      mismatches.push('work_identity_navigation');
 
     const candidate = process.env.C4_CANDIDATE_SHA ?? '';
     if (!/^[0-9a-f]{40}$/iu.test(candidate)) return MISSING;
@@ -188,31 +218,42 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       candidate_sha: candidate,
       scenario,
       command: process.argv.join(' '),
-      response_paths: [worksPath, runListPath, runPath, tracePath],
+      response_paths: [worksPath, workPath, runListPath, runPath, tracePath],
       expected: {
+        work_sha256: hash({ work: loaded.work }),
+        work_run_sha256: hash(loaded.run),
         attempt_count: attemptCount,
         feedback_count: loaded.trace.edges.filter((edge) => edge.kind === 'feedback').length,
         activity_count: loaded.trace.mcp_activities.length,
         facts_sha256: hash(traceFacts(loaded.trace)),
       },
       observed: {
+        work_sha256: hash(work.data),
+        work_run_sha256: hash(run.data),
         attempt_count: renderedAttempts,
         feedback_count: actual.edges.filter((edge) => edge.kind === 'feedback').length,
         activity_count: renderedActivities,
         facts_sha256: hash(traceFacts(actual)),
       },
+      mismatches,
     };
     if (redArm !== 'none') {
+      const mutationDetected =
+        redArm === 'omit-feedback'
+          ? actual.edges.filter((edge) => edge.kind === 'feedback').length !==
+            loaded.trace.edges.filter((edge) => edge.kind === 'feedback').length
+          : hash(traceFacts(loaded.trace)) !== hash(traceFacts(actual));
+      if (!mutationDetected) return MISSING;
       await writeEvidence(`red-arms/e11-${scenario}-${redArm}.json`, {
         ...base,
         status: 'FAIL',
         exit_code: FAIL,
         expected_nonzero: true,
-        mutation_detected: !factsMatch,
+        mutation_detected: true,
       });
       return FAIL;
     }
-    if (!factsMatch) return FAIL;
+    if (mismatches.length > 0) return FAIL;
     await writeEvidence(`e11-walking-slice-${scenario}.json`, {
       ...base,
       status: 'PASS',
@@ -238,11 +279,15 @@ async function run(): Promise<number> {
     return MISSING;
   }
   let result = PASS;
+  let executed = 0;
   for (const selectedScenario of scenarios()) {
     const scenarioResult = await runScenario(selectedScenario, redArm);
+    if (scenarioResult === SKIP_SCENARIO) continue;
     if (scenarioResult === MISSING) return MISSING;
+    executed += 1;
     if (scenarioResult !== PASS) result = scenarioResult;
   }
+  if (executed === 0) return MISSING;
   return result;
 }
 

@@ -25,9 +25,10 @@ No `apps/web/**`, recorder fixture, contract, package/lock/config, or C1/C2/C3 r
 
 - `scripts/e2e/product-run-trace-walking-slice.ts`
   - Runs the parallel-success and rework-once scenarios independently.
-  - Starts from the My Work title, follows the real link, and parses each browser response with the current full schemas.
-  - Compares recorded attempt timing/span facts, feedback edges, MCP activity sequence/association facts, list responses, rendered Attempt count, and rendered Events count.
-  - `C4_REPLAY_MUTATION=omit-feedback` and `C4_REPLAY_MUTATION=constant-duration` provide reproducible response-level red arms; they do not alter fixture files.
+  - Starts from the exact recorded Work title, requires exactly one matching link, verifies its recorded Work href, follows it, and verifies the navigated Work identity.
+  - Parses and compares the Work list, Work response, WorkRun list, WorkRun response, and trace response with the current full schemas.
+  - Compares recorded attempt timing/span facts, feedback edges, MCP activity sequence/association facts, rendered Attempt count, and rendered Events count.
+  - `C4_REPLAY_MUTATION=omit-feedback` and `C4_REPLAY_MUTATION=constant-duration` provide reproducible response-level red arms; an arm is recorded as nonzero only when its targeted comparison detects the mutation. Inapplicable arms are skipped and produce `MISSING`; fixture files are never altered.
 
 ## Hard contract gate
 

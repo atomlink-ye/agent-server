@@ -4,6 +4,7 @@ set -Eeuo pipefail
 postgres=0
 bind_local=0
 real_provider_defaults=0
+runtime=0
 pass_env=()
 publish_port=''
 
@@ -19,6 +20,10 @@ while (($#)); do
       ;;
     --real-provider-defaults)
       real_provider_defaults=1
+      shift
+      ;;
+    --runtime)
+      runtime=1
       shift
       ;;
     --pass-env)
@@ -40,7 +45,7 @@ while (($#)); do
       break
       ;;
     *)
-      printf '%s\n' 'docker-run: expected --postgres, --bind-local, --real-provider-defaults, --pass-env NAME, --publish PORT, or --' >&2
+      printf '%s\n' 'docker-run: expected --postgres, --bind-local, --real-provider-defaults, --runtime, --pass-env NAME, --publish PORT, or --' >&2
       exit 2
       ;;
   esac
@@ -49,6 +54,10 @@ done
 (($#)) || { printf '%s\n' 'docker-run: a command is required after --' >&2; exit 2; }
 
 if ((real_provider_defaults)); then
+  if ((runtime == 0)); then
+    printf '%s\n' 'docker-run: --real-provider-defaults requires explicit --runtime' >&2
+    exit 2
+  fi
   . "$PWD/scripts/dev/source-real-provider-defaults"
 fi
 
@@ -59,6 +68,9 @@ fi
 # longer misses the prebuilt image baked into the sandbox template.
 
 compose=("$PWD/scripts/dev/docker-compose")
+if ((runtime)); then
+  compose+=( -f compose.yaml -f compose.runtime.yaml )
+fi
 existing_postgres_test_id=''
 started_postgres_test=0
 if ((postgres)); then

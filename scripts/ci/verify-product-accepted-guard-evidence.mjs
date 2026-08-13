@@ -316,11 +316,7 @@ function verifyArm(arm, requirement, tier) {
       'stderr',
       `${tier}.${requirement.name}.marker_stream`,
     );
-    equalJson(
-      arm.markers_ok,
-      true,
-      `${tier}.${requirement.name}.markers_ok`,
-    );
+    equalJson(arm.markers_ok, true, `${tier}.${requirement.name}.markers_ok`);
   }
 
   if (requirement.outputMarker) {
@@ -348,8 +344,7 @@ function verifyArms(evidence, tier) {
   if (evidence.ok !== true) fail(`${tier}.not_ok`);
   if (!Array.isArray(evidence.arms)) fail(`${tier}.arms`);
   const requirements = ARM_REQUIREMENTS[tier];
-  if (evidence.arms.length !== requirements.length)
-    fail(`${tier}.arms_count`);
+  if (evidence.arms.length !== requirements.length) fail(`${tier}.arms_count`);
   const names = evidence.arms.map((arm) => arm?.name);
   if (
     names.some((name) => typeof name !== 'string') ||

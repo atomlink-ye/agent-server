@@ -1,6 +1,6 @@
 # C4 production evidence harness · local implementation ledger
 
-Status: implemented and statically reviewed; production/browser evidence is `MISSING/NOT_RUN`.
+Status: implemented and statically reviewed; production/browser evidence remains `MISSING/NOT_RUN`. The contract-valid WREC bundle closes its own E2 third-recorder gate only; it is not a C4 scenario source.
 
 ## Scope and ownership
 
@@ -33,7 +33,13 @@ No `apps/web/**`, recorder fixture, contract, package/lock/config, or C1/C2/C3 r
 
 ## Hard contract gate
 
-The current two positive fixtures are not consumer-acceptance inputs: `recording_documents[0]` fails the current full `ProductRunTraceResponseSchema`. Hash/count/provenance and selected-path checks cannot substitute for that parse. C4 therefore cannot claim a runtime PASS, and no runtime evidence directory or evidence file was created in this local phase.
+The current two positive `fa77ba9` fixtures are not consumer-acceptance inputs: each `recording_documents[0]` fails the current full `ProductRunTraceResponseSchema`. Hash/count/provenance and selected-path checks cannot substitute for that parse. The contract-valid WREC directory
+`rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-third-recording/recording-artifacts/wrec-third/oi38-negative/20260813T213910949Z-c5f4a431-02ab-44e5-acd8-49d775db83ea`
+does pass the current full schemas for its own `api/trace.json`, `api/work-run.json`, and `api/work.json`; that closes the WREC E2 third-recorder gate. It is intentionally not a C4 My Work/trace scenario source and does not globally unlock the old invalid `fa77ba9` recordings.
+
+WREC is only parallel-shaped: it has two work items with one attempt each and activities, with no work item having more than one attempt, zero feedback edges/markers, and no applicable omit-feedback arm. Those facts cannot satisfy E11's required two-scenario `parallel-success` plus `rework-once` evidence. Full E11 therefore remains `MISSING/NOT_RUN` until separate current-schema-valid `parallel-success` and `rework-once` captures exist and every consumed target document passes the full current schema parse.
+
+E10 could be a separately authorized and explicitly labeled network/schema preflight if the authority requests an adapted check; it is not current product-scenario acceptance. No adapter was added: Worker self-judgment is YAGNI because aliasing WREC into C4 would create false acceptance risk. Recovery requires either authority asking for that distinct preflight or valid scenario captures arriving. Thus the C4 scenario-source prerequisite is still open even though the WREC third-recorder gate is closed; C4 cannot claim a runtime PASS, and no runtime evidence directory or evidence file was created in this local phase.
 
 ## Future remote commands
 
@@ -78,7 +84,7 @@ Expected future artifact paths, created only after real execution:
 - `rg` static scans: passed for schema-gate, endpoint classification, required hit counters, forbidden hit counters, and red-arm entry points.
 - TypeScript source review: completed manually; no `pnpm`, install, build, dev server, browser, provider Run, sandbox, Docker, or full test command was run.
 - E10 runtime/browser: `MISSING/NOT_RUN` by dispatch prohibition and current recorder contract gate.
-- E11 runtime/browser: `MISSING/NOT_RUN` by dispatch prohibition and current recorder contract gate.
+- E11 runtime/browser: `MISSING/NOT_RUN` by dispatch prohibition and the missing separate current-schema-valid two-scenario captures; the WREC E2 closure does not change this.
 
 ## Commit units
 
@@ -90,4 +96,5 @@ Expected future artifact paths, created only after real execution:
 - `33fd4f2c82c8578d67fa4ce249360e42242a1c16`: Oracle review fixes — 4 files changed, 266 insertions(+), 94 deletions(-).
 - `547f26863fa33f6dcb9233ec764595881e1bbf50`: full trace comparison microfix — 1 file changed, 1 insertion(+).
 - `575a7b56436e26df46bace09d1eebef6b73d8825`: clean DOM red-arm baseline fix — 2 files changed, 48 insertions(+), 10 deletions(-).
-- The final review-fix commit SHA and diffstat are reported in the worker handoff so this report does not self-reference its own commit.
+- `faabd3eb04de17dcbfcedb8a6b3a66a59d2d9705`: final review fix — 2 files changed, 90 insertions(+), 30 deletions(-); latest C4 code integration before this report correction.
+- This report-correction commit is intentionally omitted to avoid self-reference; the repo/round mirror is updated together.

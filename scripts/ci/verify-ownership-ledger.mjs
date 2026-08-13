@@ -166,6 +166,13 @@ function checkRepositories() {
         const [definitionFile, definitionLine] = override.definitionEvidence.definition.locator.split(':');
         if (definitionFile !== file || override.definitionEvidence.definitionExcerptHash !== excerptHash(read(sourceFile), Number(definitionLine))) fail('override_definition_evidence_hash_MISMATCH', key);
       }
+      if (key === 'postgres.ts:214') {
+        const chain = override.definitionEvidence;
+        const source = read(sourceFile);
+        if (!sourceExcerpt(source, 208).includes('readDurableKernelMigration(filePath)')) fail('migration_reader_callsite_MISSING', key);
+        if (!chain.readerDefinition || chain.readerDefinition.locator !== 'postgres.ts:132' || chain.readerDefinition.sourceExcerptHash !== excerptHash(source, 132)) fail('migration_reader_definition_MISMATCH', key);
+        if (!chain.migrationSource || chain.migrationSource.directory !== 'src/infrastructure/postgres/migrations') fail('migration_source_directory_MISMATCH', key);
+      }
       if (!row.transactionEvidence || row.transactionEvidence.locator !== key || row.transactionEvidence.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('transaction_evidence_MISSING_OR_DRIFT', key);
       const truthTransaction = ledger.transactionTruth?.[key];
       if (!truthTransaction) fail('transaction_truth_MISSING', key);

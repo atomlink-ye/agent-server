@@ -11,12 +11,21 @@ const ledger = path.join(repo, 'scripts/ci/ownership-ledger.json');
 const candidateSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
 const hashes = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const inputs = { ledger: hashes(ledger), verifier: hashes(verifier) };
+function treeHash(root) {
+  const files = [];
+  function walk(current) { for (const name of fs.readdirSync(current).sort()) { const full = path.join(current, name); const stat = fs.lstatSync(full); if (stat.isSymbolicLink()) continue; if (stat.isDirectory()) walk(full); else files.push(path.relative(root, full)); } }
+  for (const relative of ['src/infrastructure/postgres', 'src/application/ports', 'src/contracts']) walk(path.join(root, relative));
+  const hash = crypto.createHash('sha256');
+  for (const file of files) hash.update(file).update('\0').update(fs.readFileSync(path.join(root, file))).update('\0');
+  return hash.digest('hex');
+}
 
 function invoke(sourceRoot = repo, ledgerPath = ledger) {
+  const env = { OWNERSHIP_SOURCE_ROOT: sourceRoot, OWNERSHIP_LEDGER: ledgerPath, OWNERSHIP_CANDIDATE_SHA: candidateSha };
   const result = spawnSync(process.execPath, [verifier], {
-    cwd: repo, encoding: 'utf8', env: { ...process.env, OWNERSHIP_SOURCE_ROOT: sourceRoot, OWNERSHIP_LEDGER: ledgerPath, OWNERSHIP_CANDIDATE_SHA: candidateSha },
+    cwd: repo, encoding: 'utf8', env: { ...process.env, ...env },
   });
-  return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+  return { exitCode: result.status ?? 1, exactCommand: `${Object.entries(env).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(' ')} ${process.execPath} ${verifier}`, cwd: repo, inputHashes: { ledger: hashes(ledgerPath), verifier: hashes(verifier), sourceTree: treeHash(sourceRoot) }, stdout: result.stdout, stderr: result.stderr };
 }
 
 function fresh() {
@@ -34,23 +43,23 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
 
 {
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); const target = (row) => row.file === 'postgres-workspace-memory-repository.ts' && row.line === 289; value.lockRows = value.lockRows.filter((row) => !target(row)); value.sourceLockRows = value.sourceLockRows.filter((row) => !target(row)); fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
-  arms.push({ name: 'remove-known-bidirectional-for-update-row', ...invoke(h.dir, h.ledgerPath), expectedNonzero: true, inputHashes: { ledger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'remove-known-bidirectional-for-update-row', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); delete value.ports['run-dispatcher.ts']; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
-  arms.push({ name: 'leave-port-ownerless', ...invoke(h.dir, h.ledgerPath), expectedNonzero: true, inputHashes: { ledger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'leave-port-ownerless', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
   const h = fresh(); fs.writeFileSync(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql'), 'CREATE TABLE red_arm_missing (id uuid);\n');
-  arms.push({ name: 'add-unledgered-create-table', ...invoke(h.dir, h.ledgerPath), expectedNonzero: true, inputHashes: { migration: hashes(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql')), ledger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'add-unledgered-create-table', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedMigration: hashes(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql')) } });
 }
 {
   const h = fresh(); const file = path.join(h.dir, 'src/infrastructure/postgres/postgres-session-repository.ts'); let source = fs.readFileSync(file, 'utf8');
   const needle = 'const s = await c.query(\n        `SELECT s.*, l.generation';
   if (!source.includes(needle)) throw new Error('red-arm literal query fixture missing');
-  source = source.replace(needle, 'const dynamicSql = `SELECT s.*, l.generation`;\n      const s = await c.query(dynamicSql);\n      /* red arm */\n      /*');
+  source = source.replace(needle, 'const s = await c.query(\n        dynamicSql /* SELECT s.*, l.generation');
   fs.writeFileSync(file, source);
-  arms.push({ name: 'convert-literal-query-to-variable-sql', ...invoke(h.dir, h.ledgerPath), expectedNonzero: true, inputHashes: { source: hashes(file), ledger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'convert-literal-query-to-variable-sql', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedSource: hashes(file) } });
 }
 
 const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => arm.exitCode !== 0 === arm.expectedNonzero) };

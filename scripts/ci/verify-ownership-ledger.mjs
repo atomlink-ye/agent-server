@@ -12,6 +12,8 @@ const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
 const failures = [];
 const counts = { repositories: 0, rawQueryCallSites: 0, classifiedCallSites: 0, missingCallSites: 0, ddlTables: 0, ledgerTables: Object.keys(ledger.tables ?? {}).length, ports: 0, contracts: 0, crossCapability: 0 };
 const queryTruthSourceDiffs = [];
+const ddlTruthSourceDiffs = [];
+const classifiedRuntimeTables = new Set();
 
 function fail(code, detail) { failures.push({ code, detail }); }
 function read(file) { return fs.readFileSync(path.join(sourceRoot, file), 'utf8'); }
@@ -60,16 +62,19 @@ function referencedTables(sql) {
 }
 
 function scanCalls(file) {
-  const source = read(file); const calls = [];
+  const source = read(file); const calls = []; let transactionState = 'out';
   for (const match of source.matchAll(/\.query\s*\(/g)) {
     const open = match.index + match[0].length - 1;
     const close = matchingParen(source, open);
     const argument = close < 0 ? '' : source.slice(open + 1, close);
     const sql = literalSql(argument);
-    const operation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
+    const parsedOperation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
+    const operation = parsedOperation === 'BEGIN' ? 'BEGIN' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'CONTROL' : parsedOperation === 'SELECT' ? 'READ' : ['INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(parsedOperation) ? 'WRITE' : (sql ? 'UNKNOWN' : 'MISSING');
     const lock = sql ? (/\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(sql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(sql) ? 'for_share' : 'none') : 'unknown';
-    const readWrite = sql ? (operation === 'SELECT' ? 'read' : ['INSERT', 'UPDATE', 'DELETE'].includes(operation) ? 'write' : 'control') : 'unknown';
-    const transaction = operation === 'BEGIN' ? 'in' : ['COMMIT', 'ROLLBACK'].includes(operation) ? 'out' : 'unknown';
+    const readWrite = sql ? (parsedOperation === 'SELECT' ? 'read' : ['INSERT', 'UPDATE', 'DELETE'].includes(parsedOperation) ? 'write' : 'control') : 'unknown';
+    const transaction = parsedOperation === 'BEGIN' ? 'in' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'out' : transactionState;
+    if (parsedOperation === 'BEGIN') transactionState = 'in';
+    else if (['COMMIT', 'ROLLBACK'].includes(parsedOperation)) transactionState = 'out';
     const tables = sql ? referencedTables(sql) : [];
     calls.push({ file: path.basename(file), line: lineAt(source, match.index), classification: sql ? 'classified' : 'MISSING', operation, readWrite, lock, transaction, tables });
   }
@@ -77,10 +82,10 @@ function scanCalls(file) {
 }
 
 function scanSourceLocks(file) {
-  const source = read(`src/infrastructure/postgres/${file}`); const rows = [];
+  const basename = path.basename(file); const source = read(`src/infrastructure/postgres/${basename}`); const rows = [];
   source.split('\n').forEach((line, index) => {
     const match = line.match(/\bFOR\s+(NO\s+KEY\s+UPDATE|UPDATE|SHARE)\b/i);
-    if (match) rows.push({ file, line: index + 1, lock: match[1].toLowerCase().startsWith('share') ? 'for_share' : 'for_update' });
+    if (match) rows.push({ file: basename, line: index + 1, lock: match[1].toLowerCase().startsWith('share') ? 'for_share' : 'for_update' });
   });
   return rows;
 }
@@ -106,21 +111,32 @@ function checkRepositories() {
     if (typeof expected !== 'string') { fail('repository_owner_missing', file); continue; }
     const ledgerCalls = ledger.callSites?.[file] ?? [];
     const ledgerByLine = new Map(ledgerCalls.map((row) => [row.line, row]));
-    if (ledgerCalls.length !== calls.length) queryTruthSourceDiffs.push({ file, expected: ledgerCalls.length, actual: calls.length });
+    let fileClassified = 0; let fileMissing = 0;
+    if (ledgerCalls.length !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: null, missing: null, ledger: ledgerCalls.length });
     for (const call of calls) {
-      if (call.classification === 'classified') counts.classifiedCallSites += 1; else counts.missingCallSites += 1;
-      const key = `${file}:${call.line}`;
+      const key = `${path.basename(file)}:${call.line}`;
       const row = ledgerByLine.get(call.line);
       if (!row) { fail('call_site_ledger_MISSING', key); continue; }
-      for (const field of ['file', 'line', 'classification', 'readWrite', 'lock', 'transaction', 'tables']) if (JSON.stringify(row[field]) !== JSON.stringify(call[field])) fail('call_site_field_drift', { key, field, ledger: row[field], actual: call[field] });
-      if (['for_update', 'for_share'].includes(call.lock) && !row) fail('lock_row_missing', key);
-      const owners = new Set(call.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
-      if (call.classification === 'classified' && owners.size > 1) {
+      const override = ledger.overrides?.[key];
+      if (override && call.classification !== 'MISSING') fail('override_not_dynamic_source', key);
+      if (override && (!override.sourceKind || !override.confidence || !override.evidence)) fail('override_metadata_missing', key);
+      const actual = override ? { ...call, ...override, file, line: call.line } : call;
+      actual.owner = ledger.repositories[path.basename(file)];
+      if (actual.classification === 'classified') { counts.classifiedCallSites += 1; fileClassified += 1; for (const table of actual.tables) classifiedRuntimeTables.add(table); } else { counts.missingCallSites += 1; fileMissing += 1; }
+      if (!row.owner) fail('call_site_owner_MISSING', key);
+      if (row.owner !== actual.owner) fail('call_site_owner_drift', { key, ledger: row.owner, actual: actual.owner });
+      if (actual.transaction === 'unknown') fail('call_site_transaction_unknown', key);
+      for (const field of ['file', 'line', 'classification', 'operation', 'readWrite', 'lock', 'transaction', 'tables', 'owner']) if (JSON.stringify(row[field]) !== JSON.stringify(actual[field])) fail('call_site_field_drift', { key, field, ledger: row[field], actual: actual[field] });
+      const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
+      const repositoryOwner = ledger.repositories[path.basename(file)];
+      const crossesCapability = [...owners].some((owner) => owner && owner !== repositoryOwner);
+      if (actual.classification === 'classified' && crossesCapability) {
         counts.crossCapability += 1;
         if (!['(a)', '(b)', '(c)'].includes(row.disposition)) fail('cross_capability_disposition_MISSING', key);
         if (!row.reason || !ledger.crossCapability?.explanations?.[row.disposition]) fail('cross_capability_reason_missing', key);
       } else if (row.disposition !== null) fail('cross_capability_spurious_disposition', key);
     }
+    if (fileClassified + fileMissing !== calls.length || fileClassified !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: fileClassified, missing: fileMissing, ledger: ledgerCalls.length });
     for (const lock of scanSourceLocks(file)) if (!lockRows.has(`${lock.file}:${lock.line}`)) fail('source_lock_row_missing', `${lock.file}:${lock.line}`);
   }
   const ledgerCalls = counts.classifiedCallSites + counts.missingCallSites;
@@ -134,8 +150,19 @@ function checkDdl() {
   const missing = ddl.filter(({ table }) => !Object.hasOwn(ledger.tables ?? {}, table));
   const malformed = Object.entries(ledger.tables ?? {}).filter(([, entry]) => !entry || typeof entry !== 'object' || !entry.owner);
   if (missing.length) fail('ddl_table_MISSING', missing);
+  const ddlNames = new Set(ddl.map(({ table }) => table));
+  for (const [table, entry] of Object.entries(ledger.tables ?? {})) if (!ddlNames.has(table) && entry.runtimeAccess !== 'runtime-created') ddlTruthSourceDiffs.push({ table, reason: 'ledger extra lacks runtime-created source' });
   if (malformed.length) fail('table_owner_missing', malformed.map(([table]) => table));
-  for (const [table, entry] of Object.entries(ledger.tables ?? {})) if (entry.noRuntimeAccess && !entry.reason) fail('no_runtime_access_reason_missing', table);
+  for (const [table, entry] of Object.entries(ledger.tables ?? {})) {
+    if (!Object.hasOwn(entry, 'runtimeAccess')) fail('table_runtime_access_MISSING', table);
+    if (!Object.hasOwn(entry, 'noRuntimeAccess')) fail('table_no_runtime_access_MISSING', table);
+    if (entry.noRuntimeAccess && !entry.reason) fail('no_runtime_access_reason_missing', table);
+  }
+  for (const { table } of ddl) {
+    const entry = ledger.tables[table];
+    if (entry?.runtimeAccess === 'ledgered' && !entry.noRuntimeAccess && !classifiedRuntimeTables.has(table)) fail('ddl_runtime_support_MISSING', table);
+    if (entry?.noRuntimeAccess && classifiedRuntimeTables.has(table)) fail('no_runtime_access_has_runtime_caller', table);
+  }
   if (ddl.length !== 53) fail('ddl_truth_source_count', { expected: 53, actual: ddl.length });
 }
 
@@ -174,6 +201,6 @@ function checkCrossCapability() {
 
 checkRepositories(); checkDdl(); checkPorts(); checkContracts(); checkCrossCapability();
 const gitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
-const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, counts, truthSourceDiffs: { ddl: counts.ddlTables === counts.ledgerTables ? [] : ['table-count'], query: queryTruthSourceDiffs }, failures };
+const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, counts, truthSourceDiffs: { ddl: ddlTruthSourceDiffs, query: queryTruthSourceDiffs }, failures };
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = failures.length ? 2 : 0;

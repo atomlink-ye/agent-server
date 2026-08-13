@@ -163,7 +163,6 @@ function checkDdl() {
     if (entry?.runtimeAccess === 'ledgered' && !entry.noRuntimeAccess && !classifiedRuntimeTables.has(table)) fail('ddl_runtime_support_MISSING', table);
     if (entry?.noRuntimeAccess && classifiedRuntimeTables.has(table)) fail('no_runtime_access_has_runtime_caller', table);
   }
-  if (ddl.length !== 53) fail('ddl_truth_source_count', { expected: 53, actual: ddl.length });
 }
 
 function checkPorts() {

@@ -12,13 +12,14 @@ const sourceRoot = process.env.OWNERSHIP_SOURCE_ROOT ?? repo;
 
 const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
 const failures = [];
-const counts = { repositories: 0, rawQueryCallSites: 0, typedQueryCallSites: 0, classifiedCallSites: 0, missingCallSites: 0, ddlTables: 0, ledgerTables: Object.keys(ledger.tables ?? {}).length, ports: 0, contracts: 0, crossCapability: 0, sourceLockRows: 0 };
+const counts = { repositories: 0, rawQueryCallSites: 0, typedQueryCallSites: 0, classifiedCallSites: 0, missingCallSites: 0, ddlTables: 0, ledgerTables: Object.keys(ledger.tables ?? {}).length, ports: 0, contracts: 0, crossCapability: 0, sourceLockRows: 0, transactionCalls: 0, rawDefinitelyOut: 0, rawTreatAsIn: 0, typedDefinitelyOut: 0, typedTreatAsIn: 0 };
 const queryTruthSourceDiffs = [];
 const ddlTruthSourceDiffs = [];
 const classifiedRuntimeTables = new Set();
 const typedRuntimeTables = new Set();
 let compilerIdentity = null;
 const astRepositoryFacts = [];
+const transactionLedgerDisagreements = [];
 
 function fail(code, detail) { failures.push({ code, detail }); }
 function read(file) { return fs.readFileSync(path.join(sourceRoot, file), 'utf8'); }
@@ -149,7 +150,10 @@ function checkRepositories() {
   if (JSON.stringify(files) !== JSON.stringify(ledgerFiles)) fail('repository_ledger_files', { files, ledgerFiles });
   const lockRows = new Set((ledger.sourceLockRows ?? ledger.lockRows ?? []).map((x) => `${x.file}:${x.line}`));
   for (const file of files) {
-    const sourceFile = `src/infrastructure/postgres/${file}`; const source = read(sourceFile); const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile); const ast = deriveTransactions(source, file); const astCalls = ast.rawCalls; const astTypedCalls = ast.typedCalls; counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length;
+    const sourceFile = `src/infrastructure/postgres/${file}`; const source = read(sourceFile); const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile);
+    let ast;
+    try { ast = deriveTransactions(source, file); } catch (error) { fail('transaction_classification_MISSING', { file, error: String(error) }); continue; }
+    const astCalls = ast.rawCalls; const astTypedCalls = ast.typedCalls; counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length; counts.transactionCalls += ast.calls.length;
     compilerIdentity ??= ast.compilerIdentity;
     if (ast.sourceHash !== crypto.createHash('sha256').update(source).digest('hex')) fail('ast_source_hash_MISMATCH', file);
     astRepositoryFacts.push({ file, calls: ast.calls.map(({ node, ...call }) => call) });
@@ -157,6 +161,8 @@ function checkRepositories() {
     if (astTypedCalls.length !== typedCalls.length) fail('ast_typed_query_call_site_reconciliation', { file, ast: astTypedCalls.length, typed: typedCalls.length });
     const astByLine = new Map(astCalls.map((call) => [call.line, call]));
     const astTypedByLine = new Map(astTypedCalls.map((call) => [call.line, call]));
+    for (const call of astCalls) call.transaction === 'DEFINITELY_OUT' ? counts.rawDefinitelyOut += 1 : counts.rawTreatAsIn += 1;
+    for (const call of astTypedCalls) call.transaction === 'DEFINITELY_OUT' ? counts.typedDefinitelyOut += 1 : counts.typedTreatAsIn += 1;
     for (const typed of typedCalls) for (const table of typed.tables) typedRuntimeTables.add(table);
     const expected = ledger.repositories[file];
     if (typeof expected !== 'string') { fail('repository_owner_missing', file); continue; }
@@ -186,8 +192,12 @@ function checkRepositories() {
       if (!row.transactionEvidence || row.transactionEvidence.locator !== key || row.transactionEvidence.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('transaction_evidence_MISSING_OR_DRIFT', key);
       const astTransaction = astByLine.get(call.line)?.transaction;
       if (!astTransaction || astTransaction === 'unknown') fail('ast_transaction_MISSING', key);
-      if (astTransaction && row.transaction !== astTransaction) fail('ast_transaction_MISMATCH', { key, ledger: row.transaction, derived: astTransaction });
+      if (astTransaction && row.transaction !== astTransaction) {
+        const disagreement = { key, ledger: row.transaction, derived: astTransaction, semanticIdentity: astByLine.get(call.line)?.transactionEvidence };
+        transactionLedgerDisagreements.push(disagreement); fail('ast_transaction_MISMATCH', disagreement);
+      }
       const actual = override ? { ...call, ...override, file, line: call.line } : call;
+      actual.transaction = astTransaction;
       actual.owner = ledger.repositories[path.basename(file)];
       if (actual.classification === 'classified') { counts.classifiedCallSites += 1; fileClassified += 1; for (const table of actual.tables) classifiedRuntimeTables.add(table); } else { counts.missingCallSites += 1; fileMissing += 1; }
       if (!row.owner) fail('call_site_owner_MISSING', key);
@@ -209,12 +219,19 @@ function checkRepositories() {
       const astTransaction = astTypedByLine.get(typed.line)?.transaction;
       if (!astTransaction || astTransaction === 'unknown') fail('ast_typed_transaction_MISSING', key);
       const actual = typedTruth ? { ...typed, ...typedTruth } : { ...typed };
+      actual.transaction = astTransaction;
       if (typedTruth && typedTruth.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_call_truth_evidence_MISMATCH', key);
       if (actual.classification === 'MISSING') fail('typed_query_call_unclassified_MISSING', key);
       const typedFact = ledger.typedQueryFacts?.[key];
       if (!typedFact) fail('typed_query_fact_ledger_MISSING', key);
-      if (astTransaction && typedFact?.transaction !== astTransaction) fail('ast_typed_transaction_MISMATCH', { key, ledger: typedFact?.transaction, derived: astTransaction });
-      if (row && row.transaction !== astTransaction) fail('typed_cross_transaction_MISMATCH', { key, ledger: row.transaction, derived: astTransaction });
+      if (astTransaction && typedFact?.transaction !== astTransaction) {
+        const disagreement = { key, ledger: typedFact?.transaction, derived: astTransaction, semanticIdentity: astTypedByLine.get(typed.line)?.transactionEvidence };
+        transactionLedgerDisagreements.push(disagreement); fail('ast_typed_transaction_MISMATCH', disagreement);
+      }
+      if (row && row.transaction !== astTransaction) {
+        const disagreement = { key, ledger: row.transaction, derived: astTransaction, semanticIdentity: astTypedByLine.get(typed.line)?.transactionEvidence };
+        transactionLedgerDisagreements.push(disagreement); fail('typed_cross_transaction_MISMATCH', disagreement);
+      }
       actual.owner = ledger.repositories[file];
       for (const field of ['operation', 'readWrite', 'lock', 'tables', 'owner', 'sourceKind', 'sourceExcerptHash']) {
         if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
@@ -330,44 +347,48 @@ function checkCrossCapability() {
 
 function checkTransactionFixtures() {
   const fixtures = {};
-  const lark = astRepositoryFacts.find((entry) => entry.file === 'postgres-lark-review-surface-repository.ts');
-  const larkGroups = new Map();
-  for (const call of lark?.calls ?? []) if (call.withTransactionScope) {
-    const group = larkGroups.get(call.withTransactionScope) ?? [];
-    group.push(call);
-    larkGroups.set(call.withTransactionScope, group);
+  const expected = [
+    { name: 'lark-authorize-card-action-ingress-update', file: 'postgres-lark-review-surface-repository.ts', className: 'PostgresLarkReviewSurfaceRepository', functionName: 'authorizeCardAction', queryOrdinal: 4, receiver: 'database', sql: /SELECT .*FROM channel_ingress_events .*lease_expires_at > now\(\).*FOR UPDATE/i, tables: ['channel_ingress_events'], lock: 'for_update' },
+    { name: 'lark-authorize-card-action-ingress-share', file: 'postgres-lark-review-surface-repository.ts', className: 'PostgresLarkReviewSurfaceRepository', functionName: 'authorizeCardAction', queryOrdinal: 5, receiver: 'database', sql: /SELECT .*FROM channel_ingress_events .*FOR SHARE/i, tables: ['channel_ingress_events'], lock: 'for_share' },
+    { name: 'channel-binding-for-update', file: 'postgres-channel-repository.ts', className: 'PostgresChannelRepository', functionName: 'resolveBindingWithSession', queryOrdinal: 2, receiver: 'database', sql: /SELECT .*FROM channel_conversation_bindings .*FOR UPDATE/i, tables: ['channel_conversation_bindings'], lock: 'for_update' },
+    { name: 'channel-session-for-share', file: 'postgres-channel-repository.ts', className: 'PostgresChannelRepository', functionName: 'resolveBindingWithSession', queryOrdinal: 3, receiver: 'database', sql: /SELECT id FROM product_sessions .*FOR SHARE/i, tables: ['product_sessions'], lock: 'for_share' },
+    // The dispatch names the repository PostgresCollaborativeTeamRepository, but the
+    // authoritative source declaration is PostgresTeamExecutionRepository. Keep the
+    // source class in the semantic key and expose the declared name as evidence.
+    { name: 'collaborative-recovery-child-update', file: 'postgres-collaborative-team-repository.ts', className: 'PostgresTeamExecutionRepository', declaredClassName: 'PostgresCollaborativeTeamRepository', functionName: 'recoverExpiredTeamRuns', queryOrdinal: 5, receiver: 'client', sql: /UPDATE runs .*RETURNING id,task_id/i, tables: ['runs', 'tasks'], lock: 'none' },
+    { name: 'collaborative-recovery-sibling-update', file: 'postgres-collaborative-team-repository.ts', className: 'PostgresTeamExecutionRepository', declaredClassName: 'PostgresCollaborativeTeamRepository', functionName: 'recoverExpiredTeamRuns', queryOrdinal: 7, receiver: 'client', sql: /UPDATE runs .*RETURNING id,task_id/i, tables: ['runs', 'tasks', 'team_runs'], lock: 'none' },
+  ];
+  const fixtureResults = [];
+  for (const fixture of expected) {
+    const entry = astRepositoryFacts.find((item) => item.file === fixture.file);
+    const call = entry?.calls.find((item) => item.className === fixture.className && item.functionName === fixture.functionName && item.queryOrdinal === fixture.queryOrdinal);
+    const normalizedSql = call?.normalizedSql ?? '';
+    const tables = referencedTables(normalizedSql);
+    const lock = /\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(normalizedSql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(normalizedSql) ? 'for_share' : 'none';
+    const result = { name: fixture.name, identity: call?.transactionEvidence ?? null, line: call?.line ?? null, derived: call?.transaction ?? null, expected: 'TREAT_AS_IN', receiver: call?.receiver ?? null, normalizedSql, tables, lock, declaredClassName: fixture.declaredClassName ?? fixture.className, sourceClassName: call?.className ?? null, classNameMismatch: Boolean(fixture.declaredClassName && fixture.declaredClassName !== call?.className), semanticMatch: Boolean(call && call.receiver === fixture.receiver && fixture.sql.test(normalizedSql) && JSON.stringify(tables) === JSON.stringify(fixture.tables) && lock === fixture.lock) };
+    fixtureResults.push(result);
+    if (!result.semanticMatch) fail('fixture_semantic_identity_MISSING', result);
+    else if (result.derived !== 'TREAT_AS_IN') fail('fixture_derived_DEFINITELY_OUT', result);
   }
-  const larkPair = [...larkGroups.values()].find((group) => group.filter((call) => call.transaction === 'in').length >= 2);
-  fixtures.larkWithTransactionPair = larkPair ? larkPair.filter((call) => call.transaction === 'in').slice(0, 2).map((call) => `${call.file}:${call.line}`) : [];
-  if (fixtures.larkWithTransactionPair.length !== 2) fail('fixture_lark_withTransaction_pair_MISSING', fixtures.larkWithTransactionPair);
-
-  const channel = astRepositoryFacts.find((entry) => entry.file === 'postgres-channel-repository.ts');
-  const channelGroups = new Map();
-  for (const call of channel?.calls ?? []) if (call.withTransactionScope) {
-    const group = channelGroups.get(call.withTransactionScope) ?? [];
-    group.push(call);
-    channelGroups.set(call.withTransactionScope, group);
-  }
-  const channelPair = [...channelGroups.values()].find((group) => group.filter((call) => call.transaction === 'in').length >= 2);
-  fixtures.channelWithTransactionPair = channelPair ? channelPair.filter((call) => call.transaction === 'in').slice(0, 2).map((call) => `${call.file}:${call.line}`) : [];
-  if (fixtures.channelWithTransactionPair.length !== 2) fail('fixture_channel_withTransaction_pair_MISSING', fixtures.channelWithTransactionPair);
-  const channelCross = channel?.calls.find((call) => call.typed && call.transaction === 'in' && ledger.typedCrossCapability?.[`${call.file}:${call.line}`]);
-  fixtures.channelTypedCross = channelCross ? `${channelCross.file}:${channelCross.line}` : null;
-  if (!fixtures.channelTypedCross) fail('fixture_channel_typed_cross_MISSING', fixtures.channelTypedCross);
-
-  const collaborative = astRepositoryFacts.find((entry) => entry.file === 'postgres-collaborative-team-repository.ts');
-  const explicitIn = (collaborative?.calls ?? []).filter((call) => call.transaction === 'in' && !call.withTransactionScope && call.explicitControls.beginBefore && call.explicitControls.controlAfter && call.receiver === 'client');
-  fixtures.collaborativeExplicitLater = explicitIn.length ? `${explicitIn.at(-1).file}:${explicitIn.at(-1).line}` : null;
-  fixtures.collaborativeExplicitEarlier = explicitIn.length ? `${explicitIn[0].file}:${explicitIn[0].line}` : null;
-  if (!fixtures.collaborativeExplicitLater) fail('fixture_collaborative_explicit_later_MISSING', fixtures.collaborativeExplicitLater);
-  if (!fixtures.collaborativeExplicitEarlier) fail('fixture_collaborative_explicit_earlier_MISSING', fixtures.collaborativeExplicitEarlier);
-  if (ledger.transactionTruthSource) fail('manual_transaction_truth_source_MUST_REMOVE', { knownOut: ledger.transactionTruthSource.knownOut ?? [] });
+  fixtures.exact = fixtureResults;
+  const allCalls = astRepositoryFacts.flatMap((entry) => entry.calls);
+  fixtures.counts = {
+    raw: { DEFINITELY_OUT: counts.rawDefinitelyOut, TREAT_AS_IN: counts.rawTreatAsIn, total: counts.rawQueryCallSites },
+    typed: { DEFINITELY_OUT: counts.typedDefinitelyOut, TREAT_AS_IN: counts.typedTreatAsIn, total: counts.typedQueryCallSites },
+    allAst: { DEFINITELY_OUT: allCalls.filter((call) => call.transaction === 'DEFINITELY_OUT').length, TREAT_AS_IN: allCalls.filter((call) => call.transaction === 'TREAT_AS_IN').length, total: allCalls.length },
+  };
+  const rawOut = astRepositoryFacts.flatMap((entry) => entry.calls).filter((call) => !call.typed && call.transaction === 'DEFINITELY_OUT');
+  fixtures.rawDefinitelyOutByRepository = Object.fromEntries([...new Set(rawOut.map((call) => call.file))].sort().map((file) => [file, rawOut.filter((call) => call.file === file).map((call) => ({ line: call.line, identity: call.transactionEvidence }))]));
+  const workRepositories = new Set(Object.entries(ledger.repositories ?? {}).filter(([, owner]) => owner === 'Work').map(([file]) => path.basename(file)));
+  fixtures.rawDefinitelyOutWork = rawOut.filter((call) => workRepositories.has(call.file)).map((call) => ({ file: call.file, line: call.line, identity: call.transactionEvidence }));
+  fixtures.currentLedgerDisagreements = transactionLedgerDisagreements;
+  if (ledger.transactionTruthSource || ledger.transactionTruth || ledger.typedTransactionTruth) fail('manual_transaction_truth_source_MUST_REMOVE', { transactionTruthSource: Boolean(ledger.transactionTruthSource), transactionTruth: Boolean(ledger.transactionTruth), typedTransactionTruth: Boolean(ledger.typedTransactionTruth) });
   return fixtures;
 }
 
 checkRepositories(); checkDdl(); checkPorts(); checkContracts(); checkCrossCapability();
 const fixtureMarkers = checkTransactionFixtures();
 const gitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
-const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, compilerIdentity, fixtureMarkers, counts, truthSourceDiffs: { ddl: ddlTruthSourceDiffs, query: queryTruthSourceDiffs }, failures };
+const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, compilerIdentity, fixtureMarkers, counts, transactionLedgerDisagreements, truthSourceDiffs: { ddl: ddlTruthSourceDiffs, query: queryTruthSourceDiffs }, failures };
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = failures.length ? 2 : 0;

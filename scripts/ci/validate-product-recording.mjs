@@ -206,7 +206,7 @@ function validateOi38Evidence(manifest, parsed) {
   if (normalize(evidence.foreign) !== normalize(evidence.missing))
     fail('oi38_negative_envelope_mismatch');
   const apiWork = parsed['api/work.json'];
-  const apiWorkRun = parsed['api/work-run.json'];
+  const apiWorkRun = parsed['api/work-run.json']?.work_run;
   const workRows = rows(parsed['db/works.json'], 'db/works.json');
   const workRunRows = rows(parsed['db/work_runs.json'], 'db/work_runs.json');
   if (
@@ -342,14 +342,7 @@ export async function validateRecording(directory, mode = 'pre-identity') {
   }
   if (mode === 'product') {
     ProductRunTraceResponseSchema.parse(parsed['api/trace.json']);
-    ProductWorkRunResponseSchema.parse({
-      work: parsed['api/work.json'],
-      work_run: parsed['api/work-run.json'],
-      projection_status: parsed['api/trace.json']?.projection_status,
-      work_items: parsed['api/trace.json']?.work_items,
-      actors: parsed['api/trace.json']?.actors,
-      messages: parsed['api/trace.json']?.messages,
-    });
+    ProductWorkRunResponseSchema.parse(parsed['api/work-run.json']);
   }
   let secretHits = 0;
   for (const [file, value] of Object.entries(parsed)) {
@@ -476,8 +469,8 @@ export async function validateRecording(directory, mode = 'pre-identity') {
       ) ||
       !resourceRows.every((row) => row.work_run_id === manifest.work_run_id) ||
       parsed['api/work.json']?.id !== manifest.work_id ||
-      parsed['api/work-run.json']?.id !== manifest.work_run_id ||
-      parsed['api/work-run.json']?.work_id !== manifest.work_id
+      parsed['api/work-run.json']?.work_run?.id !== manifest.work_run_id ||
+      parsed['api/work-run.json']?.work_run?.work_id !== manifest.work_id
     )
       fail('product_identity_lineage_mismatch');
     for (const query of manifest.queries) {

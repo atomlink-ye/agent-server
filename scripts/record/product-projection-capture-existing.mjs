@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpath } from 'node:fs/promises';
 import { Client } from 'pg';
 
 import {
@@ -18,6 +21,9 @@ const MEMBER_COMPOSITION = Object.freeze([
 ]);
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const execFileAsync = promisify(execFile);
+const WORKSPACE_ROOT = '/workspace';
+const ARTIFACT_ROOT = '/workspace/recording-artifacts';
 
 function fail(code, detail = '') {
   throw new Error(`${code}${detail ? `:${detail}` : ''}`);
@@ -61,12 +67,10 @@ function requiredId(value, label) {
   return value;
 }
 
-function rejectAnonymousOutputRoot(value) {
+async function validatedOutputRoot(value) {
   const outputRoot = resolve(value);
-  const workspaceRoot = resolve(
-    environment('PRODUCT_RECORDING_WORKSPACE_ROOT') ?? '/workspace',
-  );
-  const localRoot = resolve(workspaceRoot, '.local');
+  const workspaceRoot = resolve(WORKSPACE_ROOT);
+  const artifactRoot = resolve(ARTIFACT_ROOT);
   const within = (root, path) => {
     const pathFromRoot = relative(root, path);
     return (
@@ -77,11 +81,28 @@ function rejectAnonymousOutputRoot(value) {
     );
   };
   if (
-    !within(workspaceRoot, outputRoot) ||
-    within(localRoot, outputRoot)
+    !within(artifactRoot, outputRoot) ||
+    outputRoot === artifactRoot
   )
     fail('product_recordings_root_workspace_boundary_invalid');
+  const workspaceReal = await realpath(workspaceRoot).catch(() => null);
+  const parentReal = await realpath(dirname(outputRoot)).catch(() => null);
+  if (
+    workspaceReal !== workspaceRoot ||
+    (parentReal !== null && !within(artifactRoot, parentReal))
+  )
+    fail('product_recordings_root_realpath_invalid');
   return outputRoot;
+}
+
+async function readGitRevision() {
+  const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+    cwd: WORKSPACE_ROOT,
+    encoding: 'utf8',
+  }).catch(() => null);
+  const revision = result?.stdout.trim() ?? '';
+  if (!/^[0-9a-f]{40}$/u.test(revision)) fail('git_revision_missing');
+  return revision;
 }
 
 async function snapshot(baseUrl, token, path) {
@@ -187,14 +208,6 @@ function providerEvidenceFromTrace(trace) {
   };
 }
 
-async function readServiceRevision(baseUrl) {
-  const response = await fetch(new URL('/health/live', baseUrl));
-  const body = await response.json().catch(() => null);
-  if (!response.ok || typeof body?.version !== 'string' || !body.version.trim())
-    fail('service_liveness_provenance_missing');
-  return body.version;
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const baseUrl = new URL(
@@ -249,7 +262,7 @@ async function main() {
     'work_run_id',
   );
 
-  const outputRoot = rejectAnonymousOutputRoot(
+  const outputRoot = await validatedOutputRoot(
     requiredEnvironment('product_recordings_root', 'PRODUCT_RECORDINGS_ROOT'),
   );
   const databaseUrl = requiredEnvironment(
@@ -288,7 +301,7 @@ async function main() {
       principalType,
       principalId,
     );
-    const serviceRevision = await readServiceRevision(baseUrl);
+    const serviceRevision = await readGitRevision();
     const product = await acceptedGet(
       baseUrl,
       ownerToken,

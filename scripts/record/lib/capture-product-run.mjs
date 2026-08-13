@@ -648,6 +648,10 @@ export async function captureProductRun(options) {
     const works = byName.get('works');
     const workRuns = byName.get('work_runs');
     const resources = byName.get('work_run_resource_manifest');
+    const teamVersionIds = new Set(teamRows.map((row) => row.team_version_id));
+    const definitionResources = resources.filter(
+      (row) => row.slot === 'definition' && row.resource_kind === 'definition',
+    );
     if (
       !works.some(
         (row) =>
@@ -662,7 +666,11 @@ export async function captureProductRun(options) {
           row.tenant_id === options.tenantId &&
           row.workspace_id === options.workspaceId,
       ) ||
-      resources.some((row) => row.work_run_id !== options.workRunId)
+      resources.some((row) => row.work_run_id !== options.workRunId) ||
+      teamVersionIds.size !== 1 ||
+      !workRuns.every((row) => teamVersionIds.has(row.definition_version_id)) ||
+      definitionResources.length !== 1 ||
+      !teamVersionIds.has(definitionResources[0].resolved_version_id)
     )
       throw new Error('capture_product_db_identity_mismatch');
     assertScenarioPredicate(
@@ -685,7 +693,7 @@ export async function captureProductRun(options) {
     await writeJson(join(temporary, 'api/work.json'), options.work, audit);
     await writeJson(
       join(temporary, 'api/work-run.json'),
-      options.workRun,
+      workRunResponse,
       audit,
     );
     await writeJson(join(temporary, 'api/trace.json'), options.trace, audit);

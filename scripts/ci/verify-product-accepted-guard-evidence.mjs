@@ -236,7 +236,7 @@ const ARM_REQUIREMENTS = Object.freeze({
       name: 'wiring-mutation-leaf-product-routes-extra-command',
       expectedExitCode: 1,
       outputMarker:
-        'guard_wiring_invalid:modularization_verify_product_routes_definition',
+        'guard_wiring_invalid:modularization_verify_product-routes_definition',
     },
   ]),
   runtime: Object.freeze([

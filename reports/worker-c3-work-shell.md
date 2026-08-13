@@ -197,3 +197,26 @@ trailing whitespace/newline findings across the older
 `e8-classifier-a02b54a/`, `e8-classifier-51c102f/`, and follow-up raw evidence.
 Only source/tests/runner/report paths were checked separately and returned
 exit 0. Raw evidence is retained; no full-range PASS is claimed.
+
+## O-H16 production-path framing dual follow-up
+
+Test-wiring commit:
+`6f1f0c39e093d6040c2596ab7ef0da5c99247927` (parent
+`4278eb63864c19661a5689b836855ec0f68fe922`). The classifier framing dual now
+spawns the production CLI and compares exact stdout bytes. The runner dual
+invokes production `runAbsence` through its minimal spawn/absence/output seams,
+then feeds the captured real output through the outer classifier; it does not
+call framing helpers as a substitute.
+
+C-box evidence is under
+`artifacts/c3-work-shell/e8-classifier-6f1f0c3/`: 11/11 duals passed, and both
+canonical absence arms remained raw 1 / classifier 2 with restoration and
+candidate-hash proof. The exact source hashes are bound in each remote
+manifest.
+
+After the evidence commit, the canonical symbolic command
+`git diff --check 01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` is recorded as
+exit 2 because preserved raw ANSI captures in `e8-classifier-a02b54a/`,
+`e8-classifier-51c102f/`, and `e8-classifier-248d254/` contain whitespace
+findings. Scoped source/tests/runner/report checks are exit 0; raw evidence is
+retained and no full-range PASS is claimed.

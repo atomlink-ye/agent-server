@@ -44,6 +44,11 @@ const negativeControl = {
 } as const;
 const expectedFiles = [...recorderFiles, negativeControl];
 
+type ProvenanceCheckResult = {
+  readonly code: number;
+  readonly inputsVerified: boolean;
+};
+
 const legacyFiles = {
   '.gitkeep': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   'README.md': 'fa75d7774097c7ef670ec9f0171740165bb2fd4723c6023ac25c6aab13b02944',
@@ -68,7 +73,7 @@ async function readHash(path: string): Promise<string> {
   return sha256(await readFile(path));
 }
 
-export async function checkProductRecordingProvenance(): Promise<number> {
+async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResult> {
   let fixtureFiles: string[];
   let legacyFilesOnDisk: string[];
   try {
@@ -80,29 +85,29 @@ export async function checkProductRecordingProvenance(): Promise<number> {
       'code' in error &&
       (error as NodeJS.ErrnoException).code === 'ENOENT'
     )
-      return MISSING;
-    return FAIL;
+      return { code: MISSING, inputsVerified: false };
+    return { code: FAIL, inputsVerified: false };
   }
 
   const expectedFixtureFiles = expectedFiles.map(({ name }) => name).sort();
   if (expectedFixtureFiles.some((file) => !fixtureFiles.includes(file)))
-    return MISSING;
+    return { code: MISSING, inputsVerified: false };
   if (
     fixtureFiles.length !== expectedFixtureFiles.length ||
     fixtureFiles.some((file, index) => file !== expectedFixtureFiles[index])
   )
-    return FAIL;
+    return { code: FAIL, inputsVerified: false };
 
   const expectedLegacyFiles = Object.keys(legacyFiles).sort();
   if (
     legacyFilesOnDisk.length !== expectedLegacyFiles.length ||
     legacyFilesOnDisk.some((file, index) => file !== expectedLegacyFiles[index])
   )
-    return FAIL;
+    return { code: FAIL, inputsVerified: false };
 
   for (const [name, expectedSha] of Object.entries(legacyFiles)) {
     if ((await readHash(resolve(legacyRoot, name))) !== expectedSha)
-      return FAIL;
+      return { code: FAIL, inputsVerified: false };
   }
 
   for (const recording of expectedFiles) {
@@ -119,30 +124,37 @@ export async function checkProductRecordingProvenance(): Promise<number> {
         'code' in error &&
         (error as NodeJS.ErrnoException).code === 'ENOENT'
       )
-        return MISSING;
-      return FAIL;
+        return { code: MISSING, inputsVerified: false };
+      return { code: FAIL, inputsVerified: false };
     }
     if (sourceSha !== recording.sha256 || fixtureSha !== recording.sha256)
-      return FAIL;
+      return { code: FAIL, inputsVerified: false };
   }
 
   // O-H2 authorizes C1 to proceed with two complete recorders plus one
   // independent negative control, but the third complete-recorder slot is
   // still genuinely missing and must never be reported as PASS.
-  return MISSING;
+  return { code: MISSING, inputsVerified: true };
+}
+
+export async function checkProductRecordingProvenance(): Promise<number> {
+  return (await evaluateProductRecordingProvenance()).code;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  checkProductRecordingProvenance()
-    .then((code) => {
-      console.log(`recorder_count=${recorderFiles.length}`);
-      console.log('negative_control_count=1');
-      console.log('third_recorder_slot=MISSING');
-      console.log(`o_h2_decision=${OH2_DECISION}`);
+  evaluateProductRecordingProvenance()
+    .then(({ code, inputsVerified }) => {
+      if (inputsVerified) {
+        console.log(`recorder_count=${recorderFiles.length}`);
+        console.log('negative_control_count=1');
+        console.log('third_recorder_slot=MISSING');
+        console.log('provenance_inputs_verified=true');
+        console.log(`o_h2_decision=${OH2_DECISION}`);
+        console.log(
+          'known_limitation=oi38-negative-39210cab.json is provenance/count only and does not establish D10/D12 recorder eligibility or PASS',
+        );
+      }
       console.log(`product_recording_provenance_exit=${code}`);
-      console.log(
-        'known_limitation=oi38-negative-39210cab.json is provenance/count only and does not establish D10/D12 recorder eligibility or PASS',
-      );
       process.exitCode = code;
     })
     .catch((error) => {

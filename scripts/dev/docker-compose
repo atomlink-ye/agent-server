@@ -4,9 +4,45 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-# Keep the checked-in real-provider defaults as the source of defaults while
-# preserving any value already supplied by the operator/environment.
-. "$repo_root/scripts/dev/source-real-provider-defaults"
+runtime_compose=0
+if [[ -n "${COMPOSE_FILE:-}" ]]; then
+  printf '%s\n' 'docker-compose: COMPOSE_FILE is unsupported; select compose.runtime.yaml explicitly with -f/--file' >&2
+  exit 2
+fi
+is_runtime_file() {
+  local candidate="$1"
+  case "$candidate" in
+    compose.runtime.yaml|./compose.runtime.yaml|"$repo_root/compose.runtime.yaml") return 0 ;;
+  esac
+  if [[ "$candidate" != /* ]]; then
+    candidate="$repo_root/$candidate"
+  fi
+  local candidate_dir
+  candidate_dir="$(cd "$(dirname "$candidate")" 2>/dev/null && pwd -P)" || return 1
+  [[ "$candidate_dir/$(basename "$candidate")" == "$repo_root/compose.runtime.yaml" ]]
+}
+for ((arg_index = 1; arg_index <= $#; arg_index++)); do
+  arg="${!arg_index}"
+  case "$arg" in
+    -f|--file)
+      ((arg_index < $#)) || { printf '%s\n' 'docker-compose: -f/--file requires a path' >&2; exit 2; }
+      ((arg_index++))
+      is_runtime_file "${!arg_index}" && runtime_compose=1
+      ;;
+    --file=*)
+      is_runtime_file "${arg#--file=}" && runtime_compose=1
+      ;;
+    -f=*)
+      is_runtime_file "${arg#-f=}" && runtime_compose=1
+      ;;
+  esac
+done
+
+if ((runtime_compose)); then
+  # Keep the checked-in real-provider defaults as the source of defaults while
+  # preserving any value already supplied by the operator/environment.
+  . "$repo_root/scripts/dev/source-real-provider-defaults"
+fi
 
 dependency_stamp="$(node scripts/dev/dependency-stamp.mjs "$repo_root" | tr -d '\r\n')"
 [[ "$dependency_stamp" =~ ^[0-9a-f]{64}$ ]] || {
@@ -23,20 +59,43 @@ node_abi="${node_abi//[^A-Za-z0-9._-]/-}"
 volume_prefix="agent-server-cache-v1-node24-abi${node_abi}-${arch}-${dependency_stamp}"
 root_volume="${volume_prefix}-root"
 web_volume="${volume_prefix}-web"
-provider_stamp="$(node scripts/dev/provider-toolchain-stamp.mjs | tr -d '\r\n')"
-provider_volume="agent-server-provider-toolchain-v1-node24-abi${node_abi}-${arch}-${provider_stamp}"
+provider_volume=''
+if ((runtime_compose)); then
+  provider_stamp="$(node scripts/dev/provider-toolchain-stamp.mjs | tr -d '\r\n')"
+  provider_volume="agent-server-provider-toolchain-v1-node24-abi${node_abi}-${arch}-${provider_stamp}"
+fi
 
 export NODE_MODULES_VOLUME="$root_volume"
 export WEB_NODE_MODULES_VOLUME="$web_volume"
 export NODE_MODULES_EXTERNAL=true
 export WEB_NODE_MODULES_EXTERNAL=true
-export PROVIDER_TOOLCHAIN_VOLUME="$provider_volume"
+if ((runtime_compose)); then
+  export PROVIDER_TOOLCHAIN_VOLUME="$provider_volume"
+fi
 
 docker volume create "$root_volume" >/dev/null
 docker volume create "$web_volume" >/dev/null
-docker volume create "$provider_volume" >/dev/null
+if ((runtime_compose)); then
+  docker volume create "$provider_volume" >/dev/null
+fi
 
-raw_compose=(docker compose)
+compose_options=()
+skip_next=0
+for arg in "$@"; do
+  if ((skip_next)); then
+    compose_options+=("$arg")
+    skip_next=0
+    continue
+  fi
+  case "$arg" in
+    -f|--file|-p|--project-name|--project-directory|--env-file|--profile|--ansi|--progress)
+      compose_options+=("$arg")
+      skip_next=1
+      ;;
+    --file=*|-f=*) compose_options+=("$arg") ;;
+  esac
+done
+raw_compose=(docker compose "${compose_options[@]}")
 compose_command=''
 skip_next=0
 for arg in "$@"; do
@@ -74,9 +133,11 @@ if ((should_provision)); then
   fi
   "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh runner -c \
     'mkdir -p /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs && chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs'
-  "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh provider-toolchain-init -c \
-    'mkdir -p /opt/provider-toolchain-volume && chown 1000:1000 /opt/provider-toolchain-volume'
-  "${raw_compose[@]}" run --rm --no-deps provider-toolchain-init
+  if ((runtime_compose)); then
+    "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh provider-toolchain-init -c \
+      'mkdir -p /opt/provider-toolchain-volume && chown 1000:1000 /opt/provider-toolchain-volume'
+    "${raw_compose[@]}" run --rm --no-deps provider-toolchain-init
+  fi
 fi
 
 exec "${raw_compose[@]}" "$@"

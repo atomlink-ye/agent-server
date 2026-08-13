@@ -19,7 +19,8 @@ function optionValue(argv, names) {
   for (let index = 0; index < argv.length; index += 1) {
     if (!names.includes(argv[index])) continue;
     const value = argv[index + 1];
-    if (!value || value.startsWith('--')) fail(`missing_option_value:${argv[index]}`);
+    if (!value || value.startsWith('--'))
+      fail(`missing_option_value:${argv[index]}`);
     return value;
   }
   return undefined;
@@ -34,7 +35,9 @@ function resolveEvidence(value, tier) {
   } catch {
     fail(`missing_${tier}_evidence:${candidate}`);
   }
-  return stat.isDirectory() ? path.join(candidate, evidenceName(tier)) : candidate;
+  return stat.isDirectory()
+    ? path.join(candidate, evidenceName(tier))
+    : candidate;
 }
 
 function resolveTransportArtifact(value) {
@@ -72,8 +75,8 @@ function verifyTransportArtifact(filename) {
     fail('transport.recorder_command_not_runner');
   if (exitCode !== 0) fail('transport.recorder_exit_code');
   if (
-    Object.hasOwn(recorder, 'signal') && recorder.signal !== null ||
-    Object.hasOwn(recorder, 'spawn_error') && recorder.spawn_error !== null
+    (Object.hasOwn(recorder, 'signal') && recorder.signal !== null) ||
+    (Object.hasOwn(recorder, 'spawn_error') && recorder.spawn_error !== null)
   )
     fail('transport.recorder_process_state');
   return { command: commandText, exit_code: exitCode };
@@ -84,18 +87,26 @@ function isObject(value) {
 }
 
 function equalJson(actual, expected, label) {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(`mismatch:${label}`);
+  if (JSON.stringify(actual) !== JSON.stringify(expected))
+    fail(`mismatch:${label}`);
 }
 
 function requireHash(value, label) {
-  if (!isObject(value) || typeof value.path !== 'string' || !sha256Pattern.test(value.sha256))
+  if (
+    !isObject(value) ||
+    typeof value.path !== 'string' ||
+    !sha256Pattern.test(value.sha256)
+  )
     fail(`invalid_hash:${label}`);
   return value;
 }
 
 function hashGroups(evidence, label) {
   const groups = new Map();
-  const packageHash = requireHash(evidence.package_hash, `${label}.package_hash`);
+  const packageHash = requireHash(
+    evidence.package_hash,
+    `${label}.package_hash`,
+  );
   if (packageHash.path !== 'package.json') fail(`${label}.package_path`);
   groups.set('package_hash', [packageHash]);
   for (const field of [
@@ -122,7 +133,12 @@ function flatHashes(groups) {
 
 function gitBytes(candidate, filename) {
   try {
-    return execFileSync('git', ['-C', repo, 'show', `${candidate}:${filename}`]);
+    return execFileSync('git', [
+      '-C',
+      repo,
+      'show',
+      `${candidate}:${filename}`,
+    ]);
   } catch {
     fail(`candidate_blob_missing:${filename}`);
   }
@@ -133,8 +149,16 @@ function verifyCandidate(candidate) {
   let head;
   let status;
   try {
-    head = execFileSync('git', ['-C', repo, 'rev-parse', '--verify', 'HEAD^{commit}'], { encoding: 'utf8' }).trim();
-    status = execFileSync('git', ['-C', repo, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).trim();
+    head = execFileSync(
+      'git',
+      ['-C', repo, 'rev-parse', '--verify', 'HEAD^{commit}'],
+      { encoding: 'utf8' },
+    ).trim();
+    status = execFileSync(
+      'git',
+      ['-C', repo, 'status', '--porcelain', '--untracked-files=all'],
+      { encoding: 'utf8' },
+    ).trim();
   } catch {
     fail('local_git_unavailable');
   }
@@ -145,19 +169,47 @@ function verifyCandidate(candidate) {
 function verifyBinding(evidence, tier, candidate) {
   if (!isObject(evidence.candidate_binding)) fail(`${tier}.candidate_binding`);
   if (tier === 'lineage') {
-    equalJson(evidence.candidate_binding.kind, 'git_head_verified', `${tier}.binding.kind`);
-    equalJson(evidence.candidate_binding.verified, true, `${tier}.binding.verified`);
-    equalJson(evidence.candidate_binding.head_sha, candidate, `${tier}.binding.head_sha`);
-    equalJson(evidence.candidate_binding.worktree_clean, true, `${tier}.binding.clean`);
+    equalJson(
+      evidence.candidate_binding.kind,
+      'git_head_verified',
+      `${tier}.binding.kind`,
+    );
+    equalJson(
+      evidence.candidate_binding.verified,
+      true,
+      `${tier}.binding.verified`,
+    );
+    equalJson(
+      evidence.candidate_binding.head_sha,
+      candidate,
+      `${tier}.binding.head_sha`,
+    );
+    equalJson(
+      evidence.candidate_binding.worktree_clean,
+      true,
+      `${tier}.binding.clean`,
+    );
   } else {
-    equalJson(evidence.candidate_binding.kind, 'candidate_claim', `${tier}.binding.kind`);
-    equalJson(evidence.candidate_binding.verified, false, `${tier}.binding.verified`);
+    equalJson(
+      evidence.candidate_binding.kind,
+      'candidate_claim',
+      `${tier}.binding.kind`,
+    );
+    equalJson(
+      evidence.candidate_binding.verified,
+      false,
+      `${tier}.binding.verified`,
+    );
   }
 }
 
 function verifyPositiveArm(evidence, tier) {
-  if (evidence.ok !== true || !Array.isArray(evidence.arms)) fail(`${tier}.not_ok`);
-  const name = tier === 'lineage' ? 'lineage-positive' : 'runtime-positive-accepted-checker';
+  if (evidence.ok !== true || !Array.isArray(evidence.arms))
+    fail(`${tier}.not_ok`);
+  const name =
+    tier === 'lineage'
+      ? 'lineage-positive'
+      : 'runtime-positive-accepted-checker';
   const arm = evidence.arms.find((entry) => entry?.name === name);
   if (
     !isObject(arm) ||
@@ -173,8 +225,12 @@ function verifyPositiveArm(evidence, tier) {
 
 function verifyGitHashes(groups, candidate, label) {
   for (const entry of flatHashes(groups)) {
-    const digest = crypto.createHash('sha256').update(gitBytes(candidate, entry.path)).digest('hex');
-    if (digest !== entry.sha256) fail(`candidate_hash_mismatch:${label}:${entry.path}`);
+    const digest = crypto
+      .createHash('sha256')
+      .update(gitBytes(candidate, entry.path))
+      .digest('hex');
+    if (digest !== entry.sha256)
+      fail(`candidate_hash_mismatch:${label}:${entry.path}`);
   }
 }
 
@@ -207,11 +263,22 @@ function main() {
   const lineage = readJson(lineagePath, 'lineage');
   const runtime = readJson(runtimePath, 'runtime');
   if (!isObject(lineage) || !isObject(runtime)) fail('evidence_not_object');
-  equalJson(lineage.schema, 'product-accepted-guard-evidence.v2', 'lineage.schema');
-  equalJson(runtime.schema, 'product-accepted-guard-evidence.v2', 'runtime.schema');
+  equalJson(
+    lineage.schema,
+    'product-accepted-guard-evidence.v2',
+    'lineage.schema',
+  );
+  equalJson(
+    runtime.schema,
+    'product-accepted-guard-evidence.v2',
+    'runtime.schema',
+  );
   equalJson(lineage.tier, 'lineage', 'lineage.tier');
   equalJson(runtime.tier, 'runtime', 'runtime.tier');
-  if (!sha1Pattern.test(lineage.candidate_sha) || lineage.candidate_sha !== runtime.candidate_sha)
+  if (
+    !sha1Pattern.test(lineage.candidate_sha) ||
+    lineage.candidate_sha !== runtime.candidate_sha
+  )
     fail('candidate_sha_mismatch');
   const claimedCandidate = optionValue(argv, ['--candidate-sha']);
   if (claimedCandidate && claimedCandidate !== lineage.candidate_sha)
@@ -243,6 +310,8 @@ function main() {
 try {
   process.exitCode = main();
 } catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exitCode = 1;
 }

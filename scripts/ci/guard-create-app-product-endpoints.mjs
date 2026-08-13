@@ -18,7 +18,10 @@ import {
 } from '../../src/contracts/product-projection/index.ts';
 
 const MANIFEST_PATH = fileURLToPath(
-  new URL('../../src/contracts/product-accepted-subset.v1.json', import.meta.url),
+  new URL(
+    '../../src/contracts/product-accepted-subset.v1.json',
+    import.meta.url,
+  ),
 );
 const OWNER = Object.freeze({
   tenantId: 'tenant_guard',
@@ -360,7 +363,9 @@ async function readInventory() {
   const endpoints = manifest?.endpoints;
   if (!Array.isArray(endpoints) || endpoints.length !== 8)
     throw new Error('accepted_subset_endpoint_count');
-  const keys = endpoints.map((endpoint) => `${endpoint.method} ${endpoint.path}`);
+  const keys = endpoints.map(
+    (endpoint) => `${endpoint.method} ${endpoint.path}`,
+  );
   if (
     endpoints.some((endpoint) => !endpoint?.id) ||
     new Set(endpoints.map((endpoint) => endpoint.id)).size !== 8 ||

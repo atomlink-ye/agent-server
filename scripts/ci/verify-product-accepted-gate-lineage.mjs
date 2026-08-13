@@ -8,9 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const ACCEPTED_MANIFEST_RELATIVE =
   'src/contracts/product-accepted-subset.v1.json';
-const REPO_ROOT = resolve(
-  fileURLToPath(new URL('../../', import.meta.url)),
-);
+const REPO_ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const CONTRACT_EVIDENCE_ROOT = resolve(REPO_ROOT, 'evidence/product-contract');
 const DEFAULT_EVIDENCE_PATHS = Object.freeze({
   decision: resolve(CONTRACT_EVIDENCE_ROOT, 'human-gate-decision.json'),
@@ -65,7 +63,8 @@ function optionValue(names) {
   for (let index = 0; index < process.argv.length; index += 1) {
     if (!names.includes(process.argv[index])) continue;
     const value = process.argv[index + 1];
-    if (!value || value.startsWith('--')) fail(`missing_option_value:${process.argv[index]}`);
+    if (!value || value.startsWith('--'))
+      fail(`missing_option_value:${process.argv[index]}`);
     return value;
   }
   return undefined;
@@ -92,8 +91,7 @@ function evidencePaths() {
   return {
     decision: overrides.decision ?? DEFAULT_EVIDENCE_PATHS.decision,
     accepted: overrides.accepted ?? DEFAULT_EVIDENCE_PATHS.accepted,
-    continuation:
-      overrides.continuation ?? DEFAULT_EVIDENCE_PATHS.continuation,
+    continuation: overrides.continuation ?? DEFAULT_EVIDENCE_PATHS.continuation,
   };
 }
 
@@ -115,9 +113,17 @@ function parseEvidence(bytes, label) {
 
 function validateHashBundle(value, label) {
   if (!isObject(value)) fail(`evidence_mismatch:${label}`);
-  if (!isObject(value.package_hash) || value.package_hash.path !== 'package.json')
+  if (
+    !isObject(value.package_hash) ||
+    value.package_hash.path !== 'package.json'
+  )
     fail(`evidence_mismatch:${label}.package_hash`);
-  const arrays = ['guard_hashes', 'manifest_hashes', 'evidence_hashes', 'production_input_hashes'];
+  const arrays = [
+    'guard_hashes',
+    'manifest_hashes',
+    'evidence_hashes',
+    'production_input_hashes',
+  ];
   for (const field of ['package_hash', ...arrays]) {
     const entries = field === 'package_hash' ? [value[field]] : value[field];
     if (!Array.isArray(entries) || entries.length === 0)
@@ -143,21 +149,47 @@ function validateHashBundle(value, label) {
             : field === 'production_input_hashes'
               ? 'src/'
               : null;
-    if (requiredPrefix && entries.some((entry) => !entry.path.startsWith(requiredPrefix)))
+    if (
+      requiredPrefix &&
+      entries.some((entry) => !entry.path.startsWith(requiredPrefix))
+    )
       fail(`evidence_mismatch:${label}.${field}.path`);
   }
 }
 
 function verifyLineageAttestation(value) {
   if (!isObject(value)) fail('attestation_not_object');
-  equalValue(value.schema, 'product-accepted-guard-evidence.v2', 'attestation.schema');
+  equalValue(
+    value.schema,
+    'product-accepted-guard-evidence.v2',
+    'attestation.schema',
+  );
   equalValue(value.tier, 'lineage', 'attestation.tier');
-  const candidate = requireSha(value.candidate_sha, 'attestation.candidate_sha');
+  const candidate = requireSha(
+    value.candidate_sha,
+    'attestation.candidate_sha',
+  );
   if (!isObject(value.candidate_binding)) fail('attestation.candidate_binding');
-  equalValue(value.candidate_binding.kind, 'git_head_verified', 'attestation.candidate_binding.kind');
-  equalValue(value.candidate_binding.verified, true, 'attestation.candidate_binding.verified');
-  equalValue(value.candidate_binding.head_sha, candidate, 'attestation.candidate_binding.head_sha');
-  equalValue(value.candidate_binding.worktree_clean, true, 'attestation.candidate_binding.worktree_clean');
+  equalValue(
+    value.candidate_binding.kind,
+    'git_head_verified',
+    'attestation.candidate_binding.kind',
+  );
+  equalValue(
+    value.candidate_binding.verified,
+    true,
+    'attestation.candidate_binding.verified',
+  );
+  equalValue(
+    value.candidate_binding.head_sha,
+    candidate,
+    'attestation.candidate_binding.head_sha',
+  );
+  equalValue(
+    value.candidate_binding.worktree_clean,
+    true,
+    'attestation.candidate_binding.worktree_clean',
+  );
   validateHashBundle(value, 'attestation');
   equalValue(value.ok, true, 'attestation.ok');
   if (!Array.isArray(value.arms)) fail('attestation.arms');
@@ -175,8 +207,7 @@ function verifyLineageAttestation(value) {
   const expectedCandidate =
     process.env.PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA ??
     process.env.CANDIDATE_SHA;
-  if (!expectedCandidate)
-    fail('attestation.candidate_sha.current_missing');
+  if (!expectedCandidate) fail('attestation.candidate_sha.current_missing');
   equalValue(expectedCandidate, candidate, 'attestation.candidate_sha.current');
   return candidate;
 }
@@ -210,7 +241,9 @@ function gitBytes(args) {
 function gitCommit(sha, field) {
   const resolved = gitText(['rev-parse', '--verify', `${sha}^{commit}`]);
   equalValue(resolved, sha, `${field}.sha`);
-  const parents = gitText(['rev-list', '--parents', '-n', '1', sha]).split(/\s+/u);
+  const parents = gitText(['rev-list', '--parents', '-n', '1', sha]).split(
+    /\s+/u,
+  );
   if (parents.shift() !== sha) fail(`evidence_mismatch:${field}.sha`);
   return {
     sha,
@@ -234,13 +267,34 @@ function isAncestor(ancestor, descendant) {
 
 function verifyAcceptedLineage(value) {
   if (!isObject(value)) fail('evidence_mismatch:accepted.lineage');
-  const preGate = requireSha(value.pre_gate_candidate_sha, 'accepted.lineage.pre_gate_candidate_sha');
-  const sourceSha = requireSha(value.source_acceptance_sha, 'accepted.lineage.source_acceptance_sha');
-  const sourceParent = requireSha(value.source_acceptance_parent_sha, 'accepted.lineage.source_acceptance_parent_sha');
-  const sourceTree = requireSha(value.source_accepted_tree_sha, 'accepted.lineage.source_accepted_tree_sha');
-  const squashSha = requireSha(value.squash_acceptance_sha, 'accepted.lineage.squash_acceptance_sha');
-  const squashParent = requireSha(value.squash_parent_sha, 'accepted.lineage.squash_parent_sha');
-  const squashTree = requireSha(value.squash_accepted_tree_sha, 'accepted.lineage.squash_accepted_tree_sha');
+  const preGate = requireSha(
+    value.pre_gate_candidate_sha,
+    'accepted.lineage.pre_gate_candidate_sha',
+  );
+  const sourceSha = requireSha(
+    value.source_acceptance_sha,
+    'accepted.lineage.source_acceptance_sha',
+  );
+  const sourceParent = requireSha(
+    value.source_acceptance_parent_sha,
+    'accepted.lineage.source_acceptance_parent_sha',
+  );
+  const sourceTree = requireSha(
+    value.source_accepted_tree_sha,
+    'accepted.lineage.source_accepted_tree_sha',
+  );
+  const squashSha = requireSha(
+    value.squash_acceptance_sha,
+    'accepted.lineage.squash_acceptance_sha',
+  );
+  const squashParent = requireSha(
+    value.squash_parent_sha,
+    'accepted.lineage.squash_parent_sha',
+  );
+  const squashTree = requireSha(
+    value.squash_accepted_tree_sha,
+    'accepted.lineage.squash_accepted_tree_sha',
+  );
   equalValue(value.trees_equal, true, 'accepted.lineage.trees_equal');
   equalValue(
     value.squash_parent_semantics,
@@ -250,12 +304,32 @@ function verifyAcceptedLineage(value) {
   const source = gitCommit(sourceSha, 'accepted.lineage.source_acceptance');
   const squash = gitCommit(squashSha, 'accepted.lineage.squash_acceptance');
   gitCommit(preGate, 'accepted.lineage.pre_gate_candidate');
-  equalValue(source.parents, [sourceParent], 'accepted.lineage.source_acceptance.parents');
-  equalValue(squash.parents, [squashParent], 'accepted.lineage.squash_acceptance.parents');
-  equalValue(source.tree, sourceTree, 'accepted.lineage.source_acceptance.tree');
-  equalValue(squash.tree, squashTree, 'accepted.lineage.squash_acceptance.tree');
+  equalValue(
+    source.parents,
+    [sourceParent],
+    'accepted.lineage.source_acceptance.parents',
+  );
+  equalValue(
+    squash.parents,
+    [squashParent],
+    'accepted.lineage.squash_acceptance.parents',
+  );
+  equalValue(
+    source.tree,
+    sourceTree,
+    'accepted.lineage.source_acceptance.tree',
+  );
+  equalValue(
+    squash.tree,
+    squashTree,
+    'accepted.lineage.squash_acceptance.tree',
+  );
   equalValue(sourceTree, squashTree, 'accepted.lineage.trees_equal.value');
-  equalValue(preGate, sourceParent, 'accepted.lineage.pre_gate_candidate.source_parent');
+  equalValue(
+    preGate,
+    sourceParent,
+    'accepted.lineage.pre_gate_candidate.source_parent',
+  );
   return { ...value, sourceSha, squashSha };
 }
 
@@ -279,9 +353,16 @@ function verifyContinuationLineage(value, acceptedLineage) {
 }
 
 function verifyFormatProvenance(value) {
-  if (!isObject(value)) fail('evidence_mismatch:continuation.format_provenance');
-  const formatSha = requireSha(value.commit, 'continuation.format_provenance.commit');
-  const formatTree = requireSha(value.commit_tree, 'continuation.format_provenance.commit_tree');
+  if (!isObject(value))
+    fail('evidence_mismatch:continuation.format_provenance');
+  const formatSha = requireSha(
+    value.commit,
+    'continuation.format_provenance.commit',
+  );
+  const formatTree = requireSha(
+    value.commit_tree,
+    'continuation.format_provenance.commit_tree',
+  );
   const regeneratedTree = requireSha(
     value.independently_regenerated_tree,
     'continuation.format_provenance.independently_regenerated_tree',
@@ -299,9 +380,21 @@ function verifyFormatProvenance(value) {
     candidateSha,
     'continuation.format_provenance.current_candidate',
   );
-  equalValue(format.tree, formatTree, 'continuation.format_provenance.commit_tree');
-  equalValue(regeneratedTree, formatTree, 'continuation.format_provenance.independently_regenerated_tree');
-  equalValue(candidate.tree, candidateTree, 'continuation.format_provenance.current_candidate_tree');
+  equalValue(
+    format.tree,
+    formatTree,
+    'continuation.format_provenance.commit_tree',
+  );
+  equalValue(
+    regeneratedTree,
+    formatTree,
+    'continuation.format_provenance.independently_regenerated_tree',
+  );
+  equalValue(
+    candidate.tree,
+    candidateTree,
+    'continuation.format_provenance.current_candidate_tree',
+  );
   equalValue(
     value.format_commit_is_candidate_ancestor,
     isAncestor(formatSha, candidateSha),
@@ -321,14 +414,28 @@ async function main() {
     process.stdout.write('accepted_gate_lineage_attestation_ok\n');
     return 0;
   }
-  const { decision: decisionPath, accepted: acceptedPath, continuation: continuationPath } =
-    evidencePaths();
+  const {
+    decision: decisionPath,
+    accepted: acceptedPath,
+    continuation: continuationPath,
+  } = evidencePaths();
   const decisionBytes = await readEvidence(decisionPath, 'decision');
   const acceptedBytes = await readEvidence(acceptedPath, 'accepted');
-  const continuationBytes = await readEvidence(continuationPath, 'continuation');
+  const continuationBytes = await readEvidence(
+    continuationPath,
+    'continuation',
+  );
   equalValue(sha256(decisionBytes), EXPECTED.decisionSha256, 'decision.sha256');
-  equalValue(sha256(acceptedBytes), EXPECTED.acceptedEvidenceSha256, 'accepted.sha256');
-  equalValue(sha256(continuationBytes), EXPECTED.continuationSha256, 'continuation.sha256');
+  equalValue(
+    sha256(acceptedBytes),
+    EXPECTED.acceptedEvidenceSha256,
+    'accepted.sha256',
+  );
+  equalValue(
+    sha256(continuationBytes),
+    EXPECTED.continuationSha256,
+    'continuation.sha256',
+  );
 
   const decision = parseEvidence(decisionBytes, 'decision');
   const accepted = parseEvidence(acceptedBytes, 'accepted');
@@ -337,27 +444,46 @@ async function main() {
     fail('evidence_not_object');
   equalValue(decision.decision, 'ACCEPTED', 'decision.decision');
   equalValue(accepted.decision, 'ACCEPTED', 'accepted.decision');
-  equalValue(continuation.decision, 'ACCEPTED_CONTINUES_WITHOUT_SEMANTIC_CHANGE', 'continuation.decision');
+  equalValue(
+    continuation.decision,
+    'ACCEPTED_CONTINUES_WITHOUT_SEMANTIC_CHANGE',
+    'continuation.decision',
+  );
   const acceptedLineage = verifyAcceptedLineage(accepted.lineage);
-  equalValue(decision.candidate_sha, acceptedLineage.pre_gate_candidate_sha, 'decision.candidate_sha.lineage');
-  verifyContinuationLineage(continuation.lineage_interpretation, acceptedLineage);
+  equalValue(
+    decision.candidate_sha,
+    acceptedLineage.pre_gate_candidate_sha,
+    'decision.candidate_sha.lineage',
+  );
+  verifyContinuationLineage(
+    continuation.lineage_interpretation,
+    acceptedLineage,
+  );
   verifyFormatProvenance(continuation.format_provenance);
 
   const artifacts = accepted.artifacts;
   if (!Array.isArray(artifacts)) fail('evidence_mismatch:accepted.artifacts');
   const artifactHashes = new Map();
   for (const artifact of artifacts) {
-    if (!isObject(artifact) || typeof artifact.path !== 'string' || typeof artifact.sha256 !== 'string')
+    if (
+      !isObject(artifact) ||
+      typeof artifact.path !== 'string' ||
+      typeof artifact.sha256 !== 'string'
+    )
       fail('evidence_mismatch:accepted.artifacts.entry');
     artifactHashes.set(artifact.path, artifact.sha256);
   }
   const continuationManifest = continuation.manifest;
-  if (!isObject(continuationManifest)) fail('evidence_mismatch:continuation.manifest');
+  if (!isObject(continuationManifest))
+    fail('evidence_mismatch:continuation.manifest');
   const acceptedManifestBytes = gitBytes([
     'show',
     `${acceptedLineage.squashSha}:${ACCEPTED_MANIFEST_RELATIVE}`,
   ]);
-  const acceptedManifest = parseEvidence(acceptedManifestBytes, 'accepted_manifest');
+  const acceptedManifest = parseEvidence(
+    acceptedManifestBytes,
+    'accepted_manifest',
+  );
   equalValue(
     artifactHashes.get(ACCEPTED_MANIFEST_RELATIVE),
     sha256(acceptedManifestBytes),

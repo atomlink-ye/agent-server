@@ -103,7 +103,10 @@ function parseInput(argv) {
 
 function isWithin(parent, candidate) {
   const relative = path.relative(parent, candidate);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
 }
 
 function gitText(args) {
@@ -186,7 +189,7 @@ function runArm({
   return {
     name,
     expected_exit_code: expectedExitCode,
-    exit_code: missing ? null : result.status ?? null,
+    exit_code: missing ? null : (result.status ?? null),
     signal,
     argv: [command, ...args],
     cwd,
@@ -203,10 +206,7 @@ function runArm({
           markers_ok: markersOk,
         }
       : {}),
-    ok:
-      !missing &&
-      result.status === expectedExitCode &&
-      markersOk,
+    ok: !missing && result.status === expectedExitCode && markersOk,
   };
 }
 
@@ -238,10 +238,7 @@ function createRuntimeCopy() {
   });
   fs.mkdirSync(path.join(directory, 'scripts/ci'), { recursive: true });
   for (const file of [routeGuard, mutator])
-    fs.copyFileSync(
-      path.join(repo, file),
-      path.join(directory, file),
-    );
+    fs.copyFileSync(path.join(repo, file), path.join(directory, file));
   fs.symlinkSync(
     path.join(repo, 'node_modules'),
     path.join(directory, 'node_modules'),
@@ -354,10 +351,13 @@ function runLineageTier() {
     ),
   );
   arms.push(
-    runWiringMutation('wiring-mutation-leaf-product-routes-extra-command', (scripts) => {
-      scripts['modularization:verify:product-routes'] =
-        `${scripts['modularization:verify:product-routes']} && true`;
-    }),
+    runWiringMutation(
+      'wiring-mutation-leaf-product-routes-extra-command',
+      (scripts) => {
+        scripts['modularization:verify:product-routes'] =
+          `${scripts['modularization:verify:product-routes']} && true`;
+      },
+    ),
   );
   return arms;
 }
@@ -381,7 +381,10 @@ function runCheckBackendArm(name, expectedExitCode, envOverrides = {}) {
 }
 
 function runManifestStatusMutation(candidateSha) {
-  const filename = path.join(repo, 'src/contracts/product-accepted-subset.v1.json');
+  const filename = path.join(
+    repo,
+    'src/contracts/product-accepted-subset.v1.json',
+  );
   const original = fs.readFileSync(filename);
   const manifest = JSON.parse(original.toString('utf8'));
   manifest.status = 'mutated_for_guard_evidence';

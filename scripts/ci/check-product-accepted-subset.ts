@@ -287,7 +287,8 @@ function verifyLineage(value: unknown, label: string): Record<string, unknown> {
 }
 
 function verifyFormatProvenance(value: unknown): void {
-  if (!isObject(value)) fail('evidence_mismatch:continuation.format_provenance');
+  if (!isObject(value))
+    fail('evidence_mismatch:continuation.format_provenance');
   const shaFields = [
     'commit',
     'commit_tree',
@@ -317,7 +318,11 @@ async function verifyAcceptedEvidence(
   equalValue(expected.api_major, 'v1', 'generated.api_major');
   equalValue(expected.accepted_revision, 1, 'generated.accepted_revision');
   equalValue(expected.endpoints.length, 8, 'generated.endpoint_count');
-  equalValue(expected.owner_scope, ['tenant_id', 'workspace_id'], 'generated.owner_scope');
+  equalValue(
+    expected.owner_scope,
+    ['tenant_id', 'workspace_id'],
+    'generated.owner_scope',
+  );
   const decision = await readJson(paths.decision, 'decision');
   const accepted = await readJson(paths.accepted, 'accepted');
   const continuationBytes = await readFile(paths.continuation).catch(() => {
@@ -328,71 +333,160 @@ async function verifyAcceptedEvidence(
     fail('evidence_not_object');
 
   equalValue(decision.decision, 'ACCEPTED', 'decision.decision');
-  equalValue(decision.decided_by, 'Manager (Claude Code), under Owner delegated authority', 'decision.decided_by');
+  equalValue(
+    decision.decided_by,
+    'Manager (Claude Code), under Owner delegated authority',
+    'decision.decided_by',
+  );
   equalValue(decision.decided_at, '2026-08-13', 'decision.decided_at');
-  equalValue(decision.supersedes, '2026-08-12 PROVISIONAL decision (same file, earlier revision)', 'decision.supersedes');
+  equalValue(
+    decision.supersedes,
+    '2026-08-12 PROVISIONAL decision (same file, earlier revision)',
+    'decision.supersedes',
+  );
   if (
     typeof decision.candidate_sha !== 'string' ||
     !/^[a-f0-9]{40}$/u.test(decision.candidate_sha)
   )
     fail('evidence_mismatch:decision.candidate_sha');
   const decisionCandidateSha = decision.candidate_sha;
-  equalValue(decision.gate_result, { pass: 14, fail: 0, miss: 0, exit_code: 0 }, 'decision.gate_result');
+  equalValue(
+    decision.gate_result,
+    { pass: 14, fail: 0, miss: 0, exit_code: 0 },
+    'decision.gate_result',
+  );
   const decisionScope = decision.scope;
   if (!isObject(decisionScope)) fail('evidence_mismatch:decision.scope');
-  equalValue(decisionScope.authority, 'Owner Scope Gate 2026-08-13 (LANE-STATE 第二十八节)', 'decision.scope.authority');
+  equalValue(
+    decisionScope.authority,
+    'Owner Scope Gate 2026-08-13 (LANE-STATE 第二十八节)',
+    'decision.scope.authority',
+  );
   equalValue(
     decisionScope.revision,
     'Product API v1 Revision 1 = read-only accepted subset',
     'decision.scope.revision',
   );
-  equalValue(decisionScope.controls, 'cancel_work_run / decide_completion 保持 explicitly_unavailable，后续以 additive capability 加入', 'decision.scope.controls');
-  equalValue(decisionScope.trace, '接受 timeline_coverage=mcp_only 为能力边界；前端必须展示 coverage，不得表现为 full trace', 'decision.scope.trace');
-  equalValue(sha256(await readFile(paths.decision)), ACCEPTED_FACTS.decisionSha256, 'decision.sha256');
+  equalValue(
+    decisionScope.controls,
+    'cancel_work_run / decide_completion 保持 explicitly_unavailable，后续以 additive capability 加入',
+    'decision.scope.controls',
+  );
+  equalValue(
+    decisionScope.trace,
+    '接受 timeline_coverage=mcp_only 为能力边界；前端必须展示 coverage，不得表现为 full trace',
+    'decision.scope.trace',
+  );
+  equalValue(
+    sha256(await readFile(paths.decision)),
+    ACCEPTED_FACTS.decisionSha256,
+    'decision.sha256',
+  );
 
   equalValue(accepted.schema_version, 1, 'accepted.schema_version');
-  equalValue(accepted.kind, 'product_contract_acceptance_supplement', 'accepted.kind');
+  equalValue(
+    accepted.kind,
+    'product_contract_acceptance_supplement',
+    'accepted.kind',
+  );
   equalValue(accepted.decision, 'ACCEPTED', 'accepted.decision');
   const acceptedSigner = accepted.signer;
   if (!isObject(acceptedSigner)) fail('evidence_mismatch:accepted.signer');
   equalValue(acceptedSigner.role, 'Manager B', 'accepted.signer.role');
-  equalValue(acceptedSigner.agent_id, '7e2f4c22-02a6-4c74-8751-2a7a60d72a2e', 'accepted.signer.agent_id');
-  equalValue(acceptedSigner.authority, 'authority/DECISIONS.md#D21', 'accepted.signer.authority');
+  equalValue(
+    acceptedSigner.agent_id,
+    '7e2f4c22-02a6-4c74-8751-2a7a60d72a2e',
+    'accepted.signer.agent_id',
+  );
+  equalValue(
+    acceptedSigner.authority,
+    'authority/DECISIONS.md#D21',
+    'accepted.signer.authority',
+  );
   const supplements = accepted.supplements;
   if (!isObject(supplements)) fail('evidence_mismatch:accepted.supplements');
-  equalValue(supplements.path, 'evidence/human-gate-decision.json', 'accepted.supplements.path');
-  equalValue(supplements.sha256, ACCEPTED_FACTS.decisionSha256, 'accepted.supplements.sha256');
-  equalValue(sha256(await readFile(paths.decision)), supplements.sha256, 'accepted.supplements.decision_hash');
-  equalValue(await readFile(paths.accepted).then(sha256), ACCEPTED_FACTS.acceptedEvidenceSha256, 'accepted.sha256');
-  equalValue(sha256(continuationBytes), ACCEPTED_FACTS.continuationSha256, 'continuation.sha256');
+  equalValue(
+    supplements.path,
+    'evidence/human-gate-decision.json',
+    'accepted.supplements.path',
+  );
+  equalValue(
+    supplements.sha256,
+    ACCEPTED_FACTS.decisionSha256,
+    'accepted.supplements.sha256',
+  );
+  equalValue(
+    sha256(await readFile(paths.decision)),
+    supplements.sha256,
+    'accepted.supplements.decision_hash',
+  );
+  equalValue(
+    await readFile(paths.accepted).then(sha256),
+    ACCEPTED_FACTS.acceptedEvidenceSha256,
+    'accepted.sha256',
+  );
+  equalValue(
+    sha256(continuationBytes),
+    ACCEPTED_FACTS.continuationSha256,
+    'continuation.sha256',
+  );
 
   const contract = accepted.contract;
   if (!isObject(contract)) fail('evidence_mismatch:accepted.contract');
-  equalValue(contract, {
-    status: 'accepted',
-    api_major: 'v1',
-    accepted_revision: 1,
-    endpoint_count: 8,
-    owner_scope: ['tenant_id', 'workspace_id'],
-  }, 'accepted.contract');
-  equalValue(accepted.gate_result, { pass: 14, fail: 0, miss: 0, exit_code: 0, source: 'evidence/human-gate-decision.json' }, 'accepted.gate_result');
+  equalValue(
+    contract,
+    {
+      status: 'accepted',
+      api_major: 'v1',
+      accepted_revision: 1,
+      endpoint_count: 8,
+      owner_scope: ['tenant_id', 'workspace_id'],
+    },
+    'accepted.contract',
+  );
+  equalValue(
+    accepted.gate_result,
+    {
+      pass: 14,
+      fail: 0,
+      miss: 0,
+      exit_code: 0,
+      source: 'evidence/human-gate-decision.json',
+    },
+    'accepted.gate_result',
+  );
 
   const artifacts = accepted.artifacts;
   if (!Array.isArray(artifacts)) fail('evidence_mismatch:accepted.artifacts');
   const artifactHashes = new Map<string, string>();
   for (const artifact of artifacts) {
-    if (!isObject(artifact) || typeof artifact.path !== 'string' || typeof artifact.sha256 !== 'string')
+    if (
+      !isObject(artifact) ||
+      typeof artifact.path !== 'string' ||
+      typeof artifact.sha256 !== 'string'
+    )
       fail('evidence_mismatch:accepted.artifacts.entry');
     artifactHashes.set(artifact.path, artifact.sha256);
   }
-  equalValue(artifactHashes.get('scripts/ci/check-product-accepted-subset.ts'), ACCEPTED_FACTS.checkerSha256, 'accepted.artifacts.checker');
+  equalValue(
+    artifactHashes.get('scripts/ci/check-product-accepted-subset.ts'),
+    ACCEPTED_FACTS.checkerSha256,
+    'accepted.artifacts.checker',
+  );
   const policyPath = resolve(
     fileURLToPath(
-      new URL('../../src/contracts/product-contract-policy.ts', import.meta.url),
+      new URL(
+        '../../src/contracts/product-contract-policy.ts',
+        import.meta.url,
+      ),
     ),
   );
   const policyBytes = await readFile(policyPath);
-  equalValue(artifactHashes.get('src/contracts/product-contract-policy.ts'), sha256(policyBytes), 'accepted.artifacts.policy');
+  equalValue(
+    artifactHashes.get('src/contracts/product-contract-policy.ts'),
+    sha256(policyBytes),
+    'accepted.artifacts.policy',
+  );
 
   const acceptedLineage = verifyLineage(accepted.lineage, 'accepted.lineage');
   equalValue(
@@ -402,25 +496,68 @@ async function verifyAcceptedEvidence(
   );
 
   equalValue(continuation.schema_version, 1, 'continuation.schema_version');
-  equalValue(continuation.kind, 'product_contract_acceptance_format_continuation', 'continuation.kind');
-  equalValue(continuation.decision, 'ACCEPTED_CONTINUES_WITHOUT_SEMANTIC_CHANGE', 'continuation.decision');
+  equalValue(
+    continuation.kind,
+    'product_contract_acceptance_format_continuation',
+    'continuation.kind',
+  );
+  equalValue(
+    continuation.decision,
+    'ACCEPTED_CONTINUES_WITHOUT_SEMANTIC_CHANGE',
+    'continuation.decision',
+  );
   const continuationSigner = continuation.signer;
-  if (!isObject(continuationSigner)) fail('evidence_mismatch:continuation.signer');
+  if (!isObject(continuationSigner))
+    fail('evidence_mismatch:continuation.signer');
   equalValue(continuationSigner.role, 'Manager B', 'continuation.signer.role');
-  equalValue(continuationSigner.agent_id, '7e2f4c22-02a6-4c74-8751-2a7a60d72a2e', 'continuation.signer.agent_id');
-  equalValue(continuationSigner.authority, 'authority/DECISIONS.md#D21', 'continuation.signer.authority');
+  equalValue(
+    continuationSigner.agent_id,
+    '7e2f4c22-02a6-4c74-8751-2a7a60d72a2e',
+    'continuation.signer.agent_id',
+  );
+  equalValue(
+    continuationSigner.authority,
+    'authority/DECISIONS.md#D21',
+    'continuation.signer.authority',
+  );
 
   const previous = continuation.previous_evidence;
-  if (!isObject(previous)) fail('evidence_mismatch:continuation.previous_evidence');
-  equalValue(previous.path, 'rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/human-gate-product-contract-accepted.json', 'continuation.previous_evidence.path');
-  equalValue(previous.sha256, ACCEPTED_FACTS.acceptedEvidenceSha256, 'continuation.previous_evidence.sha256');
-  equalValue(await readFile(paths.accepted).then(sha256), previous.sha256, 'continuation.previous_evidence.current_hash');
-  equalValue(previous.decision, 'ACCEPTED', 'continuation.previous_evidence.decision');
-  equalValue(previous.accepted_revision, 1, 'continuation.previous_evidence.accepted_revision');
-  equalValue(previous.endpoint_count, 8, 'continuation.previous_evidence.endpoint_count');
+  if (!isObject(previous))
+    fail('evidence_mismatch:continuation.previous_evidence');
+  equalValue(
+    previous.path,
+    'rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/human-gate-product-contract-accepted.json',
+    'continuation.previous_evidence.path',
+  );
+  equalValue(
+    previous.sha256,
+    ACCEPTED_FACTS.acceptedEvidenceSha256,
+    'continuation.previous_evidence.sha256',
+  );
+  equalValue(
+    await readFile(paths.accepted).then(sha256),
+    previous.sha256,
+    'continuation.previous_evidence.current_hash',
+  );
+  equalValue(
+    previous.decision,
+    'ACCEPTED',
+    'continuation.previous_evidence.decision',
+  );
+  equalValue(
+    previous.accepted_revision,
+    1,
+    'continuation.previous_evidence.accepted_revision',
+  );
+  equalValue(
+    previous.endpoint_count,
+    8,
+    'continuation.previous_evidence.endpoint_count',
+  );
 
   const continuationManifest = continuation.manifest;
-  if (!isObject(continuationManifest)) fail('evidence_mismatch:continuation.manifest');
+  if (!isObject(continuationManifest))
+    fail('evidence_mismatch:continuation.manifest');
   equalValue(
     artifactHashes.get(ACCEPTED_MANIFEST_RELATIVE),
     continuationManifest.accepted_raw_sha256,
@@ -429,18 +566,54 @@ async function verifyAcceptedEvidence(
   const currentBytes = await readFile(manifestPath);
   const current = JSON.parse(currentBytes.toString('utf8')) as unknown;
   validateManifest(current, { allowAccepted: true });
-  equalValue(continuationManifest.path, ACCEPTED_MANIFEST_RELATIVE, 'continuation.manifest.path');
-  equalValue(sha256(currentBytes), continuationManifest.current_raw_sha256, 'manifest.current_raw_sha256');
-  equalValue(continuationManifest.accepted_canonical_jq_S_c_sha256, ACCEPTED_FACTS.acceptedManifestCanonicalSha256, 'manifest.accepted_canonical_sha256');
-  equalValue(sha256(canonicalBytes(current)), continuationManifest.current_canonical_jq_S_c_sha256, 'manifest.current_canonical_sha256');
-  equalValue(continuationManifest.canonical_equal, true, 'manifest.canonical_equal');
+  equalValue(
+    continuationManifest.path,
+    ACCEPTED_MANIFEST_RELATIVE,
+    'continuation.manifest.path',
+  );
+  equalValue(
+    sha256(currentBytes),
+    continuationManifest.current_raw_sha256,
+    'manifest.current_raw_sha256',
+  );
+  equalValue(
+    continuationManifest.accepted_canonical_jq_S_c_sha256,
+    ACCEPTED_FACTS.acceptedManifestCanonicalSha256,
+    'manifest.accepted_canonical_sha256',
+  );
+  equalValue(
+    sha256(canonicalBytes(current)),
+    continuationManifest.current_canonical_jq_S_c_sha256,
+    'manifest.current_canonical_sha256',
+  );
+  equalValue(
+    continuationManifest.canonical_equal,
+    true,
+    'manifest.canonical_equal',
+  );
   equalValue(continuationManifest.status, 'accepted', 'manifest.status');
   equalValue(continuationManifest.api_major, 'v1', 'manifest.api_major');
-  equalValue(continuationManifest.accepted_revision, 1, 'manifest.accepted_revision');
+  equalValue(
+    continuationManifest.accepted_revision,
+    1,
+    'manifest.accepted_revision',
+  );
   equalValue(continuationManifest.endpoint_count, 8, 'manifest.endpoint_count');
-  equalValue(continuationManifest.owner_scope, ['tenant_id', 'workspace_id'], 'manifest.owner_scope');
-  equalValue(continuationManifest.semantic_change, false, 'manifest.semantic_change');
-  equalValue(canonical(current), canonical(expected), 'manifest.current_contract');
+  equalValue(
+    continuationManifest.owner_scope,
+    ['tenant_id', 'workspace_id'],
+    'manifest.owner_scope',
+  );
+  equalValue(
+    continuationManifest.semantic_change,
+    false,
+    'manifest.semantic_change',
+  );
+  equalValue(
+    canonical(current),
+    canonical(expected),
+    'manifest.current_contract',
+  );
 
   const continuationLineage = continuation.lineage_interpretation;
   if (!isObject(continuationLineage))
@@ -547,7 +720,8 @@ function optionValue(
     const index = argv.indexOf(name);
     if (index >= 0) {
       const value = argv[index + 1];
-      if (!value || value.startsWith('--')) fail(`missing_option_value:${name}`);
+      if (!value || value.startsWith('--'))
+        fail(`missing_option_value:${name}`);
       return value;
     }
   }
@@ -558,7 +732,8 @@ function parseOptions(argv: readonly string[]): CliOptions {
   const write = argv.includes('--write');
   const check = argv.includes('--check');
   const mutation =
-    argv.includes('--mutation') || process.env.PRODUCT_ACCEPTED_MUTATION === '1';
+    argv.includes('--mutation') ||
+    process.env.PRODUCT_ACCEPTED_MUTATION === '1';
   if ((write ? 1 : 0) + (check ? 1 : 0) !== 1)
     fail('usage: choose exactly one of --write or --check');
   const valueOptions = new Set([
@@ -580,14 +755,16 @@ function parseOptions(argv: readonly string[]): CliOptions {
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
-    if (arg === '--write' || arg === '--check' || arg === '--mutation') continue;
+    if (arg === '--write' || arg === '--check' || arg === '--mutation')
+      continue;
     if (!valueOptions.has(arg)) fail(`unknown_option:${arg}`);
     index += 1;
     if (!argv[index] || argv[index]!.startsWith('--'))
       fail(`missing_option_value:${arg}`);
   }
 
-  const output = optionValue(argv, ['--output']) ?? process.env.PRODUCT_ACCEPTED_OUTPUT;
+  const output =
+    optionValue(argv, ['--output']) ?? process.env.PRODUCT_ACCEPTED_OUTPUT;
   const manifestOverride =
     optionValue(argv, ['--manifest', '--current-manifest']) ??
     process.env.PRODUCT_ACCEPTED_MANIFEST_PATH;
@@ -595,14 +772,19 @@ function parseOptions(argv: readonly string[]): CliOptions {
     fail('manifest_path_override_requires_mutation');
   const manifest = manifestOverride ?? SIGNED_MANIFEST;
   if (write && !output)
-    fail('--write requires explicit --output (signed manifest is never overwritten)');
+    fail(
+      '--write requires explicit --output (signed manifest is never overwritten)',
+    );
   if (write && resolve(output!) === SIGNED_MANIFEST)
     fail('--write refuses the signed manifest path');
-  if (!check)
-    return { mode: 'write', output, manifest, mutation };
+  if (!check) return { mode: 'write', output, manifest, mutation };
 
   const decisionOverride =
-    optionValue(argv, ['--decision', '--decision-path', '--original-decision']) ??
+    optionValue(argv, [
+      '--decision',
+      '--decision-path',
+      '--original-decision',
+    ]) ??
     process.env.PRODUCT_ACCEPTED_DECISION_PATH ??
     process.env.PRODUCT_ACCEPTED_DECISION;
   const acceptedOverride =
@@ -624,7 +806,10 @@ function parseOptions(argv: readonly string[]): CliOptions {
     ]) ??
     process.env.PRODUCT_ACCEPTED_CONTINUATION_PATH ??
     process.env.PRODUCT_ACCEPTED_FORMAT_CONTINUATION;
-  if (!mutation && [decisionOverride, acceptedOverride, continuationOverride].some(Boolean))
+  if (
+    !mutation &&
+    [decisionOverride, acceptedOverride, continuationOverride].some(Boolean)
+  )
     fail('evidence_path_override_requires_mutation');
   return {
     mode: 'check',
@@ -634,8 +819,7 @@ function parseOptions(argv: readonly string[]): CliOptions {
     evidence: {
       decision: decisionOverride ?? DEFAULT_EVIDENCE_PATHS.decision,
       accepted: acceptedOverride ?? DEFAULT_EVIDENCE_PATHS.accepted,
-      continuation:
-        continuationOverride ?? DEFAULT_EVIDENCE_PATHS.continuation,
+      continuation: continuationOverride ?? DEFAULT_EVIDENCE_PATHS.continuation,
     },
   };
 }
@@ -664,13 +848,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     } catch {
       fail(`accepted_subset_mismatch:${options.manifest}`);
     }
-    if (Buffer.compare(manifestBytes!, Buffer.from(expectedBytes, 'utf8')) !== 0)
+    if (
+      Buffer.compare(manifestBytes!, Buffer.from(expectedBytes, 'utf8')) !== 0
+    )
       fail('accepted_subset_mismatch');
-    await verifyAcceptedEvidence(
-      options.evidence!,
-      expected,
-      options.manifest,
-    );
+    await verifyAcceptedEvidence(options.evidence!, expected, options.manifest);
     console.log(
       `accepted_subset_ok status=accepted api_major=v1 revision=1 endpoints=${expected.endpoints.length} gate=PASS=14 FAIL=0 MISS=0`,
     );

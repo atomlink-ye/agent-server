@@ -10,10 +10,10 @@ const evidence = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
 const expectedArms = [
   ['baseline-http', 0],
   ['baseline-mcp', 0],
-  ['baseline-product-guard', 0],
+  ['baseline-product-subset', 0],
+  ['baseline-eight-routes', 0],
   ['projection-installer-missing', 1],
-  ['projection-installer-http-command-control', 0],
-  ['projection-installer-mcp-control', 0],
+  ['projection-installer-command-control', 0],
   ['foreign-leak-fail', 1],
   ['foreign-leak-mcp-control', 0],
   ['work-registration-missing', 1],

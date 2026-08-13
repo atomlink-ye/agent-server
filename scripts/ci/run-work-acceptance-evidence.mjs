@@ -40,9 +40,17 @@ arms.push(
 );
 arms.push(
   runArm(
-    'baseline-product-guard',
+    'baseline-product-subset',
     'pnpm',
-    ['guard:product-accepted-evidence'],
+    ['check:product-accepted-subset'],
+    0,
+  ),
+);
+arms.push(
+  runArm(
+    'baseline-eight-routes',
+    'pnpm',
+    ['guard:create-app-product-endpoints'],
     0,
   ),
 );
@@ -61,28 +69,14 @@ mutate(
         1,
         [
           'runs the real HTTP create, start, and read path',
-          'expected 404 to be 200',
+          'work_http_projection_installer_missing',
         ],
       ),
     );
     arms.push(
-      runArm(
-        'projection-installer-http-command-control',
-        'pnpm',
-        [
-          'modularization:acceptance:work-http',
-          '--',
-          '-t',
-          'requires owner positive control',
-        ],
-        0,
-      ),
-    );
-    arms.push(
-      runArm(
-        'projection-installer-mcp-control',
-        'pnpm',
-        ['modularization:acceptance:work-mcp'],
+      runFocusedTest(
+        'projection-installer-command-control',
+        'requires owner positive control',
         0,
       ),
     );
@@ -92,8 +86,8 @@ mutate(
 mutate(
   'foreign-leak-fail',
   'src/entrypoints/api/routes/product-work.ts',
-  `          404,\n        );\n      return mapProjectionError(context, error, ProductWorkRunResponseSchema);`,
-  `          403,\n        );\n      return mapProjectionError(context, error, ProductWorkRunResponseSchema);`,
+  `              code: 'work_not_found',\n              message: 'The requested Work was not found.',\n              request_id: requestId(context),\n            },\n          }),\n          404,`,
+  `              code: 'work_not_found',\n              message: 'The requested Work was not found.',\n              request_id: requestId(context),\n            },\n          }),\n          403,`,
   () => {
     arms.push(
       runArm(
@@ -132,7 +126,7 @@ mutate(
         1,
         [
           'creates through real MCP and reads the same Work through HTTP',
-          'product_work_create',
+          'work_mcp_registration_missing:product_work_create',
         ],
       ),
     );
@@ -161,7 +155,7 @@ mutate(
         1,
         [
           'creates through real MCP and reads the same Work through HTTP',
-          'expected 404 to be 200',
+          'work_mcp_readback_missing:work_id=',
         ],
       ),
     );
@@ -292,6 +286,25 @@ function runArm(name, executable, argv, expectedExit, markers = []) {
       result.status === expectedExit &&
       Object.values(markerAssertions).every(Boolean),
   };
+}
+
+function runFocusedTest(name, pattern, expectedExit) {
+  return runArm(
+    name,
+    'pnpm',
+    [
+      'exec',
+      'vitest',
+      'run',
+      '--config',
+      'vitest.integration.config.ts',
+      '--no-file-parallelism',
+      'tests/integration/product-api-v1-oi38.integration.test.ts',
+      '-t',
+      pattern,
+    ],
+    expectedExit,
+  );
 }
 
 function mutate(name, file, before, after, action) {

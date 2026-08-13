@@ -6,6 +6,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  GetWorkResponseSchema,
+  ProductRunTraceResponseSchema,
+  ProductWorkRunResponseSchema,
+  WorkListResponseSchema,
+  WorkRunListResponseSchema,
+} from '@atomlink-ye/agent-server/product-contract';
+import {
   FAIL,
   MISSING,
   PASS,
@@ -14,6 +21,7 @@ import {
 } from './support/product-static-replay-upstream.js';
 
 export type EndpointClass = 'works' | 'runs' | 'trace';
+type ProductResponseRoute = 'works' | 'work' | 'runs' | 'run' | 'trace';
 export type RequestObservation = {
   readonly method: string;
   readonly url: string;
@@ -68,18 +76,72 @@ function evidenceDirectory(): string {
   return resolve(value);
 }
 
-function classify(pathname: string): EndpointClass | null {
-  if (pathname === '/api/works') return 'works';
-  if (/^\/api\/works\/[^/]+\/runs\/[^/]+\/trace$/u.test(pathname)) return 'trace';
-  if (/^\/api\/works\/[^/]+\/runs(?:\/[^/]+)?$/u.test(pathname)) return 'runs';
-  return null;
-}
-
 const uuidSegment = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const currentProductPath = new RegExp(
   `^/api/works(?:/${uuidSegment}(?:/runs(?:/${uuidSegment}(?:/trace)?)?)?)?$`,
-  'u',
+  'iu',
 );
+
+const productResponseRoutes: readonly {
+  readonly route: ProductResponseRoute;
+  readonly pattern: RegExp;
+}[] = [
+  { route: 'works', pattern: /^\/api\/works$/iu },
+  { route: 'work', pattern: new RegExp(`^/api/works/${uuidSegment}$`, 'iu') },
+  { route: 'runs', pattern: new RegExp(`^/api/works/${uuidSegment}/runs$`, 'iu') },
+  { route: 'run', pattern: new RegExp(`^/api/works/${uuidSegment}/runs/${uuidSegment}$`, 'iu') },
+  { route: 'trace', pattern: new RegExp(`^/api/works/${uuidSegment}/runs/${uuidSegment}/trace$`, 'iu') },
+];
+
+function classifyProductResponsePath(pathname: string): ProductResponseRoute | null {
+  return productResponseRoutes.find(({ pattern }) => pattern.test(pathname))?.route ?? null;
+}
+
+function classify(pathname: string): EndpointClass | null {
+  const route = classifyProductResponsePath(pathname);
+  if (route === 'works') return 'works';
+  if (route === 'trace') return 'trace';
+  if (route === 'runs' || route === 'run') return 'runs';
+  return null;
+}
+
+type ParsedProductResponse =
+  | { readonly route: 'works'; readonly body: ReturnType<typeof WorkListResponseSchema.parse> }
+  | { readonly route: 'work'; readonly body: ReturnType<typeof GetWorkResponseSchema.parse> }
+  | { readonly route: 'runs'; readonly body: ReturnType<typeof WorkRunListResponseSchema.parse> }
+  | { readonly route: 'run'; readonly body: ReturnType<typeof ProductWorkRunResponseSchema.parse> }
+  | { readonly route: 'trace'; readonly body: ReturnType<typeof ProductRunTraceResponseSchema.parse> };
+
+export function parseAcceptedProductResponse(
+  pathname: string,
+  body: unknown,
+): ParsedProductResponse | null {
+  const route = classifyProductResponsePath(pathname);
+  if (!route) return null;
+  switch (route) {
+    case 'works': {
+      const parsed = WorkListResponseSchema.safeParse(body);
+      return parsed.success ? { route, body: parsed.data } : null;
+    }
+    case 'work': {
+      const parsed = GetWorkResponseSchema.safeParse(body);
+      return parsed.success ? { route, body: parsed.data } : null;
+    }
+    case 'runs': {
+      const parsed = WorkRunListResponseSchema.safeParse(body);
+      return parsed.success ? { route, body: parsed.data } : null;
+    }
+    case 'run': {
+      const parsed = ProductWorkRunResponseSchema.safeParse(body);
+      return parsed.success ? { route, body: parsed.data } : null;
+    }
+    case 'trace': {
+      const parsed = ProductRunTraceResponseSchema.safeParse(body);
+      return parsed.success ? { route, body: parsed.data } : null;
+    }
+  }
+  return null;
+}
 
 export function observeRequest(
   origin: string,
@@ -107,23 +169,16 @@ export function observeRequest(
   };
 }
 
-function collectChatDetailPaths(value: unknown, output: Set<string>): void {
-  if (Array.isArray(value)) {
-    for (const item of value) collectChatDetailPaths(item, output);
+function collectValidatedChatDetailPaths(
+  response: ParsedProductResponse,
+  output: Set<string>,
+): void {
+  if (response.route !== 'trace' || response.body.projection_status !== 'internally_anchored')
     return;
+  for (const activity of response.body.mcp_activities) {
+    if (activity.chat_detail.path.startsWith('/api/'))
+      output.add(activity.chat_detail.path);
   }
-  if (!value || typeof value !== 'object') return;
-  const record = value as Record<string, unknown>;
-  const chatDetail = record.chat_detail;
-  if (
-    chatDetail &&
-    typeof chatDetail === 'object' &&
-    typeof (chatDetail as Record<string, unknown>).path === 'string'
-  ) {
-    const path = (chatDetail as Record<string, unknown>).path as string;
-    if (path.startsWith('/api/')) output.add(path);
-  }
-  for (const child of Object.values(record)) collectChatDetailPaths(child, output);
 }
 
 function processOutput(child: ChildProcess): { readonly stdout: string[]; readonly stderr: string[] } {
@@ -259,8 +314,9 @@ export async function runNetwork(): Promise<number> {
       if (responseUrl.origin !== origin || !responseUrl.pathname.startsWith('/api/')) return;
       responseBodies.push(
         response.json().then((body) => {
-          if (response.status() >= 200 && response.status() < 300)
-            collectChatDetailPaths(body, chatDetailPaths);
+          if (response.status() < 200 || response.status() >= 300) return;
+          const parsed = parseAcceptedProductResponse(responseUrl.pathname, body);
+          if (parsed) collectValidatedChatDetailPaths(parsed, chatDetailPaths);
         }).catch(() => undefined),
       );
     });

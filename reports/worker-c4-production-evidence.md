@@ -20,7 +20,7 @@ No `apps/web/**`, recorder fixture, contract, package/lock/config, or C1/C2/C3 r
 - `scripts/e2e/product-run-trace-network.ts`
   - Starts the replay upstream, production app command, and a dynamically imported Chromium browser in the future remote acceptance environment.
   - Walks `/works` through the exact recorded Work title and href into Work Detail and counts only same-origin `/api/**` requests.
-  - Allows exactly the five current `/api/works` route shapes plus an exact `chat_detail.path` observed in a real response; every other same-origin `/api/**` path is the forbidden complement.
+  - Allows exactly the five current `/api/works` route shapes plus an exact `chat_detail.path` extracted only from a successful response on one of those five routes after the corresponding current product-contract schema full parse; every other same-origin `/api/**` path is the forbidden complement, including an unknown response such as `/api/evil` that self-claims a chat path.
   - Requires works, runs, and trace hits, `allowed_hits >= 3`, and `forbidden_hits === 0`; zero required hits is `MISSING`, forbidden hits are `FAIL`.
   - `C4_RED_ARM=forbidden-request` injects one forbidden product request and records a non-zero red-arm result only when the real browser run reaches that assertion.
 
@@ -82,8 +82,12 @@ Expected future artifact paths, created only after real execution:
 
 ## Commit units
 
-- `2ea748840723a8b4dd2a6f2c2d97f802aa73b85e`: replay upstream, 1 file, 276 insertions.
-- `06c66bf4f12ec0bcddb22b871af52b6f3ffe81ad`: E10 network harness, 1 file, 293 insertions.
-- `81dfed20769af5020b7fede79ab25356e1529899`: E11 harness, 3 files, 272 insertions/19 deletions.
-- `820f6339dfb966e48cd1c90327838239a12cd6af`: initial ledger/report, 1 file, 83 insertions.
+- `2ea748840723a8b4dd2a6f2c2d97f802aa73b85e`: replay upstream — 1 file changed, 276 insertions(+).
+- `06c66bf4f12ec0bcddb22b871af52b6f3ffe81ad`: E10 network harness — 1 file changed, 293 insertions(+).
+- `81dfed20769af5020b7fede79ab25356e1529899`: E11 harness — 3 files changed, 272 insertions(+), 19 deletions(-).
+- `820f6339dfb966e48cd1c90327838239a12cd6af`: initial ledger/report — 1 file changed, 83 insertions(+).
+- `20a94e2c67b762a5db54cf1b7d3ee97c67f094e4`: first review fix — 2 files changed, 62 insertions(+), 16 deletions(-).
+- `33fd4f2c82c8578d67fa4ce249360e42242a1c16`: Oracle review fixes — 4 files changed, 266 insertions(+), 94 deletions(-).
+- `547f26863fa33f6dcb9233ec764595881e1bbf50`: full trace comparison microfix — 1 file changed, 1 insertion(+).
+- `575a7b56436e26df46bace09d1eebef6b73d8825`: clean DOM red-arm baseline fix — 2 files changed, 48 insertions(+), 10 deletions(-).
 - The final review-fix commit SHA and diffstat are reported in the worker handoff so this report does not self-reference its own commit.

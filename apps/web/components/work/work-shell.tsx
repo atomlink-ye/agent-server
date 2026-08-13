@@ -143,7 +143,6 @@ export function WorkDetailShell({ workId }: { readonly workId: string }) {
 
   return (
     <WorkShellFrame testId="work-detail-shell">
-      <p className="work-shell-kicker">Work-first surface · read only</p>
       {state === 'loading' ? <p>Loading Work…</p> : null}
       {state === 'error' ? (
         <p role="alert">Work data could not be loaded.</p>
@@ -189,9 +188,11 @@ function WorkDetail({ data }: { readonly data: WorkDetailData }) {
 
   return (
     <>
-      <h1>{work.title}</h1>
-      <p>This is a read-only Work-first surface.</p>
-      <p>Controls are explicitly unavailable.</p>
+      <p className="work-shell-breadcrumb">My Work / {work.title}</p>
+      <header className="work-detail-header">
+        <p className="work-shell-kicker">Work Detail</p>
+        <h1>{work.title}</h1>
+      </header>
       <RunTrace trace={trace} />
     </>
   );

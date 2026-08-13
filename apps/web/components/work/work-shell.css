@@ -83,6 +83,25 @@
   text-transform: uppercase;
 }
 
+.work-shell-breadcrumb {
+  margin: 0 0 18px;
+  color: #706c74;
+  font-size: 11px;
+}
+
+.work-detail-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #d9d5ce;
+}
+
+.work-detail-header .work-shell-kicker {
+  margin-bottom: 7px;
+}
+
 .work-shell h1 {
   margin: 0;
   color: #292726;

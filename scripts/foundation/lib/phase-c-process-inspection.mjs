@@ -33,7 +33,7 @@ export function enumerateNumericProcessRecords({
   return numericProcessRecords({ procEntries, readComm, readStatus });
 }
 
-const processInspectionScript = `const fs=require('node:fs');const records=(${numericProcessRecords.toString()})({procEntries:fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8')});process.stdout.write(JSON.stringify(records));`;
+export const processInspectionScript = `const fs=require('node:fs');const records=(${numericProcessRecords.toString()})({procEntries:fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8')});process.stdout.write(JSON.stringify(records));`;
 
 function strictProcessRecords(value) {
   if (!Array.isArray(value) || value.length === 0)

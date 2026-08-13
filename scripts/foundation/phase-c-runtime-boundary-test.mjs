@@ -10,6 +10,7 @@ import {
   runtimeStateIsReadOnly,
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
+import { runtimeBoundaryCleanupProbes } from './lib/phase-c-runtime-cleanup.mjs';
 import { projectStandaloneMutationFailure } from './lib/phase-c-mutation-failure.mjs';
 import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
 
@@ -281,7 +282,8 @@ rootMutation.runtime_inspection.paseo_runtime.identity = {
   pid1_uid: 0,
   pid1_gid: 0,
 };
-assert.deepEqual(evaluate(rootMutation), {
+const rootEvaluation = evaluate(rootMutation);
+assert.deepEqual(rootEvaluation, {
   exit: 1,
   output: {
     suite: 'E4',
@@ -291,6 +293,24 @@ assert.deepEqual(evaluate(rootMutation), {
     failures: ['nonroot_runtime_boundary'],
   },
 });
+assert.equal(rootEvaluation.exit, 1);
+assert.equal(rootEvaluation.output.status, 'FAIL');
+const cleanupWithoutResultRecord = runtimeBoundaryCleanupProbes(
+  undefined,
+  rootMutation,
+);
+assert.deepEqual(cleanupWithoutResultRecord, {
+  runtime_state_probe_file_present: false,
+  workspace_probe_file_present: false,
+});
+assert.equal(
+  typeof cleanupWithoutResultRecord.runtime_state_probe_file_present,
+  'boolean',
+);
+assert.equal(
+  typeof cleanupWithoutResultRecord.workspace_probe_file_present,
+  'boolean',
+);
 const stateMutation = structuredClone(baseRecord);
 stateMutation.mutation = {
   instrumentation: 'failed-runtime-child-carrier',

@@ -29,6 +29,7 @@ import {
   isPaseoExecutableProcess,
   isPaseoProcess,
 } from './lib/phase-c-process-inspection.mjs';
+import { runtimeBoundaryCleanupProbes } from './lib/phase-c-runtime-cleanup.mjs';
 import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -595,10 +596,7 @@ function runRuntimeBoundaryMutation({
       cleanupFailure = new Error(`${suffix}_mutation_cleanup_command_failed`);
     cleanupRecord = {
       project: runProject,
-      runtime_state_probe_file_present:
-        resultRecord?.runtime_state_probe?.file_present ?? null,
-      workspace_probe_file_present:
-        resultRecord?.workspace_write_probe?.file_present ?? null,
+      ...runtimeBoundaryCleanupProbes(resultRecord, record),
       down_exit: down.status,
       remaining_project_containers: [],
       remaining_project_networks: networks,

@@ -116,8 +116,13 @@ it(
       expect(
         host.querySelector('[data-testid="work-list-error"]'),
       ).toBeNull();
+      const list = host.querySelector<HTMLUListElement>(
+        '[data-testid="work-list"]',
+      );
+      expect(list).not.toBeNull();
+      if (!list) throw new Error('work_list_missing');
       const cards = [
-        ...host.querySelectorAll<HTMLLIElement>('.work-list-card'),
+        ...list.querySelectorAll<HTMLLIElement>('.work-list-card'),
       ];
       expect(cards).toHaveLength(populatedWorkList.works.length);
       for (const [index, work] of populatedWorkList.works.entries()) {

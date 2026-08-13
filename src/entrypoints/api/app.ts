@@ -51,11 +51,7 @@ import {
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
-import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
-import type { StartWorkRun } from '../../application/work/start-work-run.js';
-import { registerProductWorkCommandRoutes } from './routes/product-work-commands.js';
-import { registerProductWorkRoutes } from './routes/product-work.js';
-import type { ProductProjectionApi } from '../../application/product-projection/product-projection.js';
+import type { WorkModule } from '../../modules/work/work-module.js';
 import {
   composePlatform,
   type PlatformContribution,
@@ -98,12 +94,7 @@ export interface AppDependencies {
   readonly managedMemory?: ManagedMemory;
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
-  readonly workIdentity?: Pick<
-    WorkIdentityApi,
-    'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
-  >;
-  readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
-  readonly productProjection?: ProductProjectionApi;
+  readonly workModule?: Pick<WorkModule, 'installHttp'>;
   readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
@@ -151,25 +142,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  if (
-    dependencies.workIdentity &&
-    dependencies.startWorkRun &&
-    dependencies.productProjection
-  )
-    registerProductWorkCommandRoutes(app, {
-      config: dependencies.config,
-      workIdentity: dependencies.workIdentity,
-      startWorkRun: dependencies.startWorkRun,
-      workListProjection: dependencies.productProjection.getWorkListItem,
-      ...(dependencies.productProjection
-        ? { workExists: dependencies.productProjection.getWork }
-        : {}),
-    });
-  if (dependencies.productProjection)
-    registerProductWorkRoutes(app, {
-      config: dependencies.config,
-      productProjection: dependencies.productProjection,
-    });
+  dependencies.workModule?.installHttp(app, dependencies.config);
   registerWorkspaceMemoryRoutes(app, dependencies);
   if (dependencies.memoryApi) {
     registerMemoryApiRoutes(app, {

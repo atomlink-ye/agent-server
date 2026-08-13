@@ -44,6 +44,7 @@ const guardedFiles = [
 ];
 const productionInputFiles = [
   'src/entrypoints/api/app.ts',
+  'src/modules/work/work-module.ts',
   'src/entrypoints/api/routes/product-work-commands.ts',
   'src/entrypoints/api/routes/product-work.ts',
   'src/contracts/product-work-commands.ts',
@@ -264,10 +265,10 @@ function createRuntimeCopy() {
 
 function runRegistrarMutation(kind) {
   const directory = createRuntimeCopy();
-  const source = path.join(directory, 'src/entrypoints/api/app.ts');
+  const source = path.join(directory, 'src/modules/work/work-module.ts');
   const mutated = path.join(
     directory,
-    `src/entrypoints/api/app.${kind}.mutated.ts`,
+    `src/modules/work/work-module.${kind}.mutated.ts`,
   );
   const prep = runArm({
     name: `runtime-mutation-${kind}-prepare`,

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { createApp } from '../../src/entrypoints/api/app.ts';
+import { installWorkHttpRoutes } from '../../src/modules/work/work-module.ts';
 import {
   CreateWorkResponseSchema,
   GetWorkResponseSchema,
@@ -355,7 +356,20 @@ function createMinimalDependencies(observed) {
     },
   };
 
-  return dependencies;
+  const { workIdentity, startWorkRun, productProjection, ...base } =
+    dependencies;
+  return {
+    ...base,
+    workModule: {
+      installHttp(app, config) {
+        installWorkHttpRoutes(app, config, {
+          workIdentity,
+          startWorkRun,
+          projection: productProjection,
+        });
+      },
+    },
+  };
 }
 
 async function readInventory() {

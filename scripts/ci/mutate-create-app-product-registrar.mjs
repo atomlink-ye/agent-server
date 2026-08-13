@@ -11,26 +11,18 @@ if (!source || !output || !['command', 'projection'].includes(registrar)) {
 }
 
 const blocks = {
-  command: `  if (
-    dependencies.workIdentity &&
-    dependencies.startWorkRun &&
-    dependencies.productProjection
-  )
-    registerProductWorkCommandRoutes(app, {
-      config: dependencies.config,
-      workIdentity: dependencies.workIdentity,
-      startWorkRun: dependencies.startWorkRun,
-      workListProjection: dependencies.productProjection.getWorkListItem,
-      ...(dependencies.productProjection
-        ? { workExists: dependencies.productProjection.getWork }
-        : {}),
-    });
+  command: `  registerProductWorkCommandRoutes(app, {
+    config,
+    workIdentity,
+    startWorkRun,
+    workListProjection: projection.getWorkListItem,
+    workExists: projection.getWork,
+  });
 `,
-  projection: `  if (dependencies.productProjection)
-    registerProductWorkRoutes(app, {
-      config: dependencies.config,
-      productProjection: dependencies.productProjection,
-    });
+  projection: `  registerProductWorkRoutes(app, {
+    config,
+    productProjection: projection,
+  });
 `,
 };
 

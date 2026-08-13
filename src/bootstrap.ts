@@ -94,13 +94,8 @@ import {
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
 import { registerSkill } from './application/extensions/skill-registry.js';
-import { createPostgresWorkIdentityModule } from './infrastructure/postgres/postgres-work-identity-repository.js';
 import { ensureServiceAccountWorkspaces } from './infrastructure/postgres/postgres-service-account-workspace-bootstrap.js';
-import { PostgresWorkProjectionFactsQuery } from './infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
-import { QueryWorkProjectionFacts } from './application/work/query-work-projection-facts.js';
-import { WorkProjectionFactsSource } from './application/product-projection/work-projection-facts-source.js';
-import { createProductProjection } from './application/product-projection/product-projection.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { InvokableWorkDefinitionReadAdapter } from './application/ports/work-definition-read.js';
 import {
@@ -425,17 +420,10 @@ export async function createService(
     invokableRepository,
     resolveAgentVersion,
   );
-  const { workIdentity, workIdentityQuery, startWorkRun } =
-    createPostgresWorkIdentityModule({
-      database: pool,
-      definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),
-      execution: new InvokeTaskExecutionAdmission(invokeTask),
-    });
-  const productProjection = createProductProjection({
-    workIdentity: workIdentityQuery,
-    workFacts: new WorkProjectionFactsSource(
-      new QueryWorkProjectionFacts(new PostgresWorkProjectionFactsQuery(pool)),
-    ),
+  const workModule = createWorkModule({
+    database: pool,
+    definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),
+    execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(pool),
   });
   const runtimeMcpServer = new RuntimeMcpServer(
@@ -448,8 +436,7 @@ export async function createService(
     createLearningProposal,
     new SyntheticMarketAdapter(),
     logger,
-    workIdentity,
-    startWorkRun,
+    workModule.contributeRuntime,
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,
@@ -703,9 +690,7 @@ export async function createService(
       getMemory,
       updateMemory,
     },
-    workIdentity,
-    startWorkRun,
-    productProjection,
+    workModule,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();
@@ -773,3 +758,4 @@ export async function createService(
     },
   };
 }
+import { createWorkModule } from './modules/work/work-module.js';

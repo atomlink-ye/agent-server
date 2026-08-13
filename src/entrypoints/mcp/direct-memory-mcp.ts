@@ -28,9 +28,7 @@ import {
   RuntimeToolGrantService,
   type RuntimeToolGrant,
 } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
-import type { StartWorkRun } from '../../application/work/start-work-run.js';
-import { registerProductWorkMcpTools } from './product-work-mcp-tools.js';
+import type { WorkRuntimeContributor } from '../../modules/work/work-module.js';
 
 export const MCP_PATH = '/mcp/agent-runtime';
 const UUID = z.string().uuid();
@@ -65,8 +63,7 @@ export function createDirectMemoryMcpHandler(input: {
   readonly createLearningProposal?: CreateLearningProposal;
   readonly market?: SyntheticMarketAdapter;
   readonly logger?: Logger;
-  readonly workIdentity?: Pick<WorkIdentityApi, 'createWork'>;
-  readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
+  readonly contributeWorkRuntime?: WorkRuntimeContributor;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const sessions = new Map<string, McpSession>();
   return async (req, res) => {
@@ -139,14 +136,11 @@ export function createDirectMemoryMcpHandler(input: {
         input,
         input.grants,
       );
-      if (input.workIdentity && input.startWorkRun)
-        registerProductWorkMcpTools({
-          server,
-          grant,
-          grants: input.grants,
-          workIdentity: input.workIdentity,
-          startWorkRun: input.startWorkRun,
-        });
+      input.contributeWorkRuntime?.({
+        server,
+        grant,
+        grants: input.grants,
+      });
       const refreshRegisteredTools = (_allowedTools: readonly string[]) =>
         undefined;
       let refreshTeamTools: (allowedTools: readonly string[]) => void = () =>

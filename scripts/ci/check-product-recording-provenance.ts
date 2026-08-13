@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const PASS = 0;
 const FAIL = 1;
 const MISSING = 2;
+const OH2_DECISION =
+  'rounds/2026-08-13-refactor-and-web-rebuild/DECISIONS-2026-08-13-owner-handover.md#O-H2';
 
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const sourceRoot = resolve(
@@ -20,7 +22,7 @@ const fixtureRoot = resolve(
 );
 const legacyRoot = resolve(repoRoot, 'fixtures/product-projection/recordings');
 
-const recordings = [
+const recorderFiles = [
   {
     name: 'parallel-success-fa77ba9.json',
     sha256:
@@ -31,12 +33,13 @@ const recordings = [
     sha256:
       '219d8a74138c277f9fae3046eac00543605cc4afeb97bbc19e2b4431cfc95aef',
   },
-  {
-    name: 'oi38-negative-39210cab.json',
-    sha256:
-      '9efe44bfbfb3e67111172c9b8589c0436f053f764004c9e9944a9b97825f2796',
-  },
 ] as const;
+const negativeControl = {
+  name: 'oi38-negative-39210cab.json',
+  sha256:
+    '9efe44bfbfb3e67111172c9b8589c0436f053f764004c9e9944a9b97825f2796',
+} as const;
+const expectedFiles = [...recorderFiles, negativeControl];
 
 const legacyFiles = {
   '.gitkeep': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
@@ -78,7 +81,7 @@ export async function checkProductRecordingProvenance(): Promise<number> {
     return FAIL;
   }
 
-  const expectedFixtureFiles = recordings.map(({ name }) => name).sort();
+  const expectedFixtureFiles = expectedFiles.map(({ name }) => name).sort();
   if (expectedFixtureFiles.some((file) => !fixtureFiles.includes(file)))
     return MISSING;
   if (
@@ -98,7 +101,7 @@ export async function checkProductRecordingProvenance(): Promise<number> {
     if ((await readHash(resolve(legacyRoot, name))) !== expectedSha) return FAIL;
   }
 
-  for (const recording of recordings) {
+  for (const recording of expectedFiles) {
     const source = resolve(sourceRoot, recording.name);
     const fixture = resolve(fixtureRoot, recording.name);
     let sourceSha: string;
@@ -119,12 +122,19 @@ export async function checkProductRecordingProvenance(): Promise<number> {
       return FAIL;
   }
 
-  return PASS;
+  // O-H2 authorizes C1 to proceed with two complete recorders plus one
+  // independent negative control, but the third complete-recorder slot is
+  // still genuinely missing and must never be reported as PASS.
+  return MISSING;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   checkProductRecordingProvenance()
     .then((code) => {
+      console.log(`recorder_count=${recorderFiles.length}`);
+      console.log('negative_control_count=1');
+      console.log('third_recorder_slot=MISSING');
+      console.log(`o_h2_decision=${OH2_DECISION}`);
       console.log(`product_recording_provenance_exit=${code}`);
       console.log(
         'known_limitation=oi38-negative-39210cab.json is provenance/count only and does not establish D10/D12 recorder eligibility or PASS',

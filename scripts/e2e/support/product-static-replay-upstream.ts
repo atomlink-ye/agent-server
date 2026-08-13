@@ -28,7 +28,6 @@ export const MISSING = 2;
 
 export const RECORDING_SCENARIOS = ['parallel-success', 'rework-once'] as const;
 export type RecordingScenario = (typeof RECORDING_SCENARIOS)[number];
-export type ReplayMutation = 'none' | 'omit-feedback' | 'constant-duration';
 
 const defaultFixtureDirectory = resolve(
   fileURLToPath(new URL('../../../apps/web/lib/__fixtures__/product-recordings', import.meta.url)),
@@ -139,36 +138,6 @@ export async function loadStaticReplayRecording(
   return { scenario, sourcePath, trace, work, workList, runList, run };
 }
 
-function applyMutation(
-  trace: Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>,
-  mutation: ReplayMutation,
-): Extract<ProductRunTrace, { projection_status: 'internally_anchored' }> {
-  if (mutation === 'none') return trace;
-  if (mutation === 'omit-feedback') {
-    return ProductRunTraceResponseSchema.parse({
-      ...trace,
-      edges: trace.edges.filter((edge) => edge.kind !== 'feedback'),
-    }) as Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>;
-  }
-  return ProductRunTraceResponseSchema.parse({
-    ...trace,
-    work_items: trace.work_items.map((item) => ({
-      ...item,
-      attempts: item.attempts.map((attempt) => ({
-        ...attempt,
-        duration_ms: attempt.duration_ms === null ? null : 1,
-      })),
-    })),
-  }) as Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>;
-}
-
-function mutationFromEnvironment(): ReplayMutation {
-  const value = process.env.C4_REPLAY_MUTATION ?? 'none';
-  if (value === 'none' || value === 'omit-feedback' || value === 'constant-duration')
-    return value;
-  throw new ReplayMissingError('invalid_replay_mutation', [value]);
-}
-
 function json(res: ServerResponse, status: number, body: unknown): void {
   const bytes = Buffer.from(JSON.stringify(body));
   res.statusCode = status;
@@ -190,12 +159,10 @@ export async function startStaticReplayUpstream(options?: {
   readonly host?: string;
   readonly port?: number;
   readonly scenario?: RecordingScenario;
-  readonly mutation?: ReplayMutation;
 }) {
   const scenario = options?.scenario ?? scenarioFromEnvironment();
-  const mutation = options?.mutation ?? mutationFromEnvironment();
   const loaded = await loadStaticReplayRecording(scenario);
-  const trace = applyMutation(loaded.trace, mutation);
+  const trace = loaded.trace;
   const run = ProductWorkRunResponseSchema.parse({
     ...loaded.run,
     work_items: trace.work_items,
@@ -258,13 +225,13 @@ export async function startStaticReplayUpstream(options?: {
     server.once('error', reject);
     server.listen(options?.port ?? Number(process.env.C4_REPLAY_PORT ?? 39781), options?.host ?? process.env.C4_REPLAY_HOST ?? '127.0.0.1', () => resolvePromise());
   });
-  return { server, loaded, mutation, trace, url: `http://${options?.host ?? process.env.C4_REPLAY_HOST ?? '127.0.0.1'}:${(server.address() as { port: number }).port}` };
+  return { server, loaded, trace, url: `http://${options?.host ?? process.env.C4_REPLAY_HOST ?? '127.0.0.1'}:${(server.address() as { port: number }).port}` };
 }
 
 async function main(): Promise<void> {
   try {
     const replay = await startStaticReplayUpstream();
-    process.stdout.write(`${JSON.stringify({ ready: true, url: replay.url, scenario: replay.loaded.scenario, mutation: replay.mutation })}\n`);
+    process.stdout.write(`${JSON.stringify({ ready: true, url: replay.url, scenario: replay.loaded.scenario })}\n`);
   } catch (error) {
     const missing = error instanceof ReplayMissingError;
     process.stderr.write(`${JSON.stringify({ status: missing ? 'MISSING' : 'FAIL', code: missing ? MISSING : FAIL, reason: error instanceof Error ? error.message : String(error), details: missing ? error.details : undefined })}\n`);

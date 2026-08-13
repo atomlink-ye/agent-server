@@ -28,7 +28,6 @@ import {
 import {
   loadStaticReplayRecording,
   type RecordingScenario,
-  type ReplayMutation,
 } from './support/product-static-replay-upstream.js';
 
 const startupTimeoutMs = Number(process.env.C4_STARTUP_TIMEOUT_MS ?? 30_000);
@@ -46,6 +45,7 @@ type ResponseLike = {
 };
 
 const SKIP_SCENARIO = 3;
+type ReplayMutation = 'none' | 'omit-feedback' | 'constant-duration';
 
 function scenarios(): readonly RecordingScenario[] {
   const requested = process.env.C4_REPLAY_SCENARIO;
@@ -117,10 +117,166 @@ function scenarioPredicate(scenario: RecordingScenario, trace: AnchoredTrace): b
 function mutationApplicable(mutation: ReplayMutation, trace: AnchoredTrace): boolean {
   if (mutation === 'none') return true;
   if (mutation === 'omit-feedback')
-    return trace.edges.some((edge) => edge.kind === 'feedback');
+    return (
+      trace.edges.some((edge) => edge.kind === 'feedback') &&
+      trace.work_items.some((item) => item.attempts.length > 1)
+    );
   return trace.work_items.some((item) =>
     item.attempts.some((attempt) => attempt.duration_ms !== null && attempt.duration_ms !== 1),
   );
+}
+
+type TraceEntry = {
+  readonly workItem: AnchoredTrace['work_items'][number];
+  readonly attempt: AnchoredTrace['work_items'][number]['attempts'][number];
+};
+
+type Geometry = { readonly left: number; readonly width: number };
+
+function durationLabel(attempt: TraceEntry['attempt']): string {
+  return attempt.duration_ms === null
+    ? 'Not captured'
+    : `${(attempt.duration_ms / 1000).toFixed(1)} seconds`;
+}
+
+function expectedGeometry(trace: AnchoredTrace): ReadonlyMap<string, Geometry> {
+  const entries = trace.work_items.flatMap((workItem) =>
+    workItem.attempts.map((attempt) => ({ workItem, attempt })),
+  );
+  const captured = entries.filter(({ attempt }) =>
+    attempt.timing_capture_status === 'captured' &&
+    attempt.started_at !== null &&
+    attempt.ended_at !== null &&
+    attempt.duration_ms !== null,
+  );
+  if (captured.length === 0)
+    return new Map<string, Geometry>(
+      entries.map(({ attempt }): [string, Geometry] => [attempt.id, { left: 0, width: 0 }]),
+    );
+  const start = Math.min(...captured.map(({ attempt }) => Date.parse(attempt.started_at!)));
+  const end = Math.max(...captured.map(({ attempt }) => Date.parse(attempt.ended_at!)));
+  const range = end - start;
+  return new Map<string, Geometry>(entries.map(({ attempt }): [string, Geometry] => {
+    if (
+      attempt.timing_capture_status !== 'captured' ||
+      attempt.started_at === null ||
+      attempt.ended_at === null ||
+      attempt.duration_ms === null
+    ) return [attempt.id, { left: 0, width: 0 }];
+    return [
+      attempt.id,
+      {
+        left: range ? ((Date.parse(attempt.started_at) - start) / range) * 100 : 0,
+        width: range ? (attempt.duration_ms / range) * 100 : 100,
+      },
+    ];
+  }));
+}
+
+function stylePercent(style: string | null, property: string): number | null {
+  const match = style?.match(new RegExp(`${property}:\\s*(-?\\d+(?:\\.\\d+)?)%`, 'u'));
+  return match?.[1] === undefined ? null : Number.parseFloat(match[1]);
+}
+
+async function assertTraceDom(page: any, trace: AnchoredTrace): Promise<{
+  readonly mismatches: readonly string[];
+  readonly feedbackMarkerCount: number;
+  readonly attemptCount: number;
+  readonly activityCount: number;
+  readonly durationOrGeometryMismatch: boolean;
+  readonly feedbackMismatch: boolean;
+}> {
+  const mismatches: string[] = [];
+  const entries: readonly TraceEntry[] = trace.work_items.flatMap((workItem) =>
+    workItem.attempts.map((attempt) => ({ workItem, attempt })),
+  );
+  const geometry = expectedGeometry(trace);
+  const buttons = await page.locator('[data-testid="trace-attempt"]').all();
+  const consumed = new Set<number>();
+  for (const entry of entries) {
+    const index = await (async () => {
+      for (let candidate = 0; candidate < buttons.length; candidate += 1) {
+        if (consumed.has(candidate)) continue;
+        const title = await buttons[candidate].getAttribute('title');
+        const aria = await buttons[candidate].getAttribute('aria-label');
+        if (
+          title === entry.workItem.subject &&
+          aria?.includes(`Attempt ${entry.attempt.attempt_no}`)
+        ) return candidate;
+      }
+      return -1;
+    })();
+    if (index < 0) {
+      mismatches.push(`attempt_selector_missing:${entry.attempt.id}`);
+      continue;
+    }
+    consumed.add(index);
+    const button = buttons[index];
+    const aria = await button.getAttribute('aria-label');
+    const text = (await button.textContent()) ?? '';
+    const expectedDuration = durationLabel(entry.attempt);
+    if (!aria?.includes(expectedDuration) || !text.includes(expectedDuration))
+      mismatches.push(`attempt_duration:${entry.attempt.id}`);
+    const style = await button.getAttribute('style');
+    const expected = geometry.get(entry.attempt.id) ?? { left: 0, width: 0 };
+    const left = stylePercent(style, '--attempt-left');
+    const width = stylePercent(style, '--attempt-width');
+    if (
+      left === null ||
+      width === null ||
+      Math.abs(left - expected.left) > 0.01 ||
+      Math.abs(width - expected.width) > 0.01
+    ) mismatches.push(`attempt_geometry:${entry.attempt.id}`);
+  }
+  if (buttons.length !== entries.length) mismatches.push('attempt_count');
+  const expectedFeedback = new Set(
+    trace.edges
+      .filter((edge) => edge.kind === 'feedback' && edge.attempt_id !== null)
+      .map((edge) => edge.attempt_id!),
+  ).size;
+  const feedbackMarkerCount = await page.locator('.run-trace__feedback').count();
+  if (feedbackMarkerCount !== expectedFeedback) mismatches.push('feedback_marker_count');
+  await page.getByRole('button', { name: 'Events', exact: true }).click();
+  const activityCount = await page.locator('.run-trace__event').count();
+  if (activityCount !== trace.mcp_activities.length) mismatches.push('activity_count');
+  return {
+    mismatches,
+    feedbackMarkerCount,
+    attemptCount: buttons.length,
+    activityCount,
+    durationOrGeometryMismatch: mismatches.some((item) =>
+      item.startsWith('attempt_duration:') || item.startsWith('attempt_geometry:'),
+    ),
+    feedbackMismatch: mismatches.includes('feedback_marker_count'),
+  };
+}
+
+async function applyDomMutation(
+  page: any,
+  scenario: RecordingScenario,
+  mutation: ReplayMutation,
+): Promise<boolean> {
+  if (mutation === 'none') return true;
+  if (mutation === 'omit-feedback') {
+    if (scenario !== 'rework-once') return false;
+    return Boolean(await page.evaluate(() => {
+      const marker = document.querySelector('.run-trace__feedback');
+      if (!marker) return false;
+      marker.remove();
+      return true;
+    }));
+  }
+  return Boolean(await page.evaluate(() => {
+    const button = document.querySelector<HTMLElement>('[data-testid="trace-attempt"]');
+    const label = button?.querySelector<HTMLElement>('.run-trace__attempt-label');
+    if (!button || !label) return false;
+    const attemptText = label.textContent?.split(' · ')[0] ?? 'Attempt';
+    label.textContent = `${attemptText} · 0.0 seconds`;
+    const previousAria = button.getAttribute('aria-label') ?? '';
+    button.setAttribute('aria-label', `${previousAria} (mutated duration)`);
+    button.style.setProperty('--attempt-width', '0%');
+    return true;
+  }));
 }
 
 async function waitForExit(child: ChildProcess | undefined): Promise<void> {
@@ -136,7 +292,8 @@ async function waitForExit(child: ChildProcess | undefined): Promise<void> {
 
 async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation): Promise<number> {
   process.env.C4_REPLAY_SCENARIO = scenario;
-  process.env.C4_REPLAY_MUTATION = redArm;
+  // Red arms are DOM-only mutations. Keep the replay upstream byte-for-byte
+  // baseline so response comparisons remain an independent acceptance gate.
   let replay: { readonly child: ChildProcess; readonly url: string } | undefined;
   let app: { readonly child: ChildProcess } | undefined;
   let browser: BrowserLike | undefined;
@@ -196,21 +353,29 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     if (canonical(work.data) !== canonical({ work: loaded.work })) mismatches.push('work');
     if (canonical(runList.data) !== canonical(loaded.runList)) mismatches.push('work_run_list');
     if (canonical(run.data) !== canonical(loaded.run)) mismatches.push('work_run');
-    const factsMatch = compareRecordedFacts(loaded.trace, actual);
-    if (!factsMatch) mismatches.push('trace_facts');
-    const attemptCount = loaded.trace.work_items.reduce((count, item) => count + item.attempts.length, 0);
-    const renderedAttempts = await page.locator('[data-testid="trace-attempt"]').count();
-    if (renderedAttempts !== attemptCount) mismatches.push('rendered_attempt_count');
-    await page.getByRole('button', { name: 'Events', exact: true }).click();
-    const renderedActivities = await page.locator('.run-trace__event').count();
-    if (renderedActivities !== loaded.trace.mcp_activities.length)
-      mismatches.push('rendered_activity_count');
+    if (!compareRecordedFacts(loaded.trace, actual)) mismatches.push('trace_facts');
     const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
     if (
       detailPath.length !== 2 ||
       decodeURIComponent(detailPath[1] ?? '') !== expectedWorkId
     )
       mismatches.push('work_identity_navigation');
+
+    if (mismatches.length > 0) {
+      // A red arm is valid only when the unmutated production response path
+      // is clean. Otherwise this is an ordinary acceptance failure, not red
+      // evidence for the requested mutation.
+      return redArm === 'none' ? FAIL : MISSING;
+    }
+    if (!(await applyDomMutation(page, scenario, redArm))) return MISSING;
+    const dom = await assertTraceDom(page, actual);
+    const mutationDetected =
+      redArm === 'omit-feedback'
+        ? dom.feedbackMismatch
+        : redArm === 'constant-duration'
+          ? dom.durationOrGeometryMismatch
+          : false;
+    const allMismatches = [...dom.mismatches];
 
     const candidate = process.env.C4_CANDIDATE_SHA ?? '';
     if (!/^[0-9a-f]{40}$/iu.test(candidate)) return MISSING;
@@ -222,7 +387,7 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       expected: {
         work_sha256: hash({ work: loaded.work }),
         work_run_sha256: hash(loaded.run),
-        attempt_count: attemptCount,
+        attempt_count: loaded.trace.work_items.reduce((count, item) => count + item.attempts.length, 0),
         feedback_count: loaded.trace.edges.filter((edge) => edge.kind === 'feedback').length,
         activity_count: loaded.trace.mcp_activities.length,
         facts_sha256: hash(traceFacts(loaded.trace)),
@@ -230,19 +395,14 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       observed: {
         work_sha256: hash(work.data),
         work_run_sha256: hash(run.data),
-        attempt_count: renderedAttempts,
+        attempt_count: dom.attemptCount,
         feedback_count: actual.edges.filter((edge) => edge.kind === 'feedback').length,
-        activity_count: renderedActivities,
+        activity_count: dom.activityCount,
         facts_sha256: hash(traceFacts(actual)),
       },
-      mismatches,
+      dom_mismatches: allMismatches,
     };
     if (redArm !== 'none') {
-      const mutationDetected =
-        redArm === 'omit-feedback'
-          ? actual.edges.filter((edge) => edge.kind === 'feedback').length !==
-            loaded.trace.edges.filter((edge) => edge.kind === 'feedback').length
-          : hash(traceFacts(loaded.trace)) !== hash(traceFacts(actual));
       if (!mutationDetected) return MISSING;
       await writeEvidence(`red-arms/e11-${scenario}-${redArm}.json`, {
         ...base,
@@ -253,7 +413,7 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       });
       return FAIL;
     }
-    if (mismatches.length > 0) return FAIL;
+    if (allMismatches.length > 0) return FAIL;
     await writeEvidence(`e11-walking-slice-${scenario}.json`, {
       ...base,
       status: 'PASS',

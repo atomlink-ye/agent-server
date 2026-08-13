@@ -11,7 +11,6 @@ import {
   PASS,
   loadStaticReplayRecording,
   type RecordingScenario,
-  type ReplayMutation,
 } from './support/product-static-replay-upstream.js';
 
 export type EndpointClass = 'works' | 'runs' | 'trace';
@@ -33,10 +32,13 @@ export type PageLike = {
   addInitScript: (script: () => void) => Promise<void>;
   goto: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
   locator: (selector: string) => LocatorLike;
+  getByRole: (role: string, options?: Record<string, unknown>) => LocatorLike;
+  url: () => string;
   waitForURL: (url: RegExp, options?: Record<string, unknown>) => Promise<void>;
 };
 type LocatorLike = {
-  first: () => LocatorLike;
+  count: () => Promise<number>;
+  getAttribute: (name: string) => Promise<string | null>;
   click: () => Promise<void>;
   waitFor: (options?: Record<string, unknown>) => Promise<void>;
 };
@@ -52,13 +54,6 @@ function scenario(): RecordingScenario {
   const value = process.env.C4_REPLAY_SCENARIO ?? 'parallel-success';
   if (value === 'parallel-success' || value === 'rework-once') return value;
   throw new Error(`invalid_scenario:${value}`);
-}
-
-function mutation(): ReplayMutation {
-  const value = process.env.C4_REPLAY_MUTATION ?? 'none';
-  if (value === 'none' || value === 'omit-feedback' || value === 'constant-duration')
-    return value;
-  throw new Error(`invalid_mutation:${value}`);
 }
 
 function candidateSha(): string {
@@ -80,32 +75,55 @@ function classify(pathname: string): EndpointClass | null {
   return null;
 }
 
-function isAllowed(pathname: string): boolean {
-  return pathname === '/api/works' || pathname.startsWith('/api/works/');
-}
+const uuidSegment = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const currentProductPath = new RegExp(
+  `^/api/works(?:/${uuidSegment}(?:/runs(?:/${uuidSegment}(?:/trace)?)?)?)?$`,
+  'u',
+);
 
-function isForbidden(pathname: string): boolean {
-  return (
-    /^\/api\/team-project(?:\/|$)/u.test(pathname) ||
-    /^\/api\/runs(?:\/|$)/u.test(pathname) ||
-    /^\/tasks(?:\/|$)/u.test(pathname) ||
-    /^\/team-runs(?:\/|$)/u.test(pathname)
-  );
-}
-
-export function observeRequest(origin: string, requestUrl: string, method: string): RequestObservation {
+export function observeRequest(
+  origin: string,
+  requestUrl: string,
+  method: string,
+  chatDetailPaths: ReadonlySet<string> = new Set(),
+): RequestObservation {
   const parsed = new URL(requestUrl);
   const sameOrigin = parsed.origin === origin;
   const pathname = parsed.pathname;
+  const requestPath = `${parsed.pathname}${parsed.search}`;
   const inProductScope = sameOrigin && pathname.startsWith('/api/');
+  const allowed =
+    inProductScope &&
+    (currentProductPath.test(pathname) || chatDetailPaths.has(requestPath));
   return {
     method,
     url: requestUrl,
     pathname,
     endpoint: inProductScope ? classify(pathname) : null,
-    allowed: inProductScope && isAllowed(pathname),
-    forbidden: sameOrigin && isForbidden(pathname),
+    allowed,
+    // The forbidden set is the exact complement of the allowlist within
+    // same-origin /api/**, so an unlisted route such as /api/evil is red.
+    forbidden: inProductScope && !allowed,
   };
+}
+
+function collectChatDetailPaths(value: unknown, output: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectChatDetailPaths(item, output);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const record = value as Record<string, unknown>;
+  const chatDetail = record.chat_detail;
+  if (
+    chatDetail &&
+    typeof chatDetail === 'object' &&
+    typeof (chatDetail as Record<string, unknown>).path === 'string'
+  ) {
+    const path = (chatDetail as Record<string, unknown>).path as string;
+    if (path.startsWith('/api/')) output.add(path);
+  }
+  for (const child of Object.values(record)) collectChatDetailPaths(child, output);
 }
 
 function processOutput(child: ChildProcess): { readonly stdout: string[]; readonly stderr: string[] } {
@@ -173,7 +191,6 @@ export async function launchReplay(): Promise<{ readonly child: ChildProcess; re
       ...process.env,
       C4_REPLAY_PORT: String(replayPort),
       C4_REPLAY_SCENARIO: scenario(),
-      C4_REPLAY_MUTATION: mutation(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -222,18 +239,30 @@ export async function runNetwork(): Promise<number> {
   let replay: { child: ChildProcess; url: string; output: { stdout: string[]; stderr: string[] } } | undefined;
   let app: { child: ChildProcess; output: { stdout: string[]; stderr: string[] } } | undefined;
   let browser: BrowserLike | undefined;
-  const observations: RequestObservation[] = [];
+  const requestInputs: { readonly url: string; readonly method: string }[] = [];
+  const responseBodies: Promise<void>[] = [];
+  const chatDetailPaths = new Set<string>();
   try {
     // This check intentionally runs before any process launch. Current fa77ba9
     // doc0 recordings fail it, so this command remains an honest MISSING.
-    await loadStaticReplayRecording(scenario());
+    const loaded = await loadStaticReplayRecording(scenario());
     replay = await launchReplay();
     app = await launchApp(replay.url);
     browser = await loadChromium();
     const page = await browser.newPage();
     const origin = new URL(appUrl).origin;
     page.on('request', (request: { url: () => string; method: () => string }) => {
-      observations.push(observeRequest(origin, request.url(), request.method()));
+      requestInputs.push({ url: request.url(), method: request.method() });
+    });
+    page.on('response', (response: { url: () => string; status: () => number; json: () => Promise<unknown> }) => {
+      const responseUrl = new URL(response.url());
+      if (responseUrl.origin !== origin || !responseUrl.pathname.startsWith('/api/')) return;
+      responseBodies.push(
+        response.json().then((body) => {
+          if (response.status() >= 200 && response.status() < 300)
+            collectChatDetailPaths(body, chatDetailPaths);
+        }).catch(() => undefined),
+      );
     });
     if (process.env.C4_RED_ARM === 'forbidden-request') {
       await page.addInitScript(() => {
@@ -241,7 +270,10 @@ export async function runNetwork(): Promise<number> {
       });
     }
     await page.goto(`${appUrl}/works`, { waitUntil: 'domcontentloaded', timeout: startupTimeoutMs });
-    const link = page.locator('a[href^="/works/"]').first();
+    const expectedHref = `/works/${encodeURIComponent(loaded.work.id)}`;
+    const link = page.getByRole('link', { name: loaded.work.title, exact: true });
+    if (await link.count() !== 1) return MISSING;
+    if (await link.getAttribute('href') !== expectedHref) return FAIL;
     await link.waitFor({ state: 'visible', timeout: startupTimeoutMs });
     await Promise.all([
       page.waitForURL(/\/works\/[^/]+$/u, { timeout: startupTimeoutMs }),
@@ -251,10 +283,18 @@ export async function runNetwork(): Promise<number> {
       state: 'visible',
       timeout: startupTimeoutMs,
     });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+    await Promise.all(responseBodies);
+    const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
+    if (detailPath.length !== 2 || decodeURIComponent(detailPath[1] ?? '') !== loaded.work.id)
+      return FAIL;
 
     const counts = { works: 0, runs: 0, trace: 0 };
     let allowedHits = 0;
     let forbiddenHits = 0;
+    const observations = requestInputs.map(({ url, method }) =>
+      observeRequest(origin, url, method, chatDetailPaths),
+    );
     for (const observation of observations) {
       if (observation.allowed) allowedHits += 1;
       if (observation.forbidden) forbiddenHits += 1;

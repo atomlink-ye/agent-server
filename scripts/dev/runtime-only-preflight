@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+target="${1:-}"
+case "$target" in
+  web-dev|mixed-team-journey|web-e2e-smoke) ;;
+  *)
+    printf 'runtime-only-preflight: unknown target: %s\n' "$target" >&2
+    exit 2
+    ;;
+esac
+
+selection="${AGENT_SERVER_COMPOSITION:-runtime}"
+if [[ -n "${RUNTIME_PREFLIGHT_TRACE_FILE:-}" ]]; then
+  printf '%s\t%s\n' "$target" "$selection" >>"$RUNTIME_PREFLIGHT_TRACE_FILE"
+fi
+if [[ "$selection" != runtime ]]; then
+  printf 'RUNTIME_ONLY_TARGET_REQUIRES_RUNTIME: %s (selection=%s)\n' \
+    "$target" "$selection" >&2
+  exit 1
+fi

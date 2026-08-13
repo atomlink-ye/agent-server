@@ -51,9 +51,12 @@ if ((runtime_compose)); then
   volume_args+=(--include-provider)
 fi
 volume_json="$(node scripts/dev/compose-volume-environment.mjs "${volume_args[@]}")"
-while IFS='=' read -r name value; do
+volume_env_file="$(mktemp "${TMPDIR:-/tmp}/agent-server-compose-volume-env.XXXXXX")"
+trap 'rm -f -- "$volume_env_file"' EXIT
+node -e 'const value=JSON.parse(process.argv[1]); for (const [name,item] of Object.entries(value)) process.stdout.write(`${name}\0${item}\0`)' "$volume_json" >"$volume_env_file"
+while IFS= read -r -d '' name && IFS= read -r -d '' value; do
   export "$name=$value"
-done < <(node -e 'const value=JSON.parse(process.argv[1]); for (const [name,item] of Object.entries(value)) console.log(`${name}=${item}`)' "$volume_json")
+done <"$volume_env_file"
 root_volume="$NODE_MODULES_VOLUME"
 web_volume="$WEB_NODE_MODULES_VOLUME"
 provider_volume=''

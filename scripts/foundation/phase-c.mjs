@@ -10,7 +10,10 @@ import {
   runtimeIsNonroot,
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
-import { isPaseoExecutableProcess } from './lib/phase-c-process-inspection.mjs';
+import {
+  isPaseoExecutableProcess,
+  isPaseoProcess,
+} from './lib/phase-c-process-inspection.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const EXPECTATION_PATH = 'evidence/foundation/runtime-real-expectation.json';
@@ -336,7 +339,7 @@ function evaluateE4(options) {
     )
   )
     failures.push('runtime_workspace_read_only_boundary');
-  if (runtime.agent_server.processes.some(isPaseoExecutableProcess))
+  if (runtime.agent_server.processes.some(isPaseoProcess))
     failures.push('agent_server_paseo_process');
   const runtimePaseoProcess = runtime.paseo_runtime.processes.some(
     isPaseoExecutableProcess,
@@ -836,6 +839,47 @@ function evaluateE6(options) {
       proof.e4_runtime_state_mutation.cleanup.external_provider_volume_after
   )
     failures.push('e4_runtime_state_mutation_cleanup');
+  if (
+    proof.e4_no_paseo_process_mutation?.exit !== 1 ||
+    proof.e4_no_paseo_process_mutation?.status !== 'FAIL' ||
+    proof.e4_no_paseo_process_mutation?.name !==
+      'remove-paseo-daemon-process' ||
+    proof.e4_no_paseo_process_mutation?.source !==
+      'scripts/foundation/phase-c-e4-no-paseo-process.yaml' ||
+    proof.e4_no_paseo_process_mutation?.operational_overlays?.length !== 0 ||
+    JSON.stringify(proof.e4_no_paseo_process_mutation?.failures) !==
+      JSON.stringify(['runtime_paseo_process_missing']) ||
+    !Array.isArray(proof.e4_no_paseo_process_mutation?.processes) ||
+    proof.e4_no_paseo_process_mutation.processes.some(
+      (process) => process?.identity === 'paseo-daemon',
+    ) ||
+    !runtimeIsNonroot(proof.e4_no_paseo_process_mutation?.identity) ||
+    !runtimeStateIsWritable(
+      proof.e4_no_paseo_process_mutation?.runtime_state_probe,
+    ) ||
+    !workspaceIsReadOnly(
+      proof.e4_no_paseo_process_mutation?.workspace_write_probe,
+    ) ||
+    proof.e4_no_paseo_process_mutation?.cleanup?.down_exit !== 0 ||
+    proof.e4_no_paseo_process_mutation?.cleanup?.remaining_project_containers
+      ?.length !== 0 ||
+    proof.e4_no_paseo_process_mutation?.cleanup?.remaining_project_networks
+      ?.length !== 0 ||
+    proof.e4_no_paseo_process_mutation?.cleanup?.remaining_project_volumes
+      ?.length !== 0 ||
+    proof.e4_no_paseo_process_mutation?.cleanup
+      ?.runtime_state_probe_file_present !== false ||
+    proof.e4_no_paseo_process_mutation?.cleanup
+      ?.workspace_probe_file_present !== false ||
+    !nonempty(
+      proof.e4_no_paseo_process_mutation?.cleanup
+        ?.external_provider_volume_before,
+    ) ||
+    proof.e4_no_paseo_process_mutation.cleanup
+      .external_provider_volume_before !==
+      proof.e4_no_paseo_process_mutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_no_paseo_process_mutation_cleanup');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {

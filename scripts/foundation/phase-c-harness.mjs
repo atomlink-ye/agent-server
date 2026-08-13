@@ -27,7 +27,9 @@ import {
 import {
   collectServiceProcesses,
   isPaseoExecutableProcess,
+  isPaseoProcess,
 } from './lib/phase-c-process-inspection.mjs';
+import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -75,6 +77,9 @@ const run = createCommandRunner({
   transcriptSink: scannedTranscripts,
   artifactSink: capturedArtifactPaths,
 });
+
+const standaloneMutationMode =
+  process.env.FOUNDATION_PHASE_C_MODE === 'missing-paseo-process';
 
 function runCriticalCompose(
   command,
@@ -366,6 +371,7 @@ function runRuntimeBoundaryMutation({
   let cleanupRecord;
   let primaryError;
   let cleanupFailure;
+  let diagnosticFailure;
   try {
     const effective = JSON.parse(
       run(wrapper, [...files, '-p', runProject, 'config', '--format', 'json'], {
@@ -496,6 +502,7 @@ function runRuntimeBoundaryMutation({
         record.runtime_inspection.paseo_runtime.runtime_state_probe,
       workspace_write_probe:
         record.runtime_inspection.paseo_runtime.workspace_write_probe,
+      processes: record.runtime_inspection.paseo_runtime.processes,
       ...childObservation,
     };
   } catch (error) {
@@ -519,8 +526,9 @@ function runRuntimeBoundaryMutation({
         project: runProject,
         artifactRoot: diagnosticRoot,
       });
-    } catch {
-      // Mutation diagnostics are secondary to its exact evaluator result.
+    } catch (error) {
+      // Preserve diagnostic failure as bounded secondary evidence.
+      diagnosticFailure = error;
     }
     const down = observe(
       () =>
@@ -605,10 +613,101 @@ function runRuntimeBoundaryMutation({
       });
     }
   }
-  if (primaryError) throw primaryError;
-  if (cleanupFailure) throw cleanupFailure;
+  const mutationFailures = [
+    primaryError
+      ? {
+          phase: 'primary',
+          message: String(primaryError.message ?? primaryError),
+        }
+      : null,
+    diagnosticFailure
+      ? {
+          phase: 'diagnostics',
+          message: String(diagnosticFailure.message ?? diagnosticFailure),
+        }
+      : null,
+    cleanupFailure
+      ? {
+          phase: 'cleanup',
+          message: String(cleanupFailure.message ?? cleanupFailure),
+        }
+      : null,
+  ].filter(Boolean);
+  if (mutationFailures.length) {
+    const firstFailure = primaryError ?? diagnosticFailure ?? cleanupFailure;
+    const combined =
+      firstFailure instanceof Error
+        ? firstFailure
+        : new Error(`${suffix}_mutation_failed`);
+    combined.mutation_failures = mutationFailures;
+    combined.primary_failure = mutationFailures[0];
+    combined.cleanup_failure = cleanupFailure
+      ? mutationFailures.find((failure) => failure.phase === 'cleanup')
+      : null;
+    throw combined;
+  }
   return { result: resultRecord, cleanup: cleanupRecord, recordPath };
 }
+
+async function runStandaloneMissingPaseoMutation() {
+  const mutation = runRuntimeBoundaryMutation({
+    suffix: 'e4nopaseo-standalone',
+    name: 'remove-paseo-daemon-process',
+    mutationSource: 'scripts/foundation/phase-c-e4-no-paseo-process.yaml',
+    // runRuntimeBoundaryMutation supplies the no-port operational overlay.
+    overlays: ['scripts/foundation/phase-c-e4-no-paseo-process.yaml'],
+    expectedFailure: 'runtime_paseo_process_missing',
+  });
+  const record = JSON.parse(readFileSync(mutation.recordPath, 'utf8'));
+  const runtime = record.runtime_inspection?.paseo_runtime;
+  const agent = record.runtime_inspection?.agent_server;
+  const exactFailure =
+    mutation.result.exit === 1 &&
+    mutation.result.status === 'FAIL' &&
+    JSON.stringify(mutation.result.failures) ===
+      JSON.stringify(['runtime_paseo_process_missing']);
+  const nonTargetFactsGreen =
+    runtimeIsNonroot(runtime?.identity) &&
+    runtimeStateIsWritable(runtime?.runtime_state_probe) &&
+    workspaceIsReadOnly(runtime?.workspace_write_probe) &&
+    Array.isArray(runtime?.processes) &&
+    runtime.processes.every((process) => !isPaseoExecutableProcess(process)) &&
+    Array.isArray(agent?.processes) &&
+    agent.processes.every((process) => !isPaseoProcess(process)) &&
+    mutation.cleanup?.down_exit === 0 &&
+    mutation.cleanup?.remaining_project_containers?.length === 0 &&
+    mutation.cleanup?.remaining_project_networks?.length === 0 &&
+    mutation.cleanup?.remaining_project_volumes?.length === 0 &&
+    mutation.cleanup?.runtime_state_probe_file_present === false &&
+    mutation.cleanup?.workspace_probe_file_present === false &&
+    mutation.cleanup?.external_provider_volume_before ===
+      mutation.cleanup?.external_provider_volume_after;
+  if (!exactFailure) throw new Error('standalone_missing_paseo_not_exact_red');
+  if (!nonTargetFactsGreen)
+    throw new Error('standalone_missing_paseo_non_target_boundary_not_green');
+  return {
+    status: 'PASS',
+    mode: 'missing-paseo-process',
+    exact_failure: ['runtime_paseo_process_missing'],
+    non_target_facts_green: true,
+    runtime_record: mutation.recordPath,
+    diagnostics: resolve(artifactRoot, 'diagnostics-e4nopaseo-standalone'),
+    cleanup: mutation.cleanup,
+  };
+}
+
+if (standaloneMutationMode) {
+  await executeStandaloneMutation({
+    runMutation: runStandaloneMissingPaseoMutation,
+    output: (value) => process.stdout.write(value),
+    exit: (code) => process.exit(code),
+    secretValues: [
+      process.env.OPENCODE_GO_API_KEY,
+      ...secretValuesFromEnvironment(composeEnvironment),
+    ],
+  });
+}
+
 try {
   // Effective Compose JSON exists only in this process's memory. Credential
   // values are discarded before any artifact is written.
@@ -1161,6 +1260,23 @@ try {
   )
     throw new Error('e4_runtime_state_mutation_observation_invalid');
 
+  const noPaseoProcessMutation = runRuntimeBoundaryMutation({
+    suffix: 'e4nopaseo',
+    name: 'remove-paseo-daemon-process',
+    mutationSource: 'scripts/foundation/phase-c-e4-no-paseo-process.yaml',
+    overlays: ['scripts/foundation/phase-c-e4-no-paseo-process.yaml'],
+    expectedFailure: 'runtime_paseo_process_missing',
+  });
+  if (
+    noPaseoProcessMutation.result.processes.some(isPaseoExecutableProcess) ||
+    !runtimeIsNonroot(noPaseoProcessMutation.result.identity) ||
+    !runtimeStateIsWritable(
+      noPaseoProcessMutation.result.runtime_state_probe,
+    ) ||
+    !workspaceIsReadOnly(noPaseoProcessMutation.result.workspace_write_probe)
+  )
+    throw new Error('e4_no_paseo_process_mutation_observation_invalid');
+
   const proofPath = resolve(artifactRoot, 'proof-record.json');
   const runEnvironment = {
     ...process.env,
@@ -1223,6 +1339,10 @@ try {
   proof.e4_runtime_state_mutation = {
     ...runtimeStateMutation.result,
     cleanup: runtimeStateMutation.cleanup,
+  };
+  proof.e4_no_paseo_process_mutation = {
+    ...noPaseoProcessMutation.result,
+    cleanup: noPaseoProcessMutation.cleanup,
   };
   proof.accepted_e4_projection = runtimeRecord.effective_compose;
   proof.cleanup = cleanup();

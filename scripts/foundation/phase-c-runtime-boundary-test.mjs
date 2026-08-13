@@ -10,6 +10,56 @@ import {
   runtimeStateIsReadOnly,
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
+import { projectStandaloneMutationFailure } from './lib/phase-c-mutation-failure.mjs';
+import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
+
+const combinedFailure = new Error('raw primary should not be serialized');
+combinedFailure.stack = 'SECRET_STACK /proc/1/cmdline';
+combinedFailure.mutation_failures = [
+  { phase: 'primary', message: 'compose failed token-secret' },
+  { phase: 'diagnostics', message: 'diagnostics failed' },
+  { phase: 'cleanup', message: 'cleanup failed; argv=SECRET_ARG' },
+  { phase: 'ignored', message: 'must not appear' },
+];
+const projectedFailure = projectStandaloneMutationFailure(combinedFailure, {
+  secretValues: ['token-secret', 'SECRET_ARG'],
+});
+assert.deepEqual(projectedFailure, {
+  status: 'FAIL',
+  mode: 'missing-paseo-process',
+  reason: 'standalone_mutation_failed',
+  mutation_failures: [
+    { phase: 'primary', message: 'compose failed [REDACTED]' },
+    { phase: 'diagnostics', message: 'diagnostics failed' },
+    { phase: 'cleanup', message: 'cleanup failed; [REDACTED]' },
+  ],
+});
+assert.equal(Object.hasOwn(projectedFailure, 'stack'), false);
+assert.equal(JSON.stringify(projectedFailure).includes('/proc/'), false);
+assert.equal(JSON.stringify(projectedFailure).includes('SECRET_'), false);
+
+const standaloneOutput = [];
+const standaloneExitRequests = [];
+const standaloneExit = await executeStandaloneMutation({
+  runMutation: async () => {
+    throw combinedFailure;
+  },
+  output: (value) => standaloneOutput.push(value),
+  exit: (code) => standaloneExitRequests.push(code),
+  secretValues: ['token-secret', 'SECRET_ARG'],
+});
+assert.equal(standaloneExit, 1);
+assert.deepEqual(standaloneExitRequests, [1]);
+assert.equal(standaloneOutput.length, 1);
+const standaloneResult = JSON.parse(standaloneOutput[0]);
+assert.deepEqual(standaloneResult, projectedFailure);
+assert.equal(standaloneResult.status, 'FAIL');
+assert.equal(standaloneResult.mutation_failures.length, 3);
+assert.equal(JSON.stringify(standaloneResult).includes('raw primary'), false);
+assert.equal(JSON.stringify(standaloneResult).includes('SECRET_'), false);
+assert.equal(JSON.stringify(standaloneResult).includes('stack'), false);
+assert.equal(JSON.stringify(standaloneResult).includes('environment'), false);
+assert.equal(JSON.stringify(standaloneResult).includes('argv='), false);
 
 const nonroot = {
   process_uid: 1000,
@@ -53,6 +103,48 @@ for (const [path, assertion] of [
   assert.match(source, assertion);
   assert.doesNotMatch(source, /^  agent-server:/mu);
 }
+const noPaseoMutationSource = readFileSync(
+  resolve(import.meta.dirname, 'phase-c-e4-no-paseo-process.yaml'),
+  'utf8',
+);
+assert.match(noPaseoMutationSource, /phase-c-no-paseo-carrier/u);
+assert.match(noPaseoMutationSource, /^  paseo-runtime:/mu);
+const evaluatorSource = readFileSync(
+  resolve(import.meta.dirname, 'phase-c.mjs'),
+  'utf8',
+);
+const evaluatorForbiddenBlock = evaluatorSource.match(
+  /const forbiddenAgentServerEnvironment = new Set\(\[([\s\S]*?)\]\);/u,
+)[1];
+const evaluatorForbiddenNames = [
+  ...evaluatorForbiddenBlock.matchAll(/'([A-Z0-9_]+)'/gu),
+]
+  .map((match) => match[1])
+  .sort();
+const mutationResetNames = [
+  ...noPaseoMutationSource.matchAll(/^      ([A-Z0-9_]+): !reset null$/gmu),
+]
+  .map((match) => match[1])
+  .sort();
+assert.deepEqual(mutationResetNames, evaluatorForbiddenNames);
+const harnessSource = readFileSync(
+  resolve(import.meta.dirname, 'phase-c-harness.mjs'),
+  'utf8',
+);
+assert.match(
+  harnessSource,
+  /FOUNDATION_PHASE_C_MODE === 'missing-paseo-process'/u,
+);
+assert.match(harnessSource, /runStandaloneMissingPaseoMutation/u);
+assert.match(
+  harnessSource,
+  /standalone_missing_paseo_non_target_boundary_not_green/u,
+);
+assert.match(harnessSource, /runtime_state_probe_file_present === false/u);
+assert.match(harnessSource, /workspace_probe_file_present === false/u);
+assert.match(harnessSource, /let diagnosticFailure/u);
+assert.match(harnessSource, /mutation_failures/u);
+assert.match(harnessSource, /cleanup_failure/u);
 
 const init = readFileSync(
   resolve(import.meta.dirname, '../../compose.external-runtime.yaml'),
@@ -119,13 +211,23 @@ const baseRecord = {
     agent_server: {
       container_id: 'agent',
       environment_names: ['NODE_ENV'],
-      processes: [{ pid: 1, uid: 1000, comm: 'node' }],
+      processes: [
+        { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
+      ],
       mounts: [{ destination: '/workspace', read_only: false }],
     },
     paseo_runtime: {
       container_id: 'runtime',
       environment_names: runtimeEnvironment,
-      processes: [{ pid: 1, uid: 1000, comm: 'paseo' }],
+      processes: [
+        {
+          pid: 1,
+          ppid: 0,
+          uid: 1000,
+          comm: 'paseo',
+          identity: 'paseo-daemon',
+        },
+      ],
       mounts: [
         {
           destination: '/opt/provider-toolchain-volume',
@@ -196,7 +298,7 @@ stateMutation.mutation = {
   real_runtime_child_survived: false,
 };
 stateMutation.runtime_inspection.paseo_runtime.processes = [
-  { pid: 1, uid: 1000, comm: 'sh' },
+  { pid: 1, ppid: 0, uid: 1000, comm: 'sh', identity: 'other' },
 ];
 stateMutation.runtime_inspection.paseo_runtime.mounts[2].read_only = true;
 stateMutation.runtime_inspection.paseo_runtime.runtime_state_probe = {
@@ -214,6 +316,48 @@ assert.deepEqual(evaluate(stateMutation), {
     failures: ['runtime_state_writable_boundary'],
   },
 });
+const noPaseoMutation = structuredClone(baseRecord);
+noPaseoMutation.mutation = {
+  name: 'remove-paseo-daemon-process',
+  source: 'scripts/foundation/phase-c-e4-no-paseo-process.yaml',
+  operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
+};
+noPaseoMutation.runtime_inspection.paseo_runtime.processes = [
+  {
+    pid: 1,
+    ppid: 0,
+    uid: 1000,
+    comm: 'phase-c-no-paseo-carrier',
+    identity: 'other',
+  },
+];
+const noPaseoEvaluation = evaluate(noPaseoMutation);
+assert.deepEqual(noPaseoEvaluation, {
+  exit: 1,
+  output: {
+    suite: 'E4',
+    status: 'FAIL',
+    code: 1,
+    reason: 'runtime ownership proposition failed',
+    failures: ['runtime_paseo_process_missing'],
+  },
+});
+assert.equal(
+  runtimeIsNonroot(noPaseoMutation.runtime_inspection.paseo_runtime.identity),
+  true,
+);
+assert.equal(
+  runtimeStateIsWritable(
+    noPaseoMutation.runtime_inspection.paseo_runtime.runtime_state_probe,
+  ),
+  true,
+);
+assert.equal(
+  noPaseoMutation.runtime_inspection.paseo_runtime.mounts.some(
+    (mount) => mount.destination === '/workspace' && mount.read_only === true,
+  ),
+  true,
+);
 rmSync(fixtureRoot, { recursive: true, force: true });
 
 process.stdout.write(

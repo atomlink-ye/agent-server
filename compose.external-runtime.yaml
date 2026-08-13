@@ -32,7 +32,7 @@ services:
       - provider-toolchain:/opt/provider-toolchain-volume:ro
       - paseo-runtime-state:/runtime-state
     working_dir: /workspace
-    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    entrypoint: []
     command: ['node', 'scripts/dev/paseo-runtime.mjs']
 
   agent-server:

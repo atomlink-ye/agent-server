@@ -43,6 +43,8 @@
     "modularization:verify:product-routes": "pnpm guard:create-app-product-endpoints",
     "modularization:verify:platform-shell": "node --import tsx scripts/ci/verify-platform-shell.mjs",
     "modularization:verify:work-boundary": "node scripts/ci/check-work-import-boundary.mjs",
+    "modularization:acceptance:work-http": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts --no-file-parallelism tests/integration/product-api-v1-oi38.integration.test.ts -t 'requires owner positive control|fails closed|runs the real HTTP'",
+    "modularization:acceptance:work-mcp": "REAL_POSTGRES_REQUIRED=1 vitest run --config vitest.integration.config.ts --no-file-parallelism tests/integration/product-api-v1-oi38.integration.test.ts -t 'creates through real MCP'",
     "guard:create-app-product-endpoints": "node --import tsx scripts/ci/guard-create-app-product-endpoints.mjs",
     "guard:product-accepted-gate-lineage": "node scripts/ci/verify-product-accepted-gate-lineage.mjs",
     "guard:product-accepted-evidence": "node scripts/ci/verify-product-accepted-guard-evidence.mjs",

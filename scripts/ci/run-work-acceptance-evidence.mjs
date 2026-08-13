@@ -429,7 +429,7 @@ mutate(
   'bootstrap-template-interpolation-fail',
   'src/bootstrap.ts',
   `  const runtimeMcpServer = new RuntimeMcpServer(`,
-  `  const forbiddenTemplate = \`${'${/}/.test("x") ? startWorkRun : undefined}'}\`;\n  const startWorkRun = workModule.contributeRuntime;\n  void forbiddenTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `  const forbiddenTemplate = \`${'${/}/.test("x") ? ({ startWorkRun: workModule.contributeRuntime }).startWorkRun : undefined}'}\`;\n  void forbiddenTemplate;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
   () => {
     withIndependentBoundaryBypassed(() => {
       arms.push(

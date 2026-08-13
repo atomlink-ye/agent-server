@@ -480,7 +480,8 @@
       "line": 332,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "transaction": "in"
     },
     {
       "file": "postgres-channel-repository.ts",
@@ -1005,7 +1006,8 @@
       "line": 322,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "transaction": "in"
     },
     {
       "file": "postgres-workspace-memory-repository.ts",
@@ -2007,7 +2009,8 @@
         "lock": "none",
         "transaction": "in",
         "tables": [
-          "runs"
+          "runs",
+          "tasks"
         ],
         "disposition": null,
         "reason": "Helper/template expansion resolves the SQL target and operation; owner-scoped transaction remains in the repository method.",
@@ -2046,9 +2049,10 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
-          "tasks"
+          "tasks",
+          "team_runs"
         ],
         "disposition": null,
         "reason": "Helper/template expansion resolves the SQL target and operation; owner-scoped transaction remains in the repository method.",
@@ -2069,7 +2073,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "team_work_item_attempts"
         ],
@@ -2092,7 +2096,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "team_work_items"
         ],
@@ -2115,7 +2119,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "team_member_runs"
         ],
@@ -2138,7 +2142,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "run_events"
         ],
@@ -2161,7 +2165,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "team_runs"
         ],
@@ -2184,7 +2188,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "runs"
         ],
@@ -2207,7 +2211,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "tasks"
         ],
@@ -2230,7 +2234,7 @@
         "classification": "classified",
         "readWrite": "write",
         "lock": "none",
-        "transaction": "out",
+        "transaction": "in",
         "tables": [
           "run_events"
         ],
@@ -6506,7 +6510,10 @@
       "line": 313,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "agent_versions"
+      ]
     },
     {
       "file": "postgres-agent-registry.ts",
@@ -6562,42 +6569,63 @@
       "line": 221,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 406,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 441,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 484,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 620,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 953,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
@@ -6611,105 +6639,159 @@
       "line": 1087,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs",
+        "team_runs",
+        "team_work_item_attempts",
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1140,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1157,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_member_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1344,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1358,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1363,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1433,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1447,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1466,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_work_item_attempts"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1551,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1564,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1574,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_member_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1613,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1738,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-collaborative-team-repository.ts",
       "line": 1936,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-invokable-repository.ts",
@@ -6968,7 +7050,12 @@
       "line": 307,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "memories",
+        "memory_stores",
+        "memory_versions"
+      ]
     },
     {
       "file": "postgres-run-repository.ts",
@@ -7003,28 +7090,41 @@
       "line": 220,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_runs"
+      ]
     },
     {
       "file": "postgres-team-message-repository.ts",
       "line": 230,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "runs",
+        "tasks"
+      ]
     },
     {
       "file": "postgres-team-message-repository.ts",
       "line": 249,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_member_runs"
+      ]
     },
     {
       "file": "postgres-team-message-repository.ts",
       "line": 292,
       "lock": "for_share",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "team_messages"
+      ]
     },
     {
       "file": "postgres-work-identity-repository.ts",
@@ -7038,7 +7138,10 @@
       "line": 413,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "work_run_resource_manifest"
+      ]
     },
     {
       "file": "postgres-workspace-memory-repository.ts",
@@ -7066,7 +7169,11 @@
       "line": 495,
       "lock": "for_update",
       "disposition": "(c)",
-      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ]
     },
     {
       "file": "postgres.ts",
@@ -7118,7 +7225,8 @@
       "lock": "none",
       "transaction": "in",
       "tables": [
-        "runs"
+        "runs",
+        "tasks"
       ],
       "disposition": null,
       "reason": "Helper/template expansion resolves the SQL target and operation; owner-scoped transaction remains in the repository method.",
@@ -7141,9 +7249,10 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
-        "tasks"
+        "tasks",
+        "team_runs"
       ],
       "disposition": null,
       "reason": "Helper/template expansion resolves the SQL target and operation; owner-scoped transaction remains in the repository method.",
@@ -7166,7 +7275,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "team_work_item_attempts"
       ],
@@ -7191,7 +7300,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "team_work_items"
       ],
@@ -7216,7 +7325,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "team_member_runs"
       ],
@@ -7241,7 +7350,7 @@
       "operation": "INSERT",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "run_events"
       ],
@@ -7266,7 +7375,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "team_runs"
       ],
@@ -7291,7 +7400,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "runs"
       ],
@@ -7316,7 +7425,7 @@
       "operation": "UPDATE",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "tasks"
       ],
@@ -7341,7 +7450,7 @@
       "operation": "INSERT",
       "readWrite": "write",
       "lock": "none",
-      "transaction": "out",
+      "transaction": "in",
       "tables": [
         "run_events"
       ],
@@ -8079,7 +8188,9 @@
     },
     "postgres-agent-registry.ts:313": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "agent_versions"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "2bdebc1700e56cb41705ef7e0e2181ba5b94291c8b9083b0bf6cc5fbed8a354f",
@@ -8120,7 +8231,7 @@
       "tables": [
         "product_sessions"
       ],
-      "transaction": "out",
+      "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "8be5c884ad8b00b258e29c21717b6c889b80268a87d0dc5325c95ffd2ddff67d",
       "locator": "postgres-channel-repository.ts:332"
@@ -8157,7 +8268,9 @@
     },
     "postgres-collaborative-team-repository.ts:221": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "c33342df001b114017e696f73604588481e1ff18c5ccef0e174bcef327cb29d4",
@@ -8165,7 +8278,9 @@
     },
     "postgres-collaborative-team-repository.ts:406": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "c33342df001b114017e696f73604588481e1ff18c5ccef0e174bcef327cb29d4",
@@ -8173,7 +8288,10 @@
     },
     "postgres-collaborative-team-repository.ts:441": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "786a28a1c7e906039489caae8305a9796e1c60342ddd5cdba82fce4a087ed923",
@@ -8181,7 +8299,11 @@
     },
     "postgres-collaborative-team-repository.ts:484": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "5bf2302bfc1af6d23cc0a3cdff79176f100c4a361e55ec6c79db9e40c46bd825",
@@ -8189,7 +8311,9 @@
     },
     "postgres-collaborative-team-repository.ts:620": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "1eca170e73c74616f0f7b77116a9026d708db6a24275055986451730409c43d7",
@@ -8197,7 +8321,9 @@
     },
     "postgres-collaborative-team-repository.ts:953": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "31141b39b4293424b79372367cfd848ca0a3885cb2c62a5cd2bf40507e3b71ba",
@@ -8215,7 +8341,14 @@
     },
     "postgres-collaborative-team-repository.ts:1087": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs",
+        "team_runs",
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "68e9895ec4e821af711187e6a5c7fb8e723d80cbadf589ee979a45e06be0b961",
@@ -8223,7 +8356,9 @@
     },
     "postgres-collaborative-team-repository.ts:1140": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "da99302112fa9ee6291e0b51e43b873ceab9c169c490e1fd75f6246f55af553f",
@@ -8231,7 +8366,9 @@
     },
     "postgres-collaborative-team-repository.ts:1157": {
       "lock": "for_share",
-      "tables": [],
+      "tables": [
+        "team_member_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "862b5c7916c59a8e5d4fe6df1a3059256d2f97bf20612178e9963908629c5bb5",
@@ -8239,7 +8376,9 @@
     },
     "postgres-collaborative-team-repository.ts:1344": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "da99302112fa9ee6291e0b51e43b873ceab9c169c490e1fd75f6246f55af553f",
@@ -8247,7 +8386,9 @@
     },
     "postgres-collaborative-team-repository.ts:1358": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "6fb8626f949efde4589f8bd29e6b5cf98b52676ea0392cd30d3732f2a771e61d",
@@ -8255,7 +8396,10 @@
     },
     "postgres-collaborative-team-repository.ts:1363": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "cf4d4a74c0e9832835145c5260562eac4f562261a4c4e7c23594e69c47f45f6d",
@@ -8263,7 +8407,9 @@
     },
     "postgres-collaborative-team-repository.ts:1433": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "da99302112fa9ee6291e0b51e43b873ceab9c169c490e1fd75f6246f55af553f",
@@ -8271,7 +8417,9 @@
     },
     "postgres-collaborative-team-repository.ts:1447": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "6fb8626f949efde4589f8bd29e6b5cf98b52676ea0392cd30d3732f2a771e61d",
@@ -8279,7 +8427,11 @@
     },
     "postgres-collaborative-team-repository.ts:1466": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "runs",
+        "tasks",
+        "team_work_item_attempts"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "c51b9064b8fb9d7b4d9b30bd0cfd10e341dd83f4f19c91ccf429babfd8eb1efd",
@@ -8287,7 +8439,9 @@
     },
     "postgres-collaborative-team-repository.ts:1551": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "da99302112fa9ee6291e0b51e43b873ceab9c169c490e1fd75f6246f55af553f",
@@ -8295,7 +8449,9 @@
     },
     "postgres-collaborative-team-repository.ts:1564": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "79de42ac8a74eea9f533d6c903ffcce85c1d75c2eb30b73f9ce595a49dbd7efe",
@@ -8303,7 +8459,9 @@
     },
     "postgres-collaborative-team-repository.ts:1574": {
       "lock": "for_share",
-      "tables": [],
+      "tables": [
+        "team_member_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "862b5c7916c59a8e5d4fe6df1a3059256d2f97bf20612178e9963908629c5bb5",
@@ -8311,7 +8469,10 @@
     },
     "postgres-collaborative-team-repository.ts:1613": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "95c13ef690046c63626de2a7ca462903ec68c3601826932d9d6ce534d8af1118",
@@ -8319,7 +8480,9 @@
     },
     "postgres-collaborative-team-repository.ts:1738": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "51fca05bee57c0d7f795d9b394a8b5db2fc2f9c720e4d003c4d0adb8e01fc773",
@@ -8327,7 +8490,9 @@
     },
     "postgres-collaborative-team-repository.ts:1936": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "04f0f82413741e810452aa92c2cc29236376d2e22244dde3cc0c7bc6486e1eab",
@@ -8699,7 +8864,11 @@
     },
     "postgres-memory-api-repository.ts:307": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "memories",
+        "memory_stores",
+        "memory_versions"
+      ],
       "transaction": "out",
       "sourceKind": "typed",
       "sourceExcerptHash": "327103cd93e76ce023ed29fd27e799bf1a2a53f80f43f4e24808b2daebf6097e",
@@ -8749,7 +8918,9 @@
     },
     "postgres-team-message-repository.ts:220": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "team_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "135c4008f9682c6ac8904c4f7bf5092c31985f4b3632e95b9089238d25f413f6",
@@ -8757,7 +8928,10 @@
     },
     "postgres-team-message-repository.ts:230": {
       "lock": "for_share",
-      "tables": [],
+      "tables": [
+        "runs",
+        "tasks"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "bbee8cfdff3e0b232d0c86ee1e5a7ee1dc19e55397d7905f587556660f9fa642",
@@ -8765,7 +8939,9 @@
     },
     "postgres-team-message-repository.ts:249": {
       "lock": "for_share",
-      "tables": [],
+      "tables": [
+        "team_member_runs"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "f46b8e3d64cc4caeb0e88d9e9c54d7a8e102d16b6d6467c36e92f4919898e169",
@@ -8773,7 +8949,9 @@
     },
     "postgres-team-message-repository.ts:292": {
       "lock": "for_share",
-      "tables": [],
+      "tables": [
+        "team_messages"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "f01547207bb2606a6248f521d01c72f6d0d28eb84ed42899a1aec289527cd43e",
@@ -8791,7 +8969,9 @@
     },
     "postgres-work-identity-repository.ts:413": {
       "lock": "for_update",
-      "tables": [],
+      "tables": [
+        "work_run_resource_manifest"
+      ],
       "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "8f36c6bb5ecdef4cb492e7696a2737e0f892b812a3bc2c096332df494f67298a",
@@ -8822,7 +9002,7 @@
       "tables": [
         "workspace_memory_entries"
       ],
-      "transaction": "out",
+      "transaction": "in",
       "sourceKind": "typed",
       "sourceExcerptHash": "0756c876256f6572ff6f80f9f8338852aa765acdc658b7600de3a4106dca8a9d",
       "locator": "postgres-workspace-memory-repository.ts:322"
@@ -8830,6 +9010,7 @@
     "postgres-workspace-memory-repository.ts:495": {
       "lock": "for_update",
       "tables": [
+        "runs",
         "workspace_memory_proposals"
       ],
       "transaction": "out",
@@ -9106,6 +9287,15 @@
       "postgres-workspace-memory-repository.ts:321",
       "postgres-workspace-memory-repository.ts:374",
       "postgres-workspace-memory-repository.ts:398"
+    ],
+    "team_completion_decision_targets": [
+      "postgres-collaborative-team-repository.ts:620"
+    ],
+    "team_versions": [
+      "postgres-invokable-repository.ts:545"
+    ],
+    "work_run_resource_manifest": [
+      "postgres-work-identity-repository.ts:413"
     ]
   },
   "typedCrossCapability": {
@@ -9122,8 +9312,8 @@
       "transaction": "out"
     },
     "postgres-lark-review-surface-repository.ts:80": {
-      "disposition": "(b)",
-      "reason": "typed auxiliary query crosses Channel repository boundary; concrete table owners remain in the same reviewed access path",
+      "disposition": "(c)",
+      "reason": "Lark review surface locks Memory proposal rows at postgres-lark-review-surface-repository.ts:80; (c) retains the concrete Memory interface/lock boundary pending a blocked migration",
       "sourceExcerptHash": "27a5b105d59475ff0fdf648acc71cde169debbc8f7979d00b369e93c6b1b4681",
       "tables": [
         "lark_memory_review_surfaces",
@@ -9135,8 +9325,8 @@
       "transaction": "in"
     },
     "postgres-lark-review-surface-repository.ts:306": {
-      "disposition": "(b)",
-      "reason": "typed auxiliary query crosses Channel repository boundary; concrete table owners remain in the same reviewed access path",
+      "disposition": "(c)",
+      "reason": "Lark review surface locks Memory proposal rows at postgres-lark-review-surface-repository.ts:306; (c) retains the concrete Memory interface/lock boundary pending a blocked migration",
       "sourceExcerptHash": "e5e349082e2b2d0aa41a1eae6f9db1ea1fc13fce198ca7847f8e62d569151f02",
       "tables": [
         "workspace_memory_proposals"
@@ -9373,6 +9563,103 @@
       "readWrite": "read",
       "lock": "for_update",
       "transaction": "in"
+    },
+    "postgres-memory-api-repository.ts:72": {
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "tables": [
+        "memory_stores",
+        "workspaces"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-memory-api-repository.ts:72; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "5ec9248a65000408061140aeedc56f2fa8f1c697264396cfbc95eeeadc814fe4"
+    },
+    "postgres-workspace-memory-repository.ts:169": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:169; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "5e5273743228439039836372b1475569dbee40dc4d86bcca1e0736a0010c258b"
+    },
+    "postgres-workspace-memory-repository.ts:199": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:199; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "5e5273743228439039836372b1475569dbee40dc4d86bcca1e0736a0010c258b"
+    },
+    "postgres-workspace-memory-repository.ts:221": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:221; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "bbaeb65e7624895083c440ce2a6c7bf0396c24c17b6cdecbc8aefb6ef001da8c"
+    },
+    "postgres-workspace-memory-repository.ts:245": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:245; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "bbaeb65e7624895083c440ce2a6c7bf0396c24c17b6cdecbc8aefb6ef001da8c"
+    },
+    "postgres-workspace-memory-repository.ts:374": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:374; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "b9db69552661a8cf52510d6b25eaf9178310eed234d8d15c1611b27e1b3b4f00"
+    },
+    "postgres-workspace-memory-repository.ts:398": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:398; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "9d337a12449a91ccd1005b156b916cf19586632faf242f1f6a87fed5e1dbe8c8"
+    },
+    "postgres-workspace-memory-repository.ts:487": {
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "tables": [
+        "runs"
+      ],
+      "transaction": "out",
+      "disposition": "(c)",
+      "reason": "explicit cross-capability access at postgres-workspace-memory-repository.ts:487; (c) retains the named repository interface and owner-scoped transaction pending a blocked migration",
+      "sourceExcerptHash": "39ce514a11bf01aae13c3657f6e6d37defe30ffb9044c4fc28fb424b05507021"
     }
   },
   "crossCapabilityAssertions": {
@@ -9433,12 +9720,12 @@
       "reason": "typed auxiliary query crosses Channel repository boundary; concrete table owners remain in the same reviewed access path"
     },
     "postgres-lark-review-surface-repository.ts:80": {
-      "disposition": "(b)",
-      "reason": "typed auxiliary query crosses Channel repository boundary; concrete table owners remain in the same reviewed access path"
+      "disposition": "(c)",
+      "reason": "Lark review surface locks Memory proposal rows at postgres-lark-review-surface-repository.ts:80; (c) retains the concrete Memory interface/lock boundary pending a blocked migration"
     },
     "postgres-lark-review-surface-repository.ts:306": {
-      "disposition": "(b)",
-      "reason": "typed auxiliary query crosses Channel repository boundary; concrete table owners remain in the same reviewed access path"
+      "disposition": "(c)",
+      "reason": "Lark review surface locks Memory proposal rows at postgres-lark-review-surface-repository.ts:306; (c) retains the concrete Memory interface/lock boundary pending a blocked migration"
     },
     "postgres-lark-review-surface-repository.ts:486": {
       "disposition": "(b)",
@@ -9759,5 +10046,597 @@
     ],
     "sourceKind": "typed",
     "fieldSource": "verifier auxiliary scan + typedRuntimeAccess/typedCrossCapability facts"
+  },
+  "typedCallTruth": {
+    "postgres-invokable-repository.ts:545": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_versions"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "d8b2983ca7e63cf57d1b6738974d3fe3372d95e934417f421942e3a9d5851ec4",
+      "evidence": "findTeamVersionBySql callers at postgres-invokable-repository.ts:484 and :512"
+    },
+    "postgres-run-repository.ts:219": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_dispatches",
+        "runs",
+        "session_lanes",
+        "tasks"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "c2497eda4f94f7234f3f1c888ac63211f7a0875d59a743dc26725096f7607eac",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:219"
+    },
+    "postgres-run-repository.ts:249": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "c2497eda4f94f7234f3f1c888ac63211f7a0875d59a743dc26725096f7607eac",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:249"
+    },
+    "postgres-run-repository.ts:463": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "4bc97ad80317ceb12629e08e9b5bf73ebcb5da9fa9f227d30ad21dfad92432f1",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:463"
+    }
+  },
+  "transactionTruth": {
+    "postgres-admission-repository.ts:60": "in",
+    "postgres-admission-repository.ts:65": "out",
+    "postgres-admission-repository.ts:68": "out",
+    "postgres-admission-repository.ts:163": "out",
+    "postgres-admission-repository.ts:208": "out",
+    "postgres-agent-registry.ts:156": "out",
+    "postgres-agent-registry.ts:226": "out",
+    "postgres-agent-registry.ts:354": "in",
+    "postgres-agent-registry.ts:357": "out",
+    "postgres-agent-registry.ts:371": "out",
+    "postgres-agent-registry.ts:385": "out",
+    "postgres-channel-repository.ts:213": "out",
+    "postgres-channel-repository.ts:244": "out",
+    "postgres-channel-repository.ts:265": "out",
+    "postgres-channel-repository.ts:356": "out",
+    "postgres-channel-repository.ts:371": "out",
+    "postgres-channel-repository.ts:552": "out",
+    "postgres-channel-repository.ts:574": "out",
+    "postgres-channel-repository.ts:608": "in",
+    "postgres-channel-repository.ts:611": "out",
+    "postgres-channel-repository.ts:614": "out",
+    "postgres-channel-repository.ts:628": "out",
+    "postgres-channel-repository.ts:634": "out",
+    "postgres-collaborative-team-repository.ts:149": "out",
+    "postgres-collaborative-team-repository.ts:219": "in",
+    "postgres-collaborative-team-repository.ts:262": "out",
+    "postgres-collaborative-team-repository.ts:266": "out",
+    "postgres-collaborative-team-repository.ts:271": "out",
+    "postgres-collaborative-team-repository.ts:276": "out",
+    "postgres-collaborative-team-repository.ts:282": "out",
+    "postgres-collaborative-team-repository.ts:320": "out",
+    "postgres-collaborative-team-repository.ts:344": "out",
+    "postgres-collaborative-team-repository.ts:354": "out",
+    "postgres-collaborative-team-repository.ts:375": "out",
+    "postgres-collaborative-team-repository.ts:386": "out",
+    "postgres-collaborative-team-repository.ts:389": "out",
+    "postgres-collaborative-team-repository.ts:404": "in",
+    "postgres-collaborative-team-repository.ts:426": "out",
+    "postgres-collaborative-team-repository.ts:430": "out",
+    "postgres-collaborative-team-repository.ts:448": "out",
+    "postgres-collaborative-team-repository.ts:504": "out",
+    "postgres-collaborative-team-repository.ts:513": "out",
+    "postgres-collaborative-team-repository.ts:517": "out",
+    "postgres-collaborative-team-repository.ts:522": "out",
+    "postgres-collaborative-team-repository.ts:534": "out",
+    "postgres-collaborative-team-repository.ts:546": "out",
+    "postgres-collaborative-team-repository.ts:555": "out",
+    "postgres-collaborative-team-repository.ts:558": "out",
+    "postgres-collaborative-team-repository.ts:612": "in",
+    "postgres-collaborative-team-repository.ts:625": "out",
+    "postgres-collaborative-team-repository.ts:628": "in",
+    "postgres-collaborative-team-repository.ts:644": "out",
+    "postgres-collaborative-team-repository.ts:676": "in",
+    "postgres-collaborative-team-repository.ts:694": "in",
+    "postgres-collaborative-team-repository.ts:700": "in",
+    "postgres-collaborative-team-repository.ts:706": "in",
+    "postgres-collaborative-team-repository.ts:719": "in",
+    "postgres-collaborative-team-repository.ts:748": "in",
+    "postgres-collaborative-team-repository.ts:755": "in",
+    "postgres-collaborative-team-repository.ts:782": "in",
+    "postgres-collaborative-team-repository.ts:799": "in",
+    "postgres-collaborative-team-repository.ts:815": "out",
+    "postgres-collaborative-team-repository.ts:824": "out",
+    "postgres-collaborative-team-repository.ts:834": "out",
+    "postgres-collaborative-team-repository.ts:1056": "in",
+    "postgres-collaborative-team-repository.ts:1059": "in",
+    "postgres-collaborative-team-repository.ts:1103": "out",
+    "postgres-collaborative-team-repository.ts:1106": "out",
+    "postgres-collaborative-team-repository.ts:1130": "in",
+    "postgres-collaborative-team-repository.ts:1136": "out",
+    "postgres-collaborative-team-repository.ts:1179": "out",
+    "postgres-collaborative-team-repository.ts:1190": "out",
+    "postgres-collaborative-team-repository.ts:1222": "out",
+    "postgres-collaborative-team-repository.ts:1235": "out",
+    "postgres-collaborative-team-repository.ts:1242": "out",
+    "postgres-collaborative-team-repository.ts:1254": "out",
+    "postgres-collaborative-team-repository.ts:1266": "out",
+    "postgres-collaborative-team-repository.ts:1288": "out",
+    "postgres-collaborative-team-repository.ts:1297": "out",
+    "postgres-collaborative-team-repository.ts:1303": "out",
+    "postgres-collaborative-team-repository.ts:1323": "in",
+    "postgres-collaborative-team-repository.ts:1340": "out",
+    "postgres-collaborative-team-repository.ts:1376": "out",
+    "postgres-collaborative-team-repository.ts:1380": "out",
+    "postgres-collaborative-team-repository.ts:1389": "out",
+    "postgres-collaborative-team-repository.ts:1392": "out",
+    "postgres-collaborative-team-repository.ts:1412": "in",
+    "postgres-collaborative-team-repository.ts:1429": "out",
+    "postgres-collaborative-team-repository.ts:1491": "out",
+    "postgres-collaborative-team-repository.ts:1495": "out",
+    "postgres-collaborative-team-repository.ts:1504": "out",
+    "postgres-collaborative-team-repository.ts:1507": "out",
+    "postgres-collaborative-team-repository.ts:1530": "in",
+    "postgres-collaborative-team-repository.ts:1547": "out",
+    "postgres-collaborative-team-repository.ts:1587": "out",
+    "postgres-collaborative-team-repository.ts:1598": "out",
+    "postgres-collaborative-team-repository.ts:1623": "out",
+    "postgres-collaborative-team-repository.ts:1652": "out",
+    "postgres-collaborative-team-repository.ts:1666": "out",
+    "postgres-collaborative-team-repository.ts:1672": "out",
+    "postgres-collaborative-team-repository.ts:1676": "out",
+    "postgres-collaborative-team-repository.ts:1699": "out",
+    "postgres-collaborative-team-repository.ts:1713": "out",
+    "postgres-collaborative-team-repository.ts:1716": "out",
+    "postgres-collaborative-team-repository.ts:1735": "in",
+    "postgres-collaborative-team-repository.ts:1756": "out",
+    "postgres-collaborative-team-repository.ts:1767": "out",
+    "postgres-collaborative-team-repository.ts:1771": "out",
+    "postgres-collaborative-team-repository.ts:1775": "out",
+    "postgres-collaborative-team-repository.ts:1785": "out",
+    "postgres-collaborative-team-repository.ts:1809": "out",
+    "postgres-collaborative-team-repository.ts:1813": "out",
+    "postgres-collaborative-team-repository.ts:1829": "out",
+    "postgres-collaborative-team-repository.ts:1833": "out",
+    "postgres-collaborative-team-repository.ts:1836": "out",
+    "postgres-collaborative-team-repository.ts:1996": "out",
+    "postgres-collaborative-team-repository.ts:2016": "out",
+    "postgres-collaborative-team-repository.ts:2211": "out",
+    "postgres-collaborative-team-repository.ts:2241": "out",
+    "postgres-collaborative-team-repository.ts:2272": "out",
+    "postgres-environment-registry.ts:15": "out",
+    "postgres-environment-registry.ts:26": "out",
+    "postgres-environment-registry.ts:37": "out",
+    "postgres-environment-registry.ts:43": "out",
+    "postgres-environment-registry.ts:57": "out",
+    "postgres-environment-registry.ts:75": "out",
+    "postgres-environment-registry.ts:85": "out",
+    "postgres-environment-registry.ts:92": "out",
+    "postgres-environment-registry.ts:102": "out",
+    "postgres-environment-registry.ts:115": "out",
+    "postgres-environment-registry.ts:128": "out",
+    "postgres-environment-registry.ts:135": "out",
+    "postgres-environment-registry.ts:142": "out",
+    "postgres-invokable-repository.ts:72": "out",
+    "postgres-invokable-repository.ts:92": "out",
+    "postgres-invokable-repository.ts:111": "out",
+    "postgres-invokable-repository.ts:128": "out",
+    "postgres-invokable-repository.ts:145": "in",
+    "postgres-invokable-repository.ts:148": "out",
+    "postgres-invokable-repository.ts:151": "out",
+    "postgres-invokable-repository.ts:191": "out",
+    "postgres-invokable-repository.ts:206": "out",
+    "postgres-invokable-repository.ts:269": "out",
+    "postgres-invokable-repository.ts:369": "out",
+    "postgres-invokable-repository.ts:460": "out",
+    "postgres-lark-review-surface-repository.ts:408": "in",
+    "postgres-lark-review-surface-repository.ts:530": "out",
+    "postgres-lark-review-surface-repository.ts:592": "in",
+    "postgres-lark-review-surface-repository.ts:595": "out",
+    "postgres-lark-review-surface-repository.ts:598": "out",
+    "postgres-lark-review-surface-repository.ts:670": "out",
+    "postgres-lark-review-surface-repository.ts:1017": "out",
+    "postgres-lark-review-surface-repository.ts:1207": "out",
+    "postgres-lark-review-surface-repository.ts:1425": "in",
+    "postgres-lark-review-surface-repository.ts:1427": "out",
+    "postgres-lark-review-surface-repository.ts:1430": "out",
+    "postgres-learning-proposal-repository.ts:100": "in",
+    "postgres-learning-proposal-repository.ts:145": "in",
+    "postgres-learning-proposal-repository.ts:158": "in",
+    "postgres-learning-proposal-repository.ts:164": "in",
+    "postgres-learning-proposal-repository.ts:177": "out",
+    "postgres-learning-proposal-repository.ts:183": "out",
+    "postgres-learning-proposal-repository.ts:195": "in",
+    "postgres-learning-proposal-repository.ts:216": "in",
+    "postgres-learning-proposal-repository.ts:225": "out",
+    "postgres-learning-proposal-repository.ts:228": "out",
+    "postgres-memory-api-repository.ts:140": "in",
+    "postgres-memory-api-repository.ts:166": "out",
+    "postgres-memory-api-repository.ts:169": "out",
+    "postgres-memory-api-repository.ts:176": "out",
+    "postgres-memory-api-repository.ts:186": "out",
+    "postgres-memory-api-repository.ts:189": "out",
+    "postgres-memory-api-repository.ts:233": "in",
+    "postgres-memory-api-repository.ts:243": "out",
+    "postgres-memory-api-repository.ts:250": "out",
+    "postgres-memory-api-repository.ts:253": "out",
+    "postgres-memory-api-repository.ts:269": "out",
+    "postgres-memory-api-repository.ts:279": "out",
+    "postgres-memory-api-repository.ts:282": "out",
+    "postgres-run-event-repository.ts:19": "out",
+    "postgres-run-repository.ts:76": "out",
+    "postgres-run-repository.ts:156": "out",
+    "postgres-run-repository.ts:274": "out",
+    "postgres-run-repository.ts:324": "out",
+    "postgres-run-repository.ts:358": "out",
+    "postgres-run-repository.ts:400": "out",
+    "postgres-runtime-session-repository.ts:27": "out",
+    "postgres-runtime-session-repository.ts:42": "out",
+    "postgres-runtime-session-repository.ts:55": "out",
+    "postgres-runtime-session-repository.ts:75": "out",
+    "postgres-runtime-session-repository.ts:93": "out",
+    "postgres-runtime-session-repository.ts:132": "out",
+    "postgres-runtime-session-repository.ts:144": "out",
+    "postgres-runtime-session-repository.ts:161": "out",
+    "postgres-runtime-session-repository.ts:173": "out",
+    "postgres-runtime-session-repository.ts:190": "out",
+    "postgres-runtime-session-repository.ts:206": "out",
+    "postgres-runtime-session-repository.ts:216": "out",
+    "postgres-runtime-session-repository.ts:234": "out",
+    "postgres-runtime-session-repository.ts:247": "out",
+    "postgres-runtime-session-repository.ts:261": "out",
+    "postgres-runtime-session-repository.ts:273": "out",
+    "postgres-runtime-session-repository.ts:283": "out",
+    "postgres-runtime-session-repository.ts:295": "out",
+    "postgres-service-account-workspace-bootstrap.ts:42": "out",
+    "postgres-session-repository.ts:31": "out",
+    "postgres-session-repository.ts:46": "out",
+    "postgres-session-repository.ts:61": "out",
+    "postgres-session-repository.ts:73": "out",
+    "postgres-session-repository.ts:82": "out",
+    "postgres-session-repository.ts:97": "out",
+    "postgres-session-repository.ts:110": "out",
+    "postgres-session-repository.ts:129": "out",
+    "postgres-session-repository.ts:161": "out",
+    "postgres-session-repository.ts:205": "out",
+    "postgres-session-repository.ts:214": "in",
+    "postgres-session-repository.ts:216": "in",
+    "postgres-session-repository.ts:222": "in",
+    "postgres-session-repository.ts:235": "out",
+    "postgres-session-repository.ts:245": "out",
+    "postgres-session-repository.ts:251": "out",
+    "postgres-session-repository.ts:272": "out",
+    "postgres-session-repository.ts:276": "out",
+    "postgres-session-repository.ts:280": "out",
+    "postgres-session-repository.ts:296": "out",
+    "postgres-session-repository.ts:300": "out",
+    "postgres-session-repository.ts:304": "out",
+    "postgres-session-repository.ts:318": "out",
+    "postgres-session-repository.ts:332": "in",
+    "postgres-session-repository.ts:334": "in",
+    "postgres-session-repository.ts:341": "in",
+    "postgres-session-repository.ts:353": "in",
+    "postgres-session-repository.ts:357": "out",
+    "postgres-session-repository.ts:359": "out",
+    "postgres-session-repository.ts:367": "in",
+    "postgres-session-repository.ts:369": "in",
+    "postgres-session-repository.ts:374": "out",
+    "postgres-session-repository.ts:378": "out",
+    "postgres-session-repository.ts:383": "out",
+    "postgres-session-repository.ts:392": "out",
+    "postgres-session-repository.ts:401": "out",
+    "postgres-session-repository.ts:405": "out",
+    "postgres-session-repository.ts:409": "out",
+    "postgres-session-repository.ts:413": "out",
+    "postgres-session-repository.ts:420": "out",
+    "postgres-task-repository.ts:27": "out",
+    "postgres-task-repository.ts:193": "out",
+    "postgres-task-repository.ts:218": "out",
+    "postgres-team-message-repository.ts:216": "in",
+    "postgres-team-message-repository.ts:313": "out",
+    "postgres-team-message-repository.ts:316": "out",
+    "postgres-work-identity-repository.ts:401": "in",
+    "postgres-work-identity-repository.ts:420": "out",
+    "postgres-work-identity-repository.ts:430": "out",
+    "postgres-work-identity-repository.ts:456": "out",
+    "postgres-work-identity-repository.ts:467": "out",
+    "postgres-workspace-memory-repository.ts:95": "out",
+    "postgres-workspace-memory-repository.ts:130": "in",
+    "postgres-workspace-memory-repository.ts:155": "out",
+    "postgres-workspace-memory-repository.ts:158": "out",
+    "postgres-workspace-memory-repository.ts:272": "in",
+    "postgres-workspace-memory-repository.ts:318": "out",
+    "postgres-workspace-memory-repository.ts:327": "out",
+    "postgres-workspace-memory-repository.ts:361": "out",
+    "postgres-workspace-memory-repository.ts:364": "out",
+    "postgres-workspace-memory-repository.ts:529": "out",
+    "postgres-workspace-memory-repository.ts:561": "out",
+    "postgres.ts:148": "out",
+    "postgres.ts:159": "out",
+    "postgres.ts:190": "out",
+    "postgres.ts:214": "out",
+    "postgres.ts:218": "out",
+    "postgres.ts:225": "out",
+    "postgres-lark-review-surface-repository.ts:109": "in",
+    "postgres-lark-review-surface-repository.ts:113": "in",
+    "postgres-channel-repository.ts:327": "in",
+    "postgres-workspace-memory-repository.ts:322": "in",
+    "postgres-lark-review-surface-repository.ts:335": "in",
+    "postgres-lark-review-surface-repository.ts:339": "in"
+  },
+  "typedTransactionTruth": {
+    "postgres-admission-repository.ts:104": "out",
+    "postgres-agent-registry.ts:104": "out",
+    "postgres-agent-registry.ts:125": "out",
+    "postgres-agent-registry.ts:135": "out",
+    "postgres-agent-registry.ts:149": "out",
+    "postgres-agent-registry.ts:204": "out",
+    "postgres-agent-registry.ts:218": "out",
+    "postgres-agent-registry.ts:247": "out",
+    "postgres-agent-registry.ts:259": "out",
+    "postgres-agent-registry.ts:290": "out",
+    "postgres-agent-registry.ts:312": "out",
+    "postgres-agent-registry.ts:397": "out",
+    "postgres-agent-registry.ts:449": "out",
+    "postgres-agent-registry.ts:453": "out",
+    "postgres-channel-repository.ts:111": "out",
+    "postgres-channel-repository.ts:143": "out",
+    "postgres-channel-repository.ts:150": "out",
+    "postgres-channel-repository.ts:175": "out",
+    "postgres-channel-repository.ts:286": "out",
+    "postgres-channel-repository.ts:300": "in",
+    "postgres-channel-repository.ts:318": "out",
+    "postgres-channel-repository.ts:327": "in",
+    "postgres-channel-repository.ts:375": "out",
+    "postgres-channel-repository.ts:393": "out",
+    "postgres-channel-repository.ts:413": "out",
+    "postgres-channel-repository.ts:429": "out",
+    "postgres-channel-repository.ts:441": "out",
+    "postgres-channel-repository.ts:466": "out",
+    "postgres-channel-repository.ts:488": "out",
+    "postgres-channel-repository.ts:521": "in",
+    "postgres-channel-repository.ts:532": "out",
+    "postgres-channel-repository.ts:584": "out",
+    "postgres-collaborative-team-repository.ts:194": "out",
+    "postgres-collaborative-team-repository.ts:220": "in",
+    "postgres-collaborative-team-repository.ts:239": "in",
+    "postgres-collaborative-team-repository.ts:297": "out",
+    "postgres-collaborative-team-repository.ts:340": "out",
+    "postgres-collaborative-team-repository.ts:362": "out",
+    "postgres-collaborative-team-repository.ts:405": "in",
+    "postgres-collaborative-team-repository.ts:434": "out",
+    "postgres-collaborative-team-repository.ts:455": "out",
+    "postgres-collaborative-team-repository.ts:527": "out",
+    "postgres-collaborative-team-repository.ts:539": "out",
+    "postgres-collaborative-team-repository.ts:550": "out",
+    "postgres-collaborative-team-repository.ts:573": "out",
+    "postgres-collaborative-team-repository.ts:613": "in",
+    "postgres-collaborative-team-repository.ts:647": "out",
+    "postgres-collaborative-team-repository.ts:773": "out",
+    "postgres-collaborative-team-repository.ts:790": "out",
+    "postgres-collaborative-team-repository.ts:858": "out",
+    "postgres-collaborative-team-repository.ts:868": "out",
+    "postgres-collaborative-team-repository.ts:893": "out",
+    "postgres-collaborative-team-repository.ts:903": "out",
+    "postgres-collaborative-team-repository.ts:913": "out",
+    "postgres-collaborative-team-repository.ts:934": "out",
+    "postgres-collaborative-team-repository.ts:951": "in",
+    "postgres-collaborative-team-repository.ts:958": "out",
+    "postgres-collaborative-team-repository.ts:1032": "out",
+    "postgres-collaborative-team-repository.ts:1063": "in",
+    "postgres-collaborative-team-repository.ts:1098": "in",
+    "postgres-collaborative-team-repository.ts:1131": "in",
+    "postgres-collaborative-team-repository.ts:1139": "out",
+    "postgres-collaborative-team-repository.ts:1154": "out",
+    "postgres-collaborative-team-repository.ts:1170": "out",
+    "postgres-collaborative-team-repository.ts:1208": "out",
+    "postgres-collaborative-team-repository.ts:1258": "out",
+    "postgres-collaborative-team-repository.ts:1262": "out",
+    "postgres-collaborative-team-repository.ts:1324": "in",
+    "postgres-collaborative-team-repository.ts:1331": "in",
+    "postgres-collaborative-team-repository.ts:1343": "out",
+    "postgres-collaborative-team-repository.ts:1357": "out",
+    "postgres-collaborative-team-repository.ts:1362": "out",
+    "postgres-collaborative-team-repository.ts:1370": "out",
+    "postgres-collaborative-team-repository.ts:1413": "in",
+    "postgres-collaborative-team-repository.ts:1420": "in",
+    "postgres-collaborative-team-repository.ts:1432": "out",
+    "postgres-collaborative-team-repository.ts:1446": "out",
+    "postgres-collaborative-team-repository.ts:1458": "out",
+    "postgres-collaborative-team-repository.ts:1478": "out",
+    "postgres-collaborative-team-repository.ts:1531": "in",
+    "postgres-collaborative-team-repository.ts:1538": "in",
+    "postgres-collaborative-team-repository.ts:1550": "out",
+    "postgres-collaborative-team-repository.ts:1563": "out",
+    "postgres-collaborative-team-repository.ts:1571": "out",
+    "postgres-collaborative-team-repository.ts:1612": "out",
+    "postgres-collaborative-team-repository.ts:1709": "out",
+    "postgres-collaborative-team-repository.ts:1737": "in",
+    "postgres-collaborative-team-repository.ts:1751": "in",
+    "postgres-collaborative-team-repository.ts:1847": "out",
+    "postgres-collaborative-team-repository.ts:1864": "out",
+    "postgres-collaborative-team-repository.ts:1878": "out",
+    "postgres-collaborative-team-repository.ts:1897": "out",
+    "postgres-collaborative-team-repository.ts:1908": "out",
+    "postgres-collaborative-team-repository.ts:1934": "out",
+    "postgres-collaborative-team-repository.ts:1957": "out",
+    "postgres-collaborative-team-repository.ts:2031": "out",
+    "postgres-collaborative-team-repository.ts:2066": "out",
+    "postgres-collaborative-team-repository.ts:2092": "out",
+    "postgres-collaborative-team-repository.ts:2134": "out",
+    "postgres-collaborative-team-repository.ts:2144": "out",
+    "postgres-collaborative-team-repository.ts:2195": "out",
+    "postgres-execution-fact-query.ts:83": "out",
+    "postgres-execution-fact-query.ts:136": "out",
+    "postgres-invokable-repository.ts:76": "in",
+    "postgres-invokable-repository.ts:115": "in",
+    "postgres-invokable-repository.ts:164": "out",
+    "postgres-invokable-repository.ts:238": "out",
+    "postgres-invokable-repository.ts:307": "out",
+    "postgres-invokable-repository.ts:337": "out",
+    "postgres-invokable-repository.ts:401": "out",
+    "postgres-invokable-repository.ts:441": "out",
+    "postgres-invokable-repository.ts:545": "out",
+    "postgres-lark-review-surface-repository.ts:80": "in",
+    "postgres-lark-review-surface-repository.ts:92": "in",
+    "postgres-lark-review-surface-repository.ts:96": "in",
+    "postgres-lark-review-surface-repository.ts:108": "out",
+    "postgres-lark-review-surface-repository.ts:112": "out",
+    "postgres-lark-review-surface-repository.ts:122": "out",
+    "postgres-lark-review-surface-repository.ts:134": "out",
+    "postgres-lark-review-surface-repository.ts:145": "out",
+    "postgres-lark-review-surface-repository.ts:306": "in",
+    "postgres-lark-review-surface-repository.ts:316": "in",
+    "postgres-lark-review-surface-repository.ts:320": "in",
+    "postgres-lark-review-surface-repository.ts:334": "out",
+    "postgres-lark-review-surface-repository.ts:338": "out",
+    "postgres-lark-review-surface-repository.ts:461": "in",
+    "postgres-lark-review-surface-repository.ts:474": "out",
+    "postgres-lark-review-surface-repository.ts:486": "out",
+    "postgres-lark-review-surface-repository.ts:508": "out",
+    "postgres-lark-review-surface-repository.ts:558": "out",
+    "postgres-lark-review-surface-repository.ts:609": "out",
+    "postgres-lark-review-surface-repository.ts:626": "out",
+    "postgres-lark-review-surface-repository.ts:645": "out",
+    "postgres-lark-review-surface-repository.ts:703": "in",
+    "postgres-lark-review-surface-repository.ts:718": "out",
+    "postgres-lark-review-surface-repository.ts:727": "out",
+    "postgres-lark-review-surface-repository.ts:754": "out",
+    "postgres-lark-review-surface-repository.ts:784": "in",
+    "postgres-lark-review-surface-repository.ts:802": "out",
+    "postgres-lark-review-surface-repository.ts:823": "out",
+    "postgres-lark-review-surface-repository.ts:839": "out",
+    "postgres-lark-review-surface-repository.ts:895": "in",
+    "postgres-lark-review-surface-repository.ts:907": "out",
+    "postgres-lark-review-surface-repository.ts:916": "out",
+    "postgres-lark-review-surface-repository.ts:931": "out",
+    "postgres-lark-review-surface-repository.ts:947": "out",
+    "postgres-lark-review-surface-repository.ts:1029": "out",
+    "postgres-lark-review-surface-repository.ts:1036": "out",
+    "postgres-lark-review-surface-repository.ts:1074": "out",
+    "postgres-lark-review-surface-repository.ts:1116": "in",
+    "postgres-lark-review-surface-repository.ts:1167": "out",
+    "postgres-lark-review-surface-repository.ts:1221": "out",
+    "postgres-lark-review-surface-repository.ts:1252": "out",
+    "postgres-lark-review-surface-repository.ts:1271": "out",
+    "postgres-lark-review-surface-repository.ts:1287": "out",
+    "postgres-lark-review-surface-repository.ts:1298": "out",
+    "postgres-lark-review-surface-repository.ts:1316": "out",
+    "postgres-lark-review-surface-repository.ts:1334": "out",
+    "postgres-learning-proposal-repository.ts:38": "out",
+    "postgres-learning-proposal-repository.ts:69": "out",
+    "postgres-learning-proposal-repository.ts:84": "out",
+    "postgres-learning-proposal-repository.ts:102": "in",
+    "postgres-learning-proposal-repository.ts:123": "in",
+    "postgres-learning-proposal-repository.ts:169": "in",
+    "postgres-learning-proposal-repository.ts:173": "in",
+    "postgres-learning-proposal-repository.ts:197": "in",
+    "postgres-learning-proposal-repository.ts:221": "in",
+    "postgres-memory-api-repository.ts:72": "out",
+    "postgres-memory-api-repository.ts:96": "out",
+    "postgres-memory-api-repository.ts:107": "out",
+    "postgres-memory-api-repository.ts:125": "out",
+    "postgres-memory-api-repository.ts:144": "in",
+    "postgres-memory-api-repository.ts:200": "out",
+    "postgres-memory-api-repository.ts:211": "out",
+    "postgres-memory-api-repository.ts:301": "out",
+    "postgres-run-event-repository.ts:25": "out",
+    "postgres-run-event-repository.ts:41": "out",
+    "postgres-run-event-repository.ts:54": "out",
+    "postgres-run-event-repository.ts:72": "out",
+    "postgres-run-event-repository.ts:89": "out",
+    "postgres-run-repository.ts:184": "out",
+    "postgres-run-repository.ts:219": "out",
+    "postgres-run-repository.ts:249": "out",
+    "postgres-run-repository.ts:441": "out",
+    "postgres-run-repository.ts:463": "out",
+    "postgres-service-account-workspace-bootstrap.ts:55": "out",
+    "postgres-task-repository.ts:131": "out",
+    "postgres-task-repository.ts:146": "out",
+    "postgres-task-repository.ts:171": "out",
+    "postgres-team-message-repository.ts:53": "out",
+    "postgres-team-message-repository.ts:81": "out",
+    "postgres-team-message-repository.ts:93": "out",
+    "postgres-team-message-repository.ts:121": "out",
+    "postgres-team-message-repository.ts:137": "out",
+    "postgres-team-message-repository.ts:154": "out",
+    "postgres-team-message-repository.ts:191": "out",
+    "postgres-team-message-repository.ts:217": "in",
+    "postgres-team-message-repository.ts:225": "in",
+    "postgres-team-message-repository.ts:242": "in",
+    "postgres-team-message-repository.ts:269": "in",
+    "postgres-team-message-repository.ts:290": "in",
+    "postgres-team-message-repository.ts:328": "out",
+    "postgres-work-identity-repository.ts:173": "out",
+    "postgres-work-identity-repository.ts:199": "out",
+    "postgres-work-identity-repository.ts:205": "out",
+    "postgres-work-identity-repository.ts:224": "out",
+    "postgres-work-identity-repository.ts:239": "out",
+    "postgres-work-identity-repository.ts:259": "out",
+    "postgres-work-identity-repository.ts:285": "out",
+    "postgres-work-identity-repository.ts:316": "out",
+    "postgres-work-identity-repository.ts:328": "out",
+    "postgres-work-identity-repository.ts:342": "out",
+    "postgres-work-identity-repository.ts:355": "out",
+    "postgres-work-identity-repository.ts:402": "in",
+    "postgres-work-identity-repository.ts:411": "in",
+    "postgres-work-identity-repository.ts:448": "out",
+    "postgres-work-identity-repository.ts:488": "out",
+    "postgres-work-identity-repository.ts:508": "out",
+    "postgres-work-identity-repository.ts:528": "out",
+    "postgres-work-projection-facts-query.ts:96": "out",
+    "postgres-work-projection-facts-query.ts:123": "out",
+    "postgres-work-projection-facts-query.ts:129": "out",
+    "postgres-work-projection-facts-query.ts:136": "out",
+    "postgres-work-projection-facts-query.ts:153": "out",
+    "postgres-work-projection-facts-query.ts:160": "out",
+    "postgres-workspace-memory-repository.ts:139": "in",
+    "postgres-workspace-memory-repository.ts:169": "out",
+    "postgres-workspace-memory-repository.ts:199": "out",
+    "postgres-workspace-memory-repository.ts:221": "out",
+    "postgres-workspace-memory-repository.ts:245": "out",
+    "postgres-workspace-memory-repository.ts:288": "in",
+    "postgres-workspace-memory-repository.ts:302": "in",
+    "postgres-workspace-memory-repository.ts:321": "in",
+    "postgres-workspace-memory-repository.ts:374": "out",
+    "postgres-workspace-memory-repository.ts:398": "out",
+    "postgres-workspace-memory-repository.ts:487": "out",
+    "postgres-workspace-memory-repository.ts:515": "out",
+    "postgres.ts:199": "out"
+  },
+  "transactionTruthSource": {
+    "kind": "independent_control_flow_fixture",
+    "basis": "explicit BEGIN/COMMIT/ROLLBACK boundaries and withTransaction callback ownership; typed inventory has a separate truth map",
+    "knownIn": [
+      "postgres-lark-review-surface-repository.ts:80",
+      "postgres-lark-review-surface-repository.ts:306",
+      "postgres-channel-repository.ts:327",
+      "postgres-workspace-memory-repository.ts:321"
+    ],
+    "knownOut": [
+      "postgres.ts:214",
+      "postgres-collaborative-team-repository.ts:628"
+    ]
   }
 }

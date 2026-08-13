@@ -47,6 +47,14 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false, requiredFailu
   const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'remove-known-bidirectional-for-update-row', ...run, expectedNonzero: true, requiredFailureCodes: ['source_lock_row_missing'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
+  const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); value.transactionTruth['postgres-collaborative-team-repository.ts:628'] = 'out'; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'change-independent-transaction-truth', ...run, expectedNonzero: true, requiredFailureCodes: ['transaction_truth_MISMATCH'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
+}
+{
+  const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); value.typedCallTruth['postgres-invokable-repository.ts:545'].sourceExcerptHash = 'typed-fact-red-arm'; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'change-typed-query-fact', ...run, expectedNonzero: true, requiredFailureCodes: ['typed_call_truth_evidence_MISMATCH'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
+}
+{
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); delete value.ports['run-dispatcher.ts']; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
   const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'leave-port-ownerless', ...run, expectedNonzero: true, requiredFailureCodes: ['port_owner_MISSING', 'run_dispatcher_owner'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
@@ -71,6 +79,11 @@ for (const arm of arms) {
 }
 const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => (arm.exitCode !== 0) === arm.expectedNonzero && arm.failureCodeAssertion) };
 if (canonicalEvidenceInput) result.canonical = JSON.parse(fs.readFileSync(canonicalEvidenceInput, 'utf8'));
+if (process.env.OWNERSHIP_REQUIRE_CANONICAL === '1') {
+  const canonical = result.canonical;
+  const expectedLedgerHash = inputs.ledger; const expectedVerifierHash = inputs.verifier;
+  if (!canonical || canonical.candidateSha !== candidateSha || canonical.exitCode !== 0 || !canonical.exactCommand || !canonical.exactCommand.includes('pnpm') || canonical.inputHashes?.ledger !== expectedLedgerHash || canonical.inputHashes?.verifier !== expectedVerifierHash) result.ok = false;
+}
 if (process.env.OWNERSHIP_EVIDENCE_PATH) fs.writeFileSync(process.env.OWNERSHIP_EVIDENCE_PATH, `${JSON.stringify(result)}\n`);
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = result.ok ? 0 : 2;

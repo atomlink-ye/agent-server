@@ -42,7 +42,7 @@ function matchingParen(s, start) {
   return -1;
 }
 
-function literalSql(argument) {
+function literalSql(argument, { allowTemplateInterpolation = false } = {}) {
   const a = argument.trim();
   if (a.startsWith("'")) {
     let out = '';
@@ -53,7 +53,11 @@ function literalSql(argument) {
     }
     return null;
   }
-  if (a.startsWith('`') && !a.includes('${')) return a.slice(1, a.lastIndexOf('`'));
+  if (a.startsWith('`')) {
+    const template = a.slice(1, a.lastIndexOf('`'));
+    if (!allowTemplateInterpolation && template.includes('${')) return null;
+    return template.replace(/\$\{[\s\S]*?\}/g, ' ');
+  }
   return null;
 }
 
@@ -93,7 +97,7 @@ function scanTypedCalls(file) {
       cursor += 1;
     }
     if (open < 0) continue;
-    const close = matchingParen(source, open); const argument = close < 0 ? '' : source.slice(open + 1, close); const sql = literalSql(argument);
+    const close = matchingParen(source, open); const argument = close < 0 ? '' : source.slice(open + 1, close); const sql = literalSql(argument, { allowTemplateInterpolation: true });
     const parsedOperation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
     const operation = parsedOperation === 'BEGIN' ? 'BEGIN' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'CONTROL' : parsedOperation === 'SELECT' ? 'READ' : ['INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(parsedOperation) ? 'WRITE' : (sql ? 'UNKNOWN' : 'MISSING');
     const lock = sql ? (/\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(sql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(sql) ? 'for_share' : 'none') : 'unknown';
@@ -156,14 +160,16 @@ function checkRepositories() {
         if (definitionFile !== file || override.definitionEvidence.definitionExcerptHash !== excerptHash(read(sourceFile), Number(definitionLine))) fail('override_definition_evidence_hash_MISMATCH', key);
       }
       if (!row.transactionEvidence || row.transactionEvidence.locator !== key || row.transactionEvidence.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('transaction_evidence_MISSING_OR_DRIFT', key);
+      const truthTransaction = ledger.transactionTruth?.[key];
+      if (!truthTransaction) fail('transaction_truth_MISSING', key);
+      if (truthTransaction && row.transaction !== truthTransaction) fail('transaction_truth_MISMATCH', { key, ledger: row.transaction, truth: truthTransaction });
       const actual = override ? { ...call, ...override, file, line: call.line } : call;
-      actual.transaction = row.transaction;
       actual.owner = ledger.repositories[path.basename(file)];
       if (actual.classification === 'classified') { counts.classifiedCallSites += 1; fileClassified += 1; for (const table of actual.tables) classifiedRuntimeTables.add(table); } else { counts.missingCallSites += 1; fileMissing += 1; }
       if (!row.owner) fail('call_site_owner_MISSING', key);
       if (row.owner !== actual.owner) fail('call_site_owner_drift', { key, ledger: row.owner, actual: actual.owner });
       if (actual.transaction === 'unknown') fail('call_site_transaction_unknown', key);
-      for (const field of ['file', 'line', 'classification', 'operation', 'readWrite', 'lock', 'transaction', 'tables', 'owner']) if (JSON.stringify(row[field]) !== JSON.stringify(actual[field])) fail('call_site_field_drift', { key, field, ledger: row[field], actual: actual[field] });
+      for (const field of ['file', 'line', 'classification', 'operation', 'readWrite', 'lock', 'tables', 'owner']) if (JSON.stringify(row[field]) !== JSON.stringify(actual[field])) fail('call_site_field_drift', { key, field, ledger: row[field], actual: actual[field] });
       const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
       const repositoryOwner = ledger.repositories[path.basename(file)];
       const crossesCapability = [...owners].some((owner) => owner && owner !== repositoryOwner);
@@ -175,7 +181,16 @@ function checkRepositories() {
     }
     for (const typed of typedCalls) {
       const key = `${file}:${typed.line}`; const row = ledger.typedCrossCapability?.[key];
-      const actual = { ...typed };
+      const typedTruth = ledger.typedCallTruth?.[key];
+      const independentTransaction = ledger.typedTransactionTruth?.[key];
+      if (!independentTransaction) fail('typed_transaction_truth_MISSING', key);
+      const actual = typedTruth ? { ...typed, ...typedTruth } : { ...typed };
+      if (independentTransaction) actual.transaction = independentTransaction;
+      if (typedTruth && typedTruth.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_call_truth_evidence_MISMATCH', key);
+      if (actual.classification === 'MISSING') fail('typed_query_call_unclassified_MISSING', key);
+      for (const field of ['operation', 'readWrite', 'lock', 'transaction', 'tables', 'sourceExcerptHash']) {
+        if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
+      }
       actual.owner = ledger.repositories[file];
       if (row?.sourceExcerptHash && row.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_query_source_excerpt_hash_MISMATCH', key);
       const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
@@ -185,9 +200,13 @@ function checkRepositories() {
         if (!row || !['(a)', '(b)', '(c)'].includes(row.disposition) || !row.reason) fail('typed_cross_capability_disposition_MISSING', key);
       } else if (row) fail('typed_cross_capability_spurious_disposition', key);
     }
-    const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); return row ? { ...fact, transaction: row.transaction, tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
+    const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); const key = `${file}:${fact.line}`; return row ? { ...fact, transaction: ledger.transactionTruth?.[key], tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
     if (fileClassified + fileMissing !== calls.length || fileClassified !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: fileClassified, missing: fileMissing, ledger: ledgerCalls.length });
-    for (const lock of scanSourceLocks(file, [...lockFacts, ...typedCalls])) {
+    const typedLockFacts = typedCalls.map((typed) => {
+      const truth = ledger.typedTransactionTruth?.[`${file}:${typed.line}`];
+      return truth ? { ...typed, transaction: truth } : typed;
+    });
+    for (const lock of scanSourceLocks(file, [...lockFacts, ...typedLockFacts])) {
       counts.sourceLockRows += 1; const key = `${lock.file}:${lock.line}`; const row = (ledger.sourceLockRows ?? []).find((item) => `${item.file}:${item.line}` === key);
       if (!lockRows.has(key)) fail('source_lock_row_missing', key);
       if (!row) continue;

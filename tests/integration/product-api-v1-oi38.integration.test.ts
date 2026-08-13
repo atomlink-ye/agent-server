@@ -174,6 +174,8 @@ describeRealPostgres(
         '/api/v1/works/' + missingId + '/runs',
         tokenB,
       );
+      if (foreign.status === 403)
+        throw new Error('work_http_foreign_scope_leak:status=403');
       expect(foreign.status).toBe(404);
       expect(missing.status).toBe(404);
       const foreignError = await normalizeErrorJson(foreign);
@@ -262,7 +264,9 @@ describeRealPostgres(
             },
           }) as never,
         );
-        const tools = await client.listTools();
+        const tools = await client.listTools().catch(() => {
+          throw new Error('work_mcp_registration_missing:product_work_create');
+        });
         if (!tools.tools.some((tool) => tool.name === 'product_work_create'))
           throw new Error('work_mcp_registration_missing:product_work_create');
         const result = await client.callTool({

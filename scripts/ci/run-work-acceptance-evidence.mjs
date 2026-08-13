@@ -23,7 +23,7 @@ const inputs = [
   'pnpm-lock.yaml',
   'src/bootstrap.ts',
   'src/modules/work/work-module.ts',
-  'src/entrypoints/api/routes/product-work.ts',
+  'src/entrypoints/api/routes/product-work-commands.ts',
   'src/entrypoints/mcp/direct-memory-mcp.ts',
   'src/entrypoints/mcp/product-work-mcp-tools.ts',
   'scripts/ci/check-work-import-boundary.mjs',
@@ -85,9 +85,9 @@ mutate(
 
 mutate(
   'foreign-leak-fail',
-  'src/entrypoints/api/routes/product-work.ts',
-  `              code: 'work_not_found',\n              message: 'The requested Work was not found.',\n              request_id: requestId(context),\n            },\n          }),\n          404,`,
-  `              code: 'work_not_found',\n              message: 'The requested Work was not found.',\n              request_id: requestId(context),\n            },\n          }),\n          403,`,
+  'src/entrypoints/api/routes/product-work-commands.ts',
+  `            throw new HttpError(\n              404,\n              'work_not_found',\n              'The requested Work was not found.',\n            );`,
+  `            throw new HttpError(\n              403,\n              'work_not_found',\n              'The requested Work was not found.',\n            );`,
   () => {
     arms.push(
       runArm(
@@ -97,7 +97,7 @@ mutate(
         1,
         [
           'requires owner positive control and makes foreign/missing Work indistinguishable',
-          'expected 403 to be 404',
+          'work_http_foreign_scope_leak:status=403',
         ],
       ),
     );

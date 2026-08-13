@@ -37,11 +37,20 @@ export interface WorkIdentityListQuery {
   readonly limit: number;
   readonly cursor: string | null;
 }
-export interface WorkListPage { readonly items: readonly Work[]; readonly nextCursor: string | null; }
-export interface WorkRunListPage { readonly items: readonly WorkRun[]; readonly nextCursor: string | null; }
+export interface WorkListPage {
+  readonly items: readonly Work[];
+  readonly nextCursor: string | null;
+}
+export interface WorkRunListPage {
+  readonly items: readonly WorkRun[];
+  readonly nextCursor: string | null;
+}
 export class InvalidWorkListCursorError extends Error {
   public readonly code = 'invalid_cursor';
-  public constructor() { super('The requested Work list cursor is invalid.'); this.name = 'InvalidWorkListCursorError'; }
+  public constructor() {
+    super('The requested Work list cursor is invalid.');
+    this.name = 'InvalidWorkListCursorError';
+  }
 }
 
 export interface BindRootTaskCasInput {
@@ -63,8 +72,13 @@ export interface WorkIdentityRepository {
   findWorkById(id: string, owner: WorkIdentityOwnerScope): Promise<Work | null>;
   createOrLoadPending(input: CreateOrLoadPendingWorkRunInput): Promise<WorkRun>;
   /** Alias retained for coordinators that use the domain wording. */
-  startPendingWorkRun?(input: CreateOrLoadPendingWorkRunInput): Promise<WorkRun>;
-  findWorkRunById(id: string, owner: WorkIdentityOwnerScope): Promise<WorkRun | null>;
+  startPendingWorkRun?(
+    input: CreateOrLoadPendingWorkRunInput,
+  ): Promise<WorkRun>;
+  findWorkRunById(
+    id: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null>;
   findLatestVisibleWorkRun?(
     workId: string,
     owner: WorkIdentityOwnerScope,
@@ -86,8 +100,15 @@ export interface WorkIdentityRepository {
     workRunId: string,
     owner: WorkIdentityOwnerScope,
   ): Promise<ResolvedResourceManifest | null>;
-  listWorks?(owner: WorkIdentityOwnerScope, query: WorkIdentityListQuery): Promise<WorkListPage>;
-  listWorkRuns?(owner: WorkIdentityOwnerScope, workId: string, query: WorkIdentityListQuery): Promise<WorkRunListPage>;
+  listWorks?(
+    owner: WorkIdentityOwnerScope,
+    query: WorkIdentityListQuery,
+  ): Promise<WorkListPage>;
+  listWorkRuns?(
+    owner: WorkIdentityOwnerScope,
+    workId: string,
+    query: WorkIdentityListQuery,
+  ): Promise<WorkRunListPage>;
 }
 
 export type WorkIdentityQuery = Pick<
@@ -102,4 +123,7 @@ export {
   WorkRunBindingConflictError,
   WorkRunNotFoundError,
 } from '../../domain/work/work-run.js';
-export { WorkIdentityConflictError, WorkNotFoundError } from '../../domain/work/work.js';
+export {
+  WorkIdentityConflictError,
+  WorkNotFoundError,
+} from '../../domain/work/work.js';

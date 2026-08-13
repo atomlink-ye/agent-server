@@ -10,7 +10,9 @@ import {
   stopProcessTree,
 } from './paseo-process.mjs';
 
-const repositoryRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const repositoryRoot = resolve(
+  fileURLToPath(new URL('../..', import.meta.url)),
+);
 const provider = process.argv[2]?.trim();
 if (!provider) throw new Error('usage: provider-session-probe.mjs <provider>');
 const requestedModel = process.env.PROVIDER_SESSION_MODEL?.trim() || null;
@@ -71,10 +73,7 @@ const runtimeBase = resolve(
   process.env.PROVIDER_SESSION_RUNTIME_ROOT ??
     join(repositoryRoot, '.local', 'provider-session-probe'),
 );
-const runRoot = join(
-  runtimeBase,
-  `${provider}-${process.pid}-${randomUUID()}`,
-);
+const runRoot = join(runtimeBase, `${provider}-${process.pid}-${randomUUID()}`);
 const projectRoot = join(runRoot, 'project');
 let paseo;
 let client;
@@ -117,8 +116,11 @@ try {
   });
   await client.connect();
   const workspace = await client.openProject(projectRoot);
-  if (!workspace.workspace?.id) throw new Error('provider_session_workspace_unavailable');
-  const models = await client.listProviderModels(provider, { cwd: projectRoot });
+  if (!workspace.workspace?.id)
+    throw new Error('provider_session_workspace_unavailable');
+  const models = await client.listProviderModels(provider, {
+    cwd: projectRoot,
+  });
   const catalogModel = models.models?.find((candidate) => candidate?.id)?.id;
   if (!catalogModel)
     throw new Error(`provider_session_model_catalog_unavailable: ${provider}`);
@@ -127,7 +129,8 @@ try {
   // explicit acceptance model is therefore authoritative after the real
   // provider catalog call has proved readiness.
   const model = requestedModel ?? catalogModel;
-  if (!model) throw new Error(`provider_session_model_unavailable: ${provider}`);
+  if (!model)
+    throw new Error(`provider_session_model_unavailable: ${provider}`);
   const agent = await client.createAgent({
     provider,
     model,

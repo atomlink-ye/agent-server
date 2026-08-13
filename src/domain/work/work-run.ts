@@ -19,8 +19,14 @@ export interface WorkRun {
   readonly updatedAt: string;
 }
 
-export type PendingWorkRun = WorkRun & { readonly rootTaskId: null; readonly boundAt: null };
-export type BoundWorkRun = WorkRun & { readonly rootTaskId: string; readonly boundAt: string };
+export type PendingWorkRun = WorkRun & {
+  readonly rootTaskId: null;
+  readonly boundAt: null;
+};
+export type BoundWorkRun = WorkRun & {
+  readonly rootTaskId: string;
+  readonly boundAt: string;
+};
 
 export interface CreatePendingWorkRunInput {
   readonly id: WorkRunId;
@@ -70,11 +76,22 @@ export class ResolvedManifestConflictError extends Error {
   }
 }
 
-export function createPendingWorkRun(input: CreatePendingWorkRunInput): PendingWorkRun {
+export function createPendingWorkRun(
+  input: CreatePendingWorkRunInput,
+): PendingWorkRun {
   if (!input.id || !input.owner.tenantId || !input.owner.workspaceId)
-    throw new InvalidWorkRunError('A work run id and owner scope are required.');
-  if (!input.workId || !input.definitionVersionId || !input.triggerRef || !input.idempotencyKey)
-    throw new InvalidWorkRunError('Work, trigger, and idempotency values are required.');
+    throw new InvalidWorkRunError(
+      'A work run id and owner scope are required.',
+    );
+  if (
+    !input.workId ||
+    !input.definitionVersionId ||
+    !input.triggerRef ||
+    !input.idempotencyKey
+  )
+    throw new InvalidWorkRunError(
+      'Work, trigger, and idempotency values are required.',
+    );
   const now = input.createdAt ?? new Date().toISOString();
   return {
     id: input.id,
@@ -92,4 +109,3 @@ export function createPendingWorkRun(input: CreatePendingWorkRunInput): PendingW
     updatedAt: input.updatedAt ?? now,
   };
 }
-

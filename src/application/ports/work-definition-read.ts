@@ -1,4 +1,7 @@
-import type { InvokableOwnerScope, InvokableRepository } from './invokable-repository.js';
+import type {
+  InvokableOwnerScope,
+  InvokableRepository,
+} from './invokable-repository.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
 

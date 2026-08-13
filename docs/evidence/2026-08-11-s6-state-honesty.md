@@ -123,7 +123,25 @@ the API projection; equality is not inferred from a count or aggregate. It
 produced:
 
 ```json
-{"marker":"S6_STATE_HONESTY_NEGATIVE_PASS","team_run_id":"9ccbce64-ed68-4e2f-9127-9734fe2b3f3a","db_gates":{"no_active_attempts":true,"all_members_idle":true,"all_work_accepted":true},"api_gates":{"no_active_attempts":true,"all_members_idle":true,"all_work_accepted":true},"stuck":false,"team_status":"succeeded","stop_reason":null,"decision_capture_status":"not_captured","decisions_present":false}
+{
+  "marker": "S6_STATE_HONESTY_NEGATIVE_PASS",
+  "team_run_id": "9ccbce64-ed68-4e2f-9127-9734fe2b3f3a",
+  "db_gates": {
+    "no_active_attempts": true,
+    "all_members_idle": true,
+    "all_work_accepted": true
+  },
+  "api_gates": {
+    "no_active_attempts": true,
+    "all_members_idle": true,
+    "all_work_accepted": true
+  },
+  "stuck": false,
+  "team_status": "succeeded",
+  "stop_reason": null,
+  "decision_capture_status": "not_captured",
+  "decisions_present": false
+}
 ```
 
 The smoke exited with `S6_NEGATIVE_SMOKE_RC=0`.

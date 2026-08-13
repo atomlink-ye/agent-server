@@ -392,10 +392,23 @@ function withFileMutation(filename, mutate, run) {
 }
 
 function runGateMutationArm(name, command, args, envOverrides, marker) {
-  const gate = path.join(repo, 'evidence/product-contract/human-gate-decision.json');
-  return withFileMutation(gate, () => Buffer.from('{}\n'), () =>
-    runArm({ name, command, args, cwd: repo, envOverrides,
-      expectedExitCode: 1, expectedOutputMarkers: [marker] }),
+  const gate = path.join(
+    repo,
+    'evidence/product-contract/human-gate-decision.json',
+  );
+  return withFileMutation(
+    gate,
+    () => Buffer.from('{}\n'),
+    () =>
+      runArm({
+        name,
+        command,
+        args,
+        cwd: repo,
+        envOverrides,
+        expectedExitCode: 1,
+        expectedOutputMarkers: [marker],
+      }),
   );
 }
 
@@ -403,9 +416,12 @@ function runWriteBeforeGateArm() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-write-gate-'));
   const output = path.join(directory, 'generated.json');
   const arm = runGateMutationArm(
-    'runtime-mutation-write-before-gate', process.execPath,
-    ['--import', 'tsx', checker, '--write', '--output', output], {},
-    'evidence_mismatch:decision.decision');
+    'runtime-mutation-write-before-gate',
+    process.execPath,
+    ['--import', 'tsx', checker, '--write', '--output', output],
+    {},
+    'evidence_mismatch:decision.decision',
+  );
   arm.output_path = output;
   arm.output_absent = !fs.existsSync(output);
   arm.ok = arm.ok && arm.output_absent;
@@ -415,11 +431,15 @@ function runWriteBeforeGateArm() {
 
 function runBackendPackageMutation(name, mutate, marker) {
   const filename = path.join(repo, 'package.json');
-  return withFileMutation(filename, (original) => {
-    const pkg = JSON.parse(original.toString('utf8'));
-    mutate(pkg.scripts);
-    return Buffer.from(`${JSON.stringify(pkg, null, 2)}\n`);
-  }, () => runCheckBackendArm(name, 1, {}, marker));
+  return withFileMutation(
+    filename,
+    (original) => {
+      const pkg = JSON.parse(original.toString('utf8'));
+      mutate(pkg.scripts);
+      return Buffer.from(`${JSON.stringify(pkg, null, 2)}\n`);
+    },
+    () => runCheckBackendArm(name, 1, {}, marker),
+  );
 }
 
 function runCheckBackendArm(
@@ -522,34 +542,53 @@ function runRuntimeTier(input) {
     expectedExitCode: 0,
   });
   writeArm.byte_equal =
-    writeArm.ok && fs.existsSync(writeOutput) &&
-    fs.readFileSync(writeOutput).equals(
-      fs.readFileSync(path.join(repo, 'src/contracts/product-accepted-subset.v1.json')),
-    );
+    writeArm.ok &&
+    fs.existsSync(writeOutput) &&
+    fs
+      .readFileSync(writeOutput)
+      .equals(
+        fs.readFileSync(
+          path.join(repo, 'src/contracts/product-accepted-subset.v1.json'),
+        ),
+      );
   writeArm.ok = writeArm.ok && writeArm.byte_equal;
   arms.push(writeArm);
   fs.rmSync(writeDirectory, { recursive: true, force: true });
   arms.push(runWriteBeforeGateArm());
-  arms.push(runGateMutationArm(
-    'runtime-mutation-attestation-env-cannot-bypass-gate',
-    'pnpm', ['check:backend'],
-    {
-      PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH:
-        process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH ?? input.output,
-      PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: input.candidateSha,
-    },
-    'evidence_mismatch:decision.sha256'));
-  arms.push(runBackendPackageMutation(
-    'runtime-mutation-check-backend-remove-guard',
-    (scripts) => {
-      scripts['check:backend'] = scripts['check:backend'].split(' && ')
-        .filter((part) => part !== 'pnpm guard:product-accepted-subset').join(' && ');
-    },
-    'guard_wiring_invalid:check_backend_guard_order_or_membership'));
-  arms.push(runBackendPackageMutation(
-    'runtime-mutation-check-backend-guard-or-true',
-    (scripts) => { scripts['guard:product-accepted-subset'] += ' || true'; },
-    'guard_wiring_invalid:accepted_guard_conditional'));
+  arms.push(
+    runGateMutationArm(
+      'runtime-mutation-attestation-env-cannot-bypass-gate',
+      'pnpm',
+      ['check:backend'],
+      {
+        PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH:
+          process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH ?? input.output,
+        PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: input.candidateSha,
+      },
+      'evidence_mismatch:decision.sha256',
+    ),
+  );
+  arms.push(
+    runBackendPackageMutation(
+      'runtime-mutation-check-backend-remove-guard',
+      (scripts) => {
+        scripts['check:backend'] = scripts['check:backend']
+          .split(' && ')
+          .filter((part) => part !== 'pnpm guard:product-accepted-subset')
+          .join(' && ');
+      },
+      'guard_wiring_invalid:check_backend_guard_order_or_membership',
+    ),
+  );
+  arms.push(
+    runBackendPackageMutation(
+      'runtime-mutation-check-backend-guard-or-true',
+      (scripts) => {
+        scripts['guard:product-accepted-subset'] += ' || true';
+      },
+      'guard_wiring_invalid:accepted_guard_conditional',
+    ),
+  );
   if (input.runCheckBackend) {
     arms.push(
       runCheckBackendArm('runtime-positive-check-backend', 0, {

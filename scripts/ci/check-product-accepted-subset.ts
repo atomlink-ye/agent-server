@@ -775,23 +775,24 @@ function parseOptions(argv: readonly string[]): CliOptions {
     );
   if (write && resolve(output!) === SIGNED_MANIFEST)
     fail('--write refuses the signed manifest path');
-  const decisionOverride =
-    optionValue(argv, ['--decision', '--decision-path', '--original-decision']);
-  const acceptedOverride =
-    optionValue(argv, [
-      '--accepted-evidence',
-      '--contract-evidence',
-      '--accepted',
-      '--accepted-path',
-      '--accepted-manifest-evidence',
-    ]);
-  const continuationOverride =
-    optionValue(argv, [
-      '--continuation-evidence',
-      '--continuation',
-      '--continuation-path',
-      '--format-continuation',
-    ]);
+  const decisionOverride = optionValue(argv, [
+    '--decision',
+    '--decision-path',
+    '--original-decision',
+  ]);
+  const acceptedOverride = optionValue(argv, [
+    '--accepted-evidence',
+    '--contract-evidence',
+    '--accepted',
+    '--accepted-path',
+    '--accepted-manifest-evidence',
+  ]);
+  const continuationOverride = optionValue(argv, [
+    '--continuation-evidence',
+    '--continuation',
+    '--continuation-path',
+    '--format-continuation',
+  ]);
   if (
     !mutation &&
     [decisionOverride, acceptedOverride, continuationOverride].some(Boolean)

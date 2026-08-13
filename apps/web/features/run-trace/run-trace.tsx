@@ -45,6 +45,7 @@ function FeedbackRelation({ edge, geometry }: { readonly edge: Extract<Trace['ed
 }
 
 function AttemptSpan({ attempt, geometry, selected, onSelect, subject }: { readonly attempt: Attempt; readonly geometry: Geometry | undefined; readonly selected: boolean; readonly onSelect: (id: string) => void; readonly subject: string }) {
+  if (!geometry) return <span aria-label={`${subject}, Attempt ${attempt.attempt_no}, timing not captured`} className="run-trace__attempt-unpositioned">Attempt {attempt.attempt_no} · Timing not captured</span>;
   return <button aria-label={`${subject}, Attempt ${attempt.attempt_no}, ${durationLabel(attempt)}`} aria-pressed={selected} className="run-trace__attempt" data-testid="trace-attempt" onClick={() => onSelect(attempt.id)} style={{ '--attempt-left': `${geometry?.left ?? 0}%`, '--attempt-width': `${geometry?.width ?? 0}%` } as CSSProperties} title={subject} type="button"><span className="run-trace__attempt-label">Attempt {attempt.attempt_no} · {durationLabel(attempt)}</span></button>;
 }
 

@@ -49,6 +49,7 @@
 .run-trace__attempt:nth-of-type(3n + 1) { background: #eef1f8; border-left-color: var(--trace-blue); }
 .run-trace__attempt[aria-pressed='true'] { border: 2px solid var(--trace-blue); border-left-width: 3px; }
 .run-trace__attempt-label { font-size: 10px; font-weight: 500; white-space: nowrap; }
+.run-trace__attempt-unpositioned { background: var(--trace-wash); border: 1px dashed var(--trace-line); border-radius: 3px; color: var(--trace-muted); display: inline-block; font-size: 10px; margin: 9px 6px; padding: 4px 6px; }
 .run-trace__feedback-marker { background: var(--trace-canvas); border: 1px solid #7b6d56; border-radius: 50%; height: 7px; left: var(--feedback-left); position: absolute; top: 4px; transform: translateX(-50%); width: 7px; }
 .run-trace__feedback-marker span { background: var(--trace-canvas); color: var(--trace-muted); font-size: 9px; left: 50%; padding: 0 4px; position: absolute; top: -11px; transform: translateX(-50%); white-space: nowrap; }
 

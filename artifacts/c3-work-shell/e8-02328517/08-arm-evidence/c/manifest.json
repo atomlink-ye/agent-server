@@ -1,0 +1,1 @@
+{"command":["sh","-lc","E=/root/workspace/mgr-frontend/.c3-e8-02328517/arms/c; for f in  test-c2.exit test-c2.log mutation-c2.diff; do echo =====$f=====; cat \"$E/$f\" 2>&1 || true; done"],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-13T23:05:18.547Z"}

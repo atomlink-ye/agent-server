@@ -1,0 +1,1 @@
+{"command":["sh","-lc","cd /root/workspace/mgr-frontend && mkdir -p /opt/playwright-browsers && PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers pnpm exec playwright install --with-deps --only-shell chromium"],"cwd":"workspace/mgr-frontend","exitCode":1,"generatedAt":"2026-08-13T22:44:12.398Z"}

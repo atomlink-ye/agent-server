@@ -93,3 +93,38 @@ The report-only commit adds this Markdown file after that diffstat.
 - Classified the direct-Vitest missing-file exit-code incompatibility as MISSING and stayed within ownership instead of editing frozen config/scripts.
 - Recorded unavailable design regions as Deferred rather than adding placeholder facts.
 
+## E8 execution recovery (C3, candidate `02328517a0fe887464d0661d772a49ad9d88451b`)
+
+This section supersedes the earlier “not run” execution note above. It records
+the authorized C-box execution only; it is evidence, not a self-acceptance.
+
+- Remote: C box `8174cc0c35a44a568688d8492fe15745`, workspace
+  `/root/workspace/mgr-frontend`; final HEAD matched the candidate exactly.
+- The Dockerfile `web-testing` target was attempted and retried. Both attempts
+  hit the remote daemon's disabled BuildKit requirement for `RUN --mount`; this
+  is INVALID/MISSING environment evidence, not a test result.
+- The declared Playwright 1.62.1 only-shell Chromium install completed with
+  exit 0. `package.json` stayed at SHA256
+  `0430cec0c4892e90638a834274f0ea0db132b60e43dba0705b08571e526ed71d` and
+  `pnpm-lock.yaml` stayed at SHA256
+  `fc37e249d8e3bffa93c5861d673af1b927387f2d5900e62b5079eff6c1e4b9b6`;
+  both post-install `cmp` checks returned 0.
+- The fixed baseline command collected one browser test file and two tests;
+  both passed (exit 0). Full output is in
+  `artifacts/c3-work-shell/e8-02328517/04-baseline/`.
+- Valid isolated red arms were a3 (runs `succeeded` mapped to `Completed`),
+  b4 (unavailable disclosure removed), c2 (per-Work `/api/works/{id}/runs`
+  N+1), and d2 (list `data-testid` changed); each exited 1 at its intended
+  assertion. Their raw mutation/output evidence is under
+  `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/`.
+- Missing-file arms e (test removed) and f (parallel recorder fixture removed)
+  both produced the real fixed-command exit 1. They therefore remain
+  `MISSING`, not PASS: the frozen direct Vitest command does not produce the
+  required `MISSING=2` exit code for either condition.
+- Final remote status retained only the pre-existing dependency-directory
+  deletions plus the C3 remote evidence directory. The minimal image lacked
+  `ps` and `pgrep`, so the final process probe is recorded honestly as
+  unavailable; no C3 process was intentionally left running.
+
+The complete execution index and raw artifact map are in
+`artifacts/c3-work-shell/e8-02328517/execution-summary.md`.

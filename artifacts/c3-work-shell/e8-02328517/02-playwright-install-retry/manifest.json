@@ -1,0 +1,1 @@
+{"command":["sh","-lc","cd /root/workspace/mgr-frontend; EVIDENCE=/root/workspace/mgr-frontend/.c3-e8-02328517; printf \"install_exit=\"; cat \"$EVIDENCE/playwright-install.exit\"; printf \"\\\\nfull_install_log\\\\n\"; cat \"$EVIDENCE/playwright-install.log\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-13T22:46:29.686Z"}

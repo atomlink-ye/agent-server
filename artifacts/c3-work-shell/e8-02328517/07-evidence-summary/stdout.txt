@@ -1,0 +1,61 @@
+candidate_head=02328517a0fe887464d0661d772a49ad9d88451b
+remote_status:
+## sandbox-ctl/adopted-8174cc0c35a44a568688d8492fe15745
+ D apps/web/node_modules
+ D node_modules
+?? .c3-e8-02328517/
+pre_hashes:
+0430cec0c4892e90638a834274f0ea0db132b60e43dba0705b08571e526ed71d  /root/workspace/mgr-frontend/.c3-e8-02328517/pre/package.json
+fc37e249d8e3bffa93c5861d673af1b927387f2d5900e62b5079eff6c1e4b9b6  /root/workspace/mgr-frontend/.c3-e8-02328517/pre/pnpm-lock.yaml
+post_hashes:
+0430cec0c4892e90638a834274f0ea0db132b60e43dba0705b08571e526ed71d  /root/workspace/mgr-frontend/package.json
+fc37e249d8e3bffa93c5861d673af1b927387f2d5900e62b5079eff6c1e4b9b6  /root/workspace/mgr-frontend/pnpm-lock.yaml
+cmp_package=0
+cmp_lock=0
+arm_a_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/a/test-a2.exit=0
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/a/test-a3.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/a/test.exit=1
+arm_b_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/b/test-b2.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/b/test-b3.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/b/test-b4.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/b/test.exit=1
+arm_c_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/c/test-c2.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/c/test.exit=1
+arm_d_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/d/test-d2.exit=1
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/d/test.exit=0
+arm_e_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/e/test.exit=1
+arm_f_exit:
+/root/workspace/mgr-frontend/.c3-e8-02328517/arms/f/test.exit=1
+arm_a_target:
+arm_b_target:
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mAssertionError[22m: expected 'Product Projection parallel-success c…' to contain 'Product status is currently unavailab…'[39m
+    [90m137|[39m           [32m'Product status is currently unavailable for this Work.'[39m[33m,[39m
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+arm_c_target:
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[31m[1mAssertionError[22m: expected "vi.fn()" to be called 1 times, but got 3 times[39m
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+arm_d_target:
+ [31m❯[39m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 2181[2mms[22m[39m
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mAssertionError[22m: expected null not to be null[39m
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m122:23[22m[39m
+    [90m120|[39m         [32m'[data-testid="work-list"]'[39m[33m,[39m
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+arm_e_target:
+[31mNo test files found, exiting with code 1
+arm_f_target:
+[2m11:00:28 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json" from "apps/web/components/work/work-list.browser.test.tsx". Does the file exist?[39m
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [2mno tests[22m

@@ -716,6 +716,8 @@ function evaluateE6(options) {
   if (
     proof.e4_workspace_mutation?.exit !== 1 ||
     proof.e4_workspace_mutation?.status !== 'FAIL' ||
+    JSON.stringify(proof.e4_workspace_mutation?.failures) !==
+      JSON.stringify(['runtime_workspace_read_only_boundary']) ||
     proof.e4_workspace_mutation?.workspace_write_probe?.write_exit !== 0 ||
     proof.e4_workspace_mutation.workspace_write_probe.error_code !== null ||
     proof.e4_workspace_mutation.workspace_write_probe.file_present !== true ||

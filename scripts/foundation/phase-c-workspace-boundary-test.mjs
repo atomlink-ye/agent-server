@@ -27,6 +27,7 @@ const mutation = readFileSync(
   'utf8',
 );
 assert.match(mutation, /^services:\n  paseo-runtime:\n/mu);
+assert.doesNotMatch(mutation, /^  agent-server:/mu);
 assert.match(mutation, /^    volumes: !override$/mu);
 assert.match(mutation, /^      - \.:\/workspace$/mu);
 assert.doesNotMatch(mutation, /^      - \.:\/workspace:ro$/mu);
@@ -35,8 +36,7 @@ assert.match(
   /^      - provider-toolchain:\/opt\/provider-toolchain-volume:ro$/mu,
 );
 assert.match(mutation, /^      - paseo-runtime-state:\/runtime-state$/mu);
-assert.doesNotMatch(mutation, /^  agent-server:/mu);
 
 process.stdout.write(
-  `${JSON.stringify({ status: 'PASS', erofs_boundary: true, rw_mutation_red: true, mutation_service: 'paseo-runtime' })}\n`,
+  `${JSON.stringify({ status: 'PASS', erofs_boundary: true, rw_predicate_rejected: true, mutation_service: 'paseo-runtime' })}\n`,
 );

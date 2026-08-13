@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { arch } from 'node:os';
 
@@ -144,6 +150,10 @@ function containerRecord(service, composeCommand = rawCompose) {
 
 function workspaceProbePath(probeProject) {
   return `/workspace/.phase-c-write-probe-${probeProject}`;
+}
+
+function workspaceProbeHostPath(probeProject) {
+  return resolve(ROOT, `.phase-c-write-probe-${probeProject}`);
 }
 
 function workspaceWriteProbe(composeCommand, probeProject, identity) {
@@ -529,6 +539,8 @@ try {
   const workspaceMutationFiles = [
     ...composeFiles,
     '-f',
+    'scripts/foundation/phase-c-e4-no-ports.yaml',
+    '-f',
     'scripts/foundation/phase-c-e4-workspace-rw-mutation.yaml',
   ];
   const workspaceMutationCompose = [
@@ -607,6 +619,7 @@ try {
       mutation: {
         name: 'restore-runtime-workspace-write-owner',
         source: 'scripts/foundation/phase-c-e4-workspace-rw-mutation.yaml',
+        operational_overlay: 'scripts/foundation/phase-c-e4-no-ports.yaml',
       },
       effective_compose: {
         services: Object.entries(workspaceMutationEffective.services ?? {})
@@ -642,34 +655,47 @@ try {
     );
     if (
       workspaceMutationRun.status !== 1 ||
-      workspaceMutationResult.status !== 'FAIL'
+      workspaceMutationResult.status !== 'FAIL' ||
+      JSON.stringify(workspaceMutationResult.failures) !==
+        JSON.stringify(['runtime_workspace_read_only_boundary'])
     )
       throw new Error('e4_workspace_rw_mutation_not_red');
     workspaceMutation = {
       name: 'restore-runtime-workspace-write-owner',
       exit: workspaceMutationRun.status,
       status: workspaceMutationResult.status,
+      failures: workspaceMutationResult.failures,
       workspace_write_probe: workspaceProbe,
     };
   } finally {
     let probeCleanup = { file_present: false };
-    const runtimeContainer = run(
-      'docker',
-      [...workspaceMutationCompose, 'ps', '-q', 'paseo-runtime'],
-      { allow: [0] },
-    ).stdout.trim();
-    if (runtimeContainer) {
-      probeCleanup = removeWorkspaceProbe(
-        workspaceMutationCompose,
-        workspaceMutationProject,
-        'workspace-mutation-probe-cleanup',
+    let probeCleanupError;
+    let workspaceMutationDown;
+    try {
+      const runtimeContainer = run(
+        'docker',
+        [...workspaceMutationCompose, 'ps', '-q', 'paseo-runtime'],
+        { allow: [0] },
+      ).stdout.trim();
+      if (runtimeContainer) {
+        probeCleanup = removeWorkspaceProbe(
+          workspaceMutationCompose,
+          workspaceMutationProject,
+          'workspace-mutation-probe-cleanup',
+        );
+      }
+    } catch (error) {
+      probeCleanupError = error;
+    } finally {
+      const hostProbePath = workspaceProbeHostPath(workspaceMutationProject);
+      rmSync(hostProbePath, { force: true });
+      probeCleanup = { file_present: existsSync(hostProbePath) };
+      workspaceMutationDown = run(
+        'docker',
+        [...workspaceMutationCompose, 'down', '--remove-orphans', '--volumes'],
+        { allow: [0] },
       );
     }
-    const workspaceMutationDown = run(
-      'docker',
-      [...workspaceMutationCompose, 'down', '--remove-orphans', '--volumes'],
-      { allow: [0] },
-    );
     const remainingContainers = run(
       'docker',
       [...workspaceMutationCompose, 'ps', '-aq'],
@@ -712,6 +738,9 @@ try {
       throw new Error('e4_workspace_mutation_cleanup_incomplete');
     if (workspaceMutationProviderBefore !== workspaceMutationProviderAfter)
       throw new Error('e4_workspace_mutation_external_provider_volume_changed');
+    if (probeCleanup.file_present)
+      throw new Error('e4_workspace_mutation_probe_cleanup_incomplete');
+    if (probeCleanupError) throw probeCleanupError;
     workspaceMutationCleanup = {
       project: workspaceMutationProject,
       probe_file_present: probeCleanup.file_present,

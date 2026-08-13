@@ -375,7 +375,7 @@ function runLineageTier() {
         scripts['modularization:verify:product-routes'] =
           `${scripts['modularization:verify:product-routes']} && true`;
       },
-      'guard_wiring_invalid:modularization_verify_product_routes_definition',
+      'guard_wiring_invalid:modularization_verify_product-routes_definition',
     ),
   );
   return arms;

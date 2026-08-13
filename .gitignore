@@ -20,5 +20,5 @@ docs/generated/*
 # BEGIN oh-my-opencode-slim clonedeps
 .slim/clonedeps/repos/
 # END oh-my-opencode-slim clonedeps
-node_modules/
-apps/web/node_modules/
+node_modules
+apps/web/node_modules

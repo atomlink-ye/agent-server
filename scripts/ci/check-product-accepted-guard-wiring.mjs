@@ -61,13 +61,24 @@ function main() {
   const filename = packagePath(process.argv.slice(2));
   const pkg = readPackage(filename);
   const backend = chain(pkg.scripts['check:backend'], 'check_backend');
-  if (!backend.includes('pnpm guard:product-accepted-subset'))
-    fail('check_backend_guard_missing');
+  requireExactSequence(
+    backend.slice(-2),
+    [
+      'pnpm guard:product-accepted-wiring',
+      'pnpm guard:product-accepted-subset',
+    ],
+    'check_backend_guard',
+  );
   if (
     backend.filter((part) => part === 'pnpm guard:product-accepted-subset')
       .length !== 1
   )
     fail('check_backend_guard_not_unique');
+  requireExactLeaf(
+    pkg.scripts,
+    'guard:product-accepted-wiring',
+    'node scripts/ci/check-product-accepted-guard-wiring.mjs',
+  );
 
   const aggregate = chain(
     pkg.scripts['guard:product-accepted-subset'],

@@ -64,7 +64,7 @@ type CliOptions = {
   readonly output?: string;
   readonly manifest: string;
   readonly mutation: boolean;
-  readonly evidence?: EvidencePaths;
+  readonly evidence: EvidencePaths;
 };
 
 type ManifestEndpoint = Omit<AcceptedEndpoint, 'responseSchema'> & {
@@ -731,9 +731,7 @@ function optionValue(
 function parseOptions(argv: readonly string[]): CliOptions {
   const write = argv.includes('--write');
   const check = argv.includes('--check');
-  const mutation =
-    argv.includes('--mutation') ||
-    process.env.PRODUCT_ACCEPTED_MUTATION === '1';
+  const mutation = argv.includes('--mutation');
   if ((write ? 1 : 0) + (check ? 1 : 0) !== 1)
     fail('usage: choose exactly one of --write or --check');
   const valueOptions = new Set([
@@ -763,11 +761,11 @@ function parseOptions(argv: readonly string[]): CliOptions {
       fail(`missing_option_value:${arg}`);
   }
 
-  const output =
-    optionValue(argv, ['--output']) ?? process.env.PRODUCT_ACCEPTED_OUTPUT;
-  const manifestOverride =
-    optionValue(argv, ['--manifest', '--current-manifest']) ??
-    process.env.PRODUCT_ACCEPTED_MANIFEST_PATH;
+  const output = optionValue(argv, ['--output']);
+  const manifestOverride = optionValue(argv, [
+    '--manifest',
+    '--current-manifest',
+  ]);
   if (manifestOverride && !mutation)
     fail('manifest_path_override_requires_mutation');
   const manifest = manifestOverride ?? SIGNED_MANIFEST;
@@ -777,16 +775,8 @@ function parseOptions(argv: readonly string[]): CliOptions {
     );
   if (write && resolve(output!) === SIGNED_MANIFEST)
     fail('--write refuses the signed manifest path');
-  if (!check) return { mode: 'write', output, manifest, mutation };
-
   const decisionOverride =
-    optionValue(argv, [
-      '--decision',
-      '--decision-path',
-      '--original-decision',
-    ]) ??
-    process.env.PRODUCT_ACCEPTED_DECISION_PATH ??
-    process.env.PRODUCT_ACCEPTED_DECISION;
+    optionValue(argv, ['--decision', '--decision-path', '--original-decision']);
   const acceptedOverride =
     optionValue(argv, [
       '--accepted-evidence',
@@ -794,25 +784,21 @@ function parseOptions(argv: readonly string[]): CliOptions {
       '--accepted',
       '--accepted-path',
       '--accepted-manifest-evidence',
-    ]) ??
-    process.env.PRODUCT_ACCEPTED_EVIDENCE_PATH ??
-    process.env.PRODUCT_ACCEPTED_CONTRACT_EVIDENCE;
+    ]);
   const continuationOverride =
     optionValue(argv, [
       '--continuation-evidence',
       '--continuation',
       '--continuation-path',
       '--format-continuation',
-    ]) ??
-    process.env.PRODUCT_ACCEPTED_CONTINUATION_PATH ??
-    process.env.PRODUCT_ACCEPTED_FORMAT_CONTINUATION;
+    ]);
   if (
     !mutation &&
     [decisionOverride, acceptedOverride, continuationOverride].some(Boolean)
   )
     fail('evidence_path_override_requires_mutation');
   return {
-    mode: 'check',
+    mode: write ? 'write' : 'check',
     output,
     manifest: manifestOverride ?? SIGNED_MANIFEST,
     mutation,
@@ -837,6 +823,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         parser: 'json',
       },
     );
+    await verifyAcceptedEvidence(
+      options.evidence,
+      expected,
+      options.mode === 'write' ? SIGNED_MANIFEST : options.manifest,
+    );
     if (options.mode === 'write') {
       await writeFile(options.output!, expectedBytes, 'utf8');
       console.log(`wrote=${resolve(options.output!)}`);
@@ -852,7 +843,6 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       Buffer.compare(manifestBytes!, Buffer.from(expectedBytes, 'utf8')) !== 0
     )
       fail('accepted_subset_mismatch');
-    await verifyAcceptedEvidence(options.evidence!, expected, options.manifest);
     console.log(
       `accepted_subset_ok status=accepted api_major=v1 revision=1 endpoints=${expected.endpoints.length} gate=PASS=14 FAIL=0 MISS=0`,
     );

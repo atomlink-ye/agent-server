@@ -268,6 +268,28 @@ const ARM_REQUIREMENTS = Object.freeze({
       expectedExitCode: 2,
       markers: PROJECTION_MISSING,
     },
+    { name: 'runtime-positive-write-byte-equal', expectedExitCode: 0 },
+    {
+      name: 'runtime-mutation-write-before-gate',
+      expectedExitCode: 1,
+      outputMarker: 'evidence_mismatch:decision.sha256',
+    },
+    {
+      name: 'runtime-mutation-attestation-env-cannot-bypass-gate',
+      expectedExitCode: 1,
+      outputMarker: 'evidence_mismatch:decision.sha256',
+    },
+    {
+      name: 'runtime-mutation-check-backend-remove-guard',
+      expectedExitCode: 1,
+      outputMarker:
+        'guard_wiring_invalid:check_backend_guard_order_or_membership',
+    },
+    {
+      name: 'runtime-mutation-check-backend-guard-or-true',
+      expectedExitCode: 1,
+      outputMarker: 'guard_wiring_invalid:accepted_guard_conditional',
+    },
     { name: 'runtime-positive-check-backend', expectedExitCode: 0 },
     {
       name: 'runtime-mutation-check-backend-manifest-status',

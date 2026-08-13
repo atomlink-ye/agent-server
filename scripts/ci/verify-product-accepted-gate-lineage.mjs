@@ -71,19 +71,11 @@ function optionValue(names) {
 }
 
 function evidencePaths() {
-  const mutation =
-    process.argv.includes('--mutation') ||
-    process.env.PRODUCT_ACCEPTED_MUTATION === '1';
+  const mutation = process.argv.includes('--mutation');
   const overrides = {
-    decision:
-      optionValue(['--decision', '--decision-path']) ??
-      process.env.PRODUCT_ACCEPTED_DECISION_PATH,
-    accepted:
-      optionValue(['--accepted', '--accepted-path']) ??
-      process.env.PRODUCT_ACCEPTED_EVIDENCE_PATH,
-    continuation:
-      optionValue(['--continuation', '--continuation-path']) ??
-      process.env.PRODUCT_ACCEPTED_CONTINUATION_PATH,
+    decision: optionValue(['--decision', '--decision-path']),
+    accepted: optionValue(['--accepted', '--accepted-path']),
+    continuation: optionValue(['--continuation', '--continuation-path']),
   };
   if (!mutation && Object.values(overrides).some(Boolean))
     fail('evidence_path_override_requires_mutation');
@@ -406,14 +398,6 @@ function verifyFormatProvenance(value) {
 }
 
 async function main() {
-  const attestationPath = process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH;
-  if (attestationPath) {
-    const bytes = await readEvidence(attestationPath, 'lineage_attestation');
-    const attestation = parseEvidence(bytes, 'lineage_attestation');
-    verifyLineageAttestation(attestation);
-    process.stdout.write('accepted_gate_lineage_attestation_ok\n');
-    return 0;
-  }
   const {
     decision: decisionPath,
     accepted: acceptedPath,
@@ -499,6 +483,12 @@ async function main() {
     sha256(Buffer.from(`${canonical(acceptedManifest)}\n`, 'utf8')),
     'continuation.manifest.accepted_canonical_sha256',
   );
+  const attestationPath = process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH;
+  if (attestationPath) {
+    const bytes = await readEvidence(attestationPath, 'lineage_attestation');
+    const attestation = parseEvidence(bytes, 'lineage_attestation');
+    verifyLineageAttestation(attestation);
+  }
   process.stdout.write('accepted_gate_lineage_ok\n');
   return 0;
 }

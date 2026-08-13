@@ -315,7 +315,7 @@ function sha(file) {
 function command(executable, argv) {
   const r = spawnSync(executable, argv, { cwd: repo, encoding: 'utf8' });
   if (r.status !== 0) fail(`${executable}:${argv.join(':')}:${r.stderr}`, 2);
-  return r.stdout.trim();
+  return r.stdout.trimEnd();
 }
 function lines(value) {
   return value ? value.split('\n') : [];

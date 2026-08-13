@@ -42,7 +42,7 @@ function matchingParen(s, start) {
   return -1;
 }
 
-function literalSql(argument, { allowTemplateInterpolation = false } = {}) {
+function literalSql(argument, { allowTemplateInterpolation = false, constants = {} } = {}) {
   const a = argument.trim();
   if (a.startsWith("'")) {
     let out = '';
@@ -56,7 +56,7 @@ function literalSql(argument, { allowTemplateInterpolation = false } = {}) {
   if (a.startsWith('`')) {
     const template = a.slice(1, a.lastIndexOf('`'));
     if (!allowTemplateInterpolation && template.includes('${')) return null;
-    return template.replace(/\$\{[\s\S]*?\}/g, ' ');
+    return template.replace(/\$\{([^}]*)\}/g, (_, expression) => constants[expression.trim()] ?? ' ');
   }
   return null;
 }
@@ -65,6 +65,7 @@ function referencedTables(sql) {
   const names = new Set();
   for (const match of sql.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO|DELETE\s+FROM|USING)\s+(?:ONLY\s+)?(?:[A-Za-z_][\w]*\.)?([A-Za-z_][\w]*)/gi)) {
     if (Object.hasOwn(ledger.tables ?? {}, match[1])) names.add(match[1]);
+    if (match[1] === 'durable_kernel_schema_migrations' && Object.hasOwn(ledger.tables ?? {}, 'durable_kernel_migration_registry')) names.add('durable_kernel_migration_registry');
   }
   return [...names].sort();
 }
@@ -89,7 +90,7 @@ function scanCalls(file) {
 
 function scanTypedCalls(file) {
   const source = read(file); const calls = []; const constSql = {};
-  for (const match of source.matchAll(/(?:const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*(['`])([\s\S]*?)\2\s*;/g)) constSql[match[1]] = match[3];
+  for (const match of source.matchAll(/(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(['`])([\s\S]*?)\2\s*;/g)) constSql[match[1]] = match[3];
   for (const match of source.matchAll(/\.query\s*</g)) {
     let cursor = match.index + match[0].length; let open = -1;
     while (cursor < source.length) {
@@ -97,7 +98,7 @@ function scanTypedCalls(file) {
       cursor += 1;
     }
     if (open < 0) continue;
-    const close = matchingParen(source, open); const argument = close < 0 ? '' : source.slice(open + 1, close); const sql = literalSql(argument, { allowTemplateInterpolation: true });
+    const close = matchingParen(source, open); const argument = close < 0 ? '' : source.slice(open + 1, close); const sql = literalSql(argument, { allowTemplateInterpolation: true, constants: constSql });
     const parsedOperation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
     const operation = parsedOperation === 'BEGIN' ? 'BEGIN' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'CONTROL' : parsedOperation === 'SELECT' ? 'READ' : ['INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(parsedOperation) ? 'WRITE' : (sql ? 'UNKNOWN' : 'MISSING');
     const lock = sql ? (/\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(sql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(sql) ? 'for_share' : 'none') : 'unknown';
@@ -130,6 +131,12 @@ function migrationTables() {
     for (const match of source.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[A-Za-z_][\w]*\.)?([A-Za-z_][\w]*)/gi)) result.push({ table: match[1], migration: file });
   }
   return result;
+}
+
+function migrationSourceHash() {
+  const dir = path.join(sourceRoot, 'src/infrastructure/postgres/migrations'); const hash = crypto.createHash('sha256');
+  for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.sql')).sort()) hash.update(file).update('\0').update(fs.readFileSync(path.join(dir, file))).update('\0');
+  return { count: fs.readdirSync(dir).filter((name) => name.endsWith('.sql')).length, hash: hash.digest('hex') };
 }
 
 function checkRepositories() {
@@ -185,18 +192,19 @@ function checkRepositories() {
       const independentTransaction = ledger.typedTransactionTruth?.[key];
       if (!independentTransaction) fail('typed_transaction_truth_MISSING', key);
       const actual = typedTruth ? { ...typed, ...typedTruth } : { ...typed };
-      if (independentTransaction) actual.transaction = independentTransaction;
       if (typedTruth && typedTruth.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_call_truth_evidence_MISMATCH', key);
       if (actual.classification === 'MISSING') fail('typed_query_call_unclassified_MISSING', key);
-      for (const field of ['operation', 'readWrite', 'lock', 'transaction', 'tables', 'sourceExcerptHash']) {
-        if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
-      }
       const typedFact = ledger.typedQueryFacts?.[key];
       if (!typedFact) fail('typed_query_fact_ledger_MISSING', key);
-      for (const field of ['operation', 'readWrite', 'lock', 'transaction', 'tables', 'sourceKind', 'sourceExcerptHash']) {
+      if (independentTransaction && typedFact?.transaction !== independentTransaction) fail('typed_transaction_truth_MISMATCH', { key, ledger: typedFact?.transaction, truth: independentTransaction });
+      actual.owner = ledger.repositories[file];
+      for (const field of ['operation', 'readWrite', 'lock', 'tables', 'owner', 'sourceKind', 'sourceExcerptHash']) {
+        if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
+      }
+      if (!['BEGIN', 'CONTROL'].includes(actual.operation) && actual.tables.length === 0) fail('typed_query_fact_tables_MISSING', key);
+      for (const field of ['operation', 'readWrite', 'lock', 'tables', 'owner', 'sourceKind', 'sourceExcerptHash']) {
         if (!typedFact || JSON.stringify(typedFact[field]) !== JSON.stringify(actual[field])) fail('typed_query_fact_drift', { key, field, ledger: typedFact?.[field], actual: actual[field] });
       }
-      actual.owner = ledger.repositories[file];
       if (row?.sourceExcerptHash && row.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_query_source_excerpt_hash_MISMATCH', key);
       const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
       const crossesCapability = [...owners].some((owner) => owner && owner !== ledger.repositories[file]);
@@ -223,6 +231,9 @@ function checkRepositories() {
       if (!row.disposition || !row.reason) fail('source_lock_disposition_missing', key);
     }
   }
+  const migrationTruth = migrationSourceHash();
+  const migrationDefinition = ledger.overrides?.['postgres.ts:214']?.definitionEvidence?.migrationSource;
+  if (!migrationDefinition || migrationDefinition.fileCount !== migrationTruth.count || migrationDefinition.fileSetHash !== migrationTruth.hash) fail('migration_definition_chain_MISMATCH', { ledger: migrationDefinition, actual: migrationTruth });
   const ledgerCalls = counts.classifiedCallSites + counts.missingCallSites;
   if (ledgerCalls !== counts.rawQueryCallSites) fail('query_call_site_reconciliation', { raw: counts.rawQueryCallSites, classified: ledgerCalls });
   if (queryTruthSourceDiffs.length) fail('query_truth_source_diff', queryTruthSourceDiffs);
@@ -290,6 +301,12 @@ function checkCrossCapability() {
   for (const [key, assertion] of Object.entries(ledger.crossCapabilityAssertions ?? {})) {
     const [file, lineText] = key.split(':'); const line = Number(lineText); const exact = ledger.callSites?.[file]?.find((row) => row.line === line); const typed = ledger.typedCrossCapability?.[key]; const observed = exact?.disposition ? exact : typed;
     if (!observed || observed.disposition !== assertion.disposition || !assertion.reason) fail('cross_capability_assertion_MISMATCH', key);
+  }
+  const larkMemoryQueries = ['80', '306', '486', '703', '784', '895', '1271'].map((line) => `postgres-lark-review-surface-repository.ts:${line}`);
+  for (const key of larkMemoryQueries) {
+    const query = ledger.typedCrossCapability?.[key];
+    const lockRows = (ledger.sourceLockRows ?? []).filter((row) => row.file === 'postgres-lark-review-surface-repository.ts' && row.disposition === '(c)');
+    if (!query || query.disposition !== '(c)' || !lockRows.length) fail('lark_memory_query_lock_disposition_MISMATCH', key);
   }
 }
 

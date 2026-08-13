@@ -55,6 +55,10 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false, requiredFailu
   const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'change-typed-query-fact', ...run, expectedNonzero: true, requiredFailureCodes: ['typed_call_truth_evidence_MISMATCH'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
+  const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); value.typedQueryFacts['postgres-lark-review-surface-repository.ts:80'].transaction = 'out'; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'change-independent-typed-transaction-truth', ...run, expectedNonzero: true, requiredFailureCodes: ['typed_transaction_truth_MISMATCH'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
+}
+{
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); delete value.ports['run-dispatcher.ts']; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
   const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'leave-port-ownerless', ...run, expectedNonzero: true, requiredFailureCodes: ['port_owner_MISSING', 'run_dispatcher_owner'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }

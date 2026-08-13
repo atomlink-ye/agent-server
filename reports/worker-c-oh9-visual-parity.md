@@ -28,12 +28,14 @@ Status: B0/B1/B5/B8 remain Partial pending independent parity review. B2 is FAIL
 - 028c2ec8d929557e33ccdf16550b08fe7f17851d — fix(frontend): align B0 B1 B2 B5 B8 trace visuals; initial stop condition none — 4 files, 127 insertions(+), 128 deletions(-).
 - fdefa2d6e374bb2cd399b2093120d6cac1e22912 — docs(frontend): record B0 B1 B2 B5 B8 parity evidence — 1 file, 38 insertions(+).
 - 59e1559cfd7b4f13c29d58e6bd0904e44d31af3b — docs(frontend): finalize O-H9 parity handoff — 1 file, 2 insertions(+), 2 deletions(-).
-- 0a7d6cdf54bdb5ac2fbea2ef8552799892e4549a — fix(frontend): correct B2 feedback target; stop condition deferred — 2 files, 6 insertions(+), 12 deletions(-).
-- 152b0a006d48c60b10e630d6488e0b0bf76cefd9 — fix(frontend): correct B2 feedback target and uncaptured timing — 3 files, 6 insertions(+), 4 deletions(-).
-- 93e6f15387c67da3bde171faeded37643a480e3d — docs(frontend): record B2 honesty fixes — 1 file, 2 insertions(+).
 - 4f4e6671682edc373ef1210b28396062b436f105 — docs(frontend): include complete O-H9 commit record — 1 file, 1 insertion(+), 1 deletion(-).
 - f8373e68db21f7d31c07c15323bae8eb3e4e78ce — fix(frontend): type recorded B2 feedback edges — 1 file, 2 insertions(+), 1 deletion(-).
 - b22488f6a2aeb7a9f9da517db350163a1d3badf3 — docs(frontend): close O-H9 ownership status — 1 file, 1 insertion(+), 1 deletion(-).
+- 0a7d6cdf54bdb5ac2fbea2ef8552799892e4549a — fix(frontend): correct B2 feedback target; stop condition deferred — 2 files, 6 insertions(+), 12 deletions(-).
+- 152b0a006d48c60b10e630d6488e0b0bf76cefd9 — fix(frontend): correct B2 feedback target and uncaptured timing — 3 files, 6 insertions(+), 4 deletions(-).
+- 93e6f15387c67da3bde171faeded37643a480e3d — docs(frontend): record B2 honesty fixes — 1 file, 2 insertions(+).
+- 79add0fb5c94726ebf9c2507991ccc37db77b6ca — docs(frontend): classify B2 as PLAN-D product-fact gap — 1 file, 17 insertions(+), 6 deletions(-).
+- 18a249e881ccb40eda500a297cdd111f410c0cd3 — fix(frontend): align B0 B1 B2 B5 B8 honestly; stop condition B2 product-fact gap — 3 files, 24 insertions(+), 23 deletions(-).
 
 ## Exact files
 

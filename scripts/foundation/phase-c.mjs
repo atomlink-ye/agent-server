@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { workspaceIsReadOnly } from './lib/phase-c-workspace-boundary.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const EXPECTATION_PATH = 'evidence/foundation/runtime-real-expectation.json';
 const EXPECTATION_COMMIT = '99fd40e2ebbe0830ddf30a04676687008fe2a2ea';
@@ -217,6 +219,8 @@ function evaluateE4(options) {
     'PASEO_DEV_WEB_UI',
   ]);
   const failures = [];
+  if (!workspaceIsReadOnly(runtime?.paseo_runtime?.workspace_write_probe))
+    failures.push('runtime_workspace_read_only_boundary');
   if (!/^[0-9a-f]{40}$/u.test(record.candidate_sha ?? ''))
     failures.push('candidate_sha');
   if (agent.command?.some((part) => String(part).includes('with-paseo')))
@@ -653,6 +657,8 @@ function evaluateE6(options) {
   if (proof.agent_server_container_id === proof.paseo_runtime_container_id)
     failures.push('independent_container_identity');
   if (proof.secret_hits !== 0) failures.push('secret_scan');
+  if (!workspaceIsReadOnly(proof.workspace_write_probe))
+    failures.push('runtime_workspace_read_only_boundary');
   let acceptedOwnership;
   try {
     acceptedOwnership = ownershipProjection(
@@ -707,6 +713,27 @@ function evaluateE6(options) {
       proof.e4_mutation.cleanup.external_provider_volume_after
   )
     failures.push('e4_mutation_cleanup');
+  if (
+    proof.e4_workspace_mutation?.exit !== 1 ||
+    proof.e4_workspace_mutation?.status !== 'FAIL' ||
+    proof.e4_workspace_mutation?.workspace_write_probe?.write_exit !== 0 ||
+    proof.e4_workspace_mutation.workspace_write_probe.error_code !== null ||
+    proof.e4_workspace_mutation.workspace_write_probe.file_present !== true ||
+    proof.e4_workspace_mutation?.cleanup?.probe_file_present !== false ||
+    proof.e4_workspace_mutation?.cleanup?.down_exit !== 0 ||
+    proof.e4_workspace_mutation?.cleanup?.remaining_project_containers
+      ?.length !== 0 ||
+    proof.e4_workspace_mutation?.cleanup?.remaining_project_networks?.length !==
+      0 ||
+    proof.e4_workspace_mutation?.cleanup?.remaining_project_volumes?.length !==
+      0 ||
+    !nonempty(
+      proof.e4_workspace_mutation?.cleanup?.external_provider_volume_before,
+    ) ||
+    proof.e4_workspace_mutation.cleanup.external_provider_volume_before !==
+      proof.e4_workspace_mutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_workspace_mutation_cleanup');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {

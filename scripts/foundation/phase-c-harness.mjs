@@ -8,6 +8,7 @@ import {
   secretValuesFromEnvironment,
 } from './lib/phase-c-command-capture.mjs';
 import { collectComposeFailureDiagnostics } from './lib/phase-c-compose-diagnostics.mjs';
+import { workspaceIsWritable } from './lib/phase-c-workspace-boundary.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -139,6 +140,59 @@ function containerRecord(service, composeCommand = rawCompose) {
       read_only: mount.RW === false,
     })),
   };
+}
+
+function workspaceProbePath(probeProject) {
+  return `/workspace/.phase-c-write-probe-${probeProject}`;
+}
+
+function workspaceWriteProbe(composeCommand, probeProject, identity) {
+  const probePath = workspaceProbePath(probeProject);
+  const script =
+    "const fs=require('node:fs');const p=process.argv[1];let write_exit=0,error_code=null;try{fs.writeFileSync(p,'phase-c-probe',{flag:'wx'})}catch(e){write_exit=1;error_code=e?.code??'UNKNOWN'}const file_present=fs.existsSync(p);process.stdout.write(JSON.stringify({write_exit,error_code,file_present}))";
+  const result = run(
+    'docker',
+    [
+      ...composeCommand,
+      'exec',
+      '-T',
+      'paseo-runtime',
+      'node',
+      '-e',
+      script,
+      probePath,
+    ],
+    { identity },
+  );
+  const observed = JSON.parse(result.stdout.trim());
+  return {
+    write_exit: observed.write_exit,
+    error_code: observed.error_code,
+    file_present: observed.file_present,
+  };
+}
+
+function removeWorkspaceProbe(composeCommand, probeProject, identity) {
+  const script =
+    "const fs=require('node:fs');const p=process.argv[1];fs.rmSync(p,{force:true});process.stdout.write(JSON.stringify({file_present:fs.existsSync(p)}))";
+  const result = run(
+    'docker',
+    [
+      ...composeCommand,
+      'exec',
+      '-T',
+      'paseo-runtime',
+      'node',
+      '-e',
+      script,
+      workspaceProbePath(probeProject),
+    ],
+    { identity },
+  );
+  const observed = JSON.parse(result.stdout.trim());
+  if (observed.file_present !== false)
+    throw new Error('workspace_probe_cleanup_incomplete');
+  return { file_present: false };
 }
 
 let cleanupComplete = false;
@@ -282,7 +336,14 @@ try {
     runtime_inspection: {
       containers: ['agent-server', 'paseo-runtime'],
       agent_server: containerRecord('agent-server'),
-      paseo_runtime: containerRecord('paseo-runtime'),
+      paseo_runtime: {
+        ...containerRecord('paseo-runtime'),
+        workspace_write_probe: workspaceWriteProbe(
+          rawCompose,
+          project,
+          'runtime-workspace-write-probe',
+        ),
+      },
     },
   };
   const runtimePath = resolve(artifactRoot, 'runtime-record.json');
@@ -364,7 +425,14 @@ try {
       runtime_inspection: {
         containers: ['agent-server', 'paseo-runtime'],
         agent_server: containerRecord('agent-server', mutationCompose),
-        paseo_runtime: containerRecord('paseo-runtime', mutationCompose),
+        paseo_runtime: {
+          ...containerRecord('paseo-runtime', mutationCompose),
+          workspace_write_probe: workspaceWriteProbe(
+            mutationCompose,
+            mutationProject,
+            'mutation-runtime-workspace-write-probe',
+          ),
+        },
       },
     };
     writeFileSync(
@@ -457,6 +525,213 @@ try {
     }
   }
 
+  const workspaceMutationProject = `${project}_e4rw`;
+  const workspaceMutationFiles = [
+    ...composeFiles,
+    '-f',
+    'scripts/foundation/phase-c-e4-workspace-rw-mutation.yaml',
+  ];
+  const workspaceMutationCompose = [
+    'compose',
+    '-p',
+    workspaceMutationProject,
+    ...workspaceMutationFiles,
+  ];
+  let workspaceMutation;
+  let workspaceMutationRecord;
+  let workspaceMutationRecordPath;
+  let workspaceMutationCleanup;
+  const workspaceMutationProviderBefore = run('docker', [
+    'volume',
+    'inspect',
+    composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim();
+  try {
+    const workspaceMutationEffective = JSON.parse(
+      run(
+        wrapper,
+        [
+          ...workspaceMutationFiles,
+          '-p',
+          workspaceMutationProject,
+          'config',
+          '--format',
+          'json',
+        ],
+        {
+          env: {
+            ...composeEnvironment,
+            OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
+          },
+          identity: 'workspace-mutation-compose-effective-config',
+          captureStdout: false,
+        },
+      ).stdout,
+    );
+    runCriticalCompose(
+      wrapper,
+      [
+        ...workspaceMutationFiles,
+        '-p',
+        workspaceMutationProject,
+        'up',
+        '-d',
+        '--wait',
+        'postgres',
+        'provider-toolchain-init',
+        'paseo-runtime',
+        'agent-server',
+      ],
+      { identity: 'workspace-mutation-compose-up-wait' },
+      workspaceMutationCompose,
+      workspaceMutationProject,
+    );
+    const workspaceProbe = workspaceWriteProbe(
+      workspaceMutationCompose,
+      workspaceMutationProject,
+      'workspace-mutation-runtime-write-probe',
+    );
+    if (!workspaceIsWritable(workspaceProbe))
+      throw new Error('e4_workspace_rw_mutation_did_not_write');
+    workspaceMutationRecordPath = resolve(
+      artifactRoot,
+      'e4-workspace-mutation-record.json',
+    );
+    workspaceMutationRecord = {
+      schema: 'agent-server.foundation.phase-c-runtime-record',
+      version: 1,
+      project: workspaceMutationProject,
+      candidate_sha: candidateSha,
+      mutation: {
+        name: 'restore-runtime-workspace-write-owner',
+        source: 'scripts/foundation/phase-c-e4-workspace-rw-mutation.yaml',
+      },
+      effective_compose: {
+        services: Object.entries(workspaceMutationEffective.services ?? {})
+          .map(([name, service]) => sanitizeService(name, service))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      },
+      runtime_inspection: {
+        containers: ['agent-server', 'paseo-runtime'],
+        agent_server: containerRecord('agent-server', workspaceMutationCompose),
+        paseo_runtime: {
+          ...containerRecord('paseo-runtime', workspaceMutationCompose),
+          workspace_write_probe: workspaceProbe,
+        },
+      },
+    };
+    writeFileSync(
+      workspaceMutationRecordPath,
+      `${JSON.stringify(workspaceMutationRecord, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    const workspaceMutationRun = run(
+      process.execPath,
+      [
+        'scripts/foundation/phase-c.mjs',
+        'E4',
+        '--runtime-record',
+        workspaceMutationRecordPath,
+      ],
+      { allow: [1] },
+    );
+    const workspaceMutationResult = JSON.parse(
+      workspaceMutationRun.stdout.trim().split('\n').at(-1),
+    );
+    if (
+      workspaceMutationRun.status !== 1 ||
+      workspaceMutationResult.status !== 'FAIL'
+    )
+      throw new Error('e4_workspace_rw_mutation_not_red');
+    workspaceMutation = {
+      name: 'restore-runtime-workspace-write-owner',
+      exit: workspaceMutationRun.status,
+      status: workspaceMutationResult.status,
+      workspace_write_probe: workspaceProbe,
+    };
+  } finally {
+    let probeCleanup = { file_present: false };
+    const runtimeContainer = run(
+      'docker',
+      [...workspaceMutationCompose, 'ps', '-q', 'paseo-runtime'],
+      { allow: [0] },
+    ).stdout.trim();
+    if (runtimeContainer) {
+      probeCleanup = removeWorkspaceProbe(
+        workspaceMutationCompose,
+        workspaceMutationProject,
+        'workspace-mutation-probe-cleanup',
+      );
+    }
+    const workspaceMutationDown = run(
+      'docker',
+      [...workspaceMutationCompose, 'down', '--remove-orphans', '--volumes'],
+      { allow: [0] },
+    );
+    const remainingContainers = run(
+      'docker',
+      [...workspaceMutationCompose, 'ps', '-aq'],
+      { allow: [0] },
+    ).stdout.trim();
+    const remainingNetworks = run('docker', [
+      'network',
+      'ls',
+      '--filter',
+      `label=com.docker.compose.project=${workspaceMutationProject}`,
+      '--format',
+      '{{.Name}}',
+    ])
+      .stdout.trim()
+      .split(/\r?\n/u)
+      .filter(Boolean);
+    const remainingVolumes = run('docker', [
+      'volume',
+      'ls',
+      '--filter',
+      `label=com.docker.compose.project=${workspaceMutationProject}`,
+      '--format',
+      '{{.Name}}',
+    ])
+      .stdout.trim()
+      .split(/\r?\n/u)
+      .filter(Boolean);
+    const workspaceMutationProviderAfter = run('docker', [
+      'volume',
+      'inspect',
+      composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+      '--format',
+      '{{.Name}}',
+    ]).stdout.trim();
+    if (
+      remainingContainers ||
+      remainingNetworks.length ||
+      remainingVolumes.length
+    )
+      throw new Error('e4_workspace_mutation_cleanup_incomplete');
+    if (workspaceMutationProviderBefore !== workspaceMutationProviderAfter)
+      throw new Error('e4_workspace_mutation_external_provider_volume_changed');
+    workspaceMutationCleanup = {
+      project: workspaceMutationProject,
+      probe_file_present: probeCleanup.file_present,
+      down_exit: workspaceMutationDown.status,
+      remaining_project_containers: [],
+      remaining_project_networks: remainingNetworks,
+      remaining_project_volumes: remainingVolumes,
+      external_provider_volume_before: workspaceMutationProviderBefore,
+      external_provider_volume_after: workspaceMutationProviderAfter,
+    };
+    if (workspaceMutationRecord && workspaceMutationRecordPath) {
+      workspaceMutationRecord.cleanup = workspaceMutationCleanup;
+      writeFileSync(
+        workspaceMutationRecordPath,
+        `${JSON.stringify(workspaceMutationRecord, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+    }
+  }
+
   const proofPath = resolve(artifactRoot, 'proof-record.json');
   const runEnvironment = {
     ...process.env,
@@ -501,12 +776,19 @@ try {
   proof.paseo_runtime_container_id =
     runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';
+  proof.workspace_write_probe =
+    runtimeRecord.runtime_inspection.paseo_runtime.workspace_write_probe;
   proof.e4_mutation = { ...mutation, cleanup: mutationCleanup };
+  proof.e4_workspace_mutation = {
+    ...workspaceMutation,
+    cleanup: workspaceMutationCleanup,
+  };
   proof.accepted_e4_projection = runtimeRecord.effective_compose;
   proof.cleanup = cleanup();
   const serialized = [
     runtimePath,
     mutationRecordPath,
+    workspaceMutationRecordPath,
     proofPath,
     ...capturedArtifactPaths,
   ]

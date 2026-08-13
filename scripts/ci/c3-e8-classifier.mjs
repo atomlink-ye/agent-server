@@ -12,14 +12,24 @@ export const C3_E8_INPUT_MARKERS = Object.freeze({
     'c3_e8_input_missing:imported-fixture=apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json',
 });
 
-const REGISTERED_MARKERS = Object.freeze(Object.values(C3_E8_INPUT_MARKERS));
+const EMPTY_BUFFER = Buffer.alloc(0);
+const INPUT_MARKER_PREFIX = 'c3_e8_input_missing:';
+const CLASSIFIER_MARKER_PREFIX = 'c3_e8_classifier_';
 
 function classifierLine(line) {
   process.stdout.write(`${line}\n`);
   return line;
 }
 
-function result({ processExit, stdout = '', stderr = '', childExitCode = null, childSignal = null, reason, marker }) {
+function result({
+  processExit,
+  stdout = EMPTY_BUFFER,
+  stderr = EMPTY_BUFFER,
+  childExitCode = null,
+  childSignal = null,
+  reason,
+  marker,
+}) {
   return {
     process: processExit,
     exitCode: processExit,
@@ -42,13 +52,29 @@ function missingResult(reason) {
   return result({ processExit: 2, reason, marker });
 }
 
-function registeredMarkerLines(stdout, stderr) {
-  return `${stdout}\n${stderr}`
-    .split(/\r?\n/u)
-    .filter((line) => REGISTERED_MARKERS.includes(line));
+function decodeForClassification(value) {
+  if (Buffer.isBuffer(value)) return new TextDecoder().decode(value);
+  return typeof value === 'string' ? value : '';
 }
 
-export function classifyChild({ kind, childExitCode, childSignal, stdout = '', stderr = '', spawnError }) {
+function reservedMarkerLines(stdout, stderr) {
+  return `${decodeForClassification(stdout)}\n${decodeForClassification(stderr)}`
+    .split(/\r?\n/u)
+    .filter(
+      (line) => line.startsWith(INPUT_MARKER_PREFIX) || line.startsWith(CLASSIFIER_MARKER_PREFIX),
+    );
+}
+
+export function parseCliArgv(argv) {
+  if (!Array.isArray(argv) || argv.length < 3) return null;
+  const [kind, separator, command, ...args] = argv;
+  if (typeof kind !== 'string' || kind.length === 0 || separator !== '--') return null;
+  if (typeof command !== 'string' || command.length === 0) return null;
+  if (args.some((argument) => typeof argument !== 'string' || argument.length === 0)) return null;
+  return { kind, argv: [command, ...args] };
+}
+
+export function classifyChild({ kind, childExitCode, childSignal, stdout = EMPTY_BUFFER, stderr = EMPTY_BUFFER, spawnError }) {
   if (spawnError) {
     if (spawnError.code === 'ENOENT') {
       return missingResult(`reason=command-not-available:command=${spawnError.command}`);
@@ -78,13 +104,11 @@ export function classifyChild({ kind, childExitCode, childSignal, stdout = '', s
     return result({ processExit: 0, childExitCode, childSignal, stdout, stderr, reason: 'pass' });
   }
 
-  const markerLines = registeredMarkerLines(stdout, stderr);
+  const markerLines = reservedMarkerLines(stdout, stderr);
   const expectedMarker = C3_E8_INPUT_MARKERS[kind];
   const expectedCount = markerLines.filter((line) => line === expectedMarker).length;
-  const hasWrongOrDuplicateMarker =
-    markerLines.length !== 1 || expectedCount !== 1 || markerLines[0] !== expectedMarker;
 
-  if (!hasWrongOrDuplicateMarker) {
+  if (markerLines.length === 1 && expectedCount === 1) {
     const marker = classifierLine(
       `c3_e8_classifier_missing:kind=${kind}:marker=${expectedMarker}`,
     );
@@ -119,6 +143,8 @@ export function classify({ kind, argv } = {}) {
   }
 
   const [command, ...args] = argv;
+  if (command.length === 0) return Promise.resolve(invalidResult(`reason=empty-command:kind=${kind}`));
+
   let child;
   try {
     child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -129,18 +155,16 @@ export function classify({ kind, argv } = {}) {
     );
   }
 
-  let stdout = '';
-  let stderr = '';
+  const stdoutChunks = [];
+  const stderrChunks = [];
   let spawnError = null;
   child.stdout.on('data', (chunk) => {
-    const text = chunk.toString();
-    stdout += text;
-    process.stdout.write(text);
+    stdoutChunks.push(chunk);
+    process.stdout.write(chunk);
   });
   child.stderr.on('data', (chunk) => {
-    const text = chunk.toString();
-    stderr += text;
-    process.stderr.write(text);
+    stderrChunks.push(chunk);
+    process.stderr.write(chunk);
   });
 
   return new Promise((resolve) => {
@@ -148,6 +172,8 @@ export function classify({ kind, argv } = {}) {
       spawnError = { code: error.code, message: error.message, command };
     });
     child.once('close', (childExitCode, childSignal) => {
+      const stdout = Buffer.concat(stdoutChunks);
+      const stderr = Buffer.concat(stderrChunks);
       resolve(
         classifyChild({
           kind,
@@ -163,8 +189,9 @@ export function classify({ kind, argv } = {}) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [kind, separator, ...commandArgv] = process.argv.slice(2);
-  const argv = separator === '--' ? commandArgv : [separator, ...commandArgv].filter((value) => value !== undefined);
-  const outcome = await classify({ kind, argv });
+  const parsed = parseCliArgv(process.argv.slice(2));
+  const outcome = parsed
+    ? await classify(parsed)
+    : invalidResult('reason=usage:expected=<kind> -- <nonempty-command> [args...]');
   process.exitCode = outcome.process;
 }

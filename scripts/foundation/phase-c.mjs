@@ -768,17 +768,21 @@ function evaluateE6(options) {
       .filter(Boolean);
     if (!switchFiles.includes('compose.runtime.yaml'))
       failures.push('canonical_switch_exact_commit');
-    const canonicalRuntime = git(
+    const canonicalRuntime = execFileSync('git', [
+      '-C',
+      ROOT,
       'show',
       `${canonicalSwitchCommit}:compose.runtime.yaml`,
-    );
+    ]);
     const templatePath = 'evidence/foundation/compose.runtime.canonical.yaml';
-    const templateRuntime = git(
+    const templateRuntime = execFileSync('git', [
+      '-C',
+      ROOT,
       'show',
       `${proof.candidate_sha}:${templatePath}`,
-    );
+    ]);
     if (
-      canonicalRuntime !== templateRuntime ||
+      !canonicalRuntime.equals(templateRuntime) ||
       sha256(canonicalRuntime) !== sha256(templateRuntime)
     )
       failures.push('canonical_runtime_template_bytes');

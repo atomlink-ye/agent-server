@@ -54,34 +54,23 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
         ),
       ).toBe(true);
 
-      const firstActivity = trace.mcp_activities[0];
-      expect(firstActivity).toBeDefined();
-      if (!firstActivity) continue;
-      const firstButton = eventButtons[0];
-      expect(firstButton?.textContent).toContain(String(firstActivity.sequence));
-      const firstActor = trace.actors.find(
-        (actor) => actor.id === firstActivity.source_refs.actor_id,
-      );
-      if (firstActor?.name) expect(firstButton?.textContent).toContain(firstActor.name);
-      const firstItem = trace.work_items.find(
-        (item) => item.id === firstActivity.source_refs.work_item_id,
-      );
-      if (firstItem) expect(firstButton?.textContent).toContain(firstItem.subject);
-      const associatedActivity = trace.mcp_activities.find(
-        (activity) => activity.source_refs.work_item_id,
-      );
-      if (associatedActivity) {
-        const associatedItem = trace.work_items.find(
-          (item) => item.id === associatedActivity.source_refs.work_item_id,
+      for (const [index, activity] of trace.mcp_activities.entries()) {
+        const button = eventButtons[index];
+        expect(button).toBeDefined();
+        if (!button) continue;
+        expect(button.textContent).toContain(String(activity.sequence));
+        const actor = trace.actors.find(
+          (candidate) => candidate.id === activity.source_refs.actor_id,
         );
-        const associatedButton = eventButtons.find((button) =>
-          button.textContent?.includes(`#${associatedActivity.sequence}`),
+        if (actor)
+          expect(button.textContent).toContain(actor.name ?? 'Name not captured');
+        const item = trace.work_items.find(
+          (candidate) => candidate.id === activity.source_refs.work_item_id,
         );
-        if (associatedItem)
-          expect(associatedButton?.textContent).toContain(associatedItem.subject);
+        if (item) expect(button.textContent).toContain(item.subject);
+        expect(button.textContent).toContain('MCP activity:');
+        expect(button.textContent).toContain('Result:');
       }
-      expect(firstButton?.textContent).toContain('MCP activity:');
-      expect(firstButton?.textContent).toContain('Result:');
 
       const sequenceCounts = new Map<number, number>();
       for (const activity of trace.mcp_activities)

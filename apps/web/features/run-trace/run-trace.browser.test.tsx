@@ -88,15 +88,35 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
           .map(({ attempt }) => attempt.duration_ms),
       ).toEqual([177206, 19179]);
     const captured = entries.filter(({ attempt }) =>
-      attempt.timing_capture_status === 'captured',
+      attempt.timing_capture_status === 'captured' &&
+      attempt.started_at !== null &&
+      attempt.ended_at !== null &&
+      attempt.duration_ms !== null,
     );
     expect(captured.length).toBeGreaterThan(0);
+    const earliestStartedAt = captured.reduce((earliest, entry) =>
+      Date.parse(entry.attempt.started_at!) < Date.parse(earliest)
+        ? entry.attempt.started_at!
+        : earliest,
+      captured[0]!.attempt.started_at!,
+    );
+    const latestEndedAt = captured.reduce((latest, entry) =>
+      Date.parse(entry.attempt.ended_at!) > Date.parse(latest)
+        ? entry.attempt.ended_at!
+        : latest,
+      captured[0]!.attempt.ended_at!,
+    );
 
     const { host, root } = mountTrace(trace);
     try {
       await act(async () => {
         root.render(<RunTrace trace={trace} />);
       });
+      expect(host.textContent).toContain(trace.work.title);
+      const axis = host.querySelector<HTMLElement>('.run-trace__axis');
+      expect(axis).not.toBeNull();
+      expect(axis?.textContent).toContain(earliestStartedAt);
+      expect(axis?.textContent).toContain(latestEndedAt);
 
       const attemptButtons = [
         ...host.querySelectorAll<HTMLButtonElement>(
@@ -173,19 +193,46 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
       ).toBe(true);
       expect(host.textContent).toContain('Inspector');
 
+      const firstEntry = entries[0];
+      expect(firstEntry).toBeDefined();
+      if (!firstEntry) continue;
+      const firstEntryButton = attemptButtons.find(
+        (button) => button.title === firstEntry.workItem.subject &&
+          button.getAttribute('aria-label')?.includes(
+            `Attempt ${firstEntry.attempt.attempt_no}`,
+          ),
+      );
+      expect(firstEntryButton).toBeDefined();
       const selectedButton = attemptButtons.find(
         (button) => button.getAttribute('aria-pressed') === 'true',
       );
-      expect(selectedButton).toBe(attemptButtons[0]);
-      const nextButton = attemptButtons.at(-1);
-      expect(nextButton).toBeDefined();
-      if (!nextButton) continue;
+      expect(selectedButton).toBe(firstEntryButton);
+      const inspector = host.querySelector<HTMLElement>(
+        '#trace-inspector-heading',
+      )?.parentElement;
+      expect(inspector).not.toBeNull();
+      expect(inspector?.textContent).toContain(firstEntry.attempt.started_at!);
+      expect(inspector?.textContent).toContain(firstEntry.attempt.ended_at!);
+      const lastEntry = entries.at(-1);
+      expect(lastEntry).toBeDefined();
+      if (!lastEntry) continue;
+      const lastEntryButton = attemptButtons.find(
+        (button) => button.title === lastEntry.workItem.subject &&
+          button.getAttribute('aria-label')?.includes(
+            `Attempt ${lastEntry.attempt.attempt_no}`,
+          ),
+      );
+      expect(lastEntryButton).toBeDefined();
+      expect(lastEntryButton).not.toBe(firstEntryButton);
+      if (!lastEntryButton) continue;
       await act(async () => {
-        nextButton.focus();
-        nextButton.click();
+        lastEntryButton.focus();
+        lastEntryButton.click();
       });
-      expect(nextButton.getAttribute('aria-pressed')).toBe('true');
+      expect(lastEntryButton.getAttribute('aria-pressed')).toBe('true');
       expect(host.querySelector('#trace-inspector-heading')).not.toBeNull();
+      expect(inspector?.textContent).toContain(lastEntry.attempt.started_at!);
+      expect(inspector?.textContent).toContain(lastEntry.attempt.ended_at!);
 
       if (trace === traces[1]) {
         const reworkItem = trace.work_items.find(

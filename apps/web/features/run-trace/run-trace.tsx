@@ -17,7 +17,7 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
   const selectedAttempt = attempts.find((entry) => entry.attempt.id === selectedAttemptKey) ?? null;
   const geometry = useMemo(() => timelineGeometry(attempts), [attempts]);
   const capturedRange = useMemo(() => capturedTimelineRange(attempts), [attempts]);
-  const feedback = trace.edges.filter((edge) => edge.kind === 'feedback');
+  const feedback = trace.edges.filter((edge): edge is Extract<Trace['edges'][number], { kind: 'feedback' }> => edge.kind === 'feedback');
   const actorRows = trace.actors.map((actor) => ({ key: actor.id, name: actor.name ?? 'Name not captured', items: trace.work_items.filter((workItem) => workItem.actor_id === actor.id) }));
   const unassignedItems = trace.work_items.filter((workItem) => !trace.actors.some((actor) => actor.id === workItem.actor_id));
   if (unassignedItems.length) actorRows.push({ key: 'uncaptured-actor', name: 'Name not captured', items: unassignedItems });

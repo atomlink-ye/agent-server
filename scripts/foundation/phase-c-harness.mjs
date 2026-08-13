@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { arch } from 'node:os';
+
+import { deriveComposeVolumeEnvironment } from '../dev/compose-volume-environment.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -23,8 +26,23 @@ const composeFiles = [
 const wrapper = resolve(ROOT, 'scripts/dev/docker-compose');
 const rawCompose = ['compose', '-p', project, ...composeFiles];
 const scannedTranscripts = [];
+const composeEnvironment = {
+  ...process.env,
+  ...(await deriveComposeVolumeEnvironment({
+    root: ROOT,
+    architecture: arch(),
+    nodeAbi: process.env.AGENT_SERVER_NODE_ABI ?? '137',
+  })),
+};
+const candidateSha = spawnSync(
+  'git',
+  ['-C', ROOT, 'rev-parse', 'HEAD'],
+  { encoding: 'utf8' },
+).stdout.trim();
+if (!/^[0-9a-f]{40}$/u.test(candidateSha))
+  throw new Error('candidate_sha_missing');
 
-function run(command, args, { allow = [0], env = process.env } = {}) {
+function run(command, args, { allow = [0], env = composeEnvironment } = {}) {
   const value = spawnSync(command, args, {
     cwd: ROOT,
     env,
@@ -75,6 +93,16 @@ function containerRecord(service) {
       id,
     ]).stdout,
   );
+  const environmentNames = run('docker', [
+    'inspect',
+    '--format',
+    '{{range .Config.Env}}{{println (index (split . "=") 0)}}{{end}}',
+    id,
+  ]).stdout
+    .split(/\r?\n/u)
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .sort();
   const top = run('docker', [
     ...rawCompose,
     'top',
@@ -88,6 +116,7 @@ function containerRecord(service) {
     .map((command) => ({ command }));
   return {
     container_id: id,
+    environment_names: environmentNames,
     processes: top,
     mounts: inspect.map((mount) => ({
       type: mount.Type,
@@ -100,6 +129,29 @@ function containerRecord(service) {
 
 let cleanupComplete = false;
 function cleanup() {
+  const projectNetworksBefore = run('docker', [
+    'network',
+    'ls',
+    '--filter',
+    `label=com.docker.compose.project=${project}`,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim().split(/\r?\n/u).filter(Boolean).sort();
+  const projectVolumesBefore = run('docker', [
+    'volume',
+    'ls',
+    '--filter',
+    `label=com.docker.compose.project=${project}`,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim().split(/\r?\n/u).filter(Boolean).sort();
+  const providerBefore = run('docker', [
+    'volume',
+    'inspect',
+    composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim();
   const cleanupResult = run(
     'docker',
     [...rawCompose, 'down', '--remove-orphans', '--volumes'],
@@ -108,16 +160,48 @@ function cleanup() {
   const remaining = run('docker', [...rawCompose, 'ps', '-aq'], {
     allow: [0],
   }).stdout.trim();
+  const remainingNetworks = run('docker', [
+    'network',
+    'ls',
+    '--filter',
+    `label=com.docker.compose.project=${project}`,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim().split(/\r?\n/u).filter(Boolean);
+  const remainingVolumes = run('docker', [
+    'volume',
+    'ls',
+    '--filter',
+    `label=com.docker.compose.project=${project}`,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim().split(/\r?\n/u).filter(Boolean);
+  const providerAfter = run('docker', [
+    'volume',
+    'inspect',
+    composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim();
   if (remaining) throw new Error(`cleanup_incomplete:${remaining}`);
+  if (remainingNetworks.length || remainingVolumes.length)
+    throw new Error('cleanup_project_resources_incomplete');
+  if (providerBefore !== providerAfter)
+    throw new Error('cleanup_external_provider_volume_changed');
   if (cleanupResult.status !== 0)
     throw new Error(`cleanup_failed:${cleanupResult.status}`);
   cleanupComplete = true;
   return {
     project,
+    candidate_sha: candidateSha,
     down_exit: cleanupResult.status,
     remaining_project_containers: [],
-    global_prune_used: false,
-    external_provider_volume_deleted: false,
+    project_networks_before: projectNetworksBefore,
+    remaining_project_networks: remainingNetworks,
+    project_volumes_before: projectVolumesBefore,
+    remaining_project_volumes: remainingVolumes,
+    external_provider_volume_before: providerBefore,
+    external_provider_volume_after: providerAfter,
   };
 }
 try {
@@ -129,7 +213,7 @@ try {
       [...composeFiles, '-p', project, 'config', '--format', 'json'],
       {
         env: {
-          ...process.env,
+          ...composeEnvironment,
           OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
         },
       },
@@ -199,8 +283,11 @@ try {
     exit: negative.status,
     status: negativeResult.status,
     reason: negativeResult.reason,
+    http_status: negativeResult.http_status,
+    error_code: negativeResult.error_code,
     missing: false,
   };
+  proof.candidate_sha = candidateSha;
   proof.agent_server_container_id = runtimeRecord.runtime_inspection.agent_server.container_id;
   proof.paseo_runtime_container_id = runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';

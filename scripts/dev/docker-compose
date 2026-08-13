@@ -44,34 +44,15 @@ if ((runtime_compose)); then
   . "$repo_root/scripts/dev/source-real-provider-defaults"
 fi
 
-dependency_stamp="$(node scripts/dev/dependency-stamp.mjs "$repo_root" | tr -d '\r\n')"
-[[ "$dependency_stamp" =~ ^[0-9a-f]{64}$ ]] || {
-  printf '%s\n' 'docker-compose: dependency stamp is not a sha256 digest' >&2
-  exit 1
-}
 arch="$(uname -m)"
-case "$arch" in
-  x86_64) arch=amd64 ;;
-  aarch64) arch=arm64 ;;
-esac
 node_abi="${AGENT_SERVER_NODE_ABI:-137}"
-node_abi="${node_abi//[^A-Za-z0-9._-]/-}"
-volume_prefix="agent-server-cache-v1-node24-abi${node_abi}-${arch}-${dependency_stamp}"
-root_volume="${volume_prefix}-root"
-web_volume="${volume_prefix}-web"
-provider_volume=''
-if ((runtime_compose)); then
-  provider_stamp="$(node scripts/dev/provider-toolchain-stamp.mjs | tr -d '\r\n')"
-  provider_volume="agent-server-provider-toolchain-v1-node24-abi${node_abi}-${arch}-${provider_stamp}"
-fi
-
-export NODE_MODULES_VOLUME="$root_volume"
-export WEB_NODE_MODULES_VOLUME="$web_volume"
-export NODE_MODULES_EXTERNAL=true
-export WEB_NODE_MODULES_EXTERNAL=true
-if ((runtime_compose)); then
-  export PROVIDER_TOOLCHAIN_VOLUME="$provider_volume"
-fi
+volume_json="$(node scripts/dev/compose-volume-environment.mjs "$repo_root" "$arch" "$node_abi")"
+while IFS='=' read -r name value; do
+  export "$name=$value"
+done < <(node -e 'const value=JSON.parse(process.argv[1]); for (const [name,item] of Object.entries(value)) console.log(`${name}=${item}`)' "$volume_json")
+root_volume="$NODE_MODULES_VOLUME"
+web_volume="$WEB_NODE_MODULES_VOLUME"
+provider_volume="$PROVIDER_TOOLCHAIN_VOLUME"
 
 docker volume create "$root_volume" >/dev/null
 docker volume create "$web_volume" >/dev/null

@@ -78,13 +78,17 @@ await request(`/api/v1/environment-versions/${environment.version.id}:publish`, 
 });
 const lead = await importAgent(
   'phase-c-lead',
-  `Create exactly one Work assigned to phase-c-worker. Its description must require exact marker ${marker}. Accept only a submitted result containing exactly ${marker}, then finish exactly once. Use only canonical Team tools.`,
+  `Use only canonical Team tools. Create exactly two independent Work items total: one assigned to phase-c-worker-a and one assigned to phase-c-worker-b. Each description must require exact marker ${marker}. Wake both workers, accept both only after their real submissions contain exactly ${marker}, call canonical team_finish exactly once, and make your final result text exactly ${marker}.`,
 );
-const worker = await importAgent(
-  'phase-c-worker',
+const workerA = await importAgent(
+  'phase-c-worker-a',
   `Use only canonical Team tools. Complete the assigned Work and submit exactly ${marker}. Do not finish with prose before the real team_work_submit receipt succeeds.`,
 );
-const definitionSource = `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: phase-c-${randomUUID().slice(0, 8)}\nspec:\n  environmentVersionId: ${environment.version.id}\n  lead:\n    name: phase-c-lead\n    agentVersionId: ${lead}\n  roster:\n    - name: phase-c-worker\n      agentVersionId: ${worker}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
+const workerB = await importAgent(
+  'phase-c-worker-b',
+  `Use only canonical Team tools. Complete the assigned Work and submit exactly ${marker}. Do not finish with prose before the real team_work_submit receipt succeeds.`,
+);
+const definitionSource = `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: phase-c-${randomUUID().slice(0, 8)}\nspec:\n  environmentVersionId: ${environment.version.id}\n  lead:\n    name: phase-c-lead\n    agentVersionId: ${lead}\n  roster:\n    - name: phase-c-worker-a\n      agentVersionId: ${workerA}\n    - name: phase-c-worker-b\n      agentVersionId: ${workerB}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`;
 const imported = await request('/api/v1/teams:import', {
   method: 'POST',
   body: { source: definitionSource },
@@ -104,10 +108,13 @@ if (negativeControl) {
       title: 'Phase C nonexistent definition negative control',
     },
   });
-  if (negative.status < 400 || negative.status >= 500)
-    throw new Error(`negative_control_unexpected_status:${negative.status}`);
+  if (
+    negative.status !== 400 ||
+    negative.body?.error?.code !== 'invalid_work_definition'
+  )
+    throw new Error('negative_control_contract_mismatch');
   process.stdout.write(
-    `${JSON.stringify({ status: 'FAIL', reason: 'nonexistent_definition', http_status: negative.status })}\n`,
+    `${JSON.stringify({ status: 'FAIL', reason: 'nonexistent_definition', http_status: negative.status, error_code: negative.body.error.code })}\n`,
   );
   process.exit(1);
 }
@@ -138,14 +145,25 @@ if (
   trace.work_run?.problem_kind !== null
 )
   throw new Error('observed_product_success_invalid');
-const markerOutput = product.work_items
-  .flatMap((item) => item.attempts)
-  .flatMap(
-    (attempt) =>
-      String(attempt.result_summary ?? '').match(/PHASEC_[0-9a-f]{32}/gu) ?? [],
-  )
-  .find((candidate) => candidate === marker);
-if (markerOutput !== marker) throw new Error('exact_marker_round_trip_failed');
+if (
+  product.projection_status !== 'internally_anchored' ||
+  trace.projection_status !== 'internally_anchored' ||
+  product.work_run.id !== workRunId ||
+  trace.work_run?.id !== workRunId
+)
+  throw new Error('product_projection_identity_invalid');
+if (
+  product.work_items.length !== 2 ||
+  product.work_items.some(
+    (item) =>
+      item.status !== 'accepted' ||
+      item.dependency_ids.length !== 0 ||
+      item.attempts.length < 1,
+  ) ||
+  product.work_run.result_summary !== marker ||
+  trace.work_run.result_summary !== marker
+)
+  throw new Error('parallel_exact_marker_round_trip_failed');
 if (!Array.isArray(trace.runs) || !trace.runs.length)
   throw new Error('trace_runs_missing');
 const tracedRunIds = trace.runs.map((run) => run.source_refs?.run_id);
@@ -217,7 +235,17 @@ const record = {
     })),
   },
   marker_input: marker,
-  marker_output: markerOutput,
+  marker_output: product.work_run.result_summary,
+  parallel_business_observation: {
+    work_count: product.work_items.length,
+    accepted_work_ids: product.work_items.map((item) => item.id).sort(),
+    dependency_counts: product.work_items.map(
+      (item) => item.dependency_ids.length,
+    ),
+    lead_result_summary: product.work_run.result_summary,
+    projection_status: product.projection_status,
+    trace_projection_status: trace.projection_status,
+  },
   marker_sha256: createHash('sha256').update(marker).digest('hex'),
   provider: defaults.PASEO_PROVIDER,
   model: defaults.PASEO_MODEL,

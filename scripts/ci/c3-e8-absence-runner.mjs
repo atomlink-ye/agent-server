@@ -69,11 +69,11 @@ export function inputMarkerFraming(stdout, marker) {
   return Buffer.concat([framing, Buffer.from(`${marker}\n`)]);
 }
 
-async function runFixedCommand(directory) {
+export async function runFixedCommand(directory, spawnImpl = spawn, output = process.stdout, errorOutput = process.stderr) {
   const stdoutChunks = [];
   const stderrChunks = [];
   let spawnError = null;
-  const child = spawn('pnpm', FIXED_VITEST_ARGS, {
+  const child = spawnImpl('pnpm', FIXED_VITEST_ARGS, {
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -84,11 +84,11 @@ async function runFixedCommand(directory) {
   });
   child.stdout.on('data', (chunk) => {
     stdoutChunks.push(chunk);
-    process.stdout.write(chunk);
+    output.write(chunk);
   });
   child.stderr.on('data', (chunk) => {
     stderrChunks.push(chunk);
-    process.stderr.write(chunk);
+    errorOutput.write(chunk);
   });
   child.once('error', (error) => {
     spawnError = { code: error.code ?? null, message: error.message };
@@ -105,32 +105,38 @@ async function runFixedCommand(directory) {
   return { ...status, spawnError, stdout, stderr };
 }
 
-async function main() {
-  const { kind, evidenceDirectory } = parseRunnerArgs(process.argv.slice(2));
+export async function runAbsence({
+  kind,
+  evidenceDirectory,
+  spawnImpl = spawn,
+  targetIsAbsentImpl = targetIsAbsent,
+  output = process.stdout,
+  errorOutput = process.stderr,
+}) {
   const target = resolve(process.cwd(), TARGETS[kind]);
-  const targetAbsent = targetIsAbsent(target);
+  const targetAbsent = targetIsAbsentImpl(target);
   writeEvidence(
     evidenceDirectory,
     'structural-status.json',
     `${JSON.stringify({ kind, target, targetAbsent }, null, 2)}\n`,
   );
   if (!targetAbsent) {
-    process.stderr.write(`c3_e8_runner:expected-input-still-present:${target}\n`);
+    errorOutput.write(`c3_e8_runner:expected-input-still-present:${target}\n`);
     writeEvidence(evidenceDirectory, 'marker-status.json', '{"emitted":false,"reason":"input-present"}\n');
     process.exitCode = 1;
     return;
   }
 
-  process.stderr.write(`c3_e8_runner:structural-absence-confirmed:${target}\n`);
-  const status = await runFixedCommand(evidenceDirectory);
+  errorOutput.write(`c3_e8_runner:structural-absence-confirmed:${target}\n`);
+  const status = await runFixedCommand(evidenceDirectory, spawnImpl, output, errorOutput);
   const outcome = runnerOutcome({
     targetAbsent,
-    targetStillAbsent: targetIsAbsent(target),
+    targetStillAbsent: targetIsAbsentImpl(target),
     status,
   });
   if (outcome.emitMarker) {
     const marker = C3_E8_INPUT_MARKERS[kind];
-    process.stdout.write(inputMarkerFraming(status.stdout, marker));
+    output.write(inputMarkerFraming(status.stdout, marker));
     writeEvidence(evidenceDirectory, 'marker-status.json', `${JSON.stringify({ marker, emitted: true })}\n`);
   } else {
     writeEvidence(
@@ -142,14 +148,19 @@ async function main() {
 
   if (status.signal) {
     process.kill(process.pid, status.signal);
-    return;
+    return 1;
   }
-  process.exitCode = outcome.processExit;
+  return outcome.processExit;
+}
+
+async function main() {
+  const { kind, evidenceDirectory } = parseRunnerArgs(process.argv.slice(2));
+  return runAbsence({ kind, evidenceDirectory });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {
-    await main();
+    process.exitCode = await main();
   } catch (error) {
     process.stderr.write(`c3_e8_runner:error:${error.message}\n`);
     process.exitCode = 1;

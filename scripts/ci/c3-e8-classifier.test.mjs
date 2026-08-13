@@ -1,16 +1,19 @@
 import { strict as assert } from 'node:assert';
+import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   C3_E8_INPUT_MARKERS,
   C3_E8_KINDS,
   classify,
   classifyChild,
-  classifierFraming,
   parseCliArgv,
 } from './c3-e8-classifier.mjs';
-import { inputMarkerFraming, parseRunnerArgs, runnerOutcome } from './c3-e8-absence-runner.mjs';
+import { parseRunnerArgs, runAbsence, runnerOutcome } from './c3-e8-absence-runner.mjs';
 
 const node = process.execPath;
 const classifierPath = fileURLToPath(new URL('./c3-e8-classifier.mjs', import.meta.url));
@@ -44,25 +47,18 @@ describe('C3/E8 classifier duals', () => {
     assert.equal(outcome.marker, `c3_e8_classifier_missing:kind=${kind}:marker=${marker}`);
   });
 
-  it('frames an unterminated child marker before the classifier marker without changing child bytes', () => {
-    const childBytes = Buffer.from(marker);
-    const outcome = classifyChild({
-      kind,
-      childExitCode: 2,
-      childSignal: null,
-      stdout: childBytes,
-      stderr: Buffer.alloc(0),
-      spawnError: null,
-    });
-    assert.equal(outcome.process, 2);
-    assert.deepEqual(classifierFraming(childBytes), Buffer.from('\n'));
-    const finalBytes = Buffer.concat([
-      childBytes,
-      classifierFraming(childBytes),
-      Buffer.from(`${outcome.marker}\n`),
-    ]);
-    assert.deepEqual(finalBytes, Buffer.from(`${marker}\nc3_e8_classifier_missing:kind=${kind}:marker=${marker}\n`));
-    assert.deepEqual(childBytes, Buffer.from(marker));
+  it('frames an unterminated child marker through the production CLI without changing child bytes', () => {
+    const run = spawnSync(
+      node,
+      [classifierPath, kind, '--', node, '-e', `process.stdout.write(${JSON.stringify(marker)}); process.exitCode = 2`],
+      { encoding: null },
+    );
+    assert.equal(run.status, 2);
+    assert.deepEqual(
+      run.stdout,
+      Buffer.from(`${marker}\nc3_e8_classifier_missing:kind=${kind}:marker=${marker}\n`),
+    );
+    assert.deepEqual(run.stderr, Buffer.alloc(0));
   });
 
   it('does not infer missing from an unmarked child exit 2', async () => {
@@ -166,7 +162,7 @@ describe('C3/E8 classifier duals', () => {
     assert.deepEqual(run.stderr, bytes(0xff, 0xfe));
   });
 
-  it('requires the runner exact three-argument shape and only emits for safe raw failure', () => {
+  it('requires the runner exact three-argument shape and only emits for safe raw failure', async () => {
     assert.deepEqual(parseRunnerArgs([kind, '--evidence', '/tmp/evidence']), {
       kind,
       evidenceDirectory: '/tmp/evidence',
@@ -186,27 +182,49 @@ describe('C3/E8 classifier duals', () => {
     });
     assert.deepEqual(safe, { emitMarker: true, processExit: 1 });
 
+    const evidenceDirectory = mkdtempSync(join(tmpdir(), 'c3-e8-runner-'));
     const rawNonNewline = Buffer.from('raw-vitest-output');
-    const framedInput = inputMarkerFraming(rawNonNewline, marker);
-    assert.deepEqual(framedInput, Buffer.from(`\n${marker}\n`));
-    const outer = classifyChild({
-      kind,
-      childExitCode: 1,
-      childSignal: null,
-      stdout: Buffer.concat([rawNonNewline, framedInput]),
-      stderr: Buffer.alloc(0),
-      spawnError: null,
-    });
-    assert.equal(outer.process, 2);
-    const finalBytes = Buffer.concat([
-      rawNonNewline,
-      framedInput,
-      Buffer.from(`${outer.marker}\n`),
-    ]);
-    assert.deepEqual(
-      finalBytes,
-      Buffer.from(`raw-vitest-output\n${marker}\nc3_e8_classifier_missing:kind=${kind}:marker=${marker}\n`),
-    );
+    const outputChunks = [];
+    const errorChunks = [];
+    const output = { write(chunk) { outputChunks.push(Buffer.from(chunk)); return true; } };
+    const errorOutput = { write(chunk) { errorChunks.push(Buffer.from(chunk)); return true; } };
+    const fakeSpawn = () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      queueMicrotask(() => {
+        child.stdout.emit('data', rawNonNewline);
+        child.emit('close', 1, null);
+      });
+      return child;
+    };
+    try {
+      const runnerExit = await runAbsence({
+        kind,
+        evidenceDirectory,
+        spawnImpl: fakeSpawn,
+        targetIsAbsentImpl: () => true,
+        output,
+        errorOutput,
+      });
+      assert.equal(runnerExit, 1);
+      const runnerBytes = Buffer.concat(outputChunks);
+      assert.deepEqual(runnerBytes, Buffer.from(`raw-vitest-output\n${marker}\n`));
+      assert.deepEqual(readFileSync(join(evidenceDirectory, 'raw.stdout')), rawNonNewline);
+      const outer = classifyChild({
+        kind,
+        childExitCode: runnerExit,
+        childSignal: null,
+        stdout: runnerBytes,
+        stderr: Buffer.alloc(0),
+        spawnError: null,
+      });
+      assert.equal(outer.process, 2);
+      assert.equal(outer.marker, `c3_e8_classifier_missing:kind=${kind}:marker=${marker}`);
+      assert.deepEqual(errorChunks, [Buffer.from(`c3_e8_runner:structural-absence-confirmed:${join(process.cwd(), 'apps/web/components/work/work-list.browser.test.tsx')}\n`)]);
+    } finally {
+      rmSync(evidenceDirectory, { recursive: true, force: true });
+    }
 
     for (const status of [
       { code: 0, signal: null, spawnError: null },

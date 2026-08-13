@@ -379,8 +379,16 @@ function checkTransactionFixtures() {
   };
   const rawOut = astRepositoryFacts.flatMap((entry) => entry.calls).filter((call) => !call.typed && call.transaction === 'DEFINITELY_OUT');
   fixtures.rawDefinitelyOutByRepository = Object.fromEntries([...new Set(rawOut.map((call) => call.file))].sort().map((file) => [file, rawOut.filter((call) => call.file === file).map((call) => ({ line: call.line, identity: call.transactionEvidence }))]));
-  const workRepositories = new Set(Object.entries(ledger.repositories ?? {}).filter(([, owner]) => owner === 'Work').map(([file]) => path.basename(file)));
-  fixtures.rawDefinitelyOutWork = rawOut.filter((call) => workRepositories.has(call.file)).map((call) => ({ file: call.file, line: call.line, identity: call.transactionEvidence }));
+  const repositoryOwners = new Map(Object.entries(ledger.repositories ?? {}).map(([file, owner]) => [path.basename(file), owner]));
+  const ownerGroups = new Map();
+  for (const call of rawOut) {
+    const owner = repositoryOwners.get(call.file) ?? 'UNMAPPED';
+    if (!ownerGroups.has(owner)) ownerGroups.set(owner, []);
+    ownerGroups.get(owner).push({ file: call.file, line: call.line, identity: call.transactionEvidence });
+  }
+  fixtures.rawDefinitelyOutByRepositoryOwner = Object.fromEntries([...ownerGroups.keys()].sort().map((owner) => [owner, ownerGroups.get(owner)]));
+  fixtures.rawDefinitelyOutWork = rawOut.filter((call) => repositoryOwners.get(call.file) === 'Work').map((call) => ({ file: call.file, line: call.line, identity: call.transactionEvidence }));
+  fixtures.rawDefinitelyOutWorkCount = fixtures.rawDefinitelyOutWork.length;
   fixtures.currentLedgerDisagreements = transactionLedgerDisagreements;
   if (ledger.transactionTruthSource || ledger.transactionTruth || ledger.typedTransactionTruth) fail('manual_transaction_truth_source_MUST_REMOVE', { transactionTruthSource: Boolean(ledger.transactionTruthSource), transactionTruth: Boolean(ledger.transactionTruth), typedTransactionTruth: Boolean(ledger.typedTransactionTruth) });
   return fixtures;

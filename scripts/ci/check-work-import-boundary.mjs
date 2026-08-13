@@ -22,6 +22,7 @@ const protectedTargets = new Set([
   'src/infrastructure/postgres/postgres-work-projection-facts-query.ts',
 ]);
 const allowedImporterPrefix = 'src/modules/work/';
+const typescriptSourceExtensions = ['.ts', '.tsx', '.mts', '.cts'];
 const violations = [];
 const require = createRequire(import.meta.url);
 const packageRoot = path.dirname(require.resolve('typescript/package.json'));
@@ -53,7 +54,7 @@ try {
   snapshot = api.updateSnapshot({ openFiles: Object.keys(virtualFiles) });
   for (const importer of files) {
     const importerRelative = relative(importer);
-    if (importerRelative.endsWith('.test.ts')) continue;
+    if (/\.test\.(?:ts|tsx|mts|cts)$/.test(importerRelative)) continue;
     const virtualImporter = path.posix.join(virtualRoot, importerRelative);
     const project = snapshot.getDefaultProjectForFile(virtualImporter);
     const source = project?.program.getSourceFile(virtualImporter);
@@ -113,7 +114,8 @@ console.log(
     guard: 'work-import-boundary',
     protected_targets: [...protectedTargets],
     allowed_importer_prefix: allowedImporterPrefix,
-    test_only_exception: 'src/**/*.test.ts',
+    typescript_source_extensions: typescriptSourceExtensions,
+    test_only_exception: 'src/**/*.test.{ts,tsx,mts,cts}',
     violations: 0,
   }),
 );
@@ -131,7 +133,12 @@ function listTypescriptFiles(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) result.push(...listTypescriptFiles(absolute));
-    else if (entry.isFile() && entry.name.endsWith('.ts'))
+    else if (
+      entry.isFile() &&
+      typescriptSourceExtensions.some((extension) =>
+        entry.name.endsWith(extension),
+      )
+    )
       result.push(absolute);
   }
   return result.sort();

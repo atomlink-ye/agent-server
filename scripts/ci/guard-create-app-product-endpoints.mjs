@@ -40,6 +40,7 @@ const DEFINITION_VERSION_ID = '00000000-0000-4000-8000-000000000021';
 const AGENT_VERSION_ID = '00000000-0000-4000-8000-000000000022';
 const ENVIRONMENT_VERSION_ID = '00000000-0000-4000-8000-000000000023';
 const NOW = '2026-08-14T00:00:00.000Z';
+const BEHAVIOR_MUTATION = process.env.GUARD_CREATE_APP_MUTATION;
 
 const responseSchemas = new Map([
   ['CreateWorkResponseSchema', CreateWorkResponseSchema],
@@ -326,6 +327,8 @@ function createMinimalDependencies(observed) {
     productProjection: {
       async getWork(input) {
         recordScope(input, 'getWork');
+        if (BEHAVIOR_MUTATION === 'corrupt_get_work_response')
+          return { work: { ...workResponse, title: 42 } };
         return { work: workResponse };
       },
       async getWorkListItem(input) {
@@ -368,6 +371,12 @@ async function readInventory() {
 }
 
 async function main() {
+  if (
+    BEHAVIOR_MUTATION !== undefined &&
+    BEHAVIOR_MUTATION !== 'corrupt_get_work_response'
+  )
+    return fail('unknown_behavior_mutation', BEHAVIOR_MUTATION);
+
   let endpoints;
   try {
     endpoints = await readInventory();
@@ -387,6 +396,25 @@ async function main() {
 
   const observed = [];
   const app = createApp(createMinimalDependencies(observed));
+  const unknownRouteResponse = await app.request(
+    new Request('http://create-app-guard/api/v1/guard-unknown-route-control', {
+      method: 'GET',
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        accept: 'application/json',
+      },
+    }),
+  );
+  const unknownRouteBody = await unknownRouteResponse.json().catch(() => null);
+  if (
+    unknownRouteResponse.status !== 404 ||
+    unknownRouteBody?.error?.code !== 'route_not_found'
+  )
+    return fail(
+      'unknown_route_control',
+      `${unknownRouteResponse.status}:${unknownRouteBody?.error?.code ?? 'missing_code'}`,
+    );
+
   const missingEndpointIds = [];
   for (const endpoint of endpoints) {
     const request = endpointRequests.get(endpoint.id);

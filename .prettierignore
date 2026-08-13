@@ -3,3 +3,6 @@ node_modules/
 .pnpm-store/
 pnpm-lock.yaml
 docs/generated/
+evidence/product-contract/human-gate-decision.json
+evidence/product-contract/human-gate-product-contract-accepted.json
+evidence/product-contract/mgr-b-human-gate-format-continuation.json

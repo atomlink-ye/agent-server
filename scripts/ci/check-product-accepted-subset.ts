@@ -22,6 +22,20 @@ const SIGNED_MANIFEST = resolve(
     ),
   ),
 );
+const CONTRACT_EVIDENCE_ROOT = resolve(
+  fileURLToPath(new URL('../../evidence/product-contract/', import.meta.url)),
+);
+const DEFAULT_EVIDENCE_PATHS: EvidencePaths = {
+  decision: resolve(CONTRACT_EVIDENCE_ROOT, 'human-gate-decision.json'),
+  accepted: resolve(
+    CONTRACT_EVIDENCE_ROOT,
+    'human-gate-product-contract-accepted.json',
+  ),
+  continuation: resolve(
+    CONTRACT_EVIDENCE_ROOT,
+    'mgr-b-human-gate-format-continuation.json',
+  ),
+};
 
 const ACCEPTED_FACTS = {
   decisionSha256:
@@ -49,6 +63,7 @@ type CliOptions = {
   readonly mode: 'write' | 'check';
   readonly output?: string;
   readonly manifest: string;
+  readonly mutation: boolean;
   readonly evidence?: EvidencePaths;
 };
 
@@ -542,6 +557,8 @@ function optionValue(
 function parseOptions(argv: readonly string[]): CliOptions {
   const write = argv.includes('--write');
   const check = argv.includes('--check');
+  const mutation =
+    argv.includes('--mutation') || process.env.PRODUCT_ACCEPTED_MUTATION === '1';
   if ((write ? 1 : 0) + (check ? 1 : 0) !== 1)
     fail('usage: choose exactly one of --write or --check');
   const valueOptions = new Set([
@@ -563,7 +580,7 @@ function parseOptions(argv: readonly string[]): CliOptions {
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
-    if (arg === '--write' || arg === '--check') continue;
+    if (arg === '--write' || arg === '--check' || arg === '--mutation') continue;
     if (!valueOptions.has(arg)) fail(`unknown_option:${arg}`);
     index += 1;
     if (!argv[index] || argv[index]!.startsWith('--'))
@@ -571,22 +588,24 @@ function parseOptions(argv: readonly string[]): CliOptions {
   }
 
   const output = optionValue(argv, ['--output']) ?? process.env.PRODUCT_ACCEPTED_OUTPUT;
-  const manifest =
+  const manifestOverride =
     optionValue(argv, ['--manifest', '--current-manifest']) ??
-    process.env.PRODUCT_ACCEPTED_MANIFEST_PATH ??
-    SIGNED_MANIFEST;
+    process.env.PRODUCT_ACCEPTED_MANIFEST_PATH;
+  if (manifestOverride && !mutation)
+    fail('manifest_path_override_requires_mutation');
+  const manifest = manifestOverride ?? SIGNED_MANIFEST;
   if (write && !output)
     fail('--write requires explicit --output (signed manifest is never overwritten)');
   if (write && resolve(output!) === SIGNED_MANIFEST)
     fail('--write refuses the signed manifest path');
   if (!check)
-    return { mode: 'write', output, manifest };
+    return { mode: 'write', output, manifest, mutation };
 
-  const decision =
+  const decisionOverride =
     optionValue(argv, ['--decision', '--decision-path', '--original-decision']) ??
     process.env.PRODUCT_ACCEPTED_DECISION_PATH ??
     process.env.PRODUCT_ACCEPTED_DECISION;
-  const accepted =
+  const acceptedOverride =
     optionValue(argv, [
       '--accepted-evidence',
       '--contract-evidence',
@@ -596,7 +615,7 @@ function parseOptions(argv: readonly string[]): CliOptions {
     ]) ??
     process.env.PRODUCT_ACCEPTED_EVIDENCE_PATH ??
     process.env.PRODUCT_ACCEPTED_CONTRACT_EVIDENCE;
-  const continuation =
+  const continuationOverride =
     optionValue(argv, [
       '--continuation-evidence',
       '--continuation',
@@ -605,13 +624,19 @@ function parseOptions(argv: readonly string[]): CliOptions {
     ]) ??
     process.env.PRODUCT_ACCEPTED_CONTINUATION_PATH ??
     process.env.PRODUCT_ACCEPTED_FORMAT_CONTINUATION;
-  if (!decision || !accepted || !continuation)
-    fail('accepted evidence requires --decision, --accepted-evidence, and --continuation-evidence (or env equivalents)');
+  if (!mutation && [decisionOverride, acceptedOverride, continuationOverride].some(Boolean))
+    fail('evidence_path_override_requires_mutation');
   return {
     mode: 'check',
     output,
-    manifest,
-    evidence: { decision, accepted, continuation },
+    manifest: manifestOverride ?? SIGNED_MANIFEST,
+    mutation,
+    evidence: {
+      decision: decisionOverride ?? DEFAULT_EVIDENCE_PATHS.decision,
+      accepted: acceptedOverride ?? DEFAULT_EVIDENCE_PATHS.accepted,
+      continuation:
+        continuationOverride ?? DEFAULT_EVIDENCE_PATHS.continuation,
+    },
   };
 }
 

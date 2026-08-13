@@ -11,6 +11,18 @@ const ACCEPTED_MANIFEST_RELATIVE =
 const REPO_ROOT = resolve(
   fileURLToPath(new URL('../../', import.meta.url)),
 );
+const CONTRACT_EVIDENCE_ROOT = resolve(REPO_ROOT, 'evidence/product-contract');
+const DEFAULT_EVIDENCE_PATHS = Object.freeze({
+  decision: resolve(CONTRACT_EVIDENCE_ROOT, 'human-gate-decision.json'),
+  accepted: resolve(
+    CONTRACT_EVIDENCE_ROOT,
+    'human-gate-product-contract-accepted.json',
+  ),
+  continuation: resolve(
+    CONTRACT_EVIDENCE_ROOT,
+    'mgr-b-human-gate-format-continuation.json',
+  ),
+});
 const EXPECTED = {
   decisionSha256:
     '57dcebed4bceef04e03eb485679d610a15ce6510e490feacbfead4c966ef13fd',
@@ -48,10 +60,40 @@ function requireSha(value, field) {
   return value;
 }
 
-function requiredPath(name) {
-  const value = process.env[name];
-  if (!value) fail(`missing_env:${name}`);
-  return value;
+function optionValue(names) {
+  for (let index = 0; index < process.argv.length; index += 1) {
+    if (!names.includes(process.argv[index])) continue;
+    const value = process.argv[index + 1];
+    if (!value || value.startsWith('--')) fail(`missing_option_value:${process.argv[index]}`);
+    return value;
+  }
+  return undefined;
+}
+
+function evidencePaths() {
+  const mutation =
+    process.argv.includes('--mutation') ||
+    process.env.PRODUCT_ACCEPTED_MUTATION === '1';
+  const overrides = {
+    decision:
+      optionValue(['--decision', '--decision-path']) ??
+      process.env.PRODUCT_ACCEPTED_DECISION_PATH,
+    accepted:
+      optionValue(['--accepted', '--accepted-path']) ??
+      process.env.PRODUCT_ACCEPTED_EVIDENCE_PATH,
+    continuation:
+      optionValue(['--continuation', '--continuation-path']) ??
+      process.env.PRODUCT_ACCEPTED_CONTINUATION_PATH,
+  };
+  if (!mutation && Object.values(overrides).some(Boolean))
+    fail('evidence_path_override_requires_mutation');
+  if (!mutation) return DEFAULT_EVIDENCE_PATHS;
+  return {
+    decision: overrides.decision ?? DEFAULT_EVIDENCE_PATHS.decision,
+    accepted: overrides.accepted ?? DEFAULT_EVIDENCE_PATHS.accepted,
+    continuation:
+      overrides.continuation ?? DEFAULT_EVIDENCE_PATHS.continuation,
+  };
 }
 
 async function readEvidence(path, label) {
@@ -202,9 +244,8 @@ function verifyFormatProvenance(value) {
 }
 
 async function main() {
-  const decisionPath = requiredPath('PRODUCT_ACCEPTED_DECISION_PATH');
-  const acceptedPath = requiredPath('PRODUCT_ACCEPTED_EVIDENCE_PATH');
-  const continuationPath = requiredPath('PRODUCT_ACCEPTED_CONTINUATION_PATH');
+  const { decision: decisionPath, accepted: acceptedPath, continuation: continuationPath } =
+    evidencePaths();
   const decisionBytes = await readEvidence(decisionPath, 'decision');
   const acceptedBytes = await readEvidence(acceptedPath, 'accepted');
   const continuationBytes = await readEvidence(continuationPath, 'continuation');

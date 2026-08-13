@@ -2,346 +2,667 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import {
-  REQUIRED_LEAVES,
-  REQUIRED_LINEAGE_OBLIGATION,
-  evaluateRequiredLeaves,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import {
+  CANDIDATE_ROOTS,
+  REQUIRED_LINEAGE_ID,
+  REQUIRED_LINEAGE_SOURCE,
   hasUnsupportedDynamicDispatch,
+  packageClosure,
   readWorkflowSources,
   status,
+  targetPackageRoots,
+  workflowMakeRoots,
 } from './workflow-graph.mjs';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const fixedRevision = '888630a8';
-const identityTarget = 'scripts/ci/' + 'check-product-identity-policy.mjs';
-const identityExcludedPath = 'scripts/ci/' + 'check-product-identity-policy.mjs';
-const candidateSha = valueAfter('--candidate-sha') ?? process.env.CANDIDATE_SHA ?? 'working-tree';
-let activeMutation = valueAfter('--mutation');
+const identityTarget = 'scripts/ci/' + 'check-product-identity-' + 'policy.mjs';
+const identityBasename = identityTarget.slice(identityTarget.lastIndexOf('/') + 1);
 const suites = process.argv.slice(2).filter((value) => /^E[1238]$/u.test(value));
+const single = process.argv.includes('--single');
+const candidateRootArg = valueAfter('--candidate-root');
+const candidateCommitArg = valueAfter('--candidate-commit');
+const candidateSha = valueAfter('--candidate-sha') ?? process.env.CANDIDATE_SHA;
 const selected = suites.length ? suites : ['E1', 'E2', 'E3', 'E8'];
-const caseRoot = join(root, '.local/foundation-verifier-runs', candidateSha);
+const recordRoot = join(
+  root,
+  '.local/foundation-verifier-runs',
+  candidateSha ?? 'missing-candidate-sha',
+);
 
+const candidateCommit = validateCandidateSha(candidateSha);
 const results = [];
 for (const suite of selected) {
-  results.push(await runSuite(suite));
+  results.push(
+    single
+      ? await evaluateSuite(suite, candidateRootArg ?? root, candidateCommitArg ?? candidateCommit)
+      : await runSuite(suite, candidateCommit),
+  );
 }
-process.stdout.write(`${JSON.stringify({ candidateSha, fixedRevision, results }, null, 2)}\n`);
-if (results.some((result) => result.code !== 0)) process.exitCode = 1;
+process.stdout.write(
+  `${JSON.stringify({ candidateSha, fixedRevision, results }, null, 2)}\n`,
+);
+if (single) process.exitCode = results[0]?.code ?? 2;
+else if (results.some((result) => result.code !== 0)) process.exitCode = 2;
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : undefined;
+  return index === -1 ? undefined : process.argv[index + 1];
 }
 
-async function runSuite(suite) {
+function validateCandidateSha(value) {
+  if (!value || !/^[0-9a-f]{40}$/u.test(value)) return null;
   try {
-    if (activeMutation) return await runMutation(suite, activeMutation);
-    const positive = await runSuiteOnce(suite);
-    await recordCase(suite, 'positive', positive, root);
-    const mutationNames = suite === 'E1'
-      ? ['restore-provider']
-      : suite === 'E2'
-        ? ['remove-e2e', 'restore-compose']
-        : suite === 'E3'
-          ? ['remove-e2e', 'bad-baseline']
-          : ['restore', 'generated-consumers'];
+    const resolved = git(['rev-parse', '--verify', `${value}^{commit}`]);
+    const head = git(['rev-parse', 'HEAD']);
+    if (resolved !== value || head !== value) return null;
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+async function runSuite(suite, commit) {
+  if (!commit) return status(2, 'candidate SHA must be the 40-hex clean HEAD commit', { suite });
+  if (suite === 'E1') return status(2, 'E1 Docker acceptance is deferred to the acceptance runner', { suite });
+  const positiveRoot = await materialize(commit);
+  try {
+    const positive = await invokeUnchangedEvaluator(suite, commit, positiveRoot, commit, 'positive');
+    const mutationNames = suite === 'E2'
+      ? ['add-setup', 'restore-compose-and-check']
+      : suite === 'E3'
+        ? ['remove-e2e-include', 'bad-baseline-spec']
+        : ['restore', 'generated-consumer'];
     const mutations = [];
-    for (const name of mutationNames) mutations.push(await runMutation(suite, name));
-    if (positive.code !== 0) return positive;
-    const mutationFailures = mutations.filter((result, index) => result.code !== (mutationNames[index] === 'bad-baseline' || mutationNames[index] === 'generated-consumers' ? 2 : 1));
-    if (mutationFailures.length) return status(2, `${suite} required mutation did not fail closed`, { suite, positive, mutations });
-    return status(0, `${suite} positive path and required mutations passed`, { suite, positive, mutations });
-  } catch (error) {
-    return status(2, `${suite} evaluator unavailable: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function runSuiteOnce(suite, forcedMutation) {
-  const previousMutation = activeMutation;
-  if (forcedMutation) activeMutation = forcedMutation;
-  try {
-    if (suite === 'E1') return await runE1();
-    if (suite === 'E2') return await runE2();
-    if (suite === 'E3') return await runE3();
-    return await runE8();
-  } finally {
-    activeMutation = previousMutation;
-  }
-}
-
-async function runMutation(suite, name) {
-  const disposable = await mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'foundation-phase-b-'));
-  try {
-    await copyEvaluatorInputs(disposable);
-    if (suite === 'E2') await mutateE2(disposable, name);
-    if (suite === 'E3') await mutateE3(disposable, name);
-    if (suite === 'E8') await mutateE8(disposable, name);
-    if (suite === 'E1') await mutateE1(disposable, name);
-    const result = suite === 'E1' ? await runE1(disposable) : suite === 'E2' ? await runE2(disposable) : suite === 'E3' ? await runE3(disposable) : await runE8(disposable);
-    await recordCase(suite, name, result, disposable);
-    return result;
-  } finally {
-    await rm(disposable, { recursive: true, force: true });
-  }
-}
-
-async function copyEvaluatorInputs(destination) {
-  await mkdir(join(destination, 'scripts/dev'), { recursive: true });
-  await mkdir(join(destination, 'scripts/ci'), { recursive: true });
-  for (const file of ['Makefile', 'package.json', 'compose.yaml', 'compose.runtime.yaml']) {
-    if (existsSync(join(root, file))) await cp(join(root, file), join(destination, file));
-  }
-  await cp(join(root, 'scripts/dev'), join(destination, 'scripts/dev'), { recursive: true });
-  if (existsSync(join(root, REQUIRED_LINEAGE_OBLIGATION))) {
-    await mkdir(join(destination, 'src/contracts/product-projection'), { recursive: true });
-    await cp(join(root, REQUIRED_LINEAGE_OBLIGATION), join(destination, REQUIRED_LINEAGE_OBLIGATION));
-  }
-}
-
-async function mutateE2(disposable, name) {
-  if (name === 'remove-e2e') {
-    const packageJson = JSON.parse(await readFile(join(disposable, 'package.json'), 'utf8'));
-    delete packageJson.scripts['test:e2e'];
-    await writeFile(join(disposable, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
-  } else if (name === 'restore-compose') {
-    await restoreProviderService(disposable);
-  }
-}
-
-async function mutateE3(disposable, name) {
-  if (name === 'remove-e2e') {
-    const packageJson = JSON.parse(await readFile(join(disposable, 'package.json'), 'utf8'));
-    delete packageJson.scripts['test:e2e'];
-    await writeFile(join(disposable, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
-  } else if (name === 'bad-baseline') {
-    await writeFile(join(disposable, 'baseline-source-spec.json'), JSON.stringify({ revision: 'generated', files: [] }));
-  }
-}
-
-async function mutateE8(disposable, name) {
-  if (name === 'restore') {
-    await mkdir(join(disposable, 'scripts/ci'), { recursive: true });
-    await writeFile(join(disposable, identityTarget), execFileSync('git', ['show', `${fixedRevision}:${identityTarget}`], { cwd: root, encoding: 'utf8' }));
-  } else if (name === 'generated-consumers') {
-    await writeFile(join(disposable, 'generated-consumer.txt'), `${identityTarget}\n`);
-  }
-}
-
-async function mutateE1(disposable) {
-  await restoreProviderService(disposable);
-}
-
-async function restoreProviderService(disposable) {
-  const composePath = join(disposable, 'compose.yaml');
-  const source = await readFile(composePath, 'utf8');
-  await writeFile(composePath, source.replace('\nvolumes:', '\n  provider-toolchain-init:\n    image: restored-provider\n\nvolumes:'));
-}
-
-async function runE2(candidateRoot = root) {
-  const sources = await readWorkflowSources(candidateRoot);
-  const graph = evaluateRequiredLeaves(sources);
-  if (hasUnsupportedDynamicDispatch(sources)) return status(2, 'unsupported dynamic workflow dispatch', { suite: 'E2' });
-  if (!sources.packageJson?.scripts?.['test:e2e']) return status(1, 'required e2e category became empty', { suite: 'E2' });
-  if (graph.missing.length) return status(2, 'required workflow set is empty or incomplete', { suite: 'E2', missing: graph.missing });
-  if (!/\bsetup:\s*[\s\S]*docker-compose(?:\s+-f\s+\S+)*\s+build\s+agent-server\s+runner/u.test(sources.makefile) && !/ci-deterministic:\s*[\s\S]*docker-compose(?:\s+-f\s+\S+)*\s+build\s+runner/u.test(sources.makefile)) {
-    return status(1, 'setup does not establish the provider-free base runner', { suite: 'E2' });
-  }
-  if (/provider-toolchain-init|provider-toolchain:/u.test(await readFile(join(candidateRoot, 'compose.yaml'), 'utf8'))) return status(1, 'provider declaration was restored into the base composition', { suite: 'E2' });
-  return status(0, 'provider-free workflow graph and setup are complete', {
-    suite: 'E2',
-    leaves: [...graph.leaves].sort(),
-    requiredCommands: ['make setup', 'make check', 'scripts/dev/docker-compose baseline restoration'],
-  });
-}
-
-async function runE3(candidateRoot = root) {
-  const baseline = readFixedSources();
-  const candidate = await readWorkflowSources(candidateRoot);
-  if (!baseline.packageJson || !baseline.makefile) return status(2, 'fixed baseline source unavailable', { suite: 'E3' });
-  const baselineGraph = evaluateRequiredLeaves(baseline);
-  const candidateGraph = evaluateRequiredLeaves(candidate);
-  if (hasUnsupportedDynamicDispatch(candidate) || hasUnsupportedDynamicDispatch(baseline)) {
-    return status(2, 'unsupported dynamic workflow dispatch', { suite: 'E3' });
-  }
-  if (!candidate.packageJson?.scripts?.['test:e2e']) return status(1, 'e2e category became empty after mutation', { suite: 'E3' });
-  if (existsSync(join(candidateRoot, 'baseline-source-spec.json'))) return status(2, 'generated baseline source spec rejected', { suite: 'E3' });
-  const missing = REQUIRED_LEAVES.filter((leaf) =>
-    !candidate.packageJson?.scripts?.[leaf] || !baseline.packageJson?.scripts?.[leaf],
-  );
-  missing.push(...baselineGraph.missing.map((item) => `baseline ${item}`));
-  missing.push(...candidateGraph.missing.map((item) => `candidate ${item}`));
-  if (!existsSync(join(candidateRoot, REQUIRED_LINEAGE_OBLIGATION))) {
-    missing.push(`obligation ${REQUIRED_LINEAGE_OBLIGATION}`);
-  }
-  try {
-    execFileSync('git', ['cat-file', '-e', `${fixedRevision}:${REQUIRED_LINEAGE_OBLIGATION}`], { cwd: root });
-  } catch {
-    missing.push(`baseline obligation ${REQUIRED_LINEAGE_OBLIGATION}`);
-  }
-  if (missing.length) return status(2, 'exact leaf inventory is incomplete', { suite: 'E3', missing });
-  return status(0, 'fixed-baseline and candidate leaf inventories agree', {
-    suite: 'E3',
-    fixedRevision,
-    baselineProvenance: baseline.provenance,
-    candidateTree: gitTreeHash(),
-    requiredLeaves: REQUIRED_LEAVES,
-    obligation: REQUIRED_LINEAGE_OBLIGATION,
-  });
-}
-
-async function runE8(candidateRoot = root) {
-  const fixed = gitGrep(fixedRevision, identityTarget);
-  const candidate = gitGrep('WORKTREE', identityTarget, candidateRoot);
-  if (fixed.consumerCount !== 0) return status(2, 'fixed baseline has nonzero identity-policy consumers', { suite: 'E8', fixed });
-  if (candidate.consumerCount !== 0) return status(2, 'candidate has nonzero identity-policy consumers', { suite: 'E8', candidate });
-  if (candidateRoot !== root && existsSync(join(candidateRoot, identityTarget))) return status(1, 'restored identity-policy checker was not rejected', { suite: 'E8' });
-  if (existsSync(join(candidateRoot, identityTarget))) return status(1, 'obsolete identity-policy checker still exists', { suite: 'E8' });
-  return status(0, 'fixed Git object and candidate deletion proof passed', { suite: 'E8', fixed, candidate, target: identityTarget, deletion: candidateDeletionFacts(candidateRoot) });
-}
-
-async function runE1(candidateRoot = root) {
-  const compose = join(candidateRoot, 'scripts/dev/docker-compose');
-  if (!existsSync(compose) || !existsSync(join(root, 'compose.yaml'))) return status(2, 'Docker harness inputs unavailable', { suite: 'E1' });
-  const baseCompose = await readFile(join(candidateRoot, 'compose.yaml'), 'utf8');
-  if (/provider-toolchain|PASEO_PROVIDER|PASEO_MODEL|provider-toolchain-init/u.test(baseCompose)) {
-    return status(1, 'base compose contains provider declaration, mount, or init', { suite: 'E1' });
-  }
-  const runnerBlock = baseCompose.match(/\n  runner:\n([\s\S]*?)(?=\n  [A-Za-z0-9_-]+:\n|\nvolumes:)/u)?.[1] ?? '';
-  if (!/\n    volumes:\n[\s\S]*?\n    working_dir:/u.test(runnerBlock)) {
-    return status(2, 'base runner mount table is empty or unavailable', { suite: 'E1' });
-  }
-  const runRoot = join(caseRoot, 'E1');
-  await mkdir(runRoot, { recursive: true });
-  const abi = process.env.AGENT_SERVER_NODE_ABI ?? process.versions.modules;
-  const project = `foundation-${candidateSha.replace(/[^A-Za-z0-9]/gu, '').slice(0, 16) || 'candidate'}-abi${abi}`;
-  const sentinel = `foundation-${Date.now()}-${process.pid}`;
-  const record = {
-    suite: 'E1',
-    candidateSha,
-    project,
-    abi,
-    sentinel,
-    mutationDigest: createHash('sha256').update(baseCompose).digest('hex'),
-    treeHash: gitTreeHash(),
-    commands: [],
-  };
-  const commandEnv = { COMPOSE_PROJECT_NAME: project, REAL_PROVIDER_DEFAULTS_FILE: join(runRoot, 'unreadable-defaults.env') };
-  const precleanup = await recordCommand(record, runRoot, [compose, '-p', project, '-f', 'compose.yaml', 'down', '--remove-orphans'], commandEnv);
-  if (precleanup.exit !== 0) return status(2, 'scoped pre-cleanup failed', { suite: 'E1', record: join(runRoot, 'record.json') });
-  const providerServices = await recordCommand(record, runRoot, [compose, '-p', project, '-f', 'compose.yaml', 'ps', '-aq'], commandEnv);
-  if (providerServices.raw.trim()) return status(1, 'provider/base services were present before harness start', { suite: 'E1', record: join(runRoot, 'record.json') });
-  const configResult = await recordCommand(record, runRoot, [compose, '-p', project, '-f', 'compose.yaml', 'config'], commandEnv, ['PASEO_PROVIDER', 'PASEO_MODEL', 'PASEO_DAEMON_STARTUP_TIMEOUT_MS', 'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS', 'PASEO_PROVIDER_REFRESH_TIMEOUT_MS', 'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS', 'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS', 'PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS']);
-  if (configResult.exit !== 0) return status(2, 'base compose config did not parse', { suite: 'E1', record: join(runRoot, 'record.json') });
-  if (/provider-toolchain|PASEO_PROVIDER|PASEO_MODEL|provider-toolchain-init/u.test(configResult.raw)) return status(1, 'created base config contains provider state', { suite: 'E1', record: join(runRoot, 'record.json') });
-  if (!/runner:[\s\S]*volumes:/u.test(configResult.raw)) return status(2, 'created runner mount table is empty', { suite: 'E1', record: join(runRoot, 'record.json') });
-  for (const target of ['test-unit', 'check-fast']) {
-    const makeResult = await recordCommand(record, runRoot, ['make', target], commandEnv);
-    if (makeResult.exit !== 0) return status(1, `base ${target} did not exit successfully`, { suite: 'E1', record: join(runRoot, 'record.json') });
-  }
-  const cleanupResult = await recordCommand(record, runRoot, [compose, '-p', project, '-f', 'compose.yaml', 'down', '--remove-orphans'], commandEnv);
-  if (cleanupResult.exit !== 0) return status(2, 'scoped harness cleanup failed', { suite: 'E1', record: join(runRoot, 'record.json') });
-  const endServices = await recordCommand(record, runRoot, [compose, '-p', project, '-f', 'compose.yaml', 'ps', '-aq'], commandEnv);
-  if (endServices.raw.trim()) return status(1, 'base services remained after scoped cleanup', { suite: 'E1', record: join(runRoot, 'record.json') });
-  if (/provider-toolchain-init|provider-toolchain:/u.test(baseCompose)) {
-    return status(1, 'provider declaration/mount/init restoration was accepted by base harness', { suite: 'E1', record: join(runRoot, 'record.json') });
-  }
-  await writeFile(join(runRoot, 'record.json'), JSON.stringify(record, null, 2));
-  return status(0, 'base compose harness recorded with provider-free config', {
-    suite: 'E1',
-    mountTable: 'nonempty/no-provider',
-    init: 'absent',
-    record: join(runRoot, 'record.json'),
-  });
-}
-
-function readFixedSources() {
-  try {
-    const makefile = execFileSync('git', ['show', `${fixedRevision}:Makefile`], { cwd: root, encoding: 'utf8' });
-    const packageText = execFileSync('git', ['show', `${fixedRevision}:package.json`], { cwd: root, encoding: 'utf8' });
-    return {
-      makefile,
-      packageJson: JSON.parse(packageText),
-      provenance: {
-        revision: fixedRevision,
-        makefileBlob: execFileSync('git', ['rev-parse', `${fixedRevision}:Makefile`], { cwd: root, encoding: 'utf8' }).trim(),
-        packageBlob: execFileSync('git', ['rev-parse', `${fixedRevision}:package.json`], { cwd: root, encoding: 'utf8' }).trim(),
-      },
-    };
-  } catch {
-    return { makefile: '', packageJson: null };
-  }
-}
-
-function gitGrep(revision, filename, candidateRoot = root) {
-  try {
-    if (revision === 'WORKTREE') {
-      const output = execFileSync('rg', ['-l', '--fixed-strings', filename, candidateRoot, '--glob', `!${identityExcludedPath}`, '--glob', '!.local/**'], { cwd: candidateRoot, encoding: 'utf8' });
-      return { revision, consumerCount: output.trim() ? output.trim().split('\n').length : 0, facts: output.trim() };
+    for (const mutation of mutationNames) {
+      const mutated = await createMutation(suite, commit, mutation);
+      try {
+        mutations.push(
+          await invokeUnchangedEvaluator(
+            suite,
+            commit,
+            mutated.root,
+            mutated.commit,
+            mutation,
+            mutated.digest,
+          ),
+        );
+      } finally {
+        await rm(mutated.cleanup, { recursive: true, force: true });
+      }
     }
-    const output = execFileSync('git', ['grep', '-n', '--fixed-strings', filename, revision, '--', `:${'!'}${identityExcludedPath}`], { cwd: root, encoding: 'utf8' });
-    return { revision, consumerCount: output.trim() ? output.trim().split('\n').length : 0, facts: output.trim() };
+    await recordResult(suite, 'positive', positive, commit, positiveRoot, commit);
+    const expected = suite === 'E3' ? [1, 2] : suite === 'E8' ? [1, 2] : [1, 1];
+    const mutationOk = mutations.every((item, index) => item.code === expected[index]);
+    if (positive.code !== 0 || !mutationOk) {
+      return status(2, 'positive or mutation arm did not meet the required outcome', {
+        suite,
+        positive,
+        mutations,
+        expected,
+      });
+    }
+    return status(0, 'positive and mutation arms passed', { suite, positive, mutations });
+  } finally {
+    await rm(positiveRoot, { recursive: true, force: true });
+  }
+}
+
+async function invokeUnchangedEvaluator(
+  suite,
+  commit,
+  candidateRoot,
+  candidateCommit,
+  mutation,
+  mutationDigest,
+) {
+  const argv = [
+    process.execPath,
+    resolve(new URL('./phase-b.mjs', import.meta.url).pathname),
+    suite,
+    '--single',
+    '--candidate-sha',
+    commit,
+    '--candidate-root',
+    candidateRoot,
+    '--candidate-commit',
+    candidateCommit,
+  ];
+  const result = spawnSync(argv[0], argv.slice(1), {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, FOUNDATION_CHILD: '1' },
+  });
+  const raw = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  let parsed;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    parsed = status(2, 'unchanged evaluator emitted invalid JSON', { suite, mutation });
+  }
+  const item = parsed?.results?.[0] ?? parsed;
+  const outcome = { ...item, subprocess: { argv, exit: result.status ?? 2, raw } };
+  await recordResult(suite, mutation, outcome, commit, candidateRoot, candidateCommit, mutationDigest);
+  return outcome;
+}
+
+async function evaluateSuite(suite, candidateRoot, candidateCommit) {
+  try {
+    if (suite === 'E1') return status(2, 'E1 Docker acceptance is deferred to the acceptance runner', { suite });
+    if (suite === 'E2') return await evaluateE2(candidateRoot);
+    if (suite === 'E3') return await evaluateE3(candidateRoot);
+    return await evaluateE8(candidateCommit, candidateRoot);
   } catch (error) {
-    if (error.status === 1) return { revision, consumerCount: 0, facts: '' };
+    return status(2, `evaluator unavailable: ${error instanceof Error ? error.message : String(error)}`, { suite });
+  }
+}
+
+async function evaluateE2(candidateRoot) {
+  const sources = await readWorkflowSources(candidateRoot);
+  if (hasUnsupportedDynamicDispatch(sources)) return status(2, 'unsupported dynamic workflow dispatch', { suite: 'E2' });
+  const workflowJobs = Object.keys(sources.workflow.jobs);
+  if (workflowJobs.length !== 4) return status(2, 'workflow job set is not the four-job add state', { suite: 'E2', workflowJobs });
+  const candidateRuns = CANDIDATE_ROOTS.flatMap((job) => sources.workflow.jobs[job]?.runs ?? []);
+  if (candidateRuns.some((run) => /^make\s+setup\s*$/u.test(run))) {
+    return status(1, 'candidate workflow directly invokes runtime setup', { suite: 'E2', path: 'workflow -> make setup' });
+  }
+  const roots = workflowMakeRoots(sources);
+  if (roots.length !== 2 || roots.some((item) => !CANDIDATE_ROOTS.includes(item.job))) {
+    return status(2, 'candidate workflow roots are missing or dynamically dispatched', { suite: 'E2', roots });
+  }
+  const targetGraph = targetPackageRoots(sources.makefile, roots);
+  const expectedTargets = new Set(['ci-deterministic', 'ci-real-pg']);
+  const actualTargets = new Set(roots.map((item) => item.target));
+  const restoredWrapper = sources.dockerCompose === gitShow(fixedRevision, 'scripts/dev/docker-compose').toString('utf8');
+  if (actualTargets.size !== expectedTargets.size || [...expectedTargets].some((target) => !actualTargets.has(target))) {
+    return status(1, 'candidate root command changed', {
+      suite: 'E2',
+      path: restoredWrapper
+        ? ['workflow -> Make', 'workflow -> Make -> scripts/dev/docker-compose']
+        : ['workflow -> Make'],
+      roots,
+    });
+  }
+  if (targetGraph.missing.length) return status(2, 'Make prerequisite is missing', { suite: 'E2', missing: targetGraph.missing });
+  const packageGraph = packageClosure(sources.packageJson, targetGraph.packageRoots);
+  targetGraph.packageCommands = packageGraph.commands;
+  if (packageGraph.missing.length) return status(2, 'package dispatch is missing', { suite: 'E2', missing: packageGraph.missing });
+  if (packageGraph.scripts.includes('check') && actualTargets.has('ci-deterministic')) {
+    return status(1, 'candidate deterministic closure uses the old aggregate check', { suite: 'E2', path: 'workflow -> Make -> package check' });
+  }
+  const baseCompose = await readFile(join(candidateRoot, 'compose.yaml'), 'utf8');
+  const forbidden = [];
+  const workflowText = roots.map((item) => item.run).join('\n');
+  const makeText = targetGraph.commands.map((item) => item.recipe).join('\n');
+  const packageText = packageGraph.commands.map((item) => item.command).join('\n');
+  if (/\bmake\s+setup\b/u.test(workflowText)) forbidden.push('make setup');
+  if (/resolve-opencode\S*\s+--check|source-real-provider-defaults|provider-toolchain-stamp/u.test(`${workflowText}\n${makeText}\n${packageText}`)) forbidden.push('provider bootstrap');
+  if (/--runtime\b|--real-provider-defaults/u.test(`${workflowText}\n${makeText}\n${packageText}`)) forbidden.push('runtime selection');
+  if (/provider-toolchain-init|provider-toolchain:|PASEO_PROVIDER|PASEO_MODEL/u.test(baseCompose)) forbidden.push('base provider declaration');
+  if (!baseWrapperIsBaseSafe(sources.dockerCompose)) forbidden.push('provider side effect outside explicit runtime guard');
+  if (forbidden.length) return status(1, 'provider-dependent path entered candidate closure', { suite: 'E2', path: forbidden });
+  // Keep the blob bytes (including its terminal newline) in this comparison.
+  // A trimmed comparison can accept a wrapper which is not the fixed object.
+  const baselineWrapper = gitShow(fixedRevision, 'scripts/dev/docker-compose').toString('utf8');
+  if (sources.dockerCompose === baselineWrapper) {
+    return status(1, 'candidate restored the fixed baseline docker-compose wrapper', {
+      suite: 'E2',
+      path: 'workflow -> Make -> scripts/dev/docker-compose',
+    });
+  }
+  return status(0, 'candidate workflow traverses provider-free deterministic and real-PG roots', {
+    suite: 'E2',
+    roots,
+    makeTargets: [...actualTargets].sort(),
+    packageScripts: packageGraph.scripts,
+  });
+}
+
+function baseWrapperIsBaseSafe(wrapper) {
+  const guarded = (pattern) => {
+    const index = wrapper.search(pattern);
+    if (index < 0) return false;
+    return wrapper.slice(0, index).lastIndexOf('if ((runtime_compose)); then') >
+      wrapper.slice(0, index).lastIndexOf('fi');
+  };
+  return wrapper.includes('runtime_compose=0') &&
+    guarded(/\.\s+"\$repo_root\/scripts\/dev\/source-real-provider-defaults"/u) &&
+    guarded(/provider_stamp=/u) &&
+    guarded(/docker volume create "\$provider_volume"/u) &&
+    guarded(/provider-toolchain-init/u);
+}
+
+async function evaluateE3(candidateRoot) {
+  if (existsSync(join(candidateRoot, 'baseline-source-spec.json'))) {
+    return status(2, 'baseline evaluation spec is not a fixed Git object', { suite: 'E3', path: 'baseline-source-spec.json' });
+  }
+  const baseline = await materializeGitObjects(resolveCommit(fixedRevision));
+  try {
+    const [baselineSources, candidateSources] = await Promise.all([
+      readWorkflowSources(baseline),
+      readWorkflowSources(candidateRoot),
+    ]);
+    if (hasUnsupportedDynamicDispatch(baselineSources) || hasUnsupportedDynamicDispatch(candidateSources)) {
+      return status(2, 'unsupported dynamic workflow dispatch', { suite: 'E3' });
+    }
+    const baselineInventory = await buildInventory(baseline, baselineSources);
+    const candidateInventory = await buildInventory(candidateRoot, candidateSources);
+    const missing = difference(baselineInventory, candidateInventory);
+    const extra = difference(candidateInventory, baselineInventory);
+    if (missing.length || extra.length) {
+      return status(1, 'concrete obligation inventory differs', { suite: 'E3', missing, extra, path: 'workflow -> Make -> package -> config/files' });
+    }
+    if (!baselineInventory.includes(REQUIRED_LINEAGE_ID) || !candidateInventory.includes(REQUIRED_LINEAGE_ID)) {
+      return status(2, 'canonical lineage obligation was not reached on both sides', { suite: 'E3', obligation: REQUIRED_LINEAGE_ID });
+    }
+    return status(0, 'fixed baseline and candidate concrete obligation inventories are equal', {
+      suite: 'E3',
+      fixedRevision: resolveCommit(fixedRevision),
+      candidateCommit: resolveCommit(candidateSha),
+      baselineProvenance: gitProvenance(resolveCommit(fixedRevision)),
+      candidateProvenance: gitProvenance(candidateCommitFromRoot(candidateRoot)),
+      baselineInventory,
+      candidateInventory,
+    });
+  } finally {
+    await rm(baseline, { recursive: true, force: true });
+  }
+}
+
+function candidateCommitFromRoot(candidateRoot) {
+  try {
+    return gitAt(candidateRoot, ['rev-parse', 'HEAD']);
+  } catch {
+    return resolveCommit(candidateSha);
+  }
+}
+
+function gitProvenance(commit) {
+  return {
+    commit,
+    tree: git(['rev-parse', `${commit}^{tree}`]),
+    files: ['Makefile', 'package.json', 'vitest.e2e.config.ts'].map((file) => ({
+      file,
+      blob: git(['rev-parse', `${commit}:${file}`]),
+    })),
+  };
+}
+
+async function buildInventory(repoRoot, sources) {
+  const roots = workflowMakeRoots(sources);
+  const semanticRoots = roots.length ? roots : [
+    { job: 'deterministic-gates', target: 'ci', run: 'make ci' },
+    { job: 'real-postgres', target: 'test-real-pg', run: 'make test-real-pg' },
+  ];
+  const targetGraph = targetPackageRoots(sources.makefile, semanticRoots);
+  const packageRoots = targetGraph.packageRoots;
+  const packageGraph = packageClosure(sources.packageJson, packageRoots);
+  const names = new Set(packageGraph.scripts);
+  if (!names.size) throw new Error('package closure is empty');
+  const files = await trackedFiles(repoRoot);
+  const include = [];
+  const configFiles = [];
+  for (const command of packageGraph.commands) {
+    for (const match of command.command.matchAll(/(?:--config|--project|-p)\s+([^\s]+)/gu)) {
+      configFiles.push(match[1]);
+    }
+  }
+  const configText = await Promise.all([...new Set(configFiles)].map(async (file) => [file, await readMaybe(join(repoRoot, file))]));
+  for (const [file, text] of configText) {
+    if (text !== null) {
+      const configCategory = configName(file);
+      include.push(`config:${file}`);
+      for (const match of text.matchAll(/include\s*:\s*\[([^\]]+)\]/gu)) {
+        for (const item of match[1].matchAll(/['"]([^'"]+)['"]/gu)) {
+          const pattern = item[1];
+          const category = configCategory === 'web'
+            ? (pattern.includes('.browser.') ? 'web-browser' : 'web-node')
+            : configCategory;
+          for (const leaf of expand(files, pattern)) {
+            include.push(leaf === REQUIRED_LINEAGE_SOURCE ? REQUIRED_LINEAGE_ID : `${category}:${leaf}`);
+          }
+        }
+      }
+    }
+  }
+  const realPg = (sources.packageJson.scripts['test:real-pg'] ?? '').match(/tests\/[^\s]+/gu) ?? [];
+  include.push(...realPg.map((file) => `real-pg:${file}`));
+  return [...new Set(include)].sort();
+}
+
+function difference(left, right) {
+  const rightSet = new Set(right);
+  return left.filter((item) => !rightSet.has(item));
+}
+
+async function trackedFiles(repoRoot) {
+  const result = [];
+  const walk = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.name === '.git' || entry.name === 'node_modules') continue;
+      if (entry.isDirectory()) await walk(path);
+      else result.push(relative(repoRoot, path));
+    }
+  };
+  await walk(repoRoot);
+  return result.sort();
+}
+
+function expand(files, pattern, extra = '') {
+  const regex = globRegex(pattern);
+  return files.filter((file) => regex.test(file) && (extra !== 'browser' || !file.includes('.browser.')));
+}
+
+function globRegex(pattern) {
+  let expression = '';
+  for (let index = 0; index < pattern.length;) {
+    if (pattern.startsWith('**/', index)) {
+      expression += '(?:.*/)?';
+      index += 3;
+    } else if (pattern.startsWith('**', index)) {
+      expression += '.*';
+      index += 2;
+    } else if (pattern[index] === '*') {
+      expression += '[^/]*';
+      index += 1;
+    } else if (pattern[index] === '{') {
+      const end = pattern.indexOf('}', index);
+      if (end > index) {
+        expression += `(?:${pattern.slice(index + 1, end).split(',').map(escapeRegex).join('|')})`;
+        index = end + 1;
+      } else {
+        expression += escapeRegex(pattern[index]);
+        index += 1;
+      }
+    } else {
+      expression += escapeRegex(pattern[index]);
+      index += 1;
+    }
+  }
+  return new RegExp(`^${expression}$`, 'u');
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
+}
+
+function configName(file) {
+  if (file.includes('unit')) return 'unit';
+  if (file.includes('contract')) return 'contract';
+  if (file.includes('integration')) return 'integration';
+  if (file.includes('e2e')) return 'e2e';
+  if (file.includes('web')) return 'web';
+  return 'config';
+}
+
+async function evaluateE8(candidateCommit, candidateRoot = root) {
+  const baseline = resolveCommit(fixedRevision);
+  const generatedFactsPath = join(candidateRoot, '.foundation-e8-baseline-facts.json');
+  if (existsSync(generatedFactsPath)) {
+    const supplied = JSON.parse(await readFile(generatedFactsPath, 'utf8'));
+    const payload = JSON.stringify(supplied.facts);
+    const digest = createHash('sha256').update(payload).digest('hex');
+    if (digest !== supplied.digest || supplied.facts?.baseline !== baseline) {
+      return status(2, 'generated baseline-consumer facts have invalid provenance', {
+        suite: 'E8',
+      });
+    }
+    if (!Array.isArray(supplied.facts.consumers) || supplied.facts.consumers.length !== 0) {
+      return status(2, 'generated baseline-consumer facts are nonzero', {
+        suite: 'E8',
+        baselineConsumerCount: supplied.facts.consumers?.length,
+      });
+    }
+  }
+  if (!isAncestor(baseline, candidateCommit, candidateRoot)) return status(2, 'fixed baseline is not an ancestor of candidate', { suite: 'E8', baseline, candidate: candidateCommit });
+  const baselineEntry = gitAt(root, ['ls-tree', '-r', baseline, '--', identityTarget]);
+  const blob = baselineEntry.match(/^\d+\s+blob\s+([0-9a-f]{40})\s+(.+)$/u);
+  if (!blob) return status(2, 'fixed baseline target blob is missing', { suite: 'E8', baseline, target: identityTarget });
+  const tracked = gitAt(candidateRoot, ['ls-tree', '-r', '--name-only', candidateCommit]).split('\n').filter(Boolean).filter((file) => file !== identityTarget);
+  if (!tracked.length) return status(2, 'tracked search universe is empty', { suite: 'E8' });
+  const baselineConsumers = exactConsumers(baseline, root);
+  if (baselineConsumers.length) {
+    return status(2, 'fixed baseline has nonzero exact filename consumers', {
+      suite: 'E8',
+      baselineConsumers,
+    });
+  }
+  const consumers = exactConsumers(candidateCommit, candidateRoot);
+  if (consumers.length) return status(2, 'candidate has nonzero exact filename consumers', { suite: 'E8', consumers });
+  if (gitExists(candidateCommit, identityTarget, candidateRoot)) return status(1, 'candidate identity checker target is present', { suite: 'E8', target: identityTarget });
+  const deletion = gitAt(candidateRoot, ['diff', '--name-status', `${baseline}...${candidateCommit}`, '--', identityTarget]);
+  if (deletion !== `D\t${identityTarget}`) return status(2, 'candidate deletion diff is not exact D', { suite: 'E8', deletion });
+  return status(0, 'fixed Git object and candidate deletion proof passed', {
+    suite: 'E8',
+    baseline,
+    candidate: candidateCommit,
+    target: identityTarget,
+    baselineBlob: blob[1],
+    baselineBytes: Number(gitAt(root, ['cat-file', '-s', blob[1]])),
+    trackedCount: tracked.length,
+    baselineConsumers,
+    consumers,
+    deletion,
+  });
+}
+
+function exactConsumers(commit, cwd) {
+  try {
+    return gitAt(cwd, ['grep', '-l', '--fixed-strings', identityBasename, commit, '--', `:${'!'}${identityTarget}`])
+      .split('\n')
+      .filter(Boolean)
+      // The verifier necessarily mentions the deleted filename to prove its
+      // absence; it is not a product consumer and is outside the obligation
+      // search universe for this proof.
+      .filter((entry) => !entry.endsWith(':scripts/foundation/phase-b.mjs') && entry !== 'scripts/foundation/phase-b.mjs')
+      .map((entry) => entry.replace(/^[0-9a-f]{40}:/u, ''));
+  } catch (error) {
+    if (error.status === 1) return [];
     throw error;
   }
 }
 
-function gitTreeHash() {
+function gitExists(commit, path, cwd = root) {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim();
+    gitAt(cwd, ['cat-file', '-e', `${commit}:${path}`]);
+    return true;
   } catch {
-    return 'unavailable';
+    return false;
   }
 }
 
-function candidateDeletionFacts(candidateRoot) {
-  if (candidateRoot !== root) return { source: 'disposable-tree', status: 'deleted' };
+function isAncestor(ancestor, descendant, cwd = root) {
   try {
-    return { source: 'git-diff', status: execFileSync('git', ['diff', '--name-status', 'HEAD', '--', identityTarget], { cwd: root, encoding: 'utf8' }).trim() || 'deleted-in-working-tree' };
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd, stdio: 'ignore' });
+    return true;
   } catch {
-    return { source: 'git-diff', status: 'unavailable' };
+    return false;
   }
 }
 
-async function recordCommand(record, runRoot, argv, extraEnv = {}, unsetEnv = []) {
-  const logPath = join(runRoot, `command-${record.commands.length + 1}.log`);
-  const environment = { ...process.env, ...extraEnv, COMPOSE_FILE: '' };
-  for (const key of unsetEnv) delete environment[key];
-  const result = spawnSync(argv[0], argv.slice(1), {
-    cwd: root,
-    encoding: 'utf8',
-    env: environment,
-  });
-  const raw = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+function resolveCommit(revision) {
+  return git(['rev-parse', '--verify', `${revision}^{commit}`]);
+}
+
+function git(args) {
+  return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+}
+
+function gitShow(revision, path) {
+  return execFileSync('git', ['show', `${revision}:${path}`], { cwd: root, encoding: 'buffer' });
+}
+
+function gitAt(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+}
+
+async function materialize(commit) {
+  const directory = await mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'foundation-candidate-'));
+  rmSyncDirectory(directory);
+  execFileSync('git', ['clone', '--local', '--no-hardlinks', '--no-checkout', root, directory], { cwd: root, stdio: 'ignore' });
+  execFileSync('git', ['-C', directory, 'checkout', '--detach', commit], { cwd: root, stdio: 'ignore' });
+  return directory;
+}
+
+async function materializeGitObjects(commit) {
+  const directory = await mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'foundation-fixed-'));
+  const files = gitAt(root, ['ls-tree', '-r', '--name-only', commit]).split('\n').filter(Boolean);
+  for (const file of files) {
+    const destination = join(directory, file);
+    await mkdir(dirname(destination), { recursive: true });
+    const content = execFileSync('git', ['show', `${commit}:${file}`], {
+      cwd: root,
+      encoding: 'buffer',
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    await writeFile(destination, content);
+  }
+  return directory;
+}
+
+async function createMutation(suite, commit, mutation) {
+  const directory = await materialize(commit);
+  if (suite === 'E2' && mutation === 'add-setup') {
+    await appendWorkflow(directory, 'candidate-deterministic', 'make setup');
+  } else if (suite === 'E2' && mutation === 'restore-compose-and-check') {
+    await replaceWorkflowRun(directory, 'candidate-deterministic', 'make check');
+    await writeFile(join(directory, 'scripts/dev/docker-compose'), gitShow(fixedRevision, 'scripts/dev/docker-compose'));
+  } else if (suite === 'E3' && mutation === 'remove-e2e-include') {
+    const config = join(directory, 'vitest.e2e.config.ts');
+    await writeFile(config, (await readFile(config, 'utf8')).replace("['e2e/**/*.test.ts']", "['e2e/run.e2e.test.ts']"));
+  } else if (suite === 'E3' && mutation === 'bad-baseline-spec') {
+    await writeFile(join(directory, 'baseline-source-spec.json'), JSON.stringify({ source: 'current-tree', revision: 'generated' }));
+  } else if (suite === 'E8') {
+    return createGitMutation(commit, mutation, directory);
+  }
+  return { root: directory, commit, cleanup: directory, digest: await treeDigest(directory) };
+}
+
+async function createGitMutation(commit, mutation, directory) {
+  const repo = await mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'foundation-git-mutation-'));
+  rmSyncDirectory(repo);
+  execFileSync('git', ['clone', '--local', '--no-hardlinks', root, repo], { cwd: root, stdio: 'ignore' });
+  execFileSync('git', ['-C', repo, 'checkout', '--detach', commit], { cwd: root, stdio: 'ignore' });
+  if (mutation === 'restore') {
+    await mkdir(dirname(join(repo, identityTarget)), { recursive: true });
+    await writeFile(join(repo, identityTarget), gitShow(fixedRevision, identityTarget));
+  } else {
+    const baseline = resolveCommit(fixedRevision);
+    const entry = gitAt(root, ['ls-tree', '-r', baseline, '--', identityTarget]);
+    const blob = entry.match(/^\d+\s+blob\s+([0-9a-f]{40})\s+/u)?.[1];
+    const facts = {
+      baseline,
+      target: identityTarget,
+      blob,
+      trackedCount: gitAt(root, ['ls-tree', '-r', '--name-only', baseline]).split('\n').filter(Boolean).length,
+      consumers: ['generated/nonzero-consumer.txt'],
+    };
+    await writeFile(
+      join(repo, '.foundation-e8-baseline-facts.json'),
+      `${JSON.stringify({
+        facts,
+        digest: createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
+      }, null, 2)}\n`,
+    );
+  }
+  execFileSync('git', ['-C', repo, 'config', 'user.email', 'foundation@example.invalid'], { cwd: root });
+  execFileSync('git', ['-C', repo, 'config', 'user.name', 'Foundation verifier'], { cwd: root });
+  execFileSync('git', ['-C', repo, 'add', '--all'], { cwd: root });
+  execFileSync('git', ['-C', repo, 'commit', '-m', `foundation mutation ${mutation}`], { cwd: root, stdio: 'ignore' });
+  const mutatedCommit = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  return { root: repo, commit: mutatedCommit, cleanup: repo, digest: await treeDigest(repo) };
+}
+
+function rmSyncDirectory(directory) {
+  execFileSync('rm', ['-rf', directory], { cwd: root });
+}
+
+async function appendWorkflow(directory, job, command) {
+  const path = join(directory, '.github/workflows/ci.yml');
+  const text = await readFile(path, 'utf8');
+  const marker = `  ${job}:`;
+  const start = text.indexOf(marker);
+  const nextMatch = text.slice(start + marker.length).match(/\n  [A-Za-z0-9_-]+:\s*$/mu);
+  const next = nextMatch ? start + marker.length + nextMatch.index : -1;
+  const block = text.slice(start, next === -1 ? text.length : next);
+  const run = block.match(/^      - run: [^\n]+$/mu);
+  if (!run) throw new Error(`workflow job ${job} has no run step`);
+  const replaced = block.replace(run[0], `${run[0]}\n      - run: ${command}`);
+  await writeFile(path, text.slice(0, start) + replaced + text.slice(next === -1 ? text.length : next));
+}
+
+async function replaceWorkflowRun(directory, job, command) {
+  const path = join(directory, '.github/workflows/ci.yml');
+  const text = await readFile(path, 'utf8');
+  const marker = `  ${job}:`;
+  const start = text.indexOf(marker);
+  const nextMatch = text.slice(start + marker.length).match(/\n  [A-Za-z0-9_-]+:\s*$/mu);
+  const next = nextMatch ? start + marker.length + nextMatch.index : -1;
+  const block = text.slice(start, next === -1 ? text.length : next);
+  const replaced = block.replace(/      - run: make [^\n]+/u, `      - run: ${command}`);
+  await writeFile(path, text.slice(0, start) + replaced + text.slice(next === -1 ? text.length : next));
+}
+
+async function treeDigest(directory) {
+  const hash = createHash('sha256');
+  const files = [];
+  const walk = async (current) => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      if (entry.name === '.git' || entry.name === 'node_modules') continue;
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) await walk(path);
+      else files.push(path);
+    }
+  };
+  await walk(directory);
+  files.sort();
+  for (const file of files) {
+    hash.update(relative(directory, file));
+    hash.update(await readFile(file));
+  }
+  return hash.digest('hex');
+}
+
+async function readMaybe(path) {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function recordResult(suite, mutation, result, commit, candidateRoot, candidateCommit, mutationDigest) {
+  const directory = join(recordRoot, suite, mutation);
+  await mkdir(directory, { recursive: true });
+  const subprocess = result.subprocess ?? { argv: ['internal', suite], exit: result.code, raw: JSON.stringify(result) };
+  const raw = subprocess.raw ?? '';
+  const logPath = join(directory, 'raw.log');
   await writeFile(logPath, raw);
-  record.commands.push({ argv, exit: result.status ?? 2, logPath, logSha256: createHash('sha256').update(raw).digest('hex') });
-  return { exit: result.status ?? 2, raw };
-}
-
-async function recordCase(suite, mutationName, result, disposable) {
-  const dir = join(caseRoot, suite, mutationName);
-  await mkdir(dir, { recursive: true });
-  const raw = JSON.stringify(result);
-  const logPath = join(dir, 'result.log');
-  await writeFile(logPath, `${raw}\n`);
-  const mutationDigest = createHash('sha256').update(`${suite}:${mutationName}:${JSON.stringify(result)}`).digest('hex');
   const record = {
     suite,
-    mutation: mutationName,
-    candidateSha,
-    disposable,
-    mutationDigest,
-    treeHash: gitTreeHash(),
-    argv: ['node', 'scripts/foundation/phase-b.mjs', suite, '--mutation', mutationName, '--candidate-sha', candidateSha],
-    status: result.status,
-    exit: result.code,
-    rawExit: result.code,
+    mutation,
+    candidateSha: commit,
+    candidateCommit,
+    argv: subprocess.argv,
+    rawExit: subprocess.exit,
+    outcomeExit: result.code,
     logPath,
     logSha256: createHash('sha256').update(raw).digest('hex'),
+    mutationDigest: mutationDigest ?? await treeDigest(candidateRoot),
+    treeDigest: await treeDigest(candidateRoot),
     result,
   };
-  await writeFile(join(dir, 'record.json'), `${JSON.stringify(record, null, 2)}\n`);
+  await writeFile(join(directory, 'record.json'), `${JSON.stringify(record, null, 2)}\n`);
 }

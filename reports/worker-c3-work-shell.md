@@ -151,3 +151,27 @@ classifier process 2 with the exact kind marker. Full evidence is under
 The prior real a3/b4/c2/d2 behavior arms remain the invariant evidence: each
 exited 1 at its intended assertion and was not absence-classified. This report
 does not self-sign ACCEPT.
+
+## O-H16 classifier review-fix
+
+Oracle-requested review fixes are in commit
+`51c102f6806f06fb2458f7ae51ef25b4fa6446f8` (parent
+`b4c8ec1838251bb9eb74a072f3fe2cc7cfdb87cd`). The classifier now preserves raw
+Buffer forwarding, rejects all contradictory reserved namespace lines, enforces
+strict CLI syntax, and emits absence evidence only after safe nonzero child
+status plus a second structural absence check. Runner raw 0, spawn error,
+null-status, signal, and restored-input cases do not emit markers and resolve
+to process 1.
+
+Updated C-box evidence is in
+`artifacts/c3-work-shell/e8-classifier-51c102f/`: 10/10 updated duals passed,
+and both real absence arms remained raw exit 1 / classifier exit 2 with restore
+proof. Exact review-fix blobs were executed from isolated remote directory
+because committed-only sync is still blocked by pre-existing remote dirty
+paths; candidate HEAD stayed unchanged.
+
+The historical range check
+`git diff 01dce6d89baa89d21180159c5be8b0a5f1446f74..b4c8ec1838251bb9eb74a072f3fe2cc7cfdb87cd --check`
+returns exit 2 due preserved raw ANSI evidence whitespace. Only source/tests
+and report paths were checked separately; this report does not claim a full
+range PASS or self-sign ACCEPT.

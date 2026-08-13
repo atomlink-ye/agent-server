@@ -19,7 +19,8 @@ Status: C-owned implementation complete. Stop condition: none; all requested reg
 ## Commits
 
 - 028c2ec8d929557e33ccdf16550b08fe7f17851d — fix(frontend): align B0 B1 B2 B5 B8 trace visuals; stop condition none — 4 files, 127 insertions(+), 128 deletions(-).
-- Report commit will be recorded below after the report files are added.
+- fdefa2d6e374bb2cd399b2093120d6cac1e22912 — docs(frontend): record B0 B1 B2 B5 B8 parity evidence — 1 file, 38 insertions(+).
+- Final report correction is included in the handoff commit; its full SHA/diffstat is recorded in the handoff message.
 
 ## Exact files
 
@@ -35,4 +36,3 @@ Status: C-owned implementation complete. Stop condition: none; all requested reg
 - C-owned paths: clean after the implementation commit; reports are the only pending C-owned paths until report commit.
 - Global status exception: artifacts/c2-trace-ui/ is an existing untracked C2-owned artifact directory. It was preserved exactly and was not added, committed, deleted, moved, or inspected for content.
 - No package, lockfile, contract, fixture, test, design repository, or unrelated file was changed.
-

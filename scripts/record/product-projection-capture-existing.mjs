@@ -32,6 +32,7 @@ function parseArgs(argv) {
     '--root-task-id',
     '--work-id',
     '--work-run-id',
+    '--capture-git-sha',
   ]);
   const parsed = {};
   for (let index = 0; index < argv.length; index += 2) {
@@ -95,11 +96,8 @@ async function validatedOutputRoot(value) {
   return outputRoot;
 }
 
-function readGitRevision() {
-  const revision = requiredEnvironment(
-    'capture_git_sha',
-    'PRODUCT_CAPTURE_GIT_SHA',
-  );
+function readGitRevision(value) {
+  const revision = value?.trim();
   if (!/^[0-9a-f]{40}$/u.test(revision)) fail('git_revision_missing');
   return revision;
 }
@@ -300,7 +298,7 @@ async function main() {
       principalType,
       principalId,
     );
-    const serviceRevision = readGitRevision();
+    const serviceRevision = readGitRevision(args['--capture-git-sha']);
     const product = await acceptedGet(
       baseUrl,
       ownerToken,

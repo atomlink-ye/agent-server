@@ -17,6 +17,8 @@ const queryTruthSourceDiffs = [];
 const ddlTruthSourceDiffs = [];
 const classifiedRuntimeTables = new Set();
 const typedRuntimeTables = new Set();
+let compilerIdentity = null;
+const astRepositoryFacts = [];
 
 function fail(code, detail) { failures.push({ code, detail }); }
 function read(file) { return fs.readFileSync(path.join(sourceRoot, file), 'utf8'); }
@@ -148,6 +150,9 @@ function checkRepositories() {
   const lockRows = new Set((ledger.sourceLockRows ?? ledger.lockRows ?? []).map((x) => `${x.file}:${x.line}`));
   for (const file of files) {
     const sourceFile = `src/infrastructure/postgres/${file}`; const source = read(sourceFile); const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile); const ast = deriveTransactions(source, file); const astCalls = ast.rawCalls; const astTypedCalls = ast.typedCalls; counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length;
+    compilerIdentity ??= ast.compilerIdentity;
+    if (ast.sourceHash !== crypto.createHash('sha256').update(source).digest('hex')) fail('ast_source_hash_MISMATCH', file);
+    astRepositoryFacts.push({ file, calls: ast.calls.map(({ node, ...call }) => call) });
     if (astCalls.length !== calls.length) fail('ast_raw_query_call_site_reconciliation', { file, ast: astCalls.length, raw: calls.length });
     if (astTypedCalls.length !== typedCalls.length) fail('ast_typed_query_call_site_reconciliation', { file, ast: astTypedCalls.length, typed: typedCalls.length });
     const astByLine = new Map(astCalls.map((call) => [call.line, call]));
@@ -323,8 +328,46 @@ function checkCrossCapability() {
   }
 }
 
+function checkTransactionFixtures() {
+  const fixtures = {};
+  const lark = astRepositoryFacts.find((entry) => entry.file === 'postgres-lark-review-surface-repository.ts');
+  const larkGroups = new Map();
+  for (const call of lark?.calls ?? []) if (call.withTransactionScope) {
+    const group = larkGroups.get(call.withTransactionScope) ?? [];
+    group.push(call);
+    larkGroups.set(call.withTransactionScope, group);
+  }
+  const larkPair = [...larkGroups.values()].find((group) => group.filter((call) => call.transaction === 'in').length >= 2);
+  fixtures.larkWithTransactionPair = larkPair ? larkPair.filter((call) => call.transaction === 'in').slice(0, 2).map((call) => `${call.file}:${call.line}`) : [];
+  if (fixtures.larkWithTransactionPair.length !== 2) fail('fixture_lark_withTransaction_pair_MISSING', fixtures.larkWithTransactionPair);
+
+  const channel = astRepositoryFacts.find((entry) => entry.file === 'postgres-channel-repository.ts');
+  const channelGroups = new Map();
+  for (const call of channel?.calls ?? []) if (call.withTransactionScope) {
+    const group = channelGroups.get(call.withTransactionScope) ?? [];
+    group.push(call);
+    channelGroups.set(call.withTransactionScope, group);
+  }
+  const channelPair = [...channelGroups.values()].find((group) => group.filter((call) => call.transaction === 'in').length >= 2);
+  fixtures.channelWithTransactionPair = channelPair ? channelPair.filter((call) => call.transaction === 'in').slice(0, 2).map((call) => `${call.file}:${call.line}`) : [];
+  if (fixtures.channelWithTransactionPair.length !== 2) fail('fixture_channel_withTransaction_pair_MISSING', fixtures.channelWithTransactionPair);
+  const channelCross = channel?.calls.find((call) => call.typed && call.transaction === 'in' && ledger.typedCrossCapability?.[`${call.file}:${call.line}`]);
+  fixtures.channelTypedCross = channelCross ? `${channelCross.file}:${channelCross.line}` : null;
+  if (!fixtures.channelTypedCross) fail('fixture_channel_typed_cross_MISSING', fixtures.channelTypedCross);
+
+  const collaborative = astRepositoryFacts.find((entry) => entry.file === 'postgres-collaborative-team-repository.ts');
+  const explicitIn = (collaborative?.calls ?? []).filter((call) => call.transaction === 'in' && !call.withTransactionScope && call.explicitControls.beginBefore && call.explicitControls.controlAfter && call.receiver === 'client');
+  fixtures.collaborativeExplicitLater = explicitIn.length ? `${explicitIn.at(-1).file}:${explicitIn.at(-1).line}` : null;
+  fixtures.collaborativeExplicitEarlier = explicitIn.length ? `${explicitIn[0].file}:${explicitIn[0].line}` : null;
+  if (!fixtures.collaborativeExplicitLater) fail('fixture_collaborative_explicit_later_MISSING', fixtures.collaborativeExplicitLater);
+  if (!fixtures.collaborativeExplicitEarlier) fail('fixture_collaborative_explicit_earlier_MISSING', fixtures.collaborativeExplicitEarlier);
+  if (ledger.transactionTruthSource) fail('manual_transaction_truth_source_MUST_REMOVE', { knownOut: ledger.transactionTruthSource.knownOut ?? [] });
+  return fixtures;
+}
+
 checkRepositories(); checkDdl(); checkPorts(); checkContracts(); checkCrossCapability();
+const fixtureMarkers = checkTransactionFixtures();
 const gitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
-const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, counts, truthSourceDiffs: { ddl: ddlTruthSourceDiffs, query: queryTruthSourceDiffs }, failures };
+const result = { ok: failures.length === 0, candidate: process.env.OWNERSHIP_CANDIDATE_SHA ?? gitSha, compilerIdentity, fixtureMarkers, counts, truthSourceDiffs: { ddl: ddlTruthSourceDiffs, query: queryTruthSourceDiffs }, failures };
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = failures.length ? 2 : 0;

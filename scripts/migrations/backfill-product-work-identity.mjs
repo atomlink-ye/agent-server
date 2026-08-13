@@ -23,7 +23,10 @@ if (!connectionString) {
       `[backfill] complete inserted=${result.inserted} reused=${result.reused} conflicts=${result.conflicts}`,
     );
   } catch (error) {
-    console.error('[backfill] failed:', error instanceof Error ? error.message : error);
+    console.error(
+      '[backfill] failed:',
+      error instanceof Error ? error.message : error,
+    );
     process.exitCode = 1;
   } finally {
     await pool.end();
@@ -64,7 +67,12 @@ async function loadTeamRuns(pool, cursor, limit) {
   const values = [];
   let where = 'tr.root_task_id IS NOT NULL';
   if (cursor) {
-    values.push(cursor.tenant_id, cursor.workspace_id, cursor.created_at, cursor.id);
+    values.push(
+      cursor.tenant_id,
+      cursor.workspace_id,
+      cursor.created_at,
+      cursor.id,
+    );
     where += ` AND (tr.tenant_id, tr.workspace_id, tr.created_at, tr.id)
       > ($${values.length - 3}, $${values.length - 2}, $${values.length - 1}, $${values.length})`;
   }
@@ -83,7 +91,9 @@ async function loadTeamRuns(pool, cursor, limit) {
   );
   const invalid = result.rows.find((row) => !row.workspace_uuid);
   if (invalid)
-    throw new Error(`Backfill preflight conflict: legacy workspace ${invalid.workspace_id} is not a UUID workspace in tenant ${invalid.tenant_id}.`);
+    throw new Error(
+      `Backfill preflight conflict: legacy workspace ${invalid.workspace_id} is not a UUID workspace in tenant ${invalid.tenant_id}.`,
+    );
   return result.rows;
 }
 
@@ -97,7 +107,8 @@ async function inspectBatch(pool, rows) {
     else if (identityMatches(identity, row)) reused += 1;
     else conflicts += 1;
   }
-  if (conflicts > 0) throw new Error('Backfill conflict detected during dry-run.');
+  if (conflicts > 0)
+    throw new Error('Backfill conflict detected during dry-run.');
   return { inserted, reused, conflicts };
 }
 
@@ -148,7 +159,10 @@ async function writeOne(client, row) {
        FROM works WHERE id=$1`,
     [workId],
   );
-  if (!existingWork.rows[0] || !workEquivalent(existingWork.rows[0], row, workId)) {
+  if (
+    !existingWork.rows[0] ||
+    !workEquivalent(existingWork.rows[0], row, workId)
+  ) {
     throw new Error(`work identity conflict for legacy team run ${row.id}`);
   }
 
@@ -177,7 +191,10 @@ async function writeOne(client, row) {
        FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2 AND idempotency_key=$3`,
     [row.tenant_id, row.workspace_uuid, idempotencyKey],
   );
-  if (!existingRun.rows[0] || !runEquivalent(existingRun.rows[0], row, workId, workRunId, idempotencyKey)) {
+  if (
+    !existingRun.rows[0] ||
+    !runEquivalent(existingRun.rows[0], row, workId, workRunId, idempotencyKey)
+  ) {
     throw new Error(`work run identity conflict for legacy team run ${row.id}`);
   }
 
@@ -186,7 +203,14 @@ async function writeOne(client, row) {
        (work_run_id,tenant_id,workspace_id,slot,resource_kind,requested_ref,resolved_version_id,resolved_fingerprint,resolved_at)
      VALUES ($1,$2,$3,'definition','definition',$4,$5,NULL,$6)
      ON CONFLICT (work_run_id,slot) DO NOTHING`,
-    [workRunId, row.tenant_id, row.workspace_uuid, `team_version:${row.team_version_id}`, row.team_version_id, createdAt],
+    [
+      workRunId,
+      row.tenant_id,
+      row.workspace_uuid,
+      `team_version:${row.team_version_id}`,
+      row.team_version_id,
+      createdAt,
+    ],
   );
   const existingManifest = await client.query(
     `SELECT slot,resource_kind,requested_ref,resolved_version_id,resolved_fingerprint,resolved_at
@@ -253,18 +277,19 @@ function identityMatches(identity, row) {
     identity.trigger_kind === 'manual' &&
     identity.trigger_ref === triggerRef &&
     identity.idempotency_key === sha256(`${workId}\0manual\0${triggerRef}`) &&
-    identity.root_task_id === row.root_task_id
-    && asIso(identity.expires_at) === asIso(row.created_at)
-    && asIso(identity.bound_at) === asIso(row.created_at)
-    && asIso(identity.run_created_at) === asIso(row.created_at)
-    && asIso(identity.run_updated_at) === asIso(row.created_at)
-    && identity.manifest.length === 1
-    && identity.manifest[0].slot === 'definition'
-    && identity.manifest[0].resource_kind === 'definition'
-    && identity.manifest[0].requested_ref === `team_version:${row.team_version_id}`
-    && identity.manifest[0].resolved_version_id === row.team_version_id
-    && identity.manifest[0].resolved_fingerprint === null
-    && asIso(identity.manifest[0].resolved_at) === asIso(row.created_at)
+    identity.root_task_id === row.root_task_id &&
+    asIso(identity.expires_at) === asIso(row.created_at) &&
+    asIso(identity.bound_at) === asIso(row.created_at) &&
+    asIso(identity.run_created_at) === asIso(row.created_at) &&
+    asIso(identity.run_updated_at) === asIso(row.created_at) &&
+    identity.manifest.length === 1 &&
+    identity.manifest[0].slot === 'definition' &&
+    identity.manifest[0].resource_kind === 'definition' &&
+    identity.manifest[0].requested_ref ===
+      `team_version:${row.team_version_id}` &&
+    identity.manifest[0].resolved_version_id === row.team_version_id &&
+    identity.manifest[0].resolved_fingerprint === null &&
+    asIso(identity.manifest[0].resolved_at) === asIso(row.created_at)
   );
 }
 
@@ -276,10 +301,10 @@ function workEquivalent(work, row, workId) {
     work.definition_id === row.definition_id &&
     work.current_definition_version_id === row.team_version_id &&
     work.title === `Backfilled work ${row.id}` &&
-    work.origin === 'backfilled'
-    && work.archived_at === null
-    && asIso(work.created_at) === asIso(row.created_at)
-    && asIso(work.updated_at) === asIso(row.created_at)
+    work.origin === 'backfilled' &&
+    work.archived_at === null &&
+    asIso(work.created_at) === asIso(row.created_at) &&
+    asIso(work.updated_at) === asIso(row.created_at)
   );
 }
 
@@ -294,11 +319,11 @@ function runEquivalent(run, row, workId, workRunId, idempotencyKey) {
     run.trigger_kind === 'manual' &&
     run.trigger_ref === `backfill:${row.id}` &&
     run.idempotency_key === idempotencyKey &&
-    run.root_task_id === row.root_task_id
-    && asIso(run.expires_at) === asIso(row.created_at)
-    && asIso(run.bound_at) === asIso(row.created_at)
-    && asIso(run.created_at) === asIso(row.created_at)
-    && asIso(run.updated_at) === asIso(row.created_at)
+    run.root_task_id === row.root_task_id &&
+    asIso(run.expires_at) === asIso(row.created_at) &&
+    asIso(run.bound_at) === asIso(row.created_at) &&
+    asIso(run.created_at) === asIso(row.created_at) &&
+    asIso(run.updated_at) === asIso(row.created_at)
   );
 }
 

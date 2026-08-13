@@ -1,12 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  chmod,
-  mkdir,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { chmod, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const REQUIRED_TABLES = Object.freeze([
@@ -30,15 +23,142 @@ const OWNER_COLUMNS = Object.freeze([
   'principal_id',
 ]);
 const SAFE_COLUMNS = Object.freeze({
-  works: ['id', 'tenant_id', 'workspace_id', 'definition_id', 'current_definition_version_id', 'title', 'origin', 'archived_at', 'created_at', 'updated_at'],
-  work_runs: ['id', 'tenant_id', 'workspace_id', 'work_id', 'definition_version_id', 'trigger_kind', 'trigger_ref', 'root_task_id', 'expires_at', 'bound_at', 'created_at', 'updated_at'],
-  team_runs: ['id', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'root_task_id', 'root_run_id', 'status', 'phase', 'created_at', 'updated_at', 'revision', 'control_state', 'stop_reason'],
-  team_member_runs: ['id', 'team_run_id', 'name', 'role', 'agent_version_id', 'runtime_session_id', 'status', 'current_work_item_id', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'created_at', 'updated_at'],
-  team_work_items: ['id', 'team_run_id', 'subject', 'description', 'status', 'owner_member_id', 'created_by_member_id', 'execution_task_id', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'created_at', 'updated_at', 'completed_at'],
-  team_work_item_attempts: ['id', 'work_item_id', 'team_run_id', 'attempt_no', 'assignee_member_id', 'requested_by_lead_task_id', 'execution_task_id', 'status', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'created_at', 'updated_at', 'completed_at'],
-  team_work_item_dependencies: ['team_run_id', 'work_item_id', 'depends_on_work_item_id', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'created_at'],
-  team_messages: ['id', 'team_run_id', 'tenant_id', 'workspace_id', 'principal_type', 'principal_id', 'sequence', 'sender_member_run_id', 'recipient_member_run_id', 'work_item_id', 'attempt_id', 'kind', 'dedup_key', 'status', 'consumed_by_task_id', 'created_at', 'consumed_at'],
-  tasks: ['id', 'tenant_id', 'root_task_id', 'parent_task_id', 'parent_run_id', 'depth', 'status', 'created_at', 'updated_at', 'team_member_run_id', 'team_sequence', 'team_task_kind', 'source_team_message_id'],
+  works: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'definition_id',
+    'current_definition_version_id',
+    'title',
+    'origin',
+    'archived_at',
+    'created_at',
+    'updated_at',
+  ],
+  work_runs: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'work_id',
+    'definition_version_id',
+    'trigger_kind',
+    'trigger_ref',
+    'root_task_id',
+    'expires_at',
+    'bound_at',
+    'created_at',
+    'updated_at',
+  ],
+  team_runs: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'root_task_id',
+    'root_run_id',
+    'status',
+    'phase',
+    'created_at',
+    'updated_at',
+    'revision',
+    'control_state',
+    'stop_reason',
+  ],
+  team_member_runs: [
+    'id',
+    'team_run_id',
+    'name',
+    'role',
+    'agent_version_id',
+    'runtime_session_id',
+    'status',
+    'current_work_item_id',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'created_at',
+    'updated_at',
+  ],
+  team_work_items: [
+    'id',
+    'team_run_id',
+    'subject',
+    'description',
+    'status',
+    'owner_member_id',
+    'created_by_member_id',
+    'execution_task_id',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+  ],
+  team_work_item_attempts: [
+    'id',
+    'work_item_id',
+    'team_run_id',
+    'attempt_no',
+    'assignee_member_id',
+    'requested_by_lead_task_id',
+    'execution_task_id',
+    'status',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+  ],
+  team_work_item_dependencies: [
+    'team_run_id',
+    'work_item_id',
+    'depends_on_work_item_id',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'created_at',
+  ],
+  team_messages: [
+    'id',
+    'team_run_id',
+    'tenant_id',
+    'workspace_id',
+    'principal_type',
+    'principal_id',
+    'sequence',
+    'sender_member_run_id',
+    'recipient_member_run_id',
+    'work_item_id',
+    'attempt_id',
+    'kind',
+    'dedup_key',
+    'status',
+    'consumed_by_task_id',
+    'created_at',
+    'consumed_at',
+  ],
+  tasks: [
+    'id',
+    'tenant_id',
+    'root_task_id',
+    'parent_task_id',
+    'parent_run_id',
+    'depth',
+    'status',
+    'created_at',
+    'updated_at',
+    'team_member_run_id',
+    'team_sequence',
+    'team_task_kind',
+    'source_team_message_id',
+  ],
   runs: ['id', 'task_id', 'attempt', 'status', 'created_at', 'updated_at'],
   run_events: ['id', 'run_id', 'sequence', 'type', 'created_at'],
 });
@@ -89,7 +209,8 @@ function quoteIdentifier(value) {
 function ownerPredicates(columns, alias = '') {
   const prefix = alias ? `${quoteIdentifier(alias)}.` : '';
   return OWNER_COLUMNS.filter((column) => columns.has(column)).map(
-    (column) => `${prefix}${quoteIdentifier(column)}=$${OWNER_COLUMNS.indexOf(column) + 1}`,
+    (column) =>
+      `${prefix}${quoteIdentifier(column)}=$${OWNER_COLUMNS.indexOf(column) + 1}`,
   );
 }
 
@@ -126,7 +247,8 @@ export async function recordProductLineageGolden({
     throw new Error('golden_recorder_product_raw_not_ready');
   if (
     !OWNER_COLUMNS.every(
-      (column) => typeof correlation[column] === 'string' && correlation[column],
+      (column) =>
+        typeof correlation[column] === 'string' && correlation[column],
     )
   )
     throw new Error('golden_recorder_owner_correlation_missing');
@@ -178,46 +300,77 @@ export async function recordProductLineageGolden({
 
   for (const table of REQUIRED_TABLES) {
     const columns = columnSets.get(table);
-    const selected = (SAFE_COLUMNS[table] ?? []).filter((column) => columns.has(column));
+    const selected = (SAFE_COLUMNS[table] ?? []).filter((column) =>
+      columns.has(column),
+    );
     // Add bounded presence projections instead of text-bearing columns.
     const presence = [];
     if (table === 'team_work_item_attempts') {
-      if (columns.has('feedback')) presence.push('feedback IS NOT NULL AS feedback_present');
+      if (columns.has('feedback'))
+        presence.push('feedback IS NOT NULL AS feedback_present');
       if (columns.has('result_summary'))
         presence.push('result_summary IS NOT NULL AS result_present');
     }
     if (table === 'team_messages' && columns.has('body'))
       presence.push('body IS NOT NULL AS body_present');
     if (table === 'run_events' && columns.has('payload'))
-      presence.push("payload IS NOT NULL AND payload <> '{}'::jsonb AS payload_present");
+      presence.push(
+        "payload IS NOT NULL AND payload <> '{}'::jsonb AS payload_present",
+      );
     if (table === 'runs' && columns.has('runtime')) {
-      presence.push("runtime->>'provider' AS provider", "runtime->>'model' AS model");
+      presence.push(
+        "runtime->>'provider' AS provider",
+        "runtime->>'model' AS model",
+      );
     }
-    if (table === 'runs' && columns.has('result')) presence.push('result IS NOT NULL AS result_present');
-    if (table === 'runs' && columns.has('error')) presence.push("error->>'code' AS error_code");
+    if (table === 'runs' && columns.has('result'))
+      presence.push('result IS NOT NULL AS result_present');
+    if (table === 'runs' && columns.has('error'))
+      presence.push("error->>'code' AS error_code");
     const ownerScope = ownerPredicates(columns);
     let scope = [];
     if (table === 'works') {
       scope = columns.has('id') ? ['"id"=$7', ...ownerScope] : [];
     } else if (table === 'work_runs') {
-      scope = ['id', 'work_id', 'root_task_id'].every((column) => columns.has(column))
+      scope = ['id', 'work_id', 'root_task_id'].every((column) =>
+        columns.has(column),
+      )
         ? ['"id"=$8', '"work_id"=$7', '"root_task_id"=$6', ...ownerScope]
         : [];
     } else if (table === 'team_runs') {
       scope = ['id', 'root_task_id'].every((column) => columns.has(column))
         ? ['"id"=$5', '"root_task_id"=$6', ...ownerScope]
         : [];
-    } else if (['team_member_runs', 'team_work_items', 'team_work_item_attempts', 'team_work_item_dependencies', 'team_messages'].includes(table)) {
+    } else if (
+      [
+        'team_member_runs',
+        'team_work_items',
+        'team_work_item_attempts',
+        'team_work_item_dependencies',
+        'team_messages',
+      ].includes(table)
+    ) {
       scope = columns.has('team_run_id')
-        ? [`"team_run_id"=$5`, `EXISTS (SELECT 1 FROM "team_runs" "tr" WHERE ${teamRunScope})`, ...ownerScope]
+        ? [
+            `"team_run_id"=$5`,
+            `EXISTS (SELECT 1 FROM "team_runs" "tr" WHERE ${teamRunScope})`,
+            ...ownerScope,
+          ]
         : [];
     } else if (table === 'tasks') {
-      scope = columns.has('root_task_id') ? [taskScope(), `EXISTS (SELECT 1 FROM "team_runs" "tr" WHERE ${teamRunScope})`] : [];
+      scope = columns.has('root_task_id')
+        ? [
+            taskScope(),
+            `EXISTS (SELECT 1 FROM "team_runs" "tr" WHERE ${teamRunScope})`,
+          ]
+        : [];
     } else if (table === 'runs') {
       scope = columns.has('task_id') ? [runScope()] : [];
     } else if (table === 'run_events') {
       scope = columns.has('run_id')
-        ? [`"run_id" IN (SELECT "r"."id" FROM "runs" "r" WHERE ${runScope('r')})`]
+        ? [
+            `"run_id" IN (SELECT "r"."id" FROM "runs" "r" WHERE ${runScope('r')})`,
+          ]
         : [];
     }
     const where = scope.length ? `WHERE ${scope.join(' AND ')}` : 'WHERE FALSE';
@@ -278,16 +431,20 @@ export async function recordProductLineageGolden({
   const files = new Map([
     ['api/product-work-run.json', json(productWorkRunRaw)],
     ['api/product-trace.json', json(productTraceRaw)],
-    ...REQUIRED_TABLES.map((table) => [`db/${table}.json`, json(tables[table])]),
+    ...REQUIRED_TABLES.map((table) => [
+      `db/${table}.json`,
+      json(tables[table]),
+    ]),
   ]);
   manifest.file_sha256 = Object.fromEntries(
     [...files.entries()].map(([path, value]) => [path, sha256(value)]),
   );
   files.set('manifest.json', json(manifest));
-  const sums = [...files.entries()]
-    .filter(([path]) => path !== 'SHA256SUMS')
-    .map(([path, value]) => `${sha256(value)}  ${path}`)
-    .join('\n') + '\n';
+  const sums =
+    [...files.entries()]
+      .filter(([path]) => path !== 'SHA256SUMS')
+      .map(([path, value]) => `${sha256(value)}  ${path}`)
+      .join('\n') + '\n';
   files.set('SHA256SUMS', sums);
 
   const parent = outputPath.replace(/\/[^/]+$/u, '') || '.';

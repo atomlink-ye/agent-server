@@ -43,7 +43,9 @@ export class WorkNotFoundError extends Error {
 }
 
 export class WorkIdentityConflictError extends Error {
-  public constructor(message = 'The work identity conflicts with an existing row.') {
+  public constructor(
+    message = 'The work identity conflicts with an existing row.',
+  ) {
     super(message);
     this.name = 'WorkIdentityConflictError';
   }
@@ -61,9 +63,13 @@ export function createWork(input: CreateWorkInput): Work {
   if (!input.id || !input.owner.tenantId || !input.owner.workspaceId)
     throw new InvalidWorkError('A work id and owner scope are required.');
   if (!input.definitionId || !input.definitionVersionId)
-    throw new InvalidWorkError('A definition and definition version are required.');
+    throw new InvalidWorkError(
+      'A definition and definition version are required.',
+    );
   if (title.length < 1 || title.length > 200)
-    throw new InvalidWorkError('Work title must contain between 1 and 200 characters.');
+    throw new InvalidWorkError(
+      'Work title must contain between 1 and 200 characters.',
+    );
   const now = input.createdAt ?? new Date().toISOString();
   return {
     id: input.id,

@@ -81,13 +81,13 @@ All requests used `Authorization: Bearer <redacted>`. Lane V created this data u
 
 Every validate endpoint returned 200 with `valid=true` and a `sha256:` fingerprint. Every import endpoint returned 201 with coherent draft lineage.
 
-| Definition | Validate/import | Definition ID | Version ID |
-| --- | --- | --- | --- |
+| Definition  | Validate/import                                                                              | Definition ID                          | Version ID                             |
+| ----------- | -------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------- |
 | Environment | `POST /api/v1/environment-packages:validate` → 200; `POST /api/v1/environments:import` → 201 | `27ddce9d-9644-465d-abfc-90f878105060` | `1aaab93a-0bbf-4fa3-a838-2c8642fa19ba` |
-| Lead | `POST /api/v1/agent-packages:validate` → 200; `POST /api/v1/agents:import` → 201 | `e581863d-d238-4f69-a77e-f691dd366daa` | `fc045b18-9f21-4220-b610-63af94dab577` |
-| Worker | same endpoints → 200/201 | `a99b6133-f14f-4dac-a99b-15560bb3e355` | `123436b9-85c7-4d3e-ae00-2b62c68bbad5` |
-| Reviewer | same endpoints → 200/201 | `364ac446-2751-4c95-99ca-b86680bb9b26` | `4774ef54-5a28-429a-8c23-51dcdf70cf68` |
-| Team | `POST /api/v1/team-packages:validate` → 200; `POST /api/v1/teams:import` → 201 | `27be3897-92b9-46d6-bc2e-7b71f62ad3bd` | `b4ca2272-2d2a-452a-abce-36eb5c46c04c` |
+| Lead        | `POST /api/v1/agent-packages:validate` → 200; `POST /api/v1/agents:import` → 201             | `e581863d-d238-4f69-a77e-f691dd366daa` | `fc045b18-9f21-4220-b610-63af94dab577` |
+| Worker      | same endpoints → 200/201                                                                     | `a99b6133-f14f-4dac-a99b-15560bb3e355` | `123436b9-85c7-4d3e-ae00-2b62c68bbad5` |
+| Reviewer    | same endpoints → 200/201                                                                     | `364ac446-2751-4c95-99ca-b86680bb9b26` | `4774ef54-5a28-429a-8c23-51dcdf70cf68` |
+| Team        | `POST /api/v1/team-packages:validate` → 200; `POST /api/v1/teams:import` → 201               | `27be3897-92b9-46d6-bc2e-7b71f62ad3bd` | `b4ca2272-2d2a-452a-abce-36eb5c46c04c` |
 
 ### 2. Publish versions — PASS
 
@@ -181,25 +181,25 @@ All requests used `Authorization: Bearer <redacted>` and JSON unless noted.
 
 Every validate/import body was `{source:<complete Definition YAML>}`. Import requests included label-specific idempotency keys. Validation required `valid=true` and a `sha256:` fingerprint; imports returned coherent draft lineage.
 
-| Definition | Validate | Import | Key fields |
-| --- | --- | --- | --- |
-| Environment | `POST /api/v1/environment-packages:validate` → 200 | `POST /api/v1/environments:import` → 201 | definition `b5cbae74-9f76-4da3-8c06-9f8721c9b6bd`; version `d0823b65-7390-4083-813c-2d0785823bb7`; fingerprint `sha256:27565d29...` |
-| Lead | `POST /api/v1/agent-packages:validate` → 200 | `POST /api/v1/agents:import` → 201 | definition `6eae5ed6-b733-4cb5-9a96-450944776b6f`; version `7ef2a405-d1fb-4090-8e00-9a1f3b459b94`; fingerprint `sha256:a8523757...` |
-| Worker | `POST /api/v1/agent-packages:validate` → 200 | `POST /api/v1/agents:import` → 201 | definition `be11dc9b-720c-4ff7-8b6f-f980865d2af6`; version `02ad1f07-17a7-4c28-85d1-e224cf207b32`; fingerprint `sha256:f220eeef...` |
-| Reviewer | `POST /api/v1/agent-packages:validate` → 200 | `POST /api/v1/agents:import` → 201 | definition `60bf7e85-ff5f-4fc0-9925-1a2694190f87`; version `710a1cc6-213f-45ea-a882-baa45f49ac19`; fingerprint `sha256:c41f4f4c...` |
-| Team | `POST /api/v1/team-packages:validate` → 200 | `POST /api/v1/teams:import` → 201 | definition `e8031947-c093-4fad-a8b3-8641e9506b27`; version `38cd045c-49fb-42a1-ad6c-0569f265fba2`; environment version `d0823b65-7390-4083-813c-2d0785823bb7`; fingerprint `sha256:3ef5a406...` |
+| Definition  | Validate                                           | Import                                   | Key fields                                                                                                                                                                                      |
+| ----------- | -------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Environment | `POST /api/v1/environment-packages:validate` → 200 | `POST /api/v1/environments:import` → 201 | definition `b5cbae74-9f76-4da3-8c06-9f8721c9b6bd`; version `d0823b65-7390-4083-813c-2d0785823bb7`; fingerprint `sha256:27565d29...`                                                             |
+| Lead        | `POST /api/v1/agent-packages:validate` → 200       | `POST /api/v1/agents:import` → 201       | definition `6eae5ed6-b733-4cb5-9a96-450944776b6f`; version `7ef2a405-d1fb-4090-8e00-9a1f3b459b94`; fingerprint `sha256:a8523757...`                                                             |
+| Worker      | `POST /api/v1/agent-packages:validate` → 200       | `POST /api/v1/agents:import` → 201       | definition `be11dc9b-720c-4ff7-8b6f-f980865d2af6`; version `02ad1f07-17a7-4c28-85d1-e224cf207b32`; fingerprint `sha256:f220eeef...`                                                             |
+| Reviewer    | `POST /api/v1/agent-packages:validate` → 200       | `POST /api/v1/agents:import` → 201       | definition `60bf7e85-ff5f-4fc0-9925-1a2694190f87`; version `710a1cc6-213f-45ea-a882-baa45f49ac19`; fingerprint `sha256:c41f4f4c...`                                                             |
+| Team        | `POST /api/v1/team-packages:validate` → 200        | `POST /api/v1/teams:import` → 201        | definition `e8031947-c093-4fad-a8b3-8641e9506b27`; version `38cd045c-49fb-42a1-ad6c-0569f265fba2`; environment version `d0823b65-7390-4083-813c-2d0785823bb7`; fingerprint `sha256:3ef5a406...` |
 
 ### 2. Publish versions — PASS
 
 Each publish used an empty JSON body and a label-specific idempotency key. Every response preserved definition/version lineage, returned `status=published`, and had non-null `published_at`.
 
-| Definition | Request | Status | Key response |
-| --- | --- | --- | --- |
-| Environment | `POST /api/v1/environment-versions/d0823b65-7390-4083-813c-2d0785823bb7:publish` | 200 | same definition/version; published |
-| Lead | `POST /api/v1/agent-versions/7ef2a405-d1fb-4090-8e00-9a1f3b459b94:publish` | 200 | definition `6eae5ed6-...`; published |
-| Worker | `POST /api/v1/agent-versions/02ad1f07-17a7-4c28-85d1-e224cf207b32:publish` | 200 | definition `be11dc9b-...`; published |
-| Reviewer | `POST /api/v1/agent-versions/710a1cc6-213f-45ea-a882-baa45f49ac19:publish` | 200 | definition `60bf7e85-...`; published |
-| Team | `POST /api/v1/team-versions/38cd045c-49fb-42a1-ad6c-0569f265fba2:publish` | 200 | definition `e8031947-...`; exact Environment/Lead/Worker/Reviewer versions retained; published |
+| Definition  | Request                                                                          | Status | Key response                                                                                   |
+| ----------- | -------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| Environment | `POST /api/v1/environment-versions/d0823b65-7390-4083-813c-2d0785823bb7:publish` | 200    | same definition/version; published                                                             |
+| Lead        | `POST /api/v1/agent-versions/7ef2a405-d1fb-4090-8e00-9a1f3b459b94:publish`       | 200    | definition `6eae5ed6-...`; published                                                           |
+| Worker      | `POST /api/v1/agent-versions/02ad1f07-17a7-4c28-85d1-e224cf207b32:publish`       | 200    | definition `be11dc9b-...`; published                                                           |
+| Reviewer    | `POST /api/v1/agent-versions/710a1cc6-213f-45ea-a882-baa45f49ac19:publish`       | 200    | definition `60bf7e85-...`; published                                                           |
+| Team        | `POST /api/v1/team-versions/38cd045c-49fb-42a1-ad6c-0569f265fba2:publish`        | 200    | definition `e8031947-...`; exact Environment/Lead/Worker/Reviewer versions retained; published |
 
 ### 3. Create Work — PASS
 

@@ -41,8 +41,5 @@
     "tenant_id": "text",
     "workspace_id": "uuid"
   },
-  "decisionCaptureStatuses": [
-    "not_captured",
-    "reported"
-  ]
+  "decisionCaptureStatuses": ["not_captured", "reported"]
 }

@@ -122,7 +122,12 @@ function parallelPredicateEvidence(works) {
           'attempt_number',
           'attemptNumber',
         ),
-        status: attemptField(attempt, 'status', 'attempt_status', 'attemptStatus'),
+        status: attemptField(
+          attempt,
+          'status',
+          'attempt_status',
+          'attemptStatus',
+        ),
       })),
       request_changes_observed: attempts.some((attempt) =>
         nonblank(attemptField(attempt, 'feedbackSummary', 'feedback_summary')),
@@ -368,27 +373,19 @@ async function main() {
           status === 'succeeded' &&
           works.length === 2 &&
           parallelAttemptsObserved &&
-          works.every(
-            (work) => {
-              const attempts = Array.isArray(work.attempts)
-                ? work.attempts
-                : [];
-              return (
-                work.status === 'accepted' &&
-                work.dependency_refs?.length === 0 &&
-                attempts.length >= 1 &&
-                !attempts.some((attempt) =>
-                  nonblank(
-                    attemptField(
-                      attempt,
-                      'feedbackSummary',
-                      'feedback_summary',
-                    ),
-                  ),
-                )
-              );
-            },
-          )
+          works.every((work) => {
+            const attempts = Array.isArray(work.attempts) ? work.attempts : [];
+            return (
+              work.status === 'accepted' &&
+              work.dependency_refs?.length === 0 &&
+              attempts.length >= 1 &&
+              !attempts.some((attempt) =>
+                nonblank(
+                  attemptField(attempt, 'feedbackSummary', 'feedback_summary'),
+                ),
+              )
+            );
+          })
         );
       if (scenario === 'rework-once')
         return (

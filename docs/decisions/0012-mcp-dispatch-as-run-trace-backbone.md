@@ -11,7 +11,7 @@ belonged to, when each agent started and finished, what each agent's task was,
 and how it turned out.
 
 It could not. `events[]` carried only a `type` and a timestamp, so a reader could
-see that *something* happened but not *what*. Worse, every result and payload
+see that _something_ happened but not _what_. Worse, every result and payload
 came back as `not_present` or `redacted`, so the fifth question — how did it turn
 out — had no answer at all.
 

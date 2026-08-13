@@ -40,7 +40,6 @@ const DEFINITION_VERSION_ID = '00000000-0000-4000-8000-000000000021';
 const AGENT_VERSION_ID = '00000000-0000-4000-8000-000000000022';
 const ENVIRONMENT_VERSION_ID = '00000000-0000-4000-8000-000000000023';
 const NOW = '2026-08-14T00:00:00.000Z';
-const MUTATION = process.env.GUARD_CREATE_APP_MUTATION;
 
 const responseSchemas = new Map([
   ['CreateWorkResponseSchema', CreateWorkResponseSchema],
@@ -239,11 +238,6 @@ function fail(code, detail = '') {
   return 1;
 }
 
-function missing(endpointId) {
-  process.stderr.write(`MISSING:${endpointId}\n`);
-  return 2;
-}
-
 function ownerScopeMatches(value) {
   return (
     value?.tenantId === OWNER.tenantId &&
@@ -262,7 +256,7 @@ function pathFor(path) {
     .replace('{work_run_id}', WORK_RUN_ID);
 }
 
-function createMinimalDependencies(observed, mutation) {
+function createMinimalDependencies(observed) {
   const recordAccess = (input, label) => {
     assertOwner(input.accessContext, label);
     observed.push(label);
@@ -355,10 +349,6 @@ function createMinimalDependencies(observed, mutation) {
     },
   };
 
-  if (mutation === 'omit_product_projection') {
-    const { productProjection: _omitted, ...mutated } = dependencies;
-    return mutated;
-  }
   return dependencies;
 }
 
@@ -378,13 +368,6 @@ async function readInventory() {
 }
 
 async function main() {
-  if (
-    MUTATION !== undefined &&
-    MUTATION !== '' &&
-    MUTATION !== 'omit_product_projection'
-  )
-    return fail('mutation_invalid', MUTATION);
-
   let endpoints;
   try {
     endpoints = await readInventory();
@@ -403,9 +386,8 @@ async function main() {
   }
 
   const observed = [];
-  const app = createApp(
-    createMinimalDependencies(observed, MUTATION === '' ? undefined : MUTATION),
-  );
+  const app = createApp(createMinimalDependencies(observed));
+  const missingEndpointIds = [];
   for (const endpoint of endpoints) {
     const request = endpointRequests.get(endpoint.id);
     const body =
@@ -425,8 +407,10 @@ async function main() {
     if (
       response.status === 404 &&
       responseBody?.error?.code === 'route_not_found'
-    )
-      return missing(endpoint.id);
+    ) {
+      missingEndpointIds.push(endpoint.id);
+      continue;
+    }
     if (!endpoint.success.some((success) => success.status === response.status))
       return fail('response_status', `${endpoint.id}:${response.status}`);
     const schema = responseSchemas.get(endpoint.response_schema);
@@ -434,6 +418,11 @@ async function main() {
       return fail('response_shape', endpoint.id);
   }
 
+  if (missingEndpointIds.length > 0) {
+    for (const endpointId of missingEndpointIds)
+      process.stderr.write(`MISSING:${endpointId}\n`);
+    return 2;
+  }
   if (!observed.includes('createWork') || !observed.includes('startWorkRun'))
     return fail('access_context_positive_control_missing');
   process.stdout.write(

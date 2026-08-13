@@ -70,29 +70,15 @@ try {
       )
         violations.push({ importer: importerRelative, target });
     }
-    for (const statement of source.statements) {
-      if (
-        !ast.isImportDeclaration(statement) &&
-        !ast.isExportDeclaration(statement)
-      )
-        continue;
-      const specifier = statement.moduleSpecifier;
-      if (!specifier || !ast.isStringLiteral(specifier)) continue;
-      record(specifier.text);
-    }
     function visit(node) {
-      if (ast.isCallExpression(node) && node.arguments.length === 1) {
-        const argument = node.arguments[0];
-        const callee = node.expression.getText(source);
-        if (
-          ast.isStringLiteral(argument) &&
-          (callee === 'import' || callee === 'require')
-        )
-          record(argument.text);
-      }
+      if (
+        ast.isStringLiteral(node) ||
+        ast.isNoSubstitutionTemplateLiteral(node)
+      )
+        record(node.text);
       node.forEachChild(visit);
     }
-    source.forEachChild(visit);
+    visit(source);
   }
 } finally {
   try {
@@ -103,7 +89,19 @@ try {
 }
 
 if (violations.length) {
-  for (const violation of violations)
+  const unique = [
+    ...new Map(
+      violations.map((violation) => [
+        `${violation.importer}:${violation.target}`,
+        violation,
+      ]),
+    ).values(),
+  ].sort((left, right) =>
+    `${left.importer}:${left.target}`.localeCompare(
+      `${right.importer}:${right.target}`,
+    ),
+  );
+  for (const violation of unique)
     console.error(
       `work_import_boundary_violation:importer=${violation.importer}:target=${violation.target}`,
     );

@@ -1,5 +1,19 @@
 #!/usr/bin/env node
 
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { composePlatformApp } from '../../src/entrypoints/api/app.ts';
 
 const EXPECTED_CONCERN_KEYS = Object.freeze([
@@ -67,6 +81,57 @@ function createMinimalDependencies() {
   };
 }
 
+async function runStopOrderSourceMutation() {
+  const repositoryRoot = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../..',
+  );
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'platform-e3-stop-'));
+  try {
+    await cp(join(repositoryRoot, 'src'), join(temporaryRoot, 'src'), {
+      recursive: true,
+    });
+    await mkdir(join(temporaryRoot, 'scripts/ci'), { recursive: true });
+    await cp(
+      join(repositoryRoot, 'scripts/ci/verify-platform-shell.mjs'),
+      join(temporaryRoot, 'scripts/ci/verify-platform-shell.mjs'),
+      { recursive: true },
+    );
+    await symlink(
+      join(repositoryRoot, 'node_modules'),
+      join(temporaryRoot, 'node_modules'),
+    );
+    const target = join(temporaryRoot, 'src/platform/composition-shell.ts');
+    const source = await readFile(target, 'utf8');
+    const needle = 'await teardowns.pop()?.();';
+    if (source.split(needle).length !== 2)
+      return fail('platform_shell_stop_mutation_target_missing', needle);
+    await writeFile(
+      target,
+      source.replace(needle, 'await teardowns.shift()?.();'),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        join(temporaryRoot, 'scripts/ci/verify-platform-shell.mjs'),
+        '--mutation=disturb-stop-order',
+      ],
+      {
+        cwd: temporaryRoot,
+        encoding: 'utf8',
+        env: { ...process.env, PLATFORM_STOP_SOURCE_MUTATED: '1' },
+      },
+    );
+    process.stdout.write(result.stdout);
+    process.stderr.write(result.stderr);
+    return result.status ?? 1;
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   const mutation = mutationFromArgv();
   if (
@@ -76,6 +141,11 @@ async function main() {
     )
   )
     return fail('platform_shell_unknown_mutation', mutation);
+  if (
+    mutation === 'disturb-stop-order' &&
+    process.env.PLATFORM_STOP_SOURCE_MUTATED !== '1'
+  )
+    return runStopOrderSourceMutation();
 
   const events = [];
   const tools = new Map();
@@ -131,16 +201,7 @@ async function main() {
   });
   const body = await response.json().catch(() => null);
   const tool = await tools.get('platform.noop')?.();
-  const originalPop = Array.prototype.pop;
-  try {
-    if (mutation === 'disturb-stop-order')
-      Array.prototype.pop = function takeFirstTeardown() {
-        return this.shift();
-      };
-    await composed.stop();
-  } finally {
-    Array.prototype.pop = originalPop;
-  }
+  await composed.stop();
 
   const expectedKeys = [...EXPECTED_CONCERN_KEYS].sort();
   const actualKeys = [...new Set(observedConcernKeys)].sort();
@@ -199,7 +260,7 @@ async function main() {
     )
       return fail(
         'FAIL:platform_shell_stop_order',
-        'mechanism=pop_to_shift;route=ok;runtime=ok;spy=ok',
+        'mechanism=target_source_pop_to_shift;route=ok;runtime=ok;spy=ok',
       );
     return fail(
       'platform_shell_stop_mutation_not_precise',

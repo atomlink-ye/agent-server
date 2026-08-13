@@ -24,6 +24,10 @@ import {
   runtimeStateIsReadOnly,
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
+import {
+  collectServiceProcesses,
+  isPaseoExecutableProcess,
+} from './lib/phase-c-process-inspection.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
@@ -119,13 +123,13 @@ function sanitizeService(name, service) {
 }
 
 function containerRecord(service, composeCommand = rawCompose) {
-  const id = run('docker', [
-    ...composeCommand,
-    'ps',
-    '-q',
+  const processInspection = collectServiceProcesses({
+    run,
+    composeCommand,
     service,
-  ]).stdout.trim();
-  if (!id) throw new Error(`container_missing:${service}`);
+    identity: `${service}-inspection`,
+  });
+  const id = processInspection.containerId;
   const inspect = JSON.parse(
     run('docker', ['inspect', '--format', '{{json .Mounts}}', id]).stdout,
   );
@@ -139,15 +143,10 @@ function containerRecord(service, composeCommand = rawCompose) {
     .map((name) => name.trim())
     .filter(Boolean)
     .sort();
-  const top = run('docker', [...composeCommand, 'top', service, '-eo', 'args='])
-    .stdout.split(/\r?\n/u)
-    .map((command) => command.trim())
-    .filter(Boolean)
-    .map((command) => ({ command }));
   return {
     container_id: id,
     environment_names: environmentNames,
-    processes: top,
+    processes: processInspection.processes,
     mounts: inspect.map((mount) => ({
       type: mount.Type,
       source_name: mount.Name || null,
@@ -417,17 +416,12 @@ function runRuntimeBoundaryMutation({
       childObservation = {
         instrumentation,
         real_runtime_child_exit: childExit,
-        real_runtime_child_survived: run(
-          'docker',
-          [...composeCommand, 'top', 'paseo-runtime', '-eo', 'args='],
-          { identity: `${suffix}-runtime-child-process-check` },
-        )
-          .stdout.split(/\r?\n/u)
-          .some((command) =>
-            /scripts\/dev\/paseo-runtime\.mjs|(?:^|\/)paseo(?:\s|$)/u.test(
-              command,
-            ),
-          ),
+        real_runtime_child_survived: collectServiceProcesses({
+          run,
+          composeCommand,
+          service: 'paseo-runtime',
+          identity: `${suffix}-runtime-child`,
+        }).processes.some(isPaseoExecutableProcess),
       };
       if (childExit !== 1 || childObservation.real_runtime_child_survived)
         throw new Error(`${suffix}_runtime_child_observation_invalid`);

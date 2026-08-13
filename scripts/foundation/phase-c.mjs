@@ -10,6 +10,7 @@ import {
   runtimeIsNonroot,
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
+import { isPaseoExecutableProcess } from './lib/phase-c-process-inspection.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const EXPECTATION_PATH = 'evidence/foundation/runtime-real-expectation.json';
@@ -335,14 +336,10 @@ function evaluateE4(options) {
     )
   )
     failures.push('runtime_workspace_read_only_boundary');
-  if (
-    runtime.agent_server.processes.some((process) =>
-      /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
-    )
-  )
+  if (runtime.agent_server.processes.some(isPaseoExecutableProcess))
     failures.push('agent_server_paseo_process');
-  const runtimePaseoProcess = runtime.paseo_runtime.processes.some((process) =>
-    /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
+  const runtimePaseoProcess = runtime.paseo_runtime.processes.some(
+    isPaseoExecutableProcess,
   );
   if (record.mutation?.instrumentation === 'failed-runtime-child-carrier') {
     if (

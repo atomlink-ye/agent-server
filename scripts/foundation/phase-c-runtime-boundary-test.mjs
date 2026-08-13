@@ -119,13 +119,13 @@ const baseRecord = {
     agent_server: {
       container_id: 'agent',
       environment_names: ['NODE_ENV'],
-      processes: [{ command: 'node server.ts' }],
+      processes: [{ user: 'node', comm: 'node' }],
       mounts: [{ destination: '/workspace', read_only: false }],
     },
     paseo_runtime: {
       container_id: 'runtime',
       environment_names: runtimeEnvironment,
-      processes: [{ command: '/usr/local/bin/paseo daemon' }],
+      processes: [{ user: '1000', comm: 'paseo' }],
       mounts: [
         {
           destination: '/opt/provider-toolchain-volume',
@@ -196,7 +196,7 @@ stateMutation.mutation = {
   real_runtime_child_survived: false,
 };
 stateMutation.runtime_inspection.paseo_runtime.processes = [
-  { command: 'phase-c-state-carrier' },
+  { user: '1000', comm: 'sh' },
 ];
 stateMutation.runtime_inspection.paseo_runtime.mounts[2].read_only = true;
 stateMutation.runtime_inspection.paseo_runtime.runtime_state_probe = {

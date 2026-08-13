@@ -154,6 +154,7 @@ function runArm({
   envOverrides = {},
   expectedExitCode,
   expectedMarkers,
+  expectedOutputMarkers,
 }) {
   let result;
   try {
@@ -186,6 +187,10 @@ function runArm({
   const markersOk = expectedMarkers
     ? JSON.stringify(markerLines) === JSON.stringify(expectedMarkers)
     : true;
+  const output = `${stdout}\n${stderr}`;
+  const outputMarkersOk = expectedOutputMarkers
+    ? expectedOutputMarkers.every((marker) => output.includes(marker))
+    : true;
   return {
     name,
     expected_exit_code: expectedExitCode,
@@ -206,7 +211,17 @@ function runArm({
           markers_ok: markersOk,
         }
       : {}),
-    ok: !missing && result.status === expectedExitCode && markersOk,
+    ...(expectedOutputMarkers
+      ? {
+          expected_output_markers: expectedOutputMarkers,
+          output_markers_ok: outputMarkersOk,
+        }
+      : {}),
+    ok:
+      !missing &&
+      result.status === expectedExitCode &&
+      markersOk &&
+      outputMarkersOk,
   };
 }
 
@@ -297,7 +312,7 @@ function writePackageMutation(mutatorFn) {
   return { directory, filename };
 }
 
-function runWiringMutation(name, mutate) {
+function runWiringMutation(name, mutate, expectedOutputMarker) {
   const copy = writePackageMutation(mutate);
   const arm = runArm({
     name,
@@ -305,6 +320,7 @@ function runWiringMutation(name, mutate) {
     args: [wiringChecker, '--package', copy.filename],
     cwd: repo,
     expectedExitCode: 1,
+    expectedOutputMarkers: [expectedOutputMarker],
   });
   fs.rmSync(copy.directory, { recursive: true, force: true });
   return arm;
@@ -339,6 +355,7 @@ function runLineageTier() {
           .filter((part) => part !== 'pnpm guard:product-accepted-subset')
           .join(' && ');
       },
+      'guard_wiring_invalid:check_backend_guard_missing',
     ),
   );
   arms.push(
@@ -348,6 +365,7 @@ function runLineageTier() {
         scripts['guard:product-accepted-subset'] =
           `${scripts['guard:product-accepted-subset']} || true`;
       },
+      'guard_wiring_invalid:accepted_guard_conditional',
     ),
   );
   arms.push(
@@ -357,12 +375,18 @@ function runLineageTier() {
         scripts['modularization:verify:product-routes'] =
           `${scripts['modularization:verify:product-routes']} && true`;
       },
+      'guard_wiring_invalid:modularization_verify_product_routes_definition',
     ),
   );
   return arms;
 }
 
-function runCheckBackendArm(name, expectedExitCode, envOverrides = {}) {
+function runCheckBackendArm(
+  name,
+  expectedExitCode,
+  envOverrides = {},
+  expectedOutputMarker,
+) {
   const childEnv = { ...envOverrides };
   if (process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH)
     childEnv.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH =
@@ -377,6 +401,9 @@ function runCheckBackendArm(name, expectedExitCode, envOverrides = {}) {
     cwd: repo,
     envOverrides: childEnv,
     expectedExitCode,
+    ...(expectedOutputMarker
+      ? { expectedOutputMarkers: [expectedOutputMarker] }
+      : {}),
   });
 }
 
@@ -386,14 +413,23 @@ function runManifestStatusMutation(candidateSha) {
     'src/contracts/product-accepted-subset.v1.json',
   );
   const original = fs.readFileSync(filename);
-  const manifest = JSON.parse(original.toString('utf8'));
-  manifest.status = 'mutated_for_guard_evidence';
-  fs.writeFileSync(filename, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  const originalText = original.toString('utf8');
+  const acceptedStatus = '"status": "accepted"';
+  const provisionalStatus = '"status": "provisional"';
+  const first = originalText.indexOf(acceptedStatus);
+  if (first < 0 || first !== originalText.lastIndexOf(acceptedStatus))
+    throw new Error('manifest_status_target_not_unique');
+  const mutatedText =
+    originalText.slice(0, first) +
+    provisionalStatus +
+    originalText.slice(first + acceptedStatus.length);
+  fs.writeFileSync(filename, Buffer.from(mutatedText, 'utf8'));
   try {
     return runCheckBackendArm(
       'runtime-mutation-check-backend-manifest-status',
       1,
       { PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: candidateSha },
+      'accepted_subset_invalid:accepted_subset_mismatch',
     );
   } finally {
     fs.writeFileSync(filename, original);
@@ -429,6 +465,7 @@ function runRuntimeTier(input) {
       cwd: behaviorCopy,
       envOverrides: { GUARD_CREATE_APP_MUTATION: 'corrupt_get_work_response' },
       expectedExitCode: 1,
+      expectedOutputMarkers: ['FAIL:response_status:get_work'],
     }),
   );
   fs.rmSync(behaviorCopy, { recursive: true, force: true });

@@ -204,24 +204,163 @@ function verifyBinding(evidence, tier, candidate) {
   }
 }
 
-function verifyPositiveArm(evidence, tier) {
-  if (evidence.ok !== true || !Array.isArray(evidence.arms))
-    fail(`${tier}.not_ok`);
-  const name =
-    tier === 'lineage'
-      ? 'lineage-positive'
-      : 'runtime-positive-accepted-checker';
-  const arm = evidence.arms.find((entry) => entry?.name === name);
+const COMMAND_MISSING = Object.freeze([
+  'MISSING:create_work',
+  'MISSING:get_work_definition',
+  'MISSING:list_work_runs',
+  'MISSING:list_works',
+  'MISSING:start_work_run',
+]);
+
+const PROJECTION_MISSING = Object.freeze([
+  'MISSING:get_run_trace',
+  'MISSING:get_work',
+  'MISSING:get_work_run',
+]);
+
+const ARM_REQUIREMENTS = Object.freeze({
+  lineage: Object.freeze([
+    { name: 'lineage-positive', expectedExitCode: 0 },
+    { name: 'wiring-positive', expectedExitCode: 0 },
+    {
+      name: 'wiring-mutation-remove-check-backend-guard',
+      expectedExitCode: 1,
+      outputMarker: 'guard_wiring_invalid:check_backend_guard_missing',
+    },
+    {
+      name: 'wiring-mutation-conditional-accepted-guard',
+      expectedExitCode: 1,
+      outputMarker: 'guard_wiring_invalid:accepted_guard_conditional',
+    },
+    {
+      name: 'wiring-mutation-leaf-product-routes-extra-command',
+      expectedExitCode: 1,
+      outputMarker:
+        'guard_wiring_invalid:modularization_verify_product_routes_definition',
+    },
+  ]),
+  runtime: Object.freeze([
+    {
+      name: 'runtime-positive-accepted-checker',
+      expectedExitCode: 0,
+    },
+    { name: 'runtime-positive-product-routes', expectedExitCode: 0 },
+    {
+      name: 'runtime-mutation-corrupt-get-work-response',
+      expectedExitCode: 1,
+      outputMarker: 'FAIL:response_status:get_work',
+    },
+    {
+      name: 'runtime-mutation-command-prepare',
+      expectedExitCode: 0,
+    },
+    {
+      name: 'runtime-mutation-command',
+      expectedExitCode: 2,
+      markers: COMMAND_MISSING,
+    },
+    {
+      name: 'runtime-mutation-projection-prepare',
+      expectedExitCode: 0,
+    },
+    {
+      name: 'runtime-mutation-projection',
+      expectedExitCode: 2,
+      markers: PROJECTION_MISSING,
+    },
+    { name: 'runtime-positive-check-backend', expectedExitCode: 0 },
+    {
+      name: 'runtime-mutation-check-backend-manifest-status',
+      expectedExitCode: 1,
+      outputMarker: 'accepted_subset_invalid:accepted_subset_mismatch',
+    },
+    { name: 'runtime-restored-check-backend', expectedExitCode: 0 },
+  ]),
+});
+
+function verifyArm(arm, requirement, tier) {
+  if (!isObject(arm)) fail(`${tier}.arm_not_object:${requirement.name}`);
+  equalJson(arm.name, requirement.name, `${tier}.${requirement.name}.name`);
+  equalJson(
+    arm.expected_exit_code,
+    requirement.expectedExitCode,
+    `${tier}.${requirement.name}.expected_exit_code`,
+  );
+  equalJson(
+    arm.exit_code,
+    requirement.expectedExitCode,
+    `${tier}.${requirement.name}.exit_code`,
+  );
+  equalJson(arm.signal, null, `${tier}.${requirement.name}.signal`);
+  equalJson(arm.spawn_error, null, `${tier}.${requirement.name}.spawn_error`);
   if (
-    !isObject(arm) ||
-    arm.expected_exit_code !== 0 ||
-    arm.exit_code !== 0 ||
-    arm.signal !== null ||
-    arm.spawn_error !== null ||
-    arm.ok !== true ||
+    typeof arm.classification !== 'string' ||
     arm.classification === 'MISSING'
   )
-    fail(`${tier}.positive_arm`);
+    fail(`${tier}.${requirement.name}.classification_missing`);
+  equalJson(arm.ok, true, `${tier}.${requirement.name}.ok`);
+
+  if (requirement.markers) {
+    equalJson(
+      arm.expected_markers,
+      requirement.markers,
+      `${tier}.${requirement.name}.expected_markers`,
+    );
+    equalJson(
+      arm.observed_markers,
+      requirement.markers,
+      `${tier}.${requirement.name}.observed_markers`,
+    );
+    equalJson(
+      arm.marker_stream,
+      'stderr',
+      `${tier}.${requirement.name}.marker_stream`,
+    );
+    equalJson(
+      arm.markers_ok,
+      true,
+      `${tier}.${requirement.name}.markers_ok`,
+    );
+  }
+
+  if (requirement.outputMarker) {
+    const expected = [requirement.outputMarker];
+    equalJson(
+      arm.expected_output_markers,
+      expected,
+      `${tier}.${requirement.name}.expected_output_markers`,
+    );
+    equalJson(
+      arm.output_markers_ok,
+      true,
+      `${tier}.${requirement.name}.output_markers_ok`,
+    );
+    if (
+      typeof arm.stdout !== 'string' ||
+      typeof arm.stderr !== 'string' ||
+      !`${arm.stdout}\n${arm.stderr}`.includes(requirement.outputMarker)
+    )
+      fail(`${tier}.${requirement.name}.output_marker`);
+  }
+}
+
+function verifyArms(evidence, tier) {
+  if (evidence.ok !== true) fail(`${tier}.not_ok`);
+  if (!Array.isArray(evidence.arms)) fail(`${tier}.arms`);
+  const requirements = ARM_REQUIREMENTS[tier];
+  if (evidence.arms.length !== requirements.length)
+    fail(`${tier}.arms_count`);
+  const names = evidence.arms.map((arm) => arm?.name);
+  if (
+    names.some((name) => typeof name !== 'string') ||
+    new Set(names).size !== names.length ||
+    requirements.some((requirement) => !names.includes(requirement.name))
+  )
+    fail(`${tier}.arms_names`);
+  for (const requirement of requirements) {
+    const arm = evidence.arms.find((entry) => entry?.name === requirement.name);
+    verifyArm(arm, requirement, tier);
+  }
 }
 
 function verifyGitHashes(groups, candidate, label) {
@@ -287,8 +426,13 @@ function main() {
   verifyCandidate(lineage.candidate_sha);
   verifyBinding(lineage, 'lineage', lineage.candidate_sha);
   verifyBinding(runtime, 'runtime', lineage.candidate_sha);
-  verifyPositiveArm(lineage, 'lineage');
-  verifyPositiveArm(runtime, 'runtime');
+  verifyArms(lineage, 'lineage');
+  if (
+    !isObject(runtime.runtime_options) ||
+    runtime.runtime_options.run_check_backend !== true
+  )
+    fail('runtime.runtime_options.run_check_backend');
+  verifyArms(runtime, 'runtime');
   const lineageGroups = hashGroups(lineage, 'lineage');
   const runtimeGroups = hashGroups(runtime, 'runtime');
   verifyEqualGroups(lineageGroups, runtimeGroups);

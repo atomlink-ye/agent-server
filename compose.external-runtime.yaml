@@ -1,10 +1,34 @@
 services:
+  paseo-runtime-state-init:
+    image: agent-server-runner:latest
+    user: '0:0'
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - paseo-runtime-state:/runtime-state
+    entrypoint: []
+    command:
+      [
+        '/bin/sh',
+        '-c',
+        'chmod 0700 /runtime-state && chown 1000:1000 /runtime-state',
+      ]
+    restart: 'no'
+
   paseo-runtime:
     image: agent-server-runner:latest
     init: true
     user: node
     depends_on:
       provider-toolchain-init:
+        condition: service_completed_successfully
+      paseo-runtime-state-init:
         condition: service_completed_successfully
     environment:
       HOME: /runtime-state/home

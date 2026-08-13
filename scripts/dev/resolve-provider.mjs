@@ -13,16 +13,32 @@ async function findInPath(command) {
   return null;
 }
 
-export async function resolveProviderBinary(provider, envName = `${provider.toUpperCase()}_BIN`) {
+export async function resolveProviderBinary(
+  provider,
+  envName = `${provider.toUpperCase()}_BIN`,
+) {
   const explicit = process.env[envName];
   if (explicit) {
-    try { await access(explicit, constants.X_OK); return explicit; } catch {
-      throw new Error(`provider_environment_invalid: ${provider} not found in PATH`);
+    try {
+      await access(explicit, constants.X_OK);
+      return explicit;
+    } catch {
+      throw new Error(
+        `provider_environment_invalid: ${provider} not found in PATH`,
+      );
     }
   }
   const binary = await findInPath(provider);
-  if (!binary) throw new Error(`provider_environment_invalid: ${provider} not found in PATH`);
-  try { await access(binary, constants.X_OK); return binary; } catch {
-    throw new Error(`provider_environment_invalid: ${provider} not found in PATH`);
+  if (!binary)
+    throw new Error(
+      `provider_environment_invalid: ${provider} not found in PATH`,
+    );
+  try {
+    await access(binary, constants.X_OK);
+    return binary;
+  } catch {
+    throw new Error(
+      `provider_environment_invalid: ${provider} not found in PATH`,
+    );
   }
 }

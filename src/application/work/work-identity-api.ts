@@ -50,8 +50,15 @@ export interface UpdateWorkDefinitionVersionInput {
   readonly workId: string;
   readonly definitionVersionId: string;
 }
-export interface ListWorksInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; }
-export interface ListWorkRunsInput extends WorkIdentityListQuery { readonly owner: WorkIdentityOwnerScope; readonly accessContext: AccessContext; readonly workId: string; }
+export interface ListWorksInput extends WorkIdentityListQuery {
+  readonly owner: WorkIdentityOwnerScope;
+  readonly accessContext: AccessContext;
+}
+export interface ListWorkRunsInput extends WorkIdentityListQuery {
+  readonly owner: WorkIdentityOwnerScope;
+  readonly accessContext: AccessContext;
+  readonly workId: string;
+}
 
 export interface GetWorkDefinitionInput {
   readonly owner: WorkIdentityOwnerScope;
@@ -228,13 +235,23 @@ export class WorkIdentityApi {
 
   public async listWorks(input: ListWorksInput): Promise<WorkListPage> {
     this.assertAccessOwner(input.owner, input.accessContext);
-    if (!this.repository.listWorks) throw new Error('Work listing is unavailable.');
-    return this.repository.listWorks(input.owner, { limit: input.limit, cursor: input.cursor });
+    if (!this.repository.listWorks)
+      throw new Error('Work listing is unavailable.');
+    return this.repository.listWorks(input.owner, {
+      limit: input.limit,
+      cursor: input.cursor,
+    });
   }
-  public async listWorkRuns(input: ListWorkRunsInput): Promise<WorkRunListPage> {
+  public async listWorkRuns(
+    input: ListWorkRunsInput,
+  ): Promise<WorkRunListPage> {
     this.assertAccessOwner(input.owner, input.accessContext);
-    if (!this.repository.listWorkRuns) throw new Error('Work run listing is unavailable.');
-    return this.repository.listWorkRuns(input.owner, input.workId, { limit: input.limit, cursor: input.cursor });
+    if (!this.repository.listWorkRuns)
+      throw new Error('Work run listing is unavailable.');
+    return this.repository.listWorkRuns(input.owner, input.workId, {
+      limit: input.limit,
+      cursor: input.cursor,
+    });
   }
 
   public async getWorkDefinition(
@@ -263,9 +280,15 @@ export class WorkIdentityApi {
       throw new WorkNotFoundError();
     return { definition, version };
   }
-  private assertAccessOwner(owner: WorkIdentityOwnerScope, accessContext: AccessContext): void {
+  private assertAccessOwner(
+    owner: WorkIdentityOwnerScope,
+    accessContext: AccessContext,
+  ): void {
     const accessOwner = WorkIdentityApi.ownerFromAccessContext(accessContext);
-    if (owner.tenantId !== accessOwner.tenantId || owner.workspaceId !== accessOwner.workspaceId)
+    if (
+      owner.tenantId !== accessOwner.tenantId ||
+      owner.workspaceId !== accessOwner.workspaceId
+    )
       throw new WorkDefinitionValidationError();
   }
 

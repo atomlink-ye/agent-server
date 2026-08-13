@@ -1,6 +1,7 @@
 import type { WorkOwnerScope } from './work.js';
 
-export type ResourceKind = 'definition' | 'agent' | 'environment' | 'memory' | 'skill';
+export type ResourceKind =
+  'definition' | 'agent' | 'environment' | 'memory' | 'skill';
 
 export interface ResolvedResourceManifestEntry {
   readonly slot: string;
@@ -35,13 +36,19 @@ export function validateManifestEntries(
   entries: readonly ResolvedResourceManifestEntry[],
 ): void {
   if (entries.length === 0)
-    throw new InvalidResolvedManifestError('A resolved manifest must contain at least one entry.');
+    throw new InvalidResolvedManifestError(
+      'A resolved manifest must contain at least one entry.',
+    );
   const slots = new Set<string>();
   for (const entry of entries) {
     if (!entry.slot || slots.has(entry.slot))
-      throw new InvalidResolvedManifestError('Manifest slots must be unique and non-empty.');
+      throw new InvalidResolvedManifestError(
+        'Manifest slots must be unique and non-empty.',
+      );
     if (!entry.resolvedVersionId)
-      throw new InvalidResolvedManifestError('Manifest entries require a resolved version.');
+      throw new InvalidResolvedManifestError(
+        'Manifest entries require a resolved version.',
+      );
     slots.add(entry.slot);
   }
 }

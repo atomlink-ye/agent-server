@@ -13,7 +13,8 @@ import {
 } from '../../contracts/product-work-commands.js';
 
 export const PRODUCT_WORK_CREATE_TOOL_REF = 'agent-server/product-work-create';
-export const PRODUCT_WORK_RUN_START_TOOL_REF = 'agent-server/product-work-run-start';
+export const PRODUCT_WORK_RUN_START_TOOL_REF =
+  'agent-server/product-work-run-start';
 
 const createInput = {
   definition_id: z.string().uuid(),
@@ -47,12 +48,21 @@ export function registerProductWorkMcpTools(input: {
       },
       async (args: CreateInput) => {
         const current = grants.get(grant.grantId);
-        if (!current || !grants.isToolAllowed(current.grantId, PRODUCT_WORK_CREATE_TOOL_REF))
-          return { isError: true, content: [{ type: 'text', text: 'not_found' }] };
+        if (
+          !current ||
+          !grants.isToolAllowed(current.grantId, PRODUCT_WORK_CREATE_TOOL_REF)
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
         grants.beginToolCall(current.grantId);
         try {
           const work = await input.workIdentity.createWork({
-            owner: { tenantId: current.tenantId, workspaceId: current.workspaceId },
+            owner: {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+            },
             accessContext: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,
@@ -64,7 +74,14 @@ export function registerProductWorkMcpTools(input: {
             definitionVersionId: args.definition_version_id,
             title: args.title,
           });
-          return { content: [{ type: 'text', text: JSON.stringify({ work: toWorkResponse(work) }) }] };
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ work: toWorkResponse(work) }),
+              },
+            ],
+          };
         } finally {
           grants.endToolCall(current.grantId);
         }
@@ -79,8 +96,17 @@ export function registerProductWorkMcpTools(input: {
       },
       async (args: StartInput) => {
         const current = grants.get(grant.grantId);
-        if (!current || !grants.isToolAllowed(current.grantId, PRODUCT_WORK_RUN_START_TOOL_REF))
-          return { isError: true, content: [{ type: 'text', text: 'not_found' }] };
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_RUN_START_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
         grants.beginToolCall(current.grantId);
         try {
           const result = await input.startWorkRun.execute({
@@ -93,16 +119,22 @@ export function registerProductWorkMcpTools(input: {
             },
             workId: args.work_id,
             triggerKind: args.trigger_kind,
-            ...(args.trigger_ref !== undefined ? { triggerRef: args.trigger_ref } : {}),
+            ...(args.trigger_ref !== undefined
+              ? { triggerRef: args.trigger_ref }
+              : {}),
           });
           return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                work_run: toWorkRunResponse(result.workRun),
-                execution_receipt: toExecutionReceiptResponse(result.executionReceipt),
-              }),
-            }],
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  work_run: toWorkRunResponse(result.workRun),
+                  execution_receipt: toExecutionReceiptResponse(
+                    result.executionReceipt,
+                  ),
+                }),
+              },
+            ],
           };
         } finally {
           grants.endToolCall(current.grantId);

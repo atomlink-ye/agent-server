@@ -5,11 +5,9 @@ function fail(reason) {
 }
 
 const teamRunId =
-  process.env.S6_NORMAL_TEAM_RUN_ID ??
-  '9ccbce64-ed68-4e2f-9127-9734fe2b3f3a';
+  process.env.S6_NORMAL_TEAM_RUN_ID ?? '9ccbce64-ed68-4e2f-9127-9734fe2b3f3a';
 const rootTaskId =
-  process.env.S6_NORMAL_ROOT_TASK_ID ??
-  '90afbd54-d1cc-4a34-843f-fae40c7b8c99';
+  process.env.S6_NORMAL_ROOT_TASK_ID ?? '90afbd54-d1cc-4a34-843f-fae40c7b8c99';
 const baseUrl =
   process.env.AGENT_SERVER_URL ??
   process.env.AGENT_SERVER_BASE_URL ??

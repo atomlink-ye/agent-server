@@ -130,11 +130,11 @@ check-fast:
 	./scripts/dev/docker-run -- pnpm check:fast
 
 ci-deterministic:
-	./scripts/dev/docker-compose build runner
+	docker image inspect agent-server-runner:latest >/dev/null 2>&1 || ./scripts/dev/docker-compose build runner
 	./scripts/dev/docker-run -- pnpm ci:deterministic
 
 ci-real-pg:
-	./scripts/dev/docker-compose build runner
+	docker image inspect agent-server-runner:latest >/dev/null 2>&1 || ./scripts/dev/docker-compose build runner
 	./scripts/dev/docker-run --postgres -- pnpm test:real-pg
 
 test:

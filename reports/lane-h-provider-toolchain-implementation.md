@@ -220,12 +220,12 @@ warm_downloaded=337 lock_comment_downloaded=0 layer_bust_same_id_downloaded=0 la
 cache_metrics=pass
 ```
 
-| 变异 | wall time | pnpm 最终 progress | 解释 |
-|---|---:|---|---|
-| fresh store | 120 s | `downloaded 337, reused 0` | 唯一 cache id，冷填充 |
-| lockfile 注释 | 79 s | `downloaded 0, reused 337` | frozen lock 仍校验；store 命中 |
-| install-layer bust，同 cache id | 80 s | `downloaded 0, reused 337` | 排除 Docker install 层缓存假绿 |
-| install-layer bust，fresh cache id | 121 s | `downloaded 337, reused 0` | 变异对偶；只有 cache id 改变 |
+| 变异                               | wall time | pnpm 最终 progress         | 解释                           |
+| ---------------------------------- | --------: | -------------------------- | ------------------------------ |
+| fresh store                        |     120 s | `downloaded 337, reused 0` | 唯一 cache id，冷填充          |
+| lockfile 注释                      |      79 s | `downloaded 0, reused 337` | frozen lock 仍校验；store 命中 |
+| install-layer bust，同 cache id    |      80 s | `downloaded 0, reused 337` | 排除 Docker install 层缓存假绿 |
+| install-layer bust，fresh cache id |     121 s | `downloaded 337, reused 0` | 变异对偶；只有 cache id 改变   |
 
 运行期间记录到 load1 约 6.39–9.98，available 内存 18–20GiB；没有 PostgreSQL exit 2 /
 connection terminated，没有 agent-server/PostgreSQL 容器退出。按 Manager 修正后的闸门，
@@ -241,15 +241,15 @@ Cube 沙箱生命周期。
 底层行为将被修改。因此这些协调前历史数只保留为发现过程和交叉证据，不进入最终耗时
 承诺。lane-h 的容器/镜像/卷/tmp/进程已清到 0 并核实。
 
-| 变异 | wall time | pnpm 最终 progress | 解释 |
-|---|---:|---|---|
-| 无 cache mount 的基线冷构建 | 170.72 s | `reused 0, downloaded 497` | 层与 store 都冷 |
-| 只 mount `/pnpm`、未显式 store-dir | 175.82 s | `reused 0, downloaded 497` | 反例：`PNPM_HOME` 不等于 store 路径 |
-| 上述错误方案的 lock 注释重建 | 163.64 s | `reused 0, downloaded 497` | 反例复现；mount 没承载 store |
-| 显式 `/pnpm/store`，fresh cache id | 160.839 s | `reused 0, downloaded 497` | 正确方案的冷填充 |
-| lock 注释，同 cache id | 156.772 s | `reused 497, downloaded 0` | store 命中；不是 install 层命中 |
-| install-layer bust，同 cache id | 58.077 s | `reused 497, downloaded 0` | 只作废 install 层，保留 cache mount；`type=cacheonly` 隔离导出成本 |
-| install-layer bust，fresh cache id | 60.921 s | `reused 0, downloaded 497` | 变异对偶；`type=cacheonly`，只有 cache id 改变 |
+| 变异                               | wall time | pnpm 最终 progress         | 解释                                                               |
+| ---------------------------------- | --------: | -------------------------- | ------------------------------------------------------------------ |
+| 无 cache mount 的基线冷构建        |  170.72 s | `reused 0, downloaded 497` | 层与 store 都冷                                                    |
+| 只 mount `/pnpm`、未显式 store-dir |  175.82 s | `reused 0, downloaded 497` | 反例：`PNPM_HOME` 不等于 store 路径                                |
+| 上述错误方案的 lock 注释重建       |  163.64 s | `reused 0, downloaded 497` | 反例复现；mount 没承载 store                                       |
+| 显式 `/pnpm/store`，fresh cache id | 160.839 s | `reused 0, downloaded 497` | 正确方案的冷填充                                                   |
+| lock 注释，同 cache id             | 156.772 s | `reused 497, downloaded 0` | store 命中；不是 install 层命中                                    |
+| install-layer bust，同 cache id    |  58.077 s | `reused 497, downloaded 0` | 只作废 install 层，保留 cache mount；`type=cacheonly` 隔离导出成本 |
+| install-layer bust，fresh cache id |  60.921 s | `reused 0, downloaded 497` | 变异对偶；`type=cacheonly`，只有 cache id 改变                     |
 
 一次额外反例很重要：Buildx 0.30.1 / BuildKit 0.32.2 下整次 `--no-cache` 即便沿用同一
 cache id，本轮观察到 mount 从空开始、`reused 0, downloaded 497`。所以最终归因不用

@@ -46,18 +46,16 @@ it('returns only a safe error when a known Product field is invalid', async () =
   vi.stubEnv('AGENT_SERVER_SERVICE_TOKEN', 'server-only-token');
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            works: 'wrong',
-            next_cursor: null,
-            secret: 'hidden',
-          }),
-          { status: 200 },
-        ),
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          works: 'wrong',
+          next_cursor: null,
+          secret: 'hidden',
+        }),
+        { status: 200 },
       ),
+    ),
   );
 
   const response = await readProduct(

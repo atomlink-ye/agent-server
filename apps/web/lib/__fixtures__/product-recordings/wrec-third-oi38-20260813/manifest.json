@@ -1,0 +1,234 @@
+{
+  "accepted_subset": {
+    "controls": {
+      "cancel_work_run": "explicitly_unavailable",
+      "decide_completion": "explicitly_unavailable"
+    },
+    "endpoint_count": 7,
+    "endpoints": [
+      "GET /api/v1/works",
+      "GET /api/v1/works/{work_id}",
+      "POST /api/v1/works",
+      "GET /api/v1/works/{work_id}/runs",
+      "POST /api/v1/works/{work_id}/runs",
+      "GET /api/v1/works/{work_id}/runs/{work_run_id}",
+      "GET /api/v1/works/{work_id}/runs/{work_run_id}/trace"
+    ]
+  },
+  "definition_hash": "9582a9aa2180a8a24abf663932684dd279a97848c3daae1953eeea6dc1d8eda2",
+  "files": {
+    "api/trace.json": {
+      "row_count": 1,
+      "sha256": "56839fe746933b822b3587bc3415724480b86079ad6c4a1d10f00caf0bacaa64"
+    },
+    "api/work-run.json": {
+      "row_count": 1,
+      "sha256": "2df634f24efbfc605c39a5a1f7b69c6923b8b15eb542526c27b1333e8986438a"
+    },
+    "api/work.json": {
+      "row_count": 1,
+      "sha256": "137e0f2a8abf1e0579d582835572b46f62b8354613a9c61d3232a61c9cab2d6f"
+    },
+    "db/run_events.json": {
+      "row_count": 129,
+      "sha256": "aa732493265a87cf83edf95b167f4781e174c71346cbaeb08023b773c28bdfb7"
+    },
+    "db/team_messages.json": {
+      "row_count": 4,
+      "sha256": "c049c79649b0893d873d3745f318828deab9397168efcdcd0d6d534d6a305c4e"
+    },
+    "db/team_runs.json": {
+      "row_count": 1,
+      "sha256": "d70cac1a550c818902ae43335b0dfb18915e7d08a44d6b9b18d7883b5e4da656"
+    },
+    "db/team_work_item_attempts.json": {
+      "row_count": 2,
+      "sha256": "7341bba9f99cea60214a091b24b4a46f146d24ef69c3e20d4ba8f9b18bfb7808"
+    },
+    "db/team_work_items.json": {
+      "row_count": 2,
+      "sha256": "b77810a734bf784ea73f513d8cb0d8b13a3ed03278fbed6e7f4ebb4fe97232db"
+    },
+    "db/work_run_resource_manifest.json": {
+      "row_count": 1,
+      "sha256": "d09ea2192e44db53560db3b27014e2402a48174be4d02cea8b7f2056dbf94da6"
+    },
+    "db/work_runs.json": {
+      "row_count": 1,
+      "sha256": "85449cf7f31030a3455907d1eb67db2e8f86e646c27a5826f7ce4a6b8de36354"
+    },
+    "db/works.json": {
+      "row_count": 1,
+      "sha256": "561a30fa03d255e51bd03e88543613c50345e8c0ec02b0a01dab61ffa5426035"
+    }
+  },
+  "format_version": "product-projection-recording/v1",
+  "git_sha": "cb55580500c9c5465e0cc4ab38528d082d51bca9",
+  "member_composition": [
+    "projection-lead",
+    "projection-worker-a",
+    "projection-worker-b"
+  ],
+  "mode": "product",
+  "predicate_evidence": {
+    "oi38": {
+      "foreign": {
+        "body": {
+          "error": {
+            "code": "work_not_found",
+            "message": "The requested Work was not found.",
+            "request_id": "a5e1a309-8644-46be-8059-3dcf12f6508b"
+          }
+        },
+        "status": 404
+      },
+      "missing": {
+        "body": {
+          "error": {
+            "code": "work_not_found",
+            "message": "The requested Work was not found.",
+            "request_id": "c6492485-77bf-41fe-b736-0b30ca275e40"
+          }
+        },
+        "status": 404
+      },
+      "missing_work_id": "5e371207-8366-4481-95a2-41ad4902fc8f",
+      "owner": {
+        "body": {
+          "next_cursor": null,
+          "work_runs": [
+            {
+              "bound_at": "2026-08-13T17:33:10.836Z",
+              "created_at": "2026-08-13T17:33:10.630Z",
+              "definition_version_id": "aafd8a43-4c98-4eb5-bf42-b11443a6da29",
+              "expires_at": "2026-08-13T17:48:10.630Z",
+              "id": "cdeecf2b-b8c8-4929-ae48-8522768605af",
+              "trigger_kind": "manual",
+              "trigger_ref": "product-projection:oi38-negative:ef71c222-ce17-4d36-9713-e3d68c6aff69",
+              "updated_at": "2026-08-13T17:33:10.836Z",
+              "work_id": "315df1a1-2a2f-4e10-a8ba-9f310bc42aed"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "owner_work_id": "315df1a1-2a2f-4e10-a8ba-9f310bc42aed"
+    }
+  },
+  "principal_id": "svc_local",
+  "principal_type": "service_account",
+  "provider": {
+    "kind": "opencode",
+    "model": "opencode-go/deepseek-v4-flash"
+  },
+  "provider_run": "real",
+  "queries": [
+    {
+      "name": "team_runs",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 1,
+      "sql": "SELECT tr.id,tr.tenant_id,tr.workspace_id,tr.principal_type,tr.principal_id,tr.root_task_id,tr.root_run_id,tr.team_version_id,tr.environment_version_id,tr.status,tr.phase,tr.final_text,tr.control_state,tr.revision,tr.lead_turn_count,tr.stop_reason,tr.completion_requested_by_run_id,tr.completion_approval_required,tr.created_at,tr.updated_at FROM team_runs tr WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY tr.id"
+    },
+    {
+      "name": "team_work_items",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 2,
+      "sql": "SELECT w.id,w.team_run_id,w.subject,w.description,w.status,w.owner_member_id,w.created_by_member_id,w.completion_summary,w.execution_task_id,w.tenant_id,w.workspace_id,w.principal_type,w.principal_id,w.created_at,w.updated_at,w.completed_at FROM team_work_items w JOIN team_runs tr ON tr.id=w.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND w.tenant_id=$2 AND w.workspace_id=$3 AND w.principal_type=$4 AND w.principal_id=$5 ORDER BY w.id"
+    },
+    {
+      "name": "team_work_item_attempts",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 2,
+      "sql": "SELECT a.id,a.work_item_id,a.team_run_id,a.attempt_no,a.assignee_member_id,a.requested_by_lead_task_id,a.feedback,a.execution_task_id,a.status,a.result_summary,a.tenant_id,a.workspace_id,a.principal_type,a.principal_id,a.created_at,a.updated_at,a.completed_at FROM team_work_item_attempts a JOIN team_runs tr ON tr.id=a.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND a.tenant_id=$2 AND a.workspace_id=$3 AND a.principal_type=$4 AND a.principal_id=$5 ORDER BY a.id"
+    },
+    {
+      "name": "team_messages",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 4,
+      "sql": "SELECT m.id,m.team_run_id,m.tenant_id,m.workspace_id,m.principal_type,m.principal_id,m.sequence,m.sender_member_run_id,m.recipient_member_run_id,m.work_item_id,m.attempt_id,m.kind,m.status,m.consumed_by_task_id,m.created_at,m.consumed_at FROM team_messages m JOIN team_runs tr ON tr.id=m.team_run_id WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 AND m.tenant_id=$2 AND m.workspace_id=$3 AND m.principal_type=$4 AND m.principal_id=$5 ORDER BY m.id"
+    },
+    {
+      "name": "run_events",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 129,
+      "sql": "SELECT e.id,e.run_id,e.sequence,e.type,e.payload,e.created_at FROM run_events e JOIN runs r ON r.id=e.run_id JOIN tasks t ON t.id=r.task_id JOIN team_runs tr ON tr.root_task_id=t.root_task_id WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3 AND t.principal_type=$4 AND t.principal_id=$5 AND tr.tenant_id=$2 AND tr.workspace_id=$3 AND tr.principal_type=$4 AND tr.principal_id=$5 ORDER BY e.id"
+    },
+    {
+      "name": "works",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 1,
+      "sql": "SELECT w.id,w.tenant_id,w.workspace_id,w.definition_id,w.current_definition_version_id,w.title,w.origin,w.archived_at,w.created_at,w.updated_at FROM works w JOIN work_runs wr ON wr.work_id=w.id JOIN tasks t ON t.id=wr.root_task_id WHERE wr.root_task_id=$1 AND w.tenant_id=$2 AND w.workspace_id=$3 AND wr.tenant_id=$2 AND wr.workspace_id=$3 AND t.tenant_id=$2 AND t.workspace_id=$3::text AND t.principal_type=$4 AND t.principal_id=$5 ORDER BY w.id"
+    },
+    {
+      "name": "work_runs",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 1,
+      "sql": "SELECT wr.id,wr.tenant_id,wr.workspace_id,wr.work_id,wr.definition_version_id,wr.trigger_kind,wr.trigger_ref,wr.root_task_id,wr.expires_at,wr.bound_at,wr.created_at,wr.updated_at FROM work_runs wr JOIN tasks t ON t.id=wr.root_task_id WHERE wr.root_task_id=$1 AND wr.tenant_id=$2 AND wr.workspace_id=$3 AND t.tenant_id=$2 AND t.workspace_id=$3::text AND t.principal_type=$4 AND t.principal_id=$5 ORDER BY wr.id"
+    },
+    {
+      "name": "work_run_resource_manifest",
+      "parameters": [
+        "$1:<redacted>",
+        "$2:<redacted>",
+        "$3:<redacted>",
+        "$4:<redacted>",
+        "$5:<redacted>"
+      ],
+      "row_count": 1,
+      "sql": "SELECT m.work_run_id,m.tenant_id,m.workspace_id,m.slot,m.resource_kind,m.requested_ref,m.resolved_version_id,m.resolved_fingerprint,m.resolved_at FROM work_run_resource_manifest m JOIN work_runs wr ON wr.id=m.work_run_id JOIN tasks t ON t.id=wr.root_task_id WHERE wr.root_task_id=$1 AND m.tenant_id=$2 AND m.workspace_id=$3 AND wr.tenant_id=$2 AND wr.workspace_id=$3 AND t.tenant_id=$2 AND t.workspace_id=$3::text AND t.principal_type=$4 AND t.principal_id=$5 ORDER BY m.work_run_id,m.slot"
+    }
+  ],
+  "recorded_at": "2026-08-13T21:39:10.949Z",
+  "root_task_id": "c5f4a431-02ab-44e5-acd8-49d775db83ea",
+  "scenario": "oi38-negative",
+  "scenario_definition": true,
+  "service_revision": "cb55580500c9c5465e0cc4ab38528d082d51bca9",
+  "started_at": "2026-08-13T17:33:10.949Z",
+  "submit_instruction_profile": "canonical-team-work-submit-hard-gate/v1",
+  "tenant_id": "tenant_local",
+  "work_id": "315df1a1-2a2f-4e10-a8ba-9f310bc42aed",
+  "work_run_id": "cdeecf2b-b8c8-4929-ae48-8522768605af",
+  "workspace_id": "00000000-0000-4000-8000-000000000001"
+}

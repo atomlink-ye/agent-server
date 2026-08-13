@@ -1,0 +1,13 @@
+[
+  {
+    "requested_ref": "team_version:aafd8a43-4c98-4eb5-bf42-b11443a6da29",
+    "resolved_at": "2026-08-13T17:33:10.877Z",
+    "resolved_fingerprint": null,
+    "resolved_version_id": "aafd8a43-4c98-4eb5-bf42-b11443a6da29",
+    "resource_kind": "definition",
+    "slot": "definition",
+    "tenant_id": "tenant_local",
+    "work_run_id": "cdeecf2b-b8c8-4929-ae48-8522768605af",
+    "workspace_id": "00000000-0000-4000-8000-000000000001"
+  }
+]

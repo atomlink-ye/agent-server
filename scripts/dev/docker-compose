@@ -46,13 +46,20 @@ fi
 
 arch="$(uname -m)"
 node_abi="${AGENT_SERVER_NODE_ABI:-137}"
-volume_json="$(node scripts/dev/compose-volume-environment.mjs "$repo_root" "$arch" "$node_abi")"
+volume_args=("$repo_root" "$arch" "$node_abi")
+if ((runtime_compose)); then
+  volume_args+=(--include-provider)
+fi
+volume_json="$(node scripts/dev/compose-volume-environment.mjs "${volume_args[@]}")"
 while IFS='=' read -r name value; do
   export "$name=$value"
 done < <(node -e 'const value=JSON.parse(process.argv[1]); for (const [name,item] of Object.entries(value)) console.log(`${name}=${item}`)' "$volume_json")
 root_volume="$NODE_MODULES_VOLUME"
 web_volume="$WEB_NODE_MODULES_VOLUME"
-provider_volume="$PROVIDER_TOOLCHAIN_VOLUME"
+provider_volume=''
+if ((runtime_compose)); then
+  provider_volume="$PROVIDER_TOOLCHAIN_VOLUME"
+fi
 
 docker volume create "$root_volume" >/dev/null
 docker volume create "$web_volume" >/dev/null

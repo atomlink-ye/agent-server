@@ -32,6 +32,7 @@ const composeEnvironment = {
     root: ROOT,
     architecture: arch(),
     nodeAbi: process.env.AGENT_SERVER_NODE_ABI ?? '137',
+    includeProvider: true,
   })),
 };
 const candidateSha = process.env.FOUNDATION_CANDIDATE_SHA?.trim() ?? '';

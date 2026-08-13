@@ -17,6 +17,7 @@ export async function deriveComposeVolumeEnvironment({
   root,
   architecture,
   nodeAbi = '137',
+  includeProvider = false,
 }) {
   const arch = ['x86_64', 'x64'].includes(architecture)
     ? 'amd64'
@@ -25,18 +26,22 @@ export async function deriveComposeVolumeEnvironment({
       : architecture;
   const abi = String(nodeAbi).replaceAll(/[^A-Za-z0-9._-]/gu, '-');
   const dependencyStamp = (await computeDependencyStamp(root)).trim();
+  const prefix = `agent-server-cache-v1-node24-abi${abi}-${arch}-${dependencyStamp}`;
+  const values = {
+    NODE_MODULES_VOLUME: `${prefix}-root`,
+    WEB_NODE_MODULES_VOLUME: `${prefix}-web`,
+    NODE_MODULES_EXTERNAL: 'true',
+    WEB_NODE_MODULES_EXTERNAL: 'true',
+  };
+  if (!includeProvider) return values;
   const providerHash = createHash('sha256');
   for (const file of providerFiles) {
     providerHash.update(file);
     providerHash.update(await readFile(join(root, file)));
   }
-  const prefix = `agent-server-cache-v1-node24-abi${abi}-${arch}-${dependencyStamp}`;
   return {
-    NODE_MODULES_VOLUME: `${prefix}-root`,
-    WEB_NODE_MODULES_VOLUME: `${prefix}-web`,
+    ...values,
     PROVIDER_TOOLCHAIN_VOLUME: `agent-server-provider-toolchain-v1-node24-abi${abi}-${arch}-${providerHash.digest('hex')}`,
-    NODE_MODULES_EXTERNAL: 'true',
-    WEB_NODE_MODULES_EXTERNAL: 'true',
   };
 }
 
@@ -48,6 +53,7 @@ if (
     root: resolve(process.argv[2] ?? '.'),
     architecture: process.argv[3] ?? process.arch,
     nodeAbi: process.argv[4] ?? '137',
+    includeProvider: process.argv[5] === '--include-provider',
   });
   process.stdout.write(`${JSON.stringify(values)}\n`);
 }

@@ -12,11 +12,11 @@ const expectedArms = [
   ['baseline-mcp', 0],
   ['baseline-product-subset', 0],
   ['baseline-eight-routes', 0],
-  ['projection-installer-missing', 1],
+  ['projection-installer-missing', 2],
   ['projection-installer-command-control', 0],
   ['foreign-leak-fail', 1],
   ['foreign-leak-mcp-control', 0],
-  ['work-registration-missing', 1],
+  ['work-registration-missing', 2],
   ['work-registration-http-control', 0],
   ['wrong-work-id-fail', 1],
   ['wrong-work-id-http-control', 0],
@@ -57,6 +57,11 @@ assert(
     JSON.stringify(expectedArms),
   'exact_arm_set',
 );
+assert(
+  JSON.stringify(evidence.arms.map((arm) => [arm.name, arm.raw_exit])) ===
+    JSON.stringify(expectedArms),
+  'exact_raw_exit_map',
+);
 for (const arm of evidence.arms) {
   assert(arm.raw_exit === arm.expected_exit, `${arm.name}:exit`);
   assert(arm.ok === true, `${arm.name}:ok`);
@@ -76,6 +81,7 @@ const result = {
     .digest('hex'),
   assertions: {
     exact_arm_set: true,
+    exact_raw_exit_map: true,
     restored_inputs: true,
     exact_status: true,
   },

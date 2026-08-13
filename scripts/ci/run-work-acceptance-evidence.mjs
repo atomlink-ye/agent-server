@@ -27,6 +27,7 @@ const inputs = [
   'src/entrypoints/mcp/direct-memory-mcp.ts',
   'src/entrypoints/mcp/product-work-mcp-tools.ts',
   'scripts/ci/check-work-import-boundary.mjs',
+  'scripts/ci/classify-work-acceptance.mjs',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
 ];
 const inputHashes = Object.fromEntries(inputs.map((file) => [file, sha(file)]));
@@ -62,11 +63,12 @@ mutate(
   `  void projection; // evidence mutation: omit projection installer`,
   () => {
     arms.push(
-      runArm(
+      runClassifiedArm(
         'projection-installer-missing',
+        'http-projection',
         'pnpm',
         ['modularization:acceptance:work-http'],
-        1,
+        2,
         [
           'runs the real HTTP create, start, and read path',
           'work_http_projection_installer_missing',
@@ -119,11 +121,12 @@ mutate(
   `      void input.contributeWorkRuntime; // evidence mutation: omit Work registration`,
   () => {
     arms.push(
-      runArm(
+      runClassifiedArm(
         'work-registration-missing',
+        'mcp-registration',
         'pnpm',
         ['modularization:acceptance:work-mcp'],
-        1,
+        2,
         [
           'creates through real MCP and reads the same Work through HTTP',
           'work_mcp_registration_missing:product_work_create',
@@ -304,6 +307,23 @@ function runFocusedTest(name, pattern, expectedExit) {
       pattern,
     ],
     expectedExit,
+  );
+}
+
+function runClassifiedArm(name, kind, executable, argv, expectedExit, markers) {
+  return runArm(
+    name,
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      kind,
+      '--',
+      executable,
+      ...argv,
+    ],
+    expectedExit,
+    [...markers, `work_acceptance_missing:kind=${kind}`],
   );
 }
 

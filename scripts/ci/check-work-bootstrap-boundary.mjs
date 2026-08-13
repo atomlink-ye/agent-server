@@ -77,6 +77,19 @@ console.log(
     parser: 'typescript-7-unstable-ast',
     file,
     predicate: [...forbiddenIdentifiers].join('|'),
+    syntax_authority: 'TypeScript 7 parser; no regex or handwritten scanner',
+    syntax_dependencies: {
+      nested_templates: 'parsed by TypeScript 7 and recursively traversed',
+      comments_and_braces:
+        'parsed by TypeScript 7; comments produce no AST nodes',
+      regex_vs_division: 'disambiguated by TypeScript 7 grammar',
+      escapes: 'decoded and structured by TypeScript 7 parser',
+      satisfies: 'parsed by TypeScript 7 and recursively traversed',
+      as_const: 'parsed by TypeScript 7 and recursively traversed',
+    },
+    traversal: 'executable AST Identifier nodes only',
+    non_identifiers:
+      'strings, comments, regex literals, and template static text do not produce target Identifier nodes',
     template_literal_policy:
       'static template text is non-executable; every ${...} interpolation AST is traversed recursively',
     violations: 0,

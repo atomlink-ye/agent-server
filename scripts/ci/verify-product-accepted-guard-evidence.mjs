@@ -278,7 +278,8 @@ const ARM_REQUIREMENTS = Object.freeze({
     {
       name: 'runtime-mutation-temp-manifest-delete-get-work',
       expectedExitCode: 1,
-      outputMarker: 'accepted_subset_invalid:accepted_subset_mismatch',
+      outputMarker:
+        'accepted_subset_invalid:evidence_mismatch:manifest.current_raw_sha256',
       endpointDeletion: true,
     },
     {
@@ -369,8 +370,16 @@ function verifyArm(arm, requirement, tier) {
       fail(`${tier}.${requirement.name}.output_marker`);
   }
   if (requirement.endpointDeletion) {
-    equalJson(arm.target_endpoint_id, 'get_work', `${tier}.${requirement.name}.target`);
-    equalJson(arm.non_target_invariant, true, `${tier}.${requirement.name}.invariant`);
+    equalJson(
+      arm.target_endpoint_id,
+      'get_work',
+      `${tier}.${requirement.name}.target`,
+    );
+    equalJson(
+      arm.non_target_invariant,
+      true,
+      `${tier}.${requirement.name}.invariant`,
+    );
     equalJson(
       arm.signed_manifest_unchanged,
       true,

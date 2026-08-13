@@ -443,7 +443,10 @@ function runEndpointDeletionManifestArm() {
   const targetEndpointId = 'get_work';
   const originalIds = signed.endpoints.map((endpoint) => endpoint.id);
   const targetIndex = originalIds.indexOf(targetEndpointId);
-  if (targetIndex < 0 || targetIndex !== originalIds.lastIndexOf(targetEndpointId))
+  if (
+    targetIndex < 0 ||
+    targetIndex !== originalIds.lastIndexOf(targetEndpointId)
+  )
     throw new Error('endpoint_deletion_target_not_unique');
   const mutated = structuredClone(signed);
   mutated.endpoints.splice(targetIndex, 1);
@@ -470,7 +473,9 @@ function runEndpointDeletionManifestArm() {
     ],
     cwd: repo,
     expectedExitCode: 1,
-    expectedOutputMarkers: ['accepted_subset_invalid:accepted_subset_mismatch'],
+    expectedOutputMarkers: [
+      'accepted_subset_invalid:evidence_mismatch:manifest.current_raw_sha256',
+    ],
   });
   arm.target_endpoint_id = targetEndpointId;
   arm.target_index = targetIndex;
@@ -485,7 +490,9 @@ function runEndpointDeletionManifestArm() {
     .update(mutatedBytes)
     .digest('hex');
   arm.non_target_invariant = nonTargetInvariant;
-  arm.signed_manifest_unchanged = fs.readFileSync(signedPath).equals(signedBytes);
+  arm.signed_manifest_unchanged = fs
+    .readFileSync(signedPath)
+    .equals(signedBytes);
   arm.ok = arm.ok && nonTargetInvariant && arm.signed_manifest_unchanged;
   fs.rmSync(directory, { recursive: true, force: true });
   return arm;

@@ -267,7 +267,7 @@ mutate(
           ['modularization:acceptance:work-mcp'],
           1,
           [
-            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:marker=createPostgresWorkIdentityModule',
+            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=createPostgresWorkIdentityModule',
           ],
         ),
       );
@@ -300,47 +300,65 @@ mutate(
 mutate(
   'bootstrap-direct-transfer-fail',
   'src/bootstrap.ts',
-  `  const runtimeMcpServer = new RuntimeMcpServer(`,
-  `  const startWorkRun = workModule;\n  void startWorkRun;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `import { createWorkModule } from './modules/work/work-module.js';`,
+  `import { createWorkModule } from './modules/work/work-module.js';\nimport { createPostgresWorkIdentityModule as forbiddenWorkIdentityModule } from './infrastructure/postgres/postgres-work-identity-repository.js';\nimport { registerProductWorkMcpTools as forbiddenWorkMcpRegistration } from './entrypoints/mcp/product-work-mcp-tools.js';`,
   () => {
-    withIndependentBoundaryBypassed(() => {
-      arms.push(
-        runArm(
-          'bootstrap-direct-transfer-independent-guard-bypassed',
-          'pnpm',
-          ['modularization:verify:work-boundary'],
-          0,
-          ['work_import_boundary_bypassed:evidence_ownership_dual'],
-        ),
-      );
-      arms.push(
-        runArm(
-          'bootstrap-direct-transfer-e5-fail',
-          'pnpm',
-          ['modularization:acceptance:work-mcp'],
-          1,
-          [
-            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=startWorkRun',
-          ],
-        ),
-      );
-      arms.push(
-        runArm(
-          'bootstrap-direct-transfer-type-control',
-          'pnpm',
-          ['check:types'],
-          0,
-        ),
-      );
-      arms.push(
-        runArm(
-          'bootstrap-direct-transfer-http-control',
-          'pnpm',
-          ['modularization:acceptance:work-http'],
-          0,
-        ),
-      );
-    });
+    const source = path.join(repo, 'src/bootstrap.ts');
+    const imported = fs.readFileSync(source, 'utf8');
+    const anchor = `  const runtimeMcpServer = new RuntimeMcpServer(`;
+    const construction = `  const forbiddenWorkInternals = forbiddenWorkIdentityModule({\n    database: pool,\n    definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),\n    execution: new InvokeTaskExecutionAdmission(invokeTask),\n  });\n  const forbiddenWorkContributor: typeof workModule.contributeRuntime =\n    (context) => forbiddenWorkMcpRegistration({\n      ...context,\n      workIdentity: forbiddenWorkInternals.workIdentity,\n      startWorkRun: forbiddenWorkInternals.startWorkRun,\n    });\n${anchor}`;
+    let changed = imported.replace(anchor, construction);
+    changed = changed.replace(
+      `    workModule.contributeRuntime,\n  );`,
+      `    forbiddenWorkContributor,\n  );`,
+    );
+    if (changed === imported || !changed.includes('forbiddenWorkContributor,'))
+      fail('bootstrap_direct_transfer_anchor_missing', 2);
+    fs.writeFileSync(source, changed);
+    try {
+      withIndependentBoundaryBypassed(() => {
+        arms.push(
+          runArm(
+            'bootstrap-direct-transfer-independent-guard-bypassed',
+            'pnpm',
+            ['modularization:verify:work-boundary'],
+            0,
+            ['work_import_boundary_bypassed:evidence_ownership_dual'],
+          ),
+        );
+        arms.push(
+          runArm(
+            'bootstrap-direct-transfer-e5-fail',
+            'pnpm',
+            ['modularization:acceptance:work-mcp'],
+            1,
+            [
+              'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=createPostgresWorkIdentityModule',
+              'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=workIdentity',
+              'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=startWorkRun',
+            ],
+          ),
+        );
+        arms.push(
+          runArm(
+            'bootstrap-direct-transfer-type-control',
+            'pnpm',
+            ['check:types'],
+            0,
+          ),
+        );
+        arms.push(
+          runArm(
+            'bootstrap-direct-transfer-http-control',
+            'pnpm',
+            ['modularization:acceptance:work-http'],
+            0,
+          ),
+        );
+      });
+    } finally {
+      fs.writeFileSync(source, imported);
+    }
   },
 );
 

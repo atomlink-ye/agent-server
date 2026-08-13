@@ -28,7 +28,7 @@ console.log(
     guard: 'work-bootstrap-zero',
     file,
     predicate: forbiddenIdentifiers.join('|'),
-    ignored_syntax: ['comments', 'string-literals', 'import-declarations'],
+    ignored_syntax: ['comments', 'string-literals'],
     violations: 0,
   }),
 );
@@ -36,7 +36,6 @@ console.log(
 function executableIdentifiers(text) {
   const result = [];
   let index = 0;
-  let importDeclaration = false;
   while (index < text.length) {
     if (text.startsWith('//', index)) {
       index = skipUntil(text, index + 2, '\n');
@@ -55,11 +54,9 @@ function executableIdentifiers(text) {
       const start = index++;
       while (index < text.length && /[A-Za-z0-9_$]/.test(text[index])) index++;
       const token = text.slice(start, index);
-      if (token === 'import') importDeclaration = true;
-      else if (!importDeclaration) result.push(token);
+      result.push(token);
       continue;
     }
-    if (importDeclaration && character === ';') importDeclaration = false;
     index++;
   }
   return result;

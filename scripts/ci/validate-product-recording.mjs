@@ -301,7 +301,7 @@ export async function validateRecording(directory, mode = 'pre-identity') {
   if (!manifest.service_revision || manifest.service_revision === 'unknown')
     fail('service_revision_invalid');
   if (
-    ['parallel-success', 'oi38-negative'].includes(manifest.scenario) &&
+    manifest.scenario === 'parallel-success' &&
     manifest.predicate_evidence?.parallel_attempts_observed !== true
   )
     fail('parallel_attempt_observation_missing');

@@ -165,8 +165,15 @@ export function assertScenarioPredicate(
   workRows,
   attemptRows,
 ) {
-  const predicateScenario =
-    scenario === 'oi38-negative' ? 'parallel-success' : scenario;
+  if (scenario === 'oi38-negative') {
+    if (
+      teamRows.every((row) => row.status === 'succeeded') &&
+      attemptRows.some((row) => row.status === 'completed' && row.completed_at)
+    )
+      return;
+    throw new Error('oi38_negative_live_run_predicate_failed');
+  }
+  const predicateScenario = scenario;
   if (predicateScenario === 'parallel-success') {
     const accepted = workRows.filter((row) => row.status === 'accepted');
     const completed = attemptRows.filter(

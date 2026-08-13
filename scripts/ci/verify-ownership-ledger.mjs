@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { deriveTransactions } from './transaction-ast-helper.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const repo = path.resolve(here, '../..');
@@ -146,7 +147,11 @@ function checkRepositories() {
   if (JSON.stringify(files) !== JSON.stringify(ledgerFiles)) fail('repository_ledger_files', { files, ledgerFiles });
   const lockRows = new Set((ledger.sourceLockRows ?? ledger.lockRows ?? []).map((x) => `${x.file}:${x.line}`));
   for (const file of files) {
-    const sourceFile = `src/infrastructure/postgres/${file}`; const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile); counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length;
+    const sourceFile = `src/infrastructure/postgres/${file}`; const source = read(sourceFile); const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile); const ast = deriveTransactions(source, file); const astCalls = ast.rawCalls; const astTypedCalls = ast.typedCalls; counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length;
+    if (astCalls.length !== calls.length) fail('ast_raw_query_call_site_reconciliation', { file, ast: astCalls.length, raw: calls.length });
+    if (astTypedCalls.length !== typedCalls.length) fail('ast_typed_query_call_site_reconciliation', { file, ast: astTypedCalls.length, typed: typedCalls.length });
+    const astByLine = new Map(astCalls.map((call) => [call.line, call]));
+    const astTypedByLine = new Map(astTypedCalls.map((call) => [call.line, call]));
     for (const typed of typedCalls) for (const table of typed.tables) typedRuntimeTables.add(table);
     const expected = ledger.repositories[file];
     if (typeof expected !== 'string') { fail('repository_owner_missing', file); continue; }
@@ -174,15 +179,15 @@ function checkRepositories() {
         if (!chain.migrationSource || chain.migrationSource.directory !== 'src/infrastructure/postgres/migrations') fail('migration_source_directory_MISMATCH', key);
       }
       if (!row.transactionEvidence || row.transactionEvidence.locator !== key || row.transactionEvidence.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('transaction_evidence_MISSING_OR_DRIFT', key);
-      const truthTransaction = ledger.transactionTruth?.[key];
-      if (!truthTransaction) fail('transaction_truth_MISSING', key);
-      if (truthTransaction && row.transaction !== truthTransaction) fail('transaction_truth_MISMATCH', { key, ledger: row.transaction, truth: truthTransaction });
+      const astTransaction = astByLine.get(call.line)?.transaction;
+      if (!astTransaction || astTransaction === 'unknown') fail('ast_transaction_MISSING', key);
+      if (astTransaction && row.transaction !== astTransaction) fail('ast_transaction_MISMATCH', { key, ledger: row.transaction, derived: astTransaction });
       const actual = override ? { ...call, ...override, file, line: call.line } : call;
       actual.owner = ledger.repositories[path.basename(file)];
       if (actual.classification === 'classified') { counts.classifiedCallSites += 1; fileClassified += 1; for (const table of actual.tables) classifiedRuntimeTables.add(table); } else { counts.missingCallSites += 1; fileMissing += 1; }
       if (!row.owner) fail('call_site_owner_MISSING', key);
       if (row.owner !== actual.owner) fail('call_site_owner_drift', { key, ledger: row.owner, actual: actual.owner });
-      if (actual.transaction === 'unknown') fail('call_site_transaction_unknown', key);
+      if (astTransaction === 'unknown') fail('call_site_transaction_unknown', key);
       for (const field of ['file', 'line', 'classification', 'operation', 'readWrite', 'lock', 'tables', 'owner']) if (JSON.stringify(row[field]) !== JSON.stringify(actual[field])) fail('call_site_field_drift', { key, field, ledger: row[field], actual: actual[field] });
       const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
       const repositoryOwner = ledger.repositories[path.basename(file)];
@@ -196,14 +201,15 @@ function checkRepositories() {
     for (const typed of typedCalls) {
       const key = `${file}:${typed.line}`; const row = ledger.typedCrossCapability?.[key];
       const typedTruth = ledger.typedCallTruth?.[key];
-      const independentTransaction = ledger.typedTransactionTruth?.[key];
-      if (!independentTransaction) fail('typed_transaction_truth_MISSING', key);
+      const astTransaction = astTypedByLine.get(typed.line)?.transaction;
+      if (!astTransaction || astTransaction === 'unknown') fail('ast_typed_transaction_MISSING', key);
       const actual = typedTruth ? { ...typed, ...typedTruth } : { ...typed };
       if (typedTruth && typedTruth.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_call_truth_evidence_MISMATCH', key);
       if (actual.classification === 'MISSING') fail('typed_query_call_unclassified_MISSING', key);
       const typedFact = ledger.typedQueryFacts?.[key];
       if (!typedFact) fail('typed_query_fact_ledger_MISSING', key);
-      if (independentTransaction && typedFact?.transaction !== independentTransaction) fail('typed_transaction_truth_MISMATCH', { key, ledger: typedFact?.transaction, truth: independentTransaction });
+      if (astTransaction && typedFact?.transaction !== astTransaction) fail('ast_typed_transaction_MISMATCH', { key, ledger: typedFact?.transaction, derived: astTransaction });
+      if (row && row.transaction !== astTransaction) fail('typed_cross_transaction_MISMATCH', { key, ledger: row.transaction, derived: astTransaction });
       actual.owner = ledger.repositories[file];
       for (const field of ['operation', 'readWrite', 'lock', 'tables', 'owner', 'sourceKind', 'sourceExcerptHash']) {
         if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
@@ -221,10 +227,10 @@ function checkRepositories() {
       } else if (row) fail('typed_cross_capability_spurious_disposition', key);
     }
     if (Object.keys(ledger.typedQueryFacts ?? {}).filter((key) => key.startsWith(`${file}:`)).length !== typedCalls.length) fail('typed_query_fact_file_coverage', file);
-    const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); const key = `${file}:${fact.line}`; return row ? { ...fact, transaction: ledger.transactionTruth?.[key], tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
+    const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); const key = `${file}:${fact.line}`; return row ? { ...fact, transaction: astByLine.get(fact.line)?.transaction, tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
     if (fileClassified + fileMissing !== calls.length || fileClassified !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: fileClassified, missing: fileMissing, ledger: ledgerCalls.length });
     const typedLockFacts = typedCalls.map((typed) => {
-      const truth = ledger.typedTransactionTruth?.[`${file}:${typed.line}`];
+      const truth = astTypedByLine.get(typed.line)?.transaction;
       return truth ? { ...typed, transaction: truth } : typed;
     });
     for (const lock of scanSourceLocks(file, [...lockFacts, ...typedLockFacts])) {

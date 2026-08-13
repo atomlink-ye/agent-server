@@ -19,7 +19,8 @@ services:
       HOME: /opt/provider-toolchain-volume/home
       PNPM_HOME: /opt/provider-toolchain-volume/pnpm
       PATH: /pnpm:/opt/provider-toolchain-volume/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    command: ['node', 'provider-toolchain/scripts/provider-toolchain.mjs', 'init']
+    command:
+      ['node', 'provider-toolchain/scripts/provider-toolchain.mjs', 'init']
 
   agent-server:
     depends_on:

@@ -190,7 +190,7 @@ canonical absence arms recorded raw exit 1 / classifier exit 2 with restore
 proof and unchanged candidate HEAD. Exact source hashes are retained in the
 remote final evidence.
 
-The precise full historical range checked was
+The precise full historical range through the framing source parent checked was
 `01dce6d89baa89d21180159c5be8b0a5f1446f74..248d254db81d78bd813fdddff092572fcb8d38fa`;
 `git diff --check` returned exit 2 because preserved raw ANSI captures contain
 trailing whitespace/newline findings across the older

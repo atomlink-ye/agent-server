@@ -19,9 +19,10 @@ input. `04-final-remote/` confirms candidate HEAD remained
 `02328517a0fe887464d0661d772a49ad9d88451b` and both inputs exist again.
 
 The full historical check
-`git diff 01dce6d89baa89d21180159c5be8b0a5f1446f74..248d254db81d78bd813fdddff092572fcb8d38fa --check`
-returns exit 2 due preserved raw ANSI terminal artifacts in the older
+The full-range check through the source parent was
+`git diff 01dce6d89baa89d21180159c5be8b0a5f1446f74..248d254db81d78bd813fdddff092572fcb8d38fa --check`;
+it returns exit 2 due preserved raw ANSI terminal artifacts in
 `e8-classifier-a02b54a/`, `e8-classifier-51c102f/`, and this follow-up's raw
-captures. Raw evidence is intentionally retained and not rewritten; no full
-range PASS is claimed. Source/tests/runner/report-only checks pass with
+captures. The current follow-up captures are retained separately and likewise
+not rewritten. No full-range PASS is claimed. Source/tests/runner/report-only checks pass with
 `git diff --check`.

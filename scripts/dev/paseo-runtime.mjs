@@ -33,9 +33,13 @@ const forwardedEnvironmentNames = [
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ];
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const repositoryRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
 const runtimeRoot = resolve(
-  process.env.PASEO_RUNTIME_ROOT ?? join(repositoryRoot, '.local', 'paseo-runtime'),
+  process.env.PASEO_RUNTIME_ROOT ??
+    join(repositoryRoot, '.local', 'paseo-runtime'),
 );
 const defaults = loadRealProviderDefaults();
 const port = Number.parseInt(process.env.PASEO_PORT ?? '16767', 10);

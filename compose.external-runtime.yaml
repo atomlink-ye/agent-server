@@ -80,13 +80,7 @@ services:
           nocopy: true
       - local-state:/workspace/.local
     command:
-      [
-        'node',
-        '--import',
-        'tsx',
-        '--watch',
-        'src/entrypoints/api/server.ts',
-      ]
+      ['node', '--import', 'tsx', '--watch', 'src/entrypoints/api/server.ts']
 
 volumes:
   paseo-runtime-state:

@@ -34,11 +34,9 @@ const composeEnvironment = {
     nodeAbi: process.env.AGENT_SERVER_NODE_ABI ?? '137',
   })),
 };
-const candidateSha = spawnSync(
-  'git',
-  ['-C', ROOT, 'rev-parse', 'HEAD'],
-  { encoding: 'utf8' },
-).stdout.trim();
+const candidateSha = spawnSync('git', ['-C', ROOT, 'rev-parse', 'HEAD'], {
+  encoding: 'utf8',
+}).stdout.trim();
 if (!/^[0-9a-f]{40}$/u.test(candidateSha))
   throw new Error('candidate_sha_missing');
 
@@ -50,7 +48,9 @@ function run(command, args, { allow = [0], env = composeEnvironment } = {}) {
     maxBuffer: 32 * 1024 * 1024,
   });
   if (!allow.includes(value.status))
-    throw new Error(`child_command_failed:status=${value.status ?? 'spawn_error'}`);
+    throw new Error(
+      `child_command_failed:status=${value.status ?? 'spawn_error'}`,
+    );
   scannedTranscripts.push(value.stdout, value.stderr);
   return value;
 }
@@ -86,31 +86,20 @@ function containerRecord(service, composeCommand = rawCompose) {
   ]).stdout.trim();
   if (!id) throw new Error(`container_missing:${service}`);
   const inspect = JSON.parse(
-    run('docker', [
-      'inspect',
-      '--format',
-      '{{json .Mounts}}',
-      id,
-    ]).stdout,
+    run('docker', ['inspect', '--format', '{{json .Mounts}}', id]).stdout,
   );
   const environmentNames = run('docker', [
     'inspect',
     '--format',
     '{{range .Config.Env}}{{println (index (split . "=") 0)}}{{end}}',
     id,
-  ]).stdout
-    .split(/\r?\n/u)
+  ])
+    .stdout.split(/\r?\n/u)
     .map((name) => name.trim())
     .filter(Boolean)
     .sort();
-  const top = run('docker', [
-    ...composeCommand,
-    'top',
-    service,
-    '-eo',
-    'args=',
-  ]).stdout
-    .split(/\r?\n/u)
+  const top = run('docker', [...composeCommand, 'top', service, '-eo', 'args='])
+    .stdout.split(/\r?\n/u)
     .map((command) => command.trim())
     .filter(Boolean)
     .map((command) => ({ command }));
@@ -136,7 +125,11 @@ function cleanup() {
     `label=com.docker.compose.project=${project}`,
     '--format',
     '{{.Name}}',
-  ]).stdout.trim().split(/\r?\n/u).filter(Boolean).sort();
+  ])
+    .stdout.trim()
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .sort();
   const projectVolumesBefore = run('docker', [
     'volume',
     'ls',
@@ -144,7 +137,11 @@ function cleanup() {
     `label=com.docker.compose.project=${project}`,
     '--format',
     '{{.Name}}',
-  ]).stdout.trim().split(/\r?\n/u).filter(Boolean).sort();
+  ])
+    .stdout.trim()
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .sort();
   const providerBefore = run('docker', [
     'volume',
     'inspect',
@@ -167,7 +164,10 @@ function cleanup() {
     `label=com.docker.compose.project=${project}`,
     '--format',
     '{{.Name}}',
-  ]).stdout.trim().split(/\r?\n/u).filter(Boolean);
+  ])
+    .stdout.trim()
+    .split(/\r?\n/u)
+    .filter(Boolean);
   const remainingVolumes = run('docker', [
     'volume',
     'ls',
@@ -175,7 +175,10 @@ function cleanup() {
     `label=com.docker.compose.project=${project}`,
     '--format',
     '{{.Name}}',
-  ]).stdout.trim().split(/\r?\n/u).filter(Boolean);
+  ])
+    .stdout.trim()
+    .split(/\r?\n/u)
+    .filter(Boolean);
   const providerAfter = run('docker', [
     'volume',
     'inspect',
@@ -327,7 +330,9 @@ try {
       ],
       { allow: [1] },
     );
-    const mutationResult = JSON.parse(mutationRun.stdout.trim().split('\n').at(-1));
+    const mutationResult = JSON.parse(
+      mutationRun.stdout.trim().split('\n').at(-1),
+    );
     if (mutationRun.status !== 1 || mutationResult.status !== 'FAIL')
       throw new Error('e4_ownership_mutation_not_red');
     mutation = {
@@ -336,9 +341,13 @@ try {
       status: mutationResult.status,
     };
   } finally {
-    run('docker', [...mutationCompose, 'down', '--remove-orphans', '--volumes'], {
-      allow: [0, 1],
-    });
+    run(
+      'docker',
+      [...mutationCompose, 'down', '--remove-orphans', '--volumes'],
+      {
+        allow: [0, 1],
+      },
+    );
   }
 
   const proofPath = resolve(artifactRoot, 'proof-record.json');
@@ -372,19 +381,22 @@ try {
     missing: false,
   };
   proof.candidate_sha = candidateSha;
-  proof.agent_server_container_id = runtimeRecord.runtime_inspection.agent_server.container_id;
-  proof.paseo_runtime_container_id = runtimeRecord.runtime_inspection.paseo_runtime.container_id;
+  proof.agent_server_container_id =
+    runtimeRecord.runtime_inspection.agent_server.container_id;
+  proof.paseo_runtime_container_id =
+    runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';
   proof.e4_mutation = mutation;
   proof.cleanup = cleanup();
   const serialized = [runtimePath, proofPath]
-    .map((path) => (path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8')))
+    .map((path) =>
+      path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8'),
+    )
     .join('\n');
   const secretHits = [...scannedTranscripts, serialized].filter((value) =>
     value.includes(process.env.OPENCODE_GO_API_KEY),
   ).length;
-  if (secretHits !== 0)
-    throw new Error('secret_scan_failed');
+  if (secretHits !== 0) throw new Error('secret_scan_failed');
   proof.secret_hits = secretHits;
   writeFileSync(proofPath, `${JSON.stringify(proof, null, 2)}\n`, {
     mode: 0o600,

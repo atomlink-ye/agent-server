@@ -40,7 +40,10 @@ export async function deriveComposeVolumeEnvironment({
   };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === resolve(import.meta.filename)
+) {
   const values = await deriveComposeVolumeEnvironment({
     root: resolve(process.argv[2] ?? '.'),
     architecture: process.argv[3] ?? process.arch,

@@ -9,10 +9,7 @@
     "observe_run": "GET /api/v1/works/{work_id}/runs/{work_run_id}",
     "observe_trace": "GET /api/v1/works/{work_id}/runs/{work_run_id}/trace"
   },
-  "required_nonempty_identifiers": [
-    "work_id",
-    "work_run_id"
-  ],
+  "required_nonempty_identifiers": ["work_id", "work_run_id"],
   "expected_terminal_state": "succeeded",
   "positive_business_predicate": {
     "kind": "exact_random_marker_round_trip",
@@ -48,11 +45,7 @@
     ]
   },
   "secret_scan": {
-    "scope": [
-      "stdout",
-      "stderr",
-      "every proof artifact"
-    ],
+    "scope": ["stdout", "stderr", "every proof artifact"],
     "expected_hits": 0
   },
   "cleanup_assertions": [

@@ -28,7 +28,8 @@ function parseArgs(argv) {
     if (suites.has(value)) result.suites.push(value);
     else if (value.startsWith('--')) {
       const next = argv[index + 1];
-      if (!next || next.startsWith('--')) throw new Error(`${value} requires a value`);
+      if (!next || next.startsWith('--'))
+        throw new Error(`${value} requires a value`);
       result.options[value.slice(2)] = next;
       index += 1;
     } else throw new Error(`unknown argument: ${value}`);
@@ -58,23 +59,39 @@ function sha256(value) {
 }
 
 function runVerifierMutation(args, environment = {}) {
-  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...args], {
-    cwd: ROOT,
-    env: { ...process.env, FOUNDATION_PHASE_C_POSITIVE_ONLY: '1', ...environment },
-    encoding: 'utf8',
-  });
+  const child = spawnSync(
+    process.execPath,
+    [fileURLToPath(import.meta.url), ...args],
+    {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        FOUNDATION_PHASE_C_POSITIVE_ONLY: '1',
+        ...environment,
+      },
+      encoding: 'utf8',
+    },
+  );
   const evaluation = child.stdout
     .trim()
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line))
     .at(-1);
-  return { exit: child.status, status: evaluation?.status, reason: evaluation?.reason };
+  return {
+    exit: child.status,
+    status: evaluation?.status,
+    reason: evaluation?.reason,
+  };
 }
 
 function evaluateE4(options) {
   if (!options['runtime-record']) {
-    return result('E4', 'MISSING', 'runtime topology record has not been collected');
+    return result(
+      'E4',
+      'MISSING',
+      'runtime topology record has not been collected',
+    );
   }
   const record = readJson(resolve(options['runtime-record']));
   if (record.__error) return result('E4', 'MISSING', record.__error);
@@ -89,12 +106,19 @@ function evaluateE4(options) {
     runtime?.paseo_runtime?.environment_names,
     runtime?.paseo_runtime?.mounts,
   ];
-  if (requiredCollections.some((value) => !Array.isArray(value) || !value.length)) {
+  if (
+    requiredCollections.some((value) => !Array.isArray(value) || !value.length)
+  ) {
     return result('E4', 'MISSING', 'required topology collection is empty');
   }
-  const agent = compose.services.find((service) => service.name === 'agent-server');
-  const paseo = compose.services.find((service) => service.name === 'paseo-runtime');
-  if (!agent || !paseo) return result('E4', 'FAIL', 'required services are absent');
+  const agent = compose.services.find(
+    (service) => service.name === 'agent-server',
+  );
+  const paseo = compose.services.find(
+    (service) => service.name === 'paseo-runtime',
+  );
+  if (!agent || !paseo)
+    return result('E4', 'FAIL', 'required services are absent');
   const forbiddenAgentServerEnvironment = new Set([
     'OPENCODE_GO_API_KEY',
     'PASEO_CONNECT_TIMEOUT_MS',
@@ -124,9 +148,16 @@ function evaluateE4(options) {
   const failures = [];
   if (!/^[0-9a-f]{40}$/u.test(record.candidate_sha ?? ''))
     failures.push('candidate_sha');
-  if (agent.command?.some((part) => String(part).includes('with-paseo'))) failures.push('agent_server_supervises_paseo');
-  if (agent.depends_on?.includes('provider-toolchain-init')) failures.push('agent_server_provider_dependency');
-  if (agent.mounts?.some((mount) => mount.target === '/opt/provider-toolchain-volume')) failures.push('agent_server_provider_mount');
+  if (agent.command?.some((part) => String(part).includes('with-paseo')))
+    failures.push('agent_server_supervises_paseo');
+  if (agent.depends_on?.includes('provider-toolchain-init'))
+    failures.push('agent_server_provider_dependency');
+  if (
+    agent.mounts?.some(
+      (mount) => mount.target === '/opt/provider-toolchain-volume',
+    )
+  )
+    failures.push('agent_server_provider_mount');
   const forbiddenEnvironmentPresent = Object.keys(agent.environment ?? {})
     .filter(
       (name) =>
@@ -140,9 +171,16 @@ function evaluateE4(options) {
       present: forbiddenEnvironmentPresent,
     });
   }
-  if (agent.environment?.PASEO_WS_URL !== 'ws://paseo-runtime:16767/ws') failures.push('agent_server_socket_boundary');
-  if (!paseo.depends_on?.includes('provider-toolchain-init')) failures.push('runtime_init_dependency');
-  if (!paseo.mounts?.some((mount) => mount.target === '/opt/provider-toolchain-volume')) failures.push('runtime_provider_mount');
+  if (agent.environment?.PASEO_WS_URL !== 'ws://paseo-runtime:16767/ws')
+    failures.push('agent_server_socket_boundary');
+  if (!paseo.depends_on?.includes('provider-toolchain-init'))
+    failures.push('runtime_init_dependency');
+  if (
+    !paseo.mounts?.some(
+      (mount) => mount.target === '/opt/provider-toolchain-volume',
+    )
+  )
+    failures.push('runtime_provider_mount');
   const requiredRuntimeEnvironment = [
     'OPENCODE_GO_API_KEY',
     'PASEO_PROVIDER',
@@ -207,29 +245,65 @@ function evaluateE4(options) {
     )
   )
     failures.push('actual_runtime_provider_mount');
-  if (runtime.agent_server.processes.some((process) => /(?:^|\/)paseo(?:\s|$)/u.test(process.command))) failures.push('agent_server_paseo_process');
-  if (!runtime.paseo_runtime.processes.some((process) => /(?:^|\/)paseo(?:\s|$)/u.test(process.command))) failures.push('runtime_paseo_process_missing');
-  if (runtime.agent_server.container_id === runtime.paseo_runtime.container_id) failures.push('container_identity_not_independent');
-  if (failures.length) return result('E4', 'FAIL', 'runtime ownership proposition failed', { failures });
+  if (
+    runtime.agent_server.processes.some((process) =>
+      /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
+    )
+  )
+    failures.push('agent_server_paseo_process');
+  if (
+    !runtime.paseo_runtime.processes.some((process) =>
+      /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
+    )
+  )
+    failures.push('runtime_paseo_process_missing');
+  if (runtime.agent_server.container_id === runtime.paseo_runtime.container_id)
+    failures.push('container_identity_not_independent');
+  if (failures.length)
+    return result('E4', 'FAIL', 'runtime ownership proposition failed', {
+      failures,
+    });
   if (process.env.FOUNDATION_PHASE_C_POSITIVE_ONLY === '1')
-    return result('E4', 'PASS', 'effective and running topology establish external runtime ownership');
+    return result(
+      'E4',
+      'PASS',
+      'effective and running topology establish external runtime ownership',
+    );
   const mutationRoot = mkdtempSync(join(tmpdir(), 'phase-c-e4-mutation-'));
   const mutationPath = join(mutationRoot, 'runtime-record.json');
   const mutated = structuredClone(record);
-  mutated.runtime_inspection.agent_server.environment_names.push('PASEO_PROVIDER');
+  mutated.runtime_inspection.agent_server.environment_names.push(
+    'PASEO_PROVIDER',
+  );
   writeFileSync(mutationPath, `${JSON.stringify(mutated)}\n`);
-  const mutation = runVerifierMutation(['E4', '--runtime-record', mutationPath]);
+  const mutation = runVerifierMutation([
+    'E4',
+    '--runtime-record',
+    mutationPath,
+  ]);
   rmSync(mutationRoot, { recursive: true, force: true });
   if (mutation.exit !== 1 || mutation.status !== 'FAIL')
-    return result('E4', 'MISSING', 'ownership-restoration mutation was not red', { mutation });
-  return result('E4', 'PASS', 'effective and running topology establish external runtime ownership', {
-    mutations: [{ name: 'restore-agent-provider-env-owner', ...mutation }],
-  });
+    return result(
+      'E4',
+      'MISSING',
+      'ownership-restoration mutation was not red',
+      { mutation },
+    );
+  return result(
+    'E4',
+    'PASS',
+    'effective and running topology establish external runtime ownership',
+    {
+      mutations: [{ name: 'restore-agent-provider-env-owner', ...mutation }],
+    },
+  );
 }
 
 const runtimeTargets = ['web-dev', 'mixed-team-journey', 'web-e2e-smoke'];
 function recipeFor(makefile, target) {
-  const match = new RegExp(`^${target}:\\n((?:\\t.*\\n)+)`, 'mu').exec(makefile);
+  const match = new RegExp(`^${target}:\\n((?:\\t.*\\n)+)`, 'mu').exec(
+    makefile,
+  );
   return match?.[1] ?? '';
 }
 
@@ -245,9 +319,14 @@ function evaluateE5() {
       ),
   );
   if (structuralFailures.length) {
-    return result('E5', 'FAIL', 'runtime-only preflight is missing or not first', {
-      structural_failures: structuralFailures,
-    });
+    return result(
+      'E5',
+      'FAIL',
+      'runtime-only preflight is missing or not first',
+      {
+        structural_failures: structuralFailures,
+      },
+    );
   }
   const positive = [];
   for (const target of runtimeTargets) {
@@ -257,13 +336,13 @@ function evaluateE5() {
       'make',
       ['--no-print-directory', '-s', '-f', makefilePath, target],
       {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        AGENT_SERVER_COMPOSITION: 'core',
-        RUNTIME_PREFLIGHT_TRACE_FILE: trace,
-      },
-      encoding: 'utf8',
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          AGENT_SERVER_COMPOSITION: 'core',
+          RUNTIME_PREFLIGHT_TRACE_FILE: trace,
+        },
+        encoding: 'utf8',
       },
     );
     const boundary = readFileSync(trace, 'utf8').trim();
@@ -271,7 +350,9 @@ function evaluateE5() {
     positive.push({
       target,
       exit: run.status,
-      reason_seen: run.stderr.includes(`RUNTIME_ONLY_TARGET_REQUIRES_RUNTIME: ${target}`),
+      reason_seen: run.stderr.includes(
+        `RUNTIME_ONLY_TARGET_REQUIRES_RUNTIME: ${target}`,
+      ),
       boundary,
       polling_seen: /health\/ready/u.test(`${run.stdout}${run.stderr}`),
     });
@@ -283,7 +364,10 @@ function evaluateE5() {
       item.polling_seen ||
       item.boundary !== `${item.target}\tcore`,
   );
-  if (badPositive) return result('E5', 'FAIL', 'runtime-only positive preflight failed', { positive });
+  if (badPositive)
+    return result('E5', 'FAIL', 'runtime-only positive preflight failed', {
+      positive,
+    });
 
   if (process.env.FOUNDATION_E5_POSITIVE_ONLY === '1') {
     return result('E5', 'PASS', 'runtime-only positive preflight passed', {
@@ -294,8 +378,12 @@ function evaluateE5() {
   const mutations = [];
   for (const target of runtimeTargets) {
     const originalRecipe = recipeFor(makefile, target);
-    if (!originalRecipe) return result('E5', 'MISSING', `recipe missing: ${target}`);
-    const mutated = makefile.replace(`\t@./scripts/dev/runtime-only-preflight ${target}\n`, '');
+    if (!originalRecipe)
+      return result('E5', 'MISSING', `recipe missing: ${target}`);
+    const mutated = makefile.replace(
+      `\t@./scripts/dev/runtime-only-preflight ${target}\n`,
+      '',
+    );
     const mutatedRecipe = recipeFor(mutated, target);
     const mutationRoot = mkdtempSync(join(tmpdir(), 'phase-c-e5-mutation-'));
     const mutationMakefile = join(mutationRoot, 'Makefile');
@@ -324,7 +412,9 @@ function evaluateE5() {
       target,
       mutation: 'remove-runtime-only-preflight',
       diff_sha256: sha256(`${target}\n${originalRecipe}\n${mutatedRecipe}`),
-      preflight_removed: !mutatedRecipe.includes(`runtime-only-preflight ${target}`),
+      preflight_removed: !mutatedRecipe.includes(
+        `runtime-only-preflight ${target}`,
+      ),
       polling_sentinel_reachable: /health\/ready/u.test(mutatedRecipe),
       verifier_exit: mutationRun.status,
       verifier_status: mutationEvaluation?.status,
@@ -340,13 +430,25 @@ function evaluateE5() {
         item.verifier_status !== 'FAIL',
     )
   ) {
-    return result('E5', 'MISSING', 'mutation did not produce a real verifier failure', { mutations });
+    return result(
+      'E5',
+      'MISSING',
+      'mutation did not produce a real verifier failure',
+      { mutations },
+    );
   }
-  return result('E5', 'PASS', 'all runtime-only targets fail at the preflight boundary and every removal mutation is red', { positive, mutations });
+  return result(
+    'E5',
+    'PASS',
+    'all runtime-only targets fail at the preflight boundary and every removal mutation is red',
+    { positive, mutations },
+  );
 }
 
 function git(...args) {
-  return execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }).trim();
+  return execFileSync('git', ['-C', ROOT, ...args], {
+    encoding: 'utf8',
+  }).trim();
 }
 
 function evaluateE6(options) {
@@ -355,13 +457,24 @@ function evaluateE6(options) {
   const committed = JSON.parse(
     git('show', `${EXPECTATION_COMMIT}:${EXPECTATION_PATH}`),
   );
-  if (sha256(JSON.stringify(committed)) !== sha256(JSON.stringify(expectation))) {
-    return result('E6', 'FAIL', 'working expectation differs from the committed Git object');
+  if (
+    sha256(JSON.stringify(committed)) !== sha256(JSON.stringify(expectation))
+  ) {
+    return result(
+      'E6',
+      'FAIL',
+      'working expectation differs from the committed Git object',
+    );
   }
   if (!options['proof-record'] && !options['proof-path']) {
-    return result('E6', 'MISSING', 'real-run proof record has not been committed', {
-      expectation_commit: EXPECTATION_COMMIT,
-    });
+    return result(
+      'E6',
+      'MISSING',
+      'real-run proof record has not been committed',
+      {
+        expectation_commit: EXPECTATION_COMMIT,
+      },
+    );
   }
   const proofPath = options['proof-path'] ?? options['proof-record'];
   if (
@@ -381,11 +494,13 @@ function evaluateE6(options) {
     proof.agent_server_container_id,
     proof.paseo_runtime_container_id,
   ];
-  if (required.some((value) => !nonempty(value))) return result('E6', 'MISSING', 'required proof identity is empty');
+  if (required.some((value) => !nonempty(value)))
+    return result('E6', 'MISSING', 'required proof identity is empty');
   const failures = [];
   if (!/^[0-9a-f]{40}$/u.test(proof.candidate_sha ?? ''))
     failures.push('candidate_sha');
-  if (proof.terminal_state !== expectation.expected_terminal_state) failures.push('terminal_state');
+  if (proof.terminal_state !== expectation.expected_terminal_state)
+    failures.push('terminal_state');
   if (
     proof.observed_success?.product_state !== 'complete' ||
     proof.observed_success?.problem_kind !== null ||
@@ -399,12 +514,17 @@ function evaluateE6(options) {
       proof.observed_success.trace_run_statuses.length ||
     proof.observed_success.fetched_run_statuses.some(
       (run, index) =>
-        run.run_id !== proof.observed_success.trace_run_statuses[index]?.run_id ||
+        run.run_id !==
+          proof.observed_success.trace_run_statuses[index]?.run_id ||
         run.status !== 'succeeded',
     )
   )
     failures.push('observed_success');
-  if (proof.marker_input !== proof.marker_output || !nonempty(proof.marker_input)) failures.push('exact_marker_round_trip');
+  if (
+    proof.marker_input !== proof.marker_output ||
+    !nonempty(proof.marker_input)
+  )
+    failures.push('exact_marker_round_trip');
   if (
     proof.parallel_business_observation?.work_count !== 2 ||
     proof.parallel_business_observation?.accepted_work_ids?.length !== 2 ||
@@ -433,9 +553,7 @@ function evaluateE6(options) {
     proof.parallel_business_observation?.trace_projection_status !==
       'internally_anchored' ||
     proof.parallel_business_observation?.overlap_observed !== true ||
-    !Array.isArray(
-      proof.parallel_business_observation?.worker_run_windows,
-    ) ||
+    !Array.isArray(proof.parallel_business_observation?.worker_run_windows) ||
     new Set(
       proof.parallel_business_observation.worker_run_windows.map(
         (run) => run.work_item_id,
@@ -443,9 +561,15 @@ function evaluateE6(options) {
     ).size !== 2
   )
     failures.push('parallel_business_predicate');
-  if (proof.provider !== expectation.runtime.provider || proof.model !== expectation.runtime.model) failures.push('provider_model');
-  if (!(proof.input_tokens > 0) || !(proof.output_tokens > 0)) failures.push('positive_token_usage');
-  if (proof.agent_server_container_id === proof.paseo_runtime_container_id) failures.push('independent_container_identity');
+  if (
+    proof.provider !== expectation.runtime.provider ||
+    proof.model !== expectation.runtime.model
+  )
+    failures.push('provider_model');
+  if (!(proof.input_tokens > 0) || !(proof.output_tokens > 0))
+    failures.push('positive_token_usage');
+  if (proof.agent_server_container_id === proof.paseo_runtime_container_id)
+    failures.push('independent_container_identity');
   if (proof.secret_hits !== 0) failures.push('secret_scan');
   if (
     proof.negative_control?.exit !== 1 ||
@@ -495,13 +619,20 @@ function evaluateE6(options) {
     sha256(committedProofBytes) !== sha256(proofBytes)
   )
     failures.push('proof_git_object_bytes');
-  const expectationTime = Number(git('show', '-s', '--format=%ct', EXPECTATION_COMMIT));
+  const expectationTime = Number(
+    git('show', '-s', '--format=%ct', EXPECTATION_COMMIT),
+  );
   const runTime = Math.floor(Date.parse(proof.run_timestamp) / 1000);
   const proofTime = Number(git('show', '-s', '--format=%ct', proofCommit));
   const switchTime = Number(
     git('show', '-s', '--format=%ct', canonicalSwitchCommit),
   );
-  if (!(expectationTime < runTime && runTime < proofTime && proofTime < switchTime)) failures.push('chronology');
+  if (!(
+    expectationTime < runTime &&
+    runTime < proofTime &&
+    proofTime < switchTime
+  ))
+    failures.push('chronology');
   try {
     git('merge-base', '--is-ancestor', EXPECTATION_COMMIT, proofCommit);
     git('merge-base', '--is-ancestor', proof.candidate_sha, proofCommit);
@@ -550,9 +681,16 @@ function evaluateE6(options) {
   } catch {
     failures.push('canonical_switch_exact_commit');
   }
-  if (failures.length) return result('E6', 'FAIL', 'real-run proof proposition failed', { failures });
+  if (failures.length)
+    return result('E6', 'FAIL', 'real-run proof proposition failed', {
+      failures,
+    });
   if (process.env.FOUNDATION_PHASE_C_POSITIVE_ONLY === '1')
-    return result('E6', 'PASS', 'real-run proof, negative control, chronology, and ancestry passed');
+    return result(
+      'E6',
+      'PASS',
+      'real-run proof, negative control, chronology, and ancestry passed',
+    );
   const mutationRoot = mkdtempSync(join(tmpdir(), 'phase-c-e6-mutation-'));
   const tamperedPath = join(mutationRoot, 'proof.json');
   const tampered = structuredClone(proof);
@@ -577,20 +715,38 @@ function evaluateE6(options) {
     { name: 'tamper-marker-proof', ...tamperedMutation },
     { name: 'reverse-proof-switch-chronology', ...chronologyMutation },
   ];
-  if (mutations.some((mutation) => mutation.exit !== 1 || mutation.status !== 'FAIL'))
+  if (
+    mutations.some(
+      (mutation) => mutation.exit !== 1 || mutation.status !== 'FAIL',
+    )
+  )
     return result('E6', 'MISSING', 'E6 mutation was not red', { mutations });
-  return result('E6', 'PASS', 'real-run proof, negative control, chronology, and ancestry passed', { mutations });
+  return result(
+    'E6',
+    'PASS',
+    'real-run proof, negative control, chronology, and ancestry passed',
+    { mutations },
+  );
 }
 
 let parsed;
 try {
   parsed = parseArgs(process.argv.slice(2));
 } catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exit(2);
 }
 const evaluations = parsed.suites.map((suite) =>
-  suite === 'E4' ? evaluateE4(parsed.options) : suite === 'E5' ? evaluateE5() : evaluateE6(parsed.options),
+  suite === 'E4'
+    ? evaluateE4(parsed.options)
+    : suite === 'E5'
+      ? evaluateE5()
+      : evaluateE6(parsed.options),
 );
-for (const evaluation of evaluations) process.stdout.write(`${JSON.stringify(evaluation)}\n`);
-process.exitCode = Math.max(...evaluations.map((evaluation) => evaluation.code));
+for (const evaluation of evaluations)
+  process.stdout.write(`${JSON.stringify(evaluation)}\n`);
+process.exitCode = Math.max(
+  ...evaluations.map((evaluation) => evaluation.code),
+);

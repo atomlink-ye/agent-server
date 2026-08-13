@@ -32,14 +32,22 @@ async function request(path, { method = 'GET', body, expected } = {}) {
   const value = await response.json().catch(() => null);
   if (expected !== undefined) return { status: response.status, body: value };
   if (!response.ok)
-    throw new Error(`request_failed:${path}:${response.status}:${value?.error?.code ?? 'unknown'}`);
+    throw new Error(
+      `request_failed:${path}:${response.status}:${value?.error?.code ?? 'unknown'}`,
+    );
   return value;
 }
 
 function agentSource(name, instructions) {
   const tools =
     name === 'phase-c-lead'
-      ? ['team-state', 'team-work-list', 'team-work-create', 'team-work-accept-v2', 'team-finish']
+      ? [
+          'team-state',
+          'team-work-list',
+          'team-work-create',
+          'team-work-accept-v2',
+          'team-finish',
+        ]
       : ['team-state', 'team-work-list', 'team-work-submit'];
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}-${randomUUID().slice(0, 8)}\nspec:\n  description: Phase C external runtime proof role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${tools.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
@@ -57,7 +65,8 @@ async function importAgent(name, instructions) {
 }
 
 async function waitFor(path, predicate) {
-  const deadline = Date.now() + Number(process.env.PHASE_C_RUN_TIMEOUT_MS ?? 900000);
+  const deadline =
+    Date.now() + Number(process.env.PHASE_C_RUN_TIMEOUT_MS ?? 900000);
   while (Date.now() < deadline) {
     const value = await request(path);
     if (predicate(value)) return value;
@@ -72,10 +81,13 @@ const environment = await request('/api/v1/environments:import', {
     source: `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: phase-c-${randomUUID().slice(0, 8)}\nspec:\n  adapter: paseo\n  provider: ${defaults.PASEO_PROVIDER}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`,
   },
 });
-await request(`/api/v1/environment-versions/${environment.version.id}:publish`, {
-  method: 'POST',
-  body: {},
-});
+await request(
+  `/api/v1/environment-versions/${environment.version.id}:publish`,
+  {
+    method: 'POST',
+    body: {},
+  },
+);
 const lead = await importAgent(
   'phase-c-lead',
   `Use only canonical Team tools. Create exactly two independent Work items total: one assigned to phase-c-worker-a and one assigned to phase-c-worker-b. Each description must require exact marker ${marker}. Wake both workers, accept both only after their real submissions contain exactly ${marker}, call canonical team_finish exactly once, and make your final result text exactly ${marker}.`,
@@ -93,10 +105,13 @@ const imported = await request('/api/v1/teams:import', {
   method: 'POST',
   body: { source: definitionSource },
 });
-const published = await request(`/api/v1/team-versions/${imported.version.id}:publish`, {
-  method: 'POST',
-  body: {},
-});
+const published = await request(
+  `/api/v1/team-versions/${imported.version.id}:publish`,
+  {
+    method: 'POST',
+    body: {},
+  },
+);
 
 if (negativeControl) {
   const negative = await request('/api/v1/works', {
@@ -197,7 +212,9 @@ const workerRunWindows = trace.runs
     started_at: run.started_at,
     ended_at: run.ended_at,
   }));
-const distinctWorkerIds = [...new Set(workerRunWindows.map((run) => run.work_item_id))];
+const distinctWorkerIds = [
+  ...new Set(workerRunWindows.map((run) => run.work_item_id)),
+];
 const overlapObserved = workerRunWindows.some((left, leftIndex) =>
   workerRunWindows.some(
     (right, rightIndex) =>
@@ -307,4 +324,6 @@ const record = {
 await writeFile(output, `${JSON.stringify(record, null, 2)}\n`, {
   mode: 0o600,
 });
-process.stdout.write(`${JSON.stringify({ status: 'PASS', output, work_id: workId, work_run_id: workRunId })}\n`);
+process.stdout.write(
+  `${JSON.stringify({ status: 'PASS', output, work_id: workId, work_run_id: workRunId })}\n`,
+);

@@ -16,6 +16,7 @@ const SCENARIOS = new Set([
   'parallel-success',
   'rework-once',
   'lead-never-accept',
+  'oi38-negative',
 ]);
 const realProviderDefaults = loadRealProviderDefaults();
 
@@ -73,6 +74,20 @@ async function http(baseUrl, token, path, options = {}) {
       body?.error?.code ?? body?.message ?? 'request_failed',
     );
   return body;
+}
+async function requestSnapshot(baseUrl, token, path) {
+  const response = await fetch(new URL(path, baseUrl), {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+  });
+  return {
+    status: response.status,
+    body: await response.json().catch(() => null),
+  };
+}
+function normalizeOi38Body(snapshot) {
+  const body = structuredClone(snapshot?.body);
+  if (body?.error) delete body.error.request_id;
+  return JSON.stringify(body);
 }
 async function waitFor(load, predicate, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -194,6 +209,18 @@ async function main() {
     fail('invalid_mode');
   if (!SCENARIOS.has(scenario)) fail('invalid_scenario');
   if (!baseUrl || !token) fail('base_url_and_agent_server_token_required');
+  const executionScenario =
+    scenario === 'oi38-negative' ? 'parallel-success' : scenario;
+  if (scenario === 'oi38-negative' && mode !== 'product')
+    fail('oi38_product_mode_required');
+  const foreignToken =
+    scenario === 'oi38-negative'
+      ? (process.env.AGENT_SERVER_FOREIGN_TOKEN ??
+        process.env.OI38_FOREIGN_TOKEN)
+      : null;
+  if (scenario === 'oi38-negative' && !foreignToken)
+    fail('oi38_foreign_token_required');
+  if (foreignToken === token) fail('oi38_foreign_token_matches_owner');
   const tenantId =
     process.env.AGENT_TENANT_ID ?? process.env.AGENT_SERVER_TENANT_ID;
   const workspaceId =
@@ -220,11 +247,28 @@ async function main() {
     ready.checks.some((check) => check.status !== 'ready')
   )
     fail('provider_binding_health_not_ready');
+  let oi38MissingWorkId;
+  let oi38MissingSnapshot;
+  if (scenario === 'oi38-negative') {
+    oi38MissingWorkId = randomUUID();
+    oi38MissingSnapshot = await requestSnapshot(
+      url,
+      foreignToken,
+      `/api/v1/works/${oi38MissingWorkId}/runs?limit=100`,
+    );
+    if (
+      oi38MissingSnapshot.status !== 404 ||
+      oi38MissingSnapshot.body?.error?.code !== 'work_not_found' ||
+      typeof oi38MissingSnapshot.body?.error?.request_id !== 'string' ||
+      !oi38MissingSnapshot.body.error.request_id
+    )
+      fail('oi38_foreign_token_preflight_failed');
+  }
   const packageSuffix =
     mode === 'state-canary' ? `-${randomUUID().slice(0, 8)}` : '';
   const definitionPath = resolve(
     DEFINITION_DIR,
-    `${mode === 'state-canary' ? 'parallel-success' : scenario}.team.yaml`,
+    `${mode === 'state-canary' ? 'parallel-success' : executionScenario}.team.yaml`,
   );
   let template = await readFile(definitionPath, 'utf8');
   if (mode === 'state-canary') {
@@ -246,9 +290,9 @@ async function main() {
   const names =
     mode === 'state-canary'
       ? ['projection-worker-a', 'projection-worker-b']
-      : scenario === 'parallel-success'
+      : executionScenario === 'parallel-success'
         ? ['projection-worker-a', 'projection-worker-b']
-        : scenario === 'rework-once'
+        : executionScenario === 'rework-once'
           ? ['projection-worker', 'projection-reviewer']
           : ['projection-worker', 'projection-observer'];
   const versions = { members: [] };
@@ -257,7 +301,7 @@ async function main() {
     body: {
       source: agentYaml(
         'projection-lead',
-        scenarioInstructions(scenario, 'lead', mode),
+        scenarioInstructions(executionScenario, 'lead', mode),
         `projection-lead${packageSuffix}`,
       ),
     },
@@ -273,7 +317,7 @@ async function main() {
       body: {
         source: agentYaml(
           name,
-          scenarioInstructions(scenario, name, mode),
+          scenarioInstructions(executionScenario, name, mode),
           `${name}${packageSuffix}`,
         ),
       },
@@ -368,7 +412,7 @@ async function main() {
           .length >= 2
       )
         parallelAttemptsObserved = true;
-      if (scenario === 'parallel-success')
+      if (executionScenario === 'parallel-success')
         return (
           status === 'succeeded' &&
           works.length === 2 &&
@@ -387,7 +431,7 @@ async function main() {
             );
           })
         );
-      if (scenario === 'rework-once')
+      if (executionScenario === 'rework-once')
         return (
           status === 'succeeded' &&
           works.length === 2 &&
@@ -465,7 +509,7 @@ async function main() {
       `/api/v1/works/${workId}/runs/${workRunId}/trace`,
       { technicalIdempotency: false },
     );
-    if (scenario === 'parallel-success') {
+    if (executionScenario === 'parallel-success') {
       const activities = trace?.mcp_activities;
       if (!Array.isArray(activities) || activities.length < 1)
         fail('parallel_mcp_activities_missing');
@@ -476,6 +520,41 @@ async function main() {
         )
       )
         fail('parallel_mcp_provenance_invalid');
+    }
+    let oi38Evidence;
+    if (scenario === 'oi38-negative') {
+      const owner = await requestSnapshot(
+        url,
+        token,
+        `/api/v1/works/${workId}/runs?limit=100`,
+      );
+      const foreign = await requestSnapshot(
+        url,
+        foreignToken,
+        `/api/v1/works/${workId}/runs?limit=100`,
+      );
+      const missing = oi38MissingSnapshot;
+      if (
+        owner.status !== 200 ||
+        !Array.isArray(owner.body?.work_runs) ||
+        owner.body.work_runs.length < 1
+      )
+        fail('oi38_owner_positive_control_failed');
+      if (
+        foreign.status !== 404 ||
+        missing.status !== 404 ||
+        foreign.body?.error?.code !== 'work_not_found' ||
+        missing.body?.error?.code !== 'work_not_found' ||
+        normalizeOi38Body(foreign) !== normalizeOi38Body(missing)
+      )
+        fail('oi38_foreign_missing_mismatch');
+      oi38Evidence = {
+        owner_work_id: workId,
+        missing_work_id: oi38MissingWorkId,
+        owner,
+        foreign,
+        missing,
+      };
     }
     const capture = await captureProductRun({
       baseUrl: url,
@@ -497,13 +576,14 @@ async function main() {
       definitionHash,
       predicateEvidence: {
         parallel_attempts_observed: parallelAttemptsObserved,
-        ...(scenario === 'parallel-success'
+        ...(executionScenario === 'parallel-success'
           ? {
               parallel_work_attempts: parallelPredicateEvidence(
                 project?.work_items,
               ),
             }
           : {}),
+        ...(oi38Evidence ? { oi38: oi38Evidence } : {}),
       },
       serviceRevision: live.version,
       databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,

@@ -40,7 +40,7 @@ services:
       [
         '/bin/sh',
         '-c',
-        'chmod 0700 /runtime-state && chown 1000:1000 /runtime-state',
+        'chown 0:0 /runtime-state && chmod 0700 /runtime-state && chown 1000:1000 /runtime-state',
       ]
     restart: 'no'
 

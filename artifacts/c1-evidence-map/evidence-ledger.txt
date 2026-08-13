@@ -1,0 +1,69 @@
+# C1 machine evidence ledger
+
+candidate_sha=e41d725d4fee6fcecc2cd5c93e4b39eafe42a42c
+
+## E1 baseline
+command=mutation_setup=none ; docker run --rm [candidate readonly mounts + image node_modules] agent-server-runner:latest bash -lc cd /workspace && ./node_modules/.bin/tsx scripts/ci/check-frame-contract-map.ts
+actual_exit_code=0
+expected_exit_code=0
+stdout=frame_contract_map_exit=0
+
+## E2 baseline
+command=mutation_setup=none ; docker run --rm [candidate readonly mounts + image node_modules] agent-server-runner:latest bash -lc cd /workspace && ./node_modules/.bin/tsx scripts/ci/check-product-recording-provenance.ts
+actual_exit_code=2
+expected_exit_code=2
+provenance_inputs_verified=true
+recorder_count=2
+negative_control_count=1
+third_recorder_slot=MISSING
+o_h2_decision=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/DECISIONS-2026-08-13-owner-handover.md#O-H2
+summary=E2 is MISSING, not PASS; O-H2 makes the third-slot MISSING nonblocking for C1 only.
+
+## Projection smoke
+command=mutation_setup=none ; docker run --rm [candidate readonly mounts + image node_modules] agent-server-runner:latest bash -lc cd /workspace && ./node_modules/.bin/tsx /tmp/c1-projection-smoke.ts
+actual_exit_code=0
+expected_exit_code=0
+
+## Red arms
+name=e1-value
+command=copy map to isolated /root mutation directory; sed duration_ms=312707 to 312708; run E1 checker in short-lived container
+actual_exit_code=1
+expected_exit_code=1
+
+name=e1-nontriple
+command=copy map to isolated /root mutation directory; replace first fixture filename with see-recording; run E1 checker
+actual_exit_code=1
+expected_exit_code=1
+
+name=e2-byte
+command=copy fixture directory to isolated /root mutation directory; append newline to parallel recorder; run E2 checker
+actual_exit_code=1
+expected_exit_code=1
+
+name=e2-fourth
+command=copy fixture directory to isolated /root mutation directory; add fourth.json; run E2 checker
+actual_exit_code=1
+expected_exit_code=1
+
+name=e2-wrong-directory
+command=copy legacy atomic fixture directory to isolated /root mutation directory; add oi38 negative control; run E2 checker
+actual_exit_code=1
+expected_exit_code=1
+
+## Worker self-decision
+trigger_fact=remote sandbox lacked the org tasks tree required by E2 sourceRoot
+reason=transport the three immutable task originals without comparing fixtures to themselves
+exact_object=artifacts/c1-evidence-map/source-mount/tasks/active/agent-server-implementation-20260722/rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/recordings
+recovery=source-mount removed before final commit
+boundary=no task original changed; only three byte-identical files transported; no install/build/service/provider
+
+## Manager C self-decision
+decision_record=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/reports/mgr-c-sandbox-decisions.md
+trigger_fact=agent-server-runner:latest lacked candidate accepted contract tree
+exact_object=candidate src/contracts, package.json, and tsconfig.json mounted read-only; image node_modules retained
+recovery=docker run --rm removed mounts with each short-lived container
+boundary=no contract edit; no node_modules mount; no install/build/service/provider; no ownership expansion
+
+## Pre-merge evidence
+pre_merge_candidate=548729ec8b0673268b9ca9112783c5d26c54f488
+status=retained only as attempt history; not used as final evidence

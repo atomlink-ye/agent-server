@@ -129,7 +129,14 @@ async function runSuite(suite, commit) {
       positiveRoot,
       commit,
     );
-    const expected = suite === 'E3' ? [1, 2] : suite === 'E8' ? [1, 2] : [1];
+    const expected =
+      suite === 'E3'
+        ? [1, 2]
+        : suite === 'E8'
+          ? [1, 2]
+          : suite === 'E1'
+            ? [1]
+            : [1, 1];
     const mutationOk = mutations.every(
       (item, index) => item.code === expected[index],
     );

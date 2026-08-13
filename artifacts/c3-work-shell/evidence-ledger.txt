@@ -1,0 +1,66 @@
+C3 Work Shell evidence ledger
+date=2026-08-13
+baseline_sha=e8850f229e31dafa128e97d26c454c4e338c283a
+code_candidate_sha=739b9abced32864882606bfaf8950d99300492cf
+
+[static_scope]
+result=PASS
+command=git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend diff --name-only e8850f229e31dafa128e97d26c454c4e338c283a..739b9abced32864882606bfaf8950d99300492cf
+actual_files=apps/web/components/work/work-list.browser.test.tsx,apps/web/components/work/work-shell.css,apps/web/components/work/work-shell.tsx
+
+[static_whitespace]
+result=PASS
+exit_code=0
+command=git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend diff --check e8850f229e31dafa128e97d26c454c4e338c283a..739b9abced32864882606bfaf8950d99300492cf
+
+[independent_oracle]
+result=ACCEPT
+reviewed_candidate_sha=739b9abced32864882606bfaf8950d99300492cf
+standards=E8,O-H3,O-H9
+remaining_ownership_blockers=0
+
+[e8_browser]
+result=MISSING
+exit_code=NOT_RUN
+command=pnpm exec vitest --config vitest.web.config.ts --run apps/web/components/work/work-list.browser.test.tsx
+reason=Manager C did not authorize a remote heavy-work window; local browser/dependency execution is prohibited by DISPATCH-C3-work-shell.md.
+
+[e8_missing_exit_contract]
+result=MISSING
+exit_code=NOT_RUN
+reason=The fixed direct-Vitest command cannot make a missing test file report MISSING=2 from inside that missing file. C3 did not modify frozen vitest.web.config.ts or add an out-of-scope wrapper script.
+
+[red_arm_runs_status_completed]
+result=MISSING
+exit_code=NOT_RUN
+mutation=Map recorder runs[].status to Completed or 已完成 in a disposable copy.
+reason=No authorized remote browser window.
+
+[red_arm_remove_unavailable]
+result=MISSING
+exit_code=NOT_RUN
+mutation=Remove the per-Work unavailable explanation in a disposable copy.
+reason=No authorized remote browser window.
+
+[red_arm_add_n_plus_one]
+result=MISSING
+exit_code=NOT_RUN
+mutation=Add /api/works/{id}/runs list enrichment in a disposable copy.
+reason=No authorized remote browser window.
+
+[red_arm_missing_test_or_fixture]
+result=MISSING
+exit_code=NOT_RUN
+mutation=Remove the test, recorder fixture, or list node in a disposable copy.
+reason=No authorized remote browser window; fixed direct-Vitest command also cannot distinguish a missing test file as exit 2 without an out-of-scope wrapper/config change.
+
+[remote_operations]
+result=NOT_RUN
+contabo=false
+docker=false
+build=false
+dev_server=false
+install=false
+push=false
+pr=false
+merge=false

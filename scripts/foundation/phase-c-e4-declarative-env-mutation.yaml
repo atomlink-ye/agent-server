@@ -1,0 +1,4 @@
+services:
+  agent-server:
+    environment:
+      PASEO_PROVIDER: declarative-mutation-provider

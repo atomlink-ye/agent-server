@@ -94,6 +94,29 @@ for (const composePath of [
     throw new Error(`${composePath}: agent volume override is missing`);
   if (agent.includes(':/opt/provider-toolchain-volume'))
     throw new Error(`${composePath}: agent owns provider mount`);
+  if (!/^    environment: !override\s*$/mu.test(agent))
+    throw new Error(`${composePath}: agent environment override is missing`);
+  const agentEnvironmentNames = [
+    ...agent.matchAll(/^      ([A-Z0-9_]+):/gmu),
+  ].map((match) => match[1]);
+  const expectedAgentEnvironmentNames = [
+    'NODE_ENV',
+    'CI',
+    'HOST',
+    'PORT',
+    'LOG_LEVEL',
+    'SERVICE_NAME',
+    'AGENT_SERVER_DISPATCHER_CONCURRENCY',
+    'DATABASE_URL',
+    'POSTGRES_URL',
+    'SERVICE_ACCOUNTS_JSON',
+    'PASEO_WS_URL',
+  ];
+  if (
+    JSON.stringify(agentEnvironmentNames) !==
+    JSON.stringify(expectedAgentEnvironmentNames)
+  )
+    throw new Error(`${composePath}: agent environment override is not exact`);
   for (const name of [
     'OPENCODE_GO_API_KEY',
     'PASEO_PROVIDER',
@@ -101,8 +124,8 @@ for (const composePath of [
     'PASEO_EXECUTION_TIMEOUT_MS',
     'PASEO_SESSION_RPC_TIMEOUT_MS',
   ]) {
-    if (!new RegExp(`^      ${name}: !reset null\\s*$`, 'mu').test(agent))
-      throw new Error(`${composePath}: agent does not reset ${name}`);
+    if (agentEnvironmentNames.includes(name))
+      throw new Error(`${composePath}: agent retains ${name}`);
   }
   if (!/^      PASEO_WS_URL: ws:\/\/paseo-runtime:16767\/ws\s*$/mu.test(agent))
     throw new Error(`${composePath}: agent socket boundary is missing`);

@@ -430,6 +430,76 @@ assert.equal(
   ),
   true,
 );
+for (const [path, expectedProvider] of [
+  ['phase-c-e4-declarative-env-mutation.yaml', 'declarative-mutation-provider'],
+  ['phase-c-e4-actual-env-mutation.yaml', 'actual-mutation-provider'],
+]) {
+  const source = readFileSync(resolve(import.meta.dirname, path), 'utf8');
+  assert.match(source, /^services:\n  agent-server:\n    environment:\n/mu);
+  assert.match(source, new RegExp(`PASEO_PROVIDER: ${expectedProvider}`, 'u'));
+  assert.equal((source.match(/^[ ]{4}\S+/gmu) ?? []).length, 1);
+}
+const declarativeEnvironmentMutation = structuredClone(baseRecord);
+declarativeEnvironmentMutation.mutation = {
+  name: 'restore-agent-provider-declarative-projection',
+  source: 'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml',
+  projection_overlay:
+    'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml',
+  launch_overlay: null,
+  operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
+};
+declarativeEnvironmentMutation.effective_compose.services[0].environment.PASEO_PROVIDER = true;
+const declarativeEnvironmentEvaluation = evaluate(
+  declarativeEnvironmentMutation,
+);
+assert.deepEqual(declarativeEnvironmentEvaluation.output.failures, [
+  {
+    proposition: 'agent_server_runtime_provider_environment',
+    present: ['PASEO_PROVIDER'],
+  },
+]);
+assert.equal(declarativeEnvironmentEvaluation.exit, 1);
+const actualEnvironmentMutation = structuredClone(baseRecord);
+actualEnvironmentMutation.mutation = {
+  name: 'restore-agent-provider-actual-container',
+  source: 'scripts/foundation/phase-c-e4-actual-env-mutation.yaml',
+  projection_overlay: null,
+  launch_overlay: 'scripts/foundation/phase-c-e4-actual-env-mutation.yaml',
+  operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
+};
+actualEnvironmentMutation.runtime_inspection.agent_server.environment_names.push(
+  'PASEO_PROVIDER',
+);
+const actualEnvironmentEvaluation = evaluate(actualEnvironmentMutation);
+assert.deepEqual(actualEnvironmentEvaluation.output.failures, [
+  {
+    proposition: 'actual_agent_server_runtime_provider_environment',
+    present: ['PASEO_PROVIDER'],
+  },
+]);
+assert.equal(actualEnvironmentEvaluation.exit, 1);
+assert.equal(
+  declarativeEnvironmentMutation.effective_compose.services[0].environment
+    .PASEO_PROVIDER,
+  true,
+);
+assert.equal(
+  declarativeEnvironmentMutation.runtime_inspection.agent_server.environment_names.includes(
+    'PASEO_PROVIDER',
+  ),
+  false,
+);
+assert.equal(
+  actualEnvironmentMutation.effective_compose.services[0].environment
+    .PASEO_PROVIDER,
+  undefined,
+);
+assert.equal(
+  actualEnvironmentMutation.runtime_inspection.agent_server.environment_names.includes(
+    'PASEO_PROVIDER',
+  ),
+  true,
+);
 rmSync(fixtureRoot, { recursive: true, force: true });
 
 process.stdout.write(

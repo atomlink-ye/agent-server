@@ -654,6 +654,321 @@ function runRuntimeBoundaryMutation({
   return { result: resultRecord, cleanup: cleanupRecord, recordPath };
 }
 
+function runEnvironmentOwnershipMutation({
+  suffix,
+  name,
+  mutationSource,
+  projectionOverlay,
+  launchOverlay,
+  expectedFailures,
+}) {
+  const runProject = `${project}_${suffix}`;
+  const cleanFiles = [
+    ...composeFiles,
+    '-f',
+    'scripts/foundation/phase-c-e4-no-ports.yaml',
+  ];
+  const projectionFiles = projectionOverlay
+    ? [...cleanFiles, '-f', projectionOverlay]
+    : cleanFiles;
+  const launchFiles = launchOverlay
+    ? [...cleanFiles, '-f', launchOverlay]
+    : cleanFiles;
+  const projectionCompose = ['compose', '-p', runProject, ...projectionFiles];
+  const launchCompose = ['compose', '-p', runProject, ...launchFiles];
+  const providerBefore = run('docker', [
+    'volume',
+    'inspect',
+    composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim();
+  let record;
+  let recordPath;
+  let resultRecord;
+  let cleanupRecord;
+  let primaryError;
+  let cleanupFailure;
+  let diagnosticFailure;
+  try {
+    const effective = JSON.parse(
+      run(
+        wrapper,
+        [...projectionFiles, '-p', runProject, 'config', '--format', 'json'],
+        {
+          env: {
+            ...composeEnvironment,
+            OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
+          },
+          identity: `${suffix}-compose-effective-config`,
+          captureStdout: false,
+        },
+      ).stdout,
+    );
+    runCriticalCompose(
+      wrapper,
+      [
+        ...launchFiles,
+        '-p',
+        runProject,
+        'up',
+        '-d',
+        '--wait',
+        'postgres',
+        'provider-toolchain-init',
+        'paseo-runtime-state-init',
+        'paseo-runtime',
+        'agent-server',
+      ],
+      { identity: `${suffix}-compose-up-wait` },
+      launchCompose,
+      runProject,
+    );
+    recordPath = resolve(artifactRoot, `${suffix}-runtime-record.json`);
+    record = {
+      schema: 'agent-server.foundation.phase-c-runtime-record',
+      version: 1,
+      project: runProject,
+      candidate_sha: candidateSha,
+      mutation: {
+        name,
+        source: mutationSource,
+        projection_overlay: projectionOverlay,
+        launch_overlay: launchOverlay,
+        operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
+      },
+      effective_compose: {
+        services: Object.entries(effective.services ?? {})
+          .map(([serviceName, service]) =>
+            sanitizeService(serviceName, service),
+          )
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      },
+      runtime_inspection: {
+        containers: ['agent-server', 'paseo-runtime'],
+        agent_server: containerRecord('agent-server', launchCompose),
+        paseo_runtime: {
+          ...containerRecord('paseo-runtime', launchCompose),
+          identity: runtimeIdentity(
+            launchCompose,
+            `${suffix}-runtime-identity`,
+          ),
+          runtime_state_probe: runtimeStateProbe(
+            launchCompose,
+            runProject,
+            `${suffix}-runtime-state-probe`,
+          ),
+          workspace_write_probe: workspaceWriteProbe(
+            launchCompose,
+            runProject,
+            `${suffix}-workspace-probe`,
+          ),
+        },
+      },
+    };
+    writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    const evaluation = run(
+      process.execPath,
+      ['scripts/foundation/phase-c.mjs', 'E4', '--runtime-record', recordPath],
+      { allow: [1], identity: `${suffix}-e4-evaluator` },
+    );
+    const evaluated = JSON.parse(evaluation.stdout.trim().split('\n').at(-1));
+    if (
+      evaluation.status !== 1 ||
+      evaluated.status !== 'FAIL' ||
+      JSON.stringify(evaluated.failures) !== JSON.stringify(expectedFailures)
+    )
+      throw new Error(`${suffix}_mutation_not_exact_red`);
+    const runtime = record.runtime_inspection.paseo_runtime;
+    const agent = record.runtime_inspection.agent_server;
+    const effectiveAgent = record.effective_compose.services.find(
+      (service) => service.name === 'agent-server',
+    );
+    const declarativeProviderPresent =
+      effectiveAgent?.environment?.PASEO_PROVIDER === true;
+    const actualProviderPresent =
+      agent.environment_names.includes('PASEO_PROVIDER');
+    const nonTargetFactsGreen =
+      runtimeIsNonroot(runtime.identity) &&
+      runtimeStateIsWritable(runtime.runtime_state_probe) &&
+      workspaceIsReadOnly(runtime.workspace_write_probe) &&
+      runtime.processes.some(isPaseoExecutableProcess) &&
+      !agent.processes.some(isPaseoProcess) &&
+      runtime.environment_names.includes('PASEO_PROVIDER') &&
+      (projectionOverlay
+        ? declarativeProviderPresent
+        : !declarativeProviderPresent) &&
+      (launchOverlay ? actualProviderPresent : !actualProviderPresent);
+    if (!nonTargetFactsGreen)
+      throw new Error(`${suffix}_non_target_facts_not_green`);
+    resultRecord = {
+      name,
+      source: mutationSource,
+      projection_overlay: projectionOverlay,
+      launch_overlay: launchOverlay,
+      operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
+      exit: evaluation.status,
+      status: evaluated.status,
+      failures: evaluated.failures,
+      non_target_facts_green: nonTargetFactsGreen,
+      declarative_provider_present: declarativeProviderPresent,
+      actual_provider_present: actualProviderPresent,
+      identity: runtime.identity,
+      runtime_state_probe: runtime.runtime_state_probe,
+      workspace_write_probe: runtime.workspace_write_probe,
+      processes: runtime.processes,
+    };
+  } catch (error) {
+    primaryError = error;
+  } finally {
+    const cleanupErrors = [];
+    const observe = (operation, fallback) => {
+      try {
+        return operation();
+      } catch (error) {
+        cleanupErrors.push(error);
+        return fallback;
+      }
+    };
+    try {
+      const diagnosticRoot = resolve(artifactRoot, `diagnostics-${suffix}`);
+      mkdirSync(diagnosticRoot, { recursive: true, mode: 0o700 });
+      collectComposeFailureDiagnostics({
+        run,
+        composeCommand: launchCompose,
+        project: runProject,
+        artifactRoot: diagnosticRoot,
+      });
+    } catch (error) {
+      diagnosticFailure = error;
+    }
+    const down = observe(
+      () =>
+        run(
+          'docker',
+          [...launchCompose, 'down', '--remove-orphans', '--volumes'],
+          { allow: [0] },
+        ),
+      { status: null },
+    );
+    const containers = observe(
+      () =>
+        run('docker', [...launchCompose, 'ps', '-aq'], {
+          allow: [0],
+        })
+          .stdout.trim()
+          .split(/\r?\n/u)
+          .filter(Boolean),
+      ['cleanup-observation-failed'],
+    );
+    const networks = observe(
+      () =>
+        run('docker', [
+          'network',
+          'ls',
+          '--filter',
+          `label=com.docker.compose.project=${runProject}`,
+          '--format',
+          '{{.Name}}',
+        ])
+          .stdout.trim()
+          .split(/\r?\n/u)
+          .filter(Boolean),
+      ['cleanup-observation-failed'],
+    );
+    const volumes = observe(
+      () =>
+        run('docker', [
+          'volume',
+          'ls',
+          '--filter',
+          `label=com.docker.compose.project=${runProject}`,
+          '--format',
+          '{{.Name}}',
+        ])
+          .stdout.trim()
+          .split(/\r?\n/u)
+          .filter(Boolean),
+      ['cleanup-observation-failed'],
+    );
+    const providerAfter = observe(
+      () =>
+        run('docker', [
+          'volume',
+          'inspect',
+          composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+          '--format',
+          '{{.Name}}',
+        ]).stdout.trim(),
+      'cleanup-observation-failed',
+    );
+    let cleanupProbeRecord = {};
+    try {
+      cleanupProbeRecord = runtimeBoundaryCleanupProbes(resultRecord, record);
+    } catch (error) {
+      cleanupErrors.push(error);
+      cleanupFailure = error;
+    }
+    if (
+      !cleanupFailure &&
+      (containers.length || networks.length || volumes.length)
+    )
+      cleanupFailure = new Error(`${suffix}_mutation_cleanup_incomplete`);
+    else if (!cleanupFailure && providerBefore !== providerAfter)
+      cleanupFailure = new Error(`${suffix}_mutation_provider_volume_changed`);
+    else if (!cleanupFailure && cleanupErrors.length)
+      cleanupFailure = new Error(`${suffix}_mutation_cleanup_command_failed`);
+    cleanupRecord = {
+      project: runProject,
+      ...cleanupProbeRecord,
+      down_exit: down.status,
+      remaining_project_containers: containers,
+      remaining_project_networks: networks,
+      remaining_project_volumes: volumes,
+      external_provider_volume_before: providerBefore,
+      external_provider_volume_after: providerAfter,
+    };
+    if (record && recordPath) {
+      record.cleanup = cleanupRecord;
+      writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`, {
+        mode: 0o600,
+      });
+    }
+  }
+  const mutationFailures = [
+    primaryError
+      ? {
+          phase: 'primary',
+          message: String(primaryError.message ?? primaryError),
+        }
+      : null,
+    diagnosticFailure
+      ? {
+          phase: 'diagnostics',
+          message: String(diagnosticFailure.message ?? diagnosticFailure),
+        }
+      : null,
+    cleanupFailure
+      ? {
+          phase: 'cleanup',
+          message: String(cleanupFailure.message ?? cleanupFailure),
+        }
+      : null,
+  ].filter(Boolean);
+  if (mutationFailures.length) {
+    const firstFailure = primaryError ?? diagnosticFailure ?? cleanupFailure;
+    const combined =
+      firstFailure instanceof Error
+        ? firstFailure
+        : new Error(`${suffix}_mutation_failed`);
+    combined.mutation_failures = mutationFailures;
+    throw combined;
+  }
+  return { result: resultRecord, cleanup: cleanupRecord, recordPath };
+}
+
 async function runStandaloneMissingPaseoMutation() {
   const mutation = runRuntimeBoundaryMutation({
     suffix: 'e4nopaseo-standalone',
@@ -1282,6 +1597,42 @@ try {
   )
     throw new Error('e4_no_paseo_process_mutation_observation_invalid');
 
+  const declarativeEnvironmentMutation = runEnvironmentOwnershipMutation({
+    suffix: 'e4envdeclarative',
+    name: 'restore-agent-provider-declarative-projection',
+    mutationSource:
+      'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml',
+    projectionOverlay:
+      'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml',
+    launchOverlay: null,
+    expectedFailures: [
+      {
+        proposition: 'agent_server_runtime_provider_environment',
+        present: ['PASEO_PROVIDER'],
+      },
+    ],
+  });
+  const actualEnvironmentMutation = runEnvironmentOwnershipMutation({
+    suffix: 'e4envactual',
+    name: 'restore-agent-provider-actual-container',
+    mutationSource: 'scripts/foundation/phase-c-e4-actual-env-mutation.yaml',
+    projectionOverlay: null,
+    launchOverlay: 'scripts/foundation/phase-c-e4-actual-env-mutation.yaml',
+    expectedFailures: [
+      {
+        proposition: 'actual_agent_server_runtime_provider_environment',
+        present: ['PASEO_PROVIDER'],
+      },
+    ],
+  });
+  if (
+    !declarativeEnvironmentMutation.result.non_target_facts_green ||
+    declarativeEnvironmentMutation.result.actual_provider_present ||
+    !actualEnvironmentMutation.result.non_target_facts_green ||
+    actualEnvironmentMutation.result.declarative_provider_present
+  )
+    throw new Error('e4_environment_mutation_isolation_invalid');
+
   const proofPath = resolve(artifactRoot, 'proof-record.json');
   const runEnvironment = {
     ...process.env,
@@ -1348,6 +1699,14 @@ try {
   proof.e4_no_paseo_process_mutation = {
     ...noPaseoProcessMutation.result,
     cleanup: noPaseoProcessMutation.cleanup,
+  };
+  proof.e4_declarative_environment_mutation = {
+    ...declarativeEnvironmentMutation.result,
+    cleanup: declarativeEnvironmentMutation.cleanup,
+  };
+  proof.e4_actual_environment_mutation = {
+    ...actualEnvironmentMutation.result,
+    cleanup: actualEnvironmentMutation.cleanup,
   };
   proof.accepted_e4_projection = runtimeRecord.effective_compose;
   proof.cleanup = cleanup();

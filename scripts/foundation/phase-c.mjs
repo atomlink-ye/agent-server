@@ -880,6 +880,99 @@ function evaluateE6(options) {
       proof.e4_no_paseo_process_mutation.cleanup.external_provider_volume_after
   )
     failures.push('e4_no_paseo_process_mutation_cleanup');
+  const declarativeEnvironmentMutation =
+    proof.e4_declarative_environment_mutation;
+  if (
+    declarativeEnvironmentMutation?.exit !== 1 ||
+    declarativeEnvironmentMutation?.status !== 'FAIL' ||
+    declarativeEnvironmentMutation?.name !==
+      'restore-agent-provider-declarative-projection' ||
+    declarativeEnvironmentMutation?.source !==
+      'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml' ||
+    declarativeEnvironmentMutation?.projection_overlay !==
+      'scripts/foundation/phase-c-e4-declarative-env-mutation.yaml' ||
+    declarativeEnvironmentMutation?.launch_overlay !== null ||
+    JSON.stringify(declarativeEnvironmentMutation?.operational_overlays) !==
+      JSON.stringify(['scripts/foundation/phase-c-e4-no-ports.yaml']) ||
+    JSON.stringify(declarativeEnvironmentMutation?.failures) !==
+      JSON.stringify([
+        {
+          proposition: 'agent_server_runtime_provider_environment',
+          present: ['PASEO_PROVIDER'],
+        },
+      ]) ||
+    declarativeEnvironmentMutation?.non_target_facts_green !== true ||
+    declarativeEnvironmentMutation?.declarative_provider_present !== true ||
+    declarativeEnvironmentMutation?.actual_provider_present !== false ||
+    !runtimeIsNonroot(declarativeEnvironmentMutation?.identity) ||
+    !runtimeStateIsWritable(
+      declarativeEnvironmentMutation?.runtime_state_probe,
+    ) ||
+    !workspaceIsReadOnly(
+      declarativeEnvironmentMutation?.workspace_write_probe,
+    ) ||
+    declarativeEnvironmentMutation?.cleanup?.down_exit !== 0 ||
+    declarativeEnvironmentMutation?.cleanup?.remaining_project_containers
+      ?.length !== 0 ||
+    declarativeEnvironmentMutation?.cleanup?.remaining_project_networks
+      ?.length !== 0 ||
+    declarativeEnvironmentMutation?.cleanup?.remaining_project_volumes
+      ?.length !== 0 ||
+    declarativeEnvironmentMutation?.cleanup
+      ?.runtime_state_probe_file_present !== false ||
+    declarativeEnvironmentMutation?.cleanup?.workspace_probe_file_present !==
+      false ||
+    !nonempty(
+      declarativeEnvironmentMutation?.cleanup?.external_provider_volume_before,
+    ) ||
+    declarativeEnvironmentMutation.cleanup.external_provider_volume_before !==
+      declarativeEnvironmentMutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_declarative_environment_mutation');
+  const actualEnvironmentMutation = proof.e4_actual_environment_mutation;
+  if (
+    actualEnvironmentMutation?.exit !== 1 ||
+    actualEnvironmentMutation?.status !== 'FAIL' ||
+    actualEnvironmentMutation?.name !==
+      'restore-agent-provider-actual-container' ||
+    actualEnvironmentMutation?.source !==
+      'scripts/foundation/phase-c-e4-actual-env-mutation.yaml' ||
+    actualEnvironmentMutation?.projection_overlay !== null ||
+    actualEnvironmentMutation?.launch_overlay !==
+      'scripts/foundation/phase-c-e4-actual-env-mutation.yaml' ||
+    JSON.stringify(actualEnvironmentMutation?.operational_overlays) !==
+      JSON.stringify(['scripts/foundation/phase-c-e4-no-ports.yaml']) ||
+    JSON.stringify(actualEnvironmentMutation?.failures) !==
+      JSON.stringify([
+        {
+          proposition: 'actual_agent_server_runtime_provider_environment',
+          present: ['PASEO_PROVIDER'],
+        },
+      ]) ||
+    actualEnvironmentMutation?.non_target_facts_green !== true ||
+    actualEnvironmentMutation?.declarative_provider_present !== false ||
+    actualEnvironmentMutation?.actual_provider_present !== true ||
+    !runtimeIsNonroot(actualEnvironmentMutation?.identity) ||
+    !runtimeStateIsWritable(actualEnvironmentMutation?.runtime_state_probe) ||
+    !workspaceIsReadOnly(actualEnvironmentMutation?.workspace_write_probe) ||
+    actualEnvironmentMutation?.cleanup?.down_exit !== 0 ||
+    actualEnvironmentMutation?.cleanup?.remaining_project_containers?.length !==
+      0 ||
+    actualEnvironmentMutation?.cleanup?.remaining_project_networks?.length !==
+      0 ||
+    actualEnvironmentMutation?.cleanup?.remaining_project_volumes?.length !==
+      0 ||
+    actualEnvironmentMutation?.cleanup?.runtime_state_probe_file_present !==
+      false ||
+    actualEnvironmentMutation?.cleanup?.workspace_probe_file_present !==
+      false ||
+    !nonempty(
+      actualEnvironmentMutation?.cleanup?.external_provider_volume_before,
+    ) ||
+    actualEnvironmentMutation.cleanup.external_provider_volume_before !==
+      actualEnvironmentMutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_actual_environment_mutation');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {

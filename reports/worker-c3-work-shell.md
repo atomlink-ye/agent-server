@@ -128,3 +128,26 @@ the authorized C-box execution only; it is evidence, not a self-acceptance.
 
 The complete execution index and raw artifact map are in
 `artifacts/c3-work-shell/e8-02328517/execution-summary.md`.
+
+## O-H16 C3/E8 classifier follow-up
+
+The classifier implementation is C-owned and frozen-root/config untouched.
+Classifier commit 1 is `a02b54af0a18c3eb9639806214509df62b335099` (parent
+`01dce6d89baa89d21180159c5be8b0a5f1446f74`). It exports the closed two-kind
+`classify({ kind, argv })`, captures and forwards child stdout/stderr, matches
+only exact independent registered marker lines, and maps process status to the
+specified 0/1/2 result without passthrough or child-exit-2 inference.
+
+The C-box committed-only sync was blocked by pre-existing remote dirty paths.
+For authorized execution, exact hash-matched committed blobs were copied into
+isolated remote directory `/root/workspace/.c3-e8-classifier-a02b54a`; the
+remote candidate remained `02328517a0fe887464d0661d772a49ad9d88451b`. Remote
+classifier duals passed 7/7. The real test-file-absent and imported-fixture-
+absent arms each structurally confirmed absence, ran the exact fixed Vitest
+command, preserved raw output and raw exit 1, restored the input, and ended at
+classifier process 2 with the exact kind marker. Full evidence is under
+`artifacts/c3-work-shell/e8-classifier-a02b54a/`.
+
+The prior real a3/b4/c2/d2 behavior arms remain the invariant evidence: each
+exited 1 at its intended assertion and was not absence-classified. This report
+does not self-sign ACCEPT.

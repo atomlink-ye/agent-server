@@ -1,0 +1,41 @@
+candidate_head=02328517a0fe887464d0661d772a49ad9d88451b
+
+status:
+## sandbox-ctl/adopted-8174cc0c35a44a568688d8492fe15745
+ D apps/web/node_modules
+ D node_modules
+?? .c3-e8-02328517/
+
+restored_inputs:
+test_file=0
+fixture=0
+
+isolated_script_hashes:
+c5b8778d7eeb616938d78a8e20f1aca4dc876d26d94d587f98ee519f4bb8a653  /root/workspace/.c3-e8-classifier-a02b54a/c3-e8-absence-arm.mjs
+34a9942145ebb991e2fe58b1a307ccfd896627685d6e8d922aea28f12a4934fd  /root/workspace/.c3-e8-classifier-a02b54a/c3-e8-absence-runner.mjs
+7d290f49244691d98f4221402ec8ba87b2a93b5ee55354b2fdf7993edfaf769b  /root/workspace/.c3-e8-classifier-a02b54a/c3-e8-classifier.mjs
+40153262de161a323978406a73d1341abf16582e416dadb847e1a7969e4f95fb  /root/workspace/.c3-e8-classifier-a02b54a/c3-e8-classifier.test.mjs
+
+remote_evidence_dirs:
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/arm-status
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/classifier-shell.exit
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/classifier-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/classifier.exit
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/classifier.stderr
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/classifier.stdout
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/marker-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/raw-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/raw.stderr
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/raw.stdout
+/root/workspace/.c3-e8-classifier-a02b54a/arms/imported-fixture-absent/structural-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/arm-status
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/classifier-shell.exit
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/classifier-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/classifier.exit
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/classifier.stderr
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/classifier.stdout
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/marker-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/raw-status.json
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/raw.stderr
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/raw.stdout
+/root/workspace/.c3-e8-classifier-a02b54a/arms/test-file-absent/structural-status.json

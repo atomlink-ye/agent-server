@@ -1,0 +1,1 @@
+{"command":["sh","-lc","ROOT=/root/workspace/.c3-e8-classifier-a02b54a/dual; for f in stdout stderr exit manifest; do printf \"===== %s =====\\\\n\" \"$f\"; cat \"$ROOT/$f\"; done"],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-13T23:27:32.119Z"}

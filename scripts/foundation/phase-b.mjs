@@ -465,6 +465,20 @@ async function evaluateE1(candidateRoot) {
           cleanupFacts,
         });
     }
+    for (const volume of [identity.nodeVolume, identity.webVolume]) {
+      const result = e1Command(
+        ['docker', 'volume', 'create', volume],
+        root,
+        environment,
+      );
+      commands.push(e1NoSecretFacts(result));
+      if (result.exit !== 0)
+        return status(2, 'test-owned external volume creation failed', {
+          suite: 'E1',
+          commands,
+          cleanupFacts,
+        });
+    }
     const created = e1Command(
       [...compose, 'create', '--no-build', 'runner'],
       candidateRoot,

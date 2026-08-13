@@ -1,7 +1,7 @@
 {
   "api_major": "v1",
   "accepted_revision": 1,
-  "status": "provisional",
+  "status": "accepted",
   "headers": {
     "revision": "Product-Contract-Revision",
     "status": "Product-Contract-Status"

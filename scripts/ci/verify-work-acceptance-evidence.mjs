@@ -25,6 +25,9 @@ try {
   process.exit(1);
 }
 const expectedArms = [
+  ['classifier-recognized-missing', 2],
+  ['classifier-unmarked-exit-two-fail', 1],
+  ['classifier-arbitrary-nonzero-fail', 1],
   ['baseline-http', 0],
   ['baseline-mcp', 0],
   ['baseline-product-subset', 0],
@@ -41,6 +44,10 @@ const expectedArms = [
   ['bootstrap-direct-work-e5-fail', 1],
   ['bootstrap-direct-work-type-control', 0],
   ['bootstrap-direct-work-http-control', 0],
+  ['bootstrap-direct-transfer-independent-guard-bypassed', 0],
+  ['bootstrap-direct-transfer-e5-fail', 1],
+  ['bootstrap-direct-transfer-type-control', 0],
+  ['bootstrap-direct-transfer-http-control', 0],
 ];
 const failures = [];
 assert(evidence.schema === 'mgr-b-work-e4-e5-runtime-v1', 'schema');
@@ -48,8 +55,7 @@ assert(/^[0-9a-f]{40}$/.test(evidence.candidate), 'candidate');
 assert(/^[0-9a-f]{40}$/.test(evidence.parent), 'parent');
 assert(evidence.ok === true, 'runtime_ok');
 assert(
-  JSON.stringify(evidence.status_before) ===
-    JSON.stringify([' D apps/web/node_modules', ' D node_modules']),
+  JSON.stringify(evidence.status_before) === JSON.stringify([]),
   'status_before',
 );
 assert(

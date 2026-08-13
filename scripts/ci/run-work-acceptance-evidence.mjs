@@ -13,7 +13,7 @@ if (!databaseUrl) fail('work_acceptance_evidence_missing_database_url', 2);
 
 const candidate = command('git', ['rev-parse', 'HEAD']);
 const parent = command('git', ['rev-parse', 'HEAD^']);
-const expectedStatus = [' D apps/web/node_modules', ' D node_modules'];
+const expectedStatus = [];
 const statusBefore = lines(command('git', ['status', '--short']));
 if (JSON.stringify(statusBefore) !== JSON.stringify(expectedStatus))
   fail(`work_acceptance_status_invalid:${JSON.stringify(statusBefore)}`, 2);
@@ -33,6 +33,58 @@ const inputs = [
 ];
 const inputHashes = Object.fromEntries(inputs.map((file) => [file, sha(file)]));
 const arms = [];
+
+arms.push(
+  runArm(
+    'classifier-recognized-missing',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('work_http_projection_installer_missing');process.exit(1)`,
+    ],
+    2,
+    ['work_acceptance_missing:kind=http-projection'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-unmarked-exit-two-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('unmarked');process.exit(2)`,
+    ],
+    1,
+    ['unmarked'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-arbitrary-nonzero-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('arbitrary_nonzero');process.exit(37)`,
+    ],
+    1,
+    ['arbitrary_nonzero'],
+  ),
+);
 
 arms.push(
   runArm('baseline-http', 'pnpm', ['modularization:acceptance:work-http'], 0),
@@ -245,6 +297,53 @@ mutate(
   },
 );
 
+mutate(
+  'bootstrap-direct-transfer-fail',
+  'src/bootstrap.ts',
+  `  const runtimeMcpServer = new RuntimeMcpServer(`,
+  `  const startWorkRun = workModule;\n  void startWorkRun;\n  const runtimeMcpServer = new RuntimeMcpServer(`,
+  () => {
+    withIndependentBoundaryBypassed(() => {
+      arms.push(
+        runArm(
+          'bootstrap-direct-transfer-independent-guard-bypassed',
+          'pnpm',
+          ['modularization:verify:work-boundary'],
+          0,
+          ['work_import_boundary_bypassed:evidence_ownership_dual'],
+        ),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-direct-transfer-e5-fail',
+          'pnpm',
+          ['modularization:acceptance:work-mcp'],
+          1,
+          [
+            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:identifier=startWorkRun',
+          ],
+        ),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-direct-transfer-type-control',
+          'pnpm',
+          ['check:types'],
+          0,
+        ),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-direct-transfer-http-control',
+          'pnpm',
+          ['modularization:acceptance:work-http'],
+          0,
+        ),
+      );
+    });
+  },
+);
+
 const statusAfter = lines(command('git', ['status', '--short']));
 const restoredHashes = Object.fromEntries(
   inputs.map((file) => [file, sha(file)]),
@@ -352,6 +451,20 @@ function mutate(name, file, before, after, action) {
     action();
   } finally {
     fs.writeFileSync(target, original);
+  }
+}
+
+function withIndependentBoundaryBypassed(action) {
+  const guard = path.join(repo, 'scripts/ci/check-work-import-boundary.mjs');
+  const original = fs.readFileSync(guard, 'utf8');
+  fs.writeFileSync(
+    guard,
+    `#!/usr/bin/env node\nconsole.log('work_import_boundary_bypassed:evidence_ownership_dual');\n`,
+  );
+  try {
+    action();
+  } finally {
+    fs.writeFileSync(guard, original);
   }
 }
 function sha(file) {

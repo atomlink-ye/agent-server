@@ -39,14 +39,19 @@ function AttemptSpan({ attempt, geometry, selected, onSelect, subject }: { reado
 }
 
 function Events({ trace }: { readonly trace: Trace }) {
-  const [selectedSequence, setSelectedSequence] = useState<number | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
   const actors = new Map(trace.actors.map((actor) => [actor.id, actor]));
   const items = new Map(trace.work_items.map((item) => [item.id, item]));
-  return <section className="run-trace__events" aria-label="Recorded MCP activities" data-testid="trace-events"><p className="run-trace__events-caption">MCP activity listing, ordered by recorded sequence. Activity status is MCP activity status, not Work status.</p>{trace.mcp_activities.map((activity) => {
+  return <section className="run-trace__events" aria-label="Recorded MCP activities" data-testid="trace-events"><p className="run-trace__events-caption">Recorded sequence values; absolute timing is not captured. Activity status is MCP activity status, not Work status.</p>{trace.mcp_activities.map((activity, snapshotOrdinal) => {
     const actor = activity.source_refs.actor_id ? actors.get(activity.source_refs.actor_id) : null;
     const item = activity.source_refs.work_item_id ? items.get(activity.source_refs.work_item_id) : null;
-    return <button aria-pressed={selectedSequence === activity.sequence} className="run-trace__event" key={activity.sequence} onClick={() => setSelectedSequence(activity.sequence)} type="button"><strong>#{activity.sequence}</strong><span>{actor?.name ?? 'Name not captured'}</span><span>{item?.subject ?? 'Work Item not captured'}</span><span className="run-trace__event-meta">{humanize(activity.kind)} · {humanize(activity.category)} · MCP activity: {humanize(activity.status)} · Result: {captureLabel(activity.result_capture_status)}</span></button>;
+    const identity = activitySnapshotIdentity(activity.activity_id, snapshotOrdinal);
+    return <button aria-pressed={selectedActivity === identity} className="run-trace__event" key={identity} onClick={() => setSelectedActivity(identity)} type="button"><strong>#{activity.sequence}</strong><span>{actor?.name ?? 'Name not captured'}</span><span>{item?.subject ?? 'Work Item not captured'}</span><span className="run-trace__event-meta">{humanize(activity.kind)} · {humanize(activity.category)} · MCP activity: {humanize(activity.status)} · Result: {captureLabel(activity.result_capture_status)}</span></button>;
   })}</section>;
+}
+
+function activitySnapshotIdentity(activityId: string, snapshotOrdinal: number) {
+  return `${activityId}:${snapshotOrdinal}`;
 }
 
 function Inspector({ selected, trace }: { readonly selected: Entry | null; readonly trace: Trace }) {

@@ -40,10 +40,18 @@ const WORK_FIELDS = [
 
 const WORK_RUN_FIELDS = [
   'bound_at',
+  'cancel_availability',
+  'completion_decision_availability',
+  'control_revision',
   'created_at',
   'definition_version_id',
   'expires_at',
   'id',
+  'attention_reason',
+  'problem_kind',
+  'product_state',
+  'result_capture_status',
+  'result_summary',
   'trigger_kind',
   'trigger_ref',
   'updated_at',
@@ -52,12 +60,16 @@ const WORK_RUN_FIELDS = [
 
 const ATTEMPT_FIELDS = [
   'attempt_no',
+  'duration_ms',
+  'ended_at',
   'feedback_capture_status',
   'feedback_summary',
   'id',
   'result_capture_status',
   'result_summary',
+  'started_at',
   'status',
+  'timing_capture_status',
 ] as const;
 
 const WORK_ITEM_FIELDS = [
@@ -107,7 +119,7 @@ const MCP_TOOL_FIELDS = [
   'chat_detail.method',
   'chat_detail.path',
   'chat_detail.target.activity_id',
-  'chat_detail.target.run_id',
+  'chat_detail.target.source_refs.run_id',
   'chat_detail.target.sequence',
   'kind',
   'provenance',
@@ -164,16 +176,6 @@ const EDGE_FIELDS = {
   ],
 } as const;
 
-const FOLLOW_UP_READ_FIELDS = [
-  'id',
-  'method',
-  'missing_fields[]',
-  'path',
-  'resource',
-  'source_ref.root_task_id',
-  'source_ref.team_run_id',
-] as const;
-
 type EdgeKind = keyof typeof EDGE_FIELDS;
 
 const withSourceRefs = (
@@ -223,10 +225,6 @@ const tracePaths = (includeIdentity: boolean): string[] => [
   'timeline_coverage.excluded_execution',
   'timeline_coverage.scope',
 ];
-
-const followUpReadPaths = FOLLOW_UP_READ_FIELDS.map(
-  (field) => `follow_up_reads[].${field}`,
-);
 
 const column = (
   table: string,
@@ -480,11 +478,6 @@ const derivation = (
 ): ProductProjectionLineageEntry => {
   const relativePath = path.slice(`${owner}.${variant}::`.length);
   if (
-    relativePath === 'contract_status' ||
-    relativePath.endsWith('.contract_status')
-  )
-    return rule('projection_contract_status_v1', 'constant(provisional)', []);
-  if (
     relativePath === 'projection_status' ||
     relativePath.endsWith('.projection_status')
   )
@@ -564,24 +557,6 @@ const derivation = (
       'capture_status(redacted_or_absent)',
       ['team_messages.body'],
     );
-  if (
-    relativePath === 'follow_up_reads[].source_ref.root_task_id' ||
-    relativePath === 'follow_up_reads[].source_ref.team_run_id'
-  ) {
-    return {
-      kind: 'source_ref',
-      table: relativePath.endsWith('root_task_id') ? 'tasks' : 'team_runs',
-      column: 'id',
-    };
-  }
-  if (relativePath.startsWith('follow_up_reads[].')) {
-    const field = relativePath.slice('follow_up_reads[].'.length);
-    return rule(
-      `follow_up_read_${field.replace(/[^a-z]+/gu, '_')}_v1`,
-      field === 'id' ? 'source_ref_id' : `constant(${field})`,
-      field === 'id' ? ['tasks.id', 'team_runs.id'] : [],
-    );
-  }
   if (relativePath === 'runs[].provider' || relativePath === 'runs[].model') {
     const field = relativePath.slice('runs[].'.length);
     return rule('run_runtime_field_v1', `json_extract(runtime, '$.${field}')`, [
@@ -603,10 +578,6 @@ const derivation = (
     if (relativePath.endsWith('.chat_detail.target.activity_id'))
       return rule('mcp_chat_detail_target_v1', 'run_event_activity_id', [
         'run_events.payload',
-      ]);
-    if (relativePath.endsWith('.chat_detail.target.run_id'))
-      return rule('mcp_chat_detail_target_v1', 'run_event_run_id', [
-        'run_events.run_id',
       ]);
     if (relativePath.endsWith('.chat_detail.target.sequence'))
       return rule('mcp_chat_detail_target_v1', 'run_event_sequence', [
@@ -710,12 +681,7 @@ const manifestFor = (
   );
 };
 
-const workRunErrorPaths = [
-  'contract_status',
-  'error.code',
-  'error.message',
-  'error.reason',
-];
+const workRunErrorPaths = ['error.code', 'error.message', 'error.request_id'];
 
 /**
  * Provisional S8 lineage manifest. The path lists above are authored product
@@ -724,25 +690,19 @@ const workRunErrorPaths = [
 export const PRODUCT_PROJECTION_LINEAGE_MANIFEST = {
   ...manifestFor('work_run_response', 'success', [
     'projection_status',
-    'contract_status',
-    ...followUpReadPaths,
     ...basePaths(true),
   ]),
   ...manifestFor('work_run_response', 'not_found', [
     'projection_status',
-    'contract_status',
     ...identityPaths,
   ]),
   ...manifestFor('work_run_response', 'error', workRunErrorPaths),
   ...manifestFor('run_trace_response', 'success', [
     'projection_status',
-    'contract_status',
-    ...followUpReadPaths,
     ...tracePaths(true),
   ]),
   ...manifestFor('run_trace_response', 'not_found', [
     'projection_status',
-    'contract_status',
     ...tracePaths(false).filter(
       (path) => !path.startsWith('work.') && !path.startsWith('work_run.'),
     ),

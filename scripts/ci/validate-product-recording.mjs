@@ -3,6 +3,8 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   sha256,
+  stableStringify,
+  RUN_EVENT_PAYLOAD_KEYS,
   sanitizeRecording,
   sanitizeRunEventPayload,
   assertNoEnvironmentValues,
@@ -244,10 +246,16 @@ export async function validateRecording(directory, mode = 'pre-identity') {
     }
     try {
       sanitizeRecording(value, file, {
+        allowKeys:
+          file === 'db/run_events.json'
+            ? RUN_EVENT_PAYLOAD_KEYS
+            : undefined,
+        allowExactValues:
+          file === 'manifest.json'
+            ? new Map([['provider_run', new Set(['real'])]])
+            : undefined,
         allowProviderSummary:
-          file === 'api/trace.json' ||
-          file === 'manifest.json' ||
-          file === 'db/run_events.json',
+          file === 'api/trace.json' || file === 'manifest.json',
       });
       assertNoEnvironmentValues(value);
     } catch (error) {

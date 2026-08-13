@@ -101,7 +101,8 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
          LEFT JOIN team_work_item_attempts attempt
                 ON attempt.execution_task_id=t.id
                AND attempt.team_run_id=tr.id
-        WHERE t.root_task_id=$1
+               AND attempt.tenant_id=$2 AND attempt.workspace_id=$3
+        WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
         ORDER BY r.created_at,r.id`,
       [input.rootTaskId, input.tenantId, input.workspaceId],
     );
@@ -171,7 +172,9 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
              LEFT JOIN team_work_item_attempts attempt
                     ON attempt.execution_task_id=t.id
                    AND attempt.team_run_id=tr.id
+                   AND attempt.tenant_id=$2 AND attempt.workspace_id=$3
             WHERE e.run_id=$1 AND e.sequence>$4
+              AND t.tenant_id=$2 AND t.workspace_id=$3
             ORDER BY e.sequence
             LIMIT $5`,
           [

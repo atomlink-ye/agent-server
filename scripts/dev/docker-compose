@@ -4,6 +4,10 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
+# Keep the checked-in real-provider defaults as the source of defaults while
+# preserving any value already supplied by the operator/environment.
+. "$repo_root/scripts/dev/source-real-provider-defaults"
+
 dependency_stamp="$(node scripts/dev/dependency-stamp.mjs "$repo_root" | tr -d '\r\n')"
 [[ "$dependency_stamp" =~ ^[0-9a-f]{64}$ ]] || {
   printf '%s\n' 'docker-compose: dependency stamp is not a sha256 digest' >&2
@@ -65,7 +69,7 @@ if ((should_provision)); then
     "${raw_compose[@]}" build runner
   fi
   "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh runner -c \
-    'chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules'
+    'mkdir -p /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs && chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs'
 fi
 
 exec "${raw_compose[@]}" "$@"

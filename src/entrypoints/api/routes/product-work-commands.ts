@@ -1,4 +1,6 @@
 import type { Hono } from 'hono';
+import type { ProductProjectionApi } from '../../../application/product-projection/product-projection.js';
+import { ProductProjectionNotFoundError } from '../../../application/product-projection/product-projection.js';
 
 import {
   InvalidWorkListCursorError,
@@ -20,8 +22,10 @@ import {
   CreateWorkRequestSchema,
   StartWorkRunRequestSchema,
   WorkListResponseSchema,
+  WorkDefinitionResponseSchema,
   WorkRunListResponseSchema,
   toExecutionReceiptResponse,
+  toWorkDefinitionResponse,
   toWorkResponse,
   toWorkRunResponse,
 } from '../../../contracts/product-work-commands.js';
@@ -38,9 +42,11 @@ export interface ProductWorkCommandDependencies {
   readonly config: AppConfig;
   readonly workIdentity: Pick<
     WorkIdentityApi,
-    'createWork' | 'listWorks' | 'listWorkRuns'
+    'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
   >;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+  readonly workExists?: ProductProjectionApi['getWork'];
+  readonly workListProjection: ProductProjectionApi['getWorkListItem'];
 }
 
 export function registerProductWorkCommandRoutes(
@@ -63,9 +69,18 @@ export function registerProductWorkCommandRoutes(
         limit,
         cursor,
       });
+      const works = await Promise.all(
+        page.items.map((work) =>
+          dependencies.workListProjection({
+            tenantId: accessContext.tenantId,
+            workspaceId: accessContext.workspaceId,
+            work,
+          }),
+        ),
+      );
       return context.json(
         WorkListResponseSchema.parse({
-          works: page.items.map(toWorkResponse),
+          works,
           next_cursor: page.nextCursor,
         }),
         200,
@@ -79,6 +94,32 @@ export function registerProductWorkCommandRoutes(
     }
   });
 
+  app.get('/api/v1/works/:workId/definition', async (context) => {
+    const workId = context.req.param('workId');
+    if (!isCanonicalUuid(workId))
+      throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
+    const accessContext = getAuthenticatedAccessContext(context);
+    try {
+      const binding = await dependencies.workIdentity.getWorkDefinition({
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
+        accessContext,
+        workId,
+      });
+      return context.json(
+        WorkDefinitionResponseSchema.parse(toWorkDefinitionResponse(binding)),
+        200,
+      );
+    } catch (error) {
+      if (error instanceof WorkNotFoundError)
+        throw new HttpError(
+          404,
+          'work_not_found',
+          'The requested Work was not found.',
+        );
+      throw error;
+    }
+  });
+
   app.get('/api/v1/works/:workId/runs', async (context) => {
     const workId = context.req.param('workId');
     if (!isCanonicalUuid(workId))
@@ -86,6 +127,23 @@ export function registerProductWorkCommandRoutes(
     const { limit, cursor } = parseListQuery(context.req.url);
     const accessContext = getAuthenticatedAccessContext(context);
     try {
+      if (dependencies.workExists) {
+        try {
+          await dependencies.workExists({
+            tenantId: accessContext.tenantId,
+            workspaceId: accessContext.workspaceId,
+            workId,
+          });
+        } catch (error) {
+          if (error instanceof ProductProjectionNotFoundError)
+            throw new HttpError(
+              404,
+              'work_not_found',
+              'The requested Work was not found.',
+            );
+          throw error;
+        }
+      }
       const page = await dependencies.workIdentity.listWorkRuns({
         owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
         accessContext,

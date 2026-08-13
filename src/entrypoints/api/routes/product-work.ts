@@ -1,14 +1,17 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
-import type { ProductProjectionApi } from '../../../application/product-projection/product-projection.js';
+import {
+  ProductProjectionNotFoundError,
+  type ProductProjectionApi,
+} from '../../../application/product-projection/product-projection.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
 } from '../../../contracts/product-projection/index.js';
-import { PRODUCT_CONTRACT_STATUS } from '../../../contracts/product-contract-policy.js';
-import { HttpError } from '../../../contracts/http.js';
+import { ErrorResponseSchema, HttpError } from '../../../contracts/http.js';
+import { GetWorkResponseSchema } from '../../../contracts/product-work-commands.js';
 import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
@@ -29,6 +32,43 @@ export function registerProductWorkRoutes(
     dependencies.config.serviceAccounts ?? [],
   );
   app.use('/api/v1/works/*', requireServiceAccountAccess(authenticator));
+
+  app.get('/api/v1/works/:workId', async (context) => {
+    const workId = context.req.param('workId');
+    if (!z.uuid().safeParse(workId).success)
+      return context.json(
+        ErrorResponseSchema.parse({
+          error: {
+            code: 'invalid_request',
+            message: 'The Work identifier is invalid.',
+            request_id: requestId(context),
+          },
+        }),
+        400,
+      );
+    try {
+      const access = getAuthenticatedAccessContext(context);
+      const response = await dependencies.productProjection.getWork({
+        tenantId: access.tenantId,
+        workspaceId: access.workspaceId,
+        workId,
+      });
+      return context.json(GetWorkResponseSchema.parse(response), 200);
+    } catch (error) {
+      if (error instanceof ProductProjectionNotFoundError)
+        return context.json(
+          ErrorResponseSchema.parse({
+            error: {
+              code: 'work_not_found',
+              message: 'The requested Work was not found.',
+              request_id: requestId(context),
+            },
+          }),
+          404,
+        );
+      return mapProjectionError(context, error, ProductWorkRunResponseSchema);
+    }
+  });
 
   app.get('/api/v1/works/:workId/runs/:workRunId', async (context) => {
     const input = parsePath(
@@ -86,11 +126,11 @@ function invalidPath(
     typeof ProductWorkRunResponseSchema | typeof ProductRunTraceResponseSchema,
 ) {
   return context.json(
-    schema.parse({
-      contract_status: PRODUCT_CONTRACT_STATUS,
+    ErrorResponseSchema.parse({
       error: {
         code: 'invalid_request',
         message: 'The Work or WorkRun identifier is invalid.',
+        request_id: requestId(context),
       },
     }),
     400,
@@ -114,8 +154,7 @@ function mapProjectionError(
     const invalid = (error as Error).name === 'ProductProjectionInvalidError';
     const unavailable =
       (error as Error).name === 'ProductProjectionUnavailableError';
-    const body = schema.parse({
-      contract_status: PRODUCT_CONTRACT_STATUS,
+    const body = ErrorResponseSchema.parse({
       error: {
         code: invalid
           ? 'projection_invalid'
@@ -127,11 +166,19 @@ function mapProjectionError(
           : unavailable
             ? 'The WorkRun projection is temporarily unavailable.'
             : 'The WorkRun was not found for the requested workspace.',
-        ...(invalid && 'reason' in error ? { reason: error.reason } : {}),
+        request_id: requestId(context),
       },
     });
     return context.json(body, invalid ? 500 : unavailable ? 503 : 404);
   }
   if (error instanceof HttpError) throw error;
   throw error;
+}
+
+function requestId(context: Context<ApiEnvironment>): string {
+  return (
+    context.get('requestId') ??
+    context.req.header('x-request-id') ??
+    'product-request'
+  );
 }

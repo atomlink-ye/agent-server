@@ -4,6 +4,9 @@
   "description": "Enterprise agent control-plane walking skeleton built on Paseo",
   "private": true,
   "type": "module",
+  "exports": {
+    "./product-contract": "./src/contracts/product-accepted-subset/index.ts"
+  },
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=22 <25"

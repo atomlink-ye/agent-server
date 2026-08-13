@@ -49,8 +49,11 @@ if (
     `${container} allow-list mismatch: expected ${allowedKeys.join(',')}, got ${declaredKeys.join(',')}`,
   );
 }
-if (!/PRODUCT_CONTRACT_STATUS\s*=\s*['"]provisional['"]/.test(policy)) {
-  errors.push('product contract policy must remain provisional');
+// Flipped to 'accepted' at the 2026-08-13 Human Gate (gate EXIT=0, PASS=14/FAIL=0/MISS=0).
+// The guard is kept, not removed: any further change to this status must break CI and
+// force a new Human Gate, exactly as it did for the provisional -> accepted flip.
+if (!/PRODUCT_CONTRACT_STATUS\s*=\s*['"]accepted['"]/.test(policy)) {
+  errors.push('product contract policy must remain accepted (change requires a new Human Gate)');
 }
 
 const contractFiles = await collectFiles(join(repositoryRoot, 'src/contracts'));

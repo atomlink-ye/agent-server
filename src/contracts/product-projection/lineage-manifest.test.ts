@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ProductWorkRunSuccessSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
 } from './index.js';
@@ -42,6 +43,53 @@ const vocabulary = {
 };
 
 describe('S8 product projection lineage', () => {
+  it('keeps the accepted success DTO strict and rejects technical follow-up reads', () => {
+    const base = {
+      work: {
+        id: '00000000-0000-4000-8000-000000000001',
+        tenant_id: 'tenant',
+        workspace_id: '00000000-0000-4000-8000-000000000002',
+        definition_id: '00000000-0000-4000-8000-000000000003',
+        definition_version_id: '00000000-0000-4000-8000-000000000004',
+        title: 'Work',
+        origin: 'created',
+        archived_at: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      work_run: {
+        id: '00000000-0000-4000-8000-000000000005',
+        work_id: '00000000-0000-4000-8000-000000000001',
+        definition_version_id: '00000000-0000-4000-8000-000000000004',
+        trigger_kind: 'manual',
+        trigger_ref: 'trigger',
+        expires_at: '2026-01-01T00:00:00.000Z',
+        bound_at: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+        product_state: 'not_captured',
+        problem_kind: 'not_captured',
+        attention_reason: 'not_captured',
+        result_summary: null,
+        result_capture_status: 'not_captured',
+        control_revision: null,
+        cancel_availability: 'not_captured',
+        completion_decision_availability: 'not_captured',
+      },
+      projection_status: 'internally_anchored',
+      work_items: [],
+      actors: [],
+      messages: [],
+    } as const;
+    expect(ProductWorkRunSuccessSchema.safeParse(base).success).toBe(true);
+    expect(
+      ProductWorkRunSuccessSchema.safeParse({
+        ...base,
+        follow_up_reads: [],
+      }).success,
+    ).toBe(false);
+  });
+
   it('flattens real Zod schemas with variant and array paths', () => {
     const workPaths = flattenProductProjectionSchemaPaths(
       ProductWorkRunResponseSchema,
@@ -72,8 +120,8 @@ describe('S8 product projection lineage', () => {
       vocabulary,
     );
     expect(result).toMatchObject({
-      schemaPaths: 366,
-      manifestKeys: 366,
+      schemaPaths: 374,
+      manifestKeys: 374,
       missing: [],
       extra: [],
       forbiddenPrefixHits: [],
@@ -106,6 +154,31 @@ describe('S8 product projection lineage', () => {
         vocabulary,
       ).forbiddenSourceRefHits,
     ).toEqual(['work_run_response.success::work.source_refs.secret_id']);
+  });
+
+  it('keeps MCP chat detail run identity inside source_refs', () => {
+    const barePath =
+      'run_trace_response.success::mcp_activities[].chat_detail.target.run_id';
+    const sourceRefPath =
+      'run_trace_response.success::mcp_activities[].chat_detail.target.source_refs.run_id';
+
+    expect(
+      scanProductProjectionVocabulary([barePath], vocabulary)
+        .forbiddenIdentityHits,
+    ).toEqual([barePath]);
+    expect(
+      scanProductProjectionVocabulary([sourceRefPath], vocabulary),
+    ).toMatchObject({
+      forbiddenPrefixHits: [],
+      forbiddenIdentityHits: [],
+      forbiddenSourceRefHits: [],
+    });
+    expect(Object.keys(PRODUCT_PROJECTION_LINEAGE_MANIFEST)).toContain(
+      sourceRefPath,
+    );
+    expect(Object.keys(PRODUCT_PROJECTION_LINEAGE_MANIFEST)).not.toContain(
+      barePath,
+    );
   });
 
   it('keeps every manifest value within the machine-readable categories', () => {

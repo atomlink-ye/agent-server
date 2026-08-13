@@ -43,7 +43,8 @@ describe('product Work trace failure semantics', () => {
         body: expect.objectContaining({
           error: expect.objectContaining({
             code: 'projection_invalid',
-            reason: 'event_page_limit',
+            message: expect.any(String),
+            request_id: expect.any(String),
           }),
         }),
       },
@@ -52,7 +53,8 @@ describe('product Work trace failure semantics', () => {
         body: expect.objectContaining({
           error: expect.objectContaining({
             code: 'projection_invalid',
-            reason: 'event_page_order_invalid',
+            message: expect.any(String),
+            request_id: expect.any(String),
           }),
         }),
       },
@@ -63,13 +65,16 @@ describe('product Work trace failure semantics', () => {
 function createTestApp(error: Error) {
   const app = new Hono<ApiEnvironment>();
   const productProjection = {
+    async getWork() {
+      throw error;
+    },
     async getWorkRun() {
       throw error;
     },
     async getRunTrace() {
       throw error;
     },
-  } as ProductProjectionApi;
+  } as unknown as ProductProjectionApi;
   registerProductWorkRoutes(app, {
     config: {
       serviceAccounts: [

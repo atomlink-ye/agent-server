@@ -1,17 +1,18 @@
 import { z } from 'zod';
 
-import { PRODUCT_CONTRACT_STATUS } from '../product-contract-policy.js';
 import {
-  ProductProjectionIdentitySchema,
+  GetWorkResponseSchema,
+  WorkRunSummarySchema,
+  WorkResponseSchema,
+} from '../product-work-commands.js';
+import { ErrorResponseSchema } from '../http.js';
+import {
   ProductActorSchema,
   ProductAttemptSchema,
   ProductMessageSchema,
+  ProductProjectionIdentitySchema,
   ProductWorkItemSchema,
 } from './identity.js';
-import {
-  WorkResponseSchema,
-  WorkRunResponseSchema,
-} from '../product-work-commands.js';
 import {
   ExecutionEventSchema,
   ExecutionEventsSchema,
@@ -21,49 +22,46 @@ import {
   McpActivitiesSchema,
   TimelineCoverageSchema,
 } from './edges.js';
+import { ProductStateSchema } from './product-state.js';
+
+export { ProductStateSchema } from './product-state.js';
+export type { ProductState } from './product-state.js';
+
+export const ProductWorkRunDetailSchema = WorkRunSummarySchema.extend({
+  product_state: ProductStateSchema,
+  problem_kind: z.enum(['failed', 'cancelled', 'not_captured']).nullable(),
+  attention_reason: z
+    .enum(['completion_approval_pending', 'not_captured'])
+    .nullable(),
+  result_summary: z.string().nullable(),
+  result_capture_status: z.enum([
+    'present',
+    'not_present',
+    'redacted',
+    'not_captured',
+  ]),
+  control_revision: z.number().int().nonnegative().nullable(),
+  cancel_availability: z.enum(['available', 'not_available', 'not_captured']),
+  completion_decision_availability: z.enum([
+    'available',
+    'not_available',
+    'not_captured',
+  ]),
+}).strict();
 
 const ProductWorkRunBaseSchema = z
   .object({
-    contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
     work: WorkResponseSchema,
-    work_run: WorkRunResponseSchema,
+    work_run: ProductWorkRunDetailSchema,
   })
   .merge(ProductProjectionIdentitySchema);
 
-const ProductProjectionFollowUpReadSchema = z
-  .object({
-    id: z.string().min(1),
-    resource: z.string().min(1),
-    missing_fields: z.array(z.string().min(1)).min(1),
-    method: z.literal('GET'),
-    path: z.string().min(1),
-    source_ref: z
-      .object({
-        root_task_id: z.string().min(1).optional(),
-        team_run_id: z.string().min(1).optional(),
-      })
-      .strict()
-      .refine(
-        (value) =>
-          (value.root_task_id !== undefined) !==
-          (value.team_run_id !== undefined),
-        'follow_up_read_source_ref_must_have_one_id',
-      ),
-  })
-  .strict();
-
-export const ProductProjectionFollowUpReadsSchema = z
-  .array(ProductProjectionFollowUpReadSchema)
-  .length(2);
-
 export const ProductWorkRunSuccessSchema = ProductWorkRunBaseSchema.extend({
   projection_status: z.literal('internally_anchored'),
-  follow_up_reads: ProductProjectionFollowUpReadsSchema,
 }).strict();
 
 export const ProductWorkRunNullSchema = z
   .object({
-    contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
     work: z.null(),
     work_run: z.null(),
     projection_status: z.literal('not_found'),
@@ -73,20 +71,7 @@ export const ProductWorkRunNullSchema = z
   })
   .strict();
 
-export const ProductWorkRunErrorSchema = z
-  .object({
-    contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
-    error: z
-      .object({
-        code: z.string(),
-        message: z.string(),
-        reason: z
-          .enum(['event_page_limit', 'event_page_order_invalid'])
-          .optional(),
-      })
-      .strict(),
-  })
-  .strict();
+export const ProductWorkRunErrorSchema = ErrorResponseSchema;
 
 export const ProductWorkRunResponseSchema = z.union([
   ProductWorkRunSuccessSchema,
@@ -96,7 +81,6 @@ export const ProductWorkRunResponseSchema = z.union([
 
 export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
   projection_status: z.literal('internally_anchored'),
-  follow_up_reads: ProductProjectionFollowUpReadsSchema,
   runs: z.array(ExecutionRunSchema),
   events: ExecutionEventsSchema,
   edges: ProductTraceEdgesSchema,
@@ -106,7 +90,6 @@ export const ProductRunTraceSuccessSchema = ProductWorkRunBaseSchema.extend({
 
 export const ProductRunTraceNullSchema = z
   .object({
-    contract_status: z.literal(PRODUCT_CONTRACT_STATUS),
     work: z.null(),
     work_run: z.null(),
     projection_status: z.literal('not_found'),
@@ -127,7 +110,9 @@ export const ProductRunTraceResponseSchema = z.union([
 
 export const ProductWorkRunSchema = ProductWorkRunResponseSchema;
 export const ProductRunTraceSchema = ProductRunTraceResponseSchema;
+export const ProductWorkResponseSchema = GetWorkResponseSchema;
 
+export type ProductWorkRunDetail = z.infer<typeof ProductWorkRunDetailSchema>;
 export type ProductWorkRun = z.infer<typeof ProductWorkRunResponseSchema>;
 export type ProductRunTrace = z.infer<typeof ProductRunTraceResponseSchema>;
 

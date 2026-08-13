@@ -92,10 +92,9 @@ then removes only the service it started. It does not mount host `HOME`, expose
 database ports, or use the Docker socket. The wrapper is for isolated commands;
 `make dev` remains the persistent-stack capability boundary.
 
-For the Agent Teams v2 main-flow smoke, set
-`PASEO_MODEL=opencode-go/deepseek-v4-flash` and export `OPENCODE_GO_API_KEY`
-from a local mode-0600 environment file. The Docker target allowlists only
-the model, key, and documented v2 timeout settings; the key is never logged.
+For the Agent Teams v2 main-flow smoke, load `OPENCODE_GO_API_KEY` from a local
+mode-0600 environment file. Provider/model and startup budgets come from
+`config/real-provider-defaults.env`; the key is never logged.
 
 Start the local stack:
 
@@ -125,7 +124,6 @@ published Team Version, proves Lead/member Work coordination and an addressed
 TeamMessage continuation, then verifies its bounded owner-scoped projection:
 
 ```bash
-PASEO_MODEL=opencode-go/deepseek-v4-flash \
 make agent-teams-v2-smoke
 ```
 
@@ -133,6 +131,22 @@ The paid model environment is optional when an explicitly free model is
 available; see the local development and operations runbooks for prerequisites
 and retained visual-evidence mode. This MVE is not a production or multi-user
 authentication boundary.
+
+The canonical real-provider bootstrap is:
+
+```bash
+set -a; . /path/to/provider.env; set +a  # external file, mode 0600
+make provider-smoke
+```
+
+The command loads provider, model, and bounded startup defaults from the single
+checked-in source `config/real-provider-defaults.env`, starts the PostgreSQL/
+Agent Server stack, and runs a narrow authenticated HTTP smoke while leaving
+the stack up.
+`OPENCODE_GO_API_KEY` must be supplied by the operator through an external
+mode-0600 file or environment; the repository never creates or stores
+credentials. A zero-credential clone cannot call the real provider, and a
+missing key fails before startup with a clear error.
 
 Submit and poll a run:
 

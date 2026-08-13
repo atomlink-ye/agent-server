@@ -9,6 +9,7 @@ import {
   mixedTeamEnvironmentYaml,
   mixedTeamYaml,
 } from '../dev/web-bootstrap-fixtures.mjs';
+import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
 const baseUrl = process.env.AGENT_SERVER_BASE_URL ?? 'http://127.0.0.1:3000';
 const token = process.env.AGENT_SERVER_SERVICE_TOKEN ?? 'token-local-dev';
@@ -16,6 +17,7 @@ const workspaceId = process.env.AGENT_SERVER_WORKSPACE_ID ?? 'workspace_main';
 const timeoutMs = Number(process.env.MIXED_TEAM_TIMEOUT_MS ?? 900_000);
 const startedAt = Date.now();
 const databaseUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+const realProviderDefaults = loadRealProviderDefaults();
 const packageMarker = JSON.parse(await readFile('package.json', 'utf8'));
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -135,8 +137,8 @@ const providers = await query(
 const expectedProviders = {
   lead: {
     policy: 'free-only',
-    provider: 'opencode',
-    model: 'opencode-go/deepseek-v4-flash',
+    provider: realProviderDefaults.PASEO_PROVIDER,
+    model: realProviderDefaults.PASEO_MODEL,
   },
   fixer: {
     policy: 'claude/deepseek-v4-flash',

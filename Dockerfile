@@ -50,8 +50,17 @@ RUN set -eu; \
       "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" "@openai/codex@$CODEX_VERSION"; \
     /opt/providers/bin/claude --version; \
     /opt/providers/bin/codex --version
-RUN cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
+# Re-materialize the seed in this revision so stale/corrupt exported layers
+# cannot satisfy the dependency bootstrap check.
+RUN set -eu; \
+    cp -a /workspace/node_modules/. /home/node/image-node_modules/ \
     && cp -a /workspace/apps/web/node_modules/. /home/node/image-web-node_modules/
+# Keep the dependency seed fail-closed: the daemon and the API build both rely
+# on package-manager bin links, and a stamp alone cannot prove they survived an
+# image export/import.
+RUN test -x /home/node/image-node_modules/.bin/paseo \
+    && test -x /home/node/image-node_modules/.bin/tsc \
+    && test -x /home/node/image-web-node_modules/.bin/tsc
 COPY --chown=node:node scripts/dev/dependency-stamp.mjs ./scripts/dev/dependency-stamp.mjs
 RUN node scripts/dev/dependency-stamp.mjs /workspace > /home/node/image-node_modules/.docker-dependencies-stamp \
     && cp /home/node/image-node_modules/.docker-dependencies-stamp /home/node/image-web-node_modules/.docker-dependencies-stamp
@@ -81,7 +90,11 @@ USER node
 
 FROM dependencies AS development
 
-COPY --chown=node:node . .
+# Compose bind-mounts the checked-out repository at /workspace for every
+# development service. Keep the image source-independent so an application
+# edit does not force a multi-gigabyte runtime image export; only the build-time
+# binary gate needs to be present in this stage.
+COPY --chown=node:node scripts/dev/resolve-opencode.mjs scripts/dev/safe-environment.mjs ./scripts/dev/
 RUN node scripts/dev/resolve-opencode.mjs --check
 
 # Browser stage. `playwright install --with-deps` pulls a chromium shell plus

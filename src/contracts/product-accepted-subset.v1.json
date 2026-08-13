@@ -1,0 +1,318 @@
+{
+  "api_major": "v1",
+  "accepted_revision": 1,
+  "status": "accepted",
+  "headers": {
+    "revision": "Product-Contract-Revision",
+    "status": "Product-Contract-Status"
+  },
+  "owner_scope": [
+    "tenant_id",
+    "workspace_id"
+  ],
+  "capability_status": [
+    {
+      "id": "attempt_timing",
+      "availability": "available"
+    },
+    {
+      "id": "cancel_work_run",
+      "availability": "explicitly_unavailable"
+    },
+    {
+      "id": "chat_detail_pointer",
+      "availability": "available"
+    },
+    {
+      "id": "decide_completion",
+      "availability": "explicitly_unavailable"
+    },
+    {
+      "id": "mcp_only_timeline",
+      "availability": "available"
+    },
+    {
+      "id": "opaque_pagination",
+      "availability": "available"
+    },
+    {
+      "id": "rework_attempt_identity",
+      "availability": "available"
+    },
+    {
+      "id": "terminal_outcome",
+      "availability": "available"
+    },
+    {
+      "id": "work_identity",
+      "availability": "available"
+    },
+    {
+      "id": "workspace_scope",
+      "availability": "available"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "create_work",
+      "method": "POST",
+      "path": "/api/v1/works",
+      "request_schema": "CreateWorkRequestSchema",
+      "response_schema": "CreateWorkResponseSchema",
+      "success": [
+        {
+          "status": 201,
+          "variant": "created"
+        }
+      ],
+      "errors": [],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
+      "schema_sha256": "c99887fc8188a11b7278fed6aa1a554dfbe8e9b85ef6e1940fe8bb2ff502548d"
+    },
+    {
+      "id": "get_run_trace",
+      "method": "GET",
+      "path": "/api/v1/works/{work_id}/runs/{work_run_id}/trace",
+      "request_schema": "GetRunTraceRequestSchema",
+      "response_schema": "ProductRunTraceResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "internally_anchored"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_run_not_found"
+        },
+        {
+          "status": 500,
+          "code": "projection_invalid"
+        },
+        {
+          "status": 503,
+          "code": "projection_unavailable"
+        }
+      ],
+      "capabilities": [
+        "chat_detail_pointer",
+        "mcp_only_timeline"
+      ],
+      "schema_sha256": "ea29643acd59c1268ca013f1d778a6c76145c57c0d389cd0d03f3bf3d9b66dad"
+    },
+    {
+      "id": "get_work",
+      "method": "GET",
+      "path": "/api/v1/works/{work_id}",
+      "request_schema": "GetWorkRequestSchema",
+      "response_schema": "GetWorkResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "found"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_not_found"
+        }
+      ],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
+      "schema_sha256": "c99887fc8188a11b7278fed6aa1a554dfbe8e9b85ef6e1940fe8bb2ff502548d"
+    },
+    {
+      "id": "get_work_definition",
+      "method": "GET",
+      "path": "/api/v1/works/{work_id}/definition",
+      "request_schema": "GetWorkRequestSchema",
+      "response_schema": "WorkDefinitionResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "found"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_not_found"
+        }
+      ],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
+      "schema_sha256": "200e75c1ba18afa327da689e59941302a95cce212e462cffb64490c859a6fd52"
+    },
+    {
+      "id": "get_work_run",
+      "method": "GET",
+      "path": "/api/v1/works/{work_id}/runs/{work_run_id}",
+      "request_schema": "GetWorkRunRequestSchema",
+      "response_schema": "ProductWorkRunResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "internally_anchored"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_run_not_found"
+        },
+        {
+          "status": 500,
+          "code": "projection_invalid"
+        },
+        {
+          "status": 503,
+          "code": "projection_unavailable"
+        }
+      ],
+      "capabilities": [
+        "attempt_timing",
+        "rework_attempt_identity",
+        "terminal_outcome"
+      ],
+      "schema_sha256": "030d70ec9d2788d7dbf7447cdf69a352522893cfb360bbf8a53597808e248df3"
+    },
+    {
+      "id": "list_work_runs",
+      "method": "GET",
+      "path": "/api/v1/works/{work_id}/runs",
+      "request_schema": "ListWorkRunsRequestSchema",
+      "response_schema": "WorkRunListResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "page"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_cursor"
+        },
+        {
+          "status": 400,
+          "code": "invalid_limit"
+        },
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_not_found"
+        }
+      ],
+      "capabilities": [
+        "opaque_pagination",
+        "work_identity",
+        "workspace_scope"
+      ],
+      "schema_sha256": "77e12935d4fbd59e14bf5c4465bd529f0077b0267ec099a0556db9eb18c47b54"
+    },
+    {
+      "id": "list_works",
+      "method": "GET",
+      "path": "/api/v1/works",
+      "request_schema": "ListWorksRequestSchema",
+      "response_schema": "WorkListResponseSchema",
+      "success": [
+        {
+          "status": 200,
+          "variant": "page"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_cursor"
+        },
+        {
+          "status": 400,
+          "code": "invalid_limit"
+        },
+        {
+          "status": 400,
+          "code": "invalid_request"
+        }
+      ],
+      "capabilities": [
+        "opaque_pagination",
+        "work_identity"
+      ],
+      "schema_sha256": "d42ec270a29ee271898cf4d19da8907c76a4867fe0e50ac9221733cf71a2f1e1"
+    },
+    {
+      "id": "start_work_run",
+      "method": "POST",
+      "path": "/api/v1/works/{work_id}/runs",
+      "request_schema": "StartWorkRunRequestSchema",
+      "response_schema": "StartWorkRunResponseSchema",
+      "success": [
+        {
+          "status": 202,
+          "variant": "new"
+        },
+        {
+          "status": 202,
+          "variant": "reused"
+        }
+      ],
+      "errors": [
+        {
+          "status": 400,
+          "code": "invalid_json"
+        },
+        {
+          "status": 400,
+          "code": "invalid_request"
+        },
+        {
+          "status": 404,
+          "code": "work_not_found"
+        },
+        {
+          "status": 409,
+          "code": "pending_expired"
+        },
+        {
+          "status": 409,
+          "code": "work_run_binding_conflict"
+        }
+      ],
+      "capabilities": [
+        "work_identity",
+        "workspace_scope"
+      ],
+      "schema_sha256": "edc4d971c20ef2154d5d680de39c73be3d5ea74338c53f559c33ec31bdf3583a"
+    }
+  ]
+}

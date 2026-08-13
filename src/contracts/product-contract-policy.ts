@@ -1,7 +1,8 @@
 import { PRODUCT_SOURCE_REF_KEYS } from './product-source-refs.js';
 
-/** S4 schemas are intentionally provisional until S10 acceptance. */
-export const PRODUCT_CONTRACT_STATUS = 'provisional' as const;
+/** Accepted at the 2026-08-13 Human Gate (read-only Revision 1 subset).
+ *  Evidence: rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/human-gate-decision.json */
+export const PRODUCT_CONTRACT_STATUS = 'accepted' as const;
 export const PRODUCT_WORK_CONTRACT_STATUS = PRODUCT_CONTRACT_STATUS;
 export const PRODUCT_TECHNICAL_ID_CONTAINER = 'source_refs' as const;
 export const PRODUCT_ALLOWED_SOURCE_REF_KEYS = PRODUCT_SOURCE_REF_KEYS;

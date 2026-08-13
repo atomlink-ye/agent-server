@@ -12,11 +12,13 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
 const providers = new Set(['claude', 'codex', 'opencode']);
 const probes = new Set(['p1', 'p2', 'p3']);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultServerScript = join(scriptDir, 'mcp-probe-server.mjs');
+const realProviderDefaults = loadRealProviderDefaults();
 
 function help() {
   return `Usage: node scripts/probes/run-provider-probes.mjs [options]
@@ -284,7 +286,7 @@ function providerMode(provider, explicit) {
 function commonRunCommand({ options, prompt, paseo }) {
   const model =
     options.provider === 'opencode'
-      ? 'opencode-go/deepseek-v4-flash'
+      ? realProviderDefaults.PASEO_MODEL
       : 'deepseek-v4-flash';
   const command = [
     paseo,

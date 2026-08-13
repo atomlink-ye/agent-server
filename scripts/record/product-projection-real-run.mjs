@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 import {
+  captureProductRun,
   capturePreIdentity,
   SUBMIT_INSTRUCTION_PROFILE,
 } from './lib/capture-product-run.mjs';
@@ -15,12 +17,18 @@ const SCENARIOS = new Set([
   'rework-once',
   'lead-never-accept',
 ]);
+const realProviderDefaults = loadRealProviderDefaults();
 
 function fail(code, message = '') {
   throw new Error(`${code}${message ? `:${message}` : ''}`);
 }
 function parseArgs(argv) {
-  const allowed = new Set(['--mode', '--scenario', '--base-url']);
+  const allowed = new Set([
+    '--mode',
+    '--scenario',
+    '--base-url',
+    '--work-run-id',
+  ]);
   const parsed = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index];
@@ -32,7 +40,8 @@ function parseArgs(argv) {
   return parsed;
 }
 function providerGuard() {
-  const provider = process.env.PASEO_PROVIDER ?? 'opencode';
+  const provider =
+    process.env.PASEO_PROVIDER ?? realProviderDefaults.PASEO_PROVIDER;
   const mode = process.env.PASEO_RUNTIME_MODE ?? '';
   const fakeMarker = process.env[`PASEO_${'FAKE'}_OK`];
   if (
@@ -44,14 +53,17 @@ function providerGuard() {
   return provider;
 }
 async function http(baseUrl, token, path, options = {}) {
+  const headers = {
+    ...(options.technicalIdempotency === false
+      ? {}
+      : { 'idempotency-key': randomUUID() }),
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json',
+    accept: 'application/json',
+  };
   const response = await fetch(new URL(path, baseUrl), {
     method: options.method ?? 'GET',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'idempotency-key': randomUUID(),
-    },
+    headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const body = await response.json().catch(() => null);
@@ -87,8 +99,39 @@ function agentYaml(name, instructions, packageName = name) {
       : ['team-state', 'team-work-list', 'team-work-submit'];
   return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${packageName}\nspec:\n  description: Product Projection real-run recording role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs.map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`).join('\n')}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute the next legal Team action."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
-function environmentYaml() {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
+function nonblank(value) {
+  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
+}
+function attemptField(attempt, ...names) {
+  for (const name of names) {
+    if (attempt?.[name] !== undefined) return attempt[name];
+  }
+  return null;
+}
+function parallelPredicateEvidence(works) {
+  return (Array.isArray(works) ? works : []).map((work) => {
+    const attempts = Array.isArray(work?.attempts) ? work.attempts : [];
+    return {
+      work_id: attemptField(work, 'id', 'work_id', 'work_ref'),
+      attempt_count: attempts.length,
+      attempts: attempts.map((attempt) => ({
+        attempt_no: attemptField(
+          attempt,
+          'attempt_no',
+          'attemptNo',
+          'attempt_number',
+          'attemptNumber',
+        ),
+        status: attemptField(attempt, 'status', 'attempt_status', 'attemptStatus'),
+      })),
+      request_changes_observed: attempts.some((attempt) =>
+        nonblank(attemptField(attempt, 'feedbackSummary', 'feedback_summary')),
+      ),
+    };
+  });
+}
+function environmentYaml(provider) {
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: product-projection-real-run-v1\nspec:\n  adapter: paseo\n  provider: ${provider}\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`;
 }
 function scenarioInstructions(scenario, role, mode) {
   if (role !== 'lead') {
@@ -144,10 +187,6 @@ async function main() {
     process.env.SERVICE_ACCOUNT_TOKEN;
   if (!['pre-identity', 'product', 'state-canary'].includes(mode))
     fail('invalid_mode');
-  if (mode === 'product')
-    fail(
-      'product_mode_not_implemented: Product Work endpoints are not available in S0',
-    );
   if (!SCENARIOS.has(scenario)) fail('invalid_scenario');
   if (!baseUrl || !token) fail('base_url_and_agent_server_token_required');
   const tenantId =
@@ -160,7 +199,7 @@ async function main() {
     process.env.AGENT_SERVER_SERVICE_ACCOUNT_ID;
   if (!tenantId || !workspaceId || !principalId)
     fail('authenticated_scope_environment_required');
-  providerGuard();
+  const provider = providerGuard();
   const url = new URL(baseUrl);
   const liveResponse = await fetch(new URL('/health/live', url));
   const live = await liveResponse.json().catch(() => null);
@@ -191,7 +230,7 @@ async function main() {
   }
   const environment = await http(url, token, '/api/v1/environments:import', {
     method: 'POST',
-    body: { source: environmentYaml() },
+    body: { source: environmentYaml(provider) },
   });
   await http(
     url,
@@ -266,17 +305,47 @@ async function main() {
     resolvedAgentVersionIds.join('\n') !== expectedAgentVersionIds.join('\n')
   )
     fail('published_definition_resolution_mismatch');
-  const invocation = await http(url, token, '/api/v1/tasks:invoke', {
-    method: 'POST',
-    body: {
-      workspace_id: workspaceId,
-      invokable: { kind: 'team', version_id: published.id },
-      input: {
-        text: `Product Projection recording scenario ${scenario}. Execute the dedicated scenario definition exactly.`,
+  let productContext = null;
+  let rootTaskId;
+  if (mode === 'product') {
+    const created = await http(url, token, '/api/v1/works', {
+      method: 'POST',
+      technicalIdempotency: false,
+      body: {
+        definition_id: published.definition_id,
+        definition_version_id: published.id,
+        title: `Product Projection ${scenario} ${randomUUID().slice(0, 8)}`,
       },
-    },
-  });
-  const rootTaskId = invocation.task_id;
+    });
+    const started = await http(
+      url,
+      token,
+      `/api/v1/works/${created.work.id}/runs`,
+      {
+        method: 'POST',
+        technicalIdempotency: false,
+        body: {
+          trigger_kind: 'manual',
+          trigger_ref: `product-projection:${scenario}:${randomUUID()}`,
+        },
+      },
+    );
+    rootTaskId = started.execution_receipt?.source_refs?.task_id;
+    if (!rootTaskId) fail('product_execution_receipt_task_id_missing');
+    productContext = { created, started };
+  } else {
+    const invocation = await http(url, token, '/api/v1/tasks:invoke', {
+      method: 'POST',
+      body: {
+        workspace_id: workspaceId,
+        invokable: { kind: 'team', version_id: published.id },
+        input: {
+          text: `Product Projection recording scenario ${scenario}. Execute the dedicated scenario definition exactly.`,
+        },
+      },
+    });
+    rootTaskId = invocation.task_id;
+  }
   const timeoutMs = Number(process.env.PRODUCT_RECORD_TIMEOUT_MS ?? 180_000);
   let parallelAttemptsObserved = false;
   const project = await waitFor(
@@ -300,10 +369,25 @@ async function main() {
           works.length === 2 &&
           parallelAttemptsObserved &&
           works.every(
-            (work) =>
-              work.status === 'accepted' &&
-              work.dependency_refs?.length === 0 &&
-              work.attempts?.length === 1,
+            (work) => {
+              const attempts = Array.isArray(work.attempts)
+                ? work.attempts
+                : [];
+              return (
+                work.status === 'accepted' &&
+                work.dependency_refs?.length === 0 &&
+                attempts.length >= 1 &&
+                !attempts.some((attempt) =>
+                  nonblank(
+                    attemptField(
+                      attempt,
+                      'feedbackSummary',
+                      'feedback_summary',
+                    ),
+                  ),
+                )
+              );
+            },
           )
         );
       if (scenario === 'rework-once')
@@ -364,6 +448,75 @@ async function main() {
   const providerModels = [
     ...new Set(runtimes.map((turn) => turn.model)),
   ].sort();
+  if (mode === 'product') {
+    const workId = productContext.created.work.id;
+    const workRunId =
+      args['--work-run-id'] ?? productContext.started.work_run.id;
+    const product = await waitFor(
+      () =>
+        http(url, token, `/api/v1/works/${workId}/runs/${workRunId}`, {
+          technicalIdempotency: false,
+        }),
+      (value) =>
+        value?.projection_status === 'internally_anchored' &&
+        value?.work_run?.id === workRunId,
+      timeoutMs,
+    );
+    const trace = await http(
+      url,
+      token,
+      `/api/v1/works/${workId}/runs/${workRunId}/trace`,
+      { technicalIdempotency: false },
+    );
+    if (scenario === 'parallel-success') {
+      const activities = trace?.mcp_activities;
+      if (!Array.isArray(activities) || activities.length < 1)
+        fail('parallel_mcp_activities_missing');
+      if (
+        activities.some(
+          (activity) =>
+            activity.provenance !== 'server_authorized_team_mcp_catalog',
+        )
+      )
+        fail('parallel_mcp_provenance_invalid');
+    }
+    const capture = await captureProductRun({
+      baseUrl: url,
+      token,
+      rootTaskId,
+      workId,
+      workRunId,
+      work: product.work,
+      workRun: product.work_run,
+      trace,
+      tenantId,
+      workspaceId,
+      principalId,
+      scenario,
+      memberComposition: ['projection-lead', ...names],
+      submitInstructionProfile: SUBMIT_INSTRUCTION_PROFILE,
+      providerKind: providerKinds.join(','),
+      providerModel: providerModels.join(','),
+      definitionHash,
+      predicateEvidence: {
+        parallel_attempts_observed: parallelAttemptsObserved,
+        ...(scenario === 'parallel-success'
+          ? {
+              parallel_work_attempts: parallelPredicateEvidence(
+                project?.work_items,
+              ),
+            }
+          : {}),
+      },
+      serviceRevision: live.version,
+      databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+      outputRoot: process.env.PRODUCT_RECORDINGS_ROOT,
+    });
+    process.stdout.write(
+      `${JSON.stringify({ provider: 'real', mode, scenario, root_task_id: rootTaskId, work_id: workId, work_run_id: workRunId, recording: capture.directory, secret_hits: capture.validation.secret_hits, hash_mismatches: capture.validation.hash_mismatches })}\n`,
+    );
+    return;
+  }
   const capture = await capturePreIdentity({
     baseUrl: url,
     token,
@@ -377,10 +530,20 @@ async function main() {
     providerKind: providerKinds.join(','),
     providerModel: providerModels.join(','),
     definitionHash,
-    predicateEvidence: { parallel_attempts_observed: parallelAttemptsObserved },
+    predicateEvidence: {
+      parallel_attempts_observed: parallelAttemptsObserved,
+      ...(scenario === 'parallel-success'
+        ? {
+            parallel_work_attempts: parallelPredicateEvidence(
+              project?.work_items,
+            ),
+          }
+        : {}),
+    },
     project,
     serviceRevision: live.version,
     databaseUrl: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+    outputRoot: process.env.PRODUCT_RECORDINGS_ROOT,
   });
   process.stdout.write(
     `${JSON.stringify({ provider: 'real', scenario, root_task_id: rootTaskId, work_id: { capture_status: 'not_applicable' }, work_run_id: { capture_status: 'not_applicable' }, api_files: capture.validation.api_files, db_tables: capture.validation.db_tables, predicate: project?.project?.status, recording: capture.directory, secret_hits: capture.validation.secret_hits, hash_mismatches: capture.validation.hash_mismatches })}\n`,

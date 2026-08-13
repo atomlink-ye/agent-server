@@ -23,6 +23,10 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
+import {
+  createOpenCodeConfigContent,
+  loadRealProviderDefaults,
+} from '../dev/real-provider-defaults.mjs';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const adminUrl = process.env.POSTGRES_ADMIN_URL;
@@ -45,7 +49,8 @@ const expiredLeaseRecovery =
   process.env.AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY ?? '';
 const scriptedRuntime =
   requestedScriptedRuntime || Boolean(expiredLeaseRecovery);
-const requestedProvider = process.env.PASEO_PROVIDER ?? 'opencode';
+const realProviderDefaults = loadRealProviderDefaults();
+const requestedProvider = realProviderDefaults.PASEO_PROVIDER;
 const supportedSmokeModels = {
   opencode: new Set([
     'opencode-go/deepseek-v4-flash',
@@ -61,9 +66,7 @@ if (!['', 'baseline', 'fixed'].includes(failedAttemptMode))
   throw new Error('invalid_failed_attempt_mode');
 if (reworkScenario && (failedAttemptMode || expiredLeaseRecovery))
   throw new Error('rework_scenario_mode_conflict');
-const requestedModel =
-  process.env.PASEO_MODEL ??
-  (requestedProvider === 'opencode' ? 'opencode-go/deepseek-v4-flash' : '');
+const requestedModel = realProviderDefaults.PASEO_MODEL;
 const runtimeResolutionProviders = new Set(['opencode', 'claude', 'codex']);
 const anthropicEnvironmentVariableNames = [
   'ANTHROPIC_BASE_URL',
@@ -2279,7 +2282,8 @@ async function runProductWorkDurableIdentityFlow({
         activity.chat_detail.method === 'GET' &&
         activity.chat_detail.path ===
           `/api/v1/runs/${activity.source_refs.run_id}/events?after=${activity.sequence - 1}` &&
-        activity.chat_detail.target.run_id === activity.source_refs.run_id &&
+        activity.chat_detail.target.source_refs.run_id ===
+          activity.source_refs.run_id &&
         activity.chat_detail.target.sequence === activity.sequence &&
         activity.chat_detail.target.activity_id === activity.activity_id,
       'product_trace_mcp_activity_pointer_invalid',
@@ -2745,24 +2749,44 @@ async function runProductWorkDurableIdentityFlow({
     ...workPageOne.works.map((item) => item.id),
     ...workPageTwo.works.map((item) => item.id),
   ];
-  assert(JSON.stringify(enumeratedWorkIds) === JSON.stringify(expectedWorkIds), 'product_work_two_page_id_set_mismatch');
-  assert(new Set(enumeratedWorkIds).size === enumeratedWorkIds.length, 'product_work_two_page_duplicate_id');
-  assert(workPageTwo.next_cursor === null, 'product_work_unexpected_third_page');
+  assert(
+    JSON.stringify(enumeratedWorkIds) === JSON.stringify(expectedWorkIds),
+    'product_work_two_page_id_set_mismatch',
+  );
+  assert(
+    new Set(enumeratedWorkIds).size === enumeratedWorkIds.length,
+    'product_work_two_page_duplicate_id',
+  );
+  assert(
+    workPageTwo.next_cursor === null,
+    'product_work_unexpected_third_page',
+  );
   const expectedRunIds = (
     await db.query(
       `SELECT id FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3 AND (root_task_id IS NOT NULL OR expires_at > now()) ORDER BY created_at ASC,id ASC`,
       [tenantId, workspaceId, work.id],
     )
   ).rows.map((row) => row.id);
-  const runPageOne = await request(`/api/v1/works/${work.id}/runs?limit=1`, { technicalIdempotency: false });
+  const runPageOne = await request(`/api/v1/works/${work.id}/runs?limit=1`, {
+    technicalIdempotency: false,
+  });
   assert(runPageOne.next_cursor, 'product_work_run_first_page_cursor_missing');
-  const runPageTwo = await request(`/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(runPageOne.next_cursor)}`, { technicalIdempotency: false });
+  const runPageTwo = await request(
+    `/api/v1/works/${work.id}/runs?limit=1&cursor=${encodeURIComponent(runPageOne.next_cursor)}`,
+    { technicalIdempotency: false },
+  );
   const enumeratedRunIds = [
     ...runPageOne.work_runs.map((item) => item.id),
     ...runPageTwo.work_runs.map((item) => item.id),
   ];
-  assert(JSON.stringify(enumeratedRunIds) === JSON.stringify(expectedRunIds), 'product_work_run_two_page_id_set_mismatch');
-  assert(new Set(enumeratedRunIds).size === enumeratedRunIds.length, 'product_work_run_two_page_duplicate_id');
+  assert(
+    JSON.stringify(enumeratedRunIds) === JSON.stringify(expectedRunIds),
+    'product_work_run_two_page_id_set_mismatch',
+  );
+  assert(
+    new Set(enumeratedRunIds).size === enumeratedRunIds.length,
+    'product_work_run_two_page_duplicate_id',
+  );
   assert(
     runPageTwo.next_cursor === null,
     'product_work_run_unexpected_third_page',
@@ -2879,23 +2903,8 @@ try {
   assert(adminUrl, 'missing_POSTGRES_ADMIN_URL');
   if (!scriptedRuntime && requestedProvider === 'opencode') {
     assert(process.env.OPENCODE_GO_API_KEY, 'missing_OPENCODE_GO_API_KEY');
-    const [providerId, modelId] = requestedModel.split('/');
-    process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-      $schema: 'https://opencode.ai/config.json',
-      agent: { build: { permission: 'allow' } },
-      provider: {
-        [providerId]: {
-          npm: '@ai-sdk/openai-compatible',
-          name: 'OpenCode Go',
-          options: {
-            baseURL: 'https://opencode.ai/zen/go/v1',
-            apiKey: '{env:OPENCODE_GO_API_KEY}',
-          },
-          models: {
-            [modelId]: { name: modelId },
-          },
-        },
-      },
+    process.env.OPENCODE_CONFIG_CONTENT = createOpenCodeConfigContent({
+      model: requestedModel,
     });
   }
   if (!scriptedRuntime) {

@@ -3,7 +3,6 @@ import {
   constants,
   cp,
   mkdir,
-  open,
   readFile,
   readdir,
   rm,
@@ -19,12 +18,50 @@ const workspaceNodeModules = '/workspace/node_modules';
 const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
 const imageNodeModules = '/home/node/image-node_modules';
 const imageWebNodeModules = '/home/node/image-web-node_modules';
-const workspacePackageJson = '/workspace/package.json';
 const restoreLockPath = `${workspaceNodeModules}/.dependency-restore.lock`;
-const restoreLockTimeoutMs = Number(process.env.DEPENDENCY_RESTORE_LOCK_TIMEOUT_MS ?? 120000);
+const restoreLockTimeoutMs = Number(
+  process.env.DEPENDENCY_RESTORE_LOCK_TIMEOUT_MS ?? 120000,
+);
 const command = process.argv.slice(2);
 
 const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
+
+// Keep this deliberately small. These links are the runtime entrypoints used
+// by the daemon and the TypeScript commands; a matching stamp does not prove
+// that an exported/imported dependency tree retained them.
+const criticalArtifacts = [
+  {
+    displayPath: 'node_modules/.bin/paseo',
+    relativePath: '.bin/paseo',
+    workspace: workspaceNodeModules,
+    image: imageNodeModules,
+  },
+  {
+    displayPath: 'node_modules/.bin/tsc',
+    relativePath: '.bin/tsc',
+    workspace: workspaceNodeModules,
+    image: imageNodeModules,
+  },
+];
+
+const checkCriticalArtifacts = async (scope, rootKind) => {
+  for (const {
+    displayPath,
+    relativePath,
+    workspace,
+    image,
+  } of criticalArtifacts) {
+    const root = rootKind === 'image' ? image : workspace;
+    const path = `${root}/${relativePath.replace('apps/web/', '')}`;
+    try {
+      await access(path, constants.X_OK);
+    } catch (error) {
+      const code = error?.code ? ` (${error.code})` : '';
+      return `${scope} missing executable ${displayPath}${code}`;
+    }
+  }
+  return null;
+};
 
 const workspaceOwnershipMessage =
   'Workspace write preflight failed. Ensure the bind-mounted source is provisioned writable by container uid/gid 1000:1000; do not chown, chmod, or escalate privileges in the container.';
@@ -34,15 +71,6 @@ const runWorkspaceWritePreflight = async () => {
   let failure;
   try {
     await writeFile(probePath, 'probe', { flag: 'wx' });
-    try {
-      await access(workspacePackageJson, constants.W_OK);
-      const packageHandle = await open(workspacePackageJson, 'r+');
-      await packageHandle.close();
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    }
   } catch (error) {
     failure = error;
   }
@@ -74,7 +102,11 @@ const clearAndRestore = async (workspace, image, preserveEntries = []) => {
 };
 
 const acquireRestoreLock = async () => {
-  const deadline = Date.now() + (Number.isFinite(restoreLockTimeoutMs) && restoreLockTimeoutMs > 0 ? restoreLockTimeoutMs : 120000);
+  const deadline =
+    Date.now() +
+    (Number.isFinite(restoreLockTimeoutMs) && restoreLockTimeoutMs > 0
+      ? restoreLockTimeoutMs
+      : 120000);
   while (Date.now() < deadline) {
     try {
       await mkdir(restoreLockPath);
@@ -84,7 +116,9 @@ const acquireRestoreLock = async () => {
       await delay(250);
     }
   }
-  throw new Error(`Dependency restore lock is busy at ${restoreLockPath}; refusing to remove or steal an uncertain lock`);
+  throw new Error(
+    `Dependency restore lock is busy at ${restoreLockPath}; refusing to remove or steal an uncertain lock`,
+  );
 };
 
 const releaseRestoreLock = async () => {
@@ -115,6 +149,15 @@ if (command.length === 0) {
       );
       process.exitCode = 1;
     } else {
+      const imageArtifactFailure =
+        (await checkCriticalArtifacts('image dependency seed', 'image')) ??
+        null;
+      if (imageArtifactFailure) {
+        process.stderr.write(
+          `[docker-ensure-node-modules] dependency_restore failed reason=${imageArtifactFailure}; rebuild the image\n`,
+        );
+        throw new Error(imageArtifactFailure);
+      }
       await acquireRestoreLock();
       try {
         const currentStamps = await Promise.all(
@@ -128,16 +171,44 @@ if (command.length === 0) {
             },
           ),
         );
-        if (currentStamps.some((stamp) => stamp !== expectedStamp)) {
+        const workspaceArtifactFailure =
+          (await checkCriticalArtifacts(
+            'workspace dependency tree',
+            'workspace',
+          )) ?? null;
+        const stampMismatch = currentStamps.some(
+          (stamp) => stamp !== expectedStamp,
+        );
+        if (stampMismatch || workspaceArtifactFailure) {
           const restoreStartedAt = Date.now();
           process.stderr.write(
-            '[docker-ensure-node-modules] dependency_restore start\n',
+            `[docker-ensure-node-modules] dependency_restore start reason=${workspaceArtifactFailure ?? 'stamp_mismatch'}\n`,
           );
           try {
-            await clearAndRestore(workspaceNodeModules, imageNodeModules, ['.dependency-restore.lock']);
+            await clearAndRestore(workspaceNodeModules, imageNodeModules, [
+              '.dependency-restore.lock',
+            ]);
             await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
-            await writeFile(stampPath(workspaceNodeModules), expectedStamp, 'utf8');
-            await writeFile(stampPath(workspaceWebNodeModules), expectedStamp, 'utf8');
+            await writeFile(
+              stampPath(workspaceNodeModules),
+              expectedStamp,
+              'utf8',
+            );
+            await writeFile(
+              stampPath(workspaceWebNodeModules),
+              expectedStamp,
+              'utf8',
+            );
+            const restoredArtifactFailure =
+              (await checkCriticalArtifacts(
+                'restored workspace dependency tree',
+                'workspace',
+              )) ?? null;
+            if (restoredArtifactFailure) {
+              throw new Error(
+                `Dependency restore completed but ${restoredArtifactFailure}`,
+              );
+            }
           } finally {
             process.stderr.write(
               `[docker-ensure-node-modules] dependency_restore end duration_ms=${Date.now() - restoreStartedAt}\n`,

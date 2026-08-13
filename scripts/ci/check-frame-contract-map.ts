@@ -72,7 +72,8 @@ function variant(schema: JsonSchema, label: string): JsonSchema | undefined {
     );
   if (label === 'not_found')
     return candidates.find(
-      (candidate) => candidate.properties?.projection_status?.const === 'not_found',
+      (candidate) =>
+        candidate.properties?.projection_status?.const === 'not_found',
     );
   return candidates.find((candidate) =>
     Object.values(candidate.properties ?? {}).some(
@@ -243,7 +244,8 @@ function valueAtPath(value: unknown, path: string): unknown {
     if (/^\d+$/u.test(token)) {
       if (!Array.isArray(current)) throw new Error('index_requires_array');
       const index = Number(token);
-      if (index >= current.length) throw new Error(`missing_json_index:${index}`);
+      if (index >= current.length)
+        throw new Error(`missing_json_index:${index}`);
       current = current[index];
     } else {
       const filter = token.match(
@@ -265,9 +267,15 @@ function valueAtPath(value: unknown, path: string): unknown {
           }
           candidate = (candidate as Record<string, unknown>)[field];
         }
-        if (filter[2] === '!=' && expected === null && candidate === undefined)
+        if (
+          filter[2] === '!=' &&
+          expected === null &&
+          candidate === undefined
+        )
           return false;
-        return filter[2] === '==' ? candidate === expected : candidate !== expected;
+        return filter[2] === '=='
+          ? candidate === expected
+          : candidate !== expected;
       });
       filteredCollection = true;
     }
@@ -307,7 +315,8 @@ function parseEvidenceTriple(triple: string): [string, string, string] {
 function renderValue(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value === null) return 'null';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
   return JSON.stringify(value);
 }
 
@@ -328,7 +337,11 @@ export async function checkFrameContractMap(): Promise<number> {
     if (rows.length !== EXPECTED_ROWS) return FAIL;
     const fixtures = new Map<string, unknown>();
     for (const row of rows) {
-      if (!row.frame || row.schemaPaths.length === 0 || row.evidence.length === 0)
+      if (
+        !row.frame ||
+        row.schemaPaths.length === 0 ||
+        row.evidence.length === 0
+      )
         return FAIL;
       if (row.schemaPaths.some((path) => !schemaPathExists(path))) return FAIL;
       for (const triple of row.evidence) {
@@ -350,7 +363,8 @@ export async function checkFrameContractMap(): Promise<number> {
         try {
           actual = valueAtPath(document, path);
         } catch (error) {
-          return error instanceof Error && error.message === 'empty_filter_result'
+          return error instanceof Error &&
+            error.message === 'empty_filter_result'
             ? MISSING
             : FAIL;
         }
@@ -376,7 +390,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       process.exitCode = code;
     })
     .catch((error) => {
-      console.error(`checker_error=${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `checker_error=${error instanceof Error ? error.message : String(error)}`,
+      );
       process.exitCode = FAIL;
     });
 }

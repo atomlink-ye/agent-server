@@ -14,7 +14,9 @@ export type ProductRecording = {
 };
 
 type RecordingWorkResponse = ReturnType<typeof WorkResponseSchema.parse>;
-type RecordingWorkRunDetail = ReturnType<typeof ProductWorkRunDetailSchema.parse>;
+type RecordingWorkRunDetail = ReturnType<
+  typeof ProductWorkRunDetailSchema.parse
+>;
 
 const WORK_RUN_SUMMARY_KEYS = [
   'id',
@@ -61,9 +63,7 @@ function workRunSummary(detail: RecordingWorkRunDetail) {
  * [2] or [1], and the accepted list contract supplies only the required
  * `next_cursor: null` pagination terminator.
  */
-export function projectWorkList(
-  recording: ProductRecording,
-): WorkListResponse {
+export function projectWorkList(recording: ProductRecording): WorkListResponse {
   const work = workFromRecording(recording);
   const detail = workRunFromRecording(recording);
   const latestRun = workRunSummary(detail);
@@ -94,9 +94,8 @@ export function projectWorkRunList(
 ): WorkRunListResponse {
   const detail = workRunFromRecording(recording);
   const summary = workRunSummary(detail);
-  const workRuns = workId === undefined || workId === summary.work_id
-    ? [summary]
-    : [];
+  const workRuns =
+    workId === undefined || workId === summary.work_id ? [summary] : [];
   return WorkRunListResponseSchema.parse({
     work_runs: workRuns,
     next_cursor: null,

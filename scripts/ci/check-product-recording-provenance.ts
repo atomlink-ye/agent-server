@@ -9,7 +9,7 @@ const PASS = 0;
 const FAIL = 1;
 const MISSING = 2;
 const OH2_DECISION =
-  'rounds/2026-08-13-refactor-and-web-rebuild/DECISIONS-2026-08-13-owner-handover.md#O-H2';
+  '/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/DECISIONS-2026-08-13-owner-handover.md#O-H2';
 
 const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const sourceRoot = resolve(
@@ -20,7 +20,10 @@ const fixtureRoot = resolve(
   repoRoot,
   'apps/web/lib/__fixtures__/product-recordings',
 );
-const legacyRoot = resolve(repoRoot, 'fixtures/product-projection/recordings');
+const legacyRoot = resolve(
+  repoRoot,
+  'fixtures/product-projection/recordings',
+);
 
 const recorderFiles = [
   {
@@ -98,7 +101,8 @@ export async function checkProductRecordingProvenance(): Promise<number> {
     return FAIL;
 
   for (const [name, expectedSha] of Object.entries(legacyFiles)) {
-    if ((await readHash(resolve(legacyRoot, name))) !== expectedSha) return FAIL;
+    if ((await readHash(resolve(legacyRoot, name))) !== expectedSha)
+      return FAIL;
   }
 
   for (const recording of expectedFiles) {
@@ -142,7 +146,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       process.exitCode = code;
     })
     .catch((error) => {
-      console.error(`checker_error=${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `checker_error=${error instanceof Error ? error.message : String(error)}`,
+      );
       process.exitCode = FAIL;
     });
 }

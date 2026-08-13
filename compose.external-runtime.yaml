@@ -17,6 +17,7 @@ services:
       PASEO_LISTEN_HOST: 0.0.0.0
       PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
       PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
+      PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
       PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
       PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
@@ -41,6 +42,9 @@ services:
         condition: service_started
     environment:
       OPENCODE_GO_API_KEY: !reset null
+      PASEO_CONNECT_TIMEOUT_MS: !reset null
+      PASEO_EXECUTION_TIMEOUT_MS: !reset null
+      PASEO_SESSION_RPC_TIMEOUT_MS: !reset null
       PASEO_PROVIDER: !reset null
       PASEO_MODEL: !reset null
       PASEO_DAEMON_STARTUP_TIMEOUT_MS: !reset null

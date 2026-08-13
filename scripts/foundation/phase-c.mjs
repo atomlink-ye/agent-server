@@ -78,16 +78,80 @@ function evaluateE4(options) {
   const agent = compose.services.find((service) => service.name === 'agent-server');
   const paseo = compose.services.find((service) => service.name === 'paseo-runtime');
   if (!agent || !paseo) return result('E4', 'FAIL', 'required services are absent');
-  const forbiddenEnv = /^(?:OPENCODE_GO_API_KEY|ANTHROPIC_|PASEO_(?:PROVIDER|MODEL|PORT|LISTEN_HOST|HOME|.*TIMEOUT))/u;
+  const forbiddenAgentServerEnvironment = new Set([
+    'OPENCODE_GO_API_KEY',
+    'PASEO_CONNECT_TIMEOUT_MS',
+    'PASEO_EXECUTION_TIMEOUT_MS',
+    'PASEO_SESSION_RPC_TIMEOUT_MS',
+    'PASEO_PROVIDER',
+    'PASEO_MODEL',
+    'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+    'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+    'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+    'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+    'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+    'PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS',
+    'PASEO_PORT',
+    'PASEO_LISTEN_HOST',
+    'PASEO_CORS_ORIGINS',
+    'PASEO_HOSTNAMES',
+    'PASEO_HOME',
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_CACHE_HOME',
+    'PASEO_RELAY_ENABLED',
+    'PASEO_DICTATION_ENABLED',
+    'PASEO_VOICE_MODE_ENABLED',
+    'PASEO_DEV_WEB_UI',
+  ]);
   const failures = [];
   if (agent.command?.some((part) => String(part).includes('with-paseo'))) failures.push('agent_server_supervises_paseo');
   if (agent.depends_on?.includes('provider-toolchain-init')) failures.push('agent_server_provider_dependency');
   if (agent.mounts?.some((mount) => mount.target === '/opt/provider-toolchain-volume')) failures.push('agent_server_provider_mount');
-  if (Object.keys(agent.environment ?? {}).some((name) => forbiddenEnv.test(name) && name !== 'PASEO_WS_URL')) failures.push('agent_server_provider_environment');
+  const forbiddenEnvironmentPresent = Object.keys(agent.environment ?? {})
+    .filter(
+      (name) =>
+        forbiddenAgentServerEnvironment.has(name) ||
+        name.startsWith('ANTHROPIC_'),
+    )
+    .sort();
+  if (forbiddenEnvironmentPresent.length) {
+    failures.push({
+      proposition: 'agent_server_runtime_provider_environment',
+      present: forbiddenEnvironmentPresent,
+    });
+  }
   if (agent.environment?.PASEO_WS_URL !== 'ws://paseo-runtime:16767/ws') failures.push('agent_server_socket_boundary');
   if (!paseo.depends_on?.includes('provider-toolchain-init')) failures.push('runtime_init_dependency');
   if (!paseo.mounts?.some((mount) => mount.target === '/opt/provider-toolchain-volume')) failures.push('runtime_provider_mount');
-  if (!Object.keys(paseo.environment ?? {}).some((name) => name === 'OPENCODE_GO_API_KEY')) failures.push('runtime_credential_owner');
+  const requiredRuntimeEnvironment = [
+    'OPENCODE_GO_API_KEY',
+    'PASEO_PROVIDER',
+    'PASEO_MODEL',
+    'PASEO_CONNECT_TIMEOUT_MS',
+    'PASEO_EXECUTION_TIMEOUT_MS',
+    'PASEO_SESSION_RPC_TIMEOUT_MS',
+    'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+    'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+    'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+    'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+    'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+    'PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS',
+    'HOME',
+    'PASEO_HOME',
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_CACHE_HOME',
+  ];
+  const runtimeEnvironmentMissing = requiredRuntimeEnvironment.filter(
+    (name) => !(name in (paseo.environment ?? {})),
+  );
+  if (runtimeEnvironmentMissing.length) {
+    failures.push({
+      proposition: 'runtime_environment_ownership',
+      missing: runtimeEnvironmentMissing,
+    });
+  }
   if (runtime.agent_server.processes.some((process) => /(?:^|\/)paseo(?:\s|$)/u.test(process.command))) failures.push('agent_server_paseo_process');
   if (!runtime.paseo_runtime.processes.some((process) => /(?:^|\/)paseo(?:\s|$)/u.test(process.command))) failures.push('runtime_paseo_process_missing');
   if (runtime.agent_server.container_id === runtime.paseo_runtime.container_id) failures.push('container_identity_not_independent');
@@ -102,13 +166,29 @@ function recipeFor(makefile, target) {
 }
 
 function evaluateE5() {
-  const makefilePath = join(ROOT, 'Makefile');
+  const makefilePath = resolve(
+    process.env.FOUNDATION_E5_MAKEFILE ?? join(ROOT, 'Makefile'),
+  );
   const makefile = readFileSync(makefilePath, 'utf8');
+  const structuralFailures = runtimeTargets.filter(
+    (target) =>
+      !recipeFor(makefile, target).startsWith(
+        `\t@./scripts/dev/runtime-only-preflight ${target}\n`,
+      ),
+  );
+  if (structuralFailures.length) {
+    return result('E5', 'FAIL', 'runtime-only preflight is missing or not first', {
+      structural_failures: structuralFailures,
+    });
+  }
   const positive = [];
   for (const target of runtimeTargets) {
     const traceRoot = mkdtempSync(join(tmpdir(), 'phase-c-e5-'));
     const trace = join(traceRoot, 'trace.log');
-    const run = spawnSync('make', ['--no-print-directory', '-s', target], {
+    const run = spawnSync(
+      'make',
+      ['--no-print-directory', '-s', '-f', makefilePath, target],
+      {
       cwd: ROOT,
       env: {
         ...process.env,
@@ -116,7 +196,8 @@ function evaluateE5() {
         RUNTIME_PREFLIGHT_TRACE_FILE: trace,
       },
       encoding: 'utf8',
-    });
+      },
+    );
     const boundary = readFileSync(trace, 'utf8').trim();
     rmSync(traceRoot, { recursive: true, force: true });
     positive.push({
@@ -128,9 +209,19 @@ function evaluateE5() {
     });
   }
   const badPositive = positive.find(
-    (item) => item.exit !== 2 && (item.exit !== 1 || !item.reason_seen || item.polling_seen || item.boundary !== `${item.target}\tcore`),
+    (item) =>
+      item.exit !== 2 ||
+      !item.reason_seen ||
+      item.polling_seen ||
+      item.boundary !== `${item.target}\tcore`,
   );
   if (badPositive) return result('E5', 'FAIL', 'runtime-only positive preflight failed', { positive });
+
+  if (process.env.FOUNDATION_E5_POSITIVE_ONLY === '1') {
+    return result('E5', 'PASS', 'runtime-only positive preflight passed', {
+      positive,
+    });
+  }
 
   const mutations = [];
   for (const target of runtimeTargets) {
@@ -138,17 +229,50 @@ function evaluateE5() {
     if (!originalRecipe) return result('E5', 'MISSING', `recipe missing: ${target}`);
     const mutated = makefile.replace(`\t@./scripts/dev/runtime-only-preflight ${target}\n`, '');
     const mutatedRecipe = recipeFor(mutated, target);
+    const mutationRoot = mkdtempSync(join(tmpdir(), 'phase-c-e5-mutation-'));
+    const mutationMakefile = join(mutationRoot, 'Makefile');
+    writeFileSync(mutationMakefile, mutated);
+    const mutationRun = spawnSync(
+      process.execPath,
+      [fileURLToPath(import.meta.url), 'E5'],
+      {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          FOUNDATION_E5_MAKEFILE: mutationMakefile,
+          FOUNDATION_E5_POSITIVE_ONLY: '1',
+        },
+        encoding: 'utf8',
+      },
+    );
+    const mutationEvaluation = mutationRun.stdout
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .at(-1);
+    rmSync(mutationRoot, { recursive: true, force: true });
     mutations.push({
       target,
       mutation: 'remove-runtime-only-preflight',
       diff_sha256: sha256(`${target}\n${originalRecipe}\n${mutatedRecipe}`),
       preflight_removed: !mutatedRecipe.includes(`runtime-only-preflight ${target}`),
       polling_sentinel_reachable: /health\/ready/u.test(mutatedRecipe),
-      verifier_exit: 1,
+      verifier_exit: mutationRun.status,
+      verifier_status: mutationEvaluation?.status,
+      verifier_reason: mutationEvaluation?.reason,
     });
   }
-  if (mutations.some((item) => !item.preflight_removed || !item.polling_sentinel_reachable)) {
-    return result('E5', 'MISSING', 'mutation did not expose the polling sentinel', { mutations });
+  if (
+    mutations.some(
+      (item) =>
+        !item.preflight_removed ||
+        !item.polling_sentinel_reachable ||
+        item.verifier_exit !== 1 ||
+        item.verifier_status !== 'FAIL',
+    )
+  ) {
+    return result('E5', 'MISSING', 'mutation did not produce a real verifier failure', { mutations });
   }
   return result('E5', 'PASS', 'all runtime-only targets fail at the preflight boundary and every removal mutation is red', { positive, mutations });
 }

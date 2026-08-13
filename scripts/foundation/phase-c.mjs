@@ -788,6 +788,9 @@ function evaluateE6(options) {
       failures.push('canonical_runtime_template_bytes');
     if (switchFiles.includes('compose.external-runtime.yaml'))
       failures.push('canonical_switch_optional_overlay');
+    const canonicalMakefile = git('show', `${canonicalSwitchCommit}:Makefile`);
+    if (canonicalMakefile.includes('compose.external-runtime.yaml'))
+      failures.push('canonical_makefile_optional_overlay');
     const canonicalDockerRun = git(
       'show',
       `${canonicalSwitchCommit}:scripts/dev/docker-run`,

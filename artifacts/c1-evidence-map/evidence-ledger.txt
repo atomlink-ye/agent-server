@@ -67,3 +67,26 @@ boundary=no contract edit; no node_modules mount; no install/build/service/provi
 ## Pre-merge evidence
 pre_merge_candidate=548729ec8b0673268b9ca9112783c5d26c54f488
 status=retained only as attempt history; not used as final evidence
+
+## W-REC E2 runtime handoff
+candidate_sha=2623bc50490ff005472f763d3948d2753892b4f5
+raw_bundle=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/mgr-c-e2-pull-2623bc5
+machine_summary=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/mgr-c-e2-pull-2623bc5/evidence/summary-pass.json
+harness_real_exit=0
+baseline_expected_exit=0
+baseline_actual_exit=0
+baseline_third_recorder_slot=PASS
+baseline_product_recording_provenance_exit=0
+hash_mismatch_expected_actual=1/1
+missing_file_expected_actual=2/2
+schema_invalid_expected_actual=1/1
+all_four_case_restore_gates=PASS
+original_wrec_source=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-third-recording/recording-artifacts/wrec-third/oi38-negative/20260813T213910949Z-c5f4a431-02ab-44e5-acd8-49d775db83ea
+wrec_source_transfer_mirror=/root/e2-inputs/wrec-source-transfer
+wrec_transfer_semantics=byte-preserving remote transport mirror only; not the original source
+legacy_source_transfer_semantics=remote transport mirror for legacy parallel/rework and old negative-control provenance only; not an original source
+byte_binding=original-source expected hashes agree with remote transfer mirror and committed fixture for all 12 files; see each case byte_binding_rows
+old_oi38_summary_counted_as_recorder=false
+new_wrec_in_product_projection=false
+remote_preparation=removed only O-H16 workspace symlinks node_modules and apps/web/node_modules, then ran frozen-lockfile install
+review_state=evidence handoff only; worker does not self-sign E2; independent final review pending

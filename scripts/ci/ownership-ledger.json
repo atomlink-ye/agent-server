@@ -10638,5 +10638,2893 @@
       "postgres.ts:214",
       "postgres-collaborative-team-repository.ts:628"
     ]
+  },
+  "typedQueryFacts": {
+    "postgres-admission-repository.ts:104": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "admissions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5556efeae00383c13d8c3f0b1adcbd9675d9c806fccd1caf26bca3a8d95a5bbd"
+    },
+    "postgres-agent-registry.ts:104": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a0ba7dc37cb789c90ab498c661c578819dad751a924368b6aa4da4343ca556bd"
+    },
+    "postgres-agent-registry.ts:125": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "agent_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "41d9304c950f9d3d746b73719af36e2f2784b2fbcf8a5dad4545249311216064"
+    },
+    "postgres-agent-registry.ts:135": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ba379fc86cd77d730dacc4f87835e3aaf4a177459da620e5a14a55249e20a2d2"
+    },
+    "postgres-agent-registry.ts:149": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8a2305474942957c0ce1361f8abc7c6100933839cc323bed4c52edf5eec3ab20"
+    },
+    "postgres-agent-registry.ts:204": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "21f1344087933fed8633af9020a516ca80e5101fddd9b12da3350eaae3a5495c"
+    },
+    "postgres-agent-registry.ts:218": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a7b7f7ec45a29ef927baf05437ee46d7857e198c0170ae5962deac9faa789141"
+    },
+    "postgres-agent-registry.ts:247": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "df3fdbd005e6a6404210ebc87ec142ecc713bfaf4b3b24d59098bcf1e1c6b7b2"
+    },
+    "postgres-agent-registry.ts:259": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "0efa01b2bea204763c47ea8089e8d0fa2e355cc48be6cc517be67435cbe9e250"
+    },
+    "postgres-agent-registry.ts:290": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "33b1980c9f24d9a660628e718faae264e79c3478656b71426100f098def889de"
+    },
+    "postgres-agent-registry.ts:312": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a1d990362cd156378b9aefa9871493775519141bdb6851bb629918a221db9dd1"
+    },
+    "postgres-agent-registry.ts:397": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "agent_registry_idempotency"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "09137e633043395dad2aee3c67123888487b6cb0db24a0f34e09aafe007d2f3d"
+    },
+    "postgres-agent-registry.ts:449": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2d3fbc9bcf3bd332932c6ed6b009d1949a4d739c62c356ab765425ddacebca8f"
+    },
+    "postgres-agent-registry.ts:453": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "aef6ecb64d164725c6d2a997a24eb68fa36af0714ac74eb57ba373d060cc0897"
+    },
+    "postgres-channel-repository.ts:111": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "fed784cca47c46f13f966d1ab8dc5867764ad079e3adf69cb51e007a07fd1c86"
+    },
+    "postgres-channel-repository.ts:143": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "39060bbc48ed48d3c71abf65c5f620cf03b7d1b8e87660cfc52386ee5004be6c"
+    },
+    "postgres-channel-repository.ts:150": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ec76949e261e9b2a1472664784efa2f110e4ba96f74e0a4cec7e78ac2b1d2a9b"
+    },
+    "postgres-channel-repository.ts:175": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "96a712542c6bd2cd12bdb658b33c49601edbf05b31a377d440f83e26e336fd4c"
+    },
+    "postgres-channel-repository.ts:286": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3577967a25f9c4a6092087f646bd3b88cc9cf5543a5c90002b640ffa16f77d64"
+    },
+    "postgres-channel-repository.ts:300": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3cc66690619a6d4d92ac7d4da6223216cb802aad21cd25174ee13d37d0a3debe"
+    },
+    "postgres-channel-repository.ts:318": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "97b86f2cf8e8d9702814d806cdfc4b299df53bd7b8edc7a4abd15b685af6ee5e"
+    },
+    "postgres-channel-repository.ts:327": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "in",
+      "tables": [
+        "product_sessions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "feaf10647c792a2a5adff78bf860d00d2a6d71e28c886d90b860428b84cbca4e"
+    },
+    "postgres-channel-repository.ts:375": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "00d79caef0febd0a710962e665531f770a12e15f601c71b8ad3671707fd5fcc7"
+    },
+    "postgres-channel-repository.ts:393": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7b1cc647015ca9618c5d836dd5121474b8d4a4b37bfaf3ed3ffd37448234277f"
+    },
+    "postgres-channel-repository.ts:413": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "820dec2e3f61e87280b8861c83ca3d7a765333b461230f7f7a8d99f17055d61a"
+    },
+    "postgres-channel-repository.ts:429": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2749025e7676aa51fbc7390e1aaf3284f29ab88604c9596873c2722fe97bd9d5"
+    },
+    "postgres-channel-repository.ts:441": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c2e8341df1e5597b53e924f50360176fb1e4cf4761399022f7ee502e87567510"
+    },
+    "postgres-channel-repository.ts:466": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a5d6e1bbbf41a14d4a7a0edb0a9e7dc76de0d20ff45f85296e8040366fdc7439"
+    },
+    "postgres-channel-repository.ts:488": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "12a2a22980ff69d8c996365cf01580bfe8a9f71bc64da0ef2481dd2df3d2acc6"
+    },
+    "postgres-channel-repository.ts:521": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "54f0a8fbd20968e4487a2c5c854d50fa4d2dc5847cbfb2a66f804d0e52cde38e"
+    },
+    "postgres-channel-repository.ts:532": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_delivery_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "59a494498a2a70e773ac258a6096821ba73642028ac3c76c887603ac63dfffdf"
+    },
+    "postgres-channel-repository.ts:584": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ae34a26b31f3f53718d2d173457cc6e68c707159299a658a8f7dda6e444ba68d"
+    },
+    "postgres-collaborative-team-repository.ts:194": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b7051290a4e494614a93d3fd249b4cd1a9325a82ddf467999daee52f99ff1c4a"
+    },
+    "postgres-collaborative-team-repository.ts:220": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "4d38f391e15583f75d520105b4aa336818329979cc2834c9c8ddb23d3b0a80aa"
+    },
+    "postgres-collaborative-team-repository.ts:239": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "df42c131fa15b5d27f237284e2cd6e158dae6c1b05f9b399c388da05366c038d"
+    },
+    "postgres-collaborative-team-repository.ts:297": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "64a3bf3883a528669a89774d353daa8c4859589ac4a85d5d1926b80467581267"
+    },
+    "postgres-collaborative-team-repository.ts:340": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "1ec187d9005a7237937b787034e8fdce33af16c37876c7627308930f913d8acb"
+    },
+    "postgres-collaborative-team-repository.ts:362": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6f6d3b9b0078def67759b1cc8836a260f1ebda7f022ff3d7dcb5e18450f0437e"
+    },
+    "postgres-collaborative-team-repository.ts:405": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "4d38f391e15583f75d520105b4aa336818329979cc2834c9c8ddb23d3b0a80aa"
+    },
+    "postgres-collaborative-team-repository.ts:434": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "cc0a63349c33a0a3f2ebb6ed046f274969870a5911254ffba8b6be9d68ce2cea"
+    },
+    "postgres-collaborative-team-repository.ts:455": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "1b25ee15121859d63afc37d9ac510d86635e8060604eeb78eafbe5df6c1f81bc"
+    },
+    "postgres-collaborative-team-repository.ts:527": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e74551ab4280d2cd9883b128bbe4d034c26a204cbad2a6fac82b7ca3684b6d1f"
+    },
+    "postgres-collaborative-team-repository.ts:539": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "caae0f34211c53bf27701a0d315dbd2405dc515fb57d4eac89df2483d0d9876c"
+    },
+    "postgres-collaborative-team-repository.ts:550": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b8f5282f6c916e93ad3ca22f13965ce06d07af8c3cf1cf82dbb7e906f1b6cccc"
+    },
+    "postgres-collaborative-team-repository.ts:573": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d52d0935c9ea7c77931faa8c45f52e8afb1154147f8136138a4cc972d9fcca28"
+    },
+    "postgres-collaborative-team-repository.ts:613": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "403322d2e520d7ebb857718817092682a31e1b1bb7b40d1fb89aa9c239fe0ac5"
+    },
+    "postgres-collaborative-team-repository.ts:647": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c8876322fa5121498123588a78573d31e74d1ac795e529ec469e9d44f14779f7"
+    },
+    "postgres-collaborative-team-repository.ts:773": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3f29bbf4e21bd6901654a592bfa0aa3501ba2a6850c0f1e3f2f3ee8340fc61f9"
+    },
+    "postgres-collaborative-team-repository.ts:790": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2d2285b666a0bae6fcae5018a476e2ccba66b1f1de41403bb27eeb6640409c76"
+    },
+    "postgres-collaborative-team-repository.ts:858": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9590ee497c623694677a09a02a7c83c9711b8036c254bf82c32f77b37a37aca1"
+    },
+    "postgres-collaborative-team-repository.ts:868": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "28a64c2ab0be97c957eadb1338a9f94bc6056997e07ec0f4d4fa3bc4409e6467"
+    },
+    "postgres-collaborative-team-repository.ts:893": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "fe56fb72c208c680707948d7becd4620be259f320d7387d67d1bb359a0920b09"
+    },
+    "postgres-collaborative-team-repository.ts:903": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "481b662a623df9eb2e968466e70dcf6f5a5468748b79c718b356eec714afa68d"
+    },
+    "postgres-collaborative-team-repository.ts:913": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_dependencies"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "754eae204a3cb8744a493adf0050fd438af7a98349a5b830f36c98d1d915617c"
+    },
+    "postgres-collaborative-team-repository.ts:934": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9986db50622aa696e0d3431f0b43b13d0ea4431cc8ca817d8cd0c3d016d948ec"
+    },
+    "postgres-collaborative-team-repository.ts:951": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8086ca001ef855b85fcc81f5dd727d5a5ccc39fdd0b9607c67aaeaf2da103cbf"
+    },
+    "postgres-collaborative-team-repository.ts:958": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_work_item_attempts",
+        "team_work_item_dependencies",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "fc293b6d86b8743c7d7d00737782a0d7a66f8cd4a32dfaec1d2ec5b19df48806"
+    },
+    "postgres-collaborative-team-repository.ts:1032": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2d7e214b2e23ea7916112ebebcb8410784748c6dbef26ec566c772c2c5795719"
+    },
+    "postgres-collaborative-team-repository.ts:1063": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_member_runs",
+        "team_runs",
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "29dcb0a76146d86877e69ea936bcf5d95d8ad98d3c215aaa4390f9ad1cb3513a"
+    },
+    "postgres-collaborative-team-repository.ts:1098": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "90880db86b23359292af71c8d9f9c383e7ad6ea1685da97c5e912fd46f934a49"
+    },
+    "postgres-collaborative-team-repository.ts:1131": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_command_receipts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "74683ee9c37a26e8f5aa55aa143a3586088408898f45de4b17013efc0daa505c"
+    },
+    "postgres-collaborative-team-repository.ts:1139": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3f4d4dcf2a96450b024bb82a15d020ed65c811ff703f1250b083b007a2a0e92"
+    },
+    "postgres-collaborative-team-repository.ts:1154": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "bf6b7fa3d0a2c6a1efaa184a663be8d1e0324374d5a6baab92d7039c3c2caf08"
+    },
+    "postgres-collaborative-team-repository.ts:1170": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "292e8c0f5ea2e63df4d3e7437f5c78e808b9bb711c79574c22e3cea21c08c2cf"
+    },
+    "postgres-collaborative-team-repository.ts:1208": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "716db8294af06dc3bbd5df4fbfee3c95e36a6b62a994119826c4db918df4ce5e"
+    },
+    "postgres-collaborative-team-repository.ts:1258": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ce9958c6c57a7fd75f0420fc06f6ce50209b3c7eed2ba886a83e83bcfe8ec348"
+    },
+    "postgres-collaborative-team-repository.ts:1262": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "23d90ec7bfe58849da7515659105c9fbbc2b34334a09b204a2147ed11c698092"
+    },
+    "postgres-collaborative-team-repository.ts:1324": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_command_receipts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "08f1f8e67d2659ca0fb5d8155e985ebd04c1d4ac5ff8906029173a4780145b82"
+    },
+    "postgres-collaborative-team-repository.ts:1331": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "4916554f138d6c8b1639bd5f270efbab2d18d70bd836125df57a11803d6cd26f"
+    },
+    "postgres-collaborative-team-repository.ts:1343": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3f4d4dcf2a96450b024bb82a15d020ed65c811ff703f1250b083b007a2a0e92"
+    },
+    "postgres-collaborative-team-repository.ts:1357": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "08242131ad022d85d5c95ab012fe1ea32d52b22e54e713b3ff6751e3b863281e"
+    },
+    "postgres-collaborative-team-repository.ts:1362": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e0c406eb7d359bc5c6f200d91a1dd84b68f2426e24586af694e1e9271ca4201a"
+    },
+    "postgres-collaborative-team-repository.ts:1370": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c14d09fbcff55b0f0e1acab1a42ed430ab508ea1ec7be64f7768614d2b07aee2"
+    },
+    "postgres-collaborative-team-repository.ts:1413": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_command_receipts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "08f1f8e67d2659ca0fb5d8155e985ebd04c1d4ac5ff8906029173a4780145b82"
+    },
+    "postgres-collaborative-team-repository.ts:1420": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "4916554f138d6c8b1639bd5f270efbab2d18d70bd836125df57a11803d6cd26f"
+    },
+    "postgres-collaborative-team-repository.ts:1432": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3f4d4dcf2a96450b024bb82a15d020ed65c811ff703f1250b083b007a2a0e92"
+    },
+    "postgres-collaborative-team-repository.ts:1446": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "08242131ad022d85d5c95ab012fe1ea32d52b22e54e713b3ff6751e3b863281e"
+    },
+    "postgres-collaborative-team-repository.ts:1458": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c0d6f61e7f11067114994043d05601e1e623fd11a5f5579a3e96bd779da869ca"
+    },
+    "postgres-collaborative-team-repository.ts:1478": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "eb9db99cf3577084d241b14b52dce438d20576155ad7f71c6d7bd95a50df5e7d"
+    },
+    "postgres-collaborative-team-repository.ts:1531": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_command_receipts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "81caea459effc6730f3dc838e19cf663ab75bf5e66b2dedca8310ea086b74147"
+    },
+    "postgres-collaborative-team-repository.ts:1538": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "1e8882c821b2ae73883876b1368f2e81e081087b9f436fc58bd496a966dbcea1"
+    },
+    "postgres-collaborative-team-repository.ts:1550": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3f4d4dcf2a96450b024bb82a15d020ed65c811ff703f1250b083b007a2a0e92"
+    },
+    "postgres-collaborative-team-repository.ts:1563": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7b6abda578327c94c84f929e260f4c20619d6e5ffe395841a4fb4a37c78d36f7"
+    },
+    "postgres-collaborative-team-repository.ts:1571": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "19c9a121ebe8e2835823177956b3cf888955973f2291fc9d136b60b008fedb95"
+    },
+    "postgres-collaborative-team-repository.ts:1612": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ba6c015e04d72561755d884dde303d01fb41bfabf4c250e57cff6df232875c34"
+    },
+    "postgres-collaborative-team-repository.ts:1709": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "63551dab14d2345f2e3630b5ae799c50dd7c8ea648f9f1021dc18dbba39889c7"
+    },
+    "postgres-collaborative-team-repository.ts:1737": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "dd6a7eee8c6e71512c86c4ff05bdb50cfc46165bdb14a7e0ca92f2405c7c9f5f"
+    },
+    "postgres-collaborative-team-repository.ts:1751": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_command_receipts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "30576fcf3cb29fffcb9c5f5a268620e43388b89a6cd9a5ba83ef42a1ed8e749c"
+    },
+    "postgres-collaborative-team-repository.ts:1847": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "313e913d71015528cae97b897e8223e1407aef06208cded879806f18368e347f"
+    },
+    "postgres-collaborative-team-repository.ts:1864": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8d0871d7018ebe46e6198faa106b5a4b27c85386cb17a2c8f9096eff0ee58a44"
+    },
+    "postgres-collaborative-team-repository.ts:1878": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8d0871d7018ebe46e6198faa106b5a4b27c85386cb17a2c8f9096eff0ee58a44"
+    },
+    "postgres-collaborative-team-repository.ts:1897": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "53724fc3ae64e8b31fc8b483d8d067e28c0fd6a5456223d8ebe5e1aa2728099f"
+    },
+    "postgres-collaborative-team-repository.ts:1908": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3e9c959e31086897d5210f13311d61e2f325802f9363833bb9d25c2a58726187"
+    },
+    "postgres-collaborative-team-repository.ts:1934": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "360b196501a5cdd2cea238d82dc3caee9677f6c36ad9123b6deaf8ff7a1f2000"
+    },
+    "postgres-collaborative-team-repository.ts:1957": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_attempts",
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e8ed243fcf6f44a0e3831c6f12960babb0c80366444f4a3b3139ffd2b5032f22"
+    },
+    "postgres-collaborative-team-repository.ts:2031": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c437155115d47da92c148646f5fe5c8272a8e421e786640c2310b03c035c5a50"
+    },
+    "postgres-collaborative-team-repository.ts:2066": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "91c248921c36df91bc4ce057fbde15a756c18021f86de5533e141cf960f2812a"
+    },
+    "postgres-collaborative-team-repository.ts:2092": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ac81c94dc2354a382e52f5335669c7d438fb29d67b0b129034214a9668253e62"
+    },
+    "postgres-collaborative-team-repository.ts:2134": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8ced73d0c6b2a5e8fe9392d970f3b910714837bca77f7669aab2a55151ff05aa"
+    },
+    "postgres-collaborative-team-repository.ts:2144": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decision_targets"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "03a71ada1aa9c035e7fad35c2b9eb3db50858750dca69d2b690ae65061d68f6f"
+    },
+    "postgres-collaborative-team-repository.ts:2195": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "743cfc3586be9037bb16901a64715de5b0326397f35115809bce545d24780c4c"
+    },
+    "postgres-execution-fact-query.ts:83": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_events",
+        "runs",
+        "tasks",
+        "team_runs",
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "13ebea120ec60822be2b8beaca127d7dbdfbfc51cf7e94b69c0f207e2e4a09ad"
+    },
+    "postgres-execution-fact-query.ts:136": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_events",
+        "runs",
+        "tasks",
+        "team_runs",
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "dceb7da6c74cbbb068f75b77df23016390efc47cf1c2fc31bef0126874424e8a"
+    },
+    "postgres-invokable-repository.ts:76": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_registry_idempotency"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3f4201c6ac9b5fcf1cb57f4306d1f0a3c10a8b2a230e94d30d78e7c4a65707ee"
+    },
+    "postgres-invokable-repository.ts:115": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_registry_idempotency"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6d8332999824431a46b33873762e224b8e8c9868d7998b45e14d4c5ecc3fa703"
+    },
+    "postgres-invokable-repository.ts:164": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_registry_idempotency"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e4600d82ccbc8f2977408c3fc673c66b404a56cc94f1d3a00f46d8467ff0d54d"
+    },
+    "postgres-invokable-repository.ts:238": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "68b5809af282914130f4c4ef4e964112988a1c77ce4ae8e19f000ccc173a0ceb"
+    },
+    "postgres-invokable-repository.ts:307": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "efa9ab73d843a2bee6ae8f5f3cd35049b56d763af1e4b32c6cc356880e781f8a"
+    },
+    "postgres-invokable-repository.ts:337": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "agent_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "0e222edd4ae238970406a3dc460c21673bba87d083d3931177c836717044969e"
+    },
+    "postgres-invokable-repository.ts:401": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_definitions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "230531b655e1698ad4ea0bd13f3e39642a8dbcb69e4517092431396fcf8cc346"
+    },
+    "postgres-invokable-repository.ts:441": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3d920873a1687674980b087561be4bcda4b4be385ecca8c639218c06ac39082"
+    },
+    "postgres-invokable-repository.ts:545": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_versions"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "d8b2983ca7e63cf57d1b6738974d3fe3372d95e934417f421942e3a9d5851ec4",
+      "evidence": "findTeamVersionBySql callers at postgres-invokable-repository.ts:484 and :512"
+    },
+    "postgres-lark-review-surface-repository.ts:80": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "lark_memory_review_surfaces",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "27a5b105d59475ff0fdf648acc71cde169debbc8f7979d00b369e93c6b1b4681"
+    },
+    "postgres-lark-review-surface-repository.ts:92": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "channel_conversation_bindings",
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8d1cc13ea99ff57e1a9e80cb7b03b5692588043d97ceed7d60f0d6ec3b33be71"
+    },
+   "postgres-lark-review-surface-repository.ts:96": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2776b3d857ba8cdc4b8d32aff62b8322bbb3ad97103863b2b51f1a8bfbadc92d"
+    },
+    "postgres-lark-review-surface-repository.ts:108": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e04840a61912ed9470dec18b839123fb74c5f578dc97eab3313a1316f1cde175"
+    },
+    "postgres-lark-review-surface-repository.ts:112": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "273124cf10efd812fb9f0a64d28abffaf431bc1122239023ab70f09683aa30bb"
+    },
+   "postgres-lark-review-surface-repository.ts:122": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9bd54323faf82b38aeded6e86506321d4ede9d0b3b6f19d5f9a2ec1d431d8d3e"
+    },
+    "postgres-lark-review-surface-repository.ts:134": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "74ee66d1ec794214781e057b37b14bfe99ac24d16f359ee513613c698e9ebae9"
+    },
+    "postgres-lark-review-surface-repository.ts:145": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b0c34e4fbbfde1bb545b1f47c7869178a899093e1674299608f367739dac551d"
+    },
+    "postgres-lark-review-surface-repository.ts:306": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e5e349082e2b2d0aa41a1eae6f9db1ea1fc13fce198ca7847f8e62d569151f02"
+    },
+    "postgres-lark-review-surface-repository.ts:316": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e084b1f02c4de0a2a47b37f1e85771d586df8d4d3083b3c4a1a35d42b556e37a"
+    },
+   "postgres-lark-review-surface-repository.ts:320": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e7b2db0732f9a77b0877ef5b31a11a9b905c66f179416adfab2ea372e1956670"
+    },
+    "postgres-lark-review-surface-repository.ts:334": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7b2a9097c0e3bb426659306a5fd448e8ec432b2669c38540dfc1bf1029eec89f"
+    },
+    "postgres-lark-review-surface-repository.ts:338": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d76ef56caa4e5acd517c93ae926fdf07a13d5e7ebc2680c6cfa217591823564f"
+    },
+   "postgres-lark-review-surface-repository.ts:461": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c019873213a73ac1956368ba85422383f40610dafe94d98d75e67c60d124277b"
+    },
+    "postgres-lark-review-surface-repository.ts:474": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c9c064eb57a54c7a331ff600c96457882817f9a1ddf750a4dfd213157c691081"
+    },
+    "postgres-lark-review-surface-repository.ts:486": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2a22df3c30beb9ced02d1cf73b0dbfdc3e2eee83c554c035db33db6ad4edab32"
+    },
+    "postgres-lark-review-surface-repository.ts:508": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_delivery_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "efbccd116cb89f9a2c2f455c8bfe76888809180aca48afdb147035018ffa1719"
+    },
+   "postgres-lark-review-surface-repository.ts:558": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6c80de68f9cb8630fbacc2501fdc578712a596ce67aeee1374197ae1e53bad0d"
+    },
+   "postgres-lark-review-surface-repository.ts:609": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "320ef6507fed813254c1d6386e5b4451457f2c35ab5896fb3e6adca4c6fee084"
+    },
+   "postgres-lark-review-surface-repository.ts:626": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b2039ac2db5aae8830c632048ae7318622708ba0cd7e7c738ae74f83e75997e5"
+    },
+   "postgres-lark-review-surface-repository.ts:645": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3372216fec675532ad1f57b09778ba54b2a2f30415312104eb1e07026d48aa3b"
+    },
+    "postgres-lark-review-surface-repository.ts:703": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e102e9501f24b6f9e8ddd104491b1c5a46a26df887965a4fccffebe9c5c4caa3"
+    },
+    "postgres-lark-review-surface-repository.ts:718": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "47ea644fdca226637eea1f28d389da2c70c857b242dbf6d1dc561933ceefe0af"
+    },
+    "postgres-lark-review-surface-repository.ts:727": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7c66347c960b155ff91d4fc1660833fc7da5638217ef40291bada34ba66c9887"
+    },
+    "postgres-lark-review-surface-repository.ts:754": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7d59b0d829a7c2c4122acec02f49ffe9f2b6053c00a4702ca41c6de1ff23914f"
+    },
+    "postgres-lark-review-surface-repository.ts:784": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3c1a969fc83e9b040a75b8cfb2a52b0581aa80f026b554ce903b657ecff03fdd"
+    },
+    "postgres-lark-review-surface-repository.ts:802": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5f058bb541b86fbe044f473e08403e8d375f21af0f7c1a8f43aa600ff0069000"
+    },
+    "postgres-lark-review-surface-repository.ts:823": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ca38ed347749b2659afab589477eb62d81ecb811f1c4db4283859f36e2f9b125"
+    },
+    "postgres-lark-review-surface-repository.ts:839": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "adb5b49c02081e11b0f07454d1ae379f8115346b3a342ec8fc98e04752a91246"
+    },
+    "postgres-lark-review-surface-repository.ts:895": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "72b798e6f1581a1f4fda82b28e53dd545be2f3f6f2006df48e996467a0408f09"
+    },
+    "postgres-lark-review-surface-repository.ts:907": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5f058bb541b86fbe044f473e08403e8d375f21af0f7c1a8f43aa600ff0069000"
+    },
+    "postgres-lark-review-surface-repository.ts:916": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6151f2dbedc08d014d968f3050f656a8eff63287a2e89f8f19044e88f3bff698"
+    },
+    "postgres-lark-review-surface-repository.ts:931": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "adb5b49c02081e11b0f07454d1ae379f8115346b3a342ec8fc98e04752a91246"
+    },
+    "postgres-lark-review-surface-repository.ts:947": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_delivery_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "8adcad714c243547c0a1f2ef427629357e46ca9c6588938422e62ab992f9414d"
+    },
+    "postgres-lark-review-surface-repository.ts:1029": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d5742d4b1015b7a2c2db450445dc3859cd50dbeb2228e566a7d63a2ce38fd57d"
+    },
+    "postgres-lark-review-surface-repository.ts:1036": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c6c8754ad95f62b103f1cfe8b30d9dd87c39735f0dc5d176f5f5c4a0c9ace9ff"
+    },
+    "postgres-lark-review-surface-repository.ts:1074": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "50f06603cbddfc2492308fdce121fd2edf46d7ab8a8bffbb5bc94eda2b292b0e"
+    },
+    "postgres-lark-review-surface-repository.ts:1116": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "34832f1efaca5d1ea4979a8a6d5934e83755a522c787a2c032d1b28b318e85a5"
+    },
+    "postgres-lark-review-surface-repository.ts:1167": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "lark_memory_review_surfaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b1777e8192458a88845a5a6dfbfe54f489e7799bd730be79a66500a2f0c68c31"
+    },
+    "postgres-lark-review-surface-repository.ts:1221": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_outbox"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "bd5778d9800efcfbf73954dae9cb69cb1de1650a988c10e871a2d361e041f46b"
+    },
+   "postgres-lark-review-surface-repository.ts:1252": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "954c9407327569c0c049aec5ce655388a95448973c0c513da0c2853404a5ef59"
+    },
+    "postgres-lark-review-surface-repository.ts:1271": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5901f8938f64875d4ba1d3735bd6066d592af240f2305a82577711b93056f78c"
+    },
+    "postgres-lark-review-surface-repository.ts:1287": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "channel_conversation_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "121ca00195c3f0bddbaa101d852671f1e3657975ffc468470aaf0d83fe5c7f8f"
+    },
+    "postgres-lark-review-surface-repository.ts:1298": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "79136a840d42a34a6dc53bfa441d1024731726cd19a44d01a8779ffe92f042f2"
+    },
+    "postgres-lark-review-surface-repository.ts:1316": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9a6b035f131068d320d3868e741af6e72064e1d432d6a321269ecfc9d05ac6af"
+    },
+   "postgres-lark-review-surface-repository.ts:1334": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "out",
+      "tables": ["lark_memory_review_surfaces"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5b6f76928b56eee5246e2db351f9888d862ae7802e621bd378b221ff2192442a"
+    },
+    "postgres-learning-proposal-repository.ts:38": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "learning_proposals",
+        "memories",
+        "memory_stores",
+        "runs",
+        "tasks",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "dcfa705e9f9d61a2a4991fa5e4d59bab63525edbfe2d3a8199406cd77dc2a627"
+    },
+   "postgres-learning-proposal-repository.ts:69": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "983878c45b685c5f3f87a762ec6ab9d92f27c7db0e63f9057959686e7969e3ac"
+    },
+   "postgres-learning-proposal-repository.ts:84": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "1d23a23232733da342623ca50b661d01fb4ab9c39b3014fbe3ebba96984cbb9e"
+    },
+   "postgres-learning-proposal-repository.ts:102": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e9caa969abf080694c411ef1d53271e6be9c1697d858e3fe04b95dd8bf3608e3"
+    },
+   "postgres-learning-proposal-repository.ts:123": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["memories","memory_stores","memory_versions"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ab81586d0f4faf96ae2304ae00ee75390b8ffdec6a2a3227a68496630966319b"
+    },
+   "postgres-learning-proposal-repository.ts:169": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "in",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a65567026706162515f8177bee879b1ac5cb4577b06b7e9e4b0fbe621d8f6247"
+    },
+   "postgres-learning-proposal-repository.ts:173": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "in",
+      "tables": ["memories","memory_stores","memory_versions"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "dee9f65af5f3c17f0c01ed8fb9375b101a2a6e648a02fe83e7f83e4e86981952"
+    },
+   "postgres-learning-proposal-repository.ts:197": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "for_update",
+     "transaction": "in",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5f7692f0977bee746bf180e2f5dad5fe479e412814b9546468af5aa74837444f"
+    },
+   "postgres-learning-proposal-repository.ts:221": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "in",
+      "tables": ["learning_proposals"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ae91a5e8a7149c9aa8616df2e95d9060c37efb6075cd4cfdbd1b94295462745c"
+    },
+    "postgres-memory-api-repository.ts:72": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memory_stores",
+        "workspaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5ec9248a65000408061140aeedc56f2fa8f1c697264396cfbc95eeeadc814fe4"
+    },
+    "postgres-memory-api-repository.ts:96": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "workspaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "877cd8caa2cbe9cedea5921c8802bd5349195748b9bd06fc0e87ac43b70b5ceb"
+    },
+    "postgres-memory-api-repository.ts:107": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memory_stores"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "60b797575a143eb243f87fce458f93d465eebddd8890f540e3f48ffac481d832"
+    },
+    "postgres-memory-api-repository.ts:125": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memory_stores"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e962bcadc823e5641471bd847fc7ea4114ed5a8f1921c40e0fe11fd84acd3abc"
+    },
+    "postgres-memory-api-repository.ts:144": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "memories",
+        "memory_stores"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c7aac1d2a32f91966686e1d9cc6513aeae9ee96d450b4fdc2dda02e87a155da2"
+    },
+    "postgres-memory-api-repository.ts:200": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memory_stores"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "45095172c74722153dda3ca96dbba509bb0a3f77f7d01a312c07862100eeb7a9"
+    },
+    "postgres-memory-api-repository.ts:211": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memories",
+        "memory_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d71be8711de9c3c66e15775bfc206b99d2db52f95b420bdcd0388844e3d45db4"
+    },
+    "postgres-memory-api-repository.ts:301": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "memories",
+        "memory_stores",
+        "memory_versions"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "42f622f89c9e960ce62f2b8f52d6802b31fbb9f765dfe74a53bf4e2767a9a9f1"
+    },
+    "postgres-run-event-repository.ts:25": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runtime_session_bindings"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c31506032fcda18951571dd7318e5bf95503c4e0ae94e716bb12e3f856918b9c"
+    },
+    "postgres-run-event-repository.ts:41": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "runtime_session_bindings",
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "45dd701cc79ce267eeb83b6b5cd24066567fe0246608be55f8a5fd800c35c652"
+    },
+    "postgres-run-event-repository.ts:54": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "runtime_session_bindings",
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "68d087f6976948a81fafc9a01e23eaa050cc56da6c0a79f3b388ce95fd149c36"
+    },
+    "postgres-run-event-repository.ts:72": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "bdd6e0d479915fb1e17b6d7823073a6132f46038d13b9ba4d70b26915ddb512c"
+    },
+    "postgres-run-event-repository.ts:89": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f71246e8c9261fcd33a6d8e72ad7de45f2be7cabede8e14427b242a6571202e7"
+    },
+    "postgres-run-repository.ts:184": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "for_update",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7587f583a98b90df830034779b1916897c2cd1153dd8c45cfc96d68b1ffb5475"
+    },
+    "postgres-run-repository.ts:219": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "run_dispatches",
+        "runs",
+        "session_lanes",
+        "tasks"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "c2497eda4f94f7234f3f1c888ac63211f7a0875d59a743dc26725096f7607eac",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:219"
+    },
+    "postgres-run-repository.ts:249": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "c2497eda4f94f7234f3f1c888ac63211f7a0875d59a743dc26725096f7607eac",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:249"
+    },
+    "postgres-run-repository.ts:441": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "3593b1d13e7ce901aa9d35c606ceae21a4f476d3ba552e2b9adf7ce13ce4ee23"
+    },
+    "postgres-run-repository.ts:463": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs"
+      ],
+      "sourceKind": "helper",
+      "sourceExcerptHash": "4bc97ad80317ceb12629e08e9b5bf73ebcb5da9fa9f227d30ad21dfad92432f1",
+      "evidence": "helper SQL definition/call context for postgres-run-repository.ts:463"
+    },
+    "postgres-service-account-workspace-bootstrap.ts:55": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "workspaces"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c25ed9979bc5a91744738ebeafff2148555aa80c2940d0eb7918bcc8f607a9c3"
+    },
+   "postgres-task-repository.ts:131": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["messages","runs","tasks"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f72508aaf4ee00de8047c558489c3b159ac1a814459091699ef35b2d1308e76c"
+    },
+   "postgres-task-repository.ts:146": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["messages","runs","tasks"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6ce4c0dc1f5f2ce5a146b5bfd5b8ac3538e6babdf7f1bc60652b12b751f1a5d9"
+    },
+   "postgres-task-repository.ts:171": {
+     "classification": "classified",
+     "operation": "UNKNOWN",
+     "readWrite": "control",
+     "lock": "none",
+     "transaction": "out",
+      "tables": ["messages","runs","tasks"],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "17cb9cf7ac575708ee893d07280d57c680b8168093609e8d6bc52f64eb7acf02"
+    },
+    "postgres-team-message-repository.ts:53": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "47cc23ea4f6afa04ae8ce5fc3d2ff55bcc8888e15fca9ff049b621108732c0e1"
+    },
+    "postgres-team-message-repository.ts:81": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "75c0f20de94ab49c882c6b5bc551388e495441a9ae0c11334f1498b34c79bc9f"
+    },
+    "postgres-team-message-repository.ts:93": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "cc07e5e02d900c83755b8718bc5015b7cc9e440aef74921cd96dd1c2e7a76a14"
+    },
+    "postgres-team-message-repository.ts:121": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ade6c7edffd5cc362d5fb1bc6ce68f8b7965406bbef240f36804073c6e6b87e1"
+    },
+    "postgres-team-message-repository.ts:137": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "09bc36321a02a5b54a24ed9a91331f1ac5aff263cfd88f9baa907124b2fc7514"
+    },
+    "postgres-team-message-repository.ts:154": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "tasks",
+        "team_messages",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9e1eea1824dc74cda882a325a5ebc0d72fe54b208ffda022d903b0d36baf1635"
+    },
+    "postgres-team-message-repository.ts:191": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d1a91b1480eedfdd264405e8908c2976715d1e1eaec2ceea28ba1b1740fca2f2"
+    },
+    "postgres-team-message-repository.ts:217": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "837350eed68053ce4f7f6a9082046c804d28b382eda6558ccb65058b8d61d105"
+    },
+    "postgres-team-message-repository.ts:225": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "in",
+      "tables": [
+        "runs",
+        "tasks"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "40730d3a733b9bcbe25358309caa7be277ab119c34e6ff08d06533c32d2b50f2"
+    },
+    "postgres-team-message-repository.ts:242": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "in",
+      "tables": [
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "c6ee6d3e10ab2ba971c02ad285430dd969b63f9db8505492e4edb7101969985f"
+    },
+    "postgres-team-message-repository.ts:269": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d62dd8278e645fd9052d3ae3c8937acaadb3615ba61a843e0e97356875deae4f"
+    },
+    "postgres-team-message-repository.ts:290": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_share",
+      "transaction": "in",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "907f90dad9ca205f5a6f549c0778967e683fc20eb0ebe592e4883c81083a805a"
+    },
+    "postgres-team-message-repository.ts:328": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "2db32987ee97cfbb72f0c1d3ca751926407d7444a19393d58f6c1bb9fbdbee61"
+    },
+    "postgres-work-identity-repository.ts:173": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "0c52a00e3faabf3ceadc5b16df5640ab2cca90d51914a65d16334c4f776a931f"
+    },
+    "postgres-work-identity-repository.ts:199": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "054b5696b3f4bcbf81e867ecf8ca5b7076fb6dd0dfdfacebbdcccaaca812575c"
+    },
+    "postgres-work-identity-repository.ts:205": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e05a7cd88e6dd825536d432c1362bce30cb5c0a3bf1ef5f17aa3db08be163006"
+    },
+    "postgres-work-identity-repository.ts:224": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "808b69eaa3f041c3aaa67f8593ae522764e820eeb4dfc9fe14f187f5c6030da5"
+    },
+    "postgres-work-identity-repository.ts:239": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f3f80c1ca2df4ded1ac6299cbcd53992bea46b1f4fa15cd980c1cc2d5cea7d13"
+    },
+    "postgres-work-identity-repository.ts:259": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "fc21a81bcb4c5a88f5293c8b97fe36c55de9efa07fdb2a180bd2605badb383c6"
+    },
+    "postgres-work-identity-repository.ts:285": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "7e6ff6644753c317ffeb452963c79a1c7cba5f1ea563adfe86bd4a237fe4798e"
+    },
+    "postgres-work-identity-repository.ts:316": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b080bfc0b480bfcc6172a2bc4707dff3653331804b3deac476429ab2b115d9a1"
+    },
+    "postgres-work-identity-repository.ts:328": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b080bfc0b480bfcc6172a2bc4707dff3653331804b3deac476429ab2b115d9a1"
+    },
+    "postgres-work-identity-repository.ts:342": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a6b9e4d34cbe976b53ff00b0a9f4d3e1af93ccf7d75473996bc201fb59510fc7"
+    },
+    "postgres-work-identity-repository.ts:355": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "d8518648aa307765a996497f3e80e96bca2e5eedc47572eda0682a9595c5f64a"
+    },
+    "postgres-work-identity-repository.ts:402": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "f13f7e5ee6006e21d1c70f9f8f6229b4130ea0d8cc51878571eb3c663b074f4b"
+    },
+    "postgres-work-identity-repository.ts:411": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "work_run_resource_manifest"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "69322cf0b2bac37e9e4c3cbcfbd484829398c7700a9c3f82f4d4f581c2781efd"
+    },
+    "postgres-work-identity-repository.ts:448": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_run_resource_manifest"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "a6f6fb5c74dd6029b86c2ba8eaaa8306b6caa81fe4894ae1b7285ad05be72faf"
+    },
+    "postgres-work-identity-repository.ts:488": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_run_resource_manifest"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b3c69ea5fad0c5e7d4d9aac33723a9417c5c1c33ca5ea638fe0979f999185627"
+    },
+    "postgres-work-identity-repository.ts:508": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "works"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "778a839845bedb7299b5627ca37d28c527b31b9dae0dea5ee4607a45aea4c0fb"
+    },
+    "postgres-work-identity-repository.ts:528": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "work_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "095dfb639eb75511fa1f9c23e201a116b32941690e01563f97f99129af39b4e4"
+    },
+    "postgres-work-projection-facts-query.ts:96": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_completion_decisions",
+        "team_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "74cbf53f704e6e1d223ee30584c1a0436b4df7bc81d2ec43e982fed41a798fb5"
+    },
+    "postgres-work-projection-facts-query.ts:123": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_member_runs"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "45c1d64e03266a78032a736870660cb72c83ce0a4e24283d4f4892d7f7923a95"
+    },
+    "postgres-work-projection-facts-query.ts:129": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_items"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "eefb7ca482a8b813611d06a7a81db6f8dd22f486c67a9cbf94bdd60f732ce357"
+    },
+    "postgres-work-projection-facts-query.ts:136": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "tasks",
+        "team_work_item_attempts"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e2efa54761a1c43b8cf1c6386122a112c6c99d59f6826011a16517cae9b083b1"
+    },
+    "postgres-work-projection-facts-query.ts:153": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "team_work_item_dependencies"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b4e639a6dd213ac5bb88a78f2182da01235ff6ea584ad08b603d44e6165e36cb"
+    },
+    "postgres-work-projection-facts-query.ts:160": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "tasks",
+        "team_messages"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "71ca909577bd9ddba5555c90ff8b6651ae2041e307ad1dcd82d208ed382da3ad"
+    },
+    "postgres-workspace-memory-repository.ts:139": {
+      "classification": "classified",
+      "operation": "WRITE",
+      "readWrite": "write",
+      "lock": "none",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "295450effadc3f0fb746937d37771082a6c9f0c28e00ba9d015ce5b3e02a0a92"
+    },
+   "postgres-workspace-memory-repository.ts:169": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5e5273743228439039836372b1475569dbee40dc4d86bcca1e0736a0010c258b"
+    },
+   "postgres-workspace-memory-repository.ts:199": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "5e5273743228439039836372b1475569dbee40dc4d86bcca1e0736a0010c258b"
+    },
+   "postgres-workspace-memory-repository.ts:221": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "bbaeb65e7624895083c440ce2a6c7bf0396c24c17b6cdecbc8aefb6ef001da8c"
+    },
+   "postgres-workspace-memory-repository.ts:245": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "bbaeb65e7624895083c440ce2a6c7bf0396c24c17b6cdecbc8aefb6ef001da8c"
+    },
+    "postgres-workspace-memory-repository.ts:288": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "channel_ingress_events"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "ebd078e92408f8b9d2997a79a320b0d6940c1c8d7a48d62d81a7a75cd3943775"
+    },
+    "postgres-workspace-memory-repository.ts:302": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "for_update",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "66b9d1f73ae678d4e7b116b004c8583261cc12388ea635ee3509d29e1cbfa96f"
+    },
+   "postgres-workspace-memory-repository.ts:321": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "for_share",
+      "transaction": "in",
+      "tables": [
+        "workspace_memory_entries"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "6e3d87bd26549d31051a453ba5914c7416eb46e9f0739193590ccca61ef5714a"
+    },
+   "postgres-workspace-memory-repository.ts:374": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_entries"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "b9db69552661a8cf52510d6b25eaf9178310eed234d8d15c1611b27e1b3b4f00"
+    },
+   "postgres-workspace-memory-repository.ts:398": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_entries"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "9d337a12449a91ccd1005b156b916cf19586632faf242f1f6a87fed5e1dbe8c8"
+    },
+   "postgres-workspace-memory-repository.ts:487": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "runs",
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "39ce514a11bf01aae13c3657f6e6d37defe30ffb9044c4fc28fb424b05507021"
+    },
+   "postgres-workspace-memory-repository.ts:515": {
+      "classification": "classified",
+      "operation": "UNKNOWN",
+      "readWrite": "control",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [
+        "workspace_memory_proposals"
+      ],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "1534ae243b9fe883c39bd8ee652f60cc6b9abc0dc2b09c75511cb59823afebf4"
+    },
+    "postgres.ts:199": {
+      "classification": "classified",
+      "operation": "READ",
+      "readWrite": "read",
+      "lock": "none",
+      "transaction": "out",
+      "tables": [],
+      "sourceKind": "typed",
+      "sourceExcerptHash": "e4ee7828af7a9d6d950615b277d38a438d92df491643e2c347d3f48bc09234e8"
+    }
   }
 }

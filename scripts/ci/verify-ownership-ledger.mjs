@@ -191,6 +191,11 @@ function checkRepositories() {
       for (const field of ['operation', 'readWrite', 'lock', 'transaction', 'tables', 'sourceExcerptHash']) {
         if (actual[field] === undefined || actual[field] === null || (field === 'tables' && !Array.isArray(actual[field])) || (field === 'sourceExcerptHash' && actual[field] !== excerptHash(read(sourceFile), typed.line))) fail('typed_query_fact_MISSING', { key, field });
       }
+      const typedFact = ledger.typedQueryFacts?.[key];
+      if (!typedFact) fail('typed_query_fact_ledger_MISSING', key);
+      for (const field of ['operation', 'readWrite', 'lock', 'transaction', 'tables', 'sourceKind', 'sourceExcerptHash']) {
+        if (!typedFact || JSON.stringify(typedFact[field]) !== JSON.stringify(actual[field])) fail('typed_query_fact_drift', { key, field, ledger: typedFact?.[field], actual: actual[field] });
+      }
       actual.owner = ledger.repositories[file];
       if (row?.sourceExcerptHash && row.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_query_source_excerpt_hash_MISMATCH', key);
       const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
@@ -200,6 +205,7 @@ function checkRepositories() {
         if (!row || !['(a)', '(b)', '(c)'].includes(row.disposition) || !row.reason) fail('typed_cross_capability_disposition_MISSING', key);
       } else if (row) fail('typed_cross_capability_spurious_disposition', key);
     }
+    if (Object.keys(ledger.typedQueryFacts ?? {}).filter((key) => key.startsWith(`${file}:`)).length !== typedCalls.length) fail('typed_query_fact_file_coverage', file);
     const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); const key = `${file}:${fact.line}`; return row ? { ...fact, transaction: ledger.transactionTruth?.[key], tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
     if (fileClassified + fileMissing !== calls.length || fileClassified !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: fileClassified, missing: fileMissing, ledger: ledgerCalls.length });
     const typedLockFacts = typedCalls.map((typed) => {

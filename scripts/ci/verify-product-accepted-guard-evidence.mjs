@@ -295,7 +295,8 @@ const ARM_REQUIREMENTS = Object.freeze({
     {
       name: 'runtime-mutation-check-backend-manifest-status',
       expectedExitCode: 1,
-      outputMarker: 'accepted_subset_invalid:accepted_subset_mismatch',
+      outputMarker:
+        'accepted_subset_invalid:evidence_mismatch:manifest.current_raw_sha256',
     },
     { name: 'runtime-restored-check-backend', expectedExitCode: 0 },
   ]),

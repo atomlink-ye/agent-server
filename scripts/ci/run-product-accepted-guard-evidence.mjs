@@ -490,7 +490,7 @@ function runManifestStatusMutation(candidateSha) {
       'runtime-mutation-check-backend-manifest-status',
       1,
       { PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: candidateSha },
-      'accepted_subset_invalid:accepted_subset_mismatch',
+      'accepted_subset_invalid:evidence_mismatch:manifest.current_raw_sha256',
     );
   } finally {
     fs.writeFileSync(filename, original);

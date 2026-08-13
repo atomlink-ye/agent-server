@@ -311,6 +311,58 @@ assert.equal(
   typeof cleanupWithoutResultRecord.workspace_probe_file_present,
   'boolean',
 );
+assert.deepEqual(
+  runtimeBoundaryCleanupProbes(
+    {
+      runtime_state_probe: { file_present: true },
+      workspace_write_probe: { file_present: true },
+    },
+    rootMutation,
+  ),
+  {
+    runtime_state_probe_file_present: true,
+    workspace_probe_file_present: true,
+  },
+);
+assert.throws(
+  () =>
+    runtimeBoundaryCleanupProbes(undefined, {
+      runtime_inspection: { paseo_runtime: {} },
+    }),
+  /runtime_cleanup_probe_invalid:runtime_state_probe/u,
+);
+assert.throws(
+  () =>
+    runtimeBoundaryCleanupProbes(
+      { runtime_state_probe: { file_present: 'false' } },
+      {
+        runtime_inspection: {
+          paseo_runtime: {
+            runtime_state_probe: { file_present: null },
+            workspace_write_probe: { file_present: false },
+          },
+        },
+      },
+    ),
+  /runtime_cleanup_probe_invalid:runtime_state_probe/u,
+);
+assert.throws(
+  () =>
+    runtimeBoundaryCleanupProbes(
+      {
+        runtime_state_probe: { file_present: false },
+        workspace_write_probe: { file_present: 0 },
+      },
+      {
+        runtime_inspection: {
+          paseo_runtime: {
+            workspace_write_probe: { file_present: undefined },
+          },
+        },
+      },
+    ),
+  /runtime_cleanup_probe_invalid:workspace_write_probe/u,
+);
 const stateMutation = structuredClone(baseRecord);
 stateMutation.mutation = {
   instrumentation: 'failed-runtime-child-carrier',

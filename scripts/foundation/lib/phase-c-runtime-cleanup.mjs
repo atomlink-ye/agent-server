@@ -4,7 +4,9 @@ function probeFilePresent(resultRecord, record, probeName) {
 
   const recordValue =
     record?.runtime_inspection?.paseo_runtime?.[probeName]?.file_present;
-  return typeof recordValue === 'boolean' ? recordValue : false;
+  if (typeof recordValue === 'boolean') return recordValue;
+
+  throw new Error(`runtime_cleanup_probe_invalid:${probeName}`);
 }
 
 export function runtimeBoundaryCleanupProbes(resultRecord, record) {

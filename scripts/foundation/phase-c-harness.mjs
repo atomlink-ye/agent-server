@@ -588,15 +588,22 @@ function runRuntimeBoundaryMutation({
         ]).stdout.trim(),
       'cleanup-observation-failed',
     );
-    if (containers || networks.length || volumes.length)
+    let cleanupProbeRecord = {};
+    try {
+      cleanupProbeRecord = runtimeBoundaryCleanupProbes(resultRecord, record);
+    } catch (error) {
+      cleanupErrors.push(error);
+      cleanupFailure = error;
+    }
+    if (!cleanupFailure && (containers || networks.length || volumes.length))
       cleanupFailure = new Error(`${suffix}_mutation_cleanup_incomplete`);
-    else if (providerBefore !== providerAfter)
+    else if (!cleanupFailure && providerBefore !== providerAfter)
       cleanupFailure = new Error(`${suffix}_mutation_provider_volume_changed`);
-    else if (cleanupErrors.length)
+    else if (!cleanupFailure && cleanupErrors.length)
       cleanupFailure = new Error(`${suffix}_mutation_cleanup_command_failed`);
     cleanupRecord = {
       project: runProject,
-      ...runtimeBoundaryCleanupProbes(resultRecord, record),
+      ...cleanupProbeRecord,
       down_exit: down.status,
       remaining_project_containers: [],
       remaining_project_networks: networks,

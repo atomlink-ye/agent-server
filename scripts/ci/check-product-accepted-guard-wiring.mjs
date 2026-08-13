@@ -49,6 +49,14 @@ function requireExactSequence(parts, expected, label) {
     fail(`${label}_order_or_membership`);
 }
 
+function requireExactLeaf(scripts, name, expected) {
+  const actual = scripts[name];
+  if (typeof actual !== 'string' || actual !== expected)
+    fail(`${name.replaceAll(':', '_')}_definition`);
+  if (/\btrue\b|\|\||&&/u.test(actual))
+    fail(`${name.replaceAll(':', '_')}_conditional`);
+}
+
 function main() {
   const filename = packagePath(process.argv.slice(2));
   const pkg = readPackage(filename);
@@ -73,6 +81,26 @@ function main() {
       'pnpm modularization:verify:product-routes',
     ],
     'accepted_guard',
+  );
+  requireExactLeaf(
+    pkg.scripts,
+    'guard:product-accepted-gate-lineage',
+    'node scripts/ci/verify-product-accepted-gate-lineage.mjs',
+  );
+  requireExactLeaf(
+    pkg.scripts,
+    'check:product-accepted-subset',
+    'node --import tsx scripts/ci/check-product-accepted-subset.ts --check',
+  );
+  requireExactLeaf(
+    pkg.scripts,
+    'modularization:verify:product-routes',
+    'pnpm guard:create-app-product-endpoints',
+  );
+  requireExactLeaf(
+    pkg.scripts,
+    'guard:create-app-product-endpoints',
+    'node --import tsx scripts/ci/guard-create-app-product-endpoints.mjs',
   );
   const message = [
     `guard_wiring_ok package=${filename}`,

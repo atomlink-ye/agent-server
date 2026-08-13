@@ -43,6 +43,7 @@
     "modularization:verify:product-routes": "pnpm guard:create-app-product-endpoints",
     "guard:create-app-product-endpoints": "node --import tsx scripts/ci/guard-create-app-product-endpoints.mjs",
     "guard:product-accepted-gate-lineage": "node scripts/ci/verify-product-accepted-gate-lineage.mjs",
+    "guard:product-accepted-evidence": "node scripts/ci/verify-product-accepted-guard-evidence.mjs",
     "check:product-accepted-subset": "node --import tsx scripts/ci/check-product-accepted-subset.ts --check",
     "guard:product-accepted-subset": "pnpm guard:product-accepted-gate-lineage && pnpm check:product-accepted-subset && pnpm modularization:verify:product-routes",
     "check:backend": "pnpm check:types && pnpm check:format && pnpm check:docs && pnpm check:exec-plans && pnpm guard:product-accepted-subset",

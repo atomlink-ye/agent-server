@@ -32,6 +32,7 @@ const EXPECTED = {
     'a92846444b09ffc869bdfbc1333effacc3affaf6ed68322b5afced83f8599893',
 };
 const SHA1 = /^[a-f0-9]{40}$/u;
+const SHA256 = /^[a-f0-9]{64}$/u;
 
 const canonical = (value) => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -110,6 +111,74 @@ function parseEvidence(bytes, label) {
   } catch {
     fail(`evidence_invalid_json:${label}`);
   }
+}
+
+function validateHashBundle(value, label) {
+  if (!isObject(value)) fail(`evidence_mismatch:${label}`);
+  if (!isObject(value.package_hash) || value.package_hash.path !== 'package.json')
+    fail(`evidence_mismatch:${label}.package_hash`);
+  const arrays = ['guard_hashes', 'manifest_hashes', 'evidence_hashes', 'production_input_hashes'];
+  for (const field of ['package_hash', ...arrays]) {
+    const entries = field === 'package_hash' ? [value[field]] : value[field];
+    if (!Array.isArray(entries) || entries.length === 0)
+      fail(`evidence_mismatch:${label}.${field}`);
+    const paths = new Set();
+    for (const entry of entries) {
+      if (
+        !isObject(entry) ||
+        typeof entry.path !== 'string' ||
+        !SHA256.test(entry.sha256) ||
+        paths.has(entry.path)
+      )
+        fail(`evidence_mismatch:${label}.${field}`);
+      paths.add(entry.path);
+    }
+    const requiredPrefix =
+      field === 'guard_hashes'
+        ? 'scripts/ci/'
+        : field === 'manifest_hashes'
+          ? 'src/contracts/'
+          : field === 'evidence_hashes'
+            ? 'evidence/'
+            : field === 'production_input_hashes'
+              ? 'src/'
+              : null;
+    if (requiredPrefix && entries.some((entry) => !entry.path.startsWith(requiredPrefix)))
+      fail(`evidence_mismatch:${label}.${field}.path`);
+  }
+}
+
+function verifyLineageAttestation(value) {
+  if (!isObject(value)) fail('attestation_not_object');
+  equalValue(value.schema, 'product-accepted-guard-evidence.v2', 'attestation.schema');
+  equalValue(value.tier, 'lineage', 'attestation.tier');
+  const candidate = requireSha(value.candidate_sha, 'attestation.candidate_sha');
+  if (!isObject(value.candidate_binding)) fail('attestation.candidate_binding');
+  equalValue(value.candidate_binding.kind, 'git_head_verified', 'attestation.candidate_binding.kind');
+  equalValue(value.candidate_binding.verified, true, 'attestation.candidate_binding.verified');
+  equalValue(value.candidate_binding.head_sha, candidate, 'attestation.candidate_binding.head_sha');
+  equalValue(value.candidate_binding.worktree_clean, true, 'attestation.candidate_binding.worktree_clean');
+  validateHashBundle(value, 'attestation');
+  equalValue(value.ok, true, 'attestation.ok');
+  if (!Array.isArray(value.arms)) fail('attestation.arms');
+  const arm = value.arms.find((entry) => entry?.name === 'lineage-positive');
+  if (
+    !isObject(arm) ||
+    arm.expected_exit_code !== 0 ||
+    arm.exit_code !== 0 ||
+    arm.signal !== null ||
+    arm.spawn_error !== null ||
+    arm.ok !== true ||
+    arm.classification === 'MISSING'
+  )
+    fail('attestation.lineage_positive');
+  const expectedCandidate =
+    process.env.PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA ??
+    process.env.CANDIDATE_SHA;
+  if (!expectedCandidate)
+    fail('attestation.candidate_sha.current_missing');
+  equalValue(expectedCandidate, candidate, 'attestation.candidate_sha.current');
+  return candidate;
 }
 
 function isObject(value) {
@@ -244,6 +313,14 @@ function verifyFormatProvenance(value) {
 }
 
 async function main() {
+  const attestationPath = process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH;
+  if (attestationPath) {
+    const bytes = await readEvidence(attestationPath, 'lineage_attestation');
+    const attestation = parseEvidence(bytes, 'lineage_attestation');
+    verifyLineageAttestation(attestation);
+    process.stdout.write('accepted_gate_lineage_attestation_ok\n');
+    return 0;
+  }
   const { decision: decisionPath, accepted: acceptedPath, continuation: continuationPath } =
     evidencePaths();
   const decisionBytes = await readEvidence(decisionPath, 'decision');

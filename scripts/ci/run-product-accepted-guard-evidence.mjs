@@ -14,6 +14,8 @@ const checker = 'scripts/ci/check-product-accepted-subset.ts';
 const wiringChecker = 'scripts/ci/check-product-accepted-guard-wiring.mjs';
 const routeGuard = 'scripts/ci/guard-create-app-product-endpoints.mjs';
 const mutator = 'scripts/ci/mutate-create-app-product-registrar.mjs';
+const aggregateVerifier =
+  'scripts/ci/verify-product-accepted-guard-evidence.mjs';
 const commandMissing = [
   'MISSING:create_work',
   'MISSING:get_work_definition',
@@ -34,10 +36,19 @@ const guardedFiles = [
   routeGuard,
   mutator,
   'scripts/ci/run-product-accepted-guard-evidence.mjs',
+  aggregateVerifier,
   'src/contracts/product-accepted-subset.v1.json',
   'evidence/product-contract/human-gate-decision.json',
   'evidence/product-contract/human-gate-product-contract-accepted.json',
   'evidence/product-contract/mgr-b-human-gate-format-continuation.json',
+];
+const productionInputFiles = [
+  'src/entrypoints/api/app.ts',
+  'src/entrypoints/api/routes/product-work-commands.ts',
+  'src/entrypoints/api/routes/product-work.ts',
+  'src/contracts/product-work-commands.ts',
+  'src/contracts/product-projection/index.ts',
+  'src/contracts/http.ts',
 ];
 
 function optionValue(argv, names) {
@@ -65,7 +76,53 @@ function parseInput(argv) {
     process.env.CANDIDATE_SHA;
   if (!candidateSha || !shaPattern.test(candidateSha))
     throw new Error('candidate_sha_must_be_40_lowercase_hex_chars');
-  return { tier, output: path.resolve(output), candidateSha };
+  const runCheckBackend = argv.includes('--run-check-backend');
+  if (tier === 'lineage' && runCheckBackend)
+    throw new Error('run_check_backend_runtime_only');
+  if (
+    argv.some(
+      (argument) =>
+        argument.startsWith('--') &&
+        ![
+          '--tier',
+          '--output',
+          '--output-dir',
+          '--candidate-sha',
+          '--run-check-backend',
+        ].includes(argument),
+    )
+  )
+    throw new Error('unknown_option');
+  return {
+    tier,
+    output: path.resolve(output),
+    candidateSha,
+    runCheckBackend,
+  };
+}
+
+function isWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function gitText(args) {
+  const result = spawnSync('git', ['-C', repo, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.status !== 0 || result.signal || result.error)
+    throw new Error(`git:${args.join(' ')}`);
+  return result.stdout.trim();
+}
+
+function verifyLineageCandidate(output, candidateSha) {
+  if (isWithin(repo, output))
+    throw new Error('lineage_output_must_be_outside_repo');
+  if (gitText(['rev-parse', '--verify', 'HEAD^{commit}']) !== candidateSha)
+    throw new Error('lineage_candidate_must_equal_head');
+  if (gitText(['status', '--porcelain', '--untracked-files=all']))
+    throw new Error('lineage_worktree_must_be_clean');
 }
 
 function sha256File(relativePath, root = repo) {
@@ -95,13 +152,31 @@ function runArm({
   expectedExitCode,
   expectedMarkers,
 }) {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, ...envOverrides },
-  });
+  let result;
+  try {
+    result = spawnSync(command, args, {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, ...envOverrides },
+    });
+  } catch (error) {
+    result = {
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      error,
+    };
+  }
   const stdout = result.stdout ?? '';
   const stderr = result.stderr ?? '';
+  const signal = result.signal ?? null;
+  const spawnError = result.error
+    ? result.error instanceof Error
+      ? result.error.message
+      : String(result.error)
+    : null;
+  const missing = signal !== null || spawnError !== null;
   const markerLines = stderr
     .split(/\r?\n/u)
     .filter((line) => line.startsWith('MISSING:'));
@@ -111,14 +186,15 @@ function runArm({
   return {
     name,
     expected_exit_code: expectedExitCode,
-    exit_code: result.status ?? 1,
-    signal: result.signal ?? null,
+    exit_code: missing ? null : result.status ?? null,
+    signal,
     argv: [command, ...args],
     cwd,
     env_overrides: envOverrides,
     stdout,
     stderr,
-    spawn_error: result.error?.message ?? null,
+    spawn_error: spawnError,
+    classification: missing ? 'MISSING' : 'OBSERVED',
     ...(expectedMarkers
       ? {
           expected_markers: expectedMarkers,
@@ -127,7 +203,10 @@ function runArm({
           markers_ok: markersOk,
         }
       : {}),
-    ok: (result.status ?? 1) === expectedExitCode && markersOk,
+    ok:
+      !missing &&
+      result.status === expectedExitCode &&
+      markersOk,
   };
 }
 
@@ -143,6 +222,7 @@ function skippedArm(name, cwd, expectedExitCode, reason) {
     stdout: '',
     stderr: '',
     spawn_error: null,
+    classification: 'MISSING',
     skipped: true,
     skip_reason: reason,
     ok: false,
@@ -273,10 +353,51 @@ function runLineageTier() {
       },
     ),
   );
+  arms.push(
+    runWiringMutation('wiring-mutation-leaf-product-routes-extra-command', (scripts) => {
+      scripts['modularization:verify:product-routes'] =
+        `${scripts['modularization:verify:product-routes']} && true`;
+    }),
+  );
   return arms;
 }
 
-function runRuntimeTier() {
+function runCheckBackendArm(name, expectedExitCode, envOverrides = {}) {
+  const childEnv = { ...envOverrides };
+  if (process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH)
+    childEnv.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH =
+      process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH;
+  childEnv.PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA =
+    childEnv.PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA ??
+    process.env.PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA;
+  return runArm({
+    name,
+    command: 'pnpm',
+    args: ['check:backend'],
+    cwd: repo,
+    envOverrides: childEnv,
+    expectedExitCode,
+  });
+}
+
+function runManifestStatusMutation(candidateSha) {
+  const filename = path.join(repo, 'src/contracts/product-accepted-subset.v1.json');
+  const original = fs.readFileSync(filename);
+  const manifest = JSON.parse(original.toString('utf8'));
+  manifest.status = 'mutated_for_guard_evidence';
+  fs.writeFileSync(filename, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  try {
+    return runCheckBackendArm(
+      'runtime-mutation-check-backend-manifest-status',
+      1,
+      { PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: candidateSha },
+    );
+  } finally {
+    fs.writeFileSync(filename, original);
+  }
+}
+
+function runRuntimeTier(input) {
   const arms = [];
   arms.push(
     runArm({
@@ -310,6 +431,19 @@ function runRuntimeTier() {
   fs.rmSync(behaviorCopy, { recursive: true, force: true });
   arms.push(...runRegistrarMutation('command'));
   arms.push(...runRegistrarMutation('projection'));
+  if (input.runCheckBackend) {
+    arms.push(
+      runCheckBackendArm('runtime-positive-check-backend', 0, {
+        PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: input.candidateSha,
+      }),
+    );
+    arms.push(runManifestStatusMutation(input.candidateSha));
+    arms.push(
+      runCheckBackendArm('runtime-restored-check-backend', 0, {
+        PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: input.candidateSha,
+      }),
+    );
+  }
   return arms;
 }
 
@@ -325,17 +459,37 @@ function hashes() {
     evidence_hashes: guardedFiles
       .filter((file) => file.startsWith('evidence/'))
       .map((file) => sha256File(file)),
+    production_input_hashes: productionInputFiles.map((file) =>
+      sha256File(file),
+    ),
   };
 }
 
 function main() {
   const input = parseInput(process.argv.slice(2));
+  if (input.tier === 'lineage')
+    verifyLineageCandidate(input.output, input.candidateSha);
   const arms =
-    input.tier === 'lineage' ? runLineageTier() : runRuntimeTier();
+    input.tier === 'lineage' ? runLineageTier() : runRuntimeTier(input);
   const evidence = {
     schema: 'product-accepted-guard-evidence.v2',
     tier: input.tier,
     candidate_sha: input.candidateSha,
+    candidate_binding:
+      input.tier === 'lineage'
+        ? {
+            kind: 'git_head_verified',
+            verified: true,
+            head_sha: input.candidateSha,
+            worktree_clean: true,
+          }
+        : {
+            kind: 'candidate_claim',
+            verified: false,
+          },
+    runtime_options: {
+      run_check_backend: input.runCheckBackend,
+    },
     ...hashes(),
     arms,
     ok: arms.every((arm) => arm.ok === true),

@@ -1,0 +1,121 @@
+.work-product-frame {
+  min-height: 100vh;
+  color: #292726;
+  background: #f5f3ef;
+  font-family: Inter, 'Avenir Next', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
+}
+
+.work-product-nav {
+  display: flex;
+  flex-direction: column;
+  width: 224px;
+  min-height: 100vh;
+  padding: 28px 16px 24px;
+  border-right: 1px solid #d9d5ce;
+  background: #eeece7;
+}
+
+.work-product-brand {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 0 8px;
+  color: #292726;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.work-product-brand span:first-child {
+  font-size: 12px;
+}
+
+.work-product-nav nav {
+  display: grid;
+  gap: 14px;
+  margin-top: 38px;
+}
+
+.work-product-nav__current {
+  display: block;
+  padding: 9px 15px;
+  border: 1px solid #d9d5ce;
+  border-radius: 7px;
+  background: #fcfbf8;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.work-product-nav__quiet {
+  display: block;
+  padding: 0 15px;
+  color: #706c74;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.work-product-nav__foot {
+  margin: auto 8px 0;
+  padding-top: 20px;
+  border-top: 1px solid #d9d5ce;
+  color: #706c74;
+  font-size: 12px;
+}
+
+.work-shell {
+  width: min(100% - 64px, 1120px);
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.work-shell :focus-visible {
+  outline: 2px solid #404a78;
+  outline-offset: 3px;
+}
+
+.work-shell-kicker {
+  margin: 0 0 8px;
+  color: #404a78;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.work-shell h1 {
+  margin: 0;
+  color: #292726;
+  font-family: Inter, 'Avenir Next', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2rem, 3.4vw, 2.7rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+@media (min-width: 720px) {
+  .work-product-frame {
+    display: grid;
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 719px) {
+  .work-product-nav {
+    width: 100%;
+    min-height: auto;
+    padding: 18px 20px;
+    border-right: 0;
+    border-bottom: 1px solid #d9d5ce;
+  }
+
+  .work-product-nav nav,
+  .work-product-nav__foot {
+    display: none;
+  }
+
+  .work-shell {
+    width: min(100% - 40px, 1120px);
+    padding-top: 34px;
+  }
+}

@@ -175,3 +175,25 @@ The historical range check
 returns exit 2 due preserved raw ANSI evidence whitespace. Only source/tests
 and report paths were checked separately; this report does not claim a full
 range PASS or self-sign ACCEPT.
+
+## O-H16 classifier framing follow-up
+
+Framing-only fix commit:
+`248d254db81d78bd813fdddff092572fcb8d38fa` (parent
+`55f5ac360cf98ee4350d64950a24694ad79a1cb8`). When child stdout is nonempty
+and unterminated, classifier and runner add one framing LF before their own
+marker; child/raw bytes and raw evidence files remain unchanged.
+
+The C-box rerun is under
+`artifacts/c3-work-shell/e8-classifier-248d254/`: 11/11 duals passed, and both
+canonical absence arms recorded raw exit 1 / classifier exit 2 with restore
+proof and unchanged candidate HEAD. Exact source hashes are retained in the
+remote final evidence.
+
+The precise full historical range checked was
+`01dce6d89baa89d21180159c5be8b0a5f1446f74..248d254db81d78bd813fdddff092572fcb8d38fa`;
+`git diff --check` returned exit 2 because preserved raw ANSI captures contain
+trailing whitespace/newline findings across the older
+`e8-classifier-a02b54a/`, `e8-classifier-51c102f/`, and follow-up raw evidence.
+Only source/tests/runner/report paths were checked separately and returned
+exit 0. Raw evidence is retained; no full-range PASS is claimed.

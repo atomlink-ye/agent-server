@@ -1,0 +1,120 @@
+===== exit =====
+cat: /root/workspace/.c3-e8-classifier-248d254/arms/imported-fixture-absent/exit: No such file or directory
+===== manifest =====
+cat: /root/workspace/.c3-e8-classifier-248d254/arms/imported-fixture-absent/manifest: No such file or directory
+===== structural-status.json =====
+{
+  "kind": "imported-fixture-absent",
+  "target": "/root/workspace/mgr-frontend/apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json",
+  "targetAbsent": true
+}
+===== raw-status.json =====
+{
+  "code": 1,
+  "signal": null,
+  "spawnError": null
+}
+===== marker-status.json =====
+{"marker":"c3_e8_input_missing:imported-fixture=apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json","emitted":true}
+===== classifier-status.json =====
+{
+  "classifierExit": 2,
+  "childExitCode": 1,
+  "childSignal": null,
+  "reason": "registered-input-marker",
+  "marker": "c3_e8_classifier_missing:kind=imported-fixture-absent:marker=c3_e8_input_missing:imported-fixture=apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json"
+}
+===== classifier.exit =====
+2
+===== arm-status =====
+bound_source_commit=248d254db81d78bd813fdddff092572fcb8d38fa
+candidate_before=02328517a0fe887464d0661d772a49ad9d88451b
+target_absent_before_spawn=0
+outer_exit=2
+restored=0
+candidate_after=02328517a0fe887464d0661d772a49ad9d88451b
+## sandbox-ctl/adopted-8174cc0c35a44a568688d8492fe15745
+ D apps/web/node_modules
+ D node_modules
+?? .c3-e8-02328517/
+===== stdout =====
+cat: /root/workspace/.c3-e8-classifier-248d254/arms/imported-fixture-absent/stdout: No such file or directory
+===== stderr =====
+cat: /root/workspace/.c3-e8-classifier-248d254/arms/imported-fixture-absent/stderr: No such file or directory
+===== raw.stdout =====
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/root/workspace/mgr-frontend[39m
+
+ [31m❯[39m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx [2m([22m[2m0 test[22m[2m)[22m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m   Start at [22m 23:50:09
+[2m   Duration [22m 10.55s[2m (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)[22m
+
+===== raw.stderr =====
+[2m11:50:20 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json" from "apps/web/components/work/work-list.browser.test.tsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36m/root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx[39m:6:30
+[33m  3  |  import { expect, it, vi } from "vitest";
+  4  |  import { WorkListShell } from "@/components/work/work-shell";
+  5  |  import parallelRecording from "@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json";
+     |                                 ^
+  6  |  import reworkRecording from "@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json";
+  7  |  import { projectWorkList } from "@/lib/product-recording-projections";[39m
+      at TransformPluginContext._formatLog (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30416:39)
+      at TransformPluginContext.error (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30413:14)
+      at normalizeUrl (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27438:18)
+      at file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27506:30
+      at async Promise.all (index 4)
+      at TransformPluginContext.transform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27474:4)
+      at EnvironmentPluginContainer.transform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30201:14)
+      at loadAndTransform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:20124:26)
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m [ apps/web/components/work/work-list.browser.test.tsx ][22m
+[31m[1mError[22m: Failed to import test file /root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx[39m
+[31m[1mCaused by: TypeError[22m: Failed to fetch dynamically imported module: http://localhost:63315/root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx?import&browserv=1786665019887[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+===== classifier.stdout =====
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/root/workspace/mgr-frontend[39m
+
+ [31m❯[39m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx [2m([22m[2m0 test[22m[2m)[22m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [2mno tests[22m
+[2m   Start at [22m 23:50:09
+[2m   Duration [22m 10.55s[2m (transform 0ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)[22m
+
+c3_e8_input_missing:imported-fixture=apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json
+c3_e8_classifier_missing:kind=imported-fixture-absent:marker=c3_e8_input_missing:imported-fixture=apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json
+===== classifier.stderr =====
+c3_e8_runner:structural-absence-confirmed:/root/workspace/mgr-frontend/apps/web/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json
+[2m11:50:20 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json" from "apps/web/components/work/work-list.browser.test.tsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36m/root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx[39m:6:30
+[33m  3  |  import { expect, it, vi } from "vitest";
+  4  |  import { WorkListShell } from "@/components/work/work-shell";
+  5  |  import parallelRecording from "@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json";
+     |                                 ^
+  6  |  import reworkRecording from "@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json";
+  7  |  import { projectWorkList } from "@/lib/product-recording-projections";[39m
+      at TransformPluginContext._formatLog (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30416:39)
+      at TransformPluginContext.error (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30413:14)
+      at normalizeUrl (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27438:18)
+      at file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27506:30
+      at async Promise.all (index 4)
+      at TransformPluginContext.transform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:27474:4)
+      at EnvironmentPluginContainer.transform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:30201:14)
+      at loadAndTransform (file:///root/workspace/mgr-frontend/node_modules/.pnpm/vite@8.1.5_@types+node@22.20.1_esbuild@0.28.1_tsx@4.23.1_yaml@2.9.0/node_modules/vite/dist/node/chunks/node.js:20124:26)
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m [ apps/web/components/work/work-list.browser.test.tsx ][22m
+[31m[1mError[22m: Failed to import test file /root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx[39m
+[31m[1mCaused by: TypeError[22m: Failed to fetch dynamically imported module: http://localhost:63315/root/workspace/mgr-frontend/apps/web/components/work/work-list.browser.test.tsx?import&browserv=1786665019887[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

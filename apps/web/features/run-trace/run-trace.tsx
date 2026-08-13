@@ -17,31 +17,25 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
   const selectedAttempt = attempts.find((entry) => entry.attempt.id === selectedAttemptKey) ?? null;
   const geometry = useMemo(() => timelineGeometry(attempts), [attempts]);
   const capturedRange = useMemo(() => capturedTimelineRange(attempts), [attempts]);
-  const feedback = trace.edges.filter((edge): edge is Extract<Trace['edges'][number], { kind: 'feedback' }> => edge.kind === 'feedback');
+  const recordedFeedbackCount = trace.edges.filter((edge) => edge.kind === 'feedback').length;
   const actorRows = trace.actors.map((actor) => ({ key: actor.id, name: actor.name ?? 'Name not captured', items: trace.work_items.filter((workItem) => workItem.actor_id === actor.id) }));
   const unassignedItems = trace.work_items.filter((workItem) => !trace.actors.some((actor) => actor.id === workItem.actor_id));
   if (unassignedItems.length) actorRows.push({ key: 'uncaptured-actor', name: 'Name not captured', items: unassignedItems });
   return <section className="run-trace" aria-labelledby="run-trace-heading">
-    <header className="run-trace__header"><div><p className="run-trace__breadcrumb">My Work / {trace.work.title}</p><p className="run-trace__eyebrow">Run Trace</p><h2 id="run-trace-heading">{trace.work.title}</h2></div><span className="run-trace__historical">Historical</span></header>
+    <header className="run-trace__header"><div><p id="run-trace-heading" className="run-trace__eyebrow">Run Trace</p></div><span className="run-trace__historical">Historical</span></header>
     <p className="run-trace__subhead">Captured MCP dispatch and confirmation activity{capturedRange ? ` · recorded ${capturedRange.startedAt} → ${capturedRange.endedAt}` : ''}</p>
     <div className="run-trace__tabs" role="tablist" aria-label="Trace views">
       <button aria-selected={view === 'timeline'} className="run-trace__tab" onClick={() => setView('timeline')} role="tab" type="button">Timeline</button>
       <button aria-selected={view === 'events'} className="run-trace__tab" onClick={() => setView('events')} role="tab" type="button">Events</button>
     </div>
-    {view === 'timeline' ? <div className="run-trace__body"><div className="run-trace__canvas"><div className="run-trace__timeline" data-testid="trace-timeline"><TimeAxis range={capturedRange} /><div className="run-trace__lanes">{actorRows.map((actor) => <div className="run-trace__actor" key={actor.key}><div className="run-trace__lane-name">{actor.name}</div><div className="run-trace__actor-rows">{actor.items.map((workItem) => <div className="run-trace__item-row" key={workItem.id}><div className="run-trace__item-name">{workItem.subject}</div><div className="run-trace__track">{workItem.attempts.map((attempt) => <AttemptSpan attempt={attempt} geometry={geometry.get(attempt.id)} key={attempt.id} selected={selectedAttemptKey === attempt.id} onSelect={setSelectedAttemptKey} subject={workItem.subject} />)}{feedback.filter((edge) => edge.work_item_id === workItem.id).map((edge) => <FeedbackRelation edge={edge} geometry={geometry} key={`${edge.attempt_id}-${edge.source_created_at}`} />)}</div></div>)}</div></div>)}</div></div></div><Inspector selectedAttempt={selectedAttempt} trace={trace} /></div> : <Events trace={trace} />}
-    <aside className="run-trace__coverage" data-testid="trace-coverage-disclosure"><strong>MCP-only coverage.</strong> {humanize(trace.timeline_coverage.scope)}; other execution sources are not represented in this recording.</aside>
+    {view === 'timeline' ? <div className="run-trace__body"><div className="run-trace__canvas"><div className="run-trace__timeline" data-testid="trace-timeline"><TimeAxis range={capturedRange} /><div className="run-trace__lanes">{actorRows.map((actor) => <div className={`run-trace__actor ${actorTone(actor.key)}`} key={actor.key}><div className="run-trace__lane-name">{actor.name}</div><div className="run-trace__actor-rows">{actor.items.map((workItem) => <div className="run-trace__item-row" key={workItem.id}><div className="run-trace__item-name">{workItem.subject}</div><div className="run-trace__track">{workItem.attempts.map((attempt) => <AttemptSpan attempt={attempt} geometry={geometry.get(attempt.id)} key={attempt.id} selected={selectedAttemptKey === attempt.id} onSelect={setSelectedAttemptKey} subject={workItem.subject} />)}</div></div>)}</div></div>)}</div></div></div><Inspector selectedAttempt={selectedAttempt} trace={trace} /></div> : <Events trace={trace} />}
+    <aside className="run-trace__coverage" data-testid="trace-coverage-disclosure"><strong>MCP-only coverage.</strong> {humanize(trace.timeline_coverage.scope)}; other execution sources are not represented in this recording.{recordedFeedbackCount ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present; relation geometry is unavailable.` : ''}</aside>
   </section>;
 }
 
 function TimeAxis({ range }: { readonly range: ReturnType<typeof capturedTimelineRange> }) {
   const ticks = range ? relativeTicks(range.startedAt, range.endedAt) : [];
   return <div className="run-trace__axis" aria-label="Recorded time axis">{ticks.map((tick) => <span key={tick.position} style={{ '--tick-position': `${tick.position}%` } as CSSProperties}>{tick.label}</span>)}</div>;
-}
-
-function FeedbackRelation({ edge, geometry }: { readonly edge: Extract<Trace['edges'][number], { kind: 'feedback' }>; readonly geometry: ReadonlyMap<string, Geometry> }) {
-  const source = geometry.get(edge.attempt_id);
-  if (!source) return null;
-  return <span aria-label="Recorded feedback relation" className="run-trace__feedback-marker" style={{ '--feedback-left': `${source.left + source.width / 2}%` } as CSSProperties}><span>Recorded feedback relation</span></span>;
 }
 
 function AttemptSpan({ attempt, geometry, selected, onSelect, subject }: { readonly attempt: Attempt; readonly geometry: Geometry | undefined; readonly selected: boolean; readonly onSelect: (id: string) => void; readonly subject: string }) {
@@ -52,7 +46,7 @@ function AttemptSpan({ attempt, geometry, selected, onSelect, subject }: { reado
 function Events({ trace }: { readonly trace: Trace }) {
   const actors = new Map(trace.actors.map((actor) => [actor.id, actor]));
   const items = new Map(trace.work_items.map((item) => [item.id, item]));
-  return <section className="run-trace__events" aria-label="Recorded MCP activities" data-testid="trace-events"><p className="run-trace__events-caption">Recorded MCP activities. Sequence values are shown as captured; no additional ordering or timing is inferred.</p><div className="run-trace__events-scroll"><table><thead><tr><th>Sequence</th><th>Actor</th><th>Work Item</th><th>Kind</th><th>Category</th><th>MCP activity status</th><th>Result capture</th></tr></thead><tbody>{trace.mcp_activities.map((activity, snapshotOrdinal) => {
+  return <section className="run-trace__events" aria-label="Recorded MCP activities" data-testid="trace-events"><p className="run-trace__events-caption">Recorded MCP activities. Sequence values are shown as captured; no additional ordering or timing is inferred.</p><div className="run-trace__events-toolbar"><strong>Recorded events</strong><span>{trace.mcp_activities.length} captured rows</span></div><div className="run-trace__events-scroll"><table><thead><tr><th>Sequence</th><th>Actor</th><th>Work Item</th><th>Kind</th><th>Category</th><th>MCP activity status</th><th>Result capture</th></tr></thead><tbody>{trace.mcp_activities.map((activity, snapshotOrdinal) => {
     const actor = activity.source_refs.actor_id ? actors.get(activity.source_refs.actor_id) : null;
     const item = activity.source_refs.work_item_id ? items.get(activity.source_refs.work_item_id) : null;
     return <tr key={activitySnapshotIdentity(activity.activity_id, snapshotOrdinal)}><td>{activity.sequence}</td><td>{actor?.name ?? 'Name not captured'}</td><td>{item?.subject ?? 'Work Item not captured'}</td><td>{humanize(activity.kind)}</td><td>{humanize(activity.category)}</td><td>{humanize(activity.status)}</td><td>{captureLabel(activity.result_capture_status)}</td></tr>;
@@ -65,7 +59,7 @@ function activitySnapshotIdentity(activityId: string, snapshotOrdinal: number) {
 
 function Inspector({ selectedAttempt, trace }: { readonly selectedAttempt: Entry | null; readonly trace: Trace }) {
   const actor = trace.actors.find((candidate) => candidate.id === selectedAttempt?.workItem.actor_id);
-  return <aside className="run-trace__inspector" aria-live="polite" aria-labelledby="trace-inspector-heading"><h3 id="trace-inspector-heading">Inspector</h3>{selectedAttempt ? <><InspectorGroup title="Subject / actor"><Fact label="Work Item" value={selectedAttempt.workItem.subject} /><Fact label="Actor" value={actor?.name ?? 'Name not captured'} /></InspectorGroup><InspectorGroup title={`Attempt ${selectedAttempt.attempt.attempt_no}`}><Fact label="Attempt number" value={String(selectedAttempt.attempt.attempt_no)} /></InspectorGroup><InspectorGroup title="Timing facts"><Fact label="Started" value={recordedTimestamp(selectedAttempt.attempt.started_at)} /><Fact label="Ended" value={recordedTimestamp(selectedAttempt.attempt.ended_at)} /><Fact label="Duration" value={durationLabel(selectedAttempt.attempt)} /></InspectorGroup><InspectorGroup title="Capture facts"><Fact label="Timing" value={captureLabel(selectedAttempt.attempt.timing_capture_status)} /><Fact label="Feedback" value={captureLabel(selectedAttempt.attempt.feedback_capture_status)} /><Fact label="Result" value={captureLabel(selectedAttempt.attempt.result_capture_status)} /></InspectorGroup></> : <p className="run-trace__unavailable">Select an Attempt to inspect recorded facts.</p>}</aside>;
+  return <aside className="run-trace__inspector" aria-live="polite" aria-labelledby="trace-inspector-heading"><h3 id="trace-inspector-heading">Inspector</h3>{selectedAttempt ? <><div className="run-trace__selected-execution"><h4>{selectedAttempt.workItem.subject}</h4><p>{actor?.name ?? 'Name not captured'}</p></div><InspectorGroup title="Subject / actor"><Fact label="Work Item" value={selectedAttempt.workItem.subject} /><Fact label="Actor" value={actor?.name ?? 'Name not captured'} /></InspectorGroup><InspectorGroup title={`Attempt ${selectedAttempt.attempt.attempt_no}`}><Fact label="Attempt number" value={String(selectedAttempt.attempt.attempt_no)} /></InspectorGroup><InspectorGroup title="Timing facts"><Fact label="Started" value={recordedTimestamp(selectedAttempt.attempt.started_at)} /><Fact label="Ended" value={recordedTimestamp(selectedAttempt.attempt.ended_at)} /><Fact label="Duration" value={durationLabel(selectedAttempt.attempt)} /></InspectorGroup><InspectorGroup title="Capture facts"><Fact label="Timing" value={captureLabel(selectedAttempt.attempt.timing_capture_status)} /><Fact label="Feedback" value={captureLabel(selectedAttempt.attempt.feedback_capture_status)} /><Fact label="Result" value={captureLabel(selectedAttempt.attempt.result_capture_status)} /></InspectorGroup></> : <p className="run-trace__unavailable">Select an Attempt to inspect recorded facts.</p>}</aside>;
 }
 function InspectorGroup({ title, children }: { readonly title: string; readonly children: ReactNode }) { return <section className="run-trace__inspector-group"><h4>{title}</h4><dl>{children}</dl></section>; }
 function Fact({ label, value }: { readonly label: string; readonly value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
@@ -91,6 +85,12 @@ function durationLabel(attempt: Attempt) { return attempt.duration_ms === null ?
 function recordedTimestamp(timestamp: string | null) { return timestamp === null ? 'Not captured' : `Recorded timestamp: ${timestamp}`; }
 function captureLabel(value: string) { return value === 'not_present' || value === 'not_captured' ? 'Not captured' : value === 'redacted' ? 'Captured, content redacted' : value === 'captured' ? 'Captured' : humanize(value); }
 function humanize(value: string) { return value.replaceAll('_', ' '); }
+
+function actorTone(identity: string) {
+  let hash = 0;
+  for (const character of identity) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  return `run-trace__actor--tone-${Math.abs(hash) % 3}`;
+}
 
 function relativeTicks(startedAt: string, endedAt: string) {
   const start = Date.parse(startedAt);

@@ -170,9 +170,6 @@ function WorkShellFrame({
           <span aria-current="page" className="work-product-nav__current">
             My Work
           </span>
-          <span className="work-product-nav__quiet">
-            Other product areas are not available in this view.
-          </span>
         </nav>
         <p className="work-product-nav__foot">Historical Work records</p>
       </aside>

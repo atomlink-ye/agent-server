@@ -33,6 +33,6 @@ Status: C-owned implementation complete. Stop condition: none; all requested reg
 
 ## Ownership and workspace status
 
-- C-owned paths: clean after the implementation commit; reports are the only pending C-owned paths until report commit.
+- C-owned paths: clean after the implementation commits.
 - Global status exception: artifacts/c2-trace-ui/ is an existing untracked C2-owned artifact directory. It was preserved exactly and was not added, committed, deleted, moved, or inspected for content.
 - No package, lockfile, contract, fixture, test, design repository, or unrelated file was changed.

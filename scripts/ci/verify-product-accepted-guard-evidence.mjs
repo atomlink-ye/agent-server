@@ -276,6 +276,12 @@ const ARM_REQUIREMENTS = Object.freeze({
       outputMarker: 'evidence_mismatch:decision.decision',
     },
     {
+      name: 'runtime-mutation-temp-manifest-delete-get-work',
+      expectedExitCode: 1,
+      outputMarker: 'accepted_subset_invalid:accepted_subset_mismatch',
+      endpointDeletion: true,
+    },
+    {
       name: 'runtime-mutation-attestation-env-cannot-bypass-gate',
       expectedExitCode: 1,
       outputMarker: 'evidence_mismatch:decision.sha256',
@@ -361,6 +367,24 @@ function verifyArm(arm, requirement, tier) {
       !`${arm.stdout}\n${arm.stderr}`.includes(requirement.outputMarker)
     )
       fail(`${tier}.${requirement.name}.output_marker`);
+  }
+  if (requirement.endpointDeletion) {
+    equalJson(arm.target_endpoint_id, 'get_work', `${tier}.${requirement.name}.target`);
+    equalJson(arm.non_target_invariant, true, `${tier}.${requirement.name}.invariant`);
+    equalJson(
+      arm.signed_manifest_unchanged,
+      true,
+      `${tier}.${requirement.name}.signed_unchanged`,
+    );
+    if (
+      !sha256Pattern.test(arm.signed_manifest_sha256) ||
+      !sha256Pattern.test(arm.mutated_manifest_sha256) ||
+      arm.signed_manifest_sha256 === arm.mutated_manifest_sha256 ||
+      !Array.isArray(arm.original_endpoint_ids) ||
+      !Array.isArray(arm.mutated_endpoint_ids) ||
+      arm.original_endpoint_ids.length !== arm.mutated_endpoint_ids.length + 1
+    )
+      fail(`${tier}.${requirement.name}.mutation_precision`);
   }
 }
 

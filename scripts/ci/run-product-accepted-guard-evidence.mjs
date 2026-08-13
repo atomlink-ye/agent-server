@@ -429,6 +429,68 @@ function runWriteBeforeGateArm() {
   return arm;
 }
 
+function runEndpointDeletionManifestArm() {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'guard-manifest-endpoint-'),
+  );
+  const signedPath = path.join(
+    repo,
+    'src/contracts/product-accepted-subset.v1.json',
+  );
+  const mutatedPath = path.join(directory, 'product-accepted-subset.v1.json');
+  const signedBytes = fs.readFileSync(signedPath);
+  const signed = JSON.parse(signedBytes.toString('utf8'));
+  const targetEndpointId = 'get_work';
+  const originalIds = signed.endpoints.map((endpoint) => endpoint.id);
+  const targetIndex = originalIds.indexOf(targetEndpointId);
+  if (targetIndex < 0 || targetIndex !== originalIds.lastIndexOf(targetEndpointId))
+    throw new Error('endpoint_deletion_target_not_unique');
+  const mutated = structuredClone(signed);
+  mutated.endpoints.splice(targetIndex, 1);
+  const mutatedBytes = Buffer.from(`${JSON.stringify(mutated, null, 2)}\n`);
+  fs.writeFileSync(mutatedPath, mutatedBytes);
+  const remainingIds = mutated.endpoints.map((endpoint) => endpoint.id);
+  const nonTargetInvariant =
+    JSON.stringify(remainingIds) ===
+      JSON.stringify(originalIds.filter((id) => id !== targetEndpointId)) &&
+    mutated.status === signed.status &&
+    mutated.api_major === signed.api_major &&
+    mutated.accepted_revision === signed.accepted_revision;
+  const arm = runArm({
+    name: 'runtime-mutation-temp-manifest-delete-get-work',
+    command: process.execPath,
+    args: [
+      '--import',
+      'tsx',
+      checker,
+      '--check',
+      '--mutation',
+      '--manifest',
+      mutatedPath,
+    ],
+    cwd: repo,
+    expectedExitCode: 1,
+    expectedOutputMarkers: ['accepted_subset_invalid:accepted_subset_mismatch'],
+  });
+  arm.target_endpoint_id = targetEndpointId;
+  arm.target_index = targetIndex;
+  arm.original_endpoint_ids = originalIds;
+  arm.mutated_endpoint_ids = remainingIds;
+  arm.signed_manifest_sha256 = crypto
+    .createHash('sha256')
+    .update(signedBytes)
+    .digest('hex');
+  arm.mutated_manifest_sha256 = crypto
+    .createHash('sha256')
+    .update(mutatedBytes)
+    .digest('hex');
+  arm.non_target_invariant = nonTargetInvariant;
+  arm.signed_manifest_unchanged = fs.readFileSync(signedPath).equals(signedBytes);
+  arm.ok = arm.ok && nonTargetInvariant && arm.signed_manifest_unchanged;
+  fs.rmSync(directory, { recursive: true, force: true });
+  return arm;
+}
+
 function runBackendPackageMutation(name, mutate, marker) {
   const filename = path.join(repo, 'package.json');
   return withFileMutation(
@@ -555,6 +617,7 @@ function runRuntimeTier(input) {
   arms.push(writeArm);
   fs.rmSync(writeDirectory, { recursive: true, force: true });
   arms.push(runWriteBeforeGateArm());
+  arms.push(runEndpointDeletionManifestArm());
   arms.push(
     runGateMutationArm(
       'runtime-mutation-attestation-env-cannot-bypass-gate',

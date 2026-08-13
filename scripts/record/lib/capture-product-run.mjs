@@ -575,8 +575,26 @@ export async function captureProductRun(options) {
     options.workRun.work_id !== options.workId
   )
     throw new Error('capture_work_run_identity_mismatch');
-
   const baseUrl = new URL(options.baseUrl);
+
+  // Historical captures must preserve the exact accepted API envelopes.  Do
+  // not normalize or repair these values: a schema failure is a closed gate
+  // before any recording file is created.
+  const { register: registerTsx } = await import('tsx/esm/api');
+  registerTsx();
+  const {
+    ProductRunTraceResponseSchema,
+    ProductWorkRunResponseSchema,
+  } = await import('../../../src/contracts/product-projection/index.ts');
+  const workRunResponse =
+    options.workRunResponse ??
+    (await getJson(
+      baseUrl,
+      options.token,
+      `/api/v1/works/${options.workId}/runs/${options.workRunId}`,
+    ));
+  ProductWorkRunResponseSchema.parse(workRunResponse);
+  ProductRunTraceResponseSchema.parse(options.trace);
   const outputRoot = resolve(
     options.outputRoot ??
       new URL(

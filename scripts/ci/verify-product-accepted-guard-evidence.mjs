@@ -273,7 +273,7 @@ const ARM_REQUIREMENTS = Object.freeze({
     {
       name: 'runtime-mutation-write-before-gate',
       expectedExitCode: 1,
-      outputMarker: 'evidence_mismatch:decision.sha256',
+      outputMarker: 'evidence_mismatch:decision.decision',
     },
     {
       name: 'runtime-mutation-attestation-env-cannot-bypass-gate',

@@ -405,7 +405,7 @@ function runWriteBeforeGateArm() {
   const arm = runGateMutationArm(
     'runtime-mutation-write-before-gate', process.execPath,
     ['--import', 'tsx', checker, '--write', '--output', output], {},
-    'evidence_mismatch:decision.sha256');
+    'evidence_mismatch:decision.decision');
   arm.output_path = output;
   arm.output_absent = !fs.existsSync(output);
   arm.ok = arm.ok && arm.output_absent;

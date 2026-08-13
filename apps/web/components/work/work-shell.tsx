@@ -44,11 +44,53 @@ export function WorkListShell() {
           Open a Work to review its recorded historical run details.
         </p>
       </header>
-      {state === 'loading' ? <p>Loading your Work…</p> : null}
-      {state === 'error' ? (
-        <p role="alert">Work data could not be loaded.</p>
+      {state === 'loading' ? (
+        <section
+          aria-live="polite"
+          className="work-list-state work-list-state--loading"
+          data-testid="work-list-loading"
+        >
+          <p className="work-list-state__eyebrow">Loading</p>
+          <h2>Getting your Work records</h2>
+          <p>We are retrieving the Work titles available to review.</p>
+          <div aria-hidden="true" className="work-list-skeleton">
+            <span />
+            <span />
+            <span />
+          </div>
+        </section>
       ) : null}
-      {state === 'available' ? (
+      {state === 'error' ? (
+        <section
+          className="work-list-state work-list-state--error"
+          data-testid="work-list-error"
+          role="alert"
+        >
+          <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+          <h2>Work records are temporarily unavailable.</h2>
+          <p>
+            This is a connection problem, not a statement about the status of
+            any Work. Refresh the page to try again.
+          </p>
+        </section>
+      ) : null}
+      {state === 'available' && works.length === 0 ? (
+        <section
+          aria-labelledby="work-list-empty-heading"
+          className="work-list-state work-list-state--empty"
+          data-testid="work-list-empty"
+        >
+          <p className="work-list-state__eyebrow">No Work records</p>
+          <h2 id="work-list-empty-heading">
+            Nothing is available to review yet.
+          </h2>
+          <p>
+            When a Work becomes available here, its title will open its
+            recorded historical run details.
+          </p>
+        </section>
+      ) : null}
+      {state === 'available' && works.length > 0 ? (
         <section
           aria-labelledby="work-list-heading"
           className="work-list-region"

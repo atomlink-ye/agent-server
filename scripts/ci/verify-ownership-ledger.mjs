@@ -1118,17 +1118,15 @@ function checkTransactionFixtures() {
     .flatMap((entry) => entry.calls)
     .filter((call) => !call.typed && call.transaction === 'DEFINITELY_OUT');
   fixtures.rawDefinitelyOutByRepository = Object.fromEntries(
-    [...new Set(rawOut.map((call) => call.file))]
-      .sort()
-      .map((file) => [
-        file,
-        rawOut
-          .filter((call) => call.file === file)
-          .map((call) => ({
-            line: call.line,
-            identity: call.transactionEvidence,
-          })),
-      ]),
+    [...new Set(rawOut.map((call) => call.file))].sort().map((file) => [
+      file,
+      rawOut
+        .filter((call) => call.file === file)
+        .map((call) => ({
+          line: call.line,
+          identity: call.transactionEvidence,
+        })),
+    ]),
   );
   const repositoryOwners = new Map(
     Object.entries(ledger.repositories ?? {}).map(([file, owner]) => [
@@ -1140,13 +1138,11 @@ function checkTransactionFixtures() {
   for (const call of rawOut) {
     const owner = repositoryOwners.get(call.file) ?? 'UNMAPPED';
     if (!ownerGroups.has(owner)) ownerGroups.set(owner, []);
-    ownerGroups
-      .get(owner)
-      .push({
-        file: call.file,
-        line: call.line,
-        identity: call.transactionEvidence,
-      });
+    ownerGroups.get(owner).push({
+      file: call.file,
+      line: call.line,
+      identity: call.transactionEvidence,
+    });
   }
   fixtures.rawDefinitelyOutByRepositoryOwner = Object.fromEntries(
     [...ownerGroups.keys()]

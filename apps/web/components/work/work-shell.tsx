@@ -37,22 +37,43 @@ export function WorkListShell() {
 
   return (
     <WorkShellFrame testId="work-list-shell">
-      <p className="work-shell-kicker">Work-first surface · read only</p>
-      <h1>Works</h1>
-      <p>This is a read-only Work-first surface.</p>
-      <p>Controls are explicitly unavailable.</p>
-      {state === 'loading' ? <p>Loading Works…</p> : null}
+      <header className="work-list-header">
+        <p className="work-shell-kicker">My Work</p>
+        <h1>Work that is available to review.</h1>
+        <p className="work-list-header__summary">
+          Open a Work to review its recorded historical run details.
+        </p>
+      </header>
+      {state === 'loading' ? <p>Loading your Work…</p> : null}
       {state === 'error' ? (
         <p role="alert">Work data could not be loaded.</p>
       ) : null}
       {state === 'available' ? (
-        <ul data-testid="work-list">
-          {works.map((work) => (
-            <li key={work.id}>
-              <a href={`/works/${encodeURIComponent(work.id)}`}>{work.title}</a>
-            </li>
-          ))}
-        </ul>
+        <section
+          aria-labelledby="work-list-heading"
+          className="work-list-region"
+        >
+          <div className="work-list-region__heading">
+            <p className="work-list-region__eyebrow">Available Work</p>
+            <h2 id="work-list-heading">Work records</h2>
+          </div>
+          <ul data-testid="work-list" className="work-list">
+            {works.map((work) => (
+              <li className="work-list-card" key={work.id}>
+                <div className="work-list-card__identity">
+                  <a href={`/works/${encodeURIComponent(work.id)}`}>
+                    {work.title}
+                  </a>
+                  <p>Open historical run details</p>
+                </div>
+                <p className="work-list-card__unavailable">
+                  <span aria-hidden="true">—</span>
+                  Product status is currently unavailable for this Work.
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </WorkShellFrame>
   );

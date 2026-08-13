@@ -1,0 +1,30 @@
+{
+  "scenario": "oi38-negative",
+  "candidate_sha": "39210cab9789e179ca288db4308a6dc011fa2ec3",
+  "negative_control": {
+    "scenario": "oi38",
+    "owner_work_run_count": 1,
+    "foreign_status": 404,
+    "missing_status": 404
+  },
+  "identity": {
+    "work_id": "e20891c5-9689-4d05-b3ea-1ff74bcd8965",
+    "attempts": [
+      {
+        "status": "failed",
+        "attempt_id": "1727c219-777a-402b-8aa7-25b0ce669c2e",
+        "attempt_no": 1
+      },
+      {
+        "status": "completed",
+        "attempt_id": "cc73b506-c846-4b89-97c3-36fbb087cf87",
+        "attempt_no": 1
+      }
+    ],
+    "team_phase": "done",
+    "team_run_id": "3576f0ea-782c-4a5b-888d-1aad3da0c889",
+    "team_status": "succeeded",
+    "work_run_id": "da561028-4fe3-46b9-a285-2866edc0dbcf",
+    "root_task_id": "8ee0811a-65ae-4c52-91bb-e7183f710b3a"
+  }
+}

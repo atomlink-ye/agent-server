@@ -17,11 +17,6 @@ const fixtureRoot = resolve(
   'apps/web/lib/__fixtures__/product-recordings',
   WREC_DIRECTORY,
 );
-const sourceRoot = resolve(
-  repoRoot,
-  '../../../../tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-third-recording/recording-artifacts/wrec-third/oi38-negative/20260813T213910949Z-c5f4a431-02ab-44e5-acd8-49d775db83ea',
-);
-
 const expectedHashes = {
   'manifest.json':
     '8d09afabbe5fc52002e15d0201feed46fe25692dd4f9f2eace03f0542b284af6',
@@ -77,7 +72,7 @@ const cases = [
 
 function usage(message) {
   throw new Error(
-    `${message}\nusage: run-product-recording-provenance-e2.mjs --checker-runtime <command> --checker-command <command> --output-root <outside-candidate-dir> --candidate-sha <exact-sha>`,
+    `${message}\nusage: run-product-recording-provenance-e2.mjs --checker-runtime <command> --checker-command <command> --source-root <immutable-wrec-dir> --output-root <outside-candidate-dir> --candidate-sha <exact-sha>`,
   );
 }
 
@@ -92,13 +87,20 @@ function parseArgs(argv) {
     values[key] = value;
     index += 1;
   }
-  for (const key of ['checker-runtime', 'checker-command', 'output-root', 'candidate-sha'])
+  for (const key of [
+    'checker-runtime',
+    'checker-command',
+    'source-root',
+    'output-root',
+    'candidate-sha',
+  ])
     if (!values[key]) usage(`missing required --${key}`);
   if (!/^[0-9a-f]{40,64}$/u.test(values['candidate-sha']))
     usage('--candidate-sha must be an exact 40-64 character hexadecimal SHA');
   return {
     checkerRuntime: values['checker-runtime'],
     checkerCommand: values['checker-command'],
+    sourceRoot: resolve(values['source-root']),
     outputRoot: resolve(values['output-root']),
     candidateSha: values['candidate-sha'],
   };
@@ -243,6 +245,32 @@ function parseCheckerMarkers(stdout) {
     ),
     provenance_status: parseBaselineStatus(stdout, 'provenance_status'),
     third_recorder_slot: parseBaselineStatus(stdout, 'third_recorder_slot'),
+    recorder_count: parseBaselineStatus(stdout, 'recorder_count'),
+    negative_control_count: parseBaselineStatus(stdout, 'negative_control_count'),
+    old_oi38_summary_counted_as_recorder: parseBaselineStatus(
+      stdout,
+      'old_oi38_summary_counted_as_recorder',
+    ),
+    oi38_foreign_missing_404_equivalent: parseBaselineStatus(
+      stdout,
+      'oi38_foreign_missing_404_equivalent',
+    ),
+    product_projection_boundary_status: parseBaselineStatus(
+      stdout,
+      'product_projection_boundary_status',
+    ),
+    product_projection_boundary_scope: parseBaselineStatus(
+      stdout,
+      'product_projection_boundary_scope',
+    ),
+    product_projection_boundary_file_count: parseBaselineStatus(
+      stdout,
+      'product_projection_boundary_file_count',
+    ),
+    product_projection_boundary_hits: parseBaselineStatus(
+      stdout,
+      'product_projection_boundary_hits',
+    ),
     product_recording_provenance_exit: parseBaselineStatus(
       stdout,
       'product_recording_provenance_exit',
@@ -271,7 +299,19 @@ function stageAssertion(caseName, markers) {
       markers.trace_parse_status === 'FAIL' &&
       markers.work_run_parse_status === 'PASS' &&
       markers.work_parse_status === 'PASS' &&
-      noProvenanceVerification
+      noProvenanceVerification &&
+      [
+        markers.recorder_count,
+        markers.negative_control_count,
+        markers.old_oi38_summary_counted_as_recorder,
+        markers.wrec_source_verified,
+        markers.wrec_fixture_verified,
+        markers.oi38_foreign_missing_404_equivalent,
+        markers.product_projection_boundary_status,
+        markers.product_projection_boundary_scope,
+        markers.product_projection_boundary_file_count,
+        markers.product_projection_boundary_hits,
+      ].every((marker) => marker === 'NOT_REPORTED')
     );
   return false;
 }
@@ -329,11 +369,28 @@ async function writeCaseEvidence(
   result,
   immutableSourceRoot,
 ) {
-  const sourceTable = await treeSnapshot(sourceRoot, { allowChecksumFile: true });
+  const sourceTable = await treeSnapshot(immutableSourceRoot, {
+    allowChecksumFile: true,
+  });
   const committedFixtureTable = await treeSnapshot(fixtureRoot);
   const mutatedFixtureTable = await treeSnapshot(setup.inputRoot);
   const baseline = caseInfo.name === 'baseline';
   const checkerMarkers = parseCheckerMarkers(result.stdout);
+  const restorationGatePass =
+    sourceTable.status === 'PASS' && committedFixtureTable.status === 'PASS';
+  const byteBindingRows = sourceTable.rows.map((row, index) => ({
+    relative_path: row.relative_path,
+    expected_sha256: row.expected_sha256,
+    immutable_source_sha256: row.actual_sha256,
+    immutable_source_matches_expected: row.matches,
+    committed_fixture_sha256:
+      committedFixtureTable.rows[index]?.actual_sha256 ?? null,
+    committed_fixture_matches_expected:
+      committedFixtureTable.rows[index]?.matches ?? false,
+    isolated_input_sha256: mutatedFixtureTable.rows[index]?.actual_sha256 ?? null,
+    isolated_input_matches_expected:
+      mutatedFixtureTable.rows[index]?.matches ?? false,
+  }));
   const evidence = {
     candidate_sha: candidateSha,
     case: caseInfo.name,
@@ -353,6 +410,8 @@ async function writeCaseEvidence(
     stderr: result.stderr,
     post_case_restore_source_status: sourceTable.status,
     post_case_restore_fixture_status: committedFixtureTable.status,
+    post_case_restore_gate_pass: restorationGatePass,
+    byte_binding_rows: byteBindingRows,
     post_case_restore_source_files: sourceTable.actual,
     post_case_restore_fixture_files: committedFixtureTable.actual,
     post_case_restore_source_extra_paths: sourceTable.extra,
@@ -418,7 +477,11 @@ async function main() {
     const caseRoot = join(runRoot, caseInfo.name);
     await mkdir(caseRoot, { recursive: true });
     const setup = await setupCase(caseInfo, caseRoot);
-    const result = await runChecker(invocation, setup.inputRoot, sourceRoot);
+    const result = await runChecker(
+      invocation,
+      setup.inputRoot,
+      args.sourceRoot,
+    );
     const evidence = await writeCaseEvidence(
       args.outputRoot,
       args.candidateSha,
@@ -426,7 +489,7 @@ async function main() {
       caseRoot,
       setup,
       result,
-      sourceRoot,
+      args.sourceRoot,
     );
     if (caseInfo.name === 'baseline') baselineEvidence = evidence.evidence;
     results.push({
@@ -434,6 +497,12 @@ async function main() {
       expected_exit: caseInfo.expectedExit,
       actual_exit: result.exit,
       stage_assertion_pass: evidence.evidence.stage_assertion_pass,
+      post_case_restore_source_status:
+        evidence.evidence.post_case_restore_source_status,
+      post_case_restore_fixture_status:
+        evidence.evidence.post_case_restore_fixture_status,
+      post_case_restore_gate_pass:
+        evidence.evidence.post_case_restore_gate_pass,
       evidence: evidence.outputPath,
       input_root: setup.inputRoot,
     });
@@ -442,7 +511,8 @@ async function main() {
   const failures = results.filter(
     (result) =>
       result.actual_exit !== result.expected_exit ||
-      result.stage_assertion_pass !== true,
+      result.stage_assertion_pass !== true ||
+      result.post_case_restore_gate_pass !== true,
   );
   const summary = {
     candidate_sha: args.candidateSha,
@@ -451,16 +521,11 @@ async function main() {
     invocation,
     cwd: repoRoot,
     output_root: args.outputRoot,
-    source_root: sourceRoot,
+    source_root: args.sourceRoot,
     fixture_root: fixtureRoot,
-    post_case_restore_source_status:
-      baselineEvidence?.post_case_restore_source_status ?? null,
-    post_case_restore_fixture_status:
-      baselineEvidence?.post_case_restore_fixture_status ?? null,
-    wrec_source_verified:
-      baselineEvidence?.post_case_restore_source_status === 'PASS',
-    wrec_fixture_verified:
-      baselineEvidence?.post_case_restore_fixture_status === 'PASS',
+    all_cases_restore_gate_pass: results.every(
+      (result) => result.post_case_restore_gate_pass === true,
+    ),
     expected_paths: Object.keys(expectedHashes).sort(),
     wrec_rows: baselineEvidence?.post_case_restore_wrec_rows ?? null,
     baseline_schema_statuses: baselineEvidence?.baseline_schema_statuses ?? null,

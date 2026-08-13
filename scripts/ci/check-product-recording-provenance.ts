@@ -522,6 +522,9 @@ async function evaluateProductRecordingProvenance(): Promise<ProvenanceCheckResu
     sourceStatus,
     fixtureStatus,
     boundaryStatus,
+    boundaryScanScope: boundary.scope,
+    boundaryScanFileCount: boundary.fileCount,
+    boundaryScanHits: boundary.hits,
     oi38Status,
   };
 }

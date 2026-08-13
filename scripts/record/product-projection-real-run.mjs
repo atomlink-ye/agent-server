@@ -412,6 +412,17 @@ async function main() {
           .length >= 2
       )
         parallelAttemptsObserved = true;
+      if (scenario === 'oi38-negative')
+        return (
+          status === 'succeeded' &&
+          works.some(
+            (work) =>
+              work.latest_attempt?.status === 'completed' ||
+              (work.attempts ?? []).some(
+                (attempt) => attempt.status === 'completed',
+              ),
+          )
+        );
       if (executionScenario === 'parallel-success')
         return (
           status === 'succeeded' &&
@@ -576,7 +587,7 @@ async function main() {
       definitionHash,
       predicateEvidence: {
         parallel_attempts_observed: parallelAttemptsObserved,
-        ...(executionScenario === 'parallel-success'
+        ...(scenario === 'parallel-success'
           ? {
               parallel_work_attempts: parallelPredicateEvidence(
                 project?.work_items,

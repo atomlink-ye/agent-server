@@ -1,14 +1,21 @@
 # Worker C · O-H9 visual parity
 
-Status: C-owned implementation complete. B2 cross-Attempt connection stop condition applies: the edge has only one attempt_id, so no unsupported attempt-to-attempt relation is drawn; this is Deferred.
+Status: B0/B1/B5/B8 remain Partial pending independent parity review. B2 is FAIL and moved out of this round's visual acceptance: it is a product-fact gap and PLAN-D input, not a frontend implementation gap.
 
 | Frame | Implemented structure | Intentionally omitted unsupported content | Remaining Deferred |
 |---|---|---|---|
-| B0 Run Trace shell | Compact My Work breadcrumb, Work Detail/Run Trace header, Historical context, Timeline/Events relationship, restrained MCP-only disclosure | Map, replay, controls, verbose unavailable blocks, product status | Full shell token migration remains deferred |
-| B1 Timeline normal | Captured timestamp-derived 5–7 tick rail, actor → work item → attempt rows, duration labels, selected attempt outline, actor-only accent colors; uncaptured timing stays as non-positioned Attempt disclosure | Status color semantics, local/synthetic time, technical IDs, guessed placement for uncaptured timing | Browser parity evidence |
-| B2 Timeline rework | Neutral target marker/short annotation at the captured feedback edge's attempt position; explicit Recorded feedback relation label | Failed/returned/rejected claims, feedback content, inferred cross-Attempt connection | Cross-Attempt connection is Deferred because the recorded edge has only one attempt_id; missing geometry is silently omitted |
-| B5 Execution Inspector | Grouped Subject / actor, Attempt N, timing facts, capture facts using existing fields only; ~315px inspector | INPUT/OUTPUT/DECISIONS/LOGS placeholders, product status | Browser parity evidence |
-| B8 Events | Dense non-interactive table: sequence, actor, Work Item, kind, category, MCP activity status, result capture; horizontal overflow | Time, attempt, sorting/filter claims, synthetic rows, technical IDs | Browser parity evidence |
+| B0 Run Trace shell | Compact single-layer Work Detail → Run Trace hierarchy, Historical context, Timeline/Events relationship, restrained MCP-only disclosure | Map, replay, controls, verbose unavailable blocks, product status | Partial; full shell token migration remains deferred |
+| B1 Timeline normal | Captured timestamp-derived 5–7 tick rail, stable actor-identity accent tokens, actor → work item → attempt rows, duration labels, selected Attempt, uncaptured timing as non-positioned disclosure | Status color semantics, local/synthetic time, technical IDs, guessed placement for uncaptured timing | Partial; browser parity evidence |
+| B2 Timeline rework | No timeline feedback geometry; only ordinary secondary disclosure that recorded feedback edges exist and relation geometry is unavailable | Return-edge geometry, target Attempt identity, failed/returned/rejected claims, feedback content | FAIL — moved out of this round's visual acceptance; product-fact gap / PLAN-D input |
+| B5 Execution Inspector | Selected execution subject with actor subtitle, natural primary/secondary fact hierarchy, grouped Attempt N, timing facts, capture facts using existing fields only; ~315px inspector | INPUT/OUTPUT/DECISIONS/LOGS placeholders, product status | Partial; browser parity evidence |
+| B8 Events | Dense non-interactive table with non-interactive recorded-events toolbar skeleton, clear table headers, sequence/actor/Work Item/kind/category/MCP activity status/result capture | Time, attempt, sorting/filter claims, synthetic rows, technical IDs, fake controls | Partial; browser parity evidence |
+
+## B2 classification: product-fact gap / PLAN-D input
+
+1. The design reference at `design/figma/01-work-detail/timeline-rework/` expresses a return edge from the feedback source Attempt to a later rework target Attempt across the timeline, including the corresponding interaction.
+2. The accepted `ProductRunTraceResponse` `data.trace.edges[]` feedback variant is `ProductFeedbackEdgeSchema` in `src/contracts/product-projection/edges.ts`; it contains only the source-side `attempt_id` and lacks a sibling `target_attempt_id` (product Attempt identity). The final field name is subject to PLAN-D/Human Gate decision, but the semantic position belongs on the feedback edge.
+3. `attempt_id` is currently taken directly by `projectFeedbackEdges` from the `attempt.id` that produced the feedback fact, so it anchors only the source. A Work Item may have multiple later Attempts; chronology or `attempt_no` cannot prove which one is the target, so the frontend cannot infer it.
+4. **在这个字段补上之前，任何画出这条边的前端实现都是在造数据。** This is a PLAN-D input / product-fact gap, not “frontend not implemented”.
 
 ## Contract and evidence gates
 
@@ -23,6 +30,10 @@ Status: C-owned implementation complete. B2 cross-Attempt connection stop condit
 - 59e1559cfd7b4f13c29d58e6bd0904e44d31af3b — docs(frontend): finalize O-H9 parity handoff — 1 file, 2 insertions(+), 2 deletions(-).
 - 0a7d6cdf54bdb5ac2fbea2ef8552799892e4549a — fix(frontend): correct B2 feedback target; stop condition deferred — 2 files, 6 insertions(+), 12 deletions(-).
 - 152b0a006d48c60b10e630d6488e0b0bf76cefd9 — fix(frontend): correct B2 feedback target and uncaptured timing — 3 files, 6 insertions(+), 4 deletions(-).
+- 93e6f15387c67da3bde171faeded37643a480e3d — docs(frontend): record B2 honesty fixes — 1 file, 2 insertions(+).
+- 4f4e6671682edc373ef1210b28396062b436f105 — docs(frontend): include complete O-H9 commit record — 1 file, 1 insertion(+), 1 deletion(-).
+- f8373e68db21f7d31c07c15323bae8eb3e4e78ce — fix(frontend): type recorded B2 feedback edges — 1 file, 2 insertions(+), 1 deletion(-).
+- b22488f6a2aeb7a9f9da517db350163a1d3badf3 — docs(frontend): close O-H9 ownership status — 1 file, 1 insertion(+), 1 deletion(-).
 
 ## Exact files
 

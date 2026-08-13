@@ -62,6 +62,13 @@ export function runnerOutcome({ targetAbsent, targetStillAbsent, status }) {
   };
 }
 
+export function inputMarkerFraming(stdout, marker) {
+  const framing = Buffer.isBuffer(stdout) && stdout.length > 0 && stdout.at(-1) !== 0x0a
+    ? Buffer.from('\n')
+    : Buffer.alloc(0);
+  return Buffer.concat([framing, Buffer.from(`${marker}\n`)]);
+}
+
 async function runFixedCommand(directory) {
   const stdoutChunks = [];
   const stderrChunks = [];
@@ -123,7 +130,7 @@ async function main() {
   });
   if (outcome.emitMarker) {
     const marker = C3_E8_INPUT_MARKERS[kind];
-    process.stdout.write(`${marker}\n`);
+    process.stdout.write(inputMarkerFraming(status.stdout, marker));
     writeEvidence(evidenceDirectory, 'marker-status.json', `${JSON.stringify({ marker, emitted: true })}\n`);
   } else {
     writeEvidence(

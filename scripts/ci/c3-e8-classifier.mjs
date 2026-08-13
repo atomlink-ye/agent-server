@@ -21,6 +21,12 @@ function classifierLine(line) {
   return line;
 }
 
+export function classifierFraming(stdout) {
+  return Buffer.isBuffer(stdout) && stdout.length > 0 && stdout.at(-1) !== 0x0a
+    ? Buffer.from('\n')
+    : EMPTY_BUFFER;
+}
+
 function result({
   processExit,
   stdout = EMPTY_BUFFER,
@@ -109,6 +115,7 @@ export function classifyChild({ kind, childExitCode, childSignal, stdout = EMPTY
   const expectedCount = markerLines.filter((line) => line === expectedMarker).length;
 
   if (markerLines.length === 1 && expectedCount === 1) {
+    process.stdout.write(classifierFraming(stdout));
     const marker = classifierLine(
       `c3_e8_classifier_missing:kind=${kind}:marker=${expectedMarker}`,
     );

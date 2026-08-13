@@ -7,9 +7,10 @@ import {
   C3_E8_KINDS,
   classify,
   classifyChild,
+  classifierFraming,
   parseCliArgv,
 } from './c3-e8-classifier.mjs';
-import { parseRunnerArgs, runnerOutcome } from './c3-e8-absence-runner.mjs';
+import { inputMarkerFraming, parseRunnerArgs, runnerOutcome } from './c3-e8-absence-runner.mjs';
 
 const node = process.execPath;
 const classifierPath = fileURLToPath(new URL('./c3-e8-classifier.mjs', import.meta.url));
@@ -41,6 +42,27 @@ describe('C3/E8 classifier duals', () => {
     assert.equal(outcome.process, 2);
     assert.equal(outcome.childExitCode, 2);
     assert.equal(outcome.marker, `c3_e8_classifier_missing:kind=${kind}:marker=${marker}`);
+  });
+
+  it('frames an unterminated child marker before the classifier marker without changing child bytes', () => {
+    const childBytes = Buffer.from(marker);
+    const outcome = classifyChild({
+      kind,
+      childExitCode: 2,
+      childSignal: null,
+      stdout: childBytes,
+      stderr: Buffer.alloc(0),
+      spawnError: null,
+    });
+    assert.equal(outcome.process, 2);
+    assert.deepEqual(classifierFraming(childBytes), Buffer.from('\n'));
+    const finalBytes = Buffer.concat([
+      childBytes,
+      classifierFraming(childBytes),
+      Buffer.from(`${outcome.marker}\n`),
+    ]);
+    assert.deepEqual(finalBytes, Buffer.from(`${marker}\nc3_e8_classifier_missing:kind=${kind}:marker=${marker}\n`));
+    assert.deepEqual(childBytes, Buffer.from(marker));
   });
 
   it('does not infer missing from an unmarked child exit 2', async () => {
@@ -163,6 +185,28 @@ describe('C3/E8 classifier duals', () => {
       status: { code: 1, signal: null, spawnError: null },
     });
     assert.deepEqual(safe, { emitMarker: true, processExit: 1 });
+
+    const rawNonNewline = Buffer.from('raw-vitest-output');
+    const framedInput = inputMarkerFraming(rawNonNewline, marker);
+    assert.deepEqual(framedInput, Buffer.from(`\n${marker}\n`));
+    const outer = classifyChild({
+      kind,
+      childExitCode: 1,
+      childSignal: null,
+      stdout: Buffer.concat([rawNonNewline, framedInput]),
+      stderr: Buffer.alloc(0),
+      spawnError: null,
+    });
+    assert.equal(outer.process, 2);
+    const finalBytes = Buffer.concat([
+      rawNonNewline,
+      framedInput,
+      Buffer.from(`${outer.marker}\n`),
+    ]);
+    assert.deepEqual(
+      finalBytes,
+      Buffer.from(`raw-vitest-output\n${marker}\nc3_e8_classifier_missing:kind=${kind}:marker=${marker}\n`),
+    );
 
     for (const status of [
       { code: 0, signal: null, spawnError: null },

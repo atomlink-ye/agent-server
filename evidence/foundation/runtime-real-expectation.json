@@ -1,0 +1,90 @@
+{
+  "schema": "agent-server.foundation.runtime-real-expectation",
+  "version": 1,
+  "purpose": "Predeclare the Phase C real-provider business outcome and runtime-ownership proof before the run.",
+  "business_entrypoint": {
+    "scenario": "product-projection-parallel-success",
+    "create_work": "POST /api/v1/works",
+    "start_run": "POST /api/v1/works/{work_id}/runs",
+    "observe_run": "GET /api/v1/works/{work_id}/runs/{work_run_id}",
+    "observe_trace": "GET /api/v1/works/{work_id}/runs/{work_run_id}/trace"
+  },
+  "required_nonempty_identifiers": [
+    "work_id",
+    "work_run_id"
+  ],
+  "expected_terminal_state": "succeeded",
+  "positive_business_predicate": {
+    "kind": "exact_random_marker_round_trip",
+    "marker_generation": "A cryptographically random non-secret marker generated immediately before the run.",
+    "input_assertion": "The marker is included in the submitted business instruction.",
+    "output_assertion": "The accepted business result contains the exact same marker byte-for-byte.",
+    "additional_assertions": [
+      "The work run reaches projection_status internally_anchored.",
+      "The observed work_run.id exactly equals the recorded work_run_id."
+    ]
+  },
+  "runtime": {
+    "provider": "opencode",
+    "model": "opencode-go/deepseek-v4-flash",
+    "usage_assertions": {
+      "input_tokens": "integer greater than zero",
+      "output_tokens": "integer greater than zero"
+    }
+  },
+  "topology_assertions": {
+    "external_paseo": [
+      "Paseo runs in an external Compose service/container with a nonempty container ID.",
+      "The external Paseo container ID differs from the Agent Server container ID.",
+      "The external service owns the Paseo process, provider toolchain mount, runtime HOME/PASEO_HOME/XDG state, provider/model/timeouts, and provider credentials.",
+      "The external service depends on provider-toolchain-init."
+    ],
+    "agent_server": [
+      "No Paseo process is present in the Agent Server container.",
+      "No provider toolchain mount is present on the Agent Server service or container.",
+      "No provider-toolchain-init dependency is present on the Agent Server service.",
+      "No provider/model/provider-credential variable is owned by the Agent Server service or container.",
+      "Agent Server connects to the external runtime only through PASEO_WS_URL."
+    ]
+  },
+  "secret_scan": {
+    "scope": [
+      "stdout",
+      "stderr",
+      "every proof artifact"
+    ],
+    "expected_hits": 0
+  },
+  "cleanup_assertions": [
+    "Cleanup is limited to the unique Phase C Compose project and run-owned temporary artifacts.",
+    "Cleanup does not prune Docker globally or delete operator-owned provider volumes.",
+    "After cleanup the unique project has no containers, networks, or project-scoped volumes."
+  ],
+  "negative_control": {
+    "mutation": "Run the same verifier with an explicitly nonexistent provider or definition.",
+    "expected_verifier_exit": 1,
+    "expected_status": "FAIL",
+    "forbidden_reclassification": "MISSING"
+  },
+  "chronology": {
+    "stages": [
+      "expectation_commit",
+      "real_run",
+      "proof_commit",
+      "canonical_switch_commit"
+    ],
+    "rules": [
+      "The expectation commit exists before the real run timestamp.",
+      "The real run timestamp is earlier than the proof commit timestamp.",
+      "The proof commit is earlier than the canonical-switch commit.",
+      "The expectation commit is an ancestor of the proof commit.",
+      "The proof commit is an ancestor of the canonical-switch commit."
+    ]
+  },
+  "forbidden_evidence": [
+    "secret or token",
+    "prompt body",
+    "raw result body",
+    "credential value"
+  ]
+}

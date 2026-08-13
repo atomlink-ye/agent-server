@@ -20,6 +20,17 @@ const populatedWorkList = {
   works: [...parallelWorkList.works, ...reworkWorkList.works],
 };
 const emptyWorkList = { ...parallelWorkList, works: [] };
+const englishProductStatusPattern =
+  String.raw`\b(?:Needs You|Problem|Failed|Stuck|Completed|Complete|Succeeded|Success|` +
+  String.raw`Running|In progress|Processing|Waiting)\b`;
+const forbiddenProductStatusLanguage = new RegExp(
+  [
+    englishProductStatusPattern,
+    String.raw`\b(?:four[- ]state(?:s)?|4[- ]state(?:s)?)\b|四态`,
+    '成功|已完成|进行中|处理中|等待|待处理',
+  ].join('|'),
+  'i',
+);
 
 function jsonResponse(body: unknown): Response {
   return {
@@ -39,11 +50,14 @@ function deferred<T>() {
 
 function renderedStatusSemantics(host: HTMLElement): string {
   return [...host.querySelectorAll<HTMLElement>('*')]
-    .flatMap((element) => [
-      element.className,
-      element.getAttribute('aria-label') ?? '',
-      element.getAttribute('data-state') ?? '',
-    ])
+    .flatMap((element) => {
+      const stateAttributes = [...element.attributes]
+        .filter(
+          ({ name }) => name.startsWith('aria-') || name.startsWith('data-'),
+        )
+        .map(({ name, value }) => `${name}=${value}`);
+      return [element.className, ...stateAttributes];
+    })
     .join(' ');
 }
 
@@ -74,6 +88,17 @@ it(
         await Promise.resolve();
       });
 
+      expect(host.textContent).toContain('My Work');
+      expect(host.textContent).toContain('Work records');
+      expect(
+        host.querySelector('[data-testid="work-list-loading"]'),
+      ).toBeNull();
+      expect(
+        host.querySelector('[data-testid="work-list-empty"]'),
+      ).toBeNull();
+      expect(
+        host.querySelector('[data-testid="work-list-error"]'),
+      ).toBeNull();
       const cards = [
         ...host.querySelectorAll<HTMLLIElement>('.work-list-card'),
       ];
@@ -94,11 +119,9 @@ it(
         ).not.toBeNull();
       }
 
-      expect(host.textContent).not.toMatch(
-        /Needs You|Problem|Failed|Stuck|Completed|已完成/,
-      );
+      expect(host.textContent).not.toMatch(forbiddenProductStatusLanguage);
       expect(renderedStatusSemantics(host)).not.toMatch(
-        /needs[-_ ]you|problem|failed|stuck|completed|已完成/i,
+        forbiddenProductStatusLanguage,
       );
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -130,6 +153,17 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       loadingHost.querySelector('[data-testid="work-list-loading"]'),
     ).not.toBeNull();
+    expect(loadingHost.textContent).toContain('Loading');
+    expect(loadingHost.textContent).toContain('Getting your Work records');
+    expect(loadingHost.textContent).toContain(
+      'We are retrieving the Work titles available to review.',
+    );
+    expect(loadingHost.textContent).not.toContain(
+      'Nothing is available to review yet.',
+    );
+    expect(loadingHost.textContent).not.toContain(
+      'Work records are temporarily unavailable.',
+    );
     expect(
       loadingHost.querySelector('[data-testid="work-list-empty"]'),
     ).toBeNull();
@@ -152,6 +186,18 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       loadingHost.querySelector('[data-testid="work-list-empty"]'),
     ).not.toBeNull();
+    expect(loadingHost.textContent).toContain('No Work records');
+    expect(loadingHost.textContent).toContain(
+      'Nothing is available to review yet.',
+    );
+    expect(loadingHost.textContent).toContain(
+      'When a Work becomes available here, its title will open its ' +
+        'recorded historical run details.',
+    );
+    expect(loadingHost.textContent).not.toContain('Getting your Work records');
+    expect(loadingHost.textContent).not.toContain(
+      'Work records are temporarily unavailable.',
+    );
     expect(
       loadingHost.querySelector('[data-testid="work-list-error"]'),
     ).toBeNull();
@@ -180,6 +226,15 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       errorHost.querySelector('[data-testid="work-list-error"]'),
     ).not.toBeNull();
+    expect(errorHost.textContent).toContain('Couldn’t load Work');
+    expect(errorHost.textContent).toContain(
+      'Work records are temporarily unavailable.',
+    );
+    expect(errorHost.textContent).toContain('This is a connection problem');
+    expect(errorHost.textContent).not.toContain('Getting your Work records');
+    expect(errorHost.textContent).not.toContain(
+      'Nothing is available to review yet.',
+    );
     expect(
       errorHost.querySelector('[data-testid="work-list-loading"]'),
     ).toBeNull();

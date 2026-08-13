@@ -39,6 +39,7 @@
     "check:format": "prettier --check .",
     "check:docs": "node scripts/ci/check-docs.mjs && node --test scripts/ci/check-apache-notice.test.mjs && node scripts/ci/check-apache-notice.mjs",
     "check:exec-plans": "node --test scripts/ci/check-exec-plans.test.mjs && node scripts/ci/check-exec-plans.mjs",
+    "modularization:verify:ownership-ledger": "node scripts/ci/ownership-ledger-harness.mjs",
     "check": "pnpm check:types && pnpm web:check:types && pnpm check:format && pnpm check:docs && pnpm check:exec-plans",
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration && pnpm test:web",
     "test:unit": "vitest run --config vitest.unit.config.ts",

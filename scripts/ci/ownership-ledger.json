@@ -1,0 +1,71 @@
+{
+  "schema": "ownership-ledger.v1",
+  "baseline": "888630a8a730ce6bcdfe2e5fb679a3620ac171aa",
+  "callSiteScan": {
+    "glob": "src/infrastructure/postgres/*.ts",
+    "expression": ".query\\s*\\(",
+    "unclassified": "MISSING",
+    "knownMissingCallSiteCount": 38
+  },
+  "repositories": {
+    "postgres-admission-repository.ts": "Execution",
+    "postgres-agent-registry.ts": "Resource",
+    "postgres-channel-repository.ts": "Channel",
+    "postgres-collaborative-team-repository.ts": "Execution",
+    "postgres-environment-registry.ts": "Resource",
+    "postgres-execution-fact-query.ts": "Execution",
+    "postgres-invokable-repository.ts": "Resource",
+    "postgres-lark-review-surface-repository.ts": "Channel",
+    "postgres-learning-proposal-repository.ts": "Memory",
+    "postgres-memory-api-repository.ts": "Memory",
+    "postgres-run-dispatcher.ts": "Execution",
+    "postgres-run-event-repository.ts": "Execution",
+    "postgres-run-repository.ts": "Execution",
+    "postgres-runtime-session-repository.ts": "Runtime",
+    "postgres-service-account-workspace-bootstrap.ts": "Platform",
+    "postgres-session-repository.ts": "Execution",
+    "postgres-task-repository.ts": "Execution",
+    "postgres-team-message-repository.ts": "Execution",
+    "postgres-work-identity-repository.ts": "Work",
+    "postgres-work-projection-facts-query.ts": "Work",
+    "postgres-work-projection-facts-source.ts": "Work",
+    "postgres-workspace-memory-repository.ts": "Memory",
+    "postgres.ts": "Platform"
+  },
+  "callSiteCounts": {
+    "postgres-admission-repository.ts": 5, "postgres-agent-registry.ts": 6, "postgres-channel-repository.ts": 12, "postgres-collaborative-team-repository.ts": 97, "postgres-environment-registry.ts": 13, "postgres-execution-fact-query.ts": 0, "postgres-invokable-repository.ts": 12, "postgres-lark-review-surface-repository.ts": 11, "postgres-learning-proposal-repository.ts": 10, "postgres-memory-api-repository.ts": 13, "postgres-run-dispatcher.ts": 0, "postgres-run-event-repository.ts": 1, "postgres-run-repository.ts": 6, "postgres-runtime-session-repository.ts": 18, "postgres-service-account-workspace-bootstrap.ts": 1, "postgres-session-repository.ts": 40, "postgres-task-repository.ts": 3, "postgres-team-message-repository.ts": 3, "postgres-work-identity-repository.ts": 5, "postgres-work-projection-facts-query.ts": 0, "postgres-work-projection-facts-source.ts": 0, "postgres-workspace-memory-repository.ts": 11, "postgres.ts": 6
+  },
+  "tables": {
+    "tasks": "Execution", "runs": "Execution", "admissions": "Execution", "run_dispatches": "Execution",
+    "agent_definitions": "Resource", "agent_versions": "Resource", "team_definitions": "Resource", "team_versions": "Resource", "compiled_team_plans": "Resource", "agent_registry_idempotency": "Resource", "team_registry_idempotency": "Resource",
+    "workspace_memory_proposals": "Memory", "workspace_memory_entries": "Memory", "workspace_memory_owned_entries": "Memory", "workspace_memory_snapshots": "Memory", "workspace_memory_projection_scopes": "Memory", "workspace_memory_snapshot_entries": "Memory", "workspace_memory_projection_receipts": "Memory", "memory_stores": "Memory", "memories": "Memory", "memory_versions": "Memory", "learning_proposals": "Memory",
+    "workspaces": "Work", "works": "Work", "work_runs": "Work", "work_run_resource_manifest": "Work",
+    "product_sessions": "Execution", "session_lanes": "Execution", "messages": "Execution", "session_reset_idempotency": "Execution",
+    "runtime_session_bindings": "Runtime", "session_launch_snapshots": "Runtime", "runtime_sessions": "Runtime",
+    "run_events": "Execution", "team_executions": "Execution", "team_node_executions": "Execution", "team_runs": "Execution", "team_member_runs": "Execution", "team_work_items": "Execution", "team_work_item_attempts": "Execution", "team_command_receipts": "Execution", "team_messages": "Execution", "team_work_item_dependencies": "Execution", "team_completion_decisions": "Execution", "team_completion_decision_targets": "Execution",
+    "channel_ingress_events": "Channel", "channel_conversation_bindings": "Channel", "channel_outbox": "Channel", "channel_delivery_attempts": "Channel", "lark_memory_review_surfaces": "Channel",
+    "environment_definitions": "Resource", "environment_versions": "Resource", "environment_registry_idempotency": "Resource"
+  },
+  "ports": {
+    "admission-repository.ts": "Execution", "agent-project-lock-store.ts": "Resource", "agent-registry.ts": "Resource", "agent-runtime.ts": "Runtime", "channel-repository.ts": "Channel", "environment-registry.ts": "Resource", "execution-admission.ts": "Execution", "execution-fact-query.ts": "Execution", "file-store.ts": "Platform", "invokable-repository.ts": "Resource", "lark-delivery.ts": "Channel", "lark-memory-document.ts": "Channel", "lark-review-surface-repository.ts": "Channel", "learning-proposal-repository.ts": "Memory", "memory-api-repository.ts": "Memory", "memory-review-card-renderer.ts": "Channel", "project-skill-registrar.ts": "Platform", "run-dispatcher.ts": "Execution", "run-events.ts": "Execution", "run-repository.ts": "Execution", "runtime-session-repository.ts": "Runtime", "session-repository.ts": "Execution", "task-repository.ts": "Execution", "team-execution-repository.ts": "Execution", "team-message-repository.ts": "Execution", "work-definition-read.ts": "Resource", "work-identity-repository.ts": "Work", "workspace-memory-repository.ts": "Memory"
+  },
+  "contracts": {
+    "agents.ts": "Resource", "environments.ts": "Resource", "health.ts": "Platform", "http.ts": "Platform", "learning-proposals.ts": "Memory", "memory-api.ts": "Memory", "product-accepted-subset.v1.json": "Platform", "product-contract-policy.ts": "Platform", "product-source-refs.ts": "Work", "product-work-commands.ts": "Work", "runs.ts": "Execution", "sessions.ts": "Execution", "tasks.ts": "Execution", "teams.ts": "Execution", "workspace-memory.ts": "Memory",
+    "product-accepted-subset/controls.ts": "Platform", "product-accepted-subset/index.ts": "Platform", "product-accepted-subset/read.ts": "Platform", "product-projection/edges.ts": "Work", "product-projection/identity.ts": "Work", "product-projection/index.ts": "Work", "product-projection/lineage-manifest.ts": "Work", "product-projection/product-state.ts": "Work"
+  },
+  "crossCapability": {
+    "allowed": ["(a)", "(b)", "(c)"],
+    "requiredForMultipleOwners": true,
+    "explanations": {
+      "(a)": "named read-model facts reader exception",
+      "(b)": "narrow interface owned by the depended-on capability",
+      "(c)": "same legacy consistency cluster; corresponding later module migration is blocked"
+    }
+  },
+  "lockRows": [
+    { "file": "postgres-session-repository.ts", "line": 216, "disposition": "(c)", "reason": "session lane and product-session lock belong to the same legacy consistency cluster" },
+    { "file": "postgres-session-repository.ts", "line": 334, "disposition": "(c)", "reason": "session lane write-side lock remains in the Execution consistency cluster" },
+    { "file": "postgres-session-repository.ts", "line": 369, "disposition": "(c)", "reason": "reset lock remains in the Execution consistency cluster" }
+  ],
+  "crossCapabilityDispositions": ["(a)", "(b)", "(c)"]
+}

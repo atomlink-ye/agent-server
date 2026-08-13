@@ -29,7 +29,7 @@ No `apps/web/**`, recorder fixture, contract, package/lock/config, or C1/C2/C3 r
   - Starts from the exact recorded Work title, requires exactly one matching link, verifies its recorded Work href, follows it, and verifies the navigated Work identity.
   - Parses and compares the Work list, Work response, WorkRun list, WorkRun response, and trace response with the current full schemas.
   - Compares recorded attempt timing/span facts, visible per-Attempt duration text and aria, proportional geometry styles, feedback marker count, MCP activity sequence/association facts, and rendered Events count.
-  - Red arms are DOM-only after clean response comparison: rework removes exactly one feedback marker; the selected scenario changes exactly one Attempt duration/geometry. The same baseline DOM assertion function then must detect the targeted mismatch. Inapplicable arms, missing selectors, or green assertions produce `MISSING` with no red evidence; fixture/upstream responses are never altered.
+  - Red arms are DOM-only after clean response comparison and a clean unmutated run of the same DOM assertion (including expected counts): rework switches back to Timeline and removes exactly one feedback marker; the selected scenario changes exactly one Attempt duration/geometry. The same assertion then must contain a newly introduced targeted mismatch and no unrelated mismatch. A pre-existing DOM mismatch, inapplicable arm, missing selector, ineffective mutation, or green assertion produces `MISSING` with no red evidence; fixture/upstream responses are never altered.
 
 ## Hard contract gate
 

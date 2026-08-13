@@ -368,14 +368,53 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       // evidence for the requested mutation.
       return redArm === 'none' ? FAIL : MISSING;
     }
-    if (!(await applyDomMutation(page, scenario, redArm))) return MISSING;
-    const dom = await assertTraceDom(page, actual);
-    const mutationDetected =
-      redArm === 'omit-feedback'
-        ? dom.feedbackMismatch
-        : redArm === 'constant-duration'
-          ? dom.durationOrGeometryMismatch
-          : false;
+    // Run the exact DOM assertion on the unmutated page first. A red arm is
+    // evidence only when this baseline is completely clean; otherwise a
+    // pre-existing mismatch could be falsely attributed to the mutation.
+    const baselineDom = await assertTraceDom(page, actual);
+    if (baselineDom.mismatches.length > 0)
+      return redArm === 'none' ? FAIL : MISSING;
+
+    let dom = baselineDom;
+    if (redArm !== 'none') {
+      // assertTraceDom leaves the trace on Events. Restore the same Timeline
+      // surface and wait for the exact mutation targets before changing DOM.
+      try {
+        const timeline = page.getByRole('button', { name: 'Timeline', exact: true });
+        await timeline.waitFor({ state: 'visible', timeout: startupTimeoutMs });
+        await timeline.click();
+        await page.locator('[data-testid="trace-attempt"]').waitFor({
+          state: 'visible',
+          timeout: startupTimeoutMs,
+        });
+        if (redArm === 'omit-feedback') {
+          await page.locator('.run-trace__feedback').first().waitFor({
+            state: 'visible',
+            timeout: startupTimeoutMs,
+          });
+        }
+      } catch {
+        return MISSING;
+      }
+      if (!(await applyDomMutation(page, scenario, redArm))) return MISSING;
+      dom = await assertTraceDom(page, actual);
+      const baselineMismatches = new Set(baselineDom.mismatches);
+      const targetedMismatches = dom.mismatches.filter((item) =>
+        redArm === 'omit-feedback'
+          ? item === 'feedback_marker_count'
+          : item.startsWith('attempt_duration:') || item.startsWith('attempt_geometry:'),
+      );
+      const unrelatedMismatches = dom.mismatches.filter((item) =>
+        !targetedMismatches.includes(item),
+      );
+      // The target must be newly introduced by this exact mutation, with no
+      // other DOM mismatch. Green or ambiguous red arms produce no evidence.
+      if (
+        targetedMismatches.length === 0 ||
+        dom.mismatches.some((item) => baselineMismatches.has(item)) ||
+        unrelatedMismatches.length > 0
+      ) return MISSING;
+    }
     const allMismatches = [...dom.mismatches];
 
     const candidate = process.env.C4_CANDIDATE_SHA ?? '';
@@ -404,7 +443,6 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       dom_mismatches: allMismatches,
     };
     if (redArm !== 'none') {
-      if (!mutationDetected) return MISSING;
       await writeEvidence(`red-arms/e11-${scenario}-${redArm}.json`, {
         ...base,
         status: 'FAIL',

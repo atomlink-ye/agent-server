@@ -312,6 +312,13 @@ function evaluateE6(options) {
   if (proof.agent_server_container_id === proof.paseo_runtime_container_id) failures.push('independent_container_identity');
   if (proof.secret_hits !== 0) failures.push('secret_scan');
   if (proof.negative_control?.exit !== 1 || proof.negative_control?.status !== 'FAIL') failures.push('negative_control');
+  if (
+    proof.cleanup?.down_exit !== 0 ||
+    proof.cleanup?.remaining_project_containers?.length !== 0 ||
+    proof.cleanup?.global_prune_used !== false ||
+    proof.cleanup?.external_provider_volume_deleted !== false
+  )
+    failures.push('scoped_cleanup');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {

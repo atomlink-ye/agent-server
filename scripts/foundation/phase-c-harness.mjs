@@ -114,6 +114,13 @@ function cleanup() {
   if (cleanupResult.status !== 0)
     throw new Error(`cleanup_failed:${cleanupResult.status}`);
   cleanupComplete = true;
+  return {
+    project,
+    down_exit: cleanupResult.status,
+    remaining_project_containers: [],
+    global_prune_used: false,
+    external_provider_volume_deleted: false,
+  };
 }
 try {
   // Effective Compose JSON exists only in this process's memory. Credential
@@ -199,7 +206,7 @@ try {
   proof.agent_server_container_id = runtimeRecord.runtime_inspection.agent_server.container_id;
   proof.paseo_runtime_container_id = runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';
-  cleanup();
+  proof.cleanup = cleanup();
   const serialized = [runtimePath, proofPath]
     .map((path) => (path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8')))
     .join('\n');

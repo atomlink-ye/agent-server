@@ -58,6 +58,77 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+const ownershipEnvironment = [
+  'OPENCODE_GO_API_KEY',
+  'PASEO_PROVIDER',
+  'PASEO_MODEL',
+  'PASEO_CONNECT_TIMEOUT_MS',
+  'PASEO_EXECUTION_TIMEOUT_MS',
+  'PASEO_SESSION_RPC_TIMEOUT_MS',
+  'PASEO_DAEMON_STARTUP_TIMEOUT_MS',
+  'PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS',
+  'PASEO_PROVIDER_REFRESH_TIMEOUT_MS',
+  'PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS',
+  'PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS',
+  'PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS',
+  'PASEO_PORT',
+  'PASEO_LISTEN_HOST',
+  'PASEO_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'XDG_CACHE_HOME',
+];
+
+function ownershipProjection(servicesValue) {
+  const services = Array.isArray(servicesValue)
+    ? Object.fromEntries(
+        servicesValue.map((service) => [service.name, service]),
+      )
+    : servicesValue;
+  const agent = services?.['agent-server'];
+  const runtime = services?.['paseo-runtime'];
+  if (!agent || !runtime) throw new Error('ownership services are missing');
+  const dependencies = (service) =>
+    Array.isArray(service.depends_on)
+      ? service.depends_on
+      : Object.entries(service.depends_on ?? {})
+          .filter(([, value]) => value !== null)
+          .map(([name]) => name);
+  const mountTargets = (service) =>
+    (service.mounts ?? service.volumes ?? []).map((mount) => {
+      if (typeof mount === 'string') return mount.split(':')[1] ?? '';
+      return mount.target ?? mount.destination ?? '';
+    });
+  const environment = (service) => service.environment ?? {};
+  const agentEnvironment = environment(agent);
+  const runtimeEnvironment = environment(runtime);
+  return {
+    agent_provider_dependency: dependencies(agent).includes(
+      'provider-toolchain-init',
+    ),
+    agent_runtime_dependency: dependencies(agent).includes('paseo-runtime'),
+    agent_provider_mount: mountTargets(agent).includes(
+      '/opt/provider-toolchain-volume',
+    ),
+    agent_owned_environment: ownershipEnvironment.filter(
+      (name) => agentEnvironment[name] !== null && name in agentEnvironment,
+    ),
+    agent_socket: agentEnvironment.PASEO_WS_URL ?? null,
+    agent_supervises_runtime: (agent.command ?? []).some((part) =>
+      String(part).includes('with-paseo'),
+    ),
+    runtime_provider_dependency: dependencies(runtime).includes(
+      'provider-toolchain-init',
+    ),
+    runtime_provider_mount: mountTargets(runtime).includes(
+      '/opt/provider-toolchain-volume',
+    ),
+    runtime_owned_environment: ownershipEnvironment.filter(
+      (name) => runtimeEnvironment[name] !== null && name in runtimeEnvironment,
+    ),
+  };
+}
+
 function runVerifierMutation(args, environment = {}) {
   const child = spawnSync(
     process.execPath,
@@ -582,6 +653,28 @@ function evaluateE6(options) {
   if (proof.agent_server_container_id === proof.paseo_runtime_container_id)
     failures.push('independent_container_identity');
   if (proof.secret_hits !== 0) failures.push('secret_scan');
+  let acceptedOwnership;
+  try {
+    acceptedOwnership = ownershipProjection(
+      proof.accepted_e4_projection?.services,
+    );
+    if (
+      acceptedOwnership.agent_provider_dependency ||
+      !acceptedOwnership.agent_runtime_dependency ||
+      acceptedOwnership.agent_provider_mount ||
+      acceptedOwnership.agent_owned_environment.length ||
+      acceptedOwnership.agent_socket !== 'ws://paseo-runtime:16767/ws' ||
+      acceptedOwnership.agent_supervises_runtime ||
+      !acceptedOwnership.runtime_provider_dependency ||
+      !acceptedOwnership.runtime_provider_mount ||
+      ownershipEnvironment.some(
+        (name) => !acceptedOwnership.runtime_owned_environment.includes(name),
+      )
+    )
+      failures.push('accepted_e4_projection');
+  } catch {
+    failures.push('accepted_e4_projection');
+  }
   if (
     proof.negative_control?.exit !== 1 ||
     proof.negative_control?.status !== 'FAIL' ||
@@ -602,6 +695,18 @@ function evaluateE6(options) {
       proof.cleanup?.external_provider_volume_after
   )
     failures.push('scoped_cleanup');
+  if (
+    proof.e4_mutation?.exit !== 1 ||
+    proof.e4_mutation?.status !== 'FAIL' ||
+    proof.e4_mutation?.cleanup?.down_exit !== 0 ||
+    proof.e4_mutation?.cleanup?.remaining_project_containers?.length !== 0 ||
+    proof.e4_mutation?.cleanup?.remaining_project_networks?.length !== 0 ||
+    proof.e4_mutation?.cleanup?.remaining_project_volumes?.length !== 0 ||
+    !nonempty(proof.e4_mutation?.cleanup?.external_provider_volume_before) ||
+    proof.e4_mutation.cleanup.external_provider_volume_before !==
+      proof.e4_mutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_mutation_cleanup');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {
@@ -661,34 +766,35 @@ function evaluateE6(options) {
     )
       .split('\n')
       .filter(Boolean);
-    const switchMakefile = git('show', `${canonicalSwitchCommit}:Makefile`);
-    const canonicalTargets = [
-      'setup',
-      'dev',
-      'dev-api',
-      'web-dev',
-      'web-e2e-smoke',
-      'mixed-team-journey',
-      'provider-smoke',
-    ];
-    const targetSelectsExternal = (target) => {
-      const recipe = recipeFor(switchMakefile, target);
-      if (recipe.includes('compose.external-runtime.yaml')) return true;
-      const variables = [...recipe.matchAll(/\$\(([^)]+)\)/gu)].map(
-        (match) => match[1],
-      );
-      return variables.some((name) =>
-        new RegExp(
-          `^${name}\\s*[:?+]?=.*compose\\.external-runtime\\.yaml`,
-          'mu',
-        ).test(switchMakefile),
-      );
-    };
-    if (
-      !switchFiles.includes('Makefile') ||
-      canonicalTargets.some((target) => !targetSelectsExternal(target))
-    )
+    if (!switchFiles.includes('compose.runtime.yaml'))
       failures.push('canonical_switch_exact_commit');
+    const canonicalRuntime = git(
+      'show',
+      `${canonicalSwitchCommit}:compose.runtime.yaml`,
+    );
+    const templatePath = 'evidence/foundation/compose.runtime.canonical.yaml';
+    const templateRuntime = git(
+      'show',
+      `${proof.candidate_sha}:${templatePath}`,
+    );
+    if (
+      canonicalRuntime !== templateRuntime ||
+      sha256(canonicalRuntime) !== sha256(templateRuntime)
+    )
+      failures.push('canonical_runtime_template_bytes');
+    if (switchFiles.includes('compose.external-runtime.yaml'))
+      failures.push('canonical_switch_optional_overlay');
+    const canonicalDockerRun = git(
+      'show',
+      `${canonicalSwitchCommit}:scripts/dev/docker-run`,
+    );
+    if (
+      !/compose\+=\(\s*-f compose\.yaml -f compose\.runtime\.yaml\s*\)/u.test(
+        canonicalDockerRun,
+      ) ||
+      canonicalDockerRun.includes('compose.external-runtime.yaml')
+    )
+      failures.push('canonical_runtime_entrypoint');
   } catch {
     failures.push('canonical_switch_exact_commit');
   }

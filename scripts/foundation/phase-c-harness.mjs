@@ -242,6 +242,7 @@ try {
     schema: 'agent-server.foundation.phase-c-runtime-record',
     version: 1,
     project,
+    candidate_sha: candidateSha,
     captured_at: new Date().toISOString(),
     effective_compose: { services: sanitizedCompose },
     runtime_inspection: {
@@ -268,6 +269,16 @@ try {
   ];
   const mutationCompose = ['compose', '-p', mutationProject, ...mutationFiles];
   let mutation;
+  let mutationRecord;
+  let mutationRecordPath;
+  let mutationCleanup;
+  const mutationProviderBefore = run('docker', [
+    'volume',
+    'inspect',
+    composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+    '--format',
+    '{{.Name}}',
+  ]).stdout.trim();
   try {
     const mutationEffective = JSON.parse(
       run(
@@ -293,8 +304,8 @@ try {
       'paseo-runtime',
       'agent-server',
     ]);
-    const mutationRecordPath = resolve(artifactRoot, 'e4-mutation-record.json');
-    const mutationRecord = {
+    mutationRecordPath = resolve(artifactRoot, 'e4-mutation-record.json');
+    mutationRecord = {
       schema: 'agent-server.foundation.phase-c-runtime-record',
       version: 1,
       project: mutationProject,
@@ -340,13 +351,68 @@ try {
       status: mutationResult.status,
     };
   } finally {
-    run(
+    const mutationDown = run(
       'docker',
       [...mutationCompose, 'down', '--remove-orphans', '--volumes'],
-      {
-        allow: [0, 1],
-      },
+      { allow: [0] },
     );
+    const mutationContainers = run(
+      'docker',
+      [...mutationCompose, 'ps', '-aq'],
+      {
+        allow: [0],
+      },
+    ).stdout.trim();
+    const mutationNetworks = run('docker', [
+      'network',
+      'ls',
+      '--filter',
+      `label=com.docker.compose.project=${mutationProject}`,
+      '--format',
+      '{{.Name}}',
+    ])
+      .stdout.trim()
+      .split(/\r?\n/u)
+      .filter(Boolean);
+    const mutationVolumes = run('docker', [
+      'volume',
+      'ls',
+      '--filter',
+      `label=com.docker.compose.project=${mutationProject}`,
+      '--format',
+      '{{.Name}}',
+    ])
+      .stdout.trim()
+      .split(/\r?\n/u)
+      .filter(Boolean);
+    const mutationProviderAfter = run('docker', [
+      'volume',
+      'inspect',
+      composeEnvironment.PROVIDER_TOOLCHAIN_VOLUME,
+      '--format',
+      '{{.Name}}',
+    ]).stdout.trim();
+    if (mutationContainers || mutationNetworks.length || mutationVolumes.length)
+      throw new Error('e4_mutation_cleanup_incomplete');
+    if (mutationProviderBefore !== mutationProviderAfter)
+      throw new Error('e4_mutation_external_provider_volume_changed');
+    mutationCleanup = {
+      project: mutationProject,
+      down_exit: mutationDown.status,
+      remaining_project_containers: [],
+      remaining_project_networks: mutationNetworks,
+      remaining_project_volumes: mutationVolumes,
+      external_provider_volume_before: mutationProviderBefore,
+      external_provider_volume_after: mutationProviderAfter,
+    };
+    if (mutationRecord && mutationRecordPath) {
+      mutationRecord.cleanup = mutationCleanup;
+      writeFileSync(
+        mutationRecordPath,
+        `${JSON.stringify(mutationRecord, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+    }
   }
 
   const proofPath = resolve(artifactRoot, 'proof-record.json');
@@ -388,9 +454,10 @@ try {
   proof.paseo_runtime_container_id =
     runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';
-  proof.e4_mutation = mutation;
+  proof.e4_mutation = { ...mutation, cleanup: mutationCleanup };
+  proof.accepted_e4_projection = runtimeRecord.effective_compose;
   proof.cleanup = cleanup();
-  const serialized = [runtimePath, proofPath]
+  const serialized = [runtimePath, mutationRecordPath, proofPath]
     .map((path) =>
       path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8'),
     )

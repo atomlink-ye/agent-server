@@ -1,0 +1,120 @@
+services:
+  provider-toolchain-init:
+    image: agent-server-runner:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    init: true
+    user: node
+    volumes:
+      - .:/workspace:ro
+      - provider-toolchain:/opt/provider-toolchain-volume
+    working_dir: /workspace
+    environment:
+      PROVIDER_VOLUME_ROOT: /opt/provider-toolchain-volume
+      PROVIDER_MANIFEST: /workspace/provider-toolchain/providers.manifest.json
+      HOME: /opt/provider-toolchain-volume/home
+      PNPM_HOME: /opt/provider-toolchain-volume/pnpm
+      PATH: /pnpm:/opt/provider-toolchain-volume/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command:
+      ['node', 'provider-toolchain/scripts/provider-toolchain.mjs', 'init']
+
+  paseo-runtime:
+    image: agent-server-runner:latest
+    init: true
+    user: node
+    depends_on:
+      provider-toolchain-init:
+        condition: service_completed_successfully
+    environment:
+      HOME: /runtime-state/home
+      PASEO_HOME: /runtime-state/paseo-home
+      XDG_CONFIG_HOME: /runtime-state/xdg-config
+      XDG_DATA_HOME: /runtime-state/xdg-data
+      XDG_CACHE_HOME: /runtime-state/xdg-cache
+      PASEO_RUNTIME_ROOT: /runtime-state
+      PASEO_PORT: '16767'
+      PASEO_LISTEN_HOST: 0.0.0.0
+      PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
+      PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
+      PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
+      PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_SESSION_RPC_TIMEOUT_MS: ${PASEO_SESSION_RPC_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: ${PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:-}
+    volumes:
+      - .:/workspace:ro
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+      - paseo-runtime-state:/runtime-state
+    working_dir: /workspace
+    entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
+    command: ['node', 'scripts/dev/paseo-runtime.mjs']
+
+  agent-server:
+    depends_on:
+      provider-toolchain-init: !reset null
+      paseo-runtime:
+        condition: service_started
+    environment:
+      OPENCODE_GO_API_KEY: !reset null
+      PASEO_CONNECT_TIMEOUT_MS: !reset null
+      PASEO_EXECUTION_TIMEOUT_MS: !reset null
+      PASEO_SESSION_RPC_TIMEOUT_MS: !reset null
+      PASEO_PROVIDER: !reset null
+      PASEO_MODEL: !reset null
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: !reset null
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: !reset null
+      PASEO_PORT: !reset null
+      PASEO_LISTEN_HOST: !reset null
+      PASEO_CORS_ORIGINS: !reset null
+      PASEO_HOSTNAMES: !reset null
+      PASEO_DEV_WEB_UI: !reset null
+      PASEO_RELAY_ENABLED: !reset null
+      PASEO_DICTATION_ENABLED: !reset null
+      PASEO_VOICE_MODE_ENABLED: !reset null
+      PASEO_HOME: !reset null
+      XDG_CONFIG_HOME: !reset null
+      XDG_DATA_HOME: !reset null
+      XDG_CACHE_HOME: !reset null
+      PASEO_WS_URL: ws://paseo-runtime:16767/ws
+    volumes: !override
+      - .:/workspace
+      - type: volume
+        source: node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
+      - local-state:/workspace/.local
+    command:
+      ['node', '--import', 'tsx', '--watch', 'src/entrypoints/api/server.ts']
+
+  web:
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+
+  runner:
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+
+volumes:
+  provider-toolchain:
+    name: ${PROVIDER_TOOLCHAIN_VOLUME:?docker-compose wrapper must provide PROVIDER_TOOLCHAIN_VOLUME}
+    external: true
+  paseo-runtime-state:

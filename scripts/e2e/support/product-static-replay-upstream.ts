@@ -114,9 +114,9 @@ export async function loadStaticReplayRecording(
   if (!Array.isArray(envelope.recording_documents) || envelope.recording_documents.length < 3)
     throw new ReplayMissingError(`recording_documents_missing:${scenario}`);
 
-  // Do not reshape this document. In particular, do not translate old
-  // target.run_id fields into a newer source_refs field. The current schema
-  // is the acceptance boundary for any future recorder replacement.
+  // Do not reshape this document or translate legacy correlation fields into
+  // newer identity fields. The current schema is the acceptance boundary for
+  // any future recorder replacement.
   const trace = parseTraceDocument(scenario, envelope.recording_documents[0]);
   const recording: ProductRecording = {
     recording_documents: envelope.recording_documents,

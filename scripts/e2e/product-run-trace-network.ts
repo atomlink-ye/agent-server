@@ -14,8 +14,8 @@ import {
   type ReplayMutation,
 } from './support/product-static-replay-upstream.js';
 
-type EndpointClass = 'works' | 'runs' | 'trace';
-type RequestObservation = {
+export type EndpointClass = 'works' | 'runs' | 'trace';
+export type RequestObservation = {
   readonly method: string;
   readonly url: string;
   readonly pathname: string;
@@ -24,11 +24,11 @@ type RequestObservation = {
   readonly forbidden: boolean;
 };
 
-type BrowserLike = {
+export type BrowserLike = {
   newPage: () => Promise<PageLike>;
   close: () => Promise<void>;
 };
-type PageLike = {
+export type PageLike = {
   on: (event: string, listener: (...args: any[]) => void) => void;
   addInitScript: (script: () => void) => Promise<void>;
   goto: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
@@ -93,7 +93,7 @@ function isForbidden(pathname: string): boolean {
   );
 }
 
-function observeRequest(origin: string, requestUrl: string, method: string): RequestObservation {
+export function observeRequest(origin: string, requestUrl: string, method: string): RequestObservation {
   const parsed = new URL(requestUrl);
   const sameOrigin = parsed.origin === origin;
   const pathname = parsed.pathname;
@@ -116,7 +116,7 @@ function processOutput(child: ChildProcess): { readonly stdout: string[]; readon
   return { stdout, stderr };
 }
 
-async function waitForReplayReady(child: ChildProcess, output: { stdout: string[]; stderr: string[] }): Promise<string> {
+export async function waitForReplayReady(child: ChildProcess, output: { stdout: string[]; stderr: string[] }): Promise<string> {
   const started = Date.now();
   return new Promise((resolveReady, reject) => {
     const tick = () => {
@@ -147,7 +147,7 @@ async function waitForReplayReady(child: ChildProcess, output: { stdout: string[
   });
 }
 
-async function waitForHttp(url: string): Promise<void> {
+export async function waitForHttp(url: string): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < startupTimeoutMs) {
     try {
@@ -161,12 +161,12 @@ async function waitForHttp(url: string): Promise<void> {
   throw new Error(`app_start_timeout:${url}`);
 }
 
-function stop(child: ChildProcess | undefined): void {
+export function stop(child: ChildProcess | undefined): void {
   if (!child || child.exitCode !== null) return;
   child.kill('SIGTERM');
 }
 
-async function launchReplay(): Promise<{ readonly child: ChildProcess; readonly url: string; readonly output: { stdout: string[]; stderr: string[] } }> {
+export async function launchReplay(): Promise<{ readonly child: ChildProcess; readonly url: string; readonly output: { stdout: string[]; stderr: string[] } }> {
   const child = spawn(process.execPath, ['--import', 'tsx', replayEntry], {
     cwd: resolve(fileURLToPath(new URL('../..', import.meta.url))),
     env: {
@@ -182,7 +182,7 @@ async function launchReplay(): Promise<{ readonly child: ChildProcess; readonly 
   return { child, url, output };
 }
 
-async function launchApp(upstreamUrl: string): Promise<{ readonly child: ChildProcess; readonly output: { stdout: string[]; stderr: string[] } }> {
+export async function launchApp(upstreamUrl: string): Promise<{ readonly child: ChildProcess; readonly output: { stdout: string[]; stderr: string[] } }> {
   const command = process.env.C4_APP_COMMAND ?? 'pnpm --filter @atomlink-ye/agent-server-web start';
   const child = spawn(command, {
     cwd: resolve(fileURLToPath(new URL('../..', import.meta.url))),
@@ -201,7 +201,7 @@ async function launchApp(upstreamUrl: string): Promise<{ readonly child: ChildPr
   return { child, output };
 }
 
-async function loadChromium(): Promise<BrowserLike> {
+export async function loadChromium(): Promise<BrowserLike> {
   try {
     const playwright = (await import('playwright')) as { readonly chromium?: { launch: (options?: Record<string, unknown>) => Promise<BrowserLike> } };
     if (!playwright.chromium) throw new Error('playwright_chromium_missing');
@@ -211,14 +211,14 @@ async function loadChromium(): Promise<BrowserLike> {
   }
 }
 
-async function writeEvidence(name: string, payload: Record<string, unknown>): Promise<void> {
+export async function writeEvidence(name: string, payload: Record<string, unknown>): Promise<void> {
   const directory = evidenceDirectory();
   const target = resolve(directory, name);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
-async function run(): Promise<number> {
+export async function runNetwork(): Promise<number> {
   let replay: { child: ChildProcess; url: string; output: { stdout: string[]; stderr: string[] } } | undefined;
   let app: { child: ChildProcess; output: { stdout: string[]; stderr: string[] } } | undefined;
   let browser: BrowserLike | undefined;
@@ -288,6 +288,7 @@ async function run(): Promise<number> {
   }
 }
 
-void run().then((code) => {
-  process.exitCode = code;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]))
+  void runNetwork().then((code) => {
+    process.exitCode = code;
+  });

@@ -228,9 +228,14 @@ async function mutateSchemaInvalid(inputRoot) {
 }
 
 function parseBaselineStatus(stdout, key) {
-  const match = stdout.match(new RegExp(`^${key}=([^\\n]+)$`, 'mu'));
+  const match = stdout.match(new RegExp(`^${key}=([^\\n]*)$`, 'mu'));
   return match?.[1] ?? 'NOT_REPORTED';
 }
+
+if (parseBaselineStatus('present_empty=\n', 'present_empty') !== '')
+  throw new Error('marker parser must distinguish present-empty from absent');
+if (parseBaselineStatus('', 'present_empty') !== 'NOT_REPORTED')
+  throw new Error('marker parser must report absent markers as NOT_REPORTED');
 
 function parseCheckerMarkers(stdout) {
   return {

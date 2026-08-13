@@ -11,6 +11,7 @@ const ledger = path.join(repo, 'scripts/ci/ownership-ledger.json');
 const candidateSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
 const hashes = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const inputs = { ledger: hashes(ledger), verifier: hashes(verifier) };
+const canonicalEvidenceInput = process.env.OWNERSHIP_CANONICAL_EVIDENCE_INPUT;
 function treeHash(root) {
   const files = [];
   function walk(current) { for (const name of fs.readdirSync(current).sort()) { const full = path.join(current, name); const stat = fs.lstatSync(full); if (stat.isSymbolicLink()) continue; if (stat.isDirectory()) walk(full); else files.push(path.relative(root, full)); } }
@@ -63,6 +64,7 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
 }
 
 const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => arm.exitCode !== 0 === arm.expectedNonzero) };
+if (canonicalEvidenceInput) result.canonical = JSON.parse(fs.readFileSync(canonicalEvidenceInput, 'utf8'));
 if (process.env.OWNERSHIP_EVIDENCE_PATH) fs.writeFileSync(process.env.OWNERSHIP_EVIDENCE_PATH, `${JSON.stringify(result)}\n`);
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = result.ok ? 0 : 2;

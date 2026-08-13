@@ -92,7 +92,9 @@ for arg in "$@"; do
       compose_options+=("$arg")
       skip_next=1
       ;;
-    --file=*|-f=*) compose_options+=("$arg") ;;
+    --file=*|-f=*|-p=*|--project-name=*|--project-directory=*|--env-file=*|--profile=*|--ansi=*|--progress=*)
+      compose_options+=("$arg")
+      ;;
   esac
 done
 raw_compose=(docker compose "${compose_options[@]}")
@@ -140,4 +142,4 @@ if ((should_provision)); then
   fi
 fi
 
-exec "${raw_compose[@]}" "$@"
+exec docker compose "$@"

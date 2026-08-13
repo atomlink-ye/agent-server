@@ -31,7 +31,7 @@ actual_exit_code=1
 expected_exit_code=1
 
 name=e1-nontriple
-command=copy map to isolated /root mutation directory; replace first fixture filename with see-recording; run E1 checker
+command=copy map to /root/c1-nontriple-e41d725; replace one full evidence triple with see-recording lacking hash/path/value delimiters; run E1 checker in short-lived container
 actual_exit_code=1
 expected_exit_code=1
 

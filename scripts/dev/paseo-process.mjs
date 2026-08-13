@@ -6,6 +6,8 @@ import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { resolveOpenCodeBinary } from './resolve-opencode.mjs';
+import { resolvePaseoBinary } from './resolve-paseo.mjs';
+import { resolveProviderBinary } from './resolve-provider.mjs';
 import {
   copyNamedEnvironment,
   createSafeRuntimeEnvironment,
@@ -119,10 +121,11 @@ export async function createIsolatedRuntimeEnvironment(runtimeRoot) {
 }
 
 /**
- * A persisted Paseo home can outlive the container that created it. Only a
- * parseable marker with a non-empty hostname from a different container is
- * safe to remove; an unreadable or same-host marker may describe a live
- * daemon and is therefore left untouched.
+ * A persisted Paseo home can outlive the container that created it.
+ * A parseable marker from another hostname is stale. For the same hostname
+ * (for example `docker compose restart` reusing a container hostname), retain
+ * it only when the PID is live and `/proc` identifies that PID as Paseo.
+ * Unreadable or ambiguous markers remain fail-closed.
  */
 export async function removeStalePaseoPid(paseoHome) {
   const pidPath = join(paseoHome, 'paseo.pid');
@@ -173,10 +176,40 @@ export async function removeStalePaseoPid(paseoHome) {
     return false;
   }
   if (recordedHostname === currentHostname) {
-    process.stderr.write(
-      'Paseo stale-pid check: paseo.pid hostname matches this container; left untouched.\n',
-    );
-    return false;
+    let alive = true;
+    try {
+      process.kill(parsedPid, 0);
+    } catch (error) {
+      alive = error?.code === 'EPERM';
+    }
+    if (alive && process.platform === 'linux') {
+      try {
+        const commandLine = await readFile(`/proc/${parsedPid}/cmdline`, 'utf8');
+        alive = /(?:^|\0|\/)paseo(?:\0|$)/u.test(commandLine);
+      } catch {
+        alive = false;
+      }
+    }
+    if (alive) {
+      process.stderr.write(
+        'Paseo stale-pid check: paseo.pid names a live process in this container; left untouched.\n',
+      );
+      return false;
+    }
+    try {
+      await unlink(pidPath);
+      process.stderr.write(
+        'Paseo stale-pid check: paseo.pid names a dead process in this container; removed stale marker.\n',
+      );
+      return true;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        process.stderr.write(
+          'Paseo stale-pid check: dead-process paseo.pid could not be removed; left untouched.\n',
+        );
+      }
+      return false;
+    }
   }
 
   try {
@@ -237,7 +270,9 @@ export async function startPaseo({
     );
   const isolated = await createIsolatedRuntimeEnvironment(runtimeRoot);
   await removeStalePaseoPid(isolated.paseoHome);
-  const paseoBinary = join(repositoryRoot, 'node_modules', '.bin', 'paseo');
+  const paseoBinary = await resolvePaseoBinary();
+  await resolveProviderBinary('claude', 'CLAUDE_CODE_BIN');
+  await resolveProviderBinary('codex', 'CODEX_BIN');
   const logPath = join(runtimeRoot, 'paseo-daemon.log');
   // One file represents one attempt. Appending lets an old timeout or SIGTERM
   // misclassify a later failure whose own log contains no such event.

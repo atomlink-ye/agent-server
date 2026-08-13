@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { execFile, spawn } from 'node:child_process';
 import {
   access,
   chmod,
@@ -10,9 +11,9 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const { register: registerTsx } = await import('tsx/esm/api');
 registerTsx();
@@ -25,6 +26,8 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
+import { resolveOpenCodeBinary } from '../dev/resolve-opencode.mjs';
+import { resolvePaseoBinary } from '../dev/resolve-paseo.mjs';
 
 const repositoryRoot = resolve(
   fileURLToPath(new URL('../..', import.meta.url)),
@@ -45,6 +48,7 @@ const projectRoot = join(runtimeRoot, 'project');
 const registryRoot = join(runtimeRoot, 'skill-registry');
 const skillRoot = join(projectRoot, 'skills', 'market-guide');
 const agentCwd = projectRoot;
+const execFileAsync = promisify(execFile);
 let admin;
 let evidence;
 let paseo;
@@ -292,11 +296,8 @@ try {
     files_digest_valid: registryEvidence.filesDigestValid,
     digest_prefix: digest.slice(0, 12),
     runtime_state_removed: false,
-    paseo_version: await installedVersion(['@getpaseo/cli']),
-    opencode_version: await installedVersion([
-      `opencode-${process.platform}-${process.arch}`,
-      'opencode',
-    ]),
+    paseo_version: await installedVersion('paseo'),
+    opencode_version: await installedVersion('opencode'),
   };
   cleanupResult = await cleanup({ retainDatabase: true });
   result.runtime_state_removed = cleanupResult.runtimeStateRemoved;
@@ -720,20 +721,29 @@ function parseStructuredDocuments(content) {
   }
 }
 
-async function installedVersion(packageNames) {
-  for (const packageName of packageNames) {
-    try {
-      return (
-        JSON.parse(
-          await readFile(
-            join(repositoryRoot, 'node_modules', packageName, 'package.json'),
-            'utf8',
-          ),
-        ).version ?? null
-      );
-    } catch {}
+async function installedVersion(provider) {
+  const binary =
+    provider === 'paseo'
+      ? await resolvePaseoBinary()
+      : await resolveOpenCodeBinary();
+  try {
+    const { stdout } = await execFileAsync(binary, ['--version'], {
+      encoding: 'utf8',
+    });
+    const version = stdout.trim();
+    if (!version) throw new Error(`${provider}_version_empty`);
+    return version;
+  } catch (error) {
+    if (Number.isInteger(error?.code) && error.code !== 0) {
+      const code = `${provider}_version_exit_${error.code}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    if (error?.signal) {
+      const code = `${provider}_version_signal_${error.signal}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    throw error;
   }
-  return null;
 }
 
 function replaceDatabase(value, database) {

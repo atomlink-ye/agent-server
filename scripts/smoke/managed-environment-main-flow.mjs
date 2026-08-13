@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import {
   access,
   chmod,
@@ -11,6 +12,7 @@ import {
 } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const { register: registerTsx } = await import('tsx/esm/api');
 registerTsx();
@@ -23,6 +25,8 @@ import {
   stopProcessTree,
   waitForHttp,
 } from '../dev/paseo-process.mjs';
+import { resolveOpenCodeBinary } from '../dev/resolve-opencode.mjs';
+import { resolvePaseoBinary } from '../dev/resolve-paseo.mjs';
 import {
   managedAgentYaml,
   managedEnvironmentYaml,
@@ -52,6 +56,7 @@ const runtimeRoot = join(
 );
 const projectCwd = join(runtimeRoot, 'project');
 const cellRoot = join(runtimeRoot, 'runtime-cells');
+const execFileAsync = promisify(execFile);
 let admin;
 let evidence;
 let paseo;
@@ -540,10 +545,8 @@ try {
     },
     authorization_header_persisted: authorizationHeaderPersisted,
     runtime_state_removed: false,
-    paseo_version: await installedVersion('@getpaseo/cli'),
-    opencode_version: await installedVersion(
-      `opencode-${process.platform}-${process.arch}`,
-    ),
+    paseo_version: await installedVersion('paseo'),
+    opencode_version: await installedVersion('opencode'),
   };
   cleanupResult = await cleanup({ retainDatabase: true });
   result.runtime_state_removed = cleanupResult.runtimeStateRemoved;
@@ -883,17 +886,28 @@ async function hasAuthorizationPersistence(root) {
   return false;
 }
 
-async function installedVersion(packageName) {
+async function installedVersion(provider) {
+  const binary =
+    provider === 'paseo'
+      ? await resolvePaseoBinary()
+      : await resolveOpenCodeBinary();
   try {
-    const packagePath = join(
-      repositoryRoot,
-      'node_modules',
-      packageName,
-      'package.json',
-    );
-    return JSON.parse(await readFile(packagePath, 'utf8')).version ?? null;
-  } catch {
-    return null;
+    const { stdout } = await execFileAsync(binary, ['--version'], {
+      encoding: 'utf8',
+    });
+    const version = stdout.trim();
+    if (!version) throw new Error(`${provider}_version_empty`);
+    return version;
+  } catch (error) {
+    if (Number.isInteger(error?.code) && error.code !== 0) {
+      const code = `${provider}_version_exit_${error.code}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    if (error?.signal) {
+      const code = `${provider}_version_signal_${error.signal}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    throw error;
   }
 }
 

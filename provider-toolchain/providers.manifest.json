@@ -1,0 +1,64 @@
+{
+  "schema": "https://0xdtech.dev/schemas/provider-toolchain-manifest-v1.json",
+  "schemaVersion": 1,
+  "toolchain": {
+    "paseo": { "version": "0.1.110", "package": "@getpaseo/cli" },
+    "serverPatch": {
+      "path": "patches/@getpaseo__server@0.1.110.patch",
+      "sha256": "f77c9e74b7f19992b85c8d588efb3eaded7ce592219b4f2d5c93c68ccff94ccf",
+      "markers": [
+        "PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS",
+        "PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS",
+        "PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS",
+        "PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS"
+      ]
+    }
+  },
+  "providers": {
+    "opencode": {
+      "version": "1.18.4",
+      "artifacts": {
+        "linux-amd64": {
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.4/opencode-linux-x64.tar.gz",
+          "sha256": "bab463c3fb3224d388bb7cfad63f38703df9cf0be2cfd2ce8cb49d886b53a174",
+          "binarySha256": "6ce6570e7db9a40e7bd3304ebdfff607920bde8cafd2eb5587bd7a26f89ba0b5"
+        },
+        "linux-arm64": {
+          "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.4/opencode-linux-arm64.tar.gz",
+          "sha256": "eba87efba3976d533a24cca0316f8ef375b5f8e797c0a95c25ee919700b7ba35",
+          "binarySha256": "3557e87db8c7db70e8ebd42157df1246554120896b115c462b760ff248cf751e"
+        }
+      }
+    },
+    "claude": {
+      "version": "2.1.223",
+      "artifacts": {
+        "linux-amd64": {
+          "url": "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/2.1.223/linux-x64/claude",
+          "sha256": "98226474f802e3094d6a86c5ade8883c16206d0fcb5c400b7401c800063e99d7",
+          "binarySha256": "98226474f802e3094d6a86c5ade8883c16206d0fcb5c400b7401c800063e99d7"
+        },
+        "linux-arm64": {
+          "url": "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/2.1.223/linux-arm64/claude",
+          "sha256": "60e83d8db0e894d0e54413e5e7daa256d180db660f51e139a51b614fc30cf3ac",
+          "binarySha256": "60e83d8db0e894d0e54413e5e7daa256d180db660f51e139a51b614fc30cf3ac"
+        }
+      }
+    },
+    "codex": {
+      "version": "0.146.1",
+      "artifacts": {
+        "linux-amd64": {
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.146.1/codex-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "f558105aec12bf6fb33570793adfc089f8b41dc32aced60b8b4fba9b451824ac",
+          "binarySha256": "37310b27d18464f00b2dbdf2db21416a01705e45a75844fc0a5d27b15b7bcfa5"
+        },
+        "linux-arm64": {
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.146.1/codex-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "05de65ee7b6bd02038e720cc313941d5ec6794718e4261bd28fd83b93fe34d43",
+          "binarySha256": "a33c77bf351a4394cd74d4468fd96da586762ee8b0342391aea20e4e505c340c"
+        }
+      }
+    }
+  }
+}

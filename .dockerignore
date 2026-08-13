@@ -1,6 +1,8 @@
 .git
 .worktrees
 node_modules
+**/node_modules
+provider-toolchain/node_modules
 .pnpm-store
 .pnpm-store/
 dist

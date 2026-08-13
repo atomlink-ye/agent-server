@@ -31,12 +31,6 @@ const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
 // that an exported/imported dependency tree retained them.
 const criticalArtifacts = [
   {
-    displayPath: 'node_modules/.bin/paseo',
-    relativePath: '.bin/paseo',
-    workspace: workspaceNodeModules,
-    image: imageNodeModules,
-  },
-  {
     displayPath: 'node_modules/.bin/tsc',
     relativePath: '.bin/tsc',
     workspace: workspaceNodeModules,

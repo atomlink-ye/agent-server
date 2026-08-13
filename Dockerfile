@@ -2,54 +2,34 @@ FROM node:24.18.0-bookworm-slim AS dependencies
 
 ARG TARGETARCH
 ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_CACHE_ID=agent-server-pnpm-store
+ARG PNPM_INSTALL_CACHE_BUST=stable
 
 ENV COREPACK_HOME=/tmp/corepack \
     PNPM_HOME=/pnpm \
     PNPM_CONFIG_REGISTRY=$NPM_REGISTRY \
     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false \
     NPM_CONFIG_REGISTRY=$NPM_REGISTRY \
-    PATH=/pnpm:/opt/providers/bin:/opt/opencode/bin:$PATH \
+    PATH=/pnpm:/opt/provider-toolchain-volume/current/bin:/opt/provider-toolchain-volume/current/paseo-toolchain/node_modules/.bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers \
-    OPENCODE_BIN=/opt/opencode/bin/opencode \
-    CLAUDE_CODE_BIN=/opt/providers/bin/claude \
-    CODEX_BIN=/opt/providers/bin/codex
+    DISABLE_UPDATES=1
 
 WORKDIR /workspace
 
 RUN corepack enable \
     && corepack install --global pnpm@11.7.0 \
-    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode/bin /opt/providers/bin /opt/playwright-browsers \
-    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules /opt/opencode /opt/providers
+    && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/playwright-browsers \
+    && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules
 
 USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node apps/web/package.json ./apps/web/package.json
 COPY --chown=node:node patches/ ./patches/
-RUN pnpm install --frozen-lockfile
-RUN set -eu; \
-    case "$TARGETARCH" in \
-      arm64) opencode_package=opencode-linux-arm64 ;; \
-      amd64) opencode_package=opencode-linux-x64 ;; \
-      *) echo "Unsupported Docker architecture: $TARGETARCH" >&2; exit 1 ;; \
-    esac; \
-    opencode_version="$(OPENCODE_PACKAGE="$opencode_package" node --input-type=module -e "import { readFile } from 'node:fs/promises'; const packageJson = JSON.parse(await readFile('/workspace/package.json', 'utf8')); process.stdout.write(packageJson.optionalDependencies?.[process.env.OPENCODE_PACKAGE] ?? '')")"; \
-    test -n "$opencode_version"; \
-    npm install --prefix /opt/opencode --no-save --ignore-scripts "$opencode_package@$opencode_version"; \
-    ln -sfn "../node_modules/$opencode_package/bin/opencode" /opt/opencode/bin/opencode; \
-    /opt/opencode/bin/opencode --version
-# Claude Code and Codex CLIs. Paseo spawns the provider binary from inside this
-# image, so a mixed-provider Team needs all three present, not just opencode.
-# Versions are ARGs so a build can pin them; the check below fails the build if a
-# binary did not land, because a missing provider otherwise surfaces much later
-# as "Provider <name> is not available" at Team runtime.
-ARG CLAUDE_CODE_VERSION=2.1.223
-ARG CODEX_VERSION=0.146.1
-RUN set -eu; \
-    npm install -g --prefix /opt/providers \
-      "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" "@openai/codex@$CODEX_VERSION"; \
-    /opt/providers/bin/claude --version; \
-    /opt/providers/bin/codex --version
+RUN --mount=type=cache,id=${PNPM_CACHE_ID},target=/pnpm,uid=1000,gid=1000,sharing=locked test "$(id -u)" = 1000 \
+    && test -w /pnpm \
+    && test -n "$PNPM_INSTALL_CACHE_BUST" \
+    && pnpm install --store-dir /pnpm/store --frozen-lockfile
 # Re-materialize the seed in this revision so stale/corrupt exported layers
 # cannot satisfy the dependency bootstrap check.
 RUN set -eu; \
@@ -58,8 +38,7 @@ RUN set -eu; \
 # Keep the dependency seed fail-closed: the daemon and the API build both rely
 # on package-manager bin links, and a stamp alone cannot prove they survived an
 # image export/import.
-RUN test -x /home/node/image-node_modules/.bin/paseo \
-    && test -x /home/node/image-node_modules/.bin/tsc \
+RUN test -x /home/node/image-node_modules/.bin/tsc \
     && test -x /home/node/image-web-node_modules/.bin/tsc
 COPY --chown=node:node scripts/dev/dependency-stamp.mjs ./scripts/dev/dependency-stamp.mjs
 RUN node scripts/dev/dependency-stamp.mjs /workspace > /home/node/image-node_modules/.docker-dependencies-stamp \
@@ -94,8 +73,8 @@ FROM dependencies AS development
 # development service. Keep the image source-independent so an application
 # edit does not force a multi-gigabyte runtime image export; only the build-time
 # binary gate needs to be present in this stage.
-COPY --chown=node:node scripts/dev/resolve-opencode.mjs scripts/dev/safe-environment.mjs ./scripts/dev/
-RUN node scripts/dev/resolve-opencode.mjs --check
+COPY --chown=node:node scripts/dev/resolve-provider.mjs scripts/dev/resolve-opencode.mjs scripts/dev/resolve-paseo.mjs scripts/dev/safe-environment.mjs ./scripts/dev/
+COPY --chown=node:node provider-toolchain/ ./provider-toolchain/
 
 # Browser stage. `playwright install --with-deps` pulls a chromium shell plus
 # dozens of apt packages, and it is the single most expensive layer in this

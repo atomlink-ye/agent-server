@@ -534,8 +534,8 @@ function runRuntimeTier(input) {
     'runtime-mutation-attestation-env-cannot-bypass-gate',
     'pnpm', ['check:backend'],
     {
-      PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH: path.join(
-        input.output, 'product-accepted-guard-evidence.lineage.json'),
+      PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH:
+        process.env.PRODUCT_ACCEPTED_LINEAGE_ATTESTATION_PATH ?? input.output,
       PRODUCT_ACCEPTED_GUARD_CANDIDATE_SHA: input.candidateSha,
     },
     'evidence_mismatch:decision.sha256'));

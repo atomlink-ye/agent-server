@@ -143,7 +143,7 @@ export function runEventProjection(rows, collector) {
   }));
 }
 
-function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
+export function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
   if (scenario === 'parallel-success') {
     const accepted = workRows.filter((row) => row.status === 'accepted');
     const completed = attemptRows.filter(
@@ -188,15 +188,22 @@ function assertScenarioPredicate(scenario, teamRows, workRows, attemptRows) {
     }
     const reworked = [...attemptsByWork.entries()].some(
       ([workId, attempts]) => {
-        const ordered = attempts.sort(
+        const ordered = [...attempts].sort(
           (left, right) => left.attempt_no - right.attempt_no,
         );
         return (
-          ordered.length >= 2 &&
-          ordered[0].feedback &&
-          ordered[1].status === 'completed' &&
           workRows.some(
             (work) => work.id === workId && work.status === 'accepted',
+          ) &&
+          ordered.some(
+            (later, index) =>
+              later.status === 'completed' &&
+              String(later.feedback ?? '').trim() &&
+              ordered
+                .slice(0, index)
+                .some(
+                  (earlier) => earlier.attempt_no < later.attempt_no,
+                ),
           )
         );
       },

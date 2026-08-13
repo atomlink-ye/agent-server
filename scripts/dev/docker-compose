@@ -69,7 +69,7 @@ if ((should_provision)); then
     "${raw_compose[@]}" build runner
   fi
   "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh runner -c \
-    'chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules'
+    'mkdir -p /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs && chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs'
 fi
 
 exec "${raw_compose[@]}" "$@"

@@ -40,19 +40,19 @@ function fresh() {
 
 const arms = [];
 const baseline = invoke();
-arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
+arms.push({ name: 'baseline', ...baseline, expectedNonzero: false, requiredFailureCodes: [] });
 
 {
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); const target = (row) => row.file === 'postgres-workspace-memory-repository.ts' && row.line === 289; value.lockRows = value.lockRows.filter((row) => !target(row)); value.sourceLockRows = value.sourceLockRows.filter((row) => !target(row)); fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
-  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'remove-known-bidirectional-for-update-row', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'remove-known-bidirectional-for-update-row', ...run, expectedNonzero: true, requiredFailureCodes: ['source_lock_row_missing'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
   const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); delete value.ports['run-dispatcher.ts']; fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
-  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'leave-port-ownerless', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'leave-port-ownerless', ...run, expectedNonzero: true, requiredFailureCodes: ['port_owner_MISSING', 'run_dispatcher_owner'], inputHashes: { ...run.inputHashes, mutatedLedger: hashes(h.ledgerPath) } });
 }
 {
   const h = fresh(); fs.writeFileSync(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql'), 'CREATE TABLE red_arm_missing (id uuid);\n');
-  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'add-unledgered-create-table', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedMigration: hashes(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql')) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'add-unledgered-create-table', ...run, expectedNonzero: true, requiredFailureCodes: ['ddl_table_MISSING'], inputHashes: { ...run.inputHashes, mutatedMigration: hashes(path.join(h.dir, 'src/infrastructure/postgres/migrations/9999_red_arm.sql')) } });
 }
 {
   const h = fresh(); const file = path.join(h.dir, 'src/infrastructure/postgres/postgres-session-repository.ts'); let source = fs.readFileSync(file, 'utf8');
@@ -60,10 +60,16 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
   if (!source.includes(needle)) throw new Error('red-arm literal query fixture missing');
   source = source.replace(needle, 'const s = await c.query(\n        dynamicSql /* SELECT s.*, l.generation');
   fs.writeFileSync(file, source);
-  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'convert-literal-query-to-variable-sql', ...run, expectedNonzero: true, inputHashes: { ...run.inputHashes, mutatedSource: hashes(file) } });
+  const run = invoke(h.dir, h.ledgerPath); arms.push({ name: 'convert-literal-query-to-variable-sql', ...run, expectedNonzero: true, requiredFailureCodes: ['query_truth_source_diff', 'query_call_site_unclassified_MISSING'], inputHashes: { ...run.inputHashes, mutatedSource: hashes(file) } });
 }
 
-const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => arm.exitCode !== 0 === arm.expectedNonzero) };
+for (const arm of arms) {
+  let observedFailureCodes = [];
+  try { observedFailureCodes = JSON.parse(arm.stdout).failures.map((failure) => failure.code); } catch { observedFailureCodes = ['harness_output_unparseable']; }
+  arm.observedFailureCodes = observedFailureCodes;
+  arm.failureCodeAssertion = (arm.requiredFailureCodes ?? []).every((code) => observedFailureCodes.includes(code));
+}
+const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => (arm.exitCode !== 0) === arm.expectedNonzero && arm.failureCodeAssertion) };
 if (canonicalEvidenceInput) result.canonical = JSON.parse(fs.readFileSync(canonicalEvidenceInput, 'utf8'));
 if (process.env.OWNERSHIP_EVIDENCE_PATH) fs.writeFileSync(process.env.OWNERSHIP_EVIDENCE_PATH, `${JSON.stringify(result)}\n`);
 process.stdout.write(`${JSON.stringify(result)}\n`);

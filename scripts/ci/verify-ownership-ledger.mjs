@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -10,15 +11,18 @@ const sourceRoot = process.env.OWNERSHIP_SOURCE_ROOT ?? repo;
 
 const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
 const failures = [];
-const counts = { repositories: 0, rawQueryCallSites: 0, classifiedCallSites: 0, missingCallSites: 0, ddlTables: 0, ledgerTables: Object.keys(ledger.tables ?? {}).length, ports: 0, contracts: 0, crossCapability: 0 };
+const counts = { repositories: 0, rawQueryCallSites: 0, typedQueryCallSites: 0, classifiedCallSites: 0, missingCallSites: 0, ddlTables: 0, ledgerTables: Object.keys(ledger.tables ?? {}).length, ports: 0, contracts: 0, crossCapability: 0, sourceLockRows: 0 };
 const queryTruthSourceDiffs = [];
 const ddlTruthSourceDiffs = [];
 const classifiedRuntimeTables = new Set();
+const typedRuntimeTables = new Set();
 
 function fail(code, detail) { failures.push({ code, detail }); }
 function read(file) { return fs.readFileSync(path.join(sourceRoot, file), 'utf8'); }
 function rel(p) { return path.relative(sourceRoot, p).split(path.sep).join('/'); }
 function lineAt(s, index) { return s.slice(0, index).split('\n').length; }
+function sourceExcerpt(source, line) { const lines = source.split('\n'); return lines.slice(Math.max(0, line - 2), Math.min(lines.length, line + 1)).join('\n'); }
+function excerptHash(source, line) { return crypto.createHash('sha256').update(sourceExcerpt(source, line)).digest('hex'); }
 
 function matchingParen(s, start) {
   let depth = 0; let quote = null;
@@ -62,7 +66,7 @@ function referencedTables(sql) {
 }
 
 function scanCalls(file) {
-  const source = read(file); const calls = []; let transactionState = 'out';
+  const source = read(file); const calls = [];
   for (const match of source.matchAll(/\.query\s*\(/g)) {
     const open = match.index + match[0].length - 1;
     const close = matchingParen(source, open);
@@ -71,22 +75,47 @@ function scanCalls(file) {
     const parsedOperation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
     const operation = parsedOperation === 'BEGIN' ? 'BEGIN' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'CONTROL' : parsedOperation === 'SELECT' ? 'READ' : ['INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(parsedOperation) ? 'WRITE' : (sql ? 'UNKNOWN' : 'MISSING');
     const lock = sql ? (/\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(sql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(sql) ? 'for_share' : 'none') : 'unknown';
-    const readWrite = sql ? (parsedOperation === 'SELECT' ? 'read' : ['INSERT', 'UPDATE', 'DELETE'].includes(parsedOperation) ? 'write' : 'control') : 'unknown';
-    const transaction = parsedOperation === 'BEGIN' ? 'in' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'out' : transactionState;
-    if (parsedOperation === 'BEGIN') transactionState = 'in';
-    else if (['COMMIT', 'ROLLBACK'].includes(parsedOperation)) transactionState = 'out';
+    const readWrite = sql ? (parsedOperation === 'SELECT' ? 'read' : ['INSERT', 'UPDATE', 'DELETE'].includes(parsedOperation) || (parsedOperation === 'WITH' && /\b(?:INSERT|UPDATE|DELETE)\b/i.test(sql)) ? 'write' : 'control') : 'unknown';
+    const transaction = parsedOperation === 'BEGIN' ? 'in' : 'out';
     const tables = sql ? referencedTables(sql) : [];
-    calls.push({ file: path.basename(file), line: lineAt(source, match.index), classification: sql ? 'classified' : 'MISSING', operation, readWrite, lock, transaction, tables });
+    calls.push({ file: path.basename(file), line: lineAt(source, match.index), classification: sql ? 'classified' : 'MISSING', operation, readWrite, lock, transaction, tables, _start: match.index, _end: close < 0 ? source.length : close });
   }
   return calls;
 }
 
-function scanSourceLocks(file) {
+function scanTypedCalls(file) {
+  const source = read(file); const calls = []; const constSql = {};
+  for (const match of source.matchAll(/(?:const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*(['`])([\s\S]*?)\2\s*;/g)) constSql[match[1]] = match[3];
+  for (const match of source.matchAll(/\.query\s*</g)) {
+    let cursor = match.index + match[0].length; let open = -1;
+    while (cursor < source.length) {
+      if (source[cursor] === '>' && /^\s*\(/.test(source.slice(cursor + 1))) { open = source.indexOf('(', cursor); break; }
+      cursor += 1;
+    }
+    if (open < 0) continue;
+    const close = matchingParen(source, open); const argument = close < 0 ? '' : source.slice(open + 1, close); const sql = literalSql(argument);
+    const parsedOperation = sql?.trim().match(/^(SELECT|INSERT|UPDATE|DELETE|WITH|BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i)?.[1].toUpperCase() ?? (sql ? 'OTHER' : 'MISSING');
+    const operation = parsedOperation === 'BEGIN' ? 'BEGIN' : ['COMMIT', 'ROLLBACK'].includes(parsedOperation) ? 'CONTROL' : parsedOperation === 'SELECT' ? 'READ' : ['INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(parsedOperation) ? 'WRITE' : (sql ? 'UNKNOWN' : 'MISSING');
+    const lock = sql ? (/\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b/i.test(sql) ? 'for_update' : /\bFOR\s+SHARE\b/i.test(sql) ? 'for_share' : 'none') : 'unknown';
+    const readWrite = sql ? (parsedOperation === 'SELECT' ? 'read' : ['INSERT', 'UPDATE', 'DELETE'].includes(parsedOperation) || (parsedOperation === 'WITH' && /\b(?:INSERT|UPDATE|DELETE)\b/i.test(sql)) ? 'write' : 'control') : 'unknown';
+    const tables = new Set(sql ? referencedTables(sql) : []);
+    for (const [name, value] of Object.entries(constSql)) if (source.slice(match.index, close < 0 ? source.length : close).includes(name)) for (const table of referencedTables(value)) tables.add(table);
+    const before = source.slice(0, match.index); const lastBegin = Math.max(before.lastIndexOf("query('BEGIN'"), before.lastIndexOf("query('BEGIN')")); const lastEnd = Math.max(before.lastIndexOf("query('COMMIT'"), before.lastIndexOf("query('ROLLBACK'")); const lastWith = before.lastIndexOf('withTransaction'); const lastBrace = before.lastIndexOf('}');
+    calls.push({ file: path.basename(file), line: lineAt(source, match.index), classification: sql ? 'classified' : 'MISSING', operation, readWrite, lock, transaction: parsedOperation === 'BEGIN' ? 'in' : (lastBegin > lastEnd || lastWith > lastBrace ? 'in' : 'out'), tables: [...tables].sort(), sourceKind: 'typed', sourceExcerptHash: excerptHash(source, lineAt(source, match.index)), _start: match.index, _end: close < 0 ? source.length : close });
+  }
+  return calls;
+}
+
+function scanSourceLocks(file, facts) {
   const basename = path.basename(file); const source = read(`src/infrastructure/postgres/${basename}`); const rows = [];
   source.split('\n').forEach((line, index) => {
     const match = line.match(/\bFOR\s+(NO\s+KEY\s+UPDATE|UPDATE|SHARE)\b/i);
-    if (match) rows.push({ file: basename, line: index + 1, lock: match[1].toLowerCase().startsWith('share') ? 'for_share' : 'for_update' });
+    if (match) {
+      const lineNumber = index + 1; const offset = source.split('\n').slice(0, index).join('\n').length + (index ? 1 : 0); const fact = facts.find((item) => item._start <= offset && item._end >= offset);
+      rows.push({ file: basename, line: lineNumber, lock: match[1].toLowerCase().startsWith('share') ? 'for_share' : 'for_update', tables: fact?.tables ?? referencedTables(sourceExcerpt(source, lineNumber)), transaction: fact?.transaction ?? 'out', sourceKind: fact?.sourceKind ?? (fact?.typed ? 'typed' : 'sql') });
+    }
   });
+  for (const match of source.matchAll(/\bpg_advisory_(lock|unlock)\s*\(/gi)) rows.push({ file: basename, line: lineAt(source, match.index), lock: `pg_advisory_${match[1].toLowerCase()}`, tables: [], transaction: 'out', sourceKind: 'sql' });
   return rows;
 }
 
@@ -106,7 +135,8 @@ function checkRepositories() {
   if (JSON.stringify(files) !== JSON.stringify(ledgerFiles)) fail('repository_ledger_files', { files, ledgerFiles });
   const lockRows = new Set((ledger.sourceLockRows ?? ledger.lockRows ?? []).map((x) => `${x.file}:${x.line}`));
   for (const file of files) {
-    const calls = scanCalls(`src/infrastructure/postgres/${file}`); counts.repositories += 1; counts.rawQueryCallSites += calls.length;
+    const sourceFile = `src/infrastructure/postgres/${file}`; const calls = scanCalls(sourceFile); const typedCalls = scanTypedCalls(sourceFile); counts.repositories += 1; counts.rawQueryCallSites += calls.length; counts.typedQueryCallSites += typedCalls.length;
+    for (const typed of typedCalls) for (const table of typed.tables) typedRuntimeTables.add(table);
     const expected = ledger.repositories[file];
     if (typeof expected !== 'string') { fail('repository_owner_missing', file); continue; }
     const ledgerCalls = ledger.callSites?.[file] ?? [];
@@ -119,8 +149,15 @@ function checkRepositories() {
       if (!row) { fail('call_site_ledger_MISSING', key); continue; }
       const override = ledger.overrides?.[key];
       if (override && call.classification !== 'MISSING') fail('override_not_dynamic_source', key);
-      if (override && (!override.sourceKind || !override.confidence || !override.evidence)) fail('override_metadata_missing', key);
+      if (override && (!['template', 'helper', 'dynamic'].includes(override.sourceKind) || !override.confidence || !override.evidence || !override.sourceExcerptHash || !override.definitionEvidence || override.definitionEvidence.callsite !== key || override.definitionEvidence.sourceExcerptHash !== override.sourceExcerptHash || !override.definitionEvidence.definitionExcerptHash)) fail('override_metadata_missing', key);
+      if (override && override.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('override_source_excerpt_hash_MISMATCH', key);
+      if (override?.definitionEvidence?.definition?.locator) {
+        const [definitionFile, definitionLine] = override.definitionEvidence.definition.locator.split(':');
+        if (definitionFile !== file || override.definitionEvidence.definitionExcerptHash !== excerptHash(read(sourceFile), Number(definitionLine))) fail('override_definition_evidence_hash_MISMATCH', key);
+      }
+      if (!row.transactionEvidence || row.transactionEvidence.locator !== key || row.transactionEvidence.sourceExcerptHash !== excerptHash(read(sourceFile), call.line)) fail('transaction_evidence_MISSING_OR_DRIFT', key);
       const actual = override ? { ...call, ...override, file, line: call.line } : call;
+      actual.transaction = row.transaction;
       actual.owner = ledger.repositories[path.basename(file)];
       if (actual.classification === 'classified') { counts.classifiedCallSites += 1; fileClassified += 1; for (const table of actual.tables) classifiedRuntimeTables.add(table); } else { counts.missingCallSites += 1; fileMissing += 1; }
       if (!row.owner) fail('call_site_owner_MISSING', key);
@@ -136,8 +173,30 @@ function checkRepositories() {
         if (!row.reason || !ledger.crossCapability?.explanations?.[row.disposition]) fail('cross_capability_reason_missing', key);
       } else if (row.disposition !== null) fail('cross_capability_spurious_disposition', key);
     }
+    for (const typed of typedCalls) {
+      const key = `${file}:${typed.line}`; const row = ledger.typedCrossCapability?.[key];
+      const actual = { ...typed };
+      actual.owner = ledger.repositories[file];
+      if (row?.sourceExcerptHash && row.sourceExcerptHash !== excerptHash(read(sourceFile), typed.line)) fail('typed_query_source_excerpt_hash_MISMATCH', key);
+      const owners = new Set(actual.tables.map((table) => typeof ledger.tables[table] === 'string' ? ledger.tables[table] : ledger.tables[table]?.owner));
+      const crossesCapability = [...owners].some((owner) => owner && owner !== ledger.repositories[file]);
+      if (crossesCapability) {
+        counts.crossCapability += 1;
+        if (!row || !['(a)', '(b)', '(c)'].includes(row.disposition) || !row.reason) fail('typed_cross_capability_disposition_MISSING', key);
+      } else if (row) fail('typed_cross_capability_spurious_disposition', key);
+    }
+    const lockFacts = [...calls].map((fact) => { const row = ledger.callSites?.[file]?.find((item) => item.line === fact.line); return row ? { ...fact, transaction: row.transaction, tables: row.tables, sourceKind: row.sourceKind ?? 'sql' } : fact; });
     if (fileClassified + fileMissing !== calls.length || fileClassified !== calls.length) queryTruthSourceDiffs.push({ file, raw: calls.length, classified: fileClassified, missing: fileMissing, ledger: ledgerCalls.length });
-    for (const lock of scanSourceLocks(file)) if (!lockRows.has(`${lock.file}:${lock.line}`)) fail('source_lock_row_missing', `${lock.file}:${lock.line}`);
+    for (const lock of scanSourceLocks(file, [...lockFacts, ...typedCalls])) {
+      counts.sourceLockRows += 1; const key = `${lock.file}:${lock.line}`; const row = (ledger.sourceLockRows ?? []).find((item) => `${item.file}:${item.line}` === key);
+      if (!lockRows.has(key)) fail('source_lock_row_missing', key);
+      if (!row) continue;
+      const fact = ledger.lockFacts?.[key];
+      if (!fact) fail('source_lock_fact_MISSING', key);
+      if (fact && (fact.locator !== key || fact.sourceExcerptHash !== excerptHash(read(`src/infrastructure/postgres/${file}`), lock.line))) fail('source_lock_fact_evidence_MISMATCH', key);
+      for (const field of ['lock', 'tables', 'transaction', 'sourceKind']) if (JSON.stringify((fact ?? row)[field]) !== JSON.stringify(lock[field])) fail('source_lock_field_drift', { key, field, ledger: (fact ?? row)[field], actual: lock[field] });
+      if (!row.disposition || !row.reason) fail('source_lock_disposition_missing', key);
+    }
   }
   const ledgerCalls = counts.classifiedCallSites + counts.missingCallSites;
   if (ledgerCalls !== counts.rawQueryCallSites) fail('query_call_site_reconciliation', { raw: counts.rawQueryCallSites, classified: ledgerCalls });
@@ -157,11 +216,18 @@ function checkDdl() {
     if (!Object.hasOwn(entry, 'runtimeAccess')) fail('table_runtime_access_MISSING', table);
     if (!Object.hasOwn(entry, 'noRuntimeAccess')) fail('table_no_runtime_access_MISSING', table);
     if (entry.noRuntimeAccess && !entry.reason) fail('no_runtime_access_reason_missing', table);
+    if (entry.noRuntimeAccess && entry.runtimeAccess !== 'none') fail('no_runtime_access_runtimeAccess_CONTRADICTION', table);
+    if (entry.runtimeAccess === 'none' && !entry.noRuntimeAccess) fail('runtime_access_none_without_noRuntimeAccess', table);
   }
   for (const { table } of ddl) {
     const entry = ledger.tables[table];
-    if (entry?.runtimeAccess === 'ledgered' && !entry.noRuntimeAccess && !classifiedRuntimeTables.has(table)) fail('ddl_runtime_support_MISSING', table);
-    if (entry?.noRuntimeAccess && classifiedRuntimeTables.has(table)) fail('no_runtime_access_has_runtime_caller', table);
+    if (entry?.runtimeAccess === 'ledgered' && !entry.noRuntimeAccess && !classifiedRuntimeTables.has(table) && !typedRuntimeTables.has(table)) fail('ddl_runtime_support_MISSING', table);
+    if (entry?.noRuntimeAccess && (classifiedRuntimeTables.has(table) || typedRuntimeTables.has(table))) fail('no_runtime_access_has_runtime_caller', table);
+  }
+  for (const table of typedRuntimeTables) if (!Array.isArray(ledger.typedRuntimeAccess?.[table]) || ledger.typedRuntimeAccess[table].length === 0) fail('typed_runtime_access_evidence_MISSING', table);
+  for (const [table, locators] of Object.entries(ledger.typedRuntimeAccess ?? {})) {
+    if (!Object.hasOwn(ledger.tables ?? {}, table)) fail('typed_runtime_access_unknown_table', table);
+    if (!Array.isArray(locators) || locators.some((locator) => typeof locator !== 'string' || !locator.includes(':'))) fail('typed_runtime_access_locator_MISSING', table);
   }
 }
 
@@ -195,6 +261,10 @@ function checkCrossCapability() {
   if (!observed.length && counts.crossCapability === 0) fail('cross_capability_empty', 'no concrete (a)/(b)/(c) ledger row');
   for (const row of ledger.sourceLockRows ?? []) {
     if (!allowed.has(row.disposition) || !row.reason) fail('source_lock_disposition_missing', `${row.file}:${row.line}`);
+  }
+  for (const [key, assertion] of Object.entries(ledger.crossCapabilityAssertions ?? {})) {
+    const [file, lineText] = key.split(':'); const line = Number(lineText); const exact = ledger.callSites?.[file]?.find((row) => row.line === line); const typed = ledger.typedCrossCapability?.[key]; const observed = exact?.disposition ? exact : typed;
+    if (!observed || observed.disposition !== assertion.disposition || !assertion.reason) fail('cross_capability_assertion_MISMATCH', key);
   }
 }
 

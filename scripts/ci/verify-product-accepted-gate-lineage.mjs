@@ -196,6 +196,9 @@ function verifyFormatProvenance(value) {
     isAncestor(formatSha, candidateSha),
     'continuation.format_provenance.format_commit_is_candidate_ancestor',
   );
+  const headSha = gitText(['rev-parse', '--verify', 'HEAD^{commit}']);
+  if (!isAncestor(candidateSha, headSha))
+    fail('current_head_does_not_continue_signed_candidate');
 }
 
 async function main() {

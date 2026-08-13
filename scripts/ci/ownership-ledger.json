@@ -4,8 +4,7 @@
   "callSiteScan": {
     "glob": "src/infrastructure/postgres/*.ts",
     "expression": ".query\\s*\\(",
-    "unclassified": "MISSING",
-    "knownMissingCallSiteCount": 38
+    "unclassified": "MISSING"
   },
   "repositories": {
     "postgres-admission-repository.ts": "Execution",
@@ -32,29 +31,387 @@
     "postgres-workspace-memory-repository.ts": "Memory",
     "postgres.ts": "Platform"
   },
-  "callSiteCounts": {
-    "postgres-admission-repository.ts": 5, "postgres-agent-registry.ts": 6, "postgres-channel-repository.ts": 12, "postgres-collaborative-team-repository.ts": 97, "postgres-environment-registry.ts": 13, "postgres-execution-fact-query.ts": 0, "postgres-invokable-repository.ts": 12, "postgres-lark-review-surface-repository.ts": 11, "postgres-learning-proposal-repository.ts": 10, "postgres-memory-api-repository.ts": 13, "postgres-run-dispatcher.ts": 0, "postgres-run-event-repository.ts": 1, "postgres-run-repository.ts": 6, "postgres-runtime-session-repository.ts": 18, "postgres-service-account-workspace-bootstrap.ts": 1, "postgres-session-repository.ts": 40, "postgres-task-repository.ts": 3, "postgres-team-message-repository.ts": 3, "postgres-work-identity-repository.ts": 5, "postgres-work-projection-facts-query.ts": 0, "postgres-work-projection-facts-source.ts": 0, "postgres-workspace-memory-repository.ts": 11, "postgres.ts": 6
-  },
   "tables": {
-    "tasks": "Execution", "runs": "Execution", "admissions": "Execution", "run_dispatches": "Execution",
-    "agent_definitions": "Resource", "agent_versions": "Resource", "team_definitions": "Resource", "team_versions": "Resource", "compiled_team_plans": "Resource", "agent_registry_idempotency": "Resource", "team_registry_idempotency": "Resource",
-    "workspace_memory_proposals": "Memory", "workspace_memory_entries": "Memory", "workspace_memory_owned_entries": "Memory", "workspace_memory_snapshots": "Memory", "workspace_memory_projection_scopes": "Memory", "workspace_memory_snapshot_entries": "Memory", "workspace_memory_projection_receipts": "Memory", "memory_stores": "Memory", "memories": "Memory", "memory_versions": "Memory", "learning_proposals": "Memory",
-    "workspaces": "Work", "works": "Work", "work_runs": "Work", "work_run_resource_manifest": "Work",
-    "product_sessions": "Execution", "session_lanes": "Execution", "messages": "Execution", "session_reset_idempotency": "Execution",
-    "runtime_session_bindings": "Runtime", "session_launch_snapshots": "Runtime", "runtime_sessions": "Runtime",
-    "run_events": "Execution", "team_executions": "Execution", "team_node_executions": "Execution", "team_runs": "Execution", "team_member_runs": "Execution", "team_work_items": "Execution", "team_work_item_attempts": "Execution", "team_command_receipts": "Execution", "team_messages": "Execution", "team_work_item_dependencies": "Execution", "team_completion_decisions": "Execution", "team_completion_decision_targets": "Execution",
-    "channel_ingress_events": "Channel", "channel_conversation_bindings": "Channel", "channel_outbox": "Channel", "channel_delivery_attempts": "Channel", "lark_memory_review_surfaces": "Channel",
-    "environment_definitions": "Resource", "environment_versions": "Resource", "environment_registry_idempotency": "Resource"
+    "tasks": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "runs": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "admissions": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "run_dispatches": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "agent_definitions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "agent_versions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_definitions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_versions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "compiled_team_plans": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "agent_registry_idempotency": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_registry_idempotency": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_proposals": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_entries": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_owned_entries": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_snapshots": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_projection_scopes": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_snapshot_entries": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspace_memory_projection_receipts": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "memory_stores": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "memories": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "memory_versions": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "learning_proposals": {
+      "owner": "Memory",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "workspaces": {
+      "owner": "Work",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "works": {
+      "owner": "Work",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "work_runs": {
+      "owner": "Work",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "work_run_resource_manifest": {
+      "owner": "Work",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "product_sessions": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "session_lanes": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "messages": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "session_reset_idempotency": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "runtime_session_bindings": {
+      "owner": "Runtime",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "session_launch_snapshots": {
+      "owner": "Runtime",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "runtime_sessions": {
+      "owner": "Runtime",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "run_events": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_executions": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_node_executions": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_runs": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_member_runs": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_work_items": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_work_item_attempts": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_command_receipts": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_messages": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_work_item_dependencies": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_completion_decisions": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "team_completion_decision_targets": {
+      "owner": "Execution",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "channel_ingress_events": {
+      "owner": "Channel",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "channel_conversation_bindings": {
+      "owner": "Channel",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "channel_outbox": {
+      "owner": "Channel",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "channel_delivery_attempts": {
+      "owner": "Channel",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "lark_memory_review_surfaces": {
+      "owner": "Channel",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "environment_definitions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "environment_versions": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    },
+    "environment_registry_idempotency": {
+      "owner": "Resource",
+      "runtimeAccess": "ledgered",
+      "noRuntimeAccess": false,
+      "reason": "versioned migration table has repository/runtime access; no no_runtime_access exemption"
+    }
   },
   "ports": {
-    "admission-repository.ts": "Execution", "agent-project-lock-store.ts": "Resource", "agent-registry.ts": "Resource", "agent-runtime.ts": "Runtime", "channel-repository.ts": "Channel", "environment-registry.ts": "Resource", "execution-admission.ts": "Execution", "execution-fact-query.ts": "Execution", "file-store.ts": "Platform", "invokable-repository.ts": "Resource", "lark-delivery.ts": "Channel", "lark-memory-document.ts": "Channel", "lark-review-surface-repository.ts": "Channel", "learning-proposal-repository.ts": "Memory", "memory-api-repository.ts": "Memory", "memory-review-card-renderer.ts": "Channel", "project-skill-registrar.ts": "Platform", "run-dispatcher.ts": "Execution", "run-events.ts": "Execution", "run-repository.ts": "Execution", "runtime-session-repository.ts": "Runtime", "session-repository.ts": "Execution", "task-repository.ts": "Execution", "team-execution-repository.ts": "Execution", "team-message-repository.ts": "Execution", "work-definition-read.ts": "Resource", "work-identity-repository.ts": "Work", "workspace-memory-repository.ts": "Memory"
+    "admission-repository.ts": "Execution",
+    "agent-project-lock-store.ts": "Resource",
+    "agent-registry.ts": "Resource",
+    "agent-runtime.ts": "Runtime",
+    "channel-repository.ts": "Channel",
+    "environment-registry.ts": "Resource",
+    "execution-admission.ts": "Execution",
+    "execution-fact-query.ts": "Execution",
+    "file-store.ts": "Platform",
+    "invokable-repository.ts": "Resource",
+    "lark-delivery.ts": "Channel",
+    "lark-memory-document.ts": "Channel",
+    "lark-review-surface-repository.ts": "Channel",
+    "learning-proposal-repository.ts": "Memory",
+    "memory-api-repository.ts": "Memory",
+    "memory-review-card-renderer.ts": "Channel",
+    "project-skill-registrar.ts": "Platform",
+    "run-dispatcher.ts": "Execution",
+    "run-events.ts": "Execution",
+    "run-repository.ts": "Execution",
+    "runtime-session-repository.ts": "Runtime",
+    "session-repository.ts": "Execution",
+    "task-repository.ts": "Execution",
+    "team-execution-repository.ts": "Execution",
+    "team-message-repository.ts": "Execution",
+    "work-definition-read.ts": "Resource",
+    "work-identity-repository.ts": "Work",
+    "workspace-memory-repository.ts": "Memory"
   },
   "contracts": {
-    "agents.ts": "Resource", "environments.ts": "Resource", "health.ts": "Platform", "http.ts": "Platform", "learning-proposals.ts": "Memory", "memory-api.ts": "Memory", "product-accepted-subset.v1.json": "Platform", "product-contract-policy.ts": "Platform", "product-source-refs.ts": "Work", "product-work-commands.ts": "Work", "runs.ts": "Execution", "sessions.ts": "Execution", "tasks.ts": "Execution", "teams.ts": "Execution", "workspace-memory.ts": "Memory",
-    "product-accepted-subset/controls.ts": "Platform", "product-accepted-subset/index.ts": "Platform", "product-accepted-subset/read.ts": "Platform", "product-projection/edges.ts": "Work", "product-projection/identity.ts": "Work", "product-projection/index.ts": "Work", "product-projection/lineage-manifest.ts": "Work", "product-projection/product-state.ts": "Work"
+    "agents.ts": "Resource",
+    "environments.ts": "Resource",
+    "health.ts": "Platform",
+    "http.ts": "Platform",
+    "learning-proposals.ts": "Memory",
+    "memory-api.ts": "Memory",
+    "product-accepted-subset.v1.json": "Platform",
+    "product-contract-policy.ts": "Platform",
+    "product-source-refs.ts": "Work",
+    "product-work-commands.ts": "Work",
+    "runs.ts": "Execution",
+    "sessions.ts": "Execution",
+    "tasks.ts": "Execution",
+    "teams.ts": "Execution",
+    "workspace-memory.ts": "Memory",
+    "product-accepted-subset/controls.ts": "Platform",
+    "product-accepted-subset/index.ts": "Platform",
+    "product-accepted-subset/read.ts": "Platform",
+    "product-projection/edges.ts": "Work",
+    "product-projection/identity.ts": "Work",
+    "product-projection/index.ts": "Work",
+    "product-projection/lineage-manifest.ts": "Work",
+    "product-projection/product-state.ts": "Work"
   },
   "crossCapability": {
-    "allowed": ["(a)", "(b)", "(c)"],
+    "allowed": [
+      "(a)",
+      "(b)",
+      "(c)"
+    ],
     "requiredForMultipleOwners": true,
     "explanations": {
       "(a)": "named read-model facts reader exception",
@@ -63,9 +420,4521 @@
     }
   },
   "lockRows": [
-    { "file": "postgres-session-repository.ts", "line": 216, "disposition": "(c)", "reason": "session lane and product-session lock belong to the same legacy consistency cluster" },
-    { "file": "postgres-session-repository.ts", "line": 334, "disposition": "(c)", "reason": "session lane write-side lock remains in the Execution consistency cluster" },
-    { "file": "postgres-session-repository.ts", "line": 369, "disposition": "(c)", "reason": "reset lock remains in the Execution consistency cluster" }
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 128,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 150,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 206,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 313,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 398,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 183,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 321,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 332,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 500,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 526,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 533,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 221,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 406,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 441,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 484,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 620,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 953,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1060,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1087,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1140,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1157,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1344,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1358,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1363,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1433,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1447,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1466,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1551,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1564,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1574,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1613,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1738,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1936,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-invokable-repository.ts",
+      "line": 77,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-invokable-repository.ts",
+      "line": 116,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 81,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 93,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 97,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 109,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 113,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 123,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 135,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 307,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 317,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 321,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 335,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 339,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 463,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 475,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 712,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 719,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 731,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 792,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 807,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 826,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 850,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 903,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 912,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 918,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 943,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 952,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1222,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1253,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1278,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1295,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1339,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 103,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 124,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 198,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-memory-api-repository.ts",
+      "line": 307,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-run-repository.ts",
+      "line": 190,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 217,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 335,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 370,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 220,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 230,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 249,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 292,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-work-identity-repository.ts",
+      "line": 406,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-work-identity-repository.ts",
+      "line": 413,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 289,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 306,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 322,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 495,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    }
   ],
-  "crossCapabilityDispositions": ["(a)", "(b)", "(c)"]
+  "crossCapabilityDispositions": [
+    "(a)",
+    "(b)",
+    "(c)"
+  ],
+  "callSites": {
+    "postgres-admission-repository.ts": [
+      {
+        "file": "postgres-admission-repository.ts",
+        "line": 60,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-admission-repository.ts",
+        "line": 65,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-admission-repository.ts",
+        "line": 68,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-admission-repository.ts",
+        "line": 163,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "admissions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-admission-repository.ts",
+        "line": 208,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "run_dispatches"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-agent-registry.ts": [
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 156,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 226,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 354,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 357,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 371,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-agent-registry.ts",
+        "line": 385,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-channel-repository.ts": [
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 213,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_ingress_events"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 244,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_ingress_events"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 265,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_ingress_events"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 356,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 371,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 552,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_delivery_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 574,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_outbox"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 608,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 611,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 614,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 628,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspaces"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-channel-repository.ts",
+        "line": 634,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-collaborative-team-repository.ts": [
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 149,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 219,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 262,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 266,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 271,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 276,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_item_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 282,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_items"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 320,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_completion_decisions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 344,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 354,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 375,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "run_events"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 386,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 389,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 404,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 426,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 430,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 448,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 504,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_item_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 513,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 517,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 522,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 534,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 546,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "run_events"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 555,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 558,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 612,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 625,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 628,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 644,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 676,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 694,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 700,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 706,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 719,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 748,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 755,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 782,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 799,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 815,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 824,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 834,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_member_runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1056,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1059,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1103,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1106,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1130,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1136,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1179,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1190,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1222,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_member_runs",
+          "team_work_items"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1235,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_item_dependencies"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1242,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_item_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1254,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1266,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1288,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_command_receipts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1297,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1303,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1323,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1340,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1376,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1380,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_command_receipts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1389,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1392,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1412,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1429,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1491,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1495,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_command_receipts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1504,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1507,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1530,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1547,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1587,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1598,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1623,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1652,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_work_item_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1666,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1672,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1676,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1699,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_command_receipts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1713,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1716,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1735,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1756,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1767,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1771,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1775,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1785,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1809,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1813,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1829,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_command_receipts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1833,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1836,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 1996,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_completion_decisions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 2016,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_completion_decision_targets"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 2211,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 2241,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-collaborative-team-repository.ts",
+        "line": 2272,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-environment-registry.ts": [
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 15,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 26,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_definitions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 37,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 43,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 57,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 75,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 85,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 92,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 102,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 115,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 128,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_definitions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 135,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-environment-registry.ts",
+        "line": 142,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-execution-fact-query.ts": [],
+    "postgres-invokable-repository.ts": [
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 72,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 92,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 111,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 128,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 145,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 148,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 151,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 191,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_registry_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 206,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_definitions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 269,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 369,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_definitions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-invokable-repository.ts",
+        "line": 460,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "team_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-lark-review-surface-repository.ts": [
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 408,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "lark_memory_review_surfaces"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 530,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_outbox"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 592,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 595,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 598,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 670,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "lark_memory_review_surfaces"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 1017,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_delivery_attempts"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 1207,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "channel_outbox"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 1425,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 1427,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-lark-review-surface-repository.ts",
+        "line": 1430,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-learning-proposal-repository.ts": [
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 100,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 145,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memory_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 158,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memories"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 164,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 177,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 183,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 195,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 216,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 225,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-learning-proposal-repository.ts",
+        "line": 228,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-memory-api-repository.ts": [
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 140,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 166,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 169,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memory_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 176,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memories"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 186,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 189,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 233,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 243,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 250,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 253,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memory_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 269,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "memories"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 279,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-memory-api-repository.ts",
+        "line": 282,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-run-dispatcher.ts": [],
+    "postgres-run-event-repository.ts": [
+      {
+        "file": "postgres-run-event-repository.ts",
+        "line": 19,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_session_bindings"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-run-repository.ts": [
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 76,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 156,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs",
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 274,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 324,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 358,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-run-repository.ts",
+        "line": 400,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-runtime-session-repository.ts": [
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 27,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 42,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 55,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 75,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 93,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots",
+          "team_member_runs"
+        ],
+        "disposition": "(a)",
+        "reason": "named read-model facts reader exception; PostgresWorkProjectionFactsReader is the named interface"
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 132,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 144,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 161,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 173,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 190,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 206,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 216,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 234,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 247,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 261,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 273,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 283,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-runtime-session-repository.ts",
+        "line": 295,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runtime_sessions",
+          "session_launch_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-service-account-workspace-bootstrap.ts": [
+      {
+        "file": "postgres-service-account-workspace-bootstrap.ts",
+        "line": 42,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspaces"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-session-repository.ts": [
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 31,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspaces"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 46,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspaces"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 61,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "agent_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 73,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 82,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "environment_versions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 97,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 110,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 129,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 161,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 205,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "messages",
+          "runs",
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 214,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 216,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "for_update",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions",
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 222,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "admissions",
+          "messages",
+          "runs",
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 235,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 245,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspace_memory_snapshots"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 251,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 272,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 276,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "messages"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 280,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "admissions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 296,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "run_dispatches"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 300,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 304,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 318,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 332,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 334,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "for_update",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 341,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "messages"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 353,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 357,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 359,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 367,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 369,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "for_update",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions",
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 374,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 378,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_reset_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 383,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 392,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes",
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 401,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 405,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "product_sessions"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 409,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_reset_idempotency"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 413,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-session-repository.ts",
+        "line": 420,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-task-repository.ts": [
+      {
+        "file": "postgres-task-repository.ts",
+        "line": 27,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-task-repository.ts",
+        "line": 193,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "session_lanes",
+          "tasks"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-task-repository.ts",
+        "line": 218,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "runs"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-team-message-repository.ts": [
+      {
+        "file": "postgres-team-message-repository.ts",
+        "line": 216,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-team-message-repository.ts",
+        "line": 313,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-team-message-repository.ts",
+        "line": 316,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-work-identity-repository.ts": [
+      {
+        "file": "postgres-work-identity-repository.ts",
+        "line": 401,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-work-identity-repository.ts",
+        "line": 420,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-work-identity-repository.ts",
+        "line": 430,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-work-identity-repository.ts",
+        "line": 456,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-work-identity-repository.ts",
+        "line": 467,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres-work-projection-facts-query.ts": [],
+    "postgres-work-projection-facts-source.ts": [],
+    "postgres-workspace-memory-repository.ts": [
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 95,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspace_memory_proposals"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 130,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 155,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 158,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 272,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "in",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 318,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 327,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 361,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 364,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 529,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspace_memory_proposals"
+        ],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres-workspace-memory-repository.ts",
+        "line": 561,
+        "classification": "classified",
+        "readWrite": "write",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [
+          "workspace_memory_entries"
+        ],
+        "disposition": null,
+        "reason": null
+      }
+    ],
+    "postgres.ts": [
+      {
+        "file": "postgres.ts",
+        "line": 148,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres.ts",
+        "line": 159,
+        "classification": "classified",
+        "readWrite": "read",
+        "lock": "none",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres.ts",
+        "line": 190,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres.ts",
+        "line": 214,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres.ts",
+        "line": 218,
+        "classification": "classified",
+        "readWrite": "control",
+        "lock": "none",
+        "transaction": "out",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      },
+      {
+        "file": "postgres.ts",
+        "line": 225,
+        "classification": "MISSING",
+        "readWrite": "unknown",
+        "lock": "unknown",
+        "transaction": "unknown",
+        "tables": [],
+        "disposition": null,
+        "reason": null
+      }
+    ]
+  },
+  "sourceLockRows": [
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 128,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 150,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 206,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 313,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-agent-registry.ts",
+      "line": 398,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 183,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 321,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 332,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 500,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 526,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-channel-repository.ts",
+      "line": 533,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 221,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 406,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 441,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 484,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 620,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 953,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1060,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1087,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1140,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1157,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1344,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1358,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1363,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1433,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1447,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1466,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1551,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1564,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1574,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1613,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1738,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-collaborative-team-repository.ts",
+      "line": 1936,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-invokable-repository.ts",
+      "line": 77,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-invokable-repository.ts",
+      "line": 116,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 81,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 93,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 97,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 109,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 113,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 123,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 135,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 307,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 317,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 321,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 335,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 339,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 463,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 475,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 712,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 719,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 731,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 792,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 807,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 826,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 850,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 903,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 912,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 918,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 943,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 952,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1222,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1253,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1278,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1295,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-lark-review-surface-repository.ts",
+      "line": 1339,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 103,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 124,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-learning-proposal-repository.ts",
+      "line": 198,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-memory-api-repository.ts",
+      "line": 307,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-run-repository.ts",
+      "line": 190,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 217,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 335,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-session-repository.ts",
+      "line": 370,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 220,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 230,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 249,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-team-message-repository.ts",
+      "line": 292,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-work-identity-repository.ts",
+      "line": 406,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-work-identity-repository.ts",
+      "line": 413,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 289,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 306,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 322,
+      "lock": "for_share",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    },
+    {
+      "file": "postgres-workspace-memory-repository.ts",
+      "line": 495,
+      "lock": "for_update",
+      "disposition": "(c)",
+      "reason": "same legacy consistency cluster; lock ownership and transaction remain with this repository"
+    }
+  ]
 }

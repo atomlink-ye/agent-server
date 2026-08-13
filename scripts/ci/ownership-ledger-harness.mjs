@@ -33,7 +33,7 @@ const baseline = invoke();
 arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
 
 {
-  const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); value.lockRows.pop(); fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
+  const h = fresh(); const value = JSON.parse(fs.readFileSync(h.ledgerPath, 'utf8')); const target = (row) => row.file === 'postgres-workspace-memory-repository.ts' && row.line === 289; value.lockRows = value.lockRows.filter((row) => !target(row)); value.sourceLockRows = value.sourceLockRows.filter((row) => !target(row)); fs.writeFileSync(h.ledgerPath, JSON.stringify(value));
   arms.push({ name: 'remove-known-bidirectional-for-update-row', ...invoke(h.dir, h.ledgerPath), expectedNonzero: true, inputHashes: { ledger: hashes(h.ledgerPath) } });
 }
 {
@@ -54,5 +54,6 @@ arms.push({ name: 'baseline', ...baseline, expectedNonzero: false });
 }
 
 const result = { schema: 'ownership-ledger-harness.v1', candidateSha, inputs, arms, ok: arms.every((arm) => arm.exitCode !== 0 === arm.expectedNonzero) };
+if (process.env.OWNERSHIP_EVIDENCE_PATH) fs.writeFileSync(process.env.OWNERSHIP_EVIDENCE_PATH, `${JSON.stringify(result)}\n`);
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exitCode = result.ok ? 0 : 2;

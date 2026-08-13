@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api check-fast web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean \
+.PHONY: setup dev dev-api check-fast web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean provider-toolchain-acceptance provider-toolchain-status buildkit-cache-acceptance \
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-test-web internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
@@ -134,6 +134,15 @@ e2e-smoke:
 
 paseo-smoke:
 	./scripts/dev/docker-run -- pnpm test:paseo-smoke
+
+provider-toolchain-status:
+	./scripts/dev/docker-run -- node provider-toolchain/scripts/provider-toolchain.mjs status
+
+provider-toolchain-acceptance:
+	./scripts/dev/provider-toolchain-acceptance.sh
+
+buildkit-cache-acceptance:
+	./scripts/dev/buildkit-cache-acceptance.sh $${BUILDKIT_CACHE_MODE:-help}
 
 eval-smoke:
 	./scripts/dev/docker-run -- pnpm eval:smoke

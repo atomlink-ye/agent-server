@@ -1,0 +1,11 @@
+packages:
+  - '.'
+
+allowBuilds:
+  esbuild: true
+  node-pty: true
+  protobufjs: false
+  sharp: true
+
+patchedDependencies:
+  '@getpaseo/server@0.1.110': patches/@getpaseo__server@0.1.110.patch

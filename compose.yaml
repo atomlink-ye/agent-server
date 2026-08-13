@@ -13,6 +13,28 @@ services:
       timeout: 3s
       retries: 30
 
+  provider-toolchain-init:
+    image: agent-server-runner:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    init: true
+    user: node
+    volumes:
+      - .:/workspace:ro
+      - provider-toolchain:/opt/provider-toolchain-volume
+    working_dir: /workspace
+    environment:
+      PROVIDER_VOLUME_ROOT: /opt/provider-toolchain-volume
+      PROVIDER_MANIFEST: /workspace/provider-toolchain/providers.manifest.json
+      HOME: /opt/provider-toolchain-volume/home
+      PNPM_HOME: /opt/provider-toolchain-volume/pnpm
+      PATH: /pnpm:/opt/provider-toolchain-volume/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command: ['node', 'provider-toolchain/scripts/provider-toolchain.mjs', 'init']
+
   agent-server:
     image: agent-server-runner:latest
     build:
@@ -28,6 +50,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      provider-toolchain-init:
+        condition: service_completed_successfully
     ports:
       - '127.0.0.1:3000:3000'
       - '127.0.0.1:16767:16767'
@@ -90,6 +114,7 @@ services:
         volume:
           nocopy: true
       - local-state:/workspace/.local
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
     # Keep this equivalent to package.json dev:api without invoking pnpm's
@@ -158,6 +183,7 @@ services:
         volume:
           nocopy: true
       - local-state:/workspace/.local
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
     working_dir: /workspace
     entrypoint: ['node', 'scripts/dev/docker-ensure-node-modules.mjs']
     command: ['pnpm', 'web:dev']
@@ -211,6 +237,7 @@ services:
           nocopy: true
       - runner-dist:/workspace/dist
       - /workspace/.local
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
     working_dir: /workspace
 
   postgres-test:
@@ -238,3 +265,6 @@ volumes:
   runner-dist:
   local-state:
   postgres-data:
+  provider-toolchain:
+    name: ${PROVIDER_TOOLCHAIN_VOLUME:?docker-compose wrapper must provide PROVIDER_TOOLCHAIN_VOLUME}
+    external: true

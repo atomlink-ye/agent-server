@@ -1,47 +1,15 @@
 import { access, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createSafeRuntimeEnvironment } from './safe-environment.mjs';
-
-const require = createRequire(import.meta.url);
-
-const packages = new Map([
-  ['linux-x64', 'opencode-linux-x64'],
-  ['linux-arm64', 'opencode-linux-arm64'],
-  ['darwin-x64', 'opencode-darwin-x64'],
-  ['darwin-arm64', 'opencode-darwin-arm64'],
-]);
+import { resolveProviderBinary } from './resolve-provider.mjs';
 
 export async function resolveOpenCodeBinary() {
-  if (process.env.OPENCODE_BIN) {
-    await access(process.env.OPENCODE_BIN, constants.X_OK);
-    return process.env.OPENCODE_BIN;
-  }
-
-  const packageName = packages.get(`${process.platform}-${process.arch}`);
-  if (!packageName) {
-    throw new Error(
-      `Unsupported OpenCode platform: ${process.platform}-${process.arch}. ` +
-        'The baseline supports Linux and macOS on x64 or arm64.',
-    );
-  }
-
-  let packageJson;
-  try {
-    packageJson = require.resolve(`${packageName}/package.json`);
-  } catch {
-    throw new Error(
-      `${packageName} is not installed. Run "make setup" before starting Paseo.`,
-    );
-  }
-  const binary = join(dirname(packageJson), 'bin', 'opencode');
-  await access(binary, constants.X_OK);
-  return binary;
+  return resolveProviderBinary('opencode', 'OPENCODE_BIN');
 }
 
 // `opencode` is a ~100MB Bun-compiled binary, so the first exec has to page the

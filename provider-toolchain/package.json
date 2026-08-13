@@ -1,0 +1,12 @@
+{
+  "name": "@atomlink-ye/agent-server-provider-toolchain",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "dependencies": {
+    "@getpaseo/cli": "0.1.110"
+  }
+}

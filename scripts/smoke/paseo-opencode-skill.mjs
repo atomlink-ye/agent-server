@@ -7,9 +7,11 @@ import {
   realpath,
   rm,
 } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { registerSkill } from '../../src/application/extensions/skill-registry.ts';
 import { LocalSkillCatalog } from '../../src/infrastructure/filesystem/local-skill-catalog.ts';
 import { materializeOpenCodeSkill } from '../../src/infrastructure/filesystem/opencode-skill-materializer.ts';
@@ -24,6 +26,8 @@ import {
   startPaseo,
   stopProcessTree,
 } from '../dev/paseo-process.mjs';
+import { resolveOpenCodeBinary } from '../dev/resolve-opencode.mjs';
+import { resolvePaseoBinary } from '../dev/resolve-paseo.mjs';
 
 const root = resolve(
   join(
@@ -38,6 +42,7 @@ const registryRoot = join(root, 'skill-registry');
 const repositoryRoot = resolve(
   join(fileURLToPath(new URL('.', import.meta.url)), '../..'),
 );
+const execFileAsync = promisify(execFile);
 let paseo;
 let client;
 let stage = 'setup';
@@ -220,11 +225,8 @@ try {
   if (!exactOutput)
     throw new Error('Native Skill probe did not return the exact marker.');
   stage = 'versions';
-  const paseoVersion = await installedVersion(['@getpaseo/cli']);
-  const opencodeVersion = await installedVersion([
-    `opencode-${process.platform}-${process.arch}`,
-    'opencode',
-  ]);
+  const paseoVersion = await installedVersion('paseo');
+  const opencodeVersion = await installedVersion('opencode');
   const realpathUnderRegistry = linkRealPath.startsWith(
     `${await realpath(registryRoot)}/`,
   );
@@ -242,20 +244,29 @@ try {
   process.exitCode = 1;
 }
 
-async function installedVersion(packageNames) {
-  for (const packageName of packageNames) {
-    try {
-      return (
-        JSON.parse(
-          await readFile(
-            join(repositoryRoot, 'node_modules', packageName, 'package.json'),
-            'utf8',
-          ),
-        ).version ?? null
-      );
-    } catch {}
+async function installedVersion(provider) {
+  const binary =
+    provider === 'paseo'
+      ? await resolvePaseoBinary()
+      : await resolveOpenCodeBinary();
+  try {
+    const { stdout } = await execFileAsync(binary, ['--version'], {
+      encoding: 'utf8',
+    });
+    const version = stdout.trim();
+    if (!version) throw new Error(`${provider}_version_empty`);
+    return version;
+  } catch (error) {
+    if (Number.isInteger(error?.code) && error.code !== 0) {
+      const code = `${provider}_version_exit_${error.code}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    if (error?.signal) {
+      const code = `${provider}_version_signal_${error.signal}`;
+      throw Object.assign(new Error(code), { code });
+    }
+    throw error;
   }
-  return null;
 }
 
 function localSkillDigest(files) {

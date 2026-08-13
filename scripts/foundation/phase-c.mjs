@@ -297,7 +297,12 @@ function evaluateE6(options) {
   }
   const proof = readJson(resolve(options['proof-record']));
   if (proof.__error) return result('E6', 'MISSING', proof.__error);
-  const required = [proof.work_id, proof.work_run_id, proof.agent_server_container_id, proof.paseo_runtime_container_id, proof.proof_commit, proof.canonical_switch_commit];
+  const required = [
+    proof.work_id,
+    proof.work_run_id,
+    proof.agent_server_container_id,
+    proof.paseo_runtime_container_id,
+  ];
   if (required.some((value) => !nonempty(value))) return result('E6', 'MISSING', 'required proof identity is empty');
   const failures = [];
   if (proof.terminal_state !== expectation.expected_terminal_state) failures.push('terminal_state');
@@ -307,14 +312,31 @@ function evaluateE6(options) {
   if (proof.agent_server_container_id === proof.paseo_runtime_container_id) failures.push('independent_container_identity');
   if (proof.secret_hits !== 0) failures.push('secret_scan');
   if (proof.negative_control?.exit !== 1 || proof.negative_control?.status !== 'FAIL') failures.push('negative_control');
+  if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
+  if (failures.length)
+    return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {
+      failures,
+    });
+  const proofCommit = options['proof-commit'];
+  const canonicalSwitchCommit = options['canonical-switch-commit'];
+  if (!nonempty(proofCommit) || !nonempty(canonicalSwitchCommit)) {
+    return result(
+      'E6',
+      'MISSING',
+      'raw evidence is valid; proof and canonical-switch Git objects do not exist yet',
+      { stage: proof.stage },
+    );
+  }
   const expectationTime = Number(git('show', '-s', '--format=%ct', EXPECTATION_COMMIT));
   const runTime = Math.floor(Date.parse(proof.run_timestamp) / 1000);
-  const proofTime = Number(git('show', '-s', '--format=%ct', proof.proof_commit));
-  const switchTime = Number(git('show', '-s', '--format=%ct', proof.canonical_switch_commit));
+  const proofTime = Number(git('show', '-s', '--format=%ct', proofCommit));
+  const switchTime = Number(
+    git('show', '-s', '--format=%ct', canonicalSwitchCommit),
+  );
   if (!(expectationTime < runTime && runTime < proofTime && proofTime < switchTime)) failures.push('chronology');
   try {
-    git('merge-base', '--is-ancestor', EXPECTATION_COMMIT, proof.proof_commit);
-    git('merge-base', '--is-ancestor', proof.proof_commit, proof.canonical_switch_commit);
+    git('merge-base', '--is-ancestor', EXPECTATION_COMMIT, proofCommit);
+    git('merge-base', '--is-ancestor', proofCommit, canonicalSwitchCommit);
   } catch {
     failures.push('ancestry');
   }

@@ -49,6 +49,7 @@
     "foundation:acceptance:core-topology": "node scripts/foundation/phase-c.mjs E4",
     "foundation:acceptance:runtime-only-targets": "node scripts/foundation/phase-c.mjs E5",
     "foundation:acceptance:runtime-real": "node scripts/foundation/phase-c.mjs E6",
+    "foundation:acceptance:phase-c-harness": "node scripts/foundation/phase-c-harness.mjs",
     "foundation:deterministic": "pnpm foundation:deterministic:ci-graph && pnpm foundation:deterministic:ci-inventory && pnpm foundation:deterministic:identity-script",
     "foundation:acceptance": "pnpm foundation:acceptance:no-provider-volume && pnpm foundation:acceptance:core-topology && pnpm foundation:acceptance:runtime-only-targets && pnpm foundation:acceptance:runtime-real",
     "check": "pnpm check:backend && pnpm check:web",

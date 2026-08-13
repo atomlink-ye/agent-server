@@ -416,7 +416,16 @@ function evaluateE6(options) {
     proof.parallel_business_observation?.projection_status !==
       'internally_anchored' ||
     proof.parallel_business_observation?.trace_projection_status !==
-      'internally_anchored'
+      'internally_anchored' ||
+    proof.parallel_business_observation?.overlap_observed !== true ||
+    !Array.isArray(
+      proof.parallel_business_observation?.worker_run_windows,
+    ) ||
+    new Set(
+      proof.parallel_business_observation.worker_run_windows.map(
+        (run) => run.work_item_id,
+      ),
+    ).size !== 2
   )
     failures.push('parallel_business_predicate');
   if (proof.provider !== expectation.runtime.provider || proof.model !== expectation.runtime.model) failures.push('provider_model');
@@ -427,7 +436,10 @@ function evaluateE6(options) {
     proof.negative_control?.exit !== 1 ||
     proof.negative_control?.status !== 'FAIL' ||
     proof.negative_control?.http_status !== 400 ||
-    proof.negative_control?.error_code !== 'invalid_work_definition'
+    proof.negative_control?.error_code !== 'invalid_work_definition' ||
+    proof.negative_control?.error_message !==
+      'The definition and published version must belong to this owner scope and lineage.' ||
+    proof.negative_control?.request_id_present !== true
   )
     failures.push('negative_control');
   if (

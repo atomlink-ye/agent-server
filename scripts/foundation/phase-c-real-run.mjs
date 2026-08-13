@@ -110,11 +110,14 @@ if (negativeControl) {
   });
   if (
     negative.status !== 400 ||
-    negative.body?.error?.code !== 'invalid_work_definition'
+    negative.body?.error?.code !== 'invalid_work_definition' ||
+    negative.body?.error?.message !==
+      'The definition and published version must belong to this owner scope and lineage.' ||
+    !negative.body?.error?.request_id
   )
     throw new Error('negative_control_contract_mismatch');
   process.stdout.write(
-    `${JSON.stringify({ status: 'FAIL', reason: 'nonexistent_definition', http_status: negative.status, error_code: negative.body.error.code })}\n`,
+    `${JSON.stringify({ status: 'FAIL', reason: 'nonexistent_definition', http_status: negative.status, error_code: negative.body.error.code, error_message: negative.body.error.message, request_id_present: true })}\n`,
   );
   process.exit(1);
 }
@@ -164,6 +167,30 @@ if (
   trace.work_run.result_summary !== marker
 )
   throw new Error('parallel_exact_marker_round_trip_failed');
+const workerRunWindows = trace.runs
+  .filter(
+    (run) =>
+      product.work_items.some((item) => item.id === run.work_item_id) &&
+      run.started_at &&
+      run.ended_at,
+  )
+  .map((run) => ({
+    work_item_id: run.work_item_id,
+    started_at: run.started_at,
+    ended_at: run.ended_at,
+  }));
+const distinctWorkerIds = [...new Set(workerRunWindows.map((run) => run.work_item_id))];
+const overlapObserved = workerRunWindows.some((left, leftIndex) =>
+  workerRunWindows.some(
+    (right, rightIndex) =>
+      leftIndex < rightIndex &&
+      left.work_item_id !== right.work_item_id &&
+      Date.parse(left.started_at) < Date.parse(right.ended_at) &&
+      Date.parse(right.started_at) < Date.parse(left.ended_at),
+  ),
+);
+if (distinctWorkerIds.length !== 2 || !overlapObserved)
+  throw new Error('parallel_worker_overlap_missing');
 if (!Array.isArray(trace.runs) || !trace.runs.length)
   throw new Error('trace_runs_missing');
 const tracedRunIds = trace.runs.map((run) => run.source_refs?.run_id);
@@ -245,6 +272,8 @@ const record = {
     lead_result_summary: product.work_run.result_summary,
     projection_status: product.projection_status,
     trace_projection_status: trace.projection_status,
+    worker_run_windows: workerRunWindows,
+    overlap_observed: overlapObserved,
   },
   marker_sha256: createHash('sha256').update(marker).digest('hex'),
   provider: defaults.PASEO_PROVIDER,

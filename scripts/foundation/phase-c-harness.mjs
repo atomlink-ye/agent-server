@@ -77,9 +77,9 @@ function sanitizeService(name, service) {
   };
 }
 
-function containerRecord(service) {
+function containerRecord(service, composeCommand = rawCompose) {
   const id = run('docker', [
-    ...rawCompose,
+    ...composeCommand,
     'ps',
     '-q',
     service,
@@ -104,7 +104,7 @@ function containerRecord(service) {
     .filter(Boolean)
     .sort();
   const top = run('docker', [
-    ...rawCompose,
+    ...composeCommand,
     'top',
     service,
     '-eo',
@@ -258,6 +258,88 @@ try {
     '--runtime-record',
     runtimePath,
   ]);
+  const mutationProject = `${project}_e4red`;
+  const mutationFiles = [
+    ...composeFiles,
+    '-f',
+    'scripts/foundation/phase-c-e4-ownership-mutation.yaml',
+  ];
+  const mutationCompose = ['compose', '-p', mutationProject, ...mutationFiles];
+  let mutation;
+  try {
+    const mutationEffective = JSON.parse(
+      run(
+        wrapper,
+        [...mutationFiles, '-p', mutationProject, 'config', '--format', 'json'],
+        {
+          env: {
+            ...composeEnvironment,
+            OPENCODE_GO_API_KEY: '__PHASE_C_CONFIG_REDACTED__',
+          },
+        },
+      ).stdout,
+    );
+    run(wrapper, [
+      ...mutationFiles,
+      '-p',
+      mutationProject,
+      'up',
+      '-d',
+      '--wait',
+      'postgres',
+      'provider-toolchain-init',
+      'paseo-runtime',
+      'agent-server',
+    ]);
+    const mutationRecordPath = resolve(artifactRoot, 'e4-mutation-record.json');
+    const mutationRecord = {
+      schema: 'agent-server.foundation.phase-c-runtime-record',
+      version: 1,
+      project: mutationProject,
+      candidate_sha: candidateSha,
+      mutation: {
+        name: 'restore-agent-provider-ownership',
+        source: 'scripts/foundation/phase-c-e4-ownership-mutation.yaml',
+      },
+      effective_compose: {
+        services: Object.entries(mutationEffective.services ?? {})
+          .map(([name, service]) => sanitizeService(name, service))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      },
+      runtime_inspection: {
+        containers: ['agent-server', 'paseo-runtime'],
+        agent_server: containerRecord('agent-server', mutationCompose),
+        paseo_runtime: containerRecord('paseo-runtime', mutationCompose),
+      },
+    };
+    writeFileSync(
+      mutationRecordPath,
+      `${JSON.stringify(mutationRecord, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    const mutationRun = run(
+      process.execPath,
+      [
+        'scripts/foundation/phase-c.mjs',
+        'E4',
+        '--runtime-record',
+        mutationRecordPath,
+      ],
+      { allow: [1] },
+    );
+    const mutationResult = JSON.parse(mutationRun.stdout.trim().split('\n').at(-1));
+    if (mutationRun.status !== 1 || mutationResult.status !== 'FAIL')
+      throw new Error('e4_ownership_mutation_not_red');
+    mutation = {
+      name: 'restore-agent-provider-ownership',
+      exit: mutationRun.status,
+      status: mutationResult.status,
+    };
+  } finally {
+    run('docker', [...mutationCompose, 'down', '--remove-orphans', '--volumes'], {
+      allow: [0, 1],
+    });
+  }
 
   const proofPath = resolve(artifactRoot, 'proof-record.json');
   const runEnvironment = {
@@ -285,12 +367,15 @@ try {
     reason: negativeResult.reason,
     http_status: negativeResult.http_status,
     error_code: negativeResult.error_code,
+    error_message: negativeResult.error_message,
+    request_id_present: negativeResult.request_id_present,
     missing: false,
   };
   proof.candidate_sha = candidateSha;
   proof.agent_server_container_id = runtimeRecord.runtime_inspection.agent_server.container_id;
   proof.paseo_runtime_container_id = runtimeRecord.runtime_inspection.paseo_runtime.container_id;
   proof.runtime_record = 'runtime-record.json';
+  proof.e4_mutation = mutation;
   proof.cleanup = cleanup();
   const serialized = [runtimePath, proofPath]
     .map((path) => (path === proofPath ? JSON.stringify(proof) : readFileSync(path, 'utf8')))

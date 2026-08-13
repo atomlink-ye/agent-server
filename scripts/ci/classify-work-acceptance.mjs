@@ -28,10 +28,7 @@ process.stderr.write(stderr);
 
 const rawExit = result.status;
 const combined = `${stdout}\n${stderr}`;
-const exactMarkerPresent = combined
-  .split(/\r?\n/)
-  .map((line) => line.trim())
-  .includes(exactMarker);
+const exactMarkerPresent = combined.includes(exactMarker);
 if (rawExit === 0) process.exit(0);
 if (exactMarkerPresent) {
   console.error(`work_acceptance_missing:kind=${kind}:marker=${exactMarker}`);

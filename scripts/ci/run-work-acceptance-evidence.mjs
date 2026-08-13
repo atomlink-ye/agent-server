@@ -27,6 +27,7 @@ const inputs = [
   'src/entrypoints/mcp/direct-memory-mcp.ts',
   'src/entrypoints/mcp/product-work-mcp-tools.ts',
   'scripts/ci/check-work-import-boundary.mjs',
+  'scripts/ci/check-work-bootstrap-boundary.mjs',
   'scripts/ci/classify-work-acceptance.mjs',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
 ];
@@ -181,17 +182,28 @@ mutate(
   () => {
     const source = path.join(repo, 'src/bootstrap.ts');
     const text = fs.readFileSync(source, 'utf8');
-    const anchor = `  const workModule = createWorkModule({`;
+    const anchor = `  const runtimeMcpServer = new RuntimeMcpServer(`;
     const changed = text.replace(
       anchor,
-      `  void forbiddenWorkIdentityFactory;\n${anchor}`,
+      `  const forbiddenWorkIdentity = forbiddenWorkIdentityFactory({\n    database: pool,\n    definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),\n    execution: new InvokeTaskExecutionAdmission(invokeTask),\n  });\n  void forbiddenWorkIdentity;\n${anchor}`,
     );
     if (changed === text) fail('bootstrap_direct_work_call_anchor_missing', 2);
     fs.writeFileSync(source, changed);
     try {
       arms.push(
         runArm(
-          'bootstrap-direct-work-fail',
+          'bootstrap-direct-work-e5-fail',
+          'pnpm',
+          ['modularization:acceptance:work-mcp'],
+          1,
+          [
+            'work_bootstrap_boundary_violation:file=src/bootstrap.ts:marker=createPostgresWorkIdentityModule',
+          ],
+        ),
+      );
+      arms.push(
+        runArm(
+          'bootstrap-direct-work-structural-control',
           'pnpm',
           ['modularization:verify:work-boundary'],
           1,
@@ -213,14 +225,6 @@ mutate(
           'bootstrap-direct-work-http-control',
           'pnpm',
           ['modularization:acceptance:work-http'],
-          0,
-        ),
-      );
-      arms.push(
-        runArm(
-          'bootstrap-direct-work-mcp-control',
-          'pnpm',
-          ['modularization:acceptance:work-mcp'],
           0,
         ),
       );

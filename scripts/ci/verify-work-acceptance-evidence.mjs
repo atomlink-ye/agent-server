@@ -6,7 +6,24 @@ import path from 'node:path';
 import process from 'node:process';
 
 const inputPath = path.resolve(option('--input'));
-const evidence = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+let inputBytes;
+try {
+  inputBytes = fs.readFileSync(inputPath);
+} catch (error) {
+  console.error(
+    `work_acceptance_evidence_missing:path=${inputPath}:reason=${error.code ?? 'unreadable'}`,
+  );
+  process.exit(2);
+}
+let evidence;
+try {
+  evidence = JSON.parse(inputBytes.toString('utf8'));
+} catch (error) {
+  console.error(
+    `work_acceptance_evidence_invalid:malformed_json:${error.message}`,
+  );
+  process.exit(1);
+}
 const expectedArms = [
   ['baseline-http', 0],
   ['baseline-mcp', 0],
@@ -20,10 +37,10 @@ const expectedArms = [
   ['work-registration-http-control', 0],
   ['wrong-work-id-fail', 1],
   ['wrong-work-id-http-control', 0],
-  ['bootstrap-direct-work-fail', 1],
+  ['bootstrap-direct-work-e5-fail', 1],
+  ['bootstrap-direct-work-structural-control', 1],
   ['bootstrap-direct-work-type-control', 0],
   ['bootstrap-direct-work-http-control', 0],
-  ['bootstrap-direct-work-mcp-control', 0],
 ];
 const failures = [];
 assert(evidence.schema === 'mgr-b-work-e4-e5-runtime-v1', 'schema');
@@ -77,7 +94,7 @@ const result = {
   parent: evidence.parent,
   evidence_input_sha256: crypto
     .createHash('sha256')
-    .update(fs.readFileSync(inputPath))
+    .update(inputBytes)
     .digest('hex'),
   assertions: {
     exact_arm_set: true,

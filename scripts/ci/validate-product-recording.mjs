@@ -49,6 +49,7 @@ const SCENARIOS = new Set([
   'parallel-success',
   'rework-once',
   'lead-never-accept',
+  'oi38-negative',
 ]);
 const EXPECTED_MEMBER_COMPOSITIONS = Object.freeze({
   'parallel-success': [
@@ -65,6 +66,11 @@ const EXPECTED_MEMBER_COMPOSITIONS = Object.freeze({
     'projection-lead',
     'projection-worker',
     'projection-observer',
+  ],
+  'oi38-negative': [
+    'projection-lead',
+    'projection-worker-a',
+    'projection-worker-b',
   ],
 });
 const SUBMIT_INSTRUCTION_PROFILE = 'canonical-team-work-submit-hard-gate/v1';
@@ -151,6 +157,100 @@ function assertQueries(manifest, mode) {
   }
 }
 
+function validateOi38Evidence(manifest, parsed) {
+  const evidence = manifest.predicate_evidence?.oi38;
+  if (!evidence || evidence.owner_work_id !== manifest.work_id)
+    fail('oi38_owner_work_id_mismatch');
+  assertUuid(evidence.missing_work_id, 'oi38.missing_work_id');
+  if (evidence.missing_work_id === manifest.work_id)
+    fail('oi38_missing_work_id_not_random');
+  for (const name of ['owner', 'foreign', 'missing']) {
+    const response = evidence[name];
+    if (
+      !response ||
+      !Number.isInteger(response.status) ||
+      !response.body ||
+      typeof response.body !== 'object' ||
+      Array.isArray(response.body)
+    )
+      fail('oi38_response_incomplete', name);
+  }
+  const owner = evidence.owner;
+  if (
+    owner.status !== 200 ||
+    !Array.isArray(owner.body.work_runs) ||
+    owner.body.work_runs.length < 1 ||
+    !Object.hasOwn(owner.body, 'next_cursor')
+  )
+    fail('oi38_owner_positive_control_failed');
+  for (const name of ['foreign', 'missing']) {
+    const response = evidence[name];
+    if (
+      response.status !== 404 ||
+      response.body.error?.code !== 'work_not_found' ||
+      typeof response.body.error?.request_id !== 'string' ||
+      !response.body.error.request_id
+    )
+      fail('oi38_negative_control_failed', name);
+  }
+  const normalize = (response) => {
+    const body = structuredClone(response.body);
+    if (body?.error) delete body.error.request_id;
+    return stableStringify(body);
+  };
+  if (normalize(evidence.foreign) !== normalize(evidence.missing))
+    fail('oi38_negative_envelope_mismatch');
+  const apiWork = parsed['api/work.json'];
+  const apiWorkRun = parsed['api/work-run.json'];
+  const workRows = rows(parsed['db/works.json'], 'db/works.json');
+  const workRunRows = rows(parsed['db/work_runs.json'], 'db/work_runs.json');
+  if (
+    apiWork?.id !== manifest.work_id ||
+    apiWorkRun?.work_id !== manifest.work_id ||
+    apiWorkRun?.id !== manifest.work_run_id ||
+    !workRows.some(
+      (row) =>
+        row.id === manifest.work_id &&
+        row.tenant_id === manifest.tenant_id &&
+        row.workspace_id === manifest.workspace_id,
+    ) ||
+    !workRunRows.some(
+      (row) =>
+        row.id === manifest.work_run_id &&
+        row.work_id === manifest.work_id &&
+        row.tenant_id === manifest.tenant_id &&
+        row.workspace_id === manifest.workspace_id,
+    ) ||
+    owner.body.work_runs.some(
+      (run) =>
+        run?.work_id !== manifest.work_id ||
+        !workRunRows.some((row) => row.id === run.id && row.work_id === manifest.work_id),
+    )
+  )
+    fail('oi38_lineage_mismatch');
+  const eventRows = rows(parsed['db/run_events.json'], 'db/run_events.json');
+  const inputTokens = eventRows.reduce(
+    (sum, row) =>
+      sum +
+      (row?.payload?.kind === 'usage' &&
+      Number.isFinite(row.payload.input_tokens)
+        ? row.payload.input_tokens
+        : 0),
+    0,
+  );
+  const outputTokens = eventRows.reduce(
+    (sum, row) =>
+      sum +
+      (row?.payload?.kind === 'usage' &&
+      Number.isFinite(row.payload.output_tokens)
+        ? row.payload.output_tokens
+        : 0),
+    0,
+  );
+  if (!(inputTokens > 0) || !(outputTokens > 0))
+    fail('oi38_usage_tokens_missing');
+}
+
 export async function validateRecording(directory, mode = 'pre-identity') {
   const root = resolve(directory);
   const expected = [
@@ -201,7 +301,7 @@ export async function validateRecording(directory, mode = 'pre-identity') {
   if (!manifest.service_revision || manifest.service_revision === 'unknown')
     fail('service_revision_invalid');
   if (
-    manifest.scenario === 'parallel-success' &&
+    ['parallel-success', 'oi38-negative'].includes(manifest.scenario) &&
     manifest.predicate_evidence?.parallel_attempts_observed !== true
   )
     fail('parallel_attempt_observation_missing');
@@ -369,6 +469,8 @@ export async function validateRecording(directory, mode = 'pre-identity') {
       if (query.row_count !== rows(parsed[file], file).length)
         fail('query_row_count_mismatch', query.name);
     }
+    if (manifest.scenario === 'oi38-negative')
+      validateOi38Evidence(manifest, parsed);
   }
   return {
     mode,

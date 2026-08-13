@@ -26,13 +26,18 @@ const stderr = result.stderr ?? '';
 process.stdout.write(stdout);
 process.stderr.write(stderr);
 
-const rawExit = result.status ?? 125;
+const rawExit = result.status;
 const combined = `${stdout}\n${stderr}`;
-if (rawExit !== 0 && combined.includes(exactMarker)) {
+const exactMarkerPresent = combined
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .includes(exactMarker);
+if (rawExit === 0) process.exit(0);
+if (exactMarkerPresent) {
   console.error(`work_acceptance_missing:kind=${kind}:marker=${exactMarker}`);
   process.exit(2);
 }
-process.exit(rawExit);
+process.exit(1);
 
 function option(name) {
   const index = process.argv.indexOf(name);

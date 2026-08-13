@@ -20,15 +20,31 @@ const populatedWorkList = {
   works: [...parallelWorkList.works, ...reworkWorkList.works],
 };
 const emptyWorkList = { ...parallelWorkList, works: [] };
-const englishProductStatusPattern =
-  String.raw`\b(?:Needs You|Problem|Failed|Stuck|Completed|Complete|Succeeded|Success|` +
-  String.raw`Running|In progress|Processing|Waiting)\b`;
+const forbiddenProductStatusTerms = [
+  'Needs You',
+  'Problem',
+  'Failed',
+  'Stuck',
+  'Completed',
+  'Complete',
+  'Succeeded',
+  'Success',
+  'Running',
+  'In progress',
+  'Processing',
+  'Waiting',
+  String.raw`four[- ]state(?:s)?`,
+  String.raw`4[- ]state(?:s)?`,
+  '四态',
+  '成功',
+  '已完成',
+  '进行中',
+  '处理中',
+  '等待',
+  '待处理',
+].join('|');
 const forbiddenProductStatusLanguage = new RegExp(
-  [
-    englishProductStatusPattern,
-    String.raw`\b(?:four[- ]state(?:s)?|4[- ]state(?:s)?)\b|四态`,
-    '成功|已完成|进行中|处理中|等待|待处理',
-  ].join('|'),
+  String.raw`(?<![A-Za-z0-9_-])(?:${forbiddenProductStatusTerms})(?![A-Za-z0-9_-])`,
   'i',
 );
 
@@ -58,7 +74,8 @@ function renderedStatusSemantics(host: HTMLElement): string {
         .map(({ name, value }) => `${name}=${value}`);
       return [element.className, ...stateAttributes];
     })
-    .join(' ');
+    .join(' ')
+    .replaceAll(/[-_]+/g, ' ');
 }
 
 async function settleNetworkTurn() {

@@ -1,4 +1,4 @@
-import type { ServiceAccountAccessContext } from '../../application/control-plane/access-context.js';
+import type { ServiceAccountAccessContext } from './access-context.js';
 
 export type ApiVariables = {
   requestId: string;

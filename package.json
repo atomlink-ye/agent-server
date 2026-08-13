@@ -41,6 +41,7 @@
     "check:exec-plans": "node --test scripts/ci/check-exec-plans.test.mjs && node scripts/ci/check-exec-plans.mjs",
     "modularization:verify:ownership-ledger": "node scripts/ci/ownership-ledger-harness.mjs",
     "modularization:verify:product-routes": "pnpm guard:create-app-product-endpoints",
+    "modularization:verify:platform-shell": "node --import tsx scripts/ci/verify-platform-shell.mjs",
     "guard:create-app-product-endpoints": "node --import tsx scripts/ci/guard-create-app-product-endpoints.mjs",
     "guard:product-accepted-gate-lineage": "node scripts/ci/verify-product-accepted-gate-lineage.mjs",
     "guard:product-accepted-evidence": "node scripts/ci/verify-product-accepted-guard-evidence.mjs",

@@ -1,4 +1,4 @@
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { RunRepository } from '../ports/run-repository.js';

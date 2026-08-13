@@ -23,7 +23,7 @@ import type { InvokeTask } from '../../application/tasks/invoke-task.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import type { ApiEnvironment } from './http-types.js';
+import type { ApiEnvironment } from '../../platform/http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';
@@ -56,6 +56,15 @@ import type { StartWorkRun } from '../../application/work/start-work-run.js';
 import { registerProductWorkCommandRoutes } from './routes/product-work-commands.js';
 import { registerProductWorkRoutes } from './routes/product-work.js';
 import type { ProductProjectionApi } from '../../application/product-projection/product-projection.js';
+import {
+  composePlatform,
+  type PlatformContribution,
+  type PlatformHttpInstaller,
+  type PlatformRuntimeRegistry,
+} from '../../platform/composition-shell.js';
+import { requireServiceAccountAccess } from './authentication.js';
+import { getAuthenticatedAccessContext } from '../../platform/access-context.js';
+import { ServiceAccountAuthenticator } from '../../application/control-plane/service-account-authenticator.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -95,6 +104,7 @@ export interface AppDependencies {
   >;
   readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
   readonly productProjection?: ProductProjectionApi;
+  readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
@@ -123,6 +133,21 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     config: dependencies.config,
     readiness: dependencies.readiness,
     version,
+  });
+  const platformAuthenticator = new ServiceAccountAuthenticator(
+    dependencies.config.serviceAccounts ?? [],
+  );
+  dependencies.installPlatformHttp?.(app, {
+    logger: dependencies.logger,
+    authenticate: requireServiceAccountAccess(platformAuthenticator),
+    accessContext: getAuthenticatedAccessContext,
+    safeError: errorResponse,
+    notFound: (requestId) =>
+      errorResponse(
+        'route_not_found',
+        'The requested route does not exist.',
+        requestId,
+      ),
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
@@ -238,6 +263,33 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
 
   return app;
+}
+
+export function composePlatformApp(
+  dependencies: Omit<AppDependencies, 'installPlatformHttp'>,
+  contributions: readonly PlatformContribution[],
+  runtimeRegistry: PlatformRuntimeRegistry,
+  starts: readonly (() =>
+    | void
+    | (() => Promise<void> | void)
+    | Promise<void | (() => Promise<void> | void)>)[] = [],
+) {
+  let shell: ReturnType<typeof composePlatform> | undefined;
+  const app = createApp({
+    ...dependencies,
+    installPlatformHttp(hono, concerns) {
+      shell = composePlatform(contributions, concerns, starts);
+      shell.installHttp(hono);
+    },
+  });
+  if (!shell) throw new Error('platform_shell_not_installed');
+  const platform = shell;
+  platform.contributeRuntime(runtimeRegistry);
+  return {
+    app,
+    start: () => platform.start(),
+    stop: () => platform.stop(),
+  };
 }
 
 function errorResponse(

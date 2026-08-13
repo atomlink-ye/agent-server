@@ -6,7 +6,7 @@ import type {
   ReadinessResponse,
 } from '../../../contracts/health.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../http-types.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
 
 export function registerHealthRoutes(
   app: Hono<ApiEnvironment>,

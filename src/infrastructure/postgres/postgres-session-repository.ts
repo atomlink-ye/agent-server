@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { AccessContext } from '../../application/control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type {
   ProductSession,
   ProductSessionListPage,

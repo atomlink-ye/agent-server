@@ -18,7 +18,7 @@ import {
 import { registerProductWorkCommandRoutes } from '../../src/entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../src/entrypoints/api/routes/product-work.js';
 import { ErrorResponseSchema, HttpError } from '../../src/contracts/http.js';
-import type { ApiEnvironment } from '../../src/entrypoints/api/http-types.js';
+import type { ApiEnvironment } from '../../src/platform/http-types.js';
 import type { AppConfig } from '../../src/shared/config.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;

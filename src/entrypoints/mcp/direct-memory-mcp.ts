@@ -13,7 +13,7 @@ import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js'
 import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
 import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { LearningProposal } from '../../domain/learning/learning-proposal.js';
-import type { AccessContext } from '../../application/control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import {
   AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_ANALOG_SUMMARY_TOOL_REF,

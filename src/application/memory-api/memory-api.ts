@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type {
   MemoryApiRepository,
   CreateMemoryInput,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import { CancelTask } from './cancel-task.js';
 import { createRun, rehydrateRun, type Run } from '../../domain/runs/run.js';
 import { createRootTask, type Task } from '../../domain/tasks/task.js';

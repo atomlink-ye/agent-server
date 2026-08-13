@@ -33,7 +33,7 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
-import type { ApiEnvironment } from '../http-types.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { ManagedMemory } from '../../../application/memory/managed-memory.js';
 import type { SessionRepository } from '../../../application/ports/session-repository.js';
 

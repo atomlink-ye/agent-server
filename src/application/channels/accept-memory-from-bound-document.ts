@@ -4,7 +4,7 @@ import type { ReviewMemoryProposal } from '../memory/review-memory-proposal.js';
 import type { ManagedMemory } from '../memory/managed-memory.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
 import type { MemoryProposal } from '../../domain/workspace-memory/memory-proposal.js';
-import type { ServiceAccountAccessContext } from '../control-plane/access-context.js';
+import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
 import {
   evaluateMemoryPolicy,
   MEMORY_POLICY_CATEGORIES,

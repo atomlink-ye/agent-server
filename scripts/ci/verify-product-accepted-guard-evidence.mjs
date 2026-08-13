@@ -63,7 +63,8 @@ function verifyTransportArtifact(filename) {
   const artifact = readJson(filename, 'transport');
   const recorder = isObject(artifact.recorder) ? artifact.recorder : artifact;
   const command = recorder.command ?? recorder.recorder_command;
-  const exitCode = recorder.exit_code ?? recorder.recorder_exit_code;
+  const exitCode =
+    recorder.exit_code ?? recorder.exitCode ?? recorder.recorder_exit_code;
   const commandText = Array.isArray(command) ? command.join(' ') : command;
   if (
     typeof commandText !== 'string' ||

@@ -32,9 +32,7 @@ function run(command, args, { allow = [0], env = process.env } = {}) {
     maxBuffer: 32 * 1024 * 1024,
   });
   if (!allow.includes(value.status))
-    throw new Error(
-      `command_failed:${command}:${value.status}:${value.stderr.slice(-1000)}`,
-    );
+    throw new Error(`child_command_failed:status=${value.status ?? 'spawn_error'}`);
   scannedTranscripts.push(value.stdout, value.stderr);
   return value;
 }

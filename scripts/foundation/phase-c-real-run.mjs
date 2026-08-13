@@ -131,6 +131,13 @@ const product = await waitFor(
   (value) => value?.work_run?.product_state === 'complete',
 );
 const trace = await request(`/api/v1/works/${workId}/runs/${workRunId}/trace`);
+if (
+  product.work_run.product_state !== 'complete' ||
+  product.work_run.problem_kind !== null ||
+  trace.work_run?.product_state !== 'complete' ||
+  trace.work_run?.problem_kind !== null
+)
+  throw new Error('observed_product_success_invalid');
 const markerOutput = product.work_items
   .flatMap((item) => item.attempts)
   .flatMap(
@@ -139,13 +146,36 @@ const markerOutput = product.work_items
   )
   .find((candidate) => candidate === marker);
 if (markerOutput !== marker) throw new Error('exact_marker_round_trip_failed');
-const traceRunIds = [
-  ...new Set(trace.runs.map((run) => run.source_refs?.run_id).filter(Boolean)),
-].sort();
-if (!traceRunIds.length) throw new Error('trace_run_ids_missing');
+if (!Array.isArray(trace.runs) || !trace.runs.length)
+  throw new Error('trace_runs_missing');
+const tracedRunIds = trace.runs.map((run) => run.source_refs?.run_id);
+if (
+  tracedRunIds.some(
+    (runId) =>
+      typeof runId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        runId,
+      ),
+  )
+)
+  throw new Error('trace_run_source_identity_missing');
+const traceRunIds = [...new Set(tracedRunIds)].sort();
+if (traceRunIds.length !== trace.runs.length)
+  throw new Error('trace_run_source_identity_ambiguous');
 const linkedRuns = await Promise.all(
   traceRunIds.map((runId) => request(`/api/v1/runs/${runId}`)),
 );
+const fetchedRunIds = linkedRuns.map((run) => run.run_id).sort();
+if (
+  fetchedRunIds.length !== traceRunIds.length ||
+  fetchedRunIds.some((runId, index) => runId !== traceRunIds[index])
+)
+  throw new Error('fetched_runs_do_not_equal_trace_runs');
+if (
+  linkedRuns.some((run) => run.status !== 'succeeded') ||
+  trace.runs.some((run) => run.status !== 'succeeded')
+)
+  throw new Error('trace_linked_runs_not_succeeded');
 const inputTokens = linkedRuns.reduce(
   (sum, run) => sum + Number(run.usage?.input_tokens ?? 0),
   0,
@@ -157,6 +187,15 @@ const outputTokens = linkedRuns.reduce(
 if (!(inputTokens > 0) || !(outputTokens > 0))
   throw new Error('positive_trace_linked_usage_missing');
 
+const observedTerminalState =
+  product.work_run.product_state === 'complete' &&
+  product.work_run.problem_kind === null &&
+  linkedRuns.every((run) => run.status === 'succeeded')
+    ? 'succeeded'
+    : null;
+if (observedTerminalState !== 'succeeded')
+  throw new Error('observed_terminal_state_not_succeeded');
+
 const record = {
   schema: 'agent-server.foundation.phase-c-proof-candidate',
   version: 1,
@@ -164,7 +203,19 @@ const record = {
   run_timestamp: new Date().toISOString(),
   work_id: workId,
   work_run_id: workRunId,
-  terminal_state: 'succeeded',
+  terminal_state: observedTerminalState,
+  observed_success: {
+    product_state: product.work_run.product_state,
+    problem_kind: product.work_run.problem_kind,
+    trace_run_statuses: traceRunIds.map((runId) => ({
+      run_id: runId,
+      status: trace.runs.find((run) => run.source_refs.run_id === runId).status,
+    })),
+    fetched_run_statuses: linkedRuns.map((run) => ({
+      run_id: run.run_id,
+      status: run.status,
+    })),
+  },
   marker_input: marker,
   marker_output: markerOutput,
   marker_sha256: createHash('sha256').update(marker).digest('hex'),

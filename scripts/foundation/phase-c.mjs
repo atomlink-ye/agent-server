@@ -306,6 +306,24 @@ function evaluateE6(options) {
   if (required.some((value) => !nonempty(value))) return result('E6', 'MISSING', 'required proof identity is empty');
   const failures = [];
   if (proof.terminal_state !== expectation.expected_terminal_state) failures.push('terminal_state');
+  if (
+    proof.observed_success?.product_state !== 'complete' ||
+    proof.observed_success?.problem_kind !== null ||
+    !Array.isArray(proof.observed_success?.trace_run_statuses) ||
+    !proof.observed_success.trace_run_statuses.length ||
+    proof.observed_success.trace_run_statuses.some(
+      (run) => !nonempty(run.run_id) || run.status !== 'succeeded',
+    ) ||
+    !Array.isArray(proof.observed_success?.fetched_run_statuses) ||
+    proof.observed_success.fetched_run_statuses.length !==
+      proof.observed_success.trace_run_statuses.length ||
+    proof.observed_success.fetched_run_statuses.some(
+      (run, index) =>
+        run.run_id !== proof.observed_success.trace_run_statuses[index]?.run_id ||
+        run.status !== 'succeeded',
+    )
+  )
+    failures.push('observed_success');
   if (proof.marker_input !== proof.marker_output || !nonempty(proof.marker_input)) failures.push('exact_marker_round_trip');
   if (proof.provider !== expectation.runtime.provider || proof.model !== expectation.runtime.model) failures.push('provider_model');
   if (!(proof.input_tokens > 0) || !(proof.output_tokens > 0)) failures.push('positive_token_usage');

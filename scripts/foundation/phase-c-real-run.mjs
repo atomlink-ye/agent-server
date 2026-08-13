@@ -167,6 +167,24 @@ if (
   trace.work_run.result_summary !== marker
 )
   throw new Error('parallel_exact_marker_round_trip_failed');
+const acceptedWorkIds = product.work_items.map((item) => item.id).sort();
+const assignmentEdges = trace.edges
+  .filter(
+    (edge) =>
+      edge.kind === 'assignment' && acceptedWorkIds.includes(edge.work_item_id),
+  )
+  .map((edge) => ({
+    work_item_id: edge.work_item_id,
+    assignee_actor_id: edge.assignee_actor_id,
+  }))
+  .sort((left, right) => left.work_item_id.localeCompare(right.work_item_id));
+if (
+  assignmentEdges.length !== 2 ||
+  assignmentEdges.map((edge) => edge.work_item_id).join('\n') !==
+    acceptedWorkIds.join('\n') ||
+  new Set(assignmentEdges.map((edge) => edge.assignee_actor_id)).size !== 2
+)
+  throw new Error('parallel_distinct_assignment_edges_missing');
 const workerRunWindows = trace.runs
   .filter(
     (run) =>
@@ -265,11 +283,15 @@ const record = {
   marker_output: product.work_run.result_summary,
   parallel_business_observation: {
     work_count: product.work_items.length,
-    accepted_work_ids: product.work_items.map((item) => item.id).sort(),
+    accepted_work_ids: acceptedWorkIds,
     dependency_counts: product.work_items.map(
       (item) => item.dependency_ids.length,
     ),
     lead_result_summary: product.work_run.result_summary,
+    assignment_edges: assignmentEdges,
+    distinct_assignee_actor_count: new Set(
+      assignmentEdges.map((edge) => edge.assignee_actor_id),
+    ).size,
     projection_status: product.projection_status,
     trace_projection_status: trace.projection_status,
     worker_run_windows: workerRunWindows,

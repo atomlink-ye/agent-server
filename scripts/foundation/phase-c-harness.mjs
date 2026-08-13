@@ -108,7 +108,7 @@ function containerRecord(service, composeCommand = rawCompose) {
     'top',
     service,
     '-eo',
-    'comm=',
+    'args=',
   ]).stdout
     .split(/\r?\n/u)
     .map((command) => command.trim())

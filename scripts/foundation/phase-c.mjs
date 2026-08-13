@@ -408,6 +408,21 @@ function evaluateE6(options) {
   if (
     proof.parallel_business_observation?.work_count !== 2 ||
     proof.parallel_business_observation?.accepted_work_ids?.length !== 2 ||
+    !Array.isArray(proof.parallel_business_observation?.assignment_edges) ||
+    proof.parallel_business_observation.assignment_edges.length !== 2 ||
+    proof.parallel_business_observation.assignment_edges
+      .map((edge) => edge.work_item_id)
+      .sort()
+      .join('\n') !==
+      [...proof.parallel_business_observation.accepted_work_ids]
+        .sort()
+        .join('\n') ||
+    proof.parallel_business_observation?.distinct_assignee_actor_count !== 2 ||
+    new Set(
+      proof.parallel_business_observation.assignment_edges.map(
+        (edge) => edge.assignee_actor_id,
+      ),
+    ).size !== 2 ||
     proof.parallel_business_observation?.dependency_counts?.some(
       (count) => count !== 0,
     ) ||

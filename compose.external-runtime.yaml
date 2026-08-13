@@ -64,31 +64,17 @@ services:
       provider-toolchain-init: !reset null
       paseo-runtime:
         condition: service_started
-    environment:
-      OPENCODE_GO_API_KEY: !reset null
-      PASEO_CONNECT_TIMEOUT_MS: !reset null
-      PASEO_EXECUTION_TIMEOUT_MS: !reset null
-      PASEO_SESSION_RPC_TIMEOUT_MS: !reset null
-      PASEO_PROVIDER: !reset null
-      PASEO_MODEL: !reset null
-      PASEO_DAEMON_STARTUP_TIMEOUT_MS: !reset null
-      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: !reset null
-      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: !reset null
-      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: !reset null
-      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: !reset null
-      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: !reset null
-      PASEO_PORT: !reset null
-      PASEO_LISTEN_HOST: !reset null
-      PASEO_CORS_ORIGINS: !reset null
-      PASEO_HOSTNAMES: !reset null
-      PASEO_DEV_WEB_UI: !reset null
-      PASEO_RELAY_ENABLED: !reset null
-      PASEO_DICTATION_ENABLED: !reset null
-      PASEO_VOICE_MODE_ENABLED: !reset null
-      PASEO_HOME: !reset null
-      XDG_CONFIG_HOME: !reset null
-      XDG_DATA_HOME: !reset null
-      XDG_CACHE_HOME: !reset null
+    environment: !override
+      NODE_ENV: development
+      CI: 'true'
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: agent-server
+      AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
+      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
+      POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
+      SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"},{"serviceAccountId":"svc_local_2","token":"token-local-dev-2","tenantId":"tenant_local_2","workspaceId":"${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}","policyVersion":"policy-local-2"}]'
       PASEO_WS_URL: ws://paseo-runtime:16767/ws
     volumes: !override
       - .:/workspace

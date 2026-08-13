@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import { realpath } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { Client } from 'pg';
 
 import {
@@ -21,7 +19,6 @@ const MEMBER_COMPOSITION = Object.freeze([
 ]);
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const execFileAsync = promisify(execFile);
 const WORKSPACE_ROOT = '/workspace';
 const ARTIFACT_ROOT = '/workspace/recording-artifacts';
 
@@ -85,22 +82,24 @@ async function validatedOutputRoot(value) {
     outputRoot === artifactRoot
   )
     fail('product_recordings_root_workspace_boundary_invalid');
+  await mkdir(artifactRoot, { recursive: true, mode: 0o700 });
   const workspaceReal = await realpath(workspaceRoot).catch(() => null);
+  const artifactReal = await realpath(artifactRoot).catch(() => null);
   const parentReal = await realpath(dirname(outputRoot)).catch(() => null);
   if (
     workspaceReal !== workspaceRoot ||
+    artifactReal !== artifactRoot ||
     (parentReal !== null && !within(artifactRoot, parentReal))
   )
     fail('product_recordings_root_realpath_invalid');
   return outputRoot;
 }
 
-async function readGitRevision() {
-  const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
-    cwd: WORKSPACE_ROOT,
-    encoding: 'utf8',
-  }).catch(() => null);
-  const revision = result?.stdout.trim() ?? '';
+function readGitRevision() {
+  const revision = requiredEnvironment(
+    'capture_git_sha',
+    'PRODUCT_CAPTURE_GIT_SHA',
+  );
   if (!/^[0-9a-f]{40}$/u.test(revision)) fail('git_revision_missing');
   return revision;
 }
@@ -301,7 +300,7 @@ async function main() {
       principalType,
       principalId,
     );
-    const serviceRevision = await readGitRevision();
+    const serviceRevision = readGitRevision();
     const product = await acceptedGet(
       baseUrl,
       ownerToken,

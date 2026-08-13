@@ -13,6 +13,18 @@ import { parseRecordedTrace } from './recording-test-helpers';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+function expectedActivityStatus(value: string): string {
+  return value.replaceAll('_', ' ');
+}
+
+function expectedCaptureLabel(value: string): string {
+  if (value === 'not_present' || value === 'not_captured')
+    return 'Not captured';
+  if (value === 'redacted') return 'Captured, content redacted';
+  if (value === 'captured') return 'Captured';
+  return expectedActivityStatus(value);
+}
+
 it('E4 renders only recorded MCP activities with sequence and association facts', async () => {
   const cases = [
     { recording: parallelRecording, count: 56 },
@@ -68,8 +80,13 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
           (candidate) => candidate.id === activity.source_refs.work_item_id,
         );
         if (item) expect(button.textContent).toContain(item.subject);
-        expect(button.textContent).toContain('MCP activity:');
-        expect(button.textContent).toContain('Result:');
+        else expect(button.textContent).toContain('Work Item not captured');
+        expect(button.textContent).toContain(
+          `MCP activity: ${expectedActivityStatus(activity.status)}`,
+        );
+        expect(button.textContent).toContain(
+          `Result: ${expectedCaptureLabel(activity.result_capture_status)}`,
+        );
       }
 
       const sequenceCounts = new Map<number, number>();

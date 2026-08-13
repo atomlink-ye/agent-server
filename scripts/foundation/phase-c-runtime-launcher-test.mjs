@@ -44,10 +44,40 @@ for (const composePath of [
   const runtime = source.match(
     /^  paseo-runtime:\n([\s\S]*?)(?=^  agent-server:)/mu,
   )?.[0];
+  const stateInit = source.match(
+    /^  paseo-runtime-state-init:\n([\s\S]*?)(?=^  paseo-runtime:)/mu,
+  )?.[0];
   const agent = source.match(
     /^  agent-server:\n([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:|^volumes:)/mu,
   )?.[0];
-  if (!runtime || !agent) throw new Error(`${composePath}: services missing`);
+  if (!stateInit || !runtime || !agent)
+    throw new Error(`${composePath}: services missing`);
+  for (const required of [
+    "user: '0:0'",
+    'read_only: true',
+    'network_mode: none',
+    '- ALL',
+    '- CHOWN',
+    '- no-new-privileges:true',
+    '- paseo-runtime-state:/runtime-state',
+    'entrypoint: []',
+    "restart: 'no'",
+    'chown 0:0 /runtime-state && chmod 0700 /runtime-state && chown 1000:1000 /runtime-state',
+  ]) {
+    if (!stateInit.includes(required))
+      throw new Error(`${composePath}: state init missing ${required}`);
+  }
+  for (const forbidden of [
+    'environment:',
+    '/workspace',
+    'provider-toolchain',
+    'ports:',
+  ]) {
+    if (stateInit.includes(forbidden))
+      throw new Error(`${composePath}: state init contains ${forbidden}`);
+  }
+  if (!runtime.includes('paseo-runtime-state-init:'))
+    throw new Error(`${composePath}: runtime state init dependency is missing`);
   if (!/^    entrypoint: \[\]\s*$/mu.test(runtime))
     throw new Error(`${composePath}: runtime entrypoint is not empty`);
   if (

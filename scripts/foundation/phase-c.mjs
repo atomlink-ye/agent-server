@@ -6,6 +6,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { workspaceIsReadOnly } from './lib/phase-c-workspace-boundary.mjs';
+import {
+  runtimeIsNonroot,
+  runtimeStateIsWritable,
+} from './lib/phase-c-runtime-boundary.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const EXPECTATION_PATH = 'evidence/foundation/runtime-real-expectation.json';
@@ -219,8 +223,10 @@ function evaluateE4(options) {
     'PASEO_DEV_WEB_UI',
   ]);
   const failures = [];
-  if (!workspaceIsReadOnly(runtime?.paseo_runtime?.workspace_write_probe))
-    failures.push('runtime_workspace_read_only_boundary');
+  if (!runtimeIsNonroot(runtime?.paseo_runtime?.identity))
+    failures.push('nonroot_runtime_boundary');
+  if (!runtimeStateIsWritable(runtime?.paseo_runtime?.runtime_state_probe))
+    failures.push('runtime_state_writable_boundary');
   if (!/^[0-9a-f]{40}$/u.test(record.candidate_sha ?? ''))
     failures.push('candidate_sha');
   if (agent.command?.some((part) => String(part).includes('with-paseo')))
@@ -250,6 +256,8 @@ function evaluateE4(options) {
     failures.push('agent_server_socket_boundary');
   if (!paseo.depends_on?.includes('provider-toolchain-init'))
     failures.push('runtime_init_dependency');
+  if (!paseo.depends_on?.includes('paseo-runtime-state-init'))
+    failures.push('runtime_state_init_dependency');
   if (
     !paseo.mounts?.some(
       (mount) => mount.target === '/opt/provider-toolchain-volume',
@@ -321,16 +329,29 @@ function evaluateE4(options) {
   )
     failures.push('actual_runtime_provider_mount');
   if (
+    !workspaceIsReadOnly(runtime?.paseo_runtime?.workspace_write_probe) ||
+    !runtime.paseo_runtime.mounts.some(
+      (mount) => mount.destination === '/workspace' && mount.read_only === true,
+    )
+  )
+    failures.push('runtime_workspace_read_only_boundary');
+  if (
     runtime.agent_server.processes.some((process) =>
       /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
     )
   )
     failures.push('agent_server_paseo_process');
-  if (
-    !runtime.paseo_runtime.processes.some((process) =>
-      /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
+  const runtimePaseoProcess = runtime.paseo_runtime.processes.some((process) =>
+    /(?:^|\/)paseo(?:\s|$)/u.test(process.command),
+  );
+  if (record.mutation?.instrumentation === 'failed-runtime-child-carrier') {
+    if (
+      runtimePaseoProcess ||
+      record.mutation.real_runtime_child_exit !== 1 ||
+      record.mutation.real_runtime_child_survived !== false
     )
-  )
+      failures.push('runtime_child_failure_observation');
+  } else if (!runtimePaseoProcess)
     failures.push('runtime_paseo_process_missing');
   if (runtime.agent_server.container_id === runtime.paseo_runtime.container_id)
     failures.push('container_identity_not_independent');
@@ -659,6 +680,10 @@ function evaluateE6(options) {
   if (proof.secret_hits !== 0) failures.push('secret_scan');
   if (!workspaceIsReadOnly(proof.workspace_write_probe))
     failures.push('runtime_workspace_read_only_boundary');
+  if (!runtimeIsNonroot(proof.runtime_identity))
+    failures.push('nonroot_runtime_boundary');
+  if (!runtimeStateIsWritable(proof.runtime_state_probe))
+    failures.push('runtime_state_writable_boundary');
   let acceptedOwnership;
   try {
     acceptedOwnership = ownershipProjection(
@@ -736,6 +761,84 @@ function evaluateE6(options) {
       proof.e4_workspace_mutation.cleanup.external_provider_volume_after
   )
     failures.push('e4_workspace_mutation_cleanup');
+  if (
+    proof.e4_root_runtime_mutation?.exit !== 1 ||
+    proof.e4_root_runtime_mutation?.status !== 'FAIL' ||
+    proof.e4_root_runtime_mutation?.name !==
+      'restore-long-lived-runtime-root-owner' ||
+    proof.e4_root_runtime_mutation?.source !==
+      'scripts/foundation/phase-c-e4-root-runtime-mutation.yaml' ||
+    proof.e4_root_runtime_mutation?.operational_overlays?.length !== 0 ||
+    JSON.stringify(proof.e4_root_runtime_mutation?.failures) !==
+      JSON.stringify(['nonroot_runtime_boundary']) ||
+    runtimeIsNonroot(proof.e4_root_runtime_mutation?.identity) ||
+    !runtimeStateIsWritable(
+      proof.e4_root_runtime_mutation?.runtime_state_probe,
+    ) ||
+    !workspaceIsReadOnly(
+      proof.e4_root_runtime_mutation?.workspace_write_probe,
+    ) ||
+    proof.e4_root_runtime_mutation?.cleanup
+      ?.runtime_state_probe_file_present !== false ||
+    proof.e4_root_runtime_mutation?.cleanup?.workspace_probe_file_present !==
+      false ||
+    proof.e4_root_runtime_mutation?.cleanup?.down_exit !== 0 ||
+    proof.e4_root_runtime_mutation?.cleanup?.remaining_project_containers
+      ?.length !== 0 ||
+    proof.e4_root_runtime_mutation?.cleanup?.remaining_project_networks
+      ?.length !== 0 ||
+    proof.e4_root_runtime_mutation?.cleanup?.remaining_project_volumes
+      ?.length !== 0 ||
+    !nonempty(
+      proof.e4_root_runtime_mutation?.cleanup?.external_provider_volume_before,
+    ) ||
+    proof.e4_root_runtime_mutation.cleanup.external_provider_volume_before !==
+      proof.e4_root_runtime_mutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_root_runtime_mutation_cleanup');
+  if (
+    proof.e4_runtime_state_mutation?.exit !== 1 ||
+    proof.e4_runtime_state_mutation?.status !== 'FAIL' ||
+    proof.e4_runtime_state_mutation?.name !==
+      'remove-runtime-state-write-owner' ||
+    proof.e4_runtime_state_mutation?.source !==
+      'scripts/foundation/phase-c-e4-runtime-state-ro-mutation.yaml' ||
+    JSON.stringify(proof.e4_runtime_state_mutation?.operational_overlays) !==
+      JSON.stringify([
+        'scripts/foundation/phase-c-e4-runtime-state-carrier.yaml',
+        'scripts/foundation/phase-c-e4-state-carrier-agent.yaml',
+      ]) ||
+    proof.e4_runtime_state_mutation?.instrumentation !==
+      'failed-runtime-child-carrier' ||
+    JSON.stringify(proof.e4_runtime_state_mutation?.failures) !==
+      JSON.stringify(['runtime_state_writable_boundary']) ||
+    !runtimeIsNonroot(proof.e4_runtime_state_mutation?.identity) ||
+    !runtimeStateIsReadOnly(
+      proof.e4_runtime_state_mutation?.runtime_state_probe,
+    ) ||
+    !workspaceIsReadOnly(
+      proof.e4_runtime_state_mutation?.workspace_write_probe,
+    ) ||
+    proof.e4_runtime_state_mutation?.real_runtime_child_exit !== 1 ||
+    proof.e4_runtime_state_mutation?.real_runtime_child_survived !== false ||
+    proof.e4_runtime_state_mutation?.cleanup
+      ?.runtime_state_probe_file_present !== false ||
+    proof.e4_runtime_state_mutation?.cleanup?.workspace_probe_file_present !==
+      false ||
+    proof.e4_runtime_state_mutation?.cleanup?.down_exit !== 0 ||
+    proof.e4_runtime_state_mutation?.cleanup?.remaining_project_containers
+      ?.length !== 0 ||
+    proof.e4_runtime_state_mutation?.cleanup?.remaining_project_networks
+      ?.length !== 0 ||
+    proof.e4_runtime_state_mutation?.cleanup?.remaining_project_volumes
+      ?.length !== 0 ||
+    !nonempty(
+      proof.e4_runtime_state_mutation?.cleanup?.external_provider_volume_before,
+    ) ||
+    proof.e4_runtime_state_mutation.cleanup.external_provider_volume_before !==
+      proof.e4_runtime_state_mutation.cleanup.external_provider_volume_after
+  )
+    failures.push('e4_runtime_state_mutation_cleanup');
   if (proof.stage !== 'raw_run_evidence') failures.push('proof_stage');
   if (failures.length)
     return result('E6', 'FAIL', 'raw real-run evidence proposition failed', {

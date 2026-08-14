@@ -1,6 +1,13 @@
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import {
+  chmod,
+  mkdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
@@ -10,6 +17,11 @@ const token = process.env.AGENT_SERVER_SERVICE_TOKEN ?? 'token-local-dev';
 const output = resolve(
   process.env.FOUNDATION_PROOF_RECORD ?? '.local/phase-c/proof-record.json',
 );
+const checkpointPath = resolve(
+  process.env.FOUNDATION_RUN_CHECKPOINT ??
+    '.local/phase-c/runtime-demo/real-run-checkpoint.json',
+);
+const invocationId = process.env.FOUNDATION_RUN_INVOCATION_ID ?? randomUUID();
 const defaults = loadRealProviderDefaults();
 const negativeControl = process.argv.includes('--negative-control');
 
@@ -163,6 +175,7 @@ const started = await request(`/api/v1/works/${created.work.id}/runs`, {
 });
 const workId = created.work.id;
 const workRunId = started.work_run.id;
+await persistCheckpoint({ workId, workRunId });
 const product = await waitFor(
   `/api/v1/works/${workId}/runs/${workRunId}`,
   (value) => value?.work_run?.product_state === 'complete',
@@ -339,3 +352,29 @@ await writeFile(output, `${JSON.stringify(record, null, 2)}\n`, {
 process.stdout.write(
   `${JSON.stringify({ status: 'PASS', output, work_id: workId, work_run_id: workRunId })}\n`,
 );
+
+async function persistCheckpoint({ workId, workRunId }) {
+  const directory = dirname(checkpointPath);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await chmod(directory, 0o700);
+  const temporaryPath = `${checkpointPath}.${invocationId}.tmp`;
+  const checkpoint = {
+    schema: 'agent-server.foundation.phase-c-run-checkpoint',
+    version: 1,
+    invocation_id: invocationId,
+    work_id: workId,
+    work_run_id: workRunId,
+    expected_marker_sha256: createHash('sha256').update(marker).digest('hex'),
+    created_at: new Date().toISOString(),
+  };
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(checkpoint)}\n`, {
+      mode: 0o600,
+    });
+    await rename(temporaryPath, checkpointPath);
+  } finally {
+    await unlink(temporaryPath).catch((error) => {
+      if (error?.code !== 'ENOENT') throw error;
+    });
+  }
+}

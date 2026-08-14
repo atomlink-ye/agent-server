@@ -1,14 +1,21 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { relative, resolve } from 'node:path';
+import { chmod, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 
 const workspace = resolve(process.cwd());
 const outcomeDirectory = resolve('.local/phase-c/runtime-demo');
 const outcomePath = resolve(outcomeDirectory, 'outcome.json');
 const stdoutPath = resolve(outcomeDirectory, 'phase-c-real-run.stdout.log');
 const stderrPath = resolve(outcomeDirectory, 'phase-c-real-run.stderr.log');
+const checkpointPath = resolve(
+  process.env.FOUNDATION_RUN_CHECKPOINT ??
+    '.local/phase-c/runtime-demo/real-run-checkpoint.json',
+);
+const invocationId = randomUUID();
+const serviceToken =
+  process.env.AGENT_SERVER_SERVICE_TOKEN ?? 'token-local-dev';
 const proofPath = resolve(
   process.env.FOUNDATION_PROOF_RECORD ?? '.local/phase-c/proof-record.json',
 );
@@ -16,6 +23,9 @@ const readyUrl = new URL(
   '/health/ready',
   process.env.AGENT_SERVER_BASE_URL ?? 'http://127.0.0.1:3000',
 );
+const monitorState = {
+  lastReason: 'child_exited_without_terminal',
+};
 
 const outcome = {
   schema: 'agent-server.foundation.phase-c-runtime-demo-outcome',
@@ -33,9 +43,20 @@ const outcome = {
     stderr_path: relative(workspace, stderrPath),
     exit_code: null,
   },
+  terminal_fallback: {
+    status: 'waiting_for_checkpoint',
+    checkpoint_path: relative(workspace, checkpointPath),
+    observed_at: null,
+    monitor_errors: [],
+  },
 };
 
 await mkdir(outcomeDirectory, { recursive: true });
+await mkdir(dirname(checkpointPath), { recursive: true, mode: 0o700 });
+await chmod(dirname(checkpointPath), 0o700);
+await unlink(checkpointPath).catch((error) => {
+  if (error?.code !== 'ENOENT') throw error;
+});
 await writeOutcome();
 
 outcome.runtime_start = { started_at: new Date().toISOString() };
@@ -58,9 +79,31 @@ outcome.real_run = {
   stderr_path: relative(workspace, stderrPath),
 };
 await writeOutcome();
-const realRun = await run(process.execPath, [
-  'scripts/foundation/phase-c-real-run.mjs',
-]);
+const monitorController = new AbortController();
+const realRunPromise = run(
+  process.execPath,
+  ['scripts/foundation/phase-c-real-run.mjs'],
+  {
+    env: {
+      ...process.env,
+      FOUNDATION_RUN_CHECKPOINT: checkpointPath,
+      FOUNDATION_RUN_INVOCATION_ID: invocationId,
+    },
+  },
+);
+const terminalMonitorPromise = monitorTerminalFallback(
+  monitorController.signal,
+);
+const realRun = await realRunPromise;
+monitorController.abort();
+await terminalMonitorPromise;
+if (outcome.terminal_fallback.status === 'waiting_for_checkpoint') {
+  outcome.terminal_fallback = {
+    ...outcome.terminal_fallback,
+    status: 'not_observed',
+    reason: monitorState.lastReason,
+  };
+}
 await writeFile(stdoutPath, realRun.stdout, { mode: 0o600 });
 await writeFile(stderrPath, realRun.stderr, { mode: 0o600 });
 outcome.real_run = {
@@ -107,6 +150,223 @@ async function waitForReady() {
   return { status: 'not_ready', attempts: 180 };
 }
 
+async function monitorTerminalFallback(signal) {
+  while (!signal.aborted) {
+    let checkpoint;
+    try {
+      checkpoint = await readCheckpoint();
+    } catch (error) {
+      if (signal.aborted) return;
+      await recordMonitorError(
+        'checkpoint',
+        error?.code === 'invalid_checkpoint'
+          ? 'invalid_checkpoint'
+          : 'checkpoint_read_failed',
+      );
+      monitorState.lastReason =
+        error?.code === 'invalid_checkpoint'
+          ? 'invalid_checkpoint'
+          : 'checkpoint_read_failed';
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    if (checkpoint === null) {
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+
+    let response;
+    try {
+      response = await fetch(
+        new URL(
+          `/api/v1/works/${checkpoint.work_id}/runs/${checkpoint.work_run_id}`,
+          process.env.AGENT_SERVER_BASE_URL ?? 'http://127.0.0.1:3000',
+        ),
+        {
+          headers: {
+            authorization: `Bearer ${serviceToken}`,
+            accept: 'application/json',
+          },
+          signal,
+        },
+      );
+    } catch (error) {
+      if (signal.aborted) return;
+      await recordMonitorError('terminal_fetch', 'transport_error');
+      monitorState.lastReason = 'transport_error';
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    const body = await response.json().catch(() => null);
+    if (
+      response.status === 503 &&
+      body?.error?.code === 'projection_unavailable'
+    ) {
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    if (!response.ok) {
+      const errorCode =
+        response.status >= 400 && response.status < 500
+          ? 'http_4xx'
+          : 'http_status';
+      await recordMonitorError('terminal_fetch', errorCode);
+      monitorState.lastReason = errorCode;
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    const product = parseTerminalResponse(body, checkpoint);
+    if (product === null) {
+      await recordMonitorError('terminal_fetch', 'response_shape_invalid');
+      monitorState.lastReason = 'response_shape_invalid';
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    if (
+      product.product_state !== 'complete' &&
+      product.product_state !== 'problem'
+    ) {
+      if (!(await delayWithAbort(signal))) return;
+      continue;
+    }
+    const resultSummary = product.result_summary;
+    const terminalFallback = {
+      status: 'observed',
+      product_state: product.product_state,
+      problem_kind: product.problem_kind,
+      result_capture_status: product.result_capture_status,
+      result_summary_present: typeof resultSummary === 'string',
+      expected_marker_sha256: checkpoint.expected_marker_sha256,
+      result_summary_matches_expected_marker:
+        typeof resultSummary === 'string' &&
+        createHash('sha256').update(resultSummary).digest('hex') ===
+          checkpoint.expected_marker_sha256,
+      work_id: checkpoint.work_id,
+      work_run_id: checkpoint.work_run_id,
+      observed_at: new Date().toISOString(),
+      monitor_errors: outcome.terminal_fallback.monitor_errors,
+    };
+    if (typeof resultSummary === 'string')
+      terminalFallback.result_summary_sha256 = createHash('sha256')
+        .update(resultSummary)
+        .digest('hex');
+    outcome.terminal_fallback = terminalFallback;
+    await writeOutcome();
+    return;
+  }
+}
+
+async function readCheckpoint() {
+  let raw;
+  try {
+    raw = await readFile(checkpointPath, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    const error = new Error('invalid_checkpoint');
+    error.code = 'invalid_checkpoint';
+    throw error;
+  }
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).some(
+      (key) =>
+        ![
+          'schema',
+          'version',
+          'invocation_id',
+          'work_id',
+          'work_run_id',
+          'expected_marker_sha256',
+          'created_at',
+        ].includes(key),
+    ) ||
+    value.schema !== 'agent-server.foundation.phase-c-run-checkpoint' ||
+    value.version !== 1 ||
+    value.invocation_id !== invocationId ||
+    !isNonEmptyString(value.work_id) ||
+    !isNonEmptyString(value.work_run_id) ||
+    !/^[0-9a-f]{64}$/iu.test(value.expected_marker_sha256) ||
+    !isNonEmptyString(value.created_at) ||
+    Number.isNaN(Date.parse(value.created_at))
+  ) {
+    const error = new Error('invalid_checkpoint');
+    error.code = 'invalid_checkpoint';
+    throw error;
+  }
+  return value;
+}
+
+function parseTerminalResponse(value, checkpoint) {
+  const workRun = value?.work_run;
+  if (
+    value?.projection_status !== 'internally_anchored' ||
+    value?.work?.id !== checkpoint.work_id ||
+    workRun?.id !== checkpoint.work_run_id ||
+    workRun?.work_id !== checkpoint.work_id ||
+    !['running', 'needs_you', 'complete', 'problem', 'not_captured'].includes(
+      workRun?.product_state,
+    ) ||
+    ![null, 'failed', 'cancelled', 'not_captured'].includes(
+      workRun?.problem_kind,
+    ) ||
+    !['present', 'not_present', 'redacted', 'not_captured'].includes(
+      workRun?.result_capture_status,
+    ) ||
+    !(
+      typeof workRun?.result_summary === 'string' ||
+      workRun?.result_summary === null
+    )
+  )
+    return null;
+  return workRun;
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function delayWithAbort(signal) {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise((resolvePromise) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolvePromise(true);
+    }, 1000);
+    function onAbort() {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      resolvePromise(false);
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function recordMonitorError(stage, code) {
+  const existing = outcome.terminal_fallback.monitor_errors.find(
+    (item) => item.stage === stage && item.code === code,
+  );
+  if (existing) {
+    existing.count += 1;
+    existing.last_at = new Date().toISOString();
+  } else {
+    outcome.terminal_fallback.monitor_errors.push({
+      stage,
+      code,
+      count: 1,
+      last_at: new Date().toISOString(),
+    });
+  }
+  await writeOutcome();
+}
+
 async function recordProof() {
   if (!existsSync(proofPath)) return;
   const contents = await readFile(proofPath);
@@ -118,17 +378,25 @@ async function recordProof() {
   };
 }
 
-async function writeOutcome() {
-  await writeFile(outcomePath, `${JSON.stringify(outcome, null, 2)}\n`, {
-    mode: 0o600,
-  });
+let outcomeWriteQueue = Promise.resolve();
+
+function writeOutcome() {
+  const contents = `${JSON.stringify(outcome, null, 2)}\n`;
+  outcomeWriteQueue = outcomeWriteQueue.then(() =>
+    writeFile(outcomePath, contents, { mode: 0o600 }),
+  );
+  return outcomeWriteQueue;
 }
 
-function run(command, argumentsList, { inherit = false } = {}) {
+function run(
+  command,
+  argumentsList,
+  { env = process.env, inherit = false } = {},
+) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, argumentsList, {
       cwd: workspace,
-      env: process.env,
+      env,
       stdio: inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     });
     if (inherit) {

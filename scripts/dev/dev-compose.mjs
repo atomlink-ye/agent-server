@@ -26,6 +26,9 @@ if (!configuration) {
     cwd: repositoryRoot,
     env: {
       ...process.env,
+      ...(configuration.runtime?.adapter
+        ? { RUNTIME_ADAPTER: configuration.runtime.adapter }
+        : {}),
       ...(configuration.runtime?.provider
         ? { PASEO_PROVIDER: configuration.runtime.provider }
         : {}),

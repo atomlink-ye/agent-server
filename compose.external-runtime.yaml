@@ -71,6 +71,7 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
+      RUNTIME_ADAPTER: ${RUNTIME_ADAPTER:-paseo}
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server

@@ -117,6 +117,7 @@ export function resolveProfile(profileOrOptions, maybeOptions) {
   }
 
   for (const [field, environmentName] of [
+    ['adapter', 'RUNTIME_ADAPTER'],
     ['provider', 'PASEO_PROVIDER'],
     ['model', 'PASEO_MODEL'],
   ]) {

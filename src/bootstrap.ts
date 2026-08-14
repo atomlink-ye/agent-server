@@ -28,6 +28,7 @@ import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
 import { InvokeTask } from './application/tasks/invoke-task.js';
 import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
+import { UnavailableRuntime } from './adapters/runtime/unavailable-runtime.js';
 import { createApp } from './entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresInvokableRepository } from './infrastructure/postgres/postgres-invokable-repository.js';
@@ -270,7 +271,7 @@ export interface SingleRunDebugControl {
 export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
-  /** Debug-only runtime substitute; production composition always uses Paseo. */
+  /** Debug-only runtime substitute; production composition selects config.runtime.adapter. */
   readonly debugRuntime?: AgentRuntimePort;
   /** Keep terminal Team wakes durable until the debug control resumes them. */
   readonly deferTeamWakeReconcile?: boolean;
@@ -396,21 +397,26 @@ export async function createService(
     invokableRepository,
     skillCatalog,
   );
+  const runtimeAdapter = config.runtime?.adapter ?? 'paseo';
   const runtime =
     options.debugRuntime ??
-    new PaseoRuntimeAdapter(
-      {
-        wsUrl: config.paseo.wsUrl,
-        provider: config.paseo.provider,
-        cwd: config.paseo.agentCwd,
-        workspaceTitle: config.paseo.workspaceTitle,
-        ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
-        connectTimeoutMs: config.paseo.connectTimeoutMs,
-        executionTimeoutMs: config.paseo.executionTimeoutMs,
-        executionTimeoutSource: config.paseo.executionTimeoutSource,
-      },
-      logger,
-    );
+    (runtimeAdapter === 'none'
+      ? new UnavailableRuntime()
+      : new PaseoRuntimeAdapter(
+          {
+            wsUrl: config.paseo.wsUrl,
+            provider: config.paseo.provider,
+            cwd: config.paseo.agentCwd,
+            workspaceTitle: config.paseo.workspaceTitle,
+            ...(config.paseo.model
+              ? { requestedModel: config.paseo.model }
+              : {}),
+            connectTimeoutMs: config.paseo.connectTimeoutMs,
+            executionTimeoutMs: config.paseo.executionTimeoutMs,
+            executionTimeoutSource: config.paseo.executionTimeoutSource,
+          },
+          logger,
+        ));
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
   const cancelTask = new CancelTask(
     taskRepository,

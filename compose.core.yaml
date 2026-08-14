@@ -10,8 +10,10 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
+      RUNTIME_ADAPTER: ${RUNTIME_ADAPTER:-none}
       AGENT_SERVER_DISPATCHER_CONCURRENCY: ${AGENT_SERVER_DISPATCHER_CONCURRENCY:-4}
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_server
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"},{"serviceAccountId":"svc_local_2","token":"token-local-dev-2","tenantId":"tenant_local_2","workspaceId":"${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}","policyVersion":"policy-local-2"}]'
-    command: ['node', '--import', 'tsx', '--watch', 'src/entrypoints/api/server.ts']
+    command:
+      ['node', '--import', 'tsx', '--watch', 'src/entrypoints/api/server.ts']

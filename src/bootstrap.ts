@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { RuntimeReadinessProbe } from './application/health/readiness.js';
 import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
@@ -13,7 +12,6 @@ import { GetTask } from './application/tasks/get-task.js';
 import { GetTaskTree } from './application/tasks/get-task-tree.js';
 import { ExecuteTeamTask } from './application/tasks/execute-team-task.js';
 import { InvokeTask } from './application/tasks/invoke-task.js';
-import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
 import { createApp } from './entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
 import {
@@ -47,11 +45,7 @@ import { createMemoryReviewActionTokenDeriver } from './application/channels/mem
 import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
-import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
 import { createLegacyRuntimeToolsContributor } from './entrypoints/mcp/runtime-tool-contributors.js';
-import { createRuntimeToolRegistry } from './entrypoints/mcp/runtime-tool-composition.js';
-import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
-import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
@@ -69,6 +63,7 @@ import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-e
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
 import { createMemoryModule } from './modules/memory/memory-module.js';
 import { createResourceModule } from './modules/resource/resource-module.js';
+import { createRuntimeModule } from './modules/runtime/runtime-module.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -79,7 +74,7 @@ export interface ServiceResources {
     'stop'
   >;
   readonly runtime: Pick<AgentRuntimePort, 'close'>;
-  readonly runtimeMcpServer?: Pick<RuntimeMcpServer, 'stop'>;
+  readonly runtimeMcpServer?: { stop(): Promise<void> };
   readonly pool: { end(): Promise<void> };
 }
 
@@ -262,7 +257,6 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
-  const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
   const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
   const teamMessages = new PostgresTeamMessageRepository(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
@@ -290,21 +284,6 @@ export async function createService(
     teamMessages,
     teamWakeReconciler,
   );
-  const runtime =
-    options.debugRuntime ??
-    new PaseoRuntimeAdapter(
-      {
-        wsUrl: config.paseo.wsUrl,
-        provider: config.paseo.provider,
-        cwd: config.paseo.agentCwd,
-        workspaceTitle: config.paseo.workspaceTitle,
-        ...(config.paseo.model ? { requestedModel: config.paseo.model } : {}),
-        connectTimeoutMs: config.paseo.connectTimeoutMs,
-        executionTimeoutMs: config.paseo.executionTimeoutMs,
-        executionTimeoutSource: config.paseo.executionTimeoutSource,
-      },
-      logger,
-    );
   const memoryModule = createMemoryModule({
     database: pool,
     tasks: taskRepository,
@@ -330,20 +309,6 @@ export async function createService(
         config.larkCanary.allowedOpenId,
       )
     : undefined;
-  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
-  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
-    runtime,
-    events,
-    memoryModule.reviewApi.review,
-    memoryModule.reviewApi.managedMemory,
-    process.env.LARK_CLI_PROFILE ?? 'agent-test',
-  );
-  const cancelTask = new CancelTask(
-    taskRepository,
-    runRepository,
-    runtime,
-    events,
-  );
   const admitRootTask = new AdmitRootTask(
     taskRepository,
     runRepository,
@@ -362,11 +327,14 @@ export async function createService(
     execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(pool),
   });
-  const runtimeMcpServer = new RuntimeMcpServer(
-    createRuntimeToolRegistry({
-      work: workModule.contributeRuntime,
-      memory: memoryModule.contributeRuntime,
-      legacy: createLegacyRuntimeToolsContributor({
+  const runtimeModule = createRuntimeModule({
+    database: pool,
+    config,
+    logger,
+    toolContributors: [
+      workModule.contributeRuntime,
+      memoryModule.contributeRuntime,
+      createLegacyRuntimeToolsContributor({
         teamTools: {
           contextResolver: teamToolContextResolver,
           commands: teamCommandService,
@@ -374,12 +342,28 @@ export async function createService(
         market: new SyntheticMarketAdapter(),
         logger,
       }),
-    }),
+    ],
+    ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
+  });
+  const {
+    runtime,
+    sessions: runtimeSessions,
+    extensions: runtimeExtensionBinder,
+    mcpHost: runtimeMcpServer,
+  } = runtimeModule;
+  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
+  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
+    runtime,
+    events,
+    memoryModule.reviewApi.review,
+    memoryModule.reviewApi.managedMemory,
+    process.env.LARK_CLI_PROFILE ?? 'agent-test',
   );
-  const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
-    config.paseo.agentCwd,
-    config.skillRegistryRoot,
-    runtimeMcpServer,
+  const cancelTask = new CancelTask(
+    taskRepository,
+    runRepository,
+    runtime,
+    events,
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
@@ -458,7 +442,7 @@ export async function createService(
     runtimeSessions,
     sessions,
     resourceModule.environmentReadApi,
-    config.paseo.runtimeCellRoot,
+    runtimeModule.runtimeCellRoot,
     collaborativeTeamExecutions,
     runRepository,
     terminalWakeReconciler,
@@ -573,7 +557,7 @@ export async function createService(
       repository: channelRepository,
     });
   }
-  const readiness = new RuntimeReadinessProbe(runtime);
+  const readiness = runtimeModule.readiness;
   const app = createApp({
     config,
     logger,

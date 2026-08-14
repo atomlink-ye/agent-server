@@ -1,40 +1,41 @@
 # Verification and completion
 
-## Evidence ladder
+## Test taxonomy
 
-Choose the cheapest honest evidence that touches the changed risk. During the current Prove stage, the representative real path, run as early as prerequisites allow, is the primary acceptance target:
+Choose the smallest layer that expresses the risk truthfully.
 
-| Change                        | Minimum evidence                                                                                            |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Domain/config/helper          | Real main-flow evidence when reachable; supporting checks only when requested or needed                     |
-| HTTP contract                 | Real main-flow E2E; focused contract evidence is required only by a changed public-contract Human Gate      |
-| Adapter translation           | Observed adapter behavior; existing component checks are supporting evidence                                |
-| Paseo/process/model/readiness | Real external behavior when the product path needs it; existing checks are supporting evidence              |
-| Durable state/concurrency     | Real datastore/concurrency behavior when the product path needs it; existing checks are supporting evidence |
-| Tenant/credential/approval    | Observed isolation/security behavior and Human Gate; existing checks are supporting evidence                |
-| User-facing Agent behavior    | Real main-flow E2E; eval datasets and correctness tests only when explicitly requested                      |
+| Layer | Typical boundary | Infrastructure |
+| --- | --- | --- |
+| Unit | domain/helper/config/reducer | none |
+| Contract | public HTTP/schema/error behavior | in-process/fake |
+| Integration | repositories/components/adapters | PGlite by default; real PG when semantics require it |
+| E2E | complete deterministic process/socket path | explicit local topology as needed |
+| External smoke | real Paseo/provider main flow | explicit opt-in credentials/runtime |
+| Eval | Agent/model-quality behavior | persistent dataset/evaluator |
+
+Tests may be few in Prove, but their category must be truthful.
+
+## Environment and fixtures
+
+Infrastructure-backed tests should use `tests/support/environment` and the shared `config/local-environments.yaml` topology definitions. A focused test should not require an undocumented manual setup script.
+
+Fixture setup is TypeScript-first. Serialized fixtures belong in Git only when a test consumes them as a stable protocol/example input.
+
+Generated logs, screenshots, recordings, raw run captures, and diagnostic JSON go to ignored `.local/test-runs/<run-id>/`. CI may upload that directory as an artifact. Never copy one-run output into repository source as proof.
 
 ## Command truth
 
-Record the exact command, date/environment when relevant, exit result, suites/assertions, and external provider/model for a smoke. Run the real flow as early as prerequisites allow. Existing CI/checks may run and must be reported truthfully, but are supporting merge signals. Do not proactively author or expand tests, eval datasets, or fixtures without an explicit user request or Human Gate need. If a command fails because a dependency or environment is absent, resolve it and rerun, or record the blocker and residual risk. Do not write “should pass” or infer a suite from a narrower command.
+Report the exact command and actual outcome. If a dependency/environment is unavailable, resolve it, use an explicitly supported substitute, or report the blocker. Never write “should pass” as verification.
 
 ## Completion contract
 
 A Prove-stage slice is complete when:
 
-- code implements the accepted scope and preserves non-goals;
-- the acceptance claim traces to the observed real flow and code; existing tests are supporting signals;
-- any public or port contract changed by the slice matches code and its required Human Gate is resolved;
-- the primary real main-flow E2E ran successfully; for a documentation-only diff that changes no product behavior, record why it is not applicable;
-- supporting checks that actually ran are reported, and any real runtime observation required by the slice or a Human Gate ran successfully;
-- failures and residual risks are recorded honestly;
-- documentation required to reproduce the accepted path is truthful; broader convergence may be deferred;
-- no raw secret/prompt/path/error exposure, debug code, unexplained TODO, temporary config, runtime home, or generated evidence remains;
-- the full diff contains only intended files;
-- any plan used is truthful, and unfinished items are explicitly transferred rather than erased.
+- code implements the accepted bounded outcome;
+- the representative path or appropriate deterministic boundary has actually been exercised;
+- public/durable contracts changed by the slice are updated and any Human Gate is resolved;
+- failures and residual risks are reported honestly;
+- no raw secret, prompt, private path, generated runtime output, debug residue, or task-history artifact remains in the intended diff;
+- temporary infrastructure is cleaned up or explicitly handed off.
 
-A slice whose real path is blocked is an honest blocked handoff, not a completed slice.
-
-## Automated harness
-
-`check-docs` verifies required documents, local links, portable paths, and absence of private Drive URLs. `check-exec-plans` verifies lane/status agreement and forbids unchecked items in completed plans. They are optional supporting checks in Prove unless the user requests them or the slice is explicitly completing/archiving the affected documentation. They cannot judge whether a checkbox was checked truthfully.
+A blocked real path is an honest blocked handoff, not a completed slice.

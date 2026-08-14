@@ -1,250 +1,159 @@
 # Agent Server
 
-Agent Server is an enterprise control-plane project for long-lived agents and bounded agent teams. Paseo remains the leaf-agent runtime; this repository owns stable product identities, task/run semantics, policy, evidence, channels, and durable orchestration around it.
+Agent Server is an enterprise control plane for long-lived Agents and bounded Agent Teams. Paseo is the current first-class execution plane; Agent Server owns product identity, Task/Run semantics, policy, durable orchestration, memory governance, channels, and product-facing projections around it.
 
-The current repository is a **walking-skeleton baseline with Agent Teams v2**,
-not the V1 platform. Its Team path is one fixed-roster, durable coordination
-loop driven by `TeamDriver`:
+The repository is still in **Prove / MVE-first** development. The goal is to validate complete product paths before production hardening.
+
+## Architecture at a glance
 
 ```mermaid
-flowchart TD
-    A["POST /api/v1/tasks:invoke"] --> B["Canonical Task admission"]
-    J["POST /api/v1/runs"] --> C["Run compatibility admission"]
-    B --> D["PostgreSQL tasks / runs / admissions / invokables"]
-    C --> D
-    D --> E["In-process dispatcher claim + fence"]
-    E --> F{"Invokable kind"}
-    F -->|agent| G["AgentRuntimePort"]
-    F -->|team| H["TeamDriver"]
-    H --> I["Child Tasks + child Runs"]
-    I --> G
-    G --> K["Paseo adapter"]
-    K --> L["OpenCode free model"]
-    L --> D
-    M["GET /api/v1/tasks/:id[/tree]"] --> D
-    N["GET /api/v1/runs/:id"] --> D
-    O["/api/v1/workspace-memory proposals/review/entries"] --> D
+flowchart LR
+    U[Web / API / Lark] --> CP[Agent Server Control Plane]
+    CP --> D[(PostgreSQL)]
+    CP --> EP[Execution Plane]
+    EP --> P[Paseo]
+    P --> R[OpenCode / Claude / Codex]
 ```
 
-## Baseline status
+`Task` is the canonical invocation and `Run` is an execution attempt. Agent Teams coordinate durable Team state in Agent Server; leaf Agent work is delegated through the execution boundary.
 
-| Capability                                     | Current state                                                                                                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP liveness/readiness                        | Implemented                                                                                                                                             |
-| Asynchronous Run API                           | Implemented                                                                                                                                             |
-| Authenticated service-account Run ingress      | Implemented                                                                                                                                             |
-| Canonical Task invoke/read/tree API            | Implemented                                                                                                                                             |
-| Owner-scoped Run reads                         | Implemented                                                                                                                                             |
-| PostgreSQL-backed Task/Run admission           | Implemented                                                                                                                                             |
-| Durable Agent/Team definitions and versions    | Implemented                                                                                                                                             |
-| Agent Teams v2 coordination                    | Implemented; fixed TeamVersion, TeamDriver, TeamRun, MemberRun, Work, and TeamMessage state                                                             |
-| Team child Task/Run execution                  | Implemented; bounded Lead turns, work attempts, and addressed member continuations                                                                      |
-| Owner-scoped idempotent replay                 | Implemented                                                                                                                                             |
-| In-process durable dispatcher/claim/fence      | Implemented; single process                                                                                                                             |
-| Paseo WebSocket adapter                        | Implemented                                                                                                                                             |
-| OpenCode free-model discovery                  | Implemented                                                                                                                                             |
-| Explicit reusable Paseo Workspace              | Implemented                                                                                                                                             |
-| Workspace memory proposals/review/entries      | Implemented; governance-only baseline                                                                                                                   |
-| Deterministic CI                               | Implemented; no model network calls                                                                                                                     |
-| Zero-model-credential external smoke           | Implemented; optional/manual/scheduled                                                                                                                  |
-| Managed Environment API + ProductSession pin   | Implemented baseline; four authenticated routes, RuntimeSession/Cell MVE                                                                                |
-| Managed Single-Agent V1 evidence               | Minimum scenario approved; hardening deferred                                                                                                           |
-| Web Chat + Paseo rich-events MVE               | Implemented MVE; sanitized direct timeline/disclosures and replay verified; Oracle merge-ready; PR integration pending                                  |
-| Self-learning Project Lab MVE                  | Implemented local/single-operator MVE; fixed Project/Team, human-reviewed LearningProposal to canonical Memory CAS, and refreshable observation surface |
-| OIDC users, shared ACLs, credentials, approval | Planned V1                                                                                                                                              |
-| Artifacts, evidence, broader Web console       | Planned V1                                                                                                                                              |
-| Fixed Lark command + Card/Doc canary           | Implemented and verified; fixed compatibility-only, not production                                                                                      |
+## Repository command surface
 
-## Quick start
+This is a Node/TypeScript repository. **pnpm is the only command surface.** There is no Makefile and repository workflows call package scripts directly.
 
-Supported local development is Docker-first. Requirements are Docker Compose
-with a running daemon, network access for image/package installation and the
-real OpenCode smoke, and Linux or macOS on x64/arm64. The image supplies Node
-`24.18.0`, pnpm `11.7.0`, Paseo `0.1.110`, and OpenCode `1.18.4`.
+Install dependencies:
 
 ```bash
-make setup
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
-Use the command for the representative path you are changing. The following are
-available scoped or merge/release verification commands, not a default sequence
-for every Prove-stage slice:
+Fast deterministic development commands:
 
 ```bash
-make ci
-make paseo-smoke
-make managed-environment-smoke
-make agent-teams-v2-smoke
+pnpm typecheck
+pnpm test:unit
+pnpm test:contract
+pnpm test:integration
+pnpm test:repository
 ```
 
-These commands run in one-shot Docker runner containers; `make ci` is
-deterministic and does not call an external model. `make paseo-smoke` runs the
-baseline external smoke inside the image and expects
-`PASEO_OPENCODE_BASELINE_OK`. The Managed Environment smoke uses the ephemeral
-`postgres-test` Compose profile and expects `MANAGED_ENVIRONMENT_MVE_OK`.
-
-Docker-first one-shot commands use `scripts/dev/docker-run [--postgres]
-[--pass-env NAME ...] -- COMMAND [ARG...]`. It forwards no host environment by
-default; each `--pass-env` name is validated and forwarded explicitly. With
-`--postgres`, it starts and waits for the private `postgres-test` service,
-injects in-network `DATABASE_URL`, `POSTGRES_URL`, and `POSTGRES_ADMIN_URL`,
-then removes only the service it started. It does not mount host `HOME`, expose
-database ports, or use the Docker socket. The wrapper is for isolated commands;
-`make dev` remains the persistent-stack capability boundary.
-
-For the Agent Teams v2 main-flow smoke, load `OPENCODE_GO_API_KEY` from a local
-mode-0600 environment file. Provider/model and startup budgets come from
-`config/real-provider-defaults.env`; the key is never logged.
-
-Start the local stack:
+Run the deterministic repository gate:
 
 ```bash
-make dev
+pnpm check
 ```
 
-`make dev` starts the persistent PostgreSQL service and the complete isolated
-Agent Server container. `make dev-api` is a compatibility alias for the same
-stack. Only `127.0.0.1:3000:3000` is published on the host; PostgreSQL, Paseo,
-OpenCode, and Runtime MCP have no host-published ports. Native diagnostics are
-explicitly named `*-native` and are not the supported default.
-
-The local Web Chat MVE uses a separate Next.js service and same-origin BFF. Run
-`make web-bootstrap` to validate/import/publish the fixed local Agent and
-Environment inputs through authenticated APIs, then `make web-dev` to build and
-start the Web service with the local stack. The browser receives only the
-HttpOnly `product_session_id`; the Agent Server bearer remains server-side.
-This is a fresh-ProductSession local MVE path, not a production Web console.
-Activity is rendered as sanitized collapsible root and direct-child timeline
-disclosures for live and replayed Run Events; completed root rows default
-closed. Production identity, recovery, and broader console behavior remain
-deferred.
-
-The Agent Teams v2 smoke is a fixed local/single-operator path. It activates a
-published Team Version, proves Lead/member Work coordination and an addressed
-TeamMessage continuation, then verifies its bounded owner-scoped projection:
+Run the full deterministic CI set locally when appropriate:
 
 ```bash
-make agent-teams-v2-smoke
+pnpm ci
 ```
 
-The paid model environment is optional when an explicitly free model is
-available; see the local development and operations runbooks for prerequisites
-and retained visual-evidence mode. This MVE is not a production or multi-user
-authentication boundary.
+`pnpm ci` includes deterministic E2E but does not require a live model. Browser-specific tests remain explicit through `pnpm test:web` and `pnpm test:e2e:web`.
 
-The canonical real-provider bootstrap is:
+## Local environments
+
+Development and infrastructure-backed tests share the topology definitions in `config/local-environments.yaml`.
+
+Stable topologies are:
+
+| Topology | Services |
+| --- | --- |
+| `in-process` | Node + PGlite/fakes only |
+| `postgres` | disposable real PostgreSQL |
+| `core` | PostgreSQL + Agent Server, no execution plane |
+| `runtime` | PostgreSQL + Agent Server + Paseo |
+| `full` | runtime topology + Web |
+
+Start an interactive environment:
 
 ```bash
-set -a; . /path/to/provider.env; set +a  # external file, mode 0600
-make provider-smoke
+pnpm env -- up core
+pnpm env -- up runtime
+pnpm env -- info
+pnpm env -- down
 ```
 
-The command loads provider, model, and bounded startup defaults from the single
-checked-in source `config/real-provider-defaults.env`, starts the PostgreSQL/
-Agent Server stack, and runs a narrow authenticated HTTP smoke while leaving
-the stack up.
-`OPENCODE_GO_API_KEY` must be supplied by the operator through an external
-mode-0600 file or environment; the repository never creates or stores
-credentials. A zero-credential clone cannot call the real provider, and a
-missing key fails before startup with a clear error.
-
-Submit and poll a run:
+For a one-off command that needs infrastructure, use the same environment library instead of creating a scenario script:
 
 ```bash
-export SERVICE_ACCOUNTS_JSON='[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"workspace_main","policyVersion":"policy-local"}]'
-
-curl -sS http://127.0.0.1:3000/api/v1/runs \
-  -H 'authorization: Bearer token-local-dev' \
-  -H 'content-type: application/json' \
-  -d '{"prompt":"Reply with exactly: HELLO"}'
-
-curl -sS http://127.0.0.1:3000/api/v1/runs/<run_id> \
-  -H 'authorization: Bearer token-local-dev'
+pnpm env -- run postgres -- <command>
+pnpm env -- run runtime -- <command>
 ```
 
-`/api/v1/runs` remains the compatibility API, but it is no longer the only public Task ingress. Both Run and Task routes require `Authorization: Bearer ...`. Admission persists a canonical root Task plus the first Run in PostgreSQL, deriving owner scope from the authenticated service account rather than caller-supplied tenant or principal fields. The Run compatibility API does not accept a caller-selected model. Operators may set `PASEO_MODEL`; otherwise the adapter chooses from the live catalog and never automatically falls back to an unmarked paid model.
+The command gets isolated infrastructure, useful URLs/DB variables, and automatic cleanup. Generated diagnostics are written under ignored `.local/test-runs/<run-id>/`; failed runs can be retained with `TEST_KEEP_FAILED=1`.
 
-The canonical public Task surface is:
+Real PostgreSQL integration tests are self-contained:
 
-- `POST /api/v1/tasks:invoke`
-- `GET /api/v1/tasks/{id}`
-- `GET /api/v1/tasks/{id}/tree`
+```bash
+pnpm test:real-pg
+```
 
-The Managed Environment baseline adds authenticated validate/import/read/publish
-routes for one fixed Paseo/OpenCode/free-only package. ProductSession creation
-pins its published EnvironmentVersion; first use creates one internal
-RuntimeSession, launch snapshot, and derived Runtime Cell. This is not a
-production isolation or full Runtime Session V2 claim.
+If `DATABASE_URL`/`POSTGRES_URL` is not already supplied, the test support layer starts and cleans up a disposable PostgreSQL topology automatically.
 
-These routes invoke a published `agent` or `team` version and return Task identity plus owner-scoped read links. Managed Agent/Team registry routes cover validate/import/read/list/publish. Agent Teams v2 reads expose the owner-scoped TeamRun, MemberRun, Work, and direct TeamMessage records created by `TeamDriver`.
+## External runtime smoke
 
-The workspace-memory governance surface is:
+Real provider checks are explicit opt-in verification, never an ordinary deterministic gate. Load credentials from an external file or secret source; do not commit them.
 
-- `POST /api/v1/workspace-memory/proposals`
-- `GET /api/v1/workspace-memory/proposals`
-- `POST /api/v1/workspace-memory/proposals/{proposal_id}/review`
-- `GET /api/v1/workspace-memory/entries`
+```bash
+set -a; . /path/to/provider.env; set +a
+pnpm smoke:runtime
+```
 
-These routes let the authenticated owner scope create memory proposals, review them by accepting, editing-and-accepting, or rejecting, and list accepted entries with source provenance. This is not agent memory or retrieval: this phase does not add embeddings, vector search, ranking, runtime context injection, or automatic prompt mutation.
+A canonical bounded Team smoke is also available:
 
-## Canonical commands
+```bash
+pnpm smoke:agent-team
+```
 
-| Command                          | Purpose                                                        |
-| -------------------------------- | -------------------------------------------------------------- |
-| `make setup`                     | Build the image and verify the Linux OpenCode binary           |
-| `make dev`                       | Start PostgreSQL plus the complete isolated Agent Server stack |
-| `make dev-api`                   | Compatibility alias for `make dev`                             |
-| `make check`                     | Types, formatting, documentation, and Exec Plan checks         |
-| `make test`                      | Unit, contract, and component-integration tests                |
-| `make e2e-smoke`                 | Real HTTP socket with a deterministic fake runtime             |
-| `make paseo-smoke`               | Real Paseo/OpenCode/free-model external smoke                  |
-| `make managed-environment-smoke` | Three-turn Managed Environment smoke in Docker                 |
-| `make agent-teams-v2-smoke`      | Agent Teams v2 main-flow smoke in Docker                       |
-| `make ci`                        | All deterministic pull-request gates                           |
-| `make clean`                     | Stop Compose services without deleting named volumes           |
+These commands use the generic environment runner. If a future test or smoke is difficult to start, improve the shared environment/fixture APIs instead of adding a task-specific setup script.
+
+## Tests, fixtures, evals, and smoke
+
+The repository deliberately separates four concerns:
+
+- **Tests**: deterministic software assertions (`src/**/*.test.ts`, `tests/`, `e2e/`).
+- **Fixtures**: typed builders or stable serialized protocol samples consumed by tests.
+- **Evals**: persistent Agent/model-quality evaluation under `evals/`.
+- **Smoke**: a very small set of real external main-flow checks under `scripts/smoke/`.
+
+Generated logs, screenshots, recordings, one-run API captures, mutation output, and task handoff artifacts are not repository source. Git/PR history and CI artifacts preserve development history; HEAD contains durable product/engineering truth.
+
+## Repository map
+
+```text
+src/                    product/runtime implementation
+apps/web/               product Web UI
+modules and tooling     composition and engineering support
+tests/                  unit support, contract, integration, repository checks
+e2e/                    deterministic end-to-end tests
+evals/                  Agent/model quality evaluation
+scripts/dev/             durable local-development helpers
+scripts/smoke/           small real external main flows
+scripts/ops/             migration/recovery/operator utilities
+tooling/environment/     shared local/test environment lifecycle
+config/                  stable checked-in configuration
+docs/                    durable product/engineering documentation
+```
 
 ## Documentation map
 
-- [Product](docs/product.md): users, value, scope, and release boundary.
-- [Features](docs/features.md): authoritative capability ledger and status.
-- [Components](docs/components.md): ownership and implementation boundaries.
-- [Architecture](docs/architecture.md): domain, execution, recovery, and security direction.
-- [Contracts](docs/contracts.md): Run compatibility, Task, health, runtime, and invokable registry interfaces.
-- [Managed Environment API](docs/contracts/managed-environment-api.md): fixed Environment package, Session pin, RuntimeSession/Cell semantics, and non-goals.
-- [Agent Teams v2 Web API](docs/contracts/self-learning-web-api.md): fixed Team BFF launch, aggregate, safe errors, and local-only boundary.
-- [Self-learning managed agent team MVE evidence](docs/evidence/self-learning-managed-agent-team-mve-evidence-packet.md): sanitized Phase 1–3 and final acceptance evidence; production hardening deferred.
-- [Quality](docs/quality.md): test taxonomy, release gates, and evidence.
-- [Operations](docs/operations.md): local development and incident runbook.
-- [Managed Single-Agent V1 runbook](docs/operations/managed-single-agent-v1-runbook.md): draft A–H happy path, recovery boundary, and escalation.
-- [Managed Single-Agent V1 evidence packet](docs/evidence/managed-single-agent-v1-evidence-packet.md): approved minimum-scenario evidence; production hardening deferred.
-- [Web Chat + Paseo Streaming MVE evidence packet](docs/evidence/web-chat-paseo-streaming-mve-evidence-packet.md): sanitized fresh-session browser evidence; production hardening deferred.
-- [Web Chat rich-events MVE evidence packet](docs/evidence/web-chat-rich-events-mve-evidence-packet.md): sanitized real-session evidence for safe progress, Tool, usage, Markdown, and refresh recovery.
-- [Lark Managed Memory command canary evidence](docs/evidence/lark-managed-memory-command-canary-evidence-packet.md): sanitized fixed-configuration command-path evidence.
-- [Lark Managed Memory Card/Doc evidence](docs/evidence/lark-managed-memory-card-doc-canary-evidence-packet.md): sanitized normal-path provider evidence and boundaries.
-- [Lark Managed Memory command canary runbook](docs/operations/lark-memory-command-canary-runbook.md): safe readiness, one-consumer operation, command/Card/Doc verification, and shutdown.
-- [Decisions](docs/decisions.md): accepted architectural decisions.
-- [Agent handbook](docs/agents.md): mandatory workflow for coding agents.
-- [Exec Plans](docs/exec-plans.md): active-to-completed work protocol.
-- [Roadmap](docs/roadmap.md): sequence from this baseline to V1.
+- [Product](docs/product.md)
+- [Features](docs/features.md)
+- [Components](docs/components.md)
+- [Architecture](docs/architecture.md)
+- [Contracts](docs/contracts.md)
+- [Quality](docs/quality.md)
+- [Operations](docs/operations.md)
+- [Decisions](docs/decisions.md)
+- [Agent handbook](docs/agents.md)
+- [Roadmap](docs/roadmap.md)
 
-The repository documentation is self-contained. The legacy `backup` branch and external research may be consulted as evidence, but neither is an implementation dependency or a source to copy wholesale.
+The repository documentation must remain usable without private Drive access. External research and project Roadmaps/Decisions may guide work, but current code plus durable repository docs define the checked-in implementation.
 
-## Baseline limitations
+## Development-stage limitations
 
-- Baseline authentication is limited to configured service-account bearer tokens on the public Run and Task APIs.
-- The baseline still lacks end-user OIDC, shared Workspace ACLs, credential broker/tool approvals, production execution-cell isolation, cancel/retry UI, and artifact services. The narrow fresh-session Web Chat rich-events MVE is implemented and verified locally; production recovery and broader console behavior remain deferred.
-- Managed Runtime Cells are an implemented MVE placement seam, not production isolation; transaction concurrency, crash recovery, legacy nullable Sessions, Grant renewal/header persistence, Host placement/GC, and a second adapter remain deferred.
-- Execution still uses one in-process dispatcher loop; this phase does not add multi-worker coordination or reconcile workers.
-- `/api/v1/runs` remains a compatibility API; canonical Task invocation now lives on `/api/v1/tasks:invoke` and Task reads on `/api/v1/tasks/{id}` plus `/tree`.
-- Public callers still invoke Teams through `/api/v1/tasks:invoke` and inspect the Task tree/status; no generalized public Team CRUD/API was added.
-- The implemented owner-scoped Team registry routes are limited to validate/import/read/list/publish; they are distinct from the Task invocation route. Agent Teams v2 coordinates durable TeamRun, MemberRun, Work, and TeamMessage records. Every Lead turn, work attempt, and addressed wake is a child Task/Run; members execute with independent RuntimeSessions.
-- Agent Teams v2 has a fixed roster and bounded Work lifecycle. Dynamic rosters, nested Teams, generalized graph execution, recovery, retry, cancellation propagation, and production readiness are not claimed.
-- Free OpenCode models and their availability can change; therefore the external smoke is not a required pull-request gate.
-- The adapter exposes only the minimum contract required to prove the seam. V1 runtime compatibility work is tracked in the roadmap.
-- Workspace memory is governance-only in this phase. Accepted entries are persisted and listable, but agents do not read them automatically and no retrieval, embedding/vector search, or runtime context assembly is implemented.
-- The Lark baseline is a fixed compatibility canary only: one App/group/user
-  and service-account tuple, command/Card/Doc projection surfaces, no canonical
-  Lark identity, and no production delivery, physical exactly-once, multi-node,
-  or full crash-recovery claim. Thread command remains the fallback surface.
+This is not a production-ready platform. Important hardening remains deferred, including broader identity/ACL work, stronger runtime isolation, multi-worker recovery/reconciliation, generalized cancellation/retry UX, production credential brokerage, and broader Artifact services. Real provider availability can also change and therefore is not a pull-request prerequisite.
 
-See [Security](SECURITY.md) before deploying or connecting real credentials. This baseline is for local development and architecture validation only.
+See [Security](SECURITY.md) before connecting real credentials or deploying outside an isolated development environment.

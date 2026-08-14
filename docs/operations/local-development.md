@@ -2,127 +2,95 @@
 
 ## Requirements
 
-- Docker Compose with a running Docker/OrbStack daemon.
+- Node compatible with `.nvmrc` and pnpm `11.7.0` for host-side deterministic tooling.
+- Docker Compose with a running daemon for `postgres`, `core`, `runtime`, and `full` topologies.
 - Linux or macOS, x64 or arm64.
-- Network access for image/package installation and live OpenCode smoke.
+- External credentials only for live provider smoke.
 
-## Real provider bootstrap
+## Install
 
-Use the canonical one-command path after loading credentials from an external
-mode-0600 file (the repository does not generate or store provider keys):
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+## Local topology model
+
+All interactive Dev environments and infrastructure-backed Test environments resolve from `config/local-environments.yaml` through `tooling/environment/`.
+
+```text
+in-process   no external service
+postgres     disposable real PostgreSQL
+core         PostgreSQL + Agent Server
+runtime      core + Paseo execution plane
+full         runtime + Web
+```
+
+Start/inspect/stop an interactive topology:
+
+```bash
+pnpm env -- up core
+pnpm env -- up runtime
+pnpm env -- up full
+pnpm env -- info
+pnpm env -- down
+```
+
+Provider/model overrides are explicit and bounded:
+
+```bash
+pnpm env -- up runtime --provider opencode --model opencode-go/deepseek-v4-flash
+```
+
+The CLI records only ignored local environment state under `.local/`.
+
+## One-off infrastructure commands
+
+Do not write a new scenario setup script. Use the generic runner:
+
+```bash
+pnpm env -- run postgres -- <command>
+pnpm env -- run runtime -- <command>
+```
+
+The runner allocates a unique Compose project, dynamic host ports, `.local/test-runs/<run-id>/`, useful DB/API environment variables, and cleanup. On failure set `TEST_KEEP_FAILED=1` to retain diagnostics.
+
+## Tests
+
+Deterministic tests do not need Docker unless they explicitly select an infrastructure topology.
+
+```bash
+pnpm test:unit
+pnpm test:contract
+pnpm test:integration
+pnpm test:e2e
+```
+
+Real PostgreSQL tests self-start their database when a DB URL is absent:
+
+```bash
+pnpm test:real-pg
+```
+
+If `DATABASE_URL` or `POSTGRES_URL` is already provided, the lane uses that database instead.
+
+## Live runtime smoke
+
+Load provider credentials from an external file/secret source, never the repository:
 
 ```bash
 set -a; . /path/to/provider.env; set +a
-make provider-smoke
+pnpm smoke:runtime
 ```
 
-This loads provider, model, and bounded startup defaults from the single source
-`config/real-provider-defaults.env`, waits for `/health/ready`, then submits and
-polls one authenticated `/api/v1/runs` request. The runner receives
-only the in-network base URL and local service token; the provider key remains
-host-side and is forwarded only to the Agent Server service. Missing
-`OPENCODE_GO_API_KEY` fails fast. Cloning the repository without credentials
-does not provide real-provider access.
-
-Cold provider discovery budgets are defined only in
-`config/real-provider-defaults.env`. Each remains overridable through its named
-environment variable; `make provider-smoke` deliberately sets none of them, so
-it exercises the checked-in defaults.
-
-The image pins Node `24.18.0`, pnpm `11.7.0`, Paseo client/CLI `0.1.110`, and
-OpenCode `1.18.4`. The current-architecture OpenCode package is explicitly
-installed and verified in the image; host optional binaries are never used.
-
-## Setup and checks
+The real Team path is:
 
 ```bash
-make setup
-make ci
+pnpm smoke:agent-team
 ```
 
-`make setup` builds the image and runs the OpenCode platform check in the
-one-shot runner. It does not install dependencies into the host worktree.
-
-One-shot Docker commands use:
-
-```bash
-scripts/dev/docker-run [--postgres] [--pass-env NAME ...] -- COMMAND [ARG...]
-```
-
-To publish an arbitrary host port for a one-shot service, use the wrapper's
-publish option, for example `scripts/dev/docker-run --publish PORT -- COMMAND`.
-
-The wrapper forwards no host environment unless a variable is named with
-`--pass-env`. `--postgres` starts and waits for the private `postgres-test`
-service, injects the in-network `DATABASE_URL`, `POSTGRES_URL`, and
-`POSTGRES_ADMIN_URL`, and removes the service it started on exit. It preserves
-the command status and does not mount host `HOME`, expose database ports, or
-use the Docker socket. It is intended for one-shot checks and smokes; the
-persistent `make dev` stack is outside that capability boundary.
-
-## Start modes
-
-`make dev` starts persistent Compose PostgreSQL and the complete Agent Server
-container. `make dev-api` is a compatibility alias for the same stack. Compose
-publishes only `127.0.0.1:3000:3000`; PostgreSQL, Paseo, OpenCode, and Runtime
-MCP have no host ports. Compose `init: true` and the existing launcher handle
-child reaping, signal forwarding, Paseo startup, and cleanup.
-
-The container supplies isolated HOME/XDG/PASEO_HOME and `.local` state. The
-worktree is the only source bind mount; Linux dependencies are held in Docker
-volumes and are never taken from host `node_modules` or host runtime homes.
-
-For deliberate host diagnostics, use an explicit `*-native` target. Configure
-an existing native daemon through `.env` or environment variables:
-
-| Variable                              | Default                       |
-| ------------------------------------- | ----------------------------- |
-| `HOST`                                | `127.0.0.1`                   |
-| `PORT`                                | `3000`                        |
-| `PASEO_WS_URL`                        | `ws://127.0.0.1:6767/ws`      |
-| `PASEO_AGENT_CWD`                     | `.local/agent-workspace`      |
-| `PASEO_WORKSPACE_TITLE`               | `Agent Server Baseline`       |
-| `PASEO_MODEL`                         | unset; free catalog selection |
-| `PASEO_CONNECT_TIMEOUT_MS`            | `10000`                       |
-| `PASEO_EXECUTION_TIMEOUT_MS`          | `120000`                      |
-| `AGENT_SERVER_DISPATCHER_CONCURRENCY` | `4`                           |
-| `PASEO_RUNTIME_CELL_ROOT`             | `.local/runtime-cells`        |
-
-Never put provider or business credentials in `.env` for the baseline smoke. The external smoke is explicitly zero-model-credential.
-
-The canonical Managed Environment smoke uses the ephemeral `postgres-test`
-Compose profile and disposable Registry/Runtime/Cell roots:
-
-```bash
-make managed-environment-smoke
-```
-
-The command prints sanitized facts only and removes the ephemeral test
-container. It does not delete the persistent PostgreSQL volume. Paseo MCP
-Authorization persistence remains a known PR #14 deviation; it is not evidence
-of a production credential lifecycle.
-The smoke overrides `PASEO_RUNTIME_CELL_ROOT` to a task-specific disposable
-root beneath its runtime root.
-
-The Agent Teams v2 smoke uses the same disposable PostgreSQL setup and pinned
-Node `24.18.0` / pnpm `11.7.0` toolchain:
-
-```bash
-make agent-teams-v2-smoke
-```
-
-It proves the fixed TeamDriver path: TeamRun activation, Lead Work control,
-member submission, acceptance, an addressed TeamMessage continuation, and
-terminal finish. An authenticated diagnostic may select a supported
-`opencode-go` model by loading `OPENCODE_GO_API_KEY` from a local mode-`0600`
-environment file; never print or commit the key. The smoke writes redacted,
-task-specific evidence under ignored `.local` paths and is local/single-operator
-evidence only. It is not a production deployment, persistence, multi-user, or
-authentication guarantee.
+Both use the same generic `runtime` topology as interactive development. Real-provider smoke is explicit opt-in and is not a deterministic PR prerequisite.
 
 ## Generated state
 
-`node_modules`, `dist`, coverage, Vitest output, `.local`, logs, runtime homes,
-workspaces, and evidence are ignored or stored in Docker volumes. `make clean`
-stops Compose services and removes orphaned/profile task containers without
-using `-v`; named dependency, runtime, and PostgreSQL volumes are preserved.
+`node_modules`, build output, coverage, Vitest output, `.local`, test-run diagnostics, runtime homes, and logs are ignored. Do not copy generated output into `docs/`, `artifacts/`, `evidence/`, or `reports/` directories; those task-history directories are not part of the repository model.

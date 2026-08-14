@@ -1,0 +1,30 @@
+name: Channel Execution Service Codemod
+
+on:
+  push:
+    branches:
+      - refactor/execution-plane-paseo-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/execution-plane-paseo-architecture
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tooling/channel-execution-service-codemod.mjs
+      - name: Commit channel migration
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/application/channels/synthesize-memory-document.ts src/application/channels/accept-memory-from-bound-document.ts src/bootstrap.ts
+          git commit -m "refactor(runtime): move channel execution to execution service"
+          git push origin HEAD:refactor/execution-plane-paseo-architecture

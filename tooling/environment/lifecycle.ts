@@ -63,13 +63,13 @@ async function resolvePorts(
 ): Promise<EnvironmentPorts> {
   if (profile === 'postgres') return { postgres: await freePort() };
   if (!testMode) return {};
-  if (profile === 'core' || profile === 'runtime') {
-    return { postgres: await freePort(), api: await freePort() };
-  }
-  if (profile === 'full') {
+  if (profile === 'core' || profile === 'runtime' || profile === 'full') {
     return {
       postgres: await freePort(),
       api: await freePort(),
+      // The shared Compose override is parsed as a whole even when the web
+      // service is not selected, so every infrastructure-backed test run
+      // supplies a collision-free value for its interpolation.
       web: await freePort(),
     };
   }
@@ -118,7 +118,7 @@ function urlsFor(state: LocalEnvironmentState): LocalEnvironmentUrls {
             state.profile === 'full'
           ? { api: 'http://127.0.0.1:3000' }
           : {}),
-    ...(state.ports.web
+    ...(state.profile === 'full' && state.ports.web
       ? { web: `http://127.0.0.1:${state.ports.web}` }
       : !state.testMode && state.profile === 'full'
         ? { web: 'http://127.0.0.1:3001' }

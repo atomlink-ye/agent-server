@@ -141,8 +141,11 @@ the durable DB/API/source observations below are the separate hard-evidence laye
 The `BRANCH_2` prescription—change a redaction rule, re-sanitize, or perform a
 zero-cost re-capture—does not apply. Re-capturing the same projection would not
 change the response bytes. The future correction is B-owned Product projection
-work that carries the durable field through the Product contract, subject to a
-Human Gate. C does not implement that correction.
+work that carries the durable field through the Product contract. Manager C
+judges that this may require a Human Gate because content that was previously
+always `null` would begin crossing the system boundary; nobody has ruled that
+gate mandatory. PLAN-D must decide whether it is required. C does not implement
+that correction.
 
 ## Authority alignment
 

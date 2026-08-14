@@ -185,6 +185,26 @@ const runtimeEnvironment = [
   'XDG_DATA_HOME',
   'XDG_CACHE_HOME',
 ];
+const completeProcessCollection = {
+  snapshots: [
+    {
+      numeric_count: 1,
+      emitted_count: 1,
+      enoent_count: 0,
+      read_error_count: 0,
+      error_class: 'none',
+    },
+    {
+      numeric_count: 1,
+      emitted_count: 1,
+      enoent_count: 0,
+      read_error_count: 0,
+      error_class: 'none',
+    },
+  ],
+  stable: true,
+  complete: true,
+};
 const baseRecord = {
   candidate_sha: 'a'.repeat(40),
   effective_compose: {
@@ -215,6 +235,7 @@ const baseRecord = {
       processes: [
         { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
       ],
+      process_collection: structuredClone(completeProcessCollection),
       mounts: [{ destination: '/workspace', read_only: false }],
     },
     paseo_runtime: {
@@ -229,6 +250,7 @@ const baseRecord = {
           identity: 'paseo-daemon',
         },
       ],
+      process_collection: structuredClone(completeProcessCollection),
       mounts: [
         {
           destination: '/opt/provider-toolchain-volume',
@@ -273,8 +295,95 @@ function evaluate(record) {
     output: JSON.parse(child.stdout.trim().split('\n').at(-1)),
   };
 }
+function evaluateE6Proof(proof) {
+  const path = resolve(import.meta.dirname, '.phase-c-e6-fixture.json');
+  writeFileSync(path, JSON.stringify(proof));
+  const child = spawnSync(
+    process.execPath,
+    [resolve(import.meta.dirname, 'phase-c.mjs'), 'E6', '--proof-record', path],
+    { env: { ...process.env }, encoding: 'utf8' },
+  );
+  rmSync(path, { force: true });
+  return {
+    exit: child.status,
+    output: JSON.parse(child.stdout.trim().split('\n').at(-1)),
+  };
+}
+const minimalProof = {
+  work_id: 'work',
+  work_run_id: 'run',
+  agent_server_container_id: 'agent',
+  paseo_runtime_container_id: 'runtime',
+};
+const missingE6ProcessEvidence = evaluateE6Proof(minimalProof);
+assert.equal(missingE6ProcessEvidence.exit, 2);
+assert.equal(missingE6ProcessEvidence.output.status, 'MISSING');
+assert.equal(
+  missingE6ProcessEvidence.output.reason,
+  'required process collection evidence is missing or incomplete',
+);
+const baselineOnlyE6Proof = {
+  ...minimalProof,
+  agent_server_process_collection: structuredClone(completeProcessCollection),
+  paseo_runtime_process_collection: structuredClone(completeProcessCollection),
+};
+const missingE6MutationEvidence = evaluateE6Proof(baselineOnlyE6Proof);
+assert.equal(missingE6MutationEvidence.exit, 2);
+assert.deepEqual(missingE6MutationEvidence.output.process_collection, [
+  'e4_mutation_agent_process_collection',
+  'e4_mutation_runtime_process_collection',
+  'e4_workspace_mutation_agent_process_collection',
+  'e4_workspace_mutation_runtime_process_collection',
+  'e4_root_runtime_mutation_agent_process_collection',
+  'e4_root_runtime_mutation_runtime_process_collection',
+  'e4_runtime_state_mutation_agent_process_collection',
+  'e4_runtime_state_mutation_runtime_process_collection',
+  'e4_runtime_state_mutation_child_process_collection',
+  'e4_no_paseo_process_mutation_agent_process_collection',
+  'e4_no_paseo_process_mutation_runtime_process_collection',
+  'e4_declarative_environment_mutation_agent_process_collection',
+  'e4_declarative_environment_mutation_runtime_process_collection',
+  'e4_actual_environment_mutation_agent_process_collection',
+  'e4_actual_environment_mutation_runtime_process_collection',
+]);
 const positive = evaluate(baseRecord);
 assert.equal(positive.exit, 0);
+const incompleteAgentCollection = structuredClone(baseRecord);
+incompleteAgentCollection.runtime_inspection.agent_server.process_collection.complete = false;
+assert.deepEqual(evaluate(incompleteAgentCollection), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'agent_server process collection is missing or incomplete',
+  },
+});
+const incompleteRuntimeCollection = structuredClone(baseRecord);
+incompleteRuntimeCollection.runtime_inspection.paseo_runtime.process_collection.snapshots[0].enoent_count = 1;
+incompleteRuntimeCollection.runtime_inspection.paseo_runtime.process_collection.complete = false;
+assert.deepEqual(evaluate(incompleteRuntimeCollection), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'paseo_runtime process collection is missing or incomplete',
+  },
+});
+const agentPaseo = structuredClone(baseRecord);
+agentPaseo.runtime_inspection.agent_server.processes[0].identity =
+  'paseo-daemon';
+assert.deepEqual(evaluate(agentPaseo), {
+  exit: 1,
+  output: {
+    suite: 'E4',
+    status: 'FAIL',
+    code: 1,
+    reason: 'runtime ownership proposition failed',
+    failures: ['agent_server_paseo_process'],
+  },
+});
 const rootMutation = structuredClone(baseRecord);
 rootMutation.runtime_inspection.paseo_runtime.identity = {
   process_uid: 0,
@@ -412,6 +521,17 @@ assert.deepEqual(noPaseoEvaluation, {
     code: 1,
     reason: 'runtime ownership proposition failed',
     failures: ['runtime_paseo_process_missing'],
+  },
+});
+const incompleteNoPaseoMutation = structuredClone(noPaseoMutation);
+incompleteNoPaseoMutation.runtime_inspection.paseo_runtime.process_collection.complete = false;
+assert.deepEqual(evaluate(incompleteNoPaseoMutation), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'paseo_runtime process collection is missing or incomplete',
   },
 });
 const wrapperOnlyMutation = structuredClone(baseRecord);

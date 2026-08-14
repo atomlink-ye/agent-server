@@ -5,11 +5,13 @@ import { resolve } from 'node:path';
 import {
   classifyProcessIdentity,
   collectServiceProcesses,
+  collectProcessSnapshots,
   enumerateNumericProcessRecords,
   exactServiceContainerId,
   isPaseoExecutableProcess,
   isPaseoProcess,
   parseProcessRecords,
+  parseProcessCollection,
 } from './lib/phase-c-process-inspection.mjs';
 
 const directInvocation = [
@@ -138,6 +140,18 @@ assert.equal(
   })[0].identity,
   'paseo-supervisor',
 );
+assert.equal(
+  fixtureRecords({
+    pids: ['10', '11', '12'],
+    parents: { 10: 0, 11: 10, 12: 11 },
+    cmdlines: {
+      10: `${directInvocation.join('\u0000')}\u0000`,
+      11: 'carrier\u0000',
+      12: 'Paseo Daemon\u0000',
+    },
+  }).at(-1).identity,
+  'paseo-daemon',
+);
 assert.deepEqual(
   fixtureRecords({
     pids: ['10', '11', '12', '13'],
@@ -252,6 +266,96 @@ assert.throws(
   (error) => error.code === 'EACCES',
 );
 
+function deterministicCollection({
+  lists,
+  errorSnapshot = null,
+  errorCode = null,
+}) {
+  let snapshotIndex = -1;
+  const observed = collectProcessSnapshots({
+    listProcEntries: () => {
+      snapshotIndex += 1;
+      return lists[snapshotIndex];
+    },
+    readComm: () => {
+      if (snapshotIndex === errorSnapshot) {
+        const error = new Error('bounded fixture read failure');
+        error.code = errorCode;
+        throw error;
+      }
+      return 'node\n';
+    },
+    readStatus: () => status(1000, 0),
+    readCmdline: () => 'carrier\u0000',
+  });
+  assert.equal(snapshotIndex, 1);
+  return observed;
+}
+const completeCollection = deterministicCollection({
+  lists: [['50'], ['50']],
+});
+assert.equal(completeCollection.process_collection.stable, true);
+assert.equal(completeCollection.process_collection.complete, true);
+assert.deepEqual(
+  completeCollection.process_collection.snapshots.map((snapshot) => [
+    snapshot.numeric_count,
+    snapshot.emitted_count,
+    snapshot.enoent_count,
+    snapshot.read_error_count,
+  ]),
+  [
+    [1, 1, 0, 0],
+    [1, 1, 0, 0],
+  ],
+);
+for (const errorSnapshot of [0, 1]) {
+  const enoentCollection = deterministicCollection({
+    lists: [['51'], ['51']],
+    errorSnapshot,
+    errorCode: 'ENOENT',
+  });
+  assert.equal(enoentCollection.process_collection.complete, false);
+}
+const changedPidCollection = deterministicCollection({
+  lists: [['52'], ['53']],
+});
+assert.equal(changedPidCollection.process_collection.stable, false);
+assert.equal(changedPidCollection.process_collection.complete, false);
+const readErrorCollection = deterministicCollection({
+  lists: [['54'], ['54']],
+  errorSnapshot: 1,
+  errorCode: 'EACCES',
+});
+assert.equal(readErrorCollection.process_collection.complete, false);
+assert.equal(
+  readErrorCollection.process_collection.snapshots[1].error_class,
+  'read_error',
+);
+assert.throws(
+  () =>
+    parseProcessCollection({
+      snapshots: [
+        {
+          numeric_count: 2,
+          emitted_count: 1,
+          enoent_count: 0,
+          read_error_count: 0,
+          error_class: 'none',
+        },
+        {
+          numeric_count: 2,
+          emitted_count: 1,
+          enoent_count: 0,
+          read_error_count: 0,
+          error_class: 'none',
+        },
+      ],
+      stable: true,
+      complete: true,
+    }),
+  /process_collection_complete_invalid/u,
+);
+
 // Raw argv, including secrets beyond argv[2], never enter the persisted record.
 const secret = 'SECRET_ARGV2_SHOULD_NEVER_BE_EMITTED';
 const secretInvocation = [...directInvocation];
@@ -307,15 +411,37 @@ const run = (command, commandFields) => {
   calls.push({ command, commandFields });
   if (commandFields.includes('ps')) return { stdout: `${containerId}\n` };
   return {
-    stdout: JSON.stringify([
-      {
-        pid: 1000,
-        ppid: 999,
-        uid: 1000,
-        comm: 'paseo',
-        identity: 'paseo-daemon',
+    stdout: JSON.stringify({
+      processes: [
+        {
+          pid: 1000,
+          ppid: 999,
+          uid: 1000,
+          comm: 'paseo',
+          identity: 'paseo-daemon',
+        },
+      ],
+      process_collection: {
+        snapshots: [
+          {
+            numeric_count: 1,
+            emitted_count: 1,
+            enoent_count: 0,
+            read_error_count: 0,
+            error_class: 'none',
+          },
+          {
+            numeric_count: 1,
+            emitted_count: 1,
+            enoent_count: 0,
+            read_error_count: 0,
+            error_class: 'none',
+          },
+        ],
+        stable: true,
+        complete: true,
       },
-    ]),
+    }),
   };
 };
 assert.deepEqual(
@@ -393,5 +519,5 @@ assert.match(source, /\/comm/u);
 assert.match(source, /\/cmdline/u);
 
 process.stdout.write(
-  `${JSON.stringify({ status: 'PASS', exact_toolchain_paths: true, ancestry_cycle_safe: true, wrapper_excluded_from_runtime_positive: true, enoent_skipped: true, non_enoent_failed: true, raw_argv_not_emitted: true, fields: ['pid', 'ppid', 'uid', 'comm', 'identity'] })}\n`,
+  `${JSON.stringify({ status: 'PASS', exact_toolchain_paths: true, ancestry_cycle_safe: true, wrapper_excluded_from_runtime_positive: true, two_snapshot_completeness: true, enoent_incomplete: true, non_enoent_incomplete: true, raw_argv_not_emitted: true, fields: ['pid', 'ppid', 'uid', 'comm', 'identity'] })}\n`,
 );

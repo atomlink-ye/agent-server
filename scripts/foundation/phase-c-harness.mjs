@@ -32,6 +32,29 @@ import {
 import { runtimeBoundaryCleanupProbes } from './lib/phase-c-runtime-cleanup.mjs';
 import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
 
+function completeProcessCollection(value) {
+  return (
+    value?.stable === true &&
+    value?.complete === true &&
+    Array.isArray(value?.snapshots) &&
+    value.snapshots.length === 2 &&
+    value.snapshots.every(
+      (snapshot) =>
+        snapshot?.error_class === 'none' &&
+        Number.isSafeInteger(snapshot?.numeric_count) &&
+        snapshot.numeric_count > 0 &&
+        Number.isSafeInteger(snapshot?.emitted_count) &&
+        snapshot.emitted_count > 0 &&
+        snapshot.numeric_count === snapshot.emitted_count &&
+        Number.isSafeInteger(snapshot?.enoent_count) &&
+        Number.isSafeInteger(snapshot?.read_error_count) &&
+        snapshot?.enoent_count === 0 &&
+        snapshot?.read_error_count === 0 &&
+        snapshot?.emitted_count > 0,
+    )
+  );
+}
+
 const ROOT = resolve(import.meta.dirname, '../..');
 const project = process.env.COMPOSE_PROJECT_NAME;
 if (!project || !/^phasec_[a-z0-9_-]+$/u.test(project))
@@ -153,6 +176,7 @@ function containerRecord(service, composeCommand = rawCompose) {
     container_id: id,
     environment_names: environmentNames,
     processes: processInspection.processes,
+    process_collection: processInspection.process_collection,
     mounts: inspect.map((mount) => ({
       type: mount.Type,
       source_name: mount.Name || null,
@@ -420,16 +444,24 @@ function runRuntimeBoundaryMutation({
           { identity: `${suffix}-runtime-child-exit` },
         ).stdout.trim(),
       );
+      const childInspection = collectServiceProcesses({
+        run,
+        composeCommand,
+        service: 'paseo-runtime',
+        identity: `${suffix}-runtime-child`,
+      });
       childObservation = {
         instrumentation,
         real_runtime_child_exit: childExit,
-        real_runtime_child_survived: collectServiceProcesses({
-          run,
-          composeCommand,
-          service: 'paseo-runtime',
-          identity: `${suffix}-runtime-child`,
-        }).processes.some(isPaseoExecutableProcess),
+        real_runtime_child_survived: childInspection.processes.some(
+          isPaseoExecutableProcess,
+        ),
+        child_process_collection: childInspection.process_collection,
       };
+      if (!completeProcessCollection(childInspection.process_collection))
+        throw new Error(
+          `${suffix}_runtime_child_process_collection_incomplete`,
+        );
       if (childExit !== 1 || childObservation.real_runtime_child_survived)
         throw new Error(`${suffix}_runtime_child_observation_invalid`);
     }
@@ -504,6 +536,10 @@ function runRuntimeBoundaryMutation({
       workspace_write_probe:
         record.runtime_inspection.paseo_runtime.workspace_write_probe,
       processes: record.runtime_inspection.paseo_runtime.processes,
+      agent_process_collection:
+        record.runtime_inspection.agent_server.process_collection,
+      runtime_process_collection:
+        record.runtime_inspection.paseo_runtime.process_collection,
       ...childObservation,
     };
   } catch (error) {
@@ -819,6 +855,8 @@ function runEnvironmentOwnershipMutation({
       runtime_state_probe: runtime.runtime_state_probe,
       workspace_write_probe: runtime.workspace_write_probe,
       processes: runtime.processes,
+      agent_process_collection: agent.process_collection,
+      runtime_process_collection: runtime.process_collection,
     };
   } catch (error) {
     primaryError = error;
@@ -1218,6 +1256,10 @@ try {
       name: 'restore-agent-provider-ownership',
       exit: mutationRun.status,
       status: mutationResult.status,
+      agent_process_collection:
+        mutationRecord.runtime_inspection.agent_server.process_collection,
+      runtime_process_collection:
+        mutationRecord.runtime_inspection.paseo_runtime.process_collection,
     };
   } finally {
     try {
@@ -1437,6 +1479,12 @@ try {
       status: workspaceMutationResult.status,
       failures: workspaceMutationResult.failures,
       workspace_write_probe: workspaceProbe,
+      agent_process_collection:
+        workspaceMutationRecord.runtime_inspection.agent_server
+          .process_collection,
+      runtime_process_collection:
+        workspaceMutationRecord.runtime_inspection.paseo_runtime
+          .process_collection,
     };
   } finally {
     try {
@@ -1683,6 +1731,10 @@ try {
     runtimeRecord.runtime_inspection.paseo_runtime.identity;
   proof.runtime_state_probe =
     runtimeRecord.runtime_inspection.paseo_runtime.runtime_state_probe;
+  proof.agent_server_process_collection =
+    runtimeRecord.runtime_inspection.agent_server.process_collection;
+  proof.paseo_runtime_process_collection =
+    runtimeRecord.runtime_inspection.paseo_runtime.process_collection;
   proof.e4_mutation = { ...mutation, cleanup: mutationCleanup };
   proof.e4_workspace_mutation = {
     ...workspaceMutation,

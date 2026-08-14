@@ -9,7 +9,7 @@ import {
   WorkResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 import { WorkDetailShell } from '@/components/work/work-shell';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import {
   projectWorkList,
   projectWorkRunList,

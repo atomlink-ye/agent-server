@@ -176,3 +176,57 @@ command was also checked against this old bundle and returned `MISSING` exit
 `2` (`future_capture_attestation_not_implemented`). Static fixture replay was
 checked and returned `MISSING` exit `2` (`manifest_file_missing`); neither old
 bundle nor self-described manifest can unblock or establish a current blocker.
+
+## Independent live confirmation arm
+
+`FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION` is a separate C-owned live arm;
+its artifact root, status file, command, and exit are not shared with the
+historical blocker, static shape monitor, or E11 arms. The overall C4 ruling
+remains `INCOMPLETE`.
+
+| live row | status | outer exit | artifact/status |
+|---|---|---:|---|
+| `FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION` | `MISSING` (no live vars supplied) | 2 | no bundle; status would be written under `C4_LIVE_EVIDENCE_ROOT/live-confirmation-status.json` |
+
+The live command is:
+
+```sh
+pnpm exec tsx scripts/ci/run-product-feedback-projection-live-confirmation.mjs
+```
+
+It accepts only live connection/identity/configuration variables. It rejects
+all caller arguments and legacy bundle/sidecar/candidate-SHA inputs. In one
+process it reads `git -C "$C4_LIVE_REMOTE_WORKSPACE_ROOT" rev-parse HEAD`,
+uses that actual SHA as both manifest `git_sha` and `service_revision`, GETs the
+accepted WorkRun and trace from `C4_LIVE_BASE_URL`, queries the existing scoped
+WorkRun/root/principal through the same `pg.Client` passed to
+`captureProductRun`, and captures into a unique
+`<C4_LIVE_OUTPUT_ROOT>/FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION/...`
+directory. `recorded_at` is checked against runner start/end timestamps.
+
+After capture, the runner only reads its own returned directory: it recomputes
+the complete file set, every manifest and `SHA256SUMS` hash, runs
+`validateRecording(..., 'product')`, parses the current
+`ProductWorkRunResponseSchema` and `ProductRunTraceResponseSchema`, and checks
+scope, identity, same-attempt joins, and candidate binding. Exactly one fresh
+non-empty DB feedback row plus API `feedback_summary=null` and status
+`not_present|redacted` yields
+`FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION_KNOWN_LIVE_BLOCKER` / exit `1`.
+Only exact UTF-8 DB/API feedback bytes with an accepted status other than
+`not_present|redacted` yields `UNBLOCKED_CANDIDATE` / exit `0`; the current enum
+keeps this branch genuinely reachable in evaluator code but contract-invalid
+for the present version, so it is not claimed green here. Missing service,
+auth, DB, run, root, schema, hash, identity, or candidate evidence yields
+`MISSING` / exit `2`.
+
+The process-path checker is:
+
+```sh
+pnpm exec tsx scripts/ci/check-product-feedback-projection-live-confirmation.mjs
+```
+
+It passed with `LIVE_CONFIRMATION_PATH_STATIC_AND_CALLABLE`, proving the fresh
+`captureProductRun -> read-only bundle -> schema/hash/identity evaluator` path,
+caller-bundle rejection (exit `2`), and missing-live-env behavior (exit `2`).
+No provider, build, dev server, browser, install, sandbox, or live service was
+run in this lane; no live artifact or completion claim exists.

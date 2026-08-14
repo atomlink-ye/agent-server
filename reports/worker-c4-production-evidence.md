@@ -1,5 +1,7 @@
 # C4 production walking-path final report
 
+> **Bounded-round scope correction:** `3d8d503 超出本轮 bounded round 范围；待 Phase D exit 达成后才可生效/合并`。该独立 route-only commit 予以保留、不回退，但 Human Gate 解开不等于 Phase D 前置解开；本报告不称 Phase E 完成。
+
 Status: browser walking path passed; roadmap §18.3 is **not achieved** because only two of its three user questions are answerable.
 
 | §18.3 question | Result | Evidence / boundary |

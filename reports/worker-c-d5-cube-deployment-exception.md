@@ -1,5 +1,7 @@
 # D-5 · C 沙箱目标部署例外
 
+> **Bounded-round scope correction:** `3d8d503 超出本轮 bounded round 范围；待 Phase D exit 达成后才可生效/合并`。D-5 Human Gate 已验收只解除该 Gate；它不解除 Phase D exit 前置，本报告不称 Phase E 完成。
+
 日期：2026-08-14
 
 目标部署：Cube 开发沙箱 `8174cc0c35a44a568688d8492fe15745`
@@ -52,4 +54,4 @@ owner   Frontend / Manager C
 
 ## 本报告不授权的动作
 
-本报告不修改 `apps/web`，不执行 route cutover，不改变沙箱、端口、iptables 或 token，也不把 security-by-obscurity 描述为内网或风险可控。Phase E 是否进入实现仍等待 Manager C 对本报告验收。
+本报告不修改 `apps/web`，不改变沙箱、端口、iptables 或 token，也不把 security-by-obscurity 描述为内网或风险可控。独立 route-only commit `3d8d503` 已被保留，但在 Phase D exit 达成前不得生效或合并。

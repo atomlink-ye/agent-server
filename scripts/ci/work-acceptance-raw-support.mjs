@@ -98,6 +98,13 @@ export function runVitestTarget({ kind, zeroExecutionMarker, pattern }) {
     }
     const executed =
       Number(report.numPassedTests ?? 0) + Number(report.numFailedTests ?? 0);
+    const failureMessages = (report.testResults ?? []).flatMap((testFile) => [
+      ...(testFile.message ? [testFile.message] : []),
+      ...(testFile.assertionResults ?? []).flatMap(
+        (assertion) => assertion.failureMessages ?? [],
+      ),
+    ]);
+    for (const message of failureMessages) process.stderr.write(`${message}\n`);
     console.log(
       JSON.stringify({
         guard: 'work-acceptance-target-execution',
@@ -106,6 +113,7 @@ export function runVitestTarget({ kind, zeroExecutionMarker, pattern }) {
         failed: Number(report.numFailedTests ?? 0),
         pending: Number(report.numPendingTests ?? 0),
         executed,
+        failure_messages: failureMessages.length,
       }),
     );
     if (executed === 0) {

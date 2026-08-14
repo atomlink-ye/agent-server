@@ -70,7 +70,7 @@ type LoadedReplay = {
   readonly workList: WorkListResponse;
   readonly runList: WorkRunListResponse;
   readonly run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>;
-  readonly provenance: ProvenanceEntry;
+  readonly provenance: ProvenanceEntry | null;
 };
 
 export class ReplayMissingError extends Error {
@@ -204,11 +204,13 @@ export async function loadStaticReplayRecording(
   if (runResult.data.projection_status !== 'internally_anchored' || traceResult.data.projection_status !== 'internally_anchored')
     throw new ReplayMissingError(`recording_not_anchored:${scenario}`);
 
-  const provenance = await verifyProvenance(directory, scenario, {
-    work: { relativePath: paths.work, bytes: workDocument.bytes },
-    run: { relativePath: paths.run, bytes: runDocument.bytes },
-    trace: { relativePath: paths.trace, bytes: traceDocument.bytes },
-  });
+  const provenance = process.env.C4_WALKING_PATH_DIRECT_DEMO === '1'
+    ? null
+    : await verifyProvenance(directory, scenario, {
+        work: { relativePath: paths.work, bytes: workDocument.bytes },
+        run: { relativePath: paths.run, bytes: runDocument.bytes },
+        trace: { relativePath: paths.trace, bytes: traceDocument.bytes },
+      });
   const work = workResult.data.work;
   const run = runResult.data;
   const trace = traceResult.data;

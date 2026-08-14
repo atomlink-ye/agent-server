@@ -52,6 +52,7 @@ async function run(): Promise<number> {
     started_at: new Date().toISOString(),
   };
   try {
+    process.env.C4_WALKING_PATH_DIRECT_DEMO = '1';
     const recording = await loadStaticReplayRecording(selected);
     replay = await launchReplay();
     app = await launchApp(replay.url);

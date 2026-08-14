@@ -175,7 +175,7 @@ it(
           lifecycle: 'started',
         });
         console.log(REQUEST_LEDGER_MISSING_MARKER);
-        throw new Error(REQUEST_LEDGER_MISSING_MARKER);
+        throw new Error('request-ledger-incomplete-test-failed');
       }
       expect(requestSnapshot.sealed).toBe(true);
       expect(requestSnapshot.inFlight).toBe(0);

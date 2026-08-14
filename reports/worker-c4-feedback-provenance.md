@@ -121,16 +121,18 @@ durable feedback was deleted.
 
 ## Branch decision
 
-Owner correction O-H48 establishes that the original four-way table was not
+Manager classification correction establishes that the original four-way table was not
 exhaustive: its first three causal branches all presupposed that redaction had
 occurred, while `MISSING_EVIDENCE` covered lack of proof. This case instead has
 positive proof of the durable fact and positive proof that the Product query
 never reads its value. The required fifth branch is therefore
-`NEVER_PROJECTED`.
+`NEVER_PROJECTED`. This classification and the interpretation of D10/D12 that
+supports it were not reviewed by Owner and remain revisable Manager judgment;
+the durable DB/API/source observations below are the separate hard-evidence layer.
 
 | Branch | Decision | Evidence | Counterevidence / reason |
 |---|---|---|---|
-| `BRANCH_1_PROVIDER_DERIVED_REQUIRED_REDACTION` | Rejected | D10/D12 exclude provider raw payload, prompt, and credentials; D18.2 allows MCP return values to remain capture-status-only. | This is durable application feedback supplied to `requestChanges`, not a provider raw payload or prompt. D12 does not require ordinary application feedback to become presence-only. The scenario's prompt-derived instruction is not itself the raw prompt/payload, and cannot be used to relabel the persisted feedback as provider transcript content. |
+| `BRANCH_1_PROVIDER_DERIVED_REQUIRED_REDACTION` | Rejected under Manager interpretation | D10/D12 text excludes provider raw payload, prompt, and credentials; D18.2 allows MCP return values to remain capture-status-only. | Manager interprets durable application feedback supplied to `requestChanges` as outside provider raw material. Owner did not review this interpretation. |
 | `BRANCH_2_OVERBROAD_REDACTION` | Rejected | The API labels presence as `redacted`, which made this branch initially appear plausible. | No sanitizer or redaction rule transforms or removes the durable value on this path. The Product facts query never selects the value, so the omission precedes any possible redaction step. |
 | `BRANCH_3_NOT_PRODUCED` | Rejected | `team_work_item_attempts.feedback` for `524401a1…` is a non-empty string; the recorder predicate also requires a non-empty later feedback row. | `not_present` on the other attempts is a separate null fact and does not apply to attempt 2. |
 | `MISSING_EVIDENCE` | Rejected for the question “was the feedback fact produced?” | The durable DB row is direct evidence, and the trace's feedback edge corroborates the relation. | Exact provider token/tool-call transcript is not required for this question. If such transcript is absent, the narrow statement is only “provider transcript not captured,” not “feedback was not produced.” |

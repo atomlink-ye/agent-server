@@ -78,6 +78,11 @@ import {
 } from './application/memory-api/memory-api.js';
 import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-memory-api-repository.js';
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
+import {
+  createLegacyRuntimeToolsContributor,
+  createMemoryReadRuntimeContributor,
+} from './entrypoints/mcp/runtime-tool-contributors.js';
+import { RuntimeToolRegistry } from './platform/runtime-tool-registry.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
@@ -427,16 +432,20 @@ export async function createService(
     executionFacts: new PostgresExecutionFactQuery(pool),
   });
   const runtimeMcpServer = new RuntimeMcpServer(
-    memoryApiRepository,
-    undefined,
-    {
-      contextResolver: teamToolContextResolver,
-      commands: teamCommandService,
-    },
-    createLearningProposal,
-    new SyntheticMarketAdapter(),
-    logger,
-    workModule.contributeRuntime,
+    new RuntimeToolRegistry([
+      workModule.contributeRuntime,
+      createMemoryReadRuntimeContributor(memoryApiRepository),
+      createLegacyRuntimeToolsContributor({
+        repository: memoryApiRepository,
+        teamTools: {
+          contextResolver: teamToolContextResolver,
+          commands: teamCommandService,
+        },
+        createLearningProposal,
+        market: new SyntheticMarketAdapter(),
+        logger,
+      }),
+    ]),
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,

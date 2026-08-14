@@ -6,6 +6,8 @@ import {
   createDirectMemoryMcpHandler,
   MCP_PATH,
 } from '../../src/entrypoints/mcp/direct-memory-mcp.ts';
+import { createMemoryReadRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.ts';
+import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.ts';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -83,7 +85,12 @@ const empty = grants.issue({
 });
 
 const server = createServer(
-  createDirectMemoryMcpHandler({ repository, grants }),
+  createDirectMemoryMcpHandler({
+    grants,
+    registry: new RuntimeToolRegistry([
+      createMemoryReadRuntimeContributor(repository),
+    ]),
+  }),
 );
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const address = server.address();

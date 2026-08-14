@@ -17,6 +17,7 @@ import { createApp } from '../../src/entrypoints/api/app.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
+import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const required = process.env.REAL_POSTGRES_REQUIRED === '1';
@@ -240,13 +241,7 @@ describeRealPostgres(
 
     it('creates through real MCP and reads the same Work through HTTP', async () => {
       const mcp = new RuntimeMcpServer(
-        {} as never,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        workModule.contributeRuntime,
+        new RuntimeToolRegistry([workModule.contributeRuntime]),
       );
       const grant = mcp.grants.issue({
         tenantId,

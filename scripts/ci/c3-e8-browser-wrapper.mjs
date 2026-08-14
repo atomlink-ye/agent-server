@@ -9,16 +9,20 @@ function stripAnsi(value) {
 }
 export function parseVitestSummary(raw) {
   const text = stripAnsi(String(raw));
-  const files = text.match(/Test Files\s+(\d+)\s+passed(?:\s*\([^)]*\))?\s*\((\d+)\s*\)/u);
-  const tests = text.match(/Tests\s+(\d+)\s+passed(?:\s+(\d+)\s+skipped)?(?:\s+(\d+)\s+todo)?\s*\((\d+)\s*\)/u);
-  if (!files || !tests) return null;
+  const fileTotal = text.match(/Test Files\s+[^\n]*\((\d+)\s*\)/u);
+  const testTotal = text.match(/Tests\s+[^\n]*\((\d+)\s*\)/u);
+  if (!fileTotal || !testTotal) return null;
+  const filePassed = text.match(/Test Files\s+(\d+)\s+passed/u);
+  const testPassed = text.match(/Tests\s+[^\n]*?(\d+)\s+passed/u);
+  const skipped = text.match(/Tests\s+[^\n]*?(\d+)\s+skipped/u);
+  const todo = text.match(/Tests\s+[^\n]*?(\d+)\s+todo/u);
   return {
-    files: Number(files[1]),
-    fileTotal: Number(files[2]),
-    tests: Number(tests[1]),
-    skipped: Number(tests[2] ?? 0),
-    todo: Number(tests[3] ?? 0),
-    testTotal: Number(tests[4]),
+    files: Number(filePassed?.[1] ?? 0),
+    fileTotal: Number(fileTotal[1]),
+    tests: Number(testPassed?.[1] ?? 0),
+    skipped: Number(skipped?.[1] ?? 0),
+    todo: Number(todo?.[1] ?? 0),
+    testTotal: Number(testTotal[1]),
   };
 }
 

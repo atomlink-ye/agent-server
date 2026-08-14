@@ -11,6 +11,13 @@ describe('C3/E8 browser summary wrapper', () => {
     assert.deepEqual(browserSummaryOutcome(summary), { process: 0, marker: null });
   });
 
+  it('parses failed summaries so assertion failures remain process-1', () => {
+    assert.deepEqual(
+      parseVitestSummary('Test Files 1 failed (1)\nTests 1 failed | 1 passed (2)'),
+      { files: 0, fileTotal: 1, tests: 1, skipped: 0, todo: 0, testTotal: 2 },
+    );
+  });
+
   it('maps zero, all-skip, and truncated summaries to exact process-2 markers', () => {
     for (const summary of [
       'Test Files 0 passed (0)\nTests 0 passed (0)',

@@ -2,8 +2,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { RunTrace, attemptsFrom } from './run-trace';
 import { parseRecordedTrace } from './recording-test-helpers';
 
@@ -69,7 +69,7 @@ function stylePercent(button: HTMLButtonElement, property: string): number {
   return Number.parseFloat(value);
 }
 
-it('E3 renders recorder-backed proportional normal and rework geometry', async () => {
+it('renders recorder-backed proportional normal and rework geometry', async () => {
   const traces = [
     parseRecordedTrace(parallelRecording),
     parseRecordedTrace(reworkRecording),
@@ -79,31 +79,37 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
     const entries = recordedAttempts(trace);
     const expectedGeometry = expectedGeometryFromRecording(entries);
     if (trace === traces[0])
-      expect(entries.map(({ attempt }) => attempt.duration_ms).sort((a, b) => (a ?? 0) - (b ?? 0)))
-        .toEqual([308425, 312707]);
+      expect(
+        entries
+          .map(({ attempt }) => attempt.duration_ms)
+          .sort((a, b) => (a ?? 0) - (b ?? 0)),
+      ).toEqual([308425, 312707]);
     else
       expect(
         entries
           .filter(({ workItem }) => workItem.attempts.length === 2)
           .map(({ attempt }) => attempt.duration_ms),
       ).toEqual([177206, 19179]);
-    const captured = entries.filter(({ attempt }) =>
-      attempt.timing_capture_status === 'captured' &&
-      attempt.started_at !== null &&
-      attempt.ended_at !== null &&
-      attempt.duration_ms !== null,
+    const captured = entries.filter(
+      ({ attempt }) =>
+        attempt.timing_capture_status === 'captured' &&
+        attempt.started_at !== null &&
+        attempt.ended_at !== null &&
+        attempt.duration_ms !== null,
     );
     expect(captured.length).toBeGreaterThan(0);
-    const earliestStartedAt = captured.reduce((earliest, entry) =>
-      Date.parse(entry.attempt.started_at!) < Date.parse(earliest)
-        ? entry.attempt.started_at!
-        : earliest,
+    const earliestStartedAt = captured.reduce(
+      (earliest, entry) =>
+        Date.parse(entry.attempt.started_at!) < Date.parse(earliest)
+          ? entry.attempt.started_at!
+          : earliest,
       captured[0]!.attempt.started_at!,
     );
-    const latestEndedAt = captured.reduce((latest, entry) =>
-      Date.parse(entry.attempt.ended_at!) > Date.parse(latest)
-        ? entry.attempt.ended_at!
-        : latest,
+    const latestEndedAt = captured.reduce(
+      (latest, entry) =>
+        Date.parse(entry.attempt.ended_at!) > Date.parse(latest)
+          ? entry.attempt.ended_at!
+          : latest,
       captured[0]!.attempt.ended_at!,
     );
 
@@ -134,14 +140,15 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
         expect(expected).toBeDefined();
         if (!expected) continue;
         const button = attemptButtons.find(
-          (candidate) => candidate.title === workItem.subject &&
-            candidate.getAttribute('aria-label')?.includes(
-              `Attempt ${attempt.attempt_no}`,
-            ),
+          (candidate) =>
+            candidate.title === workItem.subject &&
+            candidate
+              .getAttribute('aria-label')
+              ?.includes(`Attempt ${attempt.attempt_no}`),
         );
         expect(button).toBeDefined();
-        const rendered = domGeometry.find(({ button: candidate }) =>
-          candidate === button,
+        const rendered = domGeometry.find(
+          ({ button: candidate }) => candidate === button,
         );
         expect(rendered).toBeDefined();
         if (!rendered) continue;
@@ -167,10 +174,11 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
           ({ workItem }) => workItem.actor_id === actor.id,
         )) {
           const button = attemptButtons.find(
-            (candidate) => candidate.title === entry.workItem.subject &&
-              candidate.getAttribute('aria-label')?.includes(
-                `Attempt ${entry.attempt.attempt_no}`,
-              ),
+            (candidate) =>
+              candidate.title === entry.workItem.subject &&
+              candidate
+                .getAttribute('aria-label')
+                ?.includes(`Attempt ${entry.attempt.attempt_no}`),
           );
           expect(button).toBeDefined();
           if (button) expect(lane.contains(button)).toBe(true);
@@ -182,12 +190,15 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
           laneNodes.map(
             (lane) => lane.querySelector('.run-trace__lane-name')?.textContent,
           ),
-        ).toEqual(trace.actors.map((actor) => actor.name ?? 'Name not captured'));
+        ).toEqual(
+          trace.actors.map((actor) => actor.name ?? 'Name not captured'),
+        );
       }
       expect(
         attemptButtons.every(
           (button) =>
-            button.type === 'button' && button.tabIndex === 0 &&
+            button.type === 'button' &&
+            button.tabIndex === 0 &&
             button.getAttribute('aria-pressed') !== null,
         ),
       ).toBe(true);
@@ -197,10 +208,11 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
       expect(firstEntry).toBeDefined();
       if (!firstEntry) continue;
       const firstEntryButton = attemptButtons.find(
-        (button) => button.title === firstEntry.workItem.subject &&
-          button.getAttribute('aria-label')?.includes(
-            `Attempt ${firstEntry.attempt.attempt_no}`,
-          ),
+        (button) =>
+          button.title === firstEntry.workItem.subject &&
+          button
+            .getAttribute('aria-label')
+            ?.includes(`Attempt ${firstEntry.attempt.attempt_no}`),
       );
       expect(firstEntryButton).toBeDefined();
       const selectedButton = attemptButtons.find(
@@ -217,10 +229,11 @@ it('E3 renders recorder-backed proportional normal and rework geometry', async (
       expect(lastEntry).toBeDefined();
       if (!lastEntry) continue;
       const lastEntryButton = attemptButtons.find(
-        (button) => button.title === lastEntry.workItem.subject &&
-          button.getAttribute('aria-label')?.includes(
-            `Attempt ${lastEntry.attempt.attempt_no}`,
-          ),
+        (button) =>
+          button.title === lastEntry.workItem.subject &&
+          button
+            .getAttribute('aria-label')
+            ?.includes(`Attempt ${lastEntry.attempt.attempt_no}`),
       );
       expect(lastEntryButton).toBeDefined();
       expect(lastEntryButton).not.toBe(firstEntryButton);

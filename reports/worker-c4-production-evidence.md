@@ -37,6 +37,12 @@ Question ①, final outcome, remains blocked on B-owned Product fact capture: th
 
 `3d8d503` remains outside this bounded round and must not take effect or be merged before Phase D exit is reached. E12/E13 work is stopped; their earlier invocation is not used to claim Phase E completion.
 
+### Manager closure and upstream blockers
+
+- **CLOSED / ACCEPTED — no further instrumentation:** Manager formally accepts and closes the demonstrated Timeline → Inspector selection, selection persistence after switching tabs, the semantic Events table (`50` rows / `7` columns), and the MCP-only coverage disclosure. This lane must not add checkers, tests, or other evidence instruments for those accepted observations.
+- **INVALID_WRONG_PREMISE — recording prohibited:** a new `one failed/capture-gap run` must not be recorded while `team-runs.ts` still hard-codes capture state as `not_captured`. Under that incorrect premise, a supposed capture-gap recording is indistinguishable from the normal recordings, so its lineage would be permanently `INVALID_WRONG_PREMISE`. Only after B fixes the Product capture premise may a naturally produced failed/capture-gap recording be considered.
+- **UPSTREAM BLOCKED — no best-effort mapping:** activity → Attempt synchronization remains blocked upstream because the accepted activities carry no `source_refs.attempt_id` while one Work Item may have multiple Attempts. Until a further ruling and an authoritative Product relation exist, the frontend must not implement best-effort, temporal-nearest, majority-correct, or any other inferred mapping.
+
 Existing decision references retain their exact scope:
 
 - O-H49 was corrected to the fifth branch `NEVER_PROJECTED`; its decisive DB/API evidence concerns durable feedback omitted by Product projection. It is not repurposed here as proof of a durable final-outcome value.

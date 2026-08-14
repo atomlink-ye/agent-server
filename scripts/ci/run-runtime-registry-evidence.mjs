@@ -32,6 +32,7 @@ const inputs = [
   'scripts/ci/work-acceptance-outcome.mjs',
   'scripts/ci/check-work-acceptance-outcome-matrix.mjs',
   'scripts/ci/work-acceptance-raw-support.mjs',
+  'scripts/ci/check-acceptance-execution-count.mjs',
   'scripts/ci/run-runtime-registry-evidence.mjs',
   'scripts/ci/verify-runtime-registry-evidence.mjs',
 ];
@@ -49,6 +50,20 @@ arms.push(
       '"theoretical_points":64',
       '"mutually_exclusive_and_exhaustive":true',
       'status=null:signal=SIGTERM:error=ENOBUFS',
+      '"ok":true',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'acceptance-execution-count-contract',
+    'node',
+    ['scripts/ci/check-acceptance-execution-count.mjs'],
+    0,
+    [
+      '"expected_min_count":0,"observed_count":0,"expected":"PASS","actual":"PASS"',
+      '"expected_min_count":1,"observed_count":0,"expected":"ZERO_EXECUTION","actual":"ZERO_EXECUTION"',
+      '"expected_min_count":3,"observed_count":2,"expected":"INSTRUMENT_UNDEREXECUTION","actual":"INSTRUMENT_UNDEREXECUTION"',
       '"ok":true',
     ],
   ),

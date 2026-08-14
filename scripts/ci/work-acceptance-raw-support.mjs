@@ -123,12 +123,22 @@ export function runVitestTarget({
         failure_messages: failureMessages.length,
       }),
     );
-    if (executed === 0) {
+    const countOutcome = classifyAcceptanceExecutionCount({
+      expectedMinCount,
+      observedCount: executed,
+    });
+    if (countOutcome === 'ZERO_EXECUTION') {
       console.error(`WORK_ACCEPTANCE_MISSING[${zeroExecutionMarker}]`);
       return 1;
     }
-    if (executed < expectedMinCount) {
+    if (countOutcome === 'INSTRUMENT_UNDEREXECUTION') {
       console.error(`WORK_ACCEPTANCE_MISSING[${underExecutionMarker}]`);
+      return 1;
+    }
+    if (countOutcome === 'INVALID_COUNT_CONTRACT') {
+      console.error(
+        `WORK_ACCEPTANCE_MISSING[${underExecutionMarker}]:invalid_count_contract`,
+      );
       return 1;
     }
     return result.status === null || result.signal || result.error
@@ -137,6 +147,21 @@ export function runVitestTarget({
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
+}
+
+export function classifyAcceptanceExecutionCount({
+  expectedMinCount,
+  observedCount,
+}) {
+  if (
+    !Number.isInteger(expectedMinCount) ||
+    expectedMinCount < 0 ||
+    !Number.isInteger(observedCount) ||
+    observedCount < 0
+  )
+    return 'INVALID_COUNT_CONTRACT';
+  if (observedCount >= expectedMinCount) return 'PASS';
+  return observedCount === 0 ? 'ZERO_EXECUTION' : 'INSTRUMENT_UNDEREXECUTION';
 }
 
 function safeDirectory(target) {

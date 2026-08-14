@@ -18,6 +18,7 @@ const candidate = git(['rev-parse', 'HEAD']);
 const parent = git(['rev-parse', 'HEAD^']);
 const expectedExits = {
   'classifier-outcome-matrix': 0,
+  'acceptance-execution-count-contract': 0,
   'baseline-runtime-tools': 0,
   'canonical-database-missing': 2,
   'baseline-change-budget': 0,

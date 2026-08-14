@@ -299,6 +299,11 @@ export async function createService(
   });
   const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
+  pool.on('error', (error) => {
+    logger.log('error', 'postgres.pool.error', {
+      error_name: error instanceof Error ? error.name : 'UnknownError',
+    });
+  });
   await applyDurableKernelMigrations(pool);
   await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
 

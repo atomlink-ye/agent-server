@@ -11,13 +11,27 @@ if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
 }
 if (!(await requireRuntimeToolsCanonicalInputs())) process.exit(1);
 
-const behaviorExit = runVitestTarget({
-  kind: 'runtime-tools',
-  expectedMinCount: 1,
-  zeroExecutionMarker: 'runtime_tools_zero_execution',
-  underExecutionMarker: 'runtime_tools_instrument_underexecution',
-  pattern: 'calls Work and Memory through the composed runtime tool registry',
-});
+const originalConsoleError = console.error;
+console.error = (...values) =>
+  originalConsoleError(
+    ...values.map((value) =>
+      typeof value === 'string'
+        ? value.replaceAll('WORK_ACCEPTANCE_MISSING[', 'RUNTIME_TOOLS_MISSING[')
+        : value,
+    ),
+  );
+let behaviorExit;
+try {
+  behaviorExit = runVitestTarget({
+    kind: 'runtime-tools',
+    expectedMinCount: 1,
+    zeroExecutionMarker: 'runtime_tools_zero_execution',
+    underExecutionMarker: 'runtime_tools_instrument_underexecution',
+    pattern: 'calls Work and Memory through the composed runtime tool registry',
+  });
+} finally {
+  console.error = originalConsoleError;
+}
 if (behaviorExit !== 0) process.exit(behaviorExit);
 
 const boundary = spawnSync(

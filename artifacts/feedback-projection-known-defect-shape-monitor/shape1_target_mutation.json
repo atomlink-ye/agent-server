@@ -1,8 +1,0 @@
-{
-  "arm": "shape1_target_mutation",
-  "expected_exit_code": 2,
-  "observed_exit_code": 2,
-  "observed_status": "MISSING",
-  "stdout": "{\"machine\":\"FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR\",\"status\":\"MISSING\",\"exit_code\":2,\"shape1\":{\"state\":\"ABSENT\",\"reason\":\"known_shape_not_found:query_projection\"},\"shape2\":{\"state\":\"PRESENT\",\"reason\":\"null_summary_and_presence_to_status_mapping\"},\"independent_of\":[\"E11\",\"LIVE\"],\"schedules_live_confirmation\":false}",
-  "passed": true
-}

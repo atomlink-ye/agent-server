@@ -2,6 +2,39 @@
 
 ## Current verdict
 
+Overall C4 production evidence remains `INCOMPLETE`. The independent static arm
+`FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR` is not E11 evidence and does not
+run or infer a live result. It uses the installed TypeScript compiler API to
+inspect two source AST shapes:
+
+| static row | shape | observed status | exit |
+|---|---|---|---:|
+| shape1 | `PostgresWorkProjectionFactsQuery.getByRootTask` has the typed `AttemptRow` query selecting `(a.feedback IS NOT NULL) AS feedback_present` without durable `a.feedback` text, with `AttemptRow.feedback_present: boolean` and presence mapping | `KNOWN_DEFECT_SHAPE_PRESENT` | 1 |
+| shape2 | `mapWorkProjectionFacts` maps `feedback_summary: null` and `feedback_capture_status` from `attempt.feedbackCapture === 'present' ? 'redacted' : 'not_present'` | `KNOWN_DEFECT_SHAPE_PRESENT` | 1 |
+
+The checker command is:
+
+```sh
+pnpm exec tsx scripts/ci/check-feedback-projection-known-defect-shape-monitor.ts
+```
+
+Its result is `KNOWN_DEFECT_SHAPE_PRESENT` / exit `1`; only when both shapes
+are explicitly absent does the arm return `LIVE_CONFIRMATION_REQUIRED` / exit
+`0` and schedule a separate live confirmation. Any half-change, structural
+ambiguity, or unavailable parser is `MISSING` / exit `2`.
+
+The independent AST mutation runner is:
+
+```sh
+pnpm exec tsx scripts/ci/run-feedback-projection-known-defect-shape-monitor.ts --artifact-dir <fresh-dir>
+```
+
+The self-test passed all six cases: non-target AST mutation stayed exit `1`,
+each individual target mutation returned `2`, both target mutations returned
+`0`, and a missing parser module returned `2`. Its artifact and status are
+independent of the E11/full/partial and live arms; static green schedules live
+confirmation only and does not claim it.
+
 The full production journey is permanently gated as `E11_FULL_PRODUCT_JOURNEY` with status `BLOCKED_BY_PRODUCT_DEFECT`. It writes only `e11-full-product-journey-blocked.json` under the full evidence root (`C4_EVIDENCE_DIR`) and exits `2` (`MISSING`). It must never write a full `PASS` marker or a full artifact with status `PASS`.
 
 The separate partial journey is `E11_STRUCTURAL_RELATIONSHIP_PARTIAL`. It has its own command, evidence root (`C4_E11_PARTIAL_EVIDENCE_DIR`), marker, status, exit code, and aggregate fields. A partial `PASS` can exist only in the partial artifact and cannot fill or overwrite the full status; every partial aggregate continues to report full status `BLOCKED_BY_PRODUCT_DEFECT`.

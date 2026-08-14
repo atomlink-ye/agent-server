@@ -851,7 +851,7 @@ function evaluateE6(options) {
       JSON.stringify(['runtime_paseo_process_missing']) ||
     !Array.isArray(proof.e4_no_paseo_process_mutation?.processes) ||
     proof.e4_no_paseo_process_mutation.processes.some(
-      (process) => process?.identity === 'paseo-daemon',
+      isPaseoExecutableProcess,
     ) ||
     !runtimeIsNonroot(proof.e4_no_paseo_process_mutation?.identity) ||
     !runtimeStateIsWritable(

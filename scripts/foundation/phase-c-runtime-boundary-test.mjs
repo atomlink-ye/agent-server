@@ -414,6 +414,27 @@ assert.deepEqual(noPaseoEvaluation, {
     failures: ['runtime_paseo_process_missing'],
   },
 });
+const wrapperOnlyMutation = structuredClone(baseRecord);
+wrapperOnlyMutation.runtime_inspection.paseo_runtime.processes = [
+  {
+    pid: 1,
+    ppid: 0,
+    uid: 1000,
+    comm: 'node',
+    identity: 'paseo-runtime-launcher',
+  },
+];
+const wrapperOnlyEvaluation = evaluate(wrapperOnlyMutation);
+assert.deepEqual(wrapperOnlyEvaluation, noPaseoEvaluation);
+assert.deepEqual(wrapperOnlyEvaluation.output.failures, [
+  'runtime_paseo_process_missing',
+]);
+assert.equal(
+  wrapperOnlyMutation.runtime_inspection.paseo_runtime.processes.some(
+    (process) => process.identity === 'paseo-runtime-launcher',
+  ),
+  true,
+);
 assert.equal(
   runtimeIsNonroot(noPaseoMutation.runtime_inspection.paseo_runtime.identity),
   true,

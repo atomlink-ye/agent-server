@@ -61,6 +61,8 @@ try {
 } catch {
   addMonitorError('checkpoint_setup', 'checkpoint_setup_failed');
 }
+let outcomeWriteQueue = Promise.resolve();
+
 await writeOutcome();
 
 outcome.runtime_start = { started_at: new Date().toISOString() };
@@ -409,8 +411,6 @@ async function recordProof() {
     result: JSON.parse(contents.toString('utf8')),
   };
 }
-
-let outcomeWriteQueue = Promise.resolve();
 
 function writeOutcome() {
   const contents = `${JSON.stringify(outcome, null, 2)}\n`;

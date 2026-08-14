@@ -414,10 +414,12 @@ let outcomeWriteQueue = Promise.resolve();
 
 function writeOutcome() {
   const contents = `${JSON.stringify(outcome, null, 2)}\n`;
-  outcomeWriteQueue = outcomeWriteQueue.then(() =>
+  const previousWrite = outcomeWriteQueue.catch(() => undefined);
+  const currentWrite = previousWrite.then(() =>
     writeFile(outcomePath, contents, { mode: 0o600 }),
   );
-  return outcomeWriteQueue;
+  outcomeWriteQueue = currentWrite.catch(() => undefined);
+  return currentWrite;
 }
 
 function run(

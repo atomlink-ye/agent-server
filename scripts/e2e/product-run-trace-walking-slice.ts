@@ -21,10 +21,10 @@ import {
   launchApp,
   launchReplay,
   loadChromium,
-  stop,
   writeEvidence,
   type BrowserLike,
 } from './product-run-trace-network.js';
+import { cleanupOwnedProcess } from './support/owned-process-cleanup.mjs';
 import {
   loadStaticReplayRecording,
   type RecordingScenario,
@@ -279,17 +279,6 @@ async function applyDomMutation(
   }));
 }
 
-async function waitForExit(child: ChildProcess | undefined): Promise<void> {
-  if (!child || child.exitCode !== null) return;
-  await new Promise<void>((resolveExit) => {
-    const timer = setTimeout(resolveExit, 2_000);
-    child.once('exit', () => {
-      clearTimeout(timer);
-      resolveExit();
-    });
-  });
-}
-
 async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation): Promise<number> {
   process.env.C4_REPLAY_SCENARIO = scenario;
   // Red arms are DOM-only mutations. Keep the replay upstream byte-for-byte
@@ -463,10 +452,8 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     return MISSING;
   } finally {
     await browser?.close().catch(() => undefined);
-    stop(app?.child);
-    stop(replay?.child);
-    await waitForExit(app?.child);
-    await waitForExit(replay?.child);
+    await cleanupOwnedProcess(app?.child);
+    await cleanupOwnedProcess(replay?.child);
   }
 }
 

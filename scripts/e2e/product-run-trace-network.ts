@@ -19,6 +19,8 @@ import {
   loadStaticReplayRecording,
   type RecordingScenario,
 } from './support/product-static-replay-upstream.js';
+import { createPageObserver } from './support/page-observer.mjs';
+import { cleanupOwnedProcess } from './support/owned-process-cleanup.mjs';
 
 export type EndpointClass = 'works' | 'runs' | 'trace';
 type ProductResponseRoute = 'works' | 'work' | 'runs' | 'run' | 'trace';
@@ -156,6 +158,7 @@ export function observeRequest(
   const inProductScope = sameOrigin && pathname.startsWith('/api/');
   const allowed =
     inProductScope &&
+    method.toUpperCase() === 'GET' &&
     (currentProductPath.test(pathname) || chatDetailPaths.has(requestPath));
   return {
     method,
@@ -234,11 +237,6 @@ export async function waitForHttp(url: string): Promise<void> {
   throw new Error(`app_start_timeout:${url}`);
 }
 
-export function stop(child: ChildProcess | undefined): void {
-  if (!child || child.exitCode !== null) return;
-  child.kill('SIGTERM');
-}
-
 export async function launchReplay(): Promise<{ readonly child: ChildProcess; readonly url: string; readonly output: { stdout: string[]; stderr: string[] } }> {
   const child = spawn(process.execPath, ['--import', 'tsx', replayEntry], {
     cwd: resolve(fileURLToPath(new URL('../..', import.meta.url))),
@@ -294,9 +292,7 @@ export async function runNetwork(): Promise<number> {
   let replay: { child: ChildProcess; url: string; output: { stdout: string[]; stderr: string[] } } | undefined;
   let app: { child: ChildProcess; output: { stdout: string[]; stderr: string[] } } | undefined;
   let browser: BrowserLike | undefined;
-  const requestInputs: { readonly url: string; readonly method: string }[] = [];
-  const responseBodies: Promise<void>[] = [];
-  const chatDetailPaths = new Set<string>();
+    const chatDetailPaths = new Set<string>();
   try {
     // This check intentionally runs before any process launch. Current fa77ba9
     // doc0 recordings fail it, so this command remains an honest MISSING.
@@ -306,20 +302,20 @@ export async function runNetwork(): Promise<number> {
     browser = await loadChromium();
     const page = await browser.newPage();
     const origin = new URL(appUrl).origin;
-    page.on('request', (request: { url: () => string; method: () => string }) => {
-      requestInputs.push({ url: request.url(), method: request.method() });
+    const observer = createPageObserver({
+      page,
+      origin,
+      allowlist: [{
+        method: 'GET',
+        path: (path: string) => currentProductPath.test(path) || chatDetailPaths.has(path),
+        query: '',
+      }],
+      parseBody: async (record: { readonly path: string }, body: unknown) => {
+        const parsed = parseAcceptedProductResponse(record.path, body);
+        if (parsed) collectValidatedChatDetailPaths(parsed, chatDetailPaths);
+      },
     });
-    page.on('response', (response: { url: () => string; status: () => number; json: () => Promise<unknown> }) => {
-      const responseUrl = new URL(response.url());
-      if (responseUrl.origin !== origin || !responseUrl.pathname.startsWith('/api/')) return;
-      responseBodies.push(
-        response.json().then((body) => {
-          if (response.status() < 200 || response.status() >= 300) return;
-          const parsed = parseAcceptedProductResponse(responseUrl.pathname, body);
-          if (parsed) collectValidatedChatDetailPaths(parsed, chatDetailPaths);
-        }).catch(() => undefined),
-      );
-    });
+    observer.attach();
     if (process.env.C4_RED_ARM === 'forbidden-request') {
       await page.addInitScript(() => {
         void fetch('/api/team-project');
@@ -339,8 +335,10 @@ export async function runNetwork(): Promise<number> {
       state: 'visible',
       timeout: startupTimeoutMs,
     });
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-    await Promise.all(responseBodies);
+    const observed = await observer.seal({ domStable: async () => true });
+    const observerVerdict = observer.verdict();
+    if (observerVerdict.verdict === 'MISSING_EVIDENCE') return MISSING;
+    if (observerVerdict.verdict === 'UNSOUND_ABSENCE') return FAIL;
     const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
     if (detailPath.length !== 2 || decodeURIComponent(detailPath[1] ?? '') !== loaded.work.id)
       return FAIL;
@@ -348,7 +346,7 @@ export async function runNetwork(): Promise<number> {
     const counts = { works: 0, runs: 0, trace: 0 };
     let allowedHits = 0;
     let forbiddenHits = 0;
-    const observations = requestInputs.map(({ url, method }) =>
+    const observations = observed.records.map(({ url, method }) =>
       observeRequest(origin, url, method, chatDetailPaths),
     );
     for (const observation of observations) {
@@ -379,8 +377,8 @@ export async function runNetwork(): Promise<number> {
     return MISSING;
   } finally {
     await browser?.close().catch(() => undefined);
-    stop(app?.child);
-    stop(replay?.child);
+    await cleanupOwnedProcess(app?.child);
+    await cleanupOwnedProcess(replay?.child);
   }
 }
 

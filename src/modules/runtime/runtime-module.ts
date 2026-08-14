@@ -1,4 +1,8 @@
 import { PaseoExecutionPlane } from '../../adapters/paseo/paseo-execution-plane.js';
+import {
+  isExecutionRuntimeService,
+  LegacyAgentRuntimeExecutionService,
+} from '../../adapters/runtime/legacy-agent-runtime-execution-service.js';
 import { UnavailableExecutionPlane } from '../../adapters/runtime/unavailable-execution-plane.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
 import {
@@ -9,7 +13,10 @@ import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js'
 import type { ExecutionPlanePort } from '../../application/ports/execution-plane.js';
 import type { RuntimeSessionRepository } from '../../application/ports/runtime-session-repository.js';
 import type { RuntimeWorkspaceRepository } from '../../application/ports/runtime-workspace-repository.js';
-import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution-plane-runtime-facade.js';
+import {
+  ExecutionPlaneRuntimeFacade,
+  type ExecutionRuntimeService,
+} from '../../application/runtime/execution-plane-runtime-facade.js';
 import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import { LocalRuntimeExtensionBinder } from '../../infrastructure/extensions/local-runtime-extension-binder.js';
 import { RuntimeMcpServer } from '../../infrastructure/extensions/runtime-mcp-server.js';
@@ -33,8 +40,9 @@ export interface RuntimeMcpHostLifecycle {
 }
 
 export interface RuntimeModule {
-  /** @deprecated Temporary caller compatibility while application call sites migrate. */
+  /** @deprecated Temporary compatibility for the two channel memory callers. */
   readonly runtime: AgentRuntimePort;
+  readonly executionRuntime: ExecutionRuntimeService;
   readonly executionPlane: ExecutionPlanePort;
   readonly executionRuns: ExecutionRunRegistry;
   readonly sessions: RuntimeSessionRepository;
@@ -83,16 +91,21 @@ export function createRuntimeModule(options: {
           },
           options.logger,
         );
-  const runtime =
-    options.debugRuntime ??
-    new ExecutionPlaneRuntimeFacade(
-      executionPlane,
-      sessions,
-      sessionLookup,
-      executionRuns,
-      new LocalRuntimeMemoryCandidateCollector(),
-      options.config.paseo.agentCwd,
-    );
+  const productionExecutionRuntime = new ExecutionPlaneRuntimeFacade(
+    executionPlane,
+    sessions,
+    sessionLookup,
+    executionRuns,
+    new LocalRuntimeMemoryCandidateCollector(),
+    options.config.paseo.agentCwd,
+  );
+  const executionRuntime: ExecutionRuntimeService = options.debugRuntime
+    ? isExecutionRuntimeService(options.debugRuntime)
+      ? options.debugRuntime
+      : new LegacyAgentRuntimeExecutionService(options.debugRuntime)
+    : productionExecutionRuntime;
+  const runtime: AgentRuntimePort =
+    options.debugRuntime ?? productionExecutionRuntime;
   const mcpHost = new RuntimeMcpServer(
     new RuntimeToolRegistry(options.toolContributors),
     undefined,
@@ -116,6 +129,7 @@ export function createRuntimeModule(options: {
 
   return {
     runtime,
+    executionRuntime,
     executionPlane,
     executionRuns,
     sessions,

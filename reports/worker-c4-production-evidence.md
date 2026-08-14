@@ -8,7 +8,23 @@ The separate partial journey is `E11_STRUCTURAL_RELATIONSHIP_PARTIAL`. It has it
 
 修好前任何让原内容断言变绿的做法都是掩盖产品缺陷
 
-The durable defect facts are: DB feedback exists for attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`; the API feedback summary is `null` and the API capture status is `redacted`; facts queries are `IS NOT NULL` only; the facts-source summary is unconditionally `null/presence -> redacted`; and lineage is `capture_to_null`. No B-product fix is included.
+## Evidence layers and owner judgment O-H49
+
+### HARD EVIDENCE
+
+The domain feedback is accepted application input and first-class durable data, not provider raw material:
+
+- Team MCP `requestChanges` accepts `feedback: z.string().min(1)` and forwards the exact input: `src/adapters/team-mcp/team-mcp-tools.ts:156-174` (schema at line 164).
+- The application contract accepts trimmed, non-empty feedback up to 4096 characters: `src/contracts/teams.ts:20-28` (feedback at line 24).
+- The command/repository path persists the value into `team_work_item_attempts.feedback`: `src/application/teams/team-command-service.ts:179-207`; `src/infrastructure/postgres/postgres-collaborative-team-repository.ts:1515-1525,1652-1664`.
+- For attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`, the durable DB snapshot contains a non-empty feedback value while the API snapshot has `feedback_summary: null` and `feedback_capture_status: "redacted"`: `reports/worker-c4-feedback-provenance.md:94-105`.
+- The Product facts query selects only `(a.feedback IS NOT NULL) AS feedback_present`: `src/infrastructure/postgres/postgres-work-projection-facts-query.ts:136-150` (field mapping at `:194-207`). The facts source unconditionally maps summary to null and presence to redacted: `src/application/product-projection/work-projection-facts-source.ts:93-113`. Lineage records `presence_to_redaction_status` and `capture_to_null`: `src/contracts/product-projection/lineage-manifest.ts:492-506,527-553`.
+
+### OWNER JUDGMENT — O-H49
+
+D10/D12 provider raw means raw completion, prompt, and credentials only; it does not mean domain-identified application feedback. `BRANCH_2_OVERBROAD_REDACTION` therefore holds. In this domain, `status: "redacted"` is a false statement: the durable fact is present, while the Product projection has discarded the content and relabeled presence as redaction. The product gap is the facts query’s `IS NOT NULL`-only behavior plus the facts-source summary’s unconditional `null/presence -> redacted` mapping and `capture_to_null` lineage.
+
+This is deferred as a PLAN-D input. It is not fixed in C, and no B-product fix is included.
 
 ## Exact recorder inputs and loader gate
 
@@ -48,7 +64,7 @@ Partial red arms use `C4_E11_PARTIAL_RED_ARM=edge|attempt|count|status|marker`. 
 
 ## E10 and runtime boundary
 
-E10 network semantics and the shared observer/cleanup behavior are unchanged. The fixture loader now gives E10 the accepted current-schema gate and exact copied bytes. No local browser, app, sandbox, provider, build, or full test run was performed. The static `tsc --noEmit` check passed; `pnpm exec` provisioned the lockfile's existing dependencies in this otherwise empty worktree, without changing package or lock files. Runtime E10/E11 evidence remains `MISSING/NOT_RUN` in this worker lane.
+E10 network semantics and the shared observer/cleanup behavior are unchanged. The fixture loader now gives E10 the accepted current-schema gate and exact copied bytes. No local browser, app, sandbox, provider, build, install, or full test run was performed. The root `tsconfig` is not evidence for these `scripts/e2e` entry points; targeted script compilation must be performed separately in the remote acceptance environment. Runtime E10/E11 evidence remains `MISSING/NOT_RUN` in this worker lane.
 
 ## Commits
 
@@ -64,4 +80,4 @@ Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 - `cmp`: passed for all six copied recorder documents.
 - Provenance JSON parse: passed.
 - Static scans: accepted-schema gate, provenance hash checks, immutable machine names, blocked full status, independent partial evidence root, five red arms, and partial excluded-field declaration present.
-- Runtime/browser/build/provider/sandbox/full-test execution: skipped by dispatch constraints; the dependency provisioning above was not acceptance evidence and no runtime PASS is claimed.
+- Runtime/browser/build/install/provider/sandbox/full-test execution: skipped by dispatch constraints; no runtime PASS is claimed.

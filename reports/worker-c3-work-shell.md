@@ -221,3 +221,29 @@ exit 2 because preserved raw ANSI captures in `e8-classifier-a02b54a/`,
 `e8-classifier-6f1f0c3/` contain whitespace
 findings. Scoped source/tests/runner/report checks are exit 0; raw evidence is
 retained and no full-range PASS is claimed.
+
+## C3/E8 CLI reachability follow-up
+
+Reachability test commit `1dbdc999981e4ab4bbeb875bb2a49062918bd676` (parent
+`96cbb8bd94020b072f02b0f752859ec010eef7f8`) adds production-CLI subprocess
+coverage for zero arguments, an unknown kind with a non-executed sentinel, and
+a known kind with a guaranteed ENOENT command. The C-box run passed 12/12 Node
+duals. Each reachability arm returned CLI exit 2, empty stderr, and its exact
+registered invalid/missing marker; child status is N/A for usage and unknown
+kind, and N/A after ENOENT spawn failure. Per-arm argv, exact stdout hex,
+stderr hex, exit, and child/raw-status facts are under
+`artifacts/c3-work-shell/e8-reachability-1dbdc99/reachability/`.
+
+The reachability harness uses only static Node builtin imports and
+candidate-owned local modules. It has no dynamic import, optional parser/API,
+or fabricated fixture/module-missing arm. A candidate-required local-module
+linking failure remains raw process 1 with no marker and FAIL classification,
+never MISSING.
+
+The canonical symbolic range check
+`git diff --check 01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` remains exit 2
+because preserved raw ANSI captures in the earlier
+`e8-classifier-a02b54a/`, `e8-classifier-51c102f/`,
+`e8-classifier-248d254/`, `e8-classifier-6f1f0c3/`, and the reachability evidence
+contain whitespace findings. Scoped source/tests/runner/report checks are exit
+0. Raw evidence is retained and no full-range PASS is claimed.

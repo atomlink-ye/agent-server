@@ -1,0 +1,1 @@
+{"command":["sh","-lc","ROOT=/root/workspace/.c3-e8-reachability-1dbdc99; cat \"$ROOT/test.exit\"; cat \"$ROOT/test.manifest\"; cat \"$ROOT/test.stdout\"; cat \"$ROOT/test.stderr\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-14T00:14:40.822Z"}

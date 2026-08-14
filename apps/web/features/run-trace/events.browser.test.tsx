@@ -2,8 +2,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { RunTrace } from './run-trace';
 import { parseRecordedTrace } from './recording-test-helpers';
 
@@ -25,7 +25,7 @@ function expectedCaptureLabel(value: string): string {
   return expectedActivityStatus(value);
 }
 
-it('E4 renders only recorded MCP activities with sequence and association facts', async () => {
+it('renders only recorded MCP activities with sequence and association facts', async () => {
   const cases = [
     { recording: parallelRecording, count: 56 },
     { recording: reworkRecording, count: 48 },
@@ -40,8 +40,9 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
       await act(async () => {
         root.render(<RunTrace trace={trace} />);
       });
-      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === 'Events');
+      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Events',
+      );
       expect(eventsTab).toBeDefined();
       if (!eventsTab) continue;
       await act(async () => eventsTab.click());
@@ -102,8 +103,7 @@ it('E4 renders only recorded MCP activities with sequence and association facts'
       if (duplicateSequence === undefined) continue;
       const duplicateRows = eventButtons.filter(
         (button) =>
-          button.querySelector('strong')?.textContent ===
-          `#${duplicateSequence}`,
+          button.querySelector('strong')?.textContent === `#${duplicateSequence}`,
       );
       expect(duplicateRows.length).toBeGreaterThan(1);
       const duplicateSelection = duplicateRows[1];

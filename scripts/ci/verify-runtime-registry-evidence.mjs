@@ -79,7 +79,16 @@ const assertions = {
     arms['remove-memory-registration']?.marker_assertions?.[
       'non_target_work_ok=true'
     ] === true,
-  handler_wrongness_fail: arms['memory-handler-wrongness']?.raw_exit === 1,
+  handler_wrongness_target_red_work_green:
+    arms['memory-handler-wrongness']?.raw_exit === 1 &&
+    JSON.stringify(arms['memory-handler-wrongness']?.active_mutations) ===
+      JSON.stringify(['memory-handler-wrongness']) &&
+    arms['memory-handler-wrongness']?.marker_assertions?.[
+      'runtime-registry-e6-wrong'
+    ] === true &&
+    arms['memory-handler-wrongness']?.marker_assertions?.[
+      '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+    ] === true,
   constructor_reinjection_fail:
     arms['constructor-capability-reinjection']?.raw_exit === 1,
   template_static_green:
@@ -90,6 +99,36 @@ const assertions = {
   e7_bidirectional_nonempty: ['migrations', 'dependencies', 'exports'].every(
     (target) => arms['baseline-change-budget']?.stdout.includes(`"${target}"`),
   ),
+  e7_target_red_runtime_green: [
+    ['migration', 'migrations'],
+    ['dependency', 'dependencies'],
+    ['exports', 'exports'],
+  ].every(
+    ([arm, target]) =>
+      arms[`change-budget-${arm}-red`]?.raw_exit === 1 &&
+      arms[`change-budget-${arm}-red`]?.marker_assertions?.[
+        `registry_change_budget_violation:target=${target}`
+      ] === true &&
+      arms[`change-budget-${arm}-runtime-control`]?.raw_exit === 0 &&
+      JSON.stringify(
+        arms[`change-budget-${arm}-runtime-control`]?.active_mutations,
+      ) === JSON.stringify([`${arm}-change`]) &&
+      arms[`change-budget-${arm}-runtime-control`]?.marker_assertions?.[
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+      ] === true,
+  ),
+  e7_current_baseline_missing_runtime_green:
+    arms['change-budget-current-baseline-missing']?.raw_exit === 2 &&
+    arms['change-budget-current-baseline-missing']?.marker_assertions?.[
+      'registry_change_budget_missing:baseline_equals_candidate'
+    ] === true &&
+    arms['change-budget-current-baseline-runtime-control']?.raw_exit === 0 &&
+    JSON.stringify(
+      arms['change-budget-current-baseline-runtime-control']?.active_mutations,
+    ) === JSON.stringify(['baseline-current-tree']) &&
+    arms['change-budget-current-baseline-runtime-control']?.marker_assertions?.[
+      '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+    ] === true,
   all_mutations_restored: evidence.mutations.every(
     (mutation) => mutation.restored === true,
   ),

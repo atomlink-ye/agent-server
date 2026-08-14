@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 
 const repo = process.cwd();
 const output = path.resolve(option('--output'));
+const activeMutations = [];
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) fail('runtime_registry_evidence_missing_database_url', 2);
 const candidate = command('git', ['rev-parse', 'HEAD']);
@@ -167,6 +168,7 @@ mutate(
     arms.push(
       canonical('memory-handler-wrongness', 1, [
         'runtime-registry-e6-wrong',
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
         'runtime_tools_child_result:status=1:signal=none:error=none',
       ]),
     );
@@ -311,7 +313,7 @@ mutate(
   'src/infrastructure/postgres/migrations/0029_product_work_identity.sql',
   'COMMIT;',
   '-- registry change budget mutation\nCOMMIT;',
-  () =>
+  () => {
     arms.push(
       runArm(
         'change-budget-migration-red',
@@ -320,16 +322,22 @@ mutate(
         1,
         ['registry_change_budget_violation:target=migrations'],
       ),
-    ),
+    );
+    arms.push(
+      canonical('change-budget-migration-runtime-control', 0, [
+        '"observed_count":1',
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+      ]),
+    );
+  },
 );
-arms.push(canonical('change-budget-migration-runtime-control', 0, []));
 
 mutate(
   'dependency-change',
   'package.json',
   '"zod": "4.4.3"',
   '"zod": "4.4.4"',
-  () =>
+  () => {
     arms.push(
       runArm(
         'change-budget-dependency-red',
@@ -338,16 +346,22 @@ mutate(
         1,
         ['registry_change_budget_violation:target=dependencies'],
       ),
-    ),
+    );
+    arms.push(
+      canonical('change-budget-dependency-runtime-control', 0, [
+        '"observed_count":1',
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+      ]),
+    );
+  },
 );
-arms.push(canonical('change-budget-dependency-runtime-control', 0, []));
 
 mutate(
   'exports-change',
   'package.json',
   '"./product-contract": "./src/contracts/product-accepted-subset/index.ts"',
   '"./product-contract": "./src/contracts/product-accepted-subset/changed.ts"',
-  () =>
+  () => {
     arms.push(
       runArm(
         'change-budget-exports-red',
@@ -356,16 +370,22 @@ mutate(
         1,
         ['registry_change_budget_violation:target=exports'],
       ),
-    ),
+    );
+    arms.push(
+      canonical('change-budget-exports-runtime-control', 0, [
+        '"observed_count":1',
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+      ]),
+    );
+  },
 );
-arms.push(canonical('change-budget-exports-runtime-control', 0, []));
 
 mutate(
   'baseline-current-tree',
   'scripts/ci/verify-registry-change-budget.mjs',
   "const BASELINE = '888630a8a730ce6bcdfe2e5fb679a3620ac171aa';",
   `const BASELINE = '${candidate}';`,
-  () =>
+  () => {
     arms.push(
       runArm(
         'change-budget-current-baseline-missing',
@@ -374,9 +394,15 @@ mutate(
         2,
         ['registry_change_budget_missing:baseline_equals_candidate'],
       ),
-    ),
+    );
+    arms.push(
+      canonical('change-budget-current-baseline-runtime-control', 0, [
+        '"observed_count":1',
+        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+      ]),
+    );
+  },
 );
-arms.push(canonical('change-budget-current-baseline-runtime-control', 0, []));
 
 const statusAfter = status();
 const restoredHashes = Object.fromEntries(
@@ -505,6 +531,7 @@ function execute(name, executable, argv, expectedExit, markers, env) {
     raw_exit: result.status,
     signal: result.signal,
     error: result.error?.code ?? null,
+    active_mutations: [...activeMutations],
     stdout,
     stderr,
     marker_assertions: markerAssertions,
@@ -531,9 +558,12 @@ function mutate(name, file, before, after, action) {
   };
   mutations.push(record);
   fs.writeFileSync(target, changed);
+  activeMutations.push(name);
   try {
     action();
   } finally {
+    const completed = activeMutations.pop();
+    if (completed !== name) fail(`${name}:mutation_stack_mismatch`, 2);
     fs.writeFileSync(target, original);
     record.restored = sha(file) === record.original_sha256;
   }

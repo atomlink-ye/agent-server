@@ -357,6 +357,13 @@ describeRealPostgres(
           expect(workId).toEqual(expect.any(String));
           generatedWorkIds.push(workId);
           workOk = true;
+          process.stdout.write(
+            `${JSON.stringify({
+              guard: 'runtime-tools-non-target-control',
+              work_present: workPresent,
+              product_work_create_ok: workOk,
+            })}\n`,
+          );
         }
         if (memoryPresent) {
           const memory = await client.callTool({

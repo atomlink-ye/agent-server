@@ -5,7 +5,11 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
 
-export async function requireCanonicalInputs({ kind, environmentMarker }) {
+export async function requireCanonicalInputs({
+  kind,
+  environmentMarker,
+  markerPrefix = 'WORK_ACCEPTANCE_MISSING',
+}) {
   const cwd = process.cwd();
   const databaseVariable = process.env.DATABASE_URL
     ? 'DATABASE_URL'
@@ -53,7 +57,7 @@ export async function requireCanonicalInputs({ kind, environmentMarker }) {
     !nodeModules ||
     pnpmProbe.status !== 0
   ) {
-    console.error(`WORK_ACCEPTANCE_MISSING[${environmentMarker}]`);
+    console.error(`${markerPrefix}[${environmentMarker}]`);
     return false;
   }
   return true;

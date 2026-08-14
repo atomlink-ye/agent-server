@@ -21,6 +21,7 @@ const expectedExits = {
   'acceptance-execution-count-contract': 0,
   'baseline-runtime-tools': 0,
   'canonical-database-missing': 2,
+  'canonical-database-unreachable': 2,
   'baseline-change-budget': 0,
   'verifier-input-missing': 2,
   'canonical-zero-execution': 2,

@@ -15,6 +15,7 @@ if (
   !(await requireCanonicalInputs({
     kind: 'runtime-tools',
     environmentMarker: 'runtime_tools_environment_unavailable',
+    markerPrefix: 'RUNTIME_TOOLS_MISSING',
   }))
 )
   process.exit(1);

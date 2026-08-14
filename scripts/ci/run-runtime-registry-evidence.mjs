@@ -49,7 +49,7 @@ arms.push(
     [
       '"theoretical_points":64',
       '"mutually_exclusive_and_exhaustive":true',
-      'status=null:signal=SIGTERM:error=ENOBUFS',
+      '"signal":"SIGTERM","error":"ENOBUFS"',
       '"ok":true',
     ],
   ),
@@ -74,6 +74,24 @@ arms.push(
     'RUNTIME_TOOLS_MISSING[runtime_tools_database_unavailable]',
     'runtime_tools_missing:marker=runtime_tools_database_unavailable',
   ]),
+);
+arms.push(
+  execute(
+    'canonical-database-unreachable',
+    'pnpm',
+    ['modularization:acceptance:runtime-tools'],
+    2,
+    [
+      '"database_reachable":false',
+      'RUNTIME_TOOLS_MISSING[runtime_tools_environment_unavailable]',
+      'runtime_tools_missing:marker=runtime_tools_environment_unavailable',
+    ],
+    {
+      ...process.env,
+      DATABASE_URL: 'postgresql://agent:agent@127.0.0.1:1/agent_server',
+      npm_config_verify_deps_before_run: 'false',
+    },
+  ),
 );
 arms.push(
   runArm(
@@ -446,6 +464,7 @@ function runWithoutDatabase(name, expectedExit, markers) {
   const env = { ...process.env };
   delete env.DATABASE_URL;
   delete env.POSTGRES_URL;
+  env.npm_config_verify_deps_before_run = 'false';
   return execute(
     name,
     'pnpm',
@@ -459,6 +478,7 @@ function runArm(name, executable, argv, expectedExit, markers) {
   return execute(name, executable, argv, expectedExit, markers, {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    npm_config_verify_deps_before_run: 'false',
   });
 }
 function execute(name, executable, argv, expectedExit, markers, env) {

@@ -80,8 +80,8 @@ describe('PaseoObservationProjector', () => {
     const assistant = observations.filter(
       (observation) => observation.kind === 'assistant_updated',
     );
-    expect(assistant).toHaveLength(2);
-    expect(assistant.at(-1)).toEqual({ kind: 'assistant_updated', text });
+    expect(assistant).toHaveLength(1);
+    expect(assistant[0]).toEqual({ kind: 'assistant_updated', text });
   });
 
   it('keeps terminal tool projection monotonic and improves detail without regression', async () => {

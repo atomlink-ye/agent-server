@@ -82,11 +82,11 @@ The C3 source registry owns the expected counts for the five C3 production
 kinds; C4 kinds deliberately have no guessed count here and fail closed as
 `instrument`. The only legal expected-zero proof is the source-owned optional
 business rule exercised by the C3 comparison dual. Production zero arms derive
-`target-unavailable` from real target lstat/spawn failure and `instrument` from
+`target-unavailable` from actual `fs.access`/spawn failure and `instrument` from
 a started runner that cannot produce a count; callers cannot select either
 subclass.
 
-C-box C3 zero evidence: `node --test scripts/ci/c3-c4-zero-execution.test.mjs
+Local C3 zero evidence: `node --test scripts/ci/c3-c4-zero-execution.test.mjs
 scripts/ci/c3-zero-production-runner.test.mjs` exited 0 with 15 tests, 0
 skips, and 0 todos. The production runner was actually spawned for process-2
 `target-unavailable` missing-target and ENOENT arms, process-2 `instrument`

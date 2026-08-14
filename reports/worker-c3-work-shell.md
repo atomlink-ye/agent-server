@@ -355,3 +355,24 @@ classifier evidence groups and the new E8 production raw stdout/stderr files
 contain their original trailing whitespace. Raw evidence was not trimmed or
 rewritten. Scoped source, tests, matrix, and report checks remain exit 0; no
 full-range PASS is claimed.
+
+## Mutation-window audit A — historical raw evidence only
+
+This is a read-only reconstruction from raw arm files, not summaries. The
+required relation is `mutation_applied < target/control events < restore`; an
+arm without those ordered events is not promoted from missing evidence. The
+verdict vocabulary is limited to `PASS`, `UNSOUND`, and `MISSING_EVIDENCE`.
+
+| arm | raw_source | mutation_applied | control_started | control_completed | collected/check_count | skip/todo | target_failure | restore_started | restore_completed | window_relation | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| completed-status / a3 | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/a/{exit-code.txt,stdout.txt,stderr.txt}` | raw mutation diff present | not emitted | not emitted | raw 1 fail + 1 pass | not recorded | target assertion in raw failure | not emitted | not emitted | mutation-to-events-to-restore not established | MISSING_EVIDENCE |
+| unavailable-disclosure / b4 | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/b/{exit-code.txt,stdout.txt,stderr.txt}` | raw mutation diff present | not emitted | not emitted | raw 1 fail + 1 pass | not recorded | disclosure assertion in raw failure | not emitted | not emitted | mutation-to-events-to-restore not established | MISSING_EVIDENCE |
+| runs-n-plus-one / c2 | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/c/{exit-code.txt,stdout.txt,stderr.txt}` | raw mutation diff present | not emitted | not emitted | raw 1 fail + 1 pass | not recorded | request-count assertion in raw failure | not emitted | not emitted | mutation-to-events-to-restore not established | MISSING_EVIDENCE |
+| container-identity / d2 | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/d/{exit-code.txt,stdout.txt,stderr.txt}` | raw mutation diff present | not emitted | not emitted | raw 1 fail + 1 pass | not recorded | list-identity assertion in raw failure | not emitted | not emitted | mutation-to-events-to-restore not established | MISSING_EVIDENCE |
+| late-runs | `artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/late-runs/{mutation.exit,capture-exit,capture.stdout,capture.stderr}` | raw mutation evidence present | not emitted | not emitted | raw command result only | not recorded | late-request failure not event-linked | not emitted | not emitted | no bounded post-populated event window | MISSING_EVIDENCE |
+| never-settle | `artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/never-settle/{mutation.exit,capture-exit,capture.stdout,capture.stderr}` | raw mutation evidence present | not emitted | 0 green controls | raw 2 failed / 0 green | not recorded | first failure before a proven target/control window | not emitted | not emitted | no valid complete window; control did not pass | UNSOUND |
+| poison status read | `artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/status-read/{mutation.exit,capture-exit,capture.stdout,capture.stderr}` | raw mutation evidence present | not emitted | not emitted | raw command result only | not recorded | poison/read assertion not event-linked | not emitted | not emitted | mutation-to-events-to-restore not established | MISSING_EVIDENCE |
+| zero e8-browser | `artifacts/c3-work-shell/e8-zero-3484079/arms/e8-browser/{exit-code.txt,stdout.txt,stderr.txt}` | no bounded mutation window | not applicable | not applicable | zero/summary-only | not recorded | target collection not proven | not emitted | not emitted | no target/control/restore event chain | MISSING_EVIDENCE |
+| omitted target | `artifacts/c3-work-shell/e8-zero-3484079/arms/e8-behavior/{exit-code.txt,stdout.txt,stderr.txt}` | omitted target arm only | not emitted | not emitted | zero target evidence | not recorded | target unavailable | not emitted | not emitted | no mutation window | MISSING_EVIDENCE |
+| test absence / e | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/e/{exit-code.txt,stdout.txt,stderr.txt}` | test file absent | not started | not completed | 0 collection; direct exit 1 | no green summary | missing test input | not emitted | not emitted | no collection or restore event chain | MISSING_EVIDENCE |
+| fixture absence / f | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/f/{exit-code.txt,stdout.txt,stderr.txt}` | imported fixture absent | not started | not completed | 0 collection; direct exit 1 | no green summary | missing fixture input | not emitted | not emitted | no collection or restore event chain | MISSING_EVIDENCE |

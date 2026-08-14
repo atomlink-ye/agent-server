@@ -46,7 +46,17 @@ function runFixedVitest(cwd) {
     const child = spawn(
       'pnpm',
       ['exec', 'vitest', '--config', 'vitest.web.config.ts', '--run', 'apps/web/components/work/work-list.browser.test.tsx'],
-      { cwd, env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: '/opt/playwright-browsers' }, stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        cwd,
+        env: {
+          ...process.env,
+          PLAYWRIGHT_BROWSERS_PATH: '/opt/playwright-browsers',
+          ...(process.env.C3_E8_VITEST_CACHE_DIR
+            ? { VITEST_CACHE_DIR: process.env.C3_E8_VITEST_CACHE_DIR }
+            : {}),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     );
     const stdout = [];
     const stderr = [];

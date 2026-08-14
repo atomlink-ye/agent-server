@@ -22,8 +22,17 @@ const outcome = {
   version: 1,
   workspace: relative(workspace, workspace) || '.',
   proof: { path: relative(workspace, proofPath), exists: false },
-  readiness: { status: 'not_started' },
-  real_run: { status: 'not_started' },
+  readiness: {
+    status: 'not_started',
+    first_http_200_at: null,
+    response_body: null,
+  },
+  real_run: {
+    status: 'not_started',
+    stdout_path: relative(workspace, stdoutPath),
+    stderr_path: relative(workspace, stderrPath),
+    exit_code: null,
+  },
 };
 
 await mkdir(outcomeDirectory, { recursive: true });

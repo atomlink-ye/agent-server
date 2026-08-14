@@ -6,6 +6,7 @@ import { WorkListShell } from '@/components/work/work-shell';
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
+import { createRequestLedger } from '../../../../scripts/ci/c3-e8-request-ledger.mjs';
 
 (
   globalThis as typeof globalThis & {
@@ -48,12 +49,36 @@ const forbiddenProductStatusLanguage = new RegExp(
   'i',
 );
 
+// This is a lexical guard for the named product-state vocabulary only. The
+// poisoned projection below is the data-flow guard; this regex is not a claim
+// that a finite list exhausts all possible status language.
+
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
     status: 200,
     json: async () => body,
   } as Response;
+}
+
+function poisonWorkList(workList: typeof populatedWorkList) {
+  return {
+    ...workList,
+    works: workList.works.map(({ id, title }) =>
+      new Proxy(
+        { id, title },
+        {
+          get(target, property, receiver) {
+            if (property === 'id' || property === 'title')
+              return Reflect.get(target, property, receiver);
+            throw new Error(
+              `work-list-semantic-read:${String(property)}`,
+            );
+          },
+        },
+      ),
+    ),
+  };
 }
 
 function deferred<T>() {
@@ -91,10 +116,11 @@ it(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(input).toBe('/api/works');
         expect(init?.method).toBe('GET');
-        return jsonResponse(populatedWorkList);
+        return jsonResponse(poisonWorkList(populatedWorkList));
       },
     );
-    vi.stubGlobal('fetch', fetchMock);
+    const requestLedger = createRequestLedger(fetchMock);
+    vi.stubGlobal('fetch', requestLedger.fetch);
 
     const host = document.createElement('div');
     document.body.append(host);
@@ -104,6 +130,25 @@ it(
         root.render(<WorkListShell />);
         await Promise.resolve();
       });
+
+      const requestSnapshot = await requestLedger.seal();
+      expect(requestSnapshot.sealed).toBe(true);
+      expect(requestSnapshot.inFlight).toBe(0);
+      expect(requestSnapshot.records).toHaveLength(1);
+      expect(requestSnapshot.records[0]).toMatchObject({
+        generation: 1,
+        method: 'GET',
+        path: '/api/works',
+        query: '',
+        lifecycle: 'settled',
+        inFlightAtSettle: 0,
+        postSeal: false,
+      });
+      expect(
+        requestSnapshot.records.every(
+          ({ method, path }) => method === 'GET' && path === '/api/works',
+        ),
+      ).toBe(true);
 
       expect(host.textContent).toContain('My Work');
       expect(host.textContent).toContain('Work records');
@@ -147,11 +192,7 @@ it(
       );
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(
-        fetchMock.mock.calls.some(([input]) =>
-          String(input).includes('/runs') || String(input).includes('/trace'),
-        ),
-      ).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       await act(async () => root.unmount());
       host.remove();

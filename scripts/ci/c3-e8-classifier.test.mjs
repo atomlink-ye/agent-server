@@ -149,6 +149,55 @@ describe('C3/E8 classifier duals', () => {
     }
   });
 
+  it('reaches the production CLI for zero-arg, unknown-kind, and ENOENT cases', () => {
+    const zeroArgs = spawnSync(node, [classifierPath], { encoding: null });
+    assert.equal(zeroArgs.status, 2);
+    assert.deepEqual(
+      zeroArgs.stdout,
+      Buffer.from('c3_e8_classifier_invalid:reason=usage:expected=<kind> -- <nonempty-command> [args...]\n'),
+    );
+    assert.deepEqual(zeroArgs.stderr, Buffer.alloc(0));
+
+    const sentinelDirectory = mkdtempSync(join(tmpdir(), 'c3-e8-reachability-'));
+    const sentinelPath = join(sentinelDirectory, 'child-started');
+    try {
+      const unknownKind = spawnSync(
+        node,
+        [classifierPath, 'unknown-c3-kind', '--', node, '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'started')`],
+        { encoding: null },
+      );
+      assert.equal(unknownKind.status, 2);
+      assert.deepEqual(
+        unknownKind.stdout,
+        Buffer.from('c3_e8_classifier_invalid:reason=unknown-kind:kind=unknown-c3-kind\n'),
+      );
+      assert.deepEqual(unknownKind.stderr, Buffer.alloc(0));
+      assert.throws(() => readFileSync(sentinelPath), /ENOENT/u);
+    } finally {
+      rmSync(sentinelDirectory, { recursive: true, force: true });
+    }
+
+    const missingCommand = '/definitely/not/a/c3-reachability-command';
+    const enoent = spawnSync(node, [classifierPath, kind, '--', missingCommand], { encoding: null });
+    assert.equal(enoent.status, 2);
+    assert.deepEqual(
+      enoent.stdout,
+      Buffer.from(`c3_e8_classifier_missing:reason=command-not-available:command=${missingCommand}\n`),
+    );
+    assert.deepEqual(enoent.stderr, Buffer.alloc(0));
+    const direct = classifyChild({
+      kind,
+      childExitCode: null,
+      childSignal: null,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+      spawnError: { code: 'ENOENT', command: missingCommand },
+    });
+    assert.equal(direct.childExitCode, null);
+    assert.equal(direct.process, 2);
+  });
+
   it('forwards split multibyte and invalid bytes without re-encoding', () => {
     const source = [
       'process.stdout.write(Buffer.from([0xe2]));',

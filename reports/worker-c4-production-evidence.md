@@ -54,6 +54,7 @@ E10 network semantics and the shared observer/cleanup behavior are unchanged. Th
 
 - `4b958b6b28b1c9440afa0e1f3431c401e8ac0c16` — exact C4 recorder copies, provenance ledger, and accepted full-schema loader (8 files, 6693 insertions, 57 deletions).
 - `acaca9e33272fb7153a4306d098b67cf3144c969` — full blocked gate and independent partial production journey (2 files, 348 insertions, 4 deletions).
+- `242f49ed7595d36e3cb22fe06774c704accd073a` — isolate the partial edge red arm to a relation-only mutation (1 file, 5 insertions, 1 deletion).
 
 Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 

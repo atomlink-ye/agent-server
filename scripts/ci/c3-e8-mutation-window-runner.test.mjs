@@ -6,8 +6,10 @@ import { describe, it } from 'node:test';
 
 import {
   evaluateMutationWindow,
+  FIXED_VITEST_ARGV,
   parseWindowEvents,
   runMutationWindow,
+  validateMutationLedger,
   WINDOW_MARKER,
 } from './c3-e8-mutation-window-runner.mjs';
 
@@ -23,6 +25,35 @@ const validFailureOutput = [
 ].join('\n');
 
 describe('C3 mutation-window parser', () => {
+  it('uses the fixed Vitest command directly, preserving raw child streams', () => {
+    assert.deepEqual(FIXED_VITEST_ARGV, [
+      'exec', 'vitest', '--config', 'vitest.web.config.ts', '--run',
+      'apps/web/components/work/work-list.browser.test.tsx',
+    ]);
+    assert.equal(FIXED_VITEST_ARGV.includes('c3-e8-browser-wrapper.mjs'), false);
+  });
+
+  it('rejects missing, reversed, or non-monotonic mutation windows', () => {
+    const names = [
+      'mutation_applied', 'target_started', 'target_failed',
+      'control_started', 'control_completed', 'restore_started',
+      'restore_completed',
+    ];
+    const valid = names.map((name, index) => ({
+      event: name,
+      seq: index + 1,
+      wallTime: index + 1,
+    }));
+    assert.equal(validateMutationLedger(valid), null);
+    assert.equal(validateMutationLedger(valid.slice(0, -1)), 'ledger-too-short');
+    const reversed = valid.map((item) => ({ ...item }));
+    reversed[4].wallTime = 0;
+    assert.equal(validateMutationLedger(reversed), 'ledger-time-reversed');
+    const reordered = valid.map((item) => ({ ...item }));
+    reordered[1].event = 'restore_started';
+    assert.equal(validateMutationLedger(reordered), 'ledger-boundary-missing-or-duplicate');
+  });
+
   it('accepts a target failure with a completed non-target control', () => {
     const result = evaluateMutationWindow({
       arm: 'completed-status',
@@ -63,7 +94,9 @@ describe('C3 mutation-window parser', () => {
       sourcePath,
       arm: 'unavailable-disclosure',
       evidenceDirectory,
-      runCommand: () => ({
+      runCommand: () => {
+        assert.match(readFileSync(sourcePath, 'utf8'), /Product status disclosure was removed/u);
+        return {
         code: 1,
         signal: null,
         spawnError: null,
@@ -76,7 +109,8 @@ describe('C3 mutation-window parser', () => {
           summary,
         ].join('\n')),
         stderr: Buffer.alloc(0),
-      }),
+        };
+      },
     });
     assert.equal(outcome.process, 1);
     assert.equal(outcome.restoreEqual, true);

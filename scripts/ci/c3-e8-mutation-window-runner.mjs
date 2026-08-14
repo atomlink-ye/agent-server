@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import {
   PRODUCTION_MUTATION_ARMS,
@@ -14,6 +14,10 @@ import { parseVitestSummary } from './c3-e8-browser-wrapper.mjs';
 export const WINDOW_MARKER = 'c3_e8_mutation_window:';
 export const OBSERVATION_MISSING_MARKER =
   'c3_e8_observation_missing:reason=request-ledger-incomplete';
+export const FIXED_VITEST_ARGV = Object.freeze([
+  'exec', 'vitest', '--config', 'vitest.web.config.ts', '--run',
+  'apps/web/components/work/work-list.browser.test.tsx',
+]);
 
 function hashBytes(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -97,6 +101,8 @@ export function evaluateMutationWindow({ arm, child, stdout, stderr, restoreEqua
     summary,
     events: parsedEvents.events,
   };
+  if (child.spawnError || child.signal || child.code === null || child.code === undefined)
+    return { ...base, reason: 'runner-unavailable' };
   if (!summaryComplete) return { ...base, reason: 'summary-incomplete' };
   if (!restoreEqual) return { ...base, reason: 'restore-uncertain' };
   if (eventError) return base;
@@ -110,11 +116,47 @@ export function evaluateMutationWindow({ arm, child, stdout, stderr, restoreEqua
   return { ...base, reason: 'target-control-verdict-mismatch' };
 }
 
-function defaultRunCommand(cwd, evidenceDirectory) {
-  const wrapper = resolve(dirname(new URL(import.meta.url).pathname), 'c3-e8-browser-wrapper.mjs');
-  const result = spawnSync(process.execPath, [wrapper, '--evidence', evidenceDirectory], {
+export function validateMutationLedger(events) {
+  if (!Array.isArray(events) || events.length < 7) return 'ledger-too-short';
+  for (let index = 0; index < events.length; index += 1) {
+    const current = events[index];
+    if (current.seq !== index + 1 || !Number.isFinite(current.wallTime)) return 'ledger-sequence';
+    if (index > 0 && current.wallTime < events[index - 1].wallTime) return 'ledger-time-reversed';
+  }
+  if (events.filter(({ event }) => event === 'mutation_applied').length !== 1 ||
+      events.filter(({ event }) => event === 'restore_started').length !== 1 ||
+      events.filter(({ event }) => event === 'restore_completed').length !== 1)
+    return 'ledger-boundary-missing-or-duplicate';
+  const mutationIndex = events.findIndex(({ event }) => event === 'mutation_applied');
+  const restoreStartedIndex = events.findIndex(({ event }) => event === 'restore_started');
+  const restoreCompletedIndex = events.findIndex(({ event }) => event === 'restore_completed');
+  if (mutationIndex !== 0 || restoreStartedIndex <= mutationIndex || restoreCompletedIndex <= restoreStartedIndex)
+    return 'ledger-boundary-order';
+  const targetStart = events.findIndex(({ event }) => event === 'target_started');
+  const controlStart = events.findIndex(({ event }) => event === 'control_started');
+  const targetTerminal = events.findIndex(({ event }) => event === 'target_failed' || event === 'target_completed');
+  const controlTerminal = events.findIndex(({ event }) => event === 'control_failed' || event === 'control_completed');
+  if (targetStart <= mutationIndex || controlStart <= mutationIndex ||
+      targetTerminal <= targetStart || controlTerminal <= controlStart ||
+      targetTerminal >= restoreStartedIndex || controlTerminal >= restoreStartedIndex)
+    return 'ledger-window-order';
+  return null;
+}
+
+function defaultRunCommand(cwd) {
+  const timeoutMs = Number(process.env.C3_E8_RUNNER_TIMEOUT_MS ?? 120_000);
+  const result = spawnSync('pnpm', FIXED_VITEST_ARGV, {
     cwd,
     encoding: null,
+    timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120_000,
+    killSignal: 'SIGTERM',
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: '/opt/playwright-browsers',
+      ...(process.env.C3_E8_VITEST_CACHE_DIR
+        ? { VITEST_CACHE_DIR: process.env.C3_E8_VITEST_CACHE_DIR }
+        : {}),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return {
@@ -142,7 +184,7 @@ export function runMutationWindow({
   mkdirSync(evidenceDirectory, { recursive: true });
   const sourceBefore = readFileSync(sourcePath);
   const sourceBeforeHash = hashBytes(sourceBefore);
-  const events = [{ event: 'mutation_applied', wallTime: Date.now(), seq: 1 }];
+  const events = [];
   let child = {
     code: null,
     signal: null,
@@ -151,31 +193,30 @@ export function runMutationWindow({
     stderr: Buffer.alloc(0),
   };
   let restoreEqual = false;
+  let mutationWritten = false;
   let outcome;
   try {
     const mutated = Buffer.from(applyProductionMutation(sourceBefore.toString('utf8'), arm));
-    writeFileSync(sourcePath, mutated);
     writeFileSync(resolve(evidenceDirectory, 'source.before'), sourceBefore);
     writeFileSync(resolve(evidenceDirectory, 'source.mutated'), mutated);
     writeFileSync(resolve(evidenceDirectory, 'source.before.sha256'), `${sourceBeforeHash}\n`);
     writeFileSync(resolve(evidenceDirectory, 'source.mutated.sha256'), `${hashBytes(mutated)}\n`);
+    writeFileSync(sourcePath, mutated);
+    mutationWritten = readFileSync(sourcePath).equals(mutated);
+    if (!mutationWritten) throw new Error('mutation-write-uncertain');
+    events.push({ event: 'mutation_applied', wallTime: Date.now(), seq: 1 });
     child = runCommand(cwd, resolve(evidenceDirectory, 'browser'));
-    writeFileSync(resolve(evidenceDirectory, 'raw.stdout'), child.stdout);
-    writeFileSync(resolve(evidenceDirectory, 'raw.stderr'), child.stderr);
-    writeFileSync(resolve(evidenceDirectory, 'raw.exit'), `${child.code ?? 2}\n`);
-    const parsed = parseWindowEvents(child.stdout, child.stderr);
-    let nextSeq = 2;
-    for (const event of parsed.events) events.push({ ...event, seq: nextSeq++ });
-    outcome = evaluateMutationWindow({
-      arm,
-      child,
-      stdout: child.stdout,
-      stderr: child.stderr,
-      restoreEqual: false,
-    });
   } catch (error) {
     outcome = { process: 2, reason: `runner-error:${error instanceof Error ? error.message : String(error)}` };
   } finally {
+    if (mutationWritten) {
+      const parsed = parseWindowEvents(child.stdout, child.stderr);
+      let nextSeq = 2;
+      for (const event of parsed.events) events.push({ ...event, seq: nextSeq++ });
+    }
+    writeFileSync(resolve(evidenceDirectory, 'raw.stdout'), child.stdout);
+    writeFileSync(resolve(evidenceDirectory, 'raw.stderr'), child.stderr);
+    writeFileSync(resolve(evidenceDirectory, 'raw.exit'), `${child.code ?? 2}\n`);
     events.push({ event: 'restore_started', wallTime: Date.now(), seq: events.length + 1 });
     try {
       writeFileSync(sourcePath, sourceBefore);
@@ -184,12 +225,17 @@ export function runMutationWindow({
       restoreEqual = false;
     }
     if (restoreEqual) events.push({ event: 'restore_completed', wallTime: Date.now(), seq: events.length + 1 });
-    writeFileSync(resolve(evidenceDirectory, 'source.restored.sha256'), `${hashBytes(readFileSync(sourcePath))}\n`);
+    try {
+      writeFileSync(resolve(evidenceDirectory, 'source.restored.sha256'), `${hashBytes(readFileSync(sourcePath))}\n`);
+    } catch {
+      writeFileSync(resolve(evidenceDirectory, 'source.restored.sha256'), 'unavailable\n');
+    }
     writeJson(resolve(evidenceDirectory, 'events.json'), events);
   }
+  const ledgerError = validateMutationLedger(events);
   if (!restoreEqual) outcome = { ...(outcome ?? {}), process: 2, reason: 'restore-uncertain' };
-  else if (outcome?.reason === 'restore-uncertain')
-    outcome = evaluateMutationWindow({ arm, child, stdout: child.stdout, stderr: child.stderr, restoreEqual: true });
+  else if (ledgerError) outcome = { ...(outcome ?? {}), process: 2, reason: ledgerError };
+  else outcome = evaluateMutationWindow({ arm, child, stdout: child.stdout, stderr: child.stderr, restoreEqual: true });
   writeJson(resolve(evidenceDirectory, 'outcome.json'), { ...outcome, restoreEqual, sourceBeforeHash });
   return { ...outcome, restoreEqual, sourceBeforeHash };
 }

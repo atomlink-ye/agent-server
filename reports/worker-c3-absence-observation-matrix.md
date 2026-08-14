@@ -33,7 +33,7 @@ legitimately compare equal to an observed zero.
 | E8-red-container-identity | list container identity is required | production WorkShell mutation + DOM assertion | list container query | container-identity arm and exact target assertion | missing/renamed list | raw target pattern | UNSOUND | `container-identity` | COMPLETE_AND_PROVEN_ABSENT |
 | E8-incomplete-late-runs | late production `/runs` is rejected | production WorkShell mutation + ledger | every late request | late-runs arm and exact failure summary | late request | raw target count | MISSING | `late-runs` | COMPLETE_AND_PROVEN_ABSENT |
 | E8-incomplete-never-settle | never-settling production fetch cannot seal | production WorkShell mutation + ledger | pending fetch/inFlight | never-settle arm, marker, inFlight>=1 | pending/timeout | ledger marker + raw status | MISSING | `never-settle` | COMPLETE_AND_PROVEN_ABSENT |
-| E8-red-zero-target | omitted target is never a pass | C3 arm runner | selected arm target count | independent arm target pattern | target omitted | target-count.json | MISSING | omitted target assertion | MISSING_EVIDENCE |
+| E8-red-zero-target | omitted target is never a pass | C3 production zero runner | selected arm target count | independent arm target pattern | target omitted/runner unavailable | target-count.json + runner exit | MISSING | C3 runner instrument arm | MISSING_EVIDENCE |
 | C4-same-origin | same-origin `/api/**` complement is empty | shared page observer | request/response/finished/failed | sealed exact tuple universe | listener/body/pending/late | observer ledger | forbidden UNSOUND; incomplete MISSING | delayed forbidden request | MISSING_EVIDENCE |
 | C4-response-count | each expected response tuple has exact count | observer response ledger | every finished response body | sealed parse + count map | duplicate/malformed/pending | bodyOutcome/counts | duplicate/malformed UNSOUND | duplicate `/api/works` | MISSING_EVIDENCE |
 | C4-dom-mismatch | stable DOM matches accepted facts | observer seal + DOM assertion | expected selectors/counts/text | real bounded repeated DOM snapshots | unstable/missing selector | mismatch list | mismatch UNSOUND | targeted DOM mutation | MISSING_EVIDENCE |
@@ -68,7 +68,7 @@ provenance explicitly permits an empty business or optional set.
 | 1 selected mutation arm | explicit C3 arm registry | target-count.json | observed=expected | container-identity | COMPLETE_AND_PROVEN_ABSENT |
 | 1 selected incomplete arm | explicit C3 incomplete-arm registry | target-count + raw failure | observed=expected | late-runs | COMPLETE_AND_PROVEN_ABSENT |
 | 1 selected incomplete arm + exact marker | explicit C3 incomplete-arm registry | marker + ledger inFlight | observed=expected | never-settle | COMPLETE_AND_PROVEN_ABSENT |
-| 1 selected target pattern | explicit C3 arm registry | target-count.json | observed=0 is mismatch/instrument | omitted-target | MISSING_EVIDENCE |
+| 1 selected target pattern | explicit C3 arm registry | production zero runner target count | observed=0 is instrument process2 | C3 runner instrument arm | MISSING_EVIDENCE |
 | declared E10 scenario rule | scenario manifest | E10 accounting | exact rule comparison | c4-e10 | MISSING_EVIDENCE |
 | declared response tuple rule | response manifest | sealed response ledger | exact rule comparison | c4-response | MISSING_EVIDENCE |
 | declared DOM assertion rule | DOM assertion registry | DOM ledger | exact rule comparison | c4-dom | MISSING_EVIDENCE |
@@ -77,3 +77,18 @@ provenance explicitly permits an empty business or optional set.
 | declared E11 scenario rule | scenario manifest | E11 accounting | exact rule comparison | c4-e11 | MISSING_EVIDENCE |
 | declared cleanup probe rule | cleanup contract | cleanup result | exact rule comparison | c4-cleanup | MISSING_EVIDENCE |
 | declared schema rule | response schema manifest | parser ledger | exact rule comparison | c4-response | MISSING_EVIDENCE |
+
+The C3 source registry owns the expected counts for the five C3 production
+kinds; C4 kinds deliberately have no guessed count here and fail closed as
+`instrument`. The only legal expected-zero proof is the source-owned optional
+business rule exercised by the C3 comparison dual. Production zero arms derive
+`target-unavailable` from real target lstat/spawn failure and `instrument` from
+a started runner that cannot produce a count; callers cannot select either
+subclass.
+
+C-box C3 zero evidence: `node --test scripts/ci/c3-c4-zero-execution.test.mjs
+scripts/ci/c3-zero-production-runner.test.mjs` exited 0 with 10 tests, 0
+skips, and 0 todos. The production runner emitted real process-2
+`target-unavailable` arms for missing target and ENOENT spawn, plus a real
+process-2 `instrument` arm for a started command with no count; no caller
+provided expected count or subclass.

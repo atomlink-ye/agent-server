@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
 import { WorkListShell } from '@/components/work/work-shell';
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
 import { createRequestLedger } from '@/test/request-ledger';
 

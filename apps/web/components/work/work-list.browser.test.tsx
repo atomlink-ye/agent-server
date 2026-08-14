@@ -120,9 +120,35 @@ async function settleNetworkTurn() {
   });
 }
 
+const MUTATION_WINDOW_MARKER = 'c3_e8_mutation_window:';
+
+function emitMutationWindowEvent(event: string) {
+  console.log(
+    `${MUTATION_WINDOW_MARKER}${JSON.stringify({
+      event,
+      wallTime: Date.now(),
+    })}`,
+  );
+}
+
+async function withMutationWindow<T>(
+  role: 'target' | 'control',
+  body: () => Promise<T>,
+): Promise<T> {
+  emitMutationWindowEvent(`${role}_started`);
+  try {
+    const result = await body();
+    emitMutationWindowEvent(`${role}_completed`);
+    return result;
+  } catch (error) {
+    emitMutationWindowEvent(`${role}_failed`);
+    throw error;
+  }
+}
+
 it(
   'renders both recorder-backed Work titles and exact detail links without N+1 reads',
-  async () => {
+  () => withMutationWindow('target', async () => {
     const workWithStatus = {
       ...populatedWorkList,
       works: [{ ...populatedWorkList.works[0], status: 'succeeded' }],
@@ -243,10 +269,10 @@ it(
       host.remove();
       vi.unstubAllGlobals();
     }
-  },
+  }),
 );
 
-it('distinguishes loading, empty, and real network error without fabricating Work', async () => {
+it('distinguishes loading, empty, and real network error without fabricating Work', () => withMutationWindow('control', async () => {
   const pending = deferred<Response>();
   const pendingFetch = vi.fn(async () => pending.promise);
   vi.stubGlobal('fetch', pendingFetch);
@@ -359,4 +385,4 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     errorHost.remove();
     vi.unstubAllGlobals();
   }
-});
+}));

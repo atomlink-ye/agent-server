@@ -1,0 +1,41 @@
+[
+  {
+    "event": "mutation_applied",
+    "wallTime": 1786678599321,
+    "seq": 1
+  },
+  {
+    "event": "target_started",
+    "wallTime": 1786678616636,
+    "stream": "stdout",
+    "seq": 2
+  },
+  {
+    "event": "target_failed",
+    "wallTime": 1786678617095,
+    "stream": "stdout",
+    "seq": 3
+  },
+  {
+    "event": "control_started",
+    "wallTime": 1786678617702,
+    "stream": "stdout",
+    "seq": 4
+  },
+  {
+    "event": "control_completed",
+    "wallTime": 1786678617735,
+    "stream": "stdout",
+    "seq": 5
+  },
+  {
+    "event": "restore_started",
+    "wallTime": 1786678618516,
+    "seq": 6
+  },
+  {
+    "event": "restore_completed",
+    "wallTime": 1786678618523,
+    "seq": 7
+  }
+]

@@ -1,0 +1,20 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mError[22m: request-ledger-incomplete-test-failed[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m218:14[22m[39m
+    [90m216|[39m         })[33m;[39m
+    [90m217|[39m         console[33m.[39m[34mlog[39m([33mREQUEST_LEDGER_MISSING_MARKER[39m)[33m;[39m
+    [90m218|[39m         [35mthrow[39m [35mnew[39m [33mError[39m([32m'request-ledger-incomplete-test-failed'[39m)[33m;[39m
+    [90m   |[39m              [31m^[39m
+    [90m219|[39m       }
+    [90m220|[39m       [34mexpect[39m(requestSnapshot[33m.[39msealed)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+[90m [2m❯[22m withMutationWindow components/work/work-list.browser.test.tsx:[2m140:19[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

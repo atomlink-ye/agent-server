@@ -1,0 +1,54 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mAssertionError[22m: expected [ { generation: 1, …(11) }, …(2) ] to have a length of 1 but got 3[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 3[39m
+
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m222:38[22m[39m
+    [90m220|[39m       [34mexpect[39m(requestSnapshot[33m.[39msealed)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m221|[39m       [34mexpect[39m(requestSnapshot[33m.[39minFlight)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m222|[39m       [34mexpect[39m(requestSnapshot[33m.[39mrecords)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m   |[39m                                      [31m^[39m
+    [90m223|[39m       [34mexpect[39m(requestSnapshot[33m.[39mrecords[[34m0[39m])[33m.[39m[34mtoMatchObject[39m({
+    [90m224|[39m         generation[33m:[39m [34m1[39m[33m,[39m
+[90m [2m❯[22m withMutationWindow components/work/work-list.browser.test.tsx:[2m140:19[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯[39m[1m[41m Unhandled Rejection [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mAssertionError[22m: expected '/api/works/fce1d64d-b137-4dbd-97a3-57…' to be '/api/works' // Object.is equality[39m
+[90m [2m❯[22m apps/web/components/work/work-list.browser.test.tsx:[2m171:22[22m[39m
+[90m [2m❯[22m fetch scripts/ci/c3-e8-request-ledger.mjs:[2m73:30[22m[39m
+[90m [2m❯[22m apps/web/components/work/work-shell.tsx:[2m27:93[22m[39m
+
+[31mThis error originated in "[1mapps/web/components/work/work-list.browser.test.tsx[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mrenders both recorder-backed Work titles and exact detail links without N+1 reads[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+
+[31m⎯⎯⎯⎯[39m[1m[41m Unhandled Rejection [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mAssertionError[22m: expected '/api/works/d48df452-06ba-4fe2-9ab5-48…' to be '/api/works' // Object.is equality[39m
+[90m [2m❯[22m apps/web/components/work/work-list.browser.test.tsx:[2m171:22[22m[39m
+[90m [2m❯[22m fetch scripts/ci/c3-e8-request-ledger.mjs:[2m73:30[22m[39m
+[90m [2m❯[22m apps/web/components/work/work-shell.tsx:[2m27:93[22m[39m
+
+[31mThis error originated in "[1mapps/web/components/work/work-list.browser.test.tsx[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe latest test that might've caused the error is "[1mrenders both recorder-backed Work titles and exact detail links without N+1 reads[22m". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+

@@ -1,0 +1,27 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mError[22m: work-list-semantic-read:runs[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+
+[36m [2m❯[22m Object.get components/work/work-list.browser.test.tsx:[2m74:14[22m[39m
+    [90m 72|[39m         [35mif[39m (property [33m===[39m [32m'id'[39m [33m||[39m property [33m===[39m [32m'title'[39m)
+    [90m 73|[39m           [35mreturn[39m [33mReflect[39m[33m.[39m[35mget[39m(target[33m,[39m property[33m,[39m receiver)[33m;[39m
+    [90m 74|[39m         [35mthrow[39m [35mnew[39m [33mError[39m([32m`work-list-semantic-read:[39m[36m${[39m[33mString[39m(property)[36m}[39m[32m`[39m)[33m;[39m
+    [90m   |[39m              [31m^[39m
+    [90m 75|[39m       }[33m,[39m
+    [90m 76|[39m       [34mhas[39m(_target[33m,[39m property) {
+[90m [2m❯[22m components/work/work-shell.tsx:[2m113:24[22m[39m
+[90m [2m❯[22m WorkListShell components/work/work-shell.tsx:[2m103:19[22m[39m
+[90m [2m❯[22m Object.react_stack_bottom_frame ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m23863:19[22m[39m
+[90m [2m❯[22m renderWithHooks ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m5529:21[22m[39m
+[90m [2m❯[22m updateFunctionComponent ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m8897:18[22m[39m
+[90m [2m❯[22m beginWork ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m10522:17[22m[39m
+[90m [2m❯[22m runWithFiberInDEV ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m1519:29[22m[39m
+[90m [2m❯[22m performUnitOfWork ../../../mgr-frontend/node_modules/.pnpm/react-dom@19.1.1_react@19.1.1/node_modules/react-dom/cjs/react-dom-client.development.js:[2m15140:21[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

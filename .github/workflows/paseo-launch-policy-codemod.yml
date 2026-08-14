@@ -1,0 +1,30 @@
+name: Paseo Launch Policy Codemod
+
+on:
+  push:
+    branches:
+      - refactor/execution-plane-paseo-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/execution-plane-paseo-architecture
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tooling/paseo-launch-policy-codemod.mjs
+      - name: Commit launch policy migration
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/adapters/paseo/paseo-client-port.ts src/adapters/paseo/paseo-gateway.ts src/adapters/paseo/paseo-execution-plane.ts
+          git commit -m "refactor(paseo): isolate pinned sdk launch policy"
+          git push origin HEAD:refactor/execution-plane-paseo-architecture

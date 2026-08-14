@@ -34,6 +34,10 @@ export class ExecutionRunRegistry {
     await session.cancel(runId);
   }
 
+  public cancelRun(input: { readonly runId: string }): Promise<void> {
+    return this.cancel(input.runId);
+  }
+
   public has(runId: string): boolean {
     return this.#active.has(runId);
   }

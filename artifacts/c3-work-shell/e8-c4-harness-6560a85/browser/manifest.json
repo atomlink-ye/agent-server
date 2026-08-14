@@ -1,1 +1,0 @@
-{"command":["sh","-lc","B=/root/workspace/.c3-e8-browser-aae8479; printf \"remote_exit=\"; cat \"$B/exit\"; printf \"\\nremote_stdout:\\n\"; cat \"$B/stdout\"; printf \"\\nremote_stderr:\\n\"; cat \"$B/stderr\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-14T00:45:55.544Z"}

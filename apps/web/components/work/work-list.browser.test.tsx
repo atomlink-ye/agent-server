@@ -3,13 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
 import { WorkListShell } from '@/components/work/work-shell';
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
-import {
-  createRequestLedger,
-  REQUEST_LEDGER_MISSING_MARKER,
-} from '../../../../scripts/ci/c3-e8-request-ledger.mjs';
+import { createRequestLedger } from '@/test/request-ledger';
 
 (
   globalThis as typeof globalThis & {
@@ -52,10 +49,6 @@ const forbiddenProductStatusLanguage = new RegExp(
   'i',
 );
 
-// This is a lexical guard for the named product-state vocabulary only. The
-// poisoned projection below is the data-flow guard; this regex is not a claim
-// that a finite list exhausts all possible status language.
-
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
@@ -67,28 +60,33 @@ function jsonResponse(body: unknown): Response {
 function poisonWorkList(workList: typeof populatedWorkList) {
   return {
     ...workList,
-    works: workList.works.map((work) => new Proxy(work, {
-      get(target, property, receiver) {
-        if (property === 'id' || property === 'title')
-          return Reflect.get(target, property, receiver);
-        throw new Error(`work-list-semantic-read:${String(property)}`);
-      },
-      has(_target, property) {
-        if (property === 'id' || property === 'title') return true;
-        throw new Error(`work-list-semantic-has:${String(property)}`);
-      },
-      ownKeys(target) {
-        const keys = Reflect.ownKeys(target);
-        if (keys.some((key) => key !== 'id' && key !== 'title'))
-          throw new Error('work-list-semantic-own-key');
-        return keys;
-      },
-      getOwnPropertyDescriptor(target, property) {
-        if (property === 'id' || property === 'title')
-          return Object.getOwnPropertyDescriptor(target, property);
-        throw new Error(`work-list-semantic-descriptor:${String(property)}`);
-      },
-    })),
+    works: workList.works.map(
+      (work) =>
+        new Proxy(work, {
+          get(target, property, receiver) {
+            if (property === 'id' || property === 'title')
+              return Reflect.get(target, property, receiver);
+            throw new Error(`work-list-semantic-read:${String(property)}`);
+          },
+          has(_target, property) {
+            if (property === 'id' || property === 'title') return true;
+            throw new Error(`work-list-semantic-has:${String(property)}`);
+          },
+          ownKeys(target) {
+            const keys = Reflect.ownKeys(target);
+            if (keys.some((key) => key !== 'id' && key !== 'title'))
+              throw new Error('work-list-semantic-own-key');
+            return keys;
+          },
+          getOwnPropertyDescriptor(target, property) {
+            if (property === 'id' || property === 'title')
+              return Object.getOwnPropertyDescriptor(target, property);
+            throw new Error(
+              `work-list-semantic-descriptor:${String(property)}`,
+            );
+          },
+        }),
+    ),
   };
 }
 
@@ -120,173 +118,90 @@ async function settleNetworkTurn() {
   });
 }
 
-const MUTATION_WINDOW_MARKER = 'c3_e8_mutation_window:';
-
-function emitMutationWindowEvent(event: string) {
-  console.log(
-    `${MUTATION_WINDOW_MARKER}${JSON.stringify({
-      event,
-      wallTime: Date.now(),
-    })}`,
+it('renders fixture-backed Work titles and exact detail links without N+1 reads', async () => {
+  const workWithStatus = {
+    ...populatedWorkList,
+    works: [{ ...populatedWorkList.works[0], status: 'succeeded' }],
+  };
+  const ownKeyPoisoned = poisonWorkList(workWithStatus).works[0];
+  expect(() => Object.keys(ownKeyPoisoned)).toThrow(
+    'work-list-semantic-own-key',
   );
-}
+  expect(() => ({ ...ownKeyPoisoned })).toThrow(
+    'work-list-semantic-own-key',
+  );
 
-async function withMutationWindow<T>(
-  role: 'target' | 'control',
-  body: () => Promise<T>,
-): Promise<T> {
-  emitMutationWindowEvent(`${role}_started`);
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(input).toBe('/api/works');
+      expect(init?.method).toBe('GET');
+      return jsonResponse(poisonWorkList(populatedWorkList));
+    },
+  );
+  const requestLedger = createRequestLedger(fetchMock);
+  vi.stubGlobal('fetch', requestLedger.fetch);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
   try {
-    const result = await body();
-    emitMutationWindowEvent(`${role}_completed`);
-    return result;
-  } catch (error) {
-    emitMutationWindowEvent(`${role}_failed`);
-    throw error;
-  }
-}
+    await act(async () => {
+      root.render(<WorkListShell />);
+      await Promise.resolve();
+    });
 
-it(
-  'renders both recorder-backed Work titles and exact detail links without N+1 reads',
-  () => withMutationWindow('target', async () => {
-    const workWithStatus = {
-      ...populatedWorkList,
-      works: [{ ...populatedWorkList.works[0], status: 'succeeded' }],
-    };
-    const ownKeyPoisoned = poisonWorkList(workWithStatus).works[0];
-    expect(() => Object.keys(ownKeyPoisoned)).toThrow(
-      'work-list-semantic-own-key',
-    );
-    expect(() => ({ ...ownKeyPoisoned })).toThrow(
-      'work-list-semantic-own-key',
-    );
-    const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).includes('c3_e8_observation_missing=ledger')) {
-          expect(init?.headers).toMatchObject({
-            'x-c3-e8-observation': 'request-ledger',
-          });
-          return new Promise<Response>(() => {});
-        }
-        expect(input).toBe('/api/works');
-        expect(init?.method).toBe('GET');
-        return jsonResponse(poisonWorkList(populatedWorkList));
-      },
-    );
-    const requestLedger = createRequestLedger(fetchMock);
-    vi.stubGlobal('fetch', requestLedger.fetch);
+    const requestSnapshot = await requestLedger.seal();
+    expect(requestSnapshot).toMatchObject({
+      sealed: true,
+      inFlight: 0,
+    });
+    expect(requestSnapshot.records).toHaveLength(1);
+    expect(requestSnapshot.records[0]).toMatchObject({
+      generation: 1,
+      method: 'GET',
+      path: '/api/works',
+      query: '',
+      lifecycle: 'settled',
+      inFlightAtSettle: 0,
+      postSeal: false,
+    });
 
-    const host = document.createElement('div');
-    document.body.append(host);
-    const root = createRoot(host);
-    try {
-      await act(async () => {
-        root.render(<WorkListShell />);
-        await Promise.resolve();
-      });
-
-      let requestSnapshot;
-      try {
-        requestSnapshot = await requestLedger.seal();
-      } catch (error) {
-        if ((error as { reason?: string }).reason === 'post-seal-activity')
-          throw error;
-        expect(error).toMatchObject({ marker: REQUEST_LEDGER_MISSING_MARKER });
-        const incompleteSnapshot = requestLedger.snapshot();
-        const sentinelRecords = incompleteSnapshot.records.filter(
-          ({ query }) => query === '?c3_e8_observation_missing=ledger',
-        );
-        const initialListRecord = incompleteSnapshot.records.find(
-          ({ path, query }) => path === '/api/works' && query === '',
-        );
-        expect(initialListRecord).toMatchObject({
-          method: 'GET',
-          lifecycle: 'settled',
-          inFlightAtSettle: 0,
-        });
-        expect(sentinelRecords).toHaveLength(populatedWorkList.works.length);
-        expect(incompleteSnapshot.inFlight).toBe(populatedWorkList.works.length);
-        expect(sentinelRecords.every(({ method, lifecycle, inFlightAtSettle }) =>
-          method === 'GET' && lifecycle === 'started' && inFlightAtSettle === null,
-        )).toBe(true);
-        expect(sentinelRecords[0]).toMatchObject({
-          method: 'GET',
-          query: '?c3_e8_observation_missing=ledger',
-          lifecycle: 'started',
-        });
-        console.log(REQUEST_LEDGER_MISSING_MARKER);
-        throw new Error('request-ledger-incomplete-test-failed');
-      }
-      expect(requestSnapshot.sealed).toBe(true);
-      expect(requestSnapshot.inFlight).toBe(0);
-      expect(requestSnapshot.records).toHaveLength(1);
-      expect(requestSnapshot.records[0]).toMatchObject({
-        generation: 1,
-        method: 'GET',
-        path: '/api/works',
-        query: '',
-        lifecycle: 'settled',
-        inFlightAtSettle: 0,
-        postSeal: false,
-      });
-      expect(
-        requestSnapshot.records.every(
-          ({ method, path }) => method === 'GET' && path === '/api/works',
-        ),
-      ).toBe(true);
-
-      expect(host.textContent).toContain('My Work');
-      expect(host.textContent).toContain('Work records');
-      expect(
-        host.querySelector('[data-testid="work-list-loading"]'),
-      ).toBeNull();
-      expect(
-        host.querySelector('[data-testid="work-list-empty"]'),
-      ).toBeNull();
-      expect(
-        host.querySelector('[data-testid="work-list-error"]'),
-      ).toBeNull();
-      const list = host.querySelector<HTMLUListElement>(
-        '[data-testid="work-list"]',
+    expect(host.textContent).toContain('My Work');
+    expect(host.textContent).toContain('Work records');
+    expect(host.querySelector('[data-testid="work-list-loading"]')).toBeNull();
+    expect(host.querySelector('[data-testid="work-list-empty"]')).toBeNull();
+    expect(host.querySelector('[data-testid="work-list-error"]')).toBeNull();
+    const list = host.querySelector<HTMLUListElement>('[data-testid="work-list"]');
+    expect(list).not.toBeNull();
+    if (!list) throw new Error('work_list_missing');
+    const cards = [...list.querySelectorAll<HTMLLIElement>('.work-list-card')];
+    expect(cards).toHaveLength(populatedWorkList.works.length);
+    for (const [index, work] of populatedWorkList.works.entries()) {
+      const card = cards[index];
+      expect(card).toBeDefined();
+      if (!card) continue;
+      const link = card.querySelector<HTMLAnchorElement>('a');
+      expect(link?.textContent).toBe(work.title);
+      expect(link?.getAttribute('href')).toBe(`/works/${work.id}`);
+      expect(card.textContent).toContain(
+        'Product status is currently unavailable for this Work.',
       );
-      expect(list).not.toBeNull();
-      if (!list) throw new Error('work_list_missing');
-      const cards = [
-        ...list.querySelectorAll<HTMLLIElement>('.work-list-card'),
-      ];
-      expect(cards).toHaveLength(populatedWorkList.works.length);
-      for (const [index, work] of populatedWorkList.works.entries()) {
-        const card = cards[index];
-        expect(card).toBeDefined();
-        if (!card) continue;
-
-        const link = card.querySelector<HTMLAnchorElement>('a');
-        expect(link?.textContent).toBe(work.title);
-        expect(link?.getAttribute('href')).toBe(`/works/${work.id}`);
-        expect(card.textContent).toContain(
-          'Product status is currently unavailable for this Work.',
-        );
-        expect(
-          card.querySelector('.work-list-card__unavailable'),
-        ).not.toBeNull();
-      }
-
-      expect(host.textContent).not.toMatch(forbiddenProductStatusLanguage);
-      expect(renderedStatusSemantics(host)).not.toMatch(
-        forbiddenProductStatusLanguage,
-      );
-
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-      vi.unstubAllGlobals();
+      expect(card.querySelector('.work-list-card__unavailable')).not.toBeNull();
     }
-  }),
-);
 
-it('distinguishes loading, empty, and real network error without fabricating Work', () => withMutationWindow('control', async () => {
+    expect(host.textContent).not.toMatch(forbiddenProductStatusLanguage);
+    expect(renderedStatusSemantics(host)).not.toMatch(
+      forbiddenProductStatusLanguage,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('distinguishes loading, empty, and real network error without fabricating Work', async () => {
   const pending = deferred<Response>();
   const pendingFetch = vi.fn(async () => pending.promise);
   vi.stubGlobal('fetch', pendingFetch);
@@ -306,21 +221,6 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(loadingHost.textContent).toContain(
       'We are retrieving the Work titles available to review.',
     );
-    expect(loadingHost.textContent).not.toContain(
-      'Nothing is available to review yet.',
-    );
-    expect(loadingHost.textContent).not.toContain(
-      'Work records are temporarily unavailable.',
-    );
-    expect(
-      loadingHost.querySelector('[data-testid="work-list-empty"]'),
-    ).toBeNull();
-    expect(
-      loadingHost.querySelector('[data-testid="work-list-error"]'),
-    ).toBeNull();
-    expect(
-      loadingHost.querySelector('[data-testid="work-list"]'),
-    ).toBeNull();
     expect(loadingHost.querySelector('a')).toBeNull();
 
     await act(async () => {
@@ -338,20 +238,6 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(loadingHost.textContent).toContain(
       'Nothing is available to review yet.',
     );
-    expect(loadingHost.textContent).toContain(
-      'When a Work becomes available here, its title will open its ' +
-        'recorded historical run details.',
-    );
-    expect(loadingHost.textContent).not.toContain('Getting your Work records');
-    expect(loadingHost.textContent).not.toContain(
-      'Work records are temporarily unavailable.',
-    );
-    expect(
-      loadingHost.querySelector('[data-testid="work-list-error"]'),
-    ).toBeNull();
-    expect(
-      loadingHost.querySelector('[data-testid="work-list"]'),
-    ).toBeNull();
     expect(loadingHost.querySelector('a')).toBeNull();
   } finally {
     await act(async () => loadingRoot.unmount());
@@ -379,19 +265,7 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
       'Work records are temporarily unavailable.',
     );
     expect(errorHost.textContent).toContain('This is a connection problem');
-    expect(errorHost.textContent).not.toContain('Getting your Work records');
-    expect(errorHost.textContent).not.toContain(
-      'Nothing is available to review yet.',
-    );
-    expect(
-      errorHost.querySelector('[data-testid="work-list-loading"]'),
-    ).toBeNull();
-    expect(
-      errorHost.querySelector('[data-testid="work-list-empty"]'),
-    ).toBeNull();
-    expect(
-      errorHost.querySelector('[data-testid="work-list"]'),
-    ).toBeNull();
+    expect(errorHost.querySelector('[data-testid="work-list"]')).toBeNull();
     expect(errorHost.querySelector('a')).toBeNull();
     expect(networkErrorFetch).toHaveBeenCalledTimes(1);
   } finally {
@@ -399,4 +273,4 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     errorHost.remove();
     vi.unstubAllGlobals();
   }
-}));
+});

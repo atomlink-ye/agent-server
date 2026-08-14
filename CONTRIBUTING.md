@@ -1,25 +1,46 @@
 # Contributing
 
-Start with [AGENTS.md](AGENTS.md), even when working manually. The repository is in Prove / MVE-first product implementation until the user explicitly changes the stage. Keep only the planning record needed for safe continuation and preserve the Product → Feature → Component → Contract → Code → evidence trace.
+Start with [AGENTS.md](AGENTS.md), even when working manually. The repository is in Prove / MVE-first development until the user explicitly changes the stage.
 
 ## Local loop
 
-Bound one observable outcome and appetite, build the thinnest representative real path, exercise it early, fix only `BLOCKER-NOW`, record other findings, and stop at proof.
-
-Do not author or expand unit, contract, integration, deterministic E2E, eval-dataset, or test-fixture work unless the user explicitly requests it or a Human Gate requires it. Existing CI/checks may run and should be reported truthfully, but they are supporting merge signals rather than a reason to delay the first real E2E.
+Install dependencies and use pnpm directly:
 
 ```bash
-make setup
+corepack enable
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test:unit
 ```
 
-Use focused existing commands only when they are useful. For runtime-boundary changes, exercise the smallest real affected runtime path; `make paseo-smoke` is one supporting option, not an automatic gate.
+Use `pnpm env -- up <profile>` for interactive infrastructure and `pnpm env -- run <profile> -- <command>` for one-off infrastructure-backed commands. Tests that need infrastructure should normally start it through the shared TestEnvironment support rather than depending on a manual pre-step.
 
-## Pull requests
+## Repository hygiene
 
-- Keep one coherent outcome per pull request.
-- Explain current behavior, changed behavior, impact, and actual verification.
-- Update the relevant Feature status only when code and acceptance evidence justify it.
-- Do not weaken a test to make a change pass without documenting and approving the contract change.
-- Archive an Exec Plan only when archival is in scope and all remaining items are completed or explicitly transferred.
+Keep one coherent outcome per change. Do not commit task-specific logs, screenshots, recordings, evidence packets, phase/lane/worker reports, mutation output, or other generated run material. Generated diagnostics belong in `.local/test-runs/` and CI artifacts.
 
-Commit messages should be terse and intentional. Generated dependencies, `.local/`, runtime homes, credentials, and smoke evidence must stay untracked.
+Do not create scenario setup scripts when the real problem is missing environment or fixture support. Improve `tooling/environment/` or `tests/support/` instead.
+
+Long-lived names describe product or engineering semantics, not the development phase that created them.
+
+## Verification
+
+Run the cheapest honest check that touches the changed risk and report only what actually ran. Useful commands include:
+
+```bash
+pnpm test:repository
+pnpm test:unit
+pnpm test:contract
+pnpm test:integration
+pnpm test:real-pg
+pnpm test:e2e
+pnpm smoke:runtime
+```
+
+External smokes are opt-in and may require credentials. Deterministic tests must not require live model availability.
+
+## Pull requests and handoff
+
+Explain current behavior, changed behavior, impact, actual verification, and residual risk. Never weaken a test just to obtain green output without approving the contract change. If work is interrupted, hand off the exact next action, changed files, running infrastructure, latest verification, blockers, and cleanup state.
+
+Commit messages should be terse and intentional. `.local/`, runtime homes, credentials, and generated test output must stay untracked.

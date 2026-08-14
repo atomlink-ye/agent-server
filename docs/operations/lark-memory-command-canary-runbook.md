@@ -1,79 +1,41 @@
 # Lark Managed Memory command canary runbook
 
-This runbook operates the fixed compatibility canary only. It is not a
-production deployment, identity, or recovery runbook.
+This runbook operates the fixed Lark compatibility canary only. It is not a production deployment, identity, or recovery contract.
 
 ## Boundary and safety
 
-- Use only the configured `agent-test` App, one fixed group, one allowlisted
-  external user, and the matching service-account Tenant/Workspace/published
-  AgentVersion tuple.
+- Use only the configured App/chat/user/service-account ownership tuple.
 - Keep `LARK_CANARY_ENABLED` false unless deliberately running the canary.
-  When enabled, provide the required `LARK_CANARY_*` values through the caller's
-  secret manager/environment; never put the App Secret in a command, log, or
-  document.
-- Agent Server must be the sole App WebSocket consumer. Do not run a competing
-  `lark-cli event consume` or a second worker.
-- The supported review surfaces are Thread `/memory edit-and-accept` fallback,
-  Card controls, and Bot-owned Doc controls. Agent Server creates the editable
-  Bot-owned Doc before the initial Card. Open/edit the Doc if desired, then use
-  direct `Accept`; the resumed Agent fetches it with `lark-cli docs +fetch
---profile "$LARK_CLI_PROFILE" --as bot --doc <token>`. New Cards do not render
-  Edit/Preview controls; legacy actions remain inbound-only.
+- Provide required `LARK_CANARY_*` values and App credentials through the caller's secret manager/environment; never place secrets in commands, logs, or repository files.
+- Agent Server must be the sole App WebSocket consumer for the canary.
+- Thread command, Card, and Bot-owned Doc controls all operate through the canonical review state; raw callback/action tokens and comments are not retained as ordinary evidence.
 
-## Readiness and runtime
+## Deterministic prerequisites
 
-Use Node `v24.18.0` and pnpm `11.7.0`:
+Use the repository's pnpm command surface:
 
 ```bash
-export NVM_DIR="/Users/fanye/.nvm"
-. "$NVM_DIR/nvm.sh"
-nvm use 24
-node --version
-pnpm --version
+pnpm check
+pnpm test:real-pg
+pnpm eval:memory
 ```
 
-Verify configuration, Bot/User readiness, fixed ownership tuple, database
-reachability, and the selected free OpenCode model without printing credentials.
-Run deterministic and boundary gates:
+Use `pnpm smoke:runtime` only when the real Paseo/provider boundary is intentionally part of the canary verification. External provider availability is not a deterministic prerequisite.
 
-```bash
-make ci
-DATABASE_URL="$DATABASE_URL" make test-real-pg
-make paseo-smoke
-make eval-smoke
-```
-
-`DATABASE_URL` must be caller-provided; do not encode a developer port. A stale
-database that already applied an unreleased/incompatible migration (for example,
-an early `0013` without the current mention column) is not acceptance evidence.
-Use a fresh caller-provided database and record only the sanitized result.
+A real PostgreSQL test lane can self-start a disposable database. For a manually operated canary, the application database remains an explicit operator-owned environment and must not be encoded as a developer-specific port in documentation.
 
 ## Execution and shutdown
 
-Start exactly one Lark worker using the repository's `dev:lark` or `start:lark`
-path. Send unique root and second-root messages. For the command fallback, send
-the Thread command. For Card/Doc QA, have the user click the Card, edit the Doc
-body, add unresolved comment/reply, request Preview, and separately Accept the
-persisted Preview. Confirm source Run/proposal, accepted Entry, ready snapshot,
-Fresh Session exact pin, and recall through sanitized database/application
-evidence.
+Start exactly one Lark worker with `pnpm dev:lark` (or the production `start:lark` entrypoint for a built image). Send a unique root and follow-up interaction through the configured canary surface. Confirm the canonical proposal/review, accepted Memory materialization, ready snapshot, and Fresh Session pin through owner-safe application/database state.
 
-Stop with a graceful SIGTERM and wait for the worker/outbox loop to close. Do not
-use `kill -9`, blind resend, or a second consumer. If provider execution cannot
-be reconciled within the safe UUID replay window, preserve `delivery_unknown`
-and stop automatic resend.
+Stop gracefully and allow the worker/outbox loop to close. Do not use a competing consumer, blind resend, or broad process kill. If a provider send becomes ambiguous outside the safe replay window, preserve the durable unknown-delivery state rather than automatically resending.
 
-## Evidence handling
+## Diagnostic handling
 
-Record only sanitized correlation IDs, safe provider message IDs, snapshot
-IDs/hashes, statuses, test commands, and result boundaries. Do not record
-credentials, bearer tokens, App Secrets, raw events, raw comments/replies,
-callback/action tokens, raw provider errors, prompts, local filesystem paths, or
-local smoke evidence paths. The canary proves bounded retry/idempotent
-materialization, not physical exactly-once delivery or canonical identity.
+Record only sanitized correlation/status information required to diagnose the canary. Do not commit credentials, bearer tokens, App Secrets, raw events, raw comments/replies, callback/action tokens, raw provider errors, prompts, local filesystem paths, screenshots, logs, or one-run evidence packets.
 
-Preview successor lease fencing, post-canonical retry/fencing, manual rebuild
-races, rolling allocator races, generalized synthesis retry/audit, crash
-recovery, multi-node leadership, extra redrive/fault injection, performance, and
-production rollout remain deferred to the active Task 14 follow-up plan.
+Generated diagnostics belong under ignored `.local/test-runs/<run-id>/` or a CI artifact when useful.
+
+## Deferred boundaries
+
+Multi-node leadership/fencing, crash recovery, generalized redrive/fault injection, performance/load work, broader identity/authorization, and production rollout remain deferred. Track such work in the current project/issue/roadmap context rather than by committing a task-specific follow-up plan to the repository.

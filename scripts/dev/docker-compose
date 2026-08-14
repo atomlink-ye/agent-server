@@ -39,8 +39,6 @@ for ((arg_index = 1; arg_index <= $#; arg_index++)); do
 done
 
 if ((runtime_compose)); then
-  # Keep the checked-in real-provider defaults as the source of defaults while
-  # preserving any value already supplied by the operator/environment.
   . "$repo_root/scripts/dev/source-real-provider-defaults"
 fi
 
@@ -118,14 +116,11 @@ for arg in "$@"; do
 done
 
 if ((should_provision)); then
-  # Ensure the existing project image is available for the one-shot root
-  # ownership provisioning command. This keeps `up --build` compatible with
-  # the prebuilt agent-server-runner:latest image without adding an image.
   if ((has_build)); then
     "${raw_compose[@]}" build runner
   fi
   "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh runner -c \
-    'mkdir -p /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs && chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules /workspace/evidence/recordings /workspace/evidence/gate-json /workspace/evidence/run-logs'
+    'chown 1000:1000 /workspace/node_modules /workspace/apps/web/node_modules'
   if ((runtime_compose)); then
     "${raw_compose[@]}" run --rm --no-deps --user 0 --entrypoint /bin/sh provider-toolchain-init -c \
       'mkdir -p /opt/provider-toolchain-volume && chown 1000:1000 /opt/provider-toolchain-volume'

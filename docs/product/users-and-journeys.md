@@ -38,15 +38,14 @@ In the current workspace-memory baseline, an authenticated service can also prop
 
 ## Baseline developer journey
 
-The repository baseline proves the smallest developer loop:
+The current repository developer loop is pnpm-native and selects infrastructure explicitly:
 
-1. `make setup` installs exact Paseo/OpenCode versions.
-2. `make ci` validates the platform-independent contracts.
-3. `make dev` starts an isolated local runtime and API.
-4. `POST /api/v1/runs` returns `202` and a stable Run URL.
-5. Polling returns an explicit terminal result.
-6. Workspace-memory proposal routes create, review, and list accepted records under the authenticated owner scope.
-7. `make paseo-smoke` proves the same seam against a live free model without model credentials.
+1. `corepack enable && pnpm install --frozen-lockfile` installs repository dependencies.
+2. `pnpm check` runs the deterministic repository/type boundary for ordinary development.
+3. `pnpm env -- up core` starts PostgreSQL plus Agent Server without an execution plane.
+4. `pnpm env -- up runtime` starts the current Paseo-backed runtime topology when execution is required.
+5. `POST /api/v1/runs` remains a compatibility path that returns `202` and a stable Run URL; canonical product work uses Task admission.
+6. Workspace-memory proposal routes create, review, and list accepted records under authenticated owner scope.
+7. `pnpm smoke:runtime` is the explicit real-provider seam check and is not an ordinary deterministic prerequisite.
 
-This baseline journey is infrastructure evidence. It is not the end-user V1 workflow.
-It is also not the required command sequence for each current Prove-stage feature slice.
+For focused infrastructure-backed verification, prefer a self-starting test or `pnpm env -- run <profile> -- <command>` over a scenario setup script. Generated diagnostics remain under ignored `.local/test-runs/` or CI artifacts.

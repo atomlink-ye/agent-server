@@ -1,4 +1,4 @@
-name: Paseo OpenCode external smoke
+name: Runtime external smoke
 
 on:
   workflow_dispatch:
@@ -9,10 +9,16 @@ permissions:
   contents: read
 
 jobs:
-  paseo-smoke:
+  runtime-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - run: make setup
-      - run: make paseo-smoke
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm smoke:runtime

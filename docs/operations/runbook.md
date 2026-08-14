@@ -1,216 +1,111 @@
 # Baseline operations runbook
 
+This runbook covers the current Prove/MVE local and verification boundaries. It is not a production SLO, deployment, or incident-response contract.
+
 ## API is not live
 
-1. Run `make dev-api` and inspect structured `service.started` or configuration failure.
-2. Check `HOST`/`PORT` and local port conflicts.
+1. Start the current core topology with `pnpm env -- up core`.
+2. Inspect it with `pnpm env -- info` and check `HOST`/`PORT` conflicts.
 3. Call `/health/live`; liveness does not depend on Paseo.
-4. Run `make test-contract` to separate code regression from environment state.
+4. Use `pnpm test:contract` when the question is public request/response behavior rather than local process state.
+5. Stop the owned topology with `pnpm env -- down`.
+
+For a one-off diagnostic command that needs infrastructure, use the generic environment runner instead of creating a setup script:
+
+```bash
+pnpm env -- run core -- <command>
+pnpm env -- run runtime -- <command>
+```
+
+## Runtime readiness returns 503
+
+Inspect the named readiness checks and separate control-plane health from execution-plane/provider health.
+
+- `paseo_websocket`: verify daemon reachability, configured URL, and process lifetime.
+- `paseo_workspace`: verify the configured runtime directory is usable.
+- `opencode_model`: verify provider/toolchain availability, selected provider/model, network/proxy state, and current external catalog availability.
+
+Use the canonical external runtime smoke only when real provider behavior is the boundary under investigation:
+
+```bash
+pnpm smoke:runtime
+```
+
+Real provider/model availability is external state. Never weaken the deterministic gate or silently choose a paid model because a free provider is temporarily unavailable.
 
 ## Provider and model selection
 
-`PASEO_PROVIDER` is a process-global deployment setting with the closed values
-`opencode`, `claude`, and `codex`; it defaults to `opencode` and is not selected
-per package or run. Non-opencode deployments require an explicit operator
-`PASEO_MODEL` pin (the prepared Team smoke uses `deepseek-v4-flash`). The
-unattended provider modes are pinned to `opencode` `build`, Claude
-`bypassPermissions`, and Codex `full-access` where those smoke paths apply.
-
-The managed-environment `spec.provider` declaration may differ from the runtime
-`PASEO_PROVIDER`; rejecting that mismatch needs plumbing that is not yet
-present. HTTP callers cannot choose a model. Preserve the external
-`/health/ready` check name `opencode_model` even when operating another provider.
-
-## Readiness returns 503
-
-Inspect the named checks:
-
-- `paseo_websocket`: verify daemon health/log, URL, port, and process lifetime.
-- `paseo_workspace`: verify the configured directory is writable and Paseo can open it.
-- `opencode_model`: verify the platform binary, model catalog, operator override, network/proxy, and current free-model availability.
-
-Run `node scripts/dev/resolve-opencode.mjs --check`, then `make paseo-smoke`. Read the ignored daemon/API logs under the evidence path printed by the smoke. Do not paste raw logs into an issue before checking them for prompts or environment data.
-
-If one free model is externally rate-limited, an operator may diagnose another catalog entry with `PASEO_SMOKE_MODEL=opencode/<explicit-free-id> make paseo-smoke`. The smoke rejects an override whose identifier is not explicitly free; this is a diagnostic override, not an automatic paid fallback.
+`PASEO_PROVIDER` is an operator/runtime-topology setting. Runtime profiles may provide a default and `pnpm env` supports explicit provider/model overrides. HTTP callers do not choose arbitrary models. Preserve safe error normalization and never copy raw provider errors or credentials into retained diagnostics.
 
 ## Run fails or times out
 
-Baseline GET returns a stable code only. Correlate `run_id` in structured logs. A timeout may be catalog/model cold start, network latency, or provider capacity. Do not increase the timeout until daemon health, model discovery, and generation phases are distinguished. Raw provider errors remain local diagnostics.
-
-## Session reset and lane drain
-
-`POST /api/v1/sessions/{session_id}:reset` advances the generation and records a
-cancellation request for the active old-generation Task. It does not discard
-that active Task or bulk-cancel it; only non-active queued old-generation Tasks
-are terminalized with `cancelled_by_reset`. New-generation Messages remain queued
-until the active old-generation Run reaches a normal terminal state, after which
-the lane promotes the oldest eligible root. Provider cancellation forwarding and
-production recovery guarantees are not part of this minimum behavior.
-
-## Run event replay and SSE
-
-Use `GET /api/v1/runs/{run_id}/events?after=0` to inspect the persisted timeline. Resume with `next_cursor`; do not reuse an event sequence already consumed. For live observation, use the authenticated `/events/stream` route with `after` or `Last-Event-ID`. The stream replays committed events, polls the database, and closes after `succeeded`, `failed`, or `cancelled`. This is a single-node MVP polling path, not a production pub/sub or long-disconnect recovery guarantee.
-
-## Local Web Chat MVE
-
-The Web path is a separate Next.js service with a same-origin BFF. From the
-repository root, bootstrap the fixed local Agent/Environment through the
-authenticated APIs, then start the Web service:
-
-```bash
-make web-bootstrap
-make web-dev
-```
-
-Use a fresh ProductSession/browser context for the acceptance path. Confirm a
-`202` message admission, at least one complete assistant-text snapshot before
-terminal, a persisted terminal event, replacement by one formal Assistant
-Message, and correct reload recovery. The browser should expose only the
-HttpOnly `product_session_id`; inspect requests, storage, HTML, and client
-bundles without recording token values. The BFF must remain owner-checking and
-must forward SSE bytes, `after`, and `Last-Event-ID` without buffering.
-
-The accepted MVE creates a new ProductSession after the local stack starts.
-Continuation of an old ProductSession after Agent Server/Paseo restart is
-deferred because persisted provider references may retain a stale Runtime MCP
-endpoint. Do not claim restart reconstruction, identity/ACL/CSRF/CSP/rate-limit
-hardening, reconnect recovery, multi-writer ordering, retention, or production
-backpressure from this path. Stop only verified child processes during cleanup;
-do not delete retained database volumes.
-
-The Dockerfile defaults `NPM_REGISTRY` to the official npm registry so GitHub
-and other unconfigured environments do not depend on a regional mirror. For
-mainland-China local development, set the ignored Compose `.env` value:
-
-```bash
-printf '%s\n' 'NPM_REGISTRY=https://registry.npmmirror.com' >> .env
-docker compose build
-
-# Explicit override remains available when needed.
-docker compose build --build-arg NPM_REGISTRY=https://registry.npmjs.org
-```
-
-Compose forwards `.env`'s `NPM_REGISTRY` as a build arg. The image persists it
-as `PNPM_CONFIG_REGISTRY` and `NPM_CONFIG_REGISTRY`, so local Docker build-time
-installs and container-side dependency verification use the same mirror while
-GitHub retains the official default. Do not rebuild the lockfile or weaken
-lockfile, integrity, age, or other supply-chain policy to bypass a metadata
-problem. Record any package metadata caveat separately from code or policy
-failures.
+Correlate the durable `run_id` and normalized Run events. Distinguish control-plane persistence, execution-plane connectivity, provider catalog/startup, and generation timeout before increasing timeouts. Raw provider output remains local diagnostic material under ignored `.local/test-runs/` when needed.
 
 ## Task cancellation
 
-Use `POST /api/v1/tasks/{task_id}:cancel`. A queued Task returns `cancelled` after local terminalization; active work returns `cancellation_requested` after the durable request is recorded and one runtime cancel is forwarded. A terminal Task returns `terminal` idempotently. Foreign or missing Tasks intentionally return `404`. Correlate only opaque Task/Run IDs and stable status codes; never copy prompts, provider errors, credentials, or local paths into tickets.
+Use `POST /api/v1/tasks/{task_id}:cancel`. Queued work may terminalize locally; active work records the durable cancellation intent and forwards cancellation through the runtime boundary when supported. Terminal work is idempotent. Foreign or missing resources remain owner-safe `404`.
 
-## No free model
+## Session reset and lane drain
 
-This is an expected external dependency failure, not permission for automatic
-paid fallback. Check the live catalog and OpenCode status. Operators may
-deliberately configure a known model through `PASEO_MODEL`; for Claude or Codex
-that pin is required. The `free-only` package label does not override an
-operator pin, and HTTP callers cannot choose models. Keep deterministic CI
-green while external availability is investigated.
+`POST /api/v1/sessions/{session_id}:reset` advances generation and requests cancellation for the active old-generation Task. It does not imply distributed recovery. Non-active queued old-generation work may be terminalized according to the current lane rules; new-generation work remains governed by the durable lane.
 
-## Smoke leaves a process
+## Run event replay and SSE
 
-The script treats a managed PID that survives cleanup as failure. Inspect the printed runtime directory and process tree, stop only the verified child PIDs, then fix signal forwarding/daemon shutdown. Never use a broad kill pattern.
+Use `GET /api/v1/runs/{run_id}/events?after=0` for persisted timeline replay and the authenticated stream route for live observation. Resume from the returned cursor/`Last-Event-ID`; do not infer production pub/sub, retention, or long-disconnect guarantees from the current single-node polling path.
 
-## Suspected credential creation or exposure
+## Local Web
 
-Stop the isolated processes, preserve a sanitized path/timestamp, revoke any real credential, and inspect HOME/XDG/Paseo paths. A discovered OpenCode `auth.json` fails the zero-credential claim. Do not commit or share the file.
-
-## CI and external verification
-
-When merge/release criteria or a Human Gate explicitly request deterministic verification, `make ci` is the Node 24 gate and does not require an external model or database service. The separately requested PostgreSQL 16 lane uses a real `pg.Pool`; a missing database URL is a failure in that lane, not a substitute with an embedded database. Neither lane is a default Prove-stage completion requirement. Production assembles one default `pg.Pool` with its configured max of 10. The real-PG tests lease separate clients to prove connection visibility and concurrency; that test arrangement does not describe production pool partitioning. External free-model/provider availability is non-deterministic and is verified only by the authenticated smoke.
-
-The smoke uses an ephemeral service-account token only for create/poll, retains zero OpenCode credentials, selects only an explicitly free model, checks the exact marker `PASEO_OPENCODE_BASELINE_OK`, and excludes the token from logs and evidence. The initial authentication failure was resolved by commit `baf8be5`; it is not an open follow-up.
-
-## Agent Teams v2 smoke
-
-The canonical Team verification runs against a fresh isolated database:
+The Web service is part of the `full` topology. The current local path is:
 
 ```bash
-make agent-teams-v2-smoke
+pnpm web:bootstrap
+pnpm env -- up full
 ```
 
-The smoke proves one fixed-roster `TeamDriver` lifecycle: TeamRun activation,
-Lead Work control, member submission, Work acceptance, an addressed direct
-TeamMessage continuation, and terminal finish. It retains redacted local
-evidence only. Do not infer dynamic rosters, generalized graphs, crash recovery,
-restart/resume, retries, cancellation propagation, or production readiness from
-this smoke. Do not record tokens, prompts, disposable IDs, raw logs, or local
-paths.
+Use a fresh ProductSession for product-flow verification. Keep the service bearer server-side and never capture tokens in screenshots, logs, recordings, or committed files. Generated browser diagnostics belong under ignored `.local/test-runs/<run-id>/` or a CI artifact.
 
-## Managed Agent registry operations
+## Real PostgreSQL behavior
 
-## Product Workspace memory projection
+PGlite remains the default for integration behavior that does not require PostgreSQL-specific semantics. Transaction/lock/concurrency/migration/PostgreSQL-specific behavior uses:
 
-After an accepted proposal, the minimum local projection renders all accepted
-Product Workspace entries in stable `accepted_at ASC, entry_id ASC` order. The
-FileStore writes `MEMORY.md` and `manifest.json` to a temporary directory,
-verifies the SHA-256 rendered-content hash, atomically renames the snapshot
-directory, and publishes `latest-ready` only after verification succeeds.
+```bash
+pnpm test:real-pg
+```
 
-Use the authenticated workspace memory entries/snapshots routes to inspect the
-projection and `POST .../memory/snapshots:rebuild` to create the next immutable
-version. A hash or write failure marks the projection failed and must not
-publish a ready/latest pointer. Public responses contain identifiers, hashes,
-versions, and status only; never a local path. This is an MVP local projection:
-fsync, KMS, object storage, backup/restore, multi-node locking, crash fallback,
-and production durability guarantees are deferred.
+The test lane starts a disposable PostgreSQL topology automatically when no external database URL is supplied. A focused real-Postgres test can also self-start when invoked directly. Do not replace a required real-Postgres boundary with PGlite merely to obtain a pass.
 
-For Fresh Session recall, inspect the admitted Task's pinned snapshot ID/hash,
-not the current latest pointer. The local FileStore must verify the exact
-tenant/workspace/snapshot directory, manifest hash, rendered content hash, and
-expected Task hash. Missing or mismatched content fails the Run safely; never
-fall back to latest, scan the Workspace, reveal a path, or include hash/path
-details in the public error.
+## Agent Team runtime verification
+
+The canonical real Team verification is semantically named and intentionally small:
+
+```bash
+pnpm smoke:agent-team
+```
+
+It proves only the bounded current collaboration flow exercised by that smoke. It does not imply generalized dynamic rosters, restart recovery, retries, reconciliation, or production readiness.
 
 ## Memory policy evaluation
 
-`auto_safe` remains disabled by default. `make eval-smoke` runs the versioned
-deterministic memory-policy dataset and prints only aggregate JSON. The gate
-requires zero `unsafe_auto_accepts`, `rejected_memory_leaks`,
-`cross_workspace_leaks`, and `secret_exposures`. This is an evaluation and
-policy-safety boundary, not a production rollout claim; there is no model-based
-gardener or automatic enablement.
-
-Migration `0005_managed_agent_registry_b` is forward-only. Apply the complete
-migration set in order; reruns must not rewrite published versions or reset
-idempotency state. If a migration stops part-way, preserve only the sanitized
-migration error and database identifier, verify the schema version, and rerun
-the normal migration command after the database issue is fixed. Do not manually
-delete rows or edit published data. Rollback means deploying the prior
-application revision while retaining the additive `0005` schema and data for
-forward recovery. There is no runtime route/resolver feature flag and no
-destructive down migration.
-
-The deterministic lane uses PGlite for fast single-process behavior. Independent
-required PostgreSQL 16 jobs use real `pg.Pool` connections for concurrency,
-locks, and database-enforced immutability. Run the exact real database lane:
+Probabilistic/policy evaluation is separate from deterministic tests:
 
 ```bash
-make test-real-pg
+pnpm eval:memory
 ```
 
-When `DATABASE_URL` is absent, ordinary deterministic integration may skip the
-real-PG tests, but the required PostgreSQL CI job must fail rather than
-substitute PGlite. Keep those jobs independent.
+Eval results are generated output. Do not commit them as evidence packets.
 
-For ownership failures, correlate only with redacted or one-way hashed
-owner-scope tokens: managed lookup uses tenant plus principal, while the
-authenticated workspace is only a legacy import snapshot. Use a safe request
-correlation and a one-way hashed version correlation when needed; an existing
-request ID is safe only when it is already opaque or redacted. Never record raw
-tenant, principal, workspace, request body, idempotency key, or version
-identifier in logs or evidence. For idempotency failures, compare a one-way
-hash of the request key and canonical fingerprint without printing request
-bodies. For cursor failures, verify opaque cursor handling, ascending
-`(created_at, id)` ordering, strict advancement, and page bounds. Never put raw
-YAML, prompts, secrets, credentials, filesystem paths, or raw provider errors
-in logs or evidence. A future `re2js` compiler upgrade requires a new package
-version and compiler snapshot.
+## Migration and recovery utilities
 
-## Recovery boundary
+Operator utilities live under `scripts/ops/` rather than CI/test harness directories. Apply additive migrations through the supported migration utility; do not manually rewrite published/durable data to repair a local test. Recovery inspection remains bounded and should avoid automatic retries when runtime-side effects are uncertain.
 
-The current admission and Run state is PostgreSQL-backed, but durable runtime receipt storage and reconciliation are not implemented. If runtime succeeds and terminal persistence fails, the typed `RunCompletionPersistenceError` produces only an ephemeral receipt and sanitized structured log; the Run may remain `running` until later recovery. Stop automated retry for the affected work, preserve only sanitized logs and relevant IDs, and escalate to the owning orchestration operator. Do not claim receipt retrieval, reconciliation, or `runtime_execution_failed`. Durable receipt storage and broader recovery remain deferred. Multi-node workers/reconcilers are not part of the minimum runtime event lane.
+## Suspected credential exposure
+
+Stop the isolated owned processes, revoke any real credential, and inspect local runtime/provider homes without copying secret-bearing files into Git, issues, or logs. Preserve only sanitized correlation and timing information.
+
+## CI and external verification
+
+`pnpm run verify` is the main deterministic aggregate. `pnpm test:real-pg` is the PostgreSQL-specific lane. Real provider smokes are opt-in/scheduled external checks. Report only commands that actually ran and their actual outcomes.
+
+## Generated diagnostics and cleanup
+
+Temporary test/runtime diagnostics belong in `.local/test-runs/<run-id>/`. Successful runs may clean them; `TEST_KEEP_FAILED=1` may retain failed diagnostics locally. Stop only resources owned by the current environment run and avoid broad kill/delete patterns.

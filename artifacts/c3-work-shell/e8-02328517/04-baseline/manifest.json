@@ -1,1 +1,0 @@
-{"command":["sh","-lc","EVIDENCE=/root/workspace/mgr-frontend/.c3-e8-02328517; printf \"baseline_exit=\"; cat \"$EVIDENCE/baseline.exit\"; printf \"\\\\nfull_baseline_log\\\\n\"; cat \"$EVIDENCE/baseline.log\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-13T22:47:28.243Z"}

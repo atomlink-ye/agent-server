@@ -16,6 +16,8 @@
     "src/**/*.ts",
     "tests/**/*.ts",
     "e2e/**/*.ts",
+    "tooling/**/*.ts",
+    "evals/**/*.ts",
     "vitest.*.config.ts"
   ]
 }

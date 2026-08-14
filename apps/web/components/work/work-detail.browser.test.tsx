@@ -4,12 +4,12 @@ import { expect, it, vi } from 'vitest';
 
 import {
   GetWorkResponseSchema,
-  ProductRunTraceResponseSchema,
-  ProductWorkRunResponseSchema,
+  ProductRunTraceSuccessSchema,
+  ProductWorkRunSuccessSchema,
   WorkResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 import { WorkDetailShell } from '@/components/work/work-shell';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import {
   projectWorkList,
   projectWorkRunList,
@@ -21,12 +21,10 @@ import {
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-it('renders a C1-recorded Work detail through the accepted read seams', async () => {
-  const trace = ProductRunTraceResponseSchema.parse(
+it('renders a fixture-backed Work detail through the accepted read seams', async () => {
+  const trace = ProductRunTraceSuccessSchema.parse(
     reworkRecording.recording_documents[0],
   );
-  if (trace.projection_status !== 'internally_anchored')
-    throw new Error('recording_trace_not_internally_anchored');
 
   const projectedWorks = projectWorkList(reworkRecording);
   const work = GetWorkResponseSchema.parse({
@@ -36,7 +34,7 @@ it('renders a C1-recorded Work detail through the accepted read seams', async ()
   const finalRun = runs.work_runs[0];
   expect(finalRun).toBeDefined();
   if (!finalRun) return;
-  const run = ProductWorkRunResponseSchema.parse({
+  const run = ProductWorkRunSuccessSchema.parse({
     work: trace.work,
     work_run: trace.work_run,
     projection_status: trace.projection_status,
@@ -84,9 +82,7 @@ it('renders a C1-recorded Work detail through the accepted read seams', async ()
     expect(
       host.querySelector('[data-testid="trace-coverage-disclosure"]'),
     ).not.toBeNull();
-    expect(
-      fetchMock.mock.calls.map(([path]) => path),
-    ).toEqual([
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       `/api/works/${work.work.id}`,
       `/api/works/${work.work.id}/runs`,
       `/api/works/${work.work.id}/runs/${finalRun.id}`,

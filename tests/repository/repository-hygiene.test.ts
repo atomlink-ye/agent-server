@@ -28,13 +28,16 @@ const forbiddenRoots = [
   'scripts/probes/',
   'scripts/record/',
 ];
+const forbiddenExact = ['Makefile', 'docs/agents/exec-plan-protocol.md'];
 
 describe('repository hygiene', () => {
   it('keeps generated evidence and task history out of HEAD', () => {
-    expect(tracked).not.toContain('Makefile');
+    for (const path of forbiddenExact) expect(tracked).not.toContain(path);
     for (const prefix of forbiddenRoots) {
       expect(
-        tracked.some((path) => path === prefix.slice(0, -1) || path.startsWith(prefix)),
+        tracked.some(
+          (path) => path === prefix.slice(0, -1) || path.startsWith(prefix),
+        ),
         `tracked path under ${prefix}`,
       ).toBe(false);
     }
@@ -55,17 +58,21 @@ describe('repository hygiene', () => {
     ]) {
       expect(names.some((name) => name.startsWith(prefix))).toBe(false);
     }
-    expect(names.some((name) => /(?:phase|worker-|lane-|\be\d+\b)/i.test(name))).toBe(
-      false,
-    );
     expect(
-      Object.values(packageJson.scripts ?? {}).some((command) => /\bmake\b/.test(command)),
+      names.some((name) => /(?:phase|worker-|lane-|\be\d+\b)/i.test(name)),
+    ).toBe(false);
+    expect(
+      Object.values(packageJson.scripts ?? {}).some((command) =>
+        /\bmake\b/.test(command),
+      ),
     ).toBe(false);
   });
 
   it('uses one ignored location for generated test runs', () => {
     const ignore = readFileSync(resolve(root, '.gitignore'), 'utf8');
     expect(ignore).toContain('.local/test-runs/');
-    expect(tracked.some((path) => path.startsWith('.local/test-runs/'))).toBe(false);
+    expect(tracked.some((path) => path.startsWith('.local/test-runs/'))).toBe(
+      false,
+    );
   });
 });

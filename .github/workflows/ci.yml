@@ -32,4 +32,6 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - name: Focused self-starting real-Postgres test
+        run: pnpm vitest run tests/integration/real-pg-pool.integration.test.ts
       - run: pnpm test:real-pg

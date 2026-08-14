@@ -467,6 +467,7 @@ export async function captureProductRun(options) {
     throw new Error('capture_work_run_id_required');
   if (!options.work || !options.workRun || !options.trace)
     throw new Error('capture_product_api_response_required');
+  const workRunResponse = options.workRunResponse ?? options.workRun;
   if (options.work.id !== options.workId)
     throw new Error('capture_work_identity_mismatch');
   if (
@@ -474,6 +475,13 @@ export async function captureProductRun(options) {
     options.workRun.work_id !== options.workId
   )
     throw new Error('capture_work_run_identity_mismatch');
+  if (
+    options.workRunResponse &&
+    (workRunResponse?.work?.id !== options.workId ||
+      workRunResponse?.work_run?.id !== options.workRunId ||
+      workRunResponse?.work_run?.work_id !== options.workId)
+  )
+    throw new Error('capture_work_run_response_identity_mismatch');
 
   const baseUrl = new URL(options.baseUrl);
   const outputRoot = resolve(
@@ -546,7 +554,7 @@ export async function captureProductRun(options) {
     await writeJson(join(temporary, 'api/work.json'), options.work, audit);
     await writeJson(
       join(temporary, 'api/work-run.json'),
-      options.workRun,
+      workRunResponse,
       audit,
     );
     await writeJson(join(temporary, 'api/trace.json'), options.trace, audit);

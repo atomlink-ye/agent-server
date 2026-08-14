@@ -344,6 +344,8 @@ export async function validateRecording(directory, mode = 'pre-identity') {
       parsed['db/work_run_resource_manifest.json'],
       'db/work_run_resource_manifest.json',
     );
+    const workRunDocument = parsed['api/work-run.json'];
+    const workRunIdentity = workRunDocument?.work_run ?? workRunDocument;
     if (
       !workRows.some(
         (row) =>
@@ -360,8 +362,9 @@ export async function validateRecording(directory, mode = 'pre-identity') {
       ) ||
       !resourceRows.every((row) => row.work_run_id === manifest.work_run_id) ||
       parsed['api/work.json']?.id !== manifest.work_id ||
-      parsed['api/work-run.json']?.id !== manifest.work_run_id ||
-      parsed['api/work-run.json']?.work_id !== manifest.work_id
+      workRunIdentity?.id !== manifest.work_run_id ||
+      workRunIdentity?.work_id !== manifest.work_id ||
+      (workRunDocument?.work && workRunDocument.work.id !== manifest.work_id)
     )
       fail('product_identity_lineage_mismatch');
     for (const query of manifest.queries) {

@@ -208,10 +208,15 @@ pnpm exec tsx scripts/ci/run-product-feedback-projection-live-confirmation.mjs
 It accepts only live connection/identity/configuration variables. It rejects
 all caller arguments and legacy bundle/sidecar/candidate-SHA inputs. In one
 process it reads `git -C "$C4_LIVE_REMOTE_WORKSPACE_ROOT" rev-parse HEAD`,
-uses that actual SHA as both manifest `git_sha` and `service_revision`, GETs the
-accepted WorkRun and trace from `C4_LIVE_BASE_URL`, queries the existing scoped
+uses that actual SHA as manifest `git_sha`, then requires the running service's
+`/health/live` body `version` or `x-service-revision`/`x-git-sha` header to
+self-report the same full 40-hex SHA. It never self-fills `service_revision`.
+The current health surface reports `version=0.1.0`, not a 40-hex revision, so a
+real live run must fail closed as `MISSING` with
+`service_revision_unverifiable` until the service exposes one. When available,
+it GETs the accepted WorkRun and trace from `C4_LIVE_BASE_URL`, queries the existing scoped
 WorkRun/root/principal through the same `pg.Client` passed to
-`captureProductRun`, and captures into a unique
+`captureProductRun` (saving the complete WorkRun response envelope), and captures into a unique
 `<C4_LIVE_OUTPUT_ROOT>/FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION/...`
 directory. `recorded_at` is checked against runner start/end timestamps.
 
@@ -236,8 +241,19 @@ The process-path checker is:
 pnpm exec tsx scripts/ci/check-product-feedback-projection-live-confirmation.mjs
 ```
 
-It passed with `LIVE_CONFIRMATION_PATH_STATIC_AND_CALLABLE`, proving the fresh
-`captureProductRun -> read-only bundle -> schema/hash/identity evaluator` path,
-caller-bundle rejection (exit `2`), and missing-live-env behavior (exit `2`).
+It passed with `LIVE_CONFIRMATION_PATH_INJECTED_HARNESS_PASSED`: fake HTTP, DB,
+and capture adapters reached the real full-schema/identity/trace evaluator and
+returned the known-blocker branch. Caller-bundle rejection remained exit `2`,
+and missing-live-env behavior remained exit `2`.
 No provider, build, dev server, browser, install, sandbox, or live service was
 run in this lane; no live artifact or completion claim exists.
+
+### Live control/mutation audit
+
+| control row | status | evidence |
+|---|---|---|
+| fresh live mutation window | `MISSING_EVIDENCE` | no qualified live service/database window was available; no mutation was applied |
+
+The C3 mutation-window runner is not substituted for this C4 live arm. No
+`mutation_applied`, target/control child-start, observed-count, completion, or
+restore evidence is claimed for live projection feedback.

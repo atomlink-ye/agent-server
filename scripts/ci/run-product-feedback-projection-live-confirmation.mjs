@@ -14,6 +14,7 @@ import pg from 'pg';
 
 import {
   ProductRunTraceResponseSchema,
+  ProductWorkResponseSchema,
   ProductWorkRunResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 import { validateRecording } from './validate-product-recording.mjs';
@@ -136,7 +137,7 @@ async function readCandidateSha(remoteWorkspaceRoot) {
   const candidateSha = stdout.trim();
   if (!FULL_SHA.test(candidateSha))
     throw new MissingInput('remote_workspace_head_invalid');
-  return candidateSha.toLowerCase();
+  return candidateSha;
 }
 
 async function getAcceptedJson(baseUrl, token, path, name) {
@@ -151,6 +152,32 @@ async function getAcceptedJson(baseUrl, token, path, name) {
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!response.ok) throw new MissingInput(`${name}_http_${response.status}`);
   return parseJson(bytes, name);
+}
+
+async function readServiceRevision(baseUrl, token) {
+  let response;
+  try {
+    response = await fetch(new URL('/health/live', baseUrl), {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+    });
+  } catch {
+    throw new MissingInput('service_revision_unreachable');
+  }
+  if (!response.ok)
+    throw new MissingInput(`service_revision_http_${response.status}`);
+  const body = parseJson(
+    Buffer.from(await response.arrayBuffer()),
+    'service_revision',
+  );
+  const candidates = [
+    response.headers.get('x-service-revision'),
+    response.headers.get('x-git-sha'),
+    body?.version,
+  ].filter((value) => typeof value === 'string' && FULL_SHA.test(value.trim()));
+  const revisions = [...new Set(candidates.map((value) => value.trim()))];
+  if (revisions.length !== 1)
+    throw new MissingInput('service_revision_unverifiable');
+  return revisions[0];
 }
 
 async function assertExistingWorkRun(client, input) {
@@ -245,6 +272,7 @@ function captureAttemptRows(bundle) {
 export function evaluateFreshBundle(
   bundle,
   candidateSha,
+  serviceRevision,
   startMs,
   endMs,
   input,
@@ -265,7 +293,8 @@ export function evaluateFreshBundle(
     throw new MissingInput('fresh_manifest_identity_mismatch');
   if (
     manifest.git_sha !== candidateSha ||
-    manifest.service_revision !== candidateSha
+    manifest.service_revision !== serviceRevision ||
+    serviceRevision !== candidateSha
   )
     throw new MissingInput('fresh_manifest_candidate_binding_mismatch');
   if (!FULL_SHA.test(manifest.git_sha))
@@ -317,7 +346,7 @@ export function evaluateFreshBundle(
   )
     throw new MissingInput('fresh_api_trace_identity_mismatch');
 
-  const teamRuns = object(bundle['db/team_runs.json'], 'fresh_team_runs');
+  const teamRuns = bundle['db/team_runs.json'];
   const attempts = captureAttemptRows(bundle);
   if (!Array.isArray(teamRuns) || !Array.isArray(attempts))
     throw new MissingInput('fresh_db_rows_shape_unverifiable');
@@ -346,7 +375,11 @@ export function evaluateFreshBundle(
   if (feedbackRows.length !== 1)
     throw new MissingInput('fresh_db_feedback_nonempty_not_exactly_one');
   const dbAttempt = feedbackRows[0];
-  if (!UUID.test(dbAttempt.id) || !teamRunIds.has(dbAttempt.team_run_id))
+  if (
+    !UUID.test(dbAttempt.id) ||
+    !teamRunIds.has(dbAttempt.team_run_id) ||
+    !UUID.test(dbAttempt.work_item_id ?? '')
+  )
     throw new MissingInput('fresh_db_attempt_identity_invalid');
   const apiAttempts = workRun.work_items.flatMap((item) => item.attempts);
   const sameAttempts = apiAttempts.filter(
@@ -360,6 +393,44 @@ export function evaluateFreshBundle(
     apiAttempt.source_refs.team_run_id !== dbAttempt.team_run_id
   )
     throw new MissingInput('fresh_api_db_attempt_scope_mismatch');
+
+  const apiWorkItem = workRun.work_items.find((item) =>
+    item.attempts.some((attempt) => attempt.id === dbAttempt.id),
+  );
+  const traceAttempts = trace.work_items.flatMap((item) => item.attempts);
+  const traceSameAttempts = traceAttempts.filter(
+    (attempt) => attempt.id === dbAttempt.id,
+  );
+  if (!apiWorkItem || traceSameAttempts.length !== 1)
+    throw new MissingInput('fresh_trace_api_attempt_join_invalid');
+  if (dbAttempt.work_item_id !== apiWorkItem.id)
+    throw new MissingInput('fresh_db_api_work_item_join_invalid');
+  const traceAttempt = traceSameAttempts[0];
+  const sourceRefKeys = [
+    'root_task_id',
+    'team_run_id',
+    'team_member_run_id',
+    'task_id',
+    'run_id',
+  ];
+  if (
+    sourceRefKeys.some(
+      (key) => apiAttempt.source_refs[key] !== traceAttempt.source_refs[key],
+    )
+  )
+    throw new MissingInput('fresh_api_trace_attempt_source_refs_mismatch');
+  const feedbackEdges = trace.edges.filter(
+    (edge) => edge.kind === 'feedback' && edge.attempt_id === dbAttempt.id,
+  );
+  if (
+    feedbackEdges.length !== 1 ||
+    feedbackEdges[0].work_item_id !== apiWorkItem.id ||
+    feedbackEdges[0].source_refs.team_run_id !== dbAttempt.team_run_id ||
+    (dbAttempt.requested_by_lead_task_id &&
+      feedbackEdges[0].source_refs.task_id !==
+        dbAttempt.requested_by_lead_task_id)
+  )
+    throw new MissingInput('fresh_trace_feedback_edge_join_invalid');
 
   const common = {
     arm: LIVE_ARM,
@@ -414,6 +485,98 @@ async function loadFreshBundle(directory) {
   return bundle;
 }
 
+export async function runFreshCaptureEvaluatorPath({
+  input,
+  baseUrl,
+  token,
+  client,
+  candidateSha,
+  serviceRevision,
+  startedAt,
+  outputRoot,
+  getJson = (path, name) => getAcceptedJson(baseUrl, token, path, name),
+  assertDb = assertExistingWorkRun,
+  capture = captureProductRun,
+  loadBundle = loadFreshBundle,
+  evaluate = evaluateFreshBundle,
+}) {
+  await assertDb(client, input);
+  const workEnvelope = await getJson(
+    `/api/v1/works/${input.workId}`,
+    'live_work',
+  );
+  const workRunEnvelope = await getJson(
+    `/api/v1/works/${input.workId}/runs/${input.workRunId}`,
+    'live_work_run',
+  );
+  const traceEnvelope = await getJson(
+    `/api/v1/works/${input.workId}/runs/${input.workRunId}/trace`,
+    'live_trace',
+  );
+  const parsedWork = ProductWorkResponseSchema.safeParse(workEnvelope);
+  if (!parsedWork.success)
+    throw new MissingInput(
+      `live_work_schema_invalid:${schemaIssues(parsedWork).join('|')}`,
+    );
+  const parsedWorkRun = ProductWorkRunResponseSchema.safeParse(workRunEnvelope);
+  if (
+    !parsedWorkRun.success ||
+    parsedWorkRun.data.projection_status !== 'internally_anchored'
+  )
+    throw new MissingInput(
+      `live_work_run_schema_invalid:${schemaIssues(parsedWorkRun).join('|')}`,
+    );
+  const parsedTrace = ProductRunTraceResponseSchema.safeParse(traceEnvelope);
+  if (
+    !parsedTrace.success ||
+    parsedTrace.data.projection_status !== 'internally_anchored'
+  )
+    throw new MissingInput(
+      `live_trace_schema_invalid:${schemaIssues(parsedTrace).join('|')}`,
+    );
+  const captureResult = await capture({
+    baseUrl: String(baseUrl),
+    token,
+    rootTaskId: input.rootTaskId,
+    workId: input.workId,
+    workRunId: input.workRunId,
+    work: parsedWork.data.work,
+    workRun: parsedWorkRun.data.work_run,
+    workRunResponse: parsedWorkRun.data,
+    trace: parsedTrace.data,
+    tenantId: input.C4_LIVE_TENANT_ID,
+    workspaceId: input.C4_LIVE_WORKSPACE_ID,
+    principalType: input.principalType,
+    principalId: input.C4_LIVE_PRINCIPAL_ID,
+    scenario: SCENARIO,
+    memberComposition: [
+      'projection-lead',
+      'projection-worker',
+      'projection-reviewer',
+    ],
+    submitInstructionProfile: SUBMIT_INSTRUCTION_PROFILE,
+    providerKind: input.C4_LIVE_PROVIDER_KIND,
+    providerModel: process.env.C4_LIVE_PROVIDER_MODEL ?? 'remote-service',
+    definitionHash: input.C4_LIVE_DEFINITION_HASH,
+    gitSha: candidateSha,
+    serviceRevision,
+    client,
+    databaseUrl: input.C4_LIVE_DATABASE_URL,
+    outputRoot,
+  });
+  const endedAt = Date.now();
+  const fresh = await loadBundle(captureResult.directory);
+  const verdict = evaluate(
+    fresh,
+    candidateSha,
+    serviceRevision,
+    startedAt,
+    endedAt,
+    input,
+  );
+  return { captureResult, verdict, endedAt };
+}
+
 function liveInput() {
   // Deliberately reject legacy/static trust inputs.  They are not evidence for
   // this arm and no caller-controlled candidate SHA is accepted.
@@ -437,6 +600,9 @@ function liveInput() {
     rootTaskId: uuid(values.C4_LIVE_ROOT_TASK_ID, 'live_root_task_id'),
     workId: uuid(values.C4_LIVE_WORK_ID, 'live_work_id'),
     workRunId: uuid(values.C4_LIVE_WORK_RUN_ID, 'live_work_run_id'),
+    tenantId: values.C4_LIVE_TENANT_ID,
+    workspaceId: values.C4_LIVE_WORKSPACE_ID,
+    principalId: values.C4_LIVE_PRINCIPAL_ID,
     principalType:
       process.env.C4_LIVE_PRINCIPAL_TYPE?.trim() || 'service_account',
   };
@@ -485,72 +651,30 @@ async function run() {
     try {
       await client.connect();
       connected = true;
-      await assertExistingWorkRun(client, input);
-      const work = await getAcceptedJson(
+      const serviceRevision = await readServiceRevision(
         baseUrl,
         input.C4_LIVE_TOKEN,
-        `/api/v1/works/${input.workId}`,
-        'live_work',
-      );
-      const workRun = await getAcceptedJson(
-        baseUrl,
-        input.C4_LIVE_TOKEN,
-        `/api/v1/works/${input.workId}/runs/${input.workRunId}`,
-        'live_work_run',
-      );
-      const trace = await getAcceptedJson(
-        baseUrl,
-        input.C4_LIVE_TOKEN,
-        `/api/v1/works/${input.workId}/runs/${input.workRunId}/trace`,
-        'live_trace',
       );
       const outputRoot = resolve(
         input.C4_LIVE_OUTPUT_ROOT,
         LIVE_ARM,
         `${new Date(startedAt).toISOString().replace(/[-:.]/gu, '')}-${process.pid}-${randomUUID()}`,
       );
-      const capture = await captureProductRun({
-        baseUrl: input.C4_LIVE_BASE_URL,
+      const result = await runFreshCaptureEvaluatorPath({
+        input,
+        baseUrl,
         token: input.C4_LIVE_TOKEN,
-        rootTaskId: input.rootTaskId,
-        workId: input.workId,
-        workRunId: input.workRunId,
-        work,
-        workRun: workRun,
-        trace,
-        tenantId: input.C4_LIVE_TENANT_ID,
-        workspaceId: input.C4_LIVE_WORKSPACE_ID,
-        principalType: input.principalType,
-        principalId: input.C4_LIVE_PRINCIPAL_ID,
-        scenario: SCENARIO,
-        memberComposition: [
-          'projection-lead',
-          'projection-worker',
-          'projection-reviewer',
-        ],
-        submitInstructionProfile: SUBMIT_INSTRUCTION_PROFILE,
-        providerKind: input.C4_LIVE_PROVIDER_KIND,
-        providerModel: process.env.C4_LIVE_PROVIDER_MODEL ?? 'remote-service',
-        definitionHash: input.C4_LIVE_DEFINITION_HASH,
-        gitSha: candidateSha,
-        serviceRevision: candidateSha,
         client,
-        databaseUrl: input.C4_LIVE_DATABASE_URL,
+        candidateSha,
+        serviceRevision,
+        startedAt,
         outputRoot,
       });
-      const endedAt = Date.now();
-      const fresh = await loadFreshBundle(capture.directory);
-      verdict = evaluateFreshBundle(
-        fresh,
-        candidateSha,
-        startedAt,
-        endedAt,
-        input,
-      );
-      verdict.artifact_directory = capture.directory;
+      verdict = result.verdict;
+      verdict.artifact_directory = result.captureResult.directory;
       verdict.runner_started_at = new Date(startedAt).toISOString();
-      verdict.runner_ended_at = new Date(endedAt).toISOString();
-      verdict.capture_validation = capture.validation;
+      verdict.runner_ended_at = new Date(result.endedAt).toISOString();
+      verdict.capture_validation = result.captureResult.validation;
     } finally {
       if (connected) await client.end();
     }

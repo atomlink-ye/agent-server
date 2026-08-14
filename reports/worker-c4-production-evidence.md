@@ -98,3 +98,18 @@ Expected future artifact paths, created only after real execution:
 - `575a7b56436e26df46bace09d1eebef6b73d8825`: clean DOM red-arm baseline fix — 2 files changed, 48 insertions(+), 10 deletions(-).
 - `faabd3eb04de17dcbfcedb8a6b3a66a59d2d9705`: final review fix — 2 files changed, 90 insertions(+), 30 deletions(-); latest C4 code integration before this report correction.
 - This report-correction commit is intentionally omitted to avoid self-reference; the repo/round mirror is updated together.
+
+## Shared observer and cleanup hardening
+
+The C4 follow-up adds `scripts/e2e/support/page-observer.mjs`, which records
+request/response/requestfinished/requestfailed lifecycle, exact method/path/
+query allowlist decisions, response body parse outcomes, duplicate counts,
+in-flight generations, bounded quiet-point sealing, and post-seal activity.
+`owned-process-cleanup.mjs` records collector-unavailable, awaited TERM exit,
+and TERM-ignoring residual outcomes fail-closed. E10 now uses the shared
+observer and both E10/E11 use the owned cleanup function.
+
+The C-box Node duals ran exit 0 with 10/10 tests, no skips/todos. The fixed E8
+browser command ran in a restored isolated target with exit 0, one file and two
+tests passed. These are harness evidence only; current C4 replay fixture/schema
+gates remain `MISSING_EVIDENCE` and no runtime E10/E11 PASS is claimed.

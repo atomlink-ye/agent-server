@@ -307,8 +307,12 @@ export async function runNetwork(): Promise<number> {
       origin,
       allowlist: [{
         method: 'GET',
-        path: (path: string) => currentProductPath.test(path) || chatDetailPaths.has(path),
-        query: '',
+        path: (path: string) =>
+          currentProductPath.test(path) ||
+          [...chatDetailPaths].some((value) => new URL(value, origin).pathname === path),
+        query: (query: string) =>
+          query === '' ||
+          [...chatDetailPaths].some((value) => new URL(value, origin).search === query),
       }],
       parseBody: async (record: { readonly path: string }, body: unknown) => {
         const parsed = parseAcceptedProductResponse(record.path, body);

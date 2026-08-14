@@ -26,7 +26,8 @@ function matchesRule(record, rule) {
   if (typeof rule.path === 'function' && !rule.path(record.path)) return false;
   if (rule.path instanceof RegExp && !rule.path.test(record.path)) return false;
   if (typeof rule.path === 'string' && rule.path !== record.path) return false;
-  if (rule.query !== undefined && rule.query !== record.query) return false;
+  if (typeof rule.query === 'function' && !rule.query(record.query)) return false;
+  if (typeof rule.query === 'string' && rule.query !== record.query) return false;
   return true;
 }
 

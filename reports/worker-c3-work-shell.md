@@ -248,3 +248,38 @@ because preserved raw ANSI captures in the earlier
 findings. The `e8-reachability-1dbdc99/` evidence does not trigger the check.
 Scoped source/tests/runner/report checks are exit 0. Raw evidence is retained
 and no full-range PASS is claimed.
+
+## C3/E8 bounded request observation and C4 harness follow-up
+
+E8 implementation commits are `c9eb90f`, `e4a61c4`, and `aae8479`. The
+populated browser assertion now wraps the production `fetch` path in a
+C-owned ledger that records generation, method, full URL/path/query, start and
+settle lifecycle, in-flight counts, rejection, seal state, and post-seal
+activity. It waits for all known work to settle, two quiet event-loop turns,
+and a bounded post-seal guard. Pending, collector errors, timeout, and late
+activity are incomplete evidence, not absence. The populated response is a
+poisoned closed shape derived from the C1 projection: only `id` and `title`
+can be read; status/runs/latest/attempt/order/time/product-state reads throw.
+
+The C4 implementation commits are `82edbe9` and `6560a85`. The shared
+`scripts/e2e/support/page-observer.mjs` owns request, response,
+requestfinished, and requestfailed lifecycle records, exact method/path/query
+allowlist matching, body acquisition/parse outcomes, sealed response counts,
+post-seal activity, and fail-closed verdicts. The owned-process cleanup helper
+records unavailable collector, awaited SIGTERM exit, and TERM-ignoring residual
+states; it never claims no residual when collection is unavailable.
+
+C-box Node evidence is under
+`artifacts/c3-work-shell/e8-c4-harness-6560a85/node/`: exit 0, 10/10 tests,
+0 skip, 0 todo. The authorized fixed browser command was run in a restored
+isolated target on C box and is under
+`artifacts/c3-work-shell/e8-c4-harness-6560a85/browser/`: exit 0, one file,
+two tests passed. Remote committed-only sync was blocked by the pre-existing
+remote dirty state; the remote candidate remained `02328517a0fe887464d0661d772a49ad9d88451b`
+and was restored after the isolated browser run.
+
+The complete claim matrix, including explicit incomplete arms and the
+three-value verdict vocabulary, is
+`reports/worker-c3-absence-observation-matrix.md`. Existing C4 recorder/schema
+prerequisites still prevent a runtime E10/E11 acceptance claim; those rows are
+`MISSING_EVIDENCE`, not silent absence.

@@ -1,0 +1,1 @@
+{"command":["sh","-lc","B=/root/workspace/.c3-harness-6560a85; printf \"remote_exit=\"; cat \"$B/node.exit\"; printf \"\\nremote_stdout:\\n\"; cat \"$B/node.stdout\"; printf \"\\nremote_stderr:\\n\"; cat \"$B/node.stderr\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-14T00:46:10.985Z"}

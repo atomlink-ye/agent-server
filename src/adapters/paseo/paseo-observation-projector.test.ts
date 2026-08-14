@@ -10,7 +10,11 @@ function createHarness() {
     agentId: 'agent-1',
     provider: 'opencode',
     executionCwd: '/tmp/runtime-cell',
-    sink: { emit: (observation) => observations.push(observation) },
+    sink: {
+      emit: (observation) => {
+        observations.push(observation);
+      },
+    },
   });
   return { projector, observations };
 }

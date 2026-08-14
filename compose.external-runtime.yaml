@@ -39,6 +39,7 @@ services:
       PASEO_RUNTIME_ROOT: /runtime-state
       PASEO_PORT: '16767'
       PASEO_LISTEN_HOST: 0.0.0.0
+      PASEO_HOSTNAMES: ${PASEO_HOSTNAMES:-paseo-runtime}
       PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
       PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
       PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}

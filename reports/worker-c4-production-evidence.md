@@ -123,7 +123,7 @@ Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 Command (current rework bundle, candidate bound to the checked-out HEAD):
 
 ```sh
-C4_CANDIDATE_SHA="$(git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend rev-parse HEAD)" C4_BLOCKER_BUNDLE_DIR=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1 pnpm exec tsx scripts/ci/check-product-feedback-projection-blocker.ts
+(cd /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend && C4_CANDIDATE_SHA="$(git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend rev-parse HEAD)" C4_BLOCKER_BUNDLE_DIR=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1 pnpm exec tsx /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend/scripts/ci/check-product-feedback-projection-blocker.ts)
 ```
 
 Observed exit `1` and JSON status `BLOCKER_STILL_PRESENT`; the JSON recorded

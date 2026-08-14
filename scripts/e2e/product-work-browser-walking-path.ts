@@ -40,6 +40,11 @@ function sameStrings(actual: readonly string[], expected: readonly string[]): bo
   return JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
 }
 
+function mismatch(name: string, observed?: unknown): number {
+  process.stderr.write(`${JSON.stringify({ machine, status: 'FAIL', first_mismatch: name, observed })}\n`);
+  return FAIL;
+}
+
 async function run(): Promise<number> {
   let replay: { readonly child: ChildProcess; readonly url: string; readonly output: { readonly stdout: string[]; readonly stderr: string[] } } | undefined;
   let app: { readonly child: ChildProcess; readonly output: { readonly stdout: string[]; readonly stderr: string[] } } | undefined;
@@ -71,9 +76,10 @@ async function run(): Promise<number> {
       name: recording.work.title,
       exact: true,
     });
-    if ((await workLink.count()) !== 1) return FAIL;
+    if ((await workLink.count()) !== 1)
+      return mismatch('work_link_count', await workLink.count());
     if ((await workLink.getAttribute('href')) !== `/works/${recording.work.id}`)
-      return FAIL;
+      return mismatch('work_link_href', await workLink.getAttribute('href'));
     await Promise.all([
       page.waitForURL(/\/works\/[^/]+$/u, { timeout }),
       workLink.click(),
@@ -93,35 +99,45 @@ async function run(): Promise<number> {
           !outcomeText.includes('not captured')
         : !outcomeText.includes(expectedOutcome)
     )
-      return FAIL;
+      return mismatch('work_outcome', outcomeText);
 
     const visibleActors = await page.locator('.run-trace__lane-name').allTextContents();
     const expectedActors = recording.trace.actors.map(
       (actor) => actor.name ?? 'Name not captured',
     );
-    if (!sameStrings(visibleActors, expectedActors)) return FAIL;
+    if (!sameStrings(visibleActors, expectedActors))
+      return mismatch('actors', { visibleActors, expectedActors });
 
     const visibleItems = await page.locator('.run-trace__item-name').allTextContents();
     const expectedItems = recording.trace.work_items.map((item) => item.subject);
-    if (!sameStrings(visibleItems, expectedItems)) return FAIL;
+    if (!sameStrings(visibleItems, expectedItems))
+      return mismatch('work_items', { visibleItems, expectedItems });
 
     const expectedAttemptCount = recording.trace.work_items.reduce(
       (count, item) => count + item.attempts.length,
       0,
     );
     const attemptCount = await page.locator('[data-testid="trace-attempt"]').count();
-    if (attemptCount !== expectedAttemptCount) return FAIL;
+    if (attemptCount !== expectedAttemptCount)
+      return mismatch('attempt_count', { attemptCount, expectedAttemptCount });
 
     const feedbackEdges = recording.trace.edges.filter(
       (edge) => edge.kind === 'feedback',
     );
     const markers = page.locator('[aria-label="Recorded feedback relation"]');
-    if ((await markers.count()) !== feedbackEdges.length) return FAIL;
+    if ((await markers.count()) !== feedbackEdges.length)
+      return mismatch('feedback_marker_count', {
+        markerCount: await markers.count(),
+        feedbackEdgeCount: feedbackEdges.length,
+      });
     for (let index = 0; index < feedbackEdges.length; index += 1) {
       const edge = feedbackEdges[index];
       if (edge?.attempt_id === null) return MISSING;
       if ((await markers.nth(index).getAttribute('data-attempt-id')) !== edge?.attempt_id)
-        return FAIL;
+        return mismatch('feedback_source_attempt', {
+          marker: await markers.nth(index).getAttribute('data-attempt-id'),
+          edge: edge?.attempt_id,
+        });
     }
 
     const coverage =
@@ -132,7 +148,7 @@ async function run(): Promise<number> {
       (!coverage.includes(`${feedbackEdges.length} recorded feedback edge`) ||
         !coverage.includes('relation geometry is unavailable'))
     )
-      return FAIL;
+      return mismatch('feedback_disclosure', coverage);
 
     await mkdir(output, { recursive: true });
     const screenshot = resolve(output, `${selected}.png`);

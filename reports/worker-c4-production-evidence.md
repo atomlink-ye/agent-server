@@ -48,7 +48,7 @@ Partial red arms use `C4_E11_PARTIAL_RED_ARM=edge|attempt|count|status|marker`. 
 
 ## E10 and runtime boundary
 
-E10 network semantics and the shared observer/cleanup behavior are unchanged. The fixture loader now gives E10 the accepted current-schema gate and exact copied bytes. No local browser, app, sandbox, provider, build, install, or full test run was performed. Runtime E10/E11 evidence remains `MISSING/NOT_RUN` in this worker lane.
+E10 network semantics and the shared observer/cleanup behavior are unchanged. The fixture loader now gives E10 the accepted current-schema gate and exact copied bytes. No local browser, app, sandbox, provider, build, or full test run was performed. The static `tsc --noEmit` check passed; `pnpm exec` provisioned the lockfile's existing dependencies in this otherwise empty worktree, without changing package or lock files. Runtime E10/E11 evidence remains `MISSING/NOT_RUN` in this worker lane.
 
 ## Commits
 
@@ -63,4 +63,4 @@ Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 - `cmp`: passed for all six copied recorder documents.
 - Provenance JSON parse: passed.
 - Static scans: accepted-schema gate, provenance hash checks, immutable machine names, blocked full status, independent partial evidence root, five red arms, and partial excluded-field declaration present.
-- Runtime/browser/build/install/provider/sandbox execution: skipped by dispatch constraints; no runtime PASS is claimed.
+- Runtime/browser/build/provider/sandbox/full-test execution: skipped by dispatch constraints; the dependency provisioning above was not acceptance evidence and no runtime PASS is claimed.

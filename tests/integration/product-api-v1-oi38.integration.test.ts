@@ -646,14 +646,17 @@ function runtimeRegistryMemoryRepository(): MemoryApiRepository {
     updatedAt: now,
   };
   return {
-    async getStore(id, principal) {
+    async getStore(
+      id: string,
+      principal: { readonly tenantId: string; readonly principalId: string },
+    ) {
       return id === store.id &&
         principal.tenantId === store.owner.tenantId &&
         principal.principalId === store.owner.principalId
         ? store
         : null;
     },
-    async listMemories(id) {
+    async listMemories(id: string) {
       return id === store.id ? [memory] : null;
     },
   } as unknown as MemoryApiRepository;

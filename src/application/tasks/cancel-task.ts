@@ -5,7 +5,7 @@ import type { TaskRepository } from '../ports/task-repository.js';
 import { transitionTask } from '../../domain/tasks/task.js';
 
 export interface ActiveExecutionCanceller {
-  cancel(runId: string): Promise<void>;
+  cancelRun(input: { readonly runId: string }): Promise<void>;
 }
 
 export class CancelTask {
@@ -29,7 +29,7 @@ export class CancelTask {
     if (!cancellation) return null;
     const { runId, outcome } = cancellation;
     if (outcome === 'running_requested') {
-      await this.executions.cancel(runId);
+      await this.executions.cancelRun({ runId });
       return {
         taskId,
         runId,

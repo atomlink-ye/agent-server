@@ -7,7 +7,6 @@ export const BROWSER_ZERO_MARKER = 'c3_e8_browser_zero_execution';
 function stripAnsi(value) {
   return value.replaceAll(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '');
 }
-
 export function parseVitestSummary(raw) {
   const text = stripAnsi(String(raw));
   const files = text.match(/Test Files\s+(\d+)\s+passed(?:\s*\([^)]*\))?\s*\((\d+)\s*\)/u);
@@ -91,4 +90,3 @@ if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pat
     process.exitCode = 2;
   });
 }
-

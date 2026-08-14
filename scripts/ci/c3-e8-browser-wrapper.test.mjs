@@ -23,4 +23,3 @@ describe('C3/E8 browser summary wrapper', () => {
     }
   });
 });
-

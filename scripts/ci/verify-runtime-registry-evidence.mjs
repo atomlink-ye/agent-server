@@ -113,7 +113,13 @@ const assertions = {
     evidence.zero_rule_audit?.e6_proposition_valid_under_corrected_rule ===
       true &&
     evidence.zero_rule_audit?.e6_business_collection_nonempty_rule === false &&
-    evidence.zero_rule_audit?.fixture_added_for_audit === false,
+    evidence.zero_rule_audit?.fixture_added_for_audit === false &&
+    evidence.zero_rule_audit?.runner_database_input?.includes(
+      'refreshed before each canonical arm',
+    ) === true &&
+    evidence.zero_rule_audit?.runner_pnpm_dependency_check?.includes(
+      'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false',
+    ) === true,
   recorder_ok: evidence.ok === true,
 };
 const ok = Object.values(assertions).every(Boolean);

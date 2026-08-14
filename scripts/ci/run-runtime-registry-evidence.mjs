@@ -75,7 +75,7 @@ arms.push(
     {
       ...process.env,
       DATABASE_URL: 'postgresql://agent:agent@127.0.0.1:1/agent_server',
-      npm_config_verify_deps_before_run: 'false',
+      PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'false',
     },
   ),
 );
@@ -419,6 +419,10 @@ fs.writeFileSync(
         e7_nonempty_expected_source:
           'PLAN-B E7 fixed baseline 888630a8 requires nonempty migrations/dependencies/exports compare sets',
         fixture_added_for_audit: false,
+        runner_database_input:
+          'DATABASE_URL credentials/port from launch input with current Postgres container IP refreshed before each canonical arm',
+        runner_pnpm_dependency_check:
+          'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false prevents mutation arms from invoking install; canonical script itself still runs',
       },
       ok,
     },
@@ -464,7 +468,7 @@ function runWithoutDatabase(name, expectedExit, markers) {
   const env = { ...process.env };
   delete env.DATABASE_URL;
   delete env.POSTGRES_URL;
-  env.npm_config_verify_deps_before_run = 'false';
+  env.PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN = 'false';
   return execute(
     name,
     'pnpm',
@@ -477,8 +481,8 @@ function runWithoutDatabase(name, expectedExit, markers) {
 function runArm(name, executable, argv, expectedExit, markers) {
   return execute(name, executable, argv, expectedExit, markers, {
     ...process.env,
-    DATABASE_URL: databaseUrl,
-    npm_config_verify_deps_before_run: 'false',
+    DATABASE_URL: currentDatabaseUrl(),
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'false',
   });
 }
 function execute(name, executable, argv, expectedExit, markers, env) {
@@ -548,6 +552,22 @@ function command(executable, argv) {
 function status() {
   const value = command('git', ['status', '--short']);
   return value ? value.split('\n') : [];
+}
+function currentDatabaseUrl() {
+  const probe = spawnSync(
+    'docker',
+    [
+      'inspect',
+      '-f',
+      '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
+      'mgr-backend-postgres-1',
+    ],
+    { cwd: repo, encoding: 'utf8' },
+  );
+  if (probe.status !== 0 || !probe.stdout.trim()) return databaseUrl;
+  const refreshed = new URL(databaseUrl);
+  refreshed.hostname = probe.stdout.trim();
+  return refreshed.toString();
 }
 function dependencyState() {
   return Object.fromEntries(

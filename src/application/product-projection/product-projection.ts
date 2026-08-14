@@ -398,11 +398,6 @@ function hasProductFactConflict(
   )
     return true;
   if (product.finalTextPresent !== (product.finalText !== null)) return true;
-  if (
-    product.completionApprovalRequired === false &&
-    product.completionRequestedByRunId !== null
-  )
-    return true;
   return (
     product.completionApprovalRequired === true &&
     product.approvalAccepted &&

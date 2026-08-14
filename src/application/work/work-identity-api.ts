@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
 import type { WorkDefinitionReadPort } from '../ports/work-definition-read.js';

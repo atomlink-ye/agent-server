@@ -38,12 +38,14 @@ web-bootstrap:
 		runner node scripts/dev/web-bootstrap.mjs
 
 web-dev:
+	@./scripts/dev/runtime-only-preflight web-dev
 	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build -d postgres agent-server
 	@until curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; do sleep 1; done
 	$(MAKE) web-bootstrap
 	@set -a; . .local/web-bootstrap.env; set +a; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build web
 
 web-e2e-smoke:
+	@./scripts/dev/runtime-only-preflight web-e2e-smoke
 	@set -eu; \
 	. ./scripts/dev/source-real-provider-defaults; \
 	wait_for_url() { \
@@ -77,6 +79,7 @@ test-web:
 	./scripts/dev/docker-run -- pnpm test:web
 
 mixed-team-journey:
+	@./scripts/dev/runtime-only-preflight mixed-team-journey
 	@test -n "$${OPENCODE_GO_API_KEY:-}" || { echo 'mixed-team-journey requires OPENCODE_GO_API_KEY' >&2; exit 1; }
 	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build -d postgres agent-server
 	@. ./scripts/dev/source-real-provider-defaults; attempts=$$(expr "$$PASEO_DAEMON_STARTUP_TIMEOUT_MS" / 1000 + 60); for attempt in $$(seq 1 "$$attempts"); do \

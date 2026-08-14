@@ -2,8 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ChannelIngress } from '../../domain/channels/channel-event.js';
 import type { ChannelRepository } from '../ports/channel-repository.js';
 import type { LarkCanaryEnabledConfig } from '../../shared/config.js';
-import { ManagedMemory } from '../memory/managed-memory.js';
-import { ReviewMemoryProposal } from '../memory/review-memory-proposal.js';
+import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import { ownerFromLarkCanary } from './resolve-lark-binding.js';
 import type { WorkspaceMemoryEntry } from '../../domain/workspace-memory/memory-proposal.js';
 
@@ -13,11 +12,11 @@ export class ApplyMemoryReviewCommand {
       ChannelRepository,
       'findBinding' | 'saveOutbox' | 'completeIngress' | 'releaseIngress'
     >,
-    private readonly review: Pick<
-      ReviewMemoryProposal,
-      'execute' | 'findForAccess'
+    private readonly review: MemoryReviewApi['review'],
+    private readonly managedMemory: Pick<
+      MemoryReviewApi['managedMemory'],
+      'acceptEntry'
     >,
-    private readonly managedMemory: Pick<ManagedMemory, 'acceptEntry'>,
     private readonly config: LarkCanaryEnabledConfig,
     private readonly idFactory: () => string = randomUUID,
   ) {}

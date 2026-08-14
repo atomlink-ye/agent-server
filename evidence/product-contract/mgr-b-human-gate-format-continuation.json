@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "kind": "product_contract_acceptance_format_continuation",
+  "decision": "ACCEPTED_CONTINUES_WITHOUT_SEMANTIC_CHANGE",
+  "signer": {
+    "role": "Manager B",
+    "agent_id": "7e2f4c22-02a6-4c74-8751-2a7a60d72a2e",
+    "authority": "authority/DECISIONS.md#D21",
+    "signed_at_utc": "2026-08-13T17:25:00Z"
+  },
+  "scope": "Bind the current manifest bytes after the independently reproduced, Owner-authorized pinned-Prettier reflow. This continues the existing accepted Product API decision; it does not rerun, replace, or broaden that Human Gate.",
+  "previous_evidence": {
+    "path": "rounds/2026-08-12-product-api-v1-protect-acceptance/evidence/human-gate-product-contract-accepted.json",
+    "sha256": "08bd91c7d3335eed051323f714435cd5e957558d80054ea5f8b3b87a8a982c1f",
+    "decision": "ACCEPTED",
+    "accepted_revision": 1,
+    "endpoint_count": 8
+  },
+  "manifest": {
+    "path": "src/contracts/product-accepted-subset.v1.json",
+    "accepted_raw_sha256": "9b082f1c016cbf2c66bac18913c5278a179b109de541b8ac90dcd2e3cb0c1738",
+    "current_raw_sha256": "9717970c65f330b31e0a6507a6abb0922dd8baeabdbaa7efc2ef40f8dd63e420",
+    "accepted_canonical_jq_S_c_sha256": "ec942c3f9b87bd57faa8ba5611a5515478be33cdd73295feed01f734ebd42aba",
+    "current_canonical_jq_S_c_sha256": "ec942c3f9b87bd57faa8ba5611a5515478be33cdd73295feed01f734ebd42aba",
+    "canonical_equal": true,
+    "status": "accepted",
+    "api_major": "v1",
+    "accepted_revision": 1,
+    "endpoint_count": 8,
+    "owner_scope": ["tenant_id", "workspace_id"],
+    "semantic_change": false
+  },
+  "canonical_verification": {
+    "method": "Parse JSON and serialize it with recursively sorted object keys and compact output using /usr/bin/jq -S -c .; retain array order.",
+    "jq_path": "/usr/bin/jq",
+    "jq_version": "jq-1.7.1-apple",
+    "accepted_source_command": "git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-backend show 7731af29cd127dd09583da30ef183c8b5015815c:src/contracts/product-accepted-subset.v1.json",
+    "accepted_canonical_command": "/usr/bin/jq -S -c . <accepted-commit-manifest-file>",
+    "current_canonical_command": "/usr/bin/jq -S -c . /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-backend/src/contracts/product-accepted-subset.v1.json",
+    "sha256_command": "/usr/bin/shasum -a 256 <canonical-file>",
+    "accepted_canonical_sha256": "ec942c3f9b87bd57faa8ba5611a5515478be33cdd73295feed01f734ebd42aba",
+    "current_canonical_sha256": "ec942c3f9b87bd57faa8ba5611a5515478be33cdd73295feed01f734ebd42aba",
+    "comparison_command": "/usr/bin/cmp -s <accepted-canonical-file> <current-canonical-file>",
+    "comparison_exit": 0,
+    "verifier": "evidence/verify-mgr-b-human-gate-format-continuation.sh",
+    "verifier_sha256": "aa087d0596eb18bbd81cbfe386d41c5b536866eae6963eeb0af7b4556a08eb05",
+    "last_run": {
+      "cwd": "/Volumes/AgentsWorkspace/orgs/0xdtech",
+      "command": "bash /Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/evidence/verify-mgr-b-human-gate-format-continuation.sh",
+      "raw_exit": 0,
+      "result_marker": "PASS",
+      "start_marker": "FORMAT_CONTINUATION_VERIFY_START",
+      "end_marker": "FORMAT_CONTINUATION_VERIFY_END"
+    }
+  },
+  "mutation_dual": {
+    "target": "accepted canonical JSON accepted_revision numeric value",
+    "mutation": "one byte: 1 -> 2",
+    "command": "/usr/bin/sed 's/\"accepted_revision\":1/\"accepted_revision\":2/' <accepted-canonical-file> > <mutated-canonical-file>",
+    "byte_difference_command": "/usr/bin/cmp -l <accepted-canonical-file> <mutated-canonical-file> | /usr/bin/wc -l",
+    "observed_byte_differences": 1,
+    "comparison_command": "/usr/bin/cmp -s <mutated-canonical-file> <current-canonical-file>",
+    "expected_comparison_exit": 1,
+    "observed_comparison_exit": 1,
+    "expected": "red",
+    "observed": "red"
+  },
+  "format_provenance": {
+    "commit": "bda00cc0db719f14917e8753e5a762ce34008cb0",
+    "subject": "style: mechanically format 32 fixed-baseline inventory files",
+    "commit_tree": "bdae0757937f0923ca655e892fd85eaf0caca4f2",
+    "independently_regenerated_tree": "bdae0757937f0923ca655e892fd85eaf0caca4f2",
+    "tool": "prettier@3.9.6",
+    "current_candidate_sha": "86bb425033978e312dc3583e0d8e20264e4b7cbe",
+    "current_candidate_tree": "63b8d465844dea1a5cfddad58d1abe42d15f1e85",
+    "format_commit_is_candidate_ancestor": true
+  },
+  "lineage_interpretation": {
+    "pre_gate_candidate_sha": "a1d6351c2c8a69a36d52e8b2fb27c654cbe570b7",
+    "source_acceptance_sha": "5866962675a39791d0a8ac8a2b93e0868dd69345",
+    "source_accepted_tree_sha": "3ac6f4812130e6694f209fb64650f0baaee6f1c9",
+    "squash_acceptance_sha": "7731af29cd127dd09583da30ef183c8b5015815c",
+    "squash_accepted_tree_sha": "3ac6f4812130e6694f209fb64650f0baaee6f1c9",
+    "note": "The pre-gate candidate is the parent of the source acceptance commit. The squash acceptance has a mainline integration parent; equal accepted trees, not direct ancestry from the pre-gate candidate, prove the squash lineage."
+  },
+  "invalidation_conditions": [
+    "canonical manifest JSON differs",
+    "method and path endpoint sets differ",
+    "status, API major, accepted revision, owner scope, capability status, or schema hashes change semantically",
+    "the byte change cannot be uniquely attributed to the authorized formatting commit"
+  ],
+  "verdict": "The existing Product API v1 Revision 1 Human Gate remains accepted. Guard may bind the current manifest raw hash through this continuation, but must separately make the checker and createApp route guard executable and prove their behavior."
+}

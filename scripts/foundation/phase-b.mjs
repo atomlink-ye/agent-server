@@ -548,8 +548,11 @@ async function evaluateE2(candidateRoot) {
   if (hasUnsupportedDynamicDispatch(sources))
     return status(2, 'unsupported dynamic workflow dispatch', { suite: 'E2' });
   const workflowJobs = Object.keys(sources.workflow.jobs);
-  if (workflowJobs.length !== 4)
-    return status(2, 'workflow job set is not the four-job add state', {
+  if (
+    workflowJobs.length !== CANDIDATE_ROOTS.length ||
+    CANDIDATE_ROOTS.some((job) => !workflowJobs.includes(job))
+  )
+    return status(2, 'workflow job set is not the two-job cutover state', {
       suite: 'E2',
       workflowJobs,
     });

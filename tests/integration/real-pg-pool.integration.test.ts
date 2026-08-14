@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { AccessContext } from '../../src/application/control-plane/access-context.js';
+import type { AccessContext } from '../../src/platform/access-context.js';
 import type { ChannelOutboxInput } from '../../src/domain/channels/channel-delivery.js';
 import type { ChannelIngressInput } from '../../src/domain/channels/channel-event.js';
 import { GetTask } from '../../src/application/tasks/get-task.js';

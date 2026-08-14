@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FileStore } from '../ports/file-store.js';
-import type { ServiceAccountAccessContext } from '../control-plane/access-context.js';
+import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
 import type { WorkspaceMemoryEntry } from '../../domain/workspace-memory/memory-proposal.js';
 
 export interface ManagedMemoryDatabase {

@@ -1,7 +1,7 @@
 import type { Run } from '../../domain/runs/run.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { ClaimedRun } from '../ports/run-repository.js';
-import type { InvokableRepository } from '../ports/invokable-repository.js';
+import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import { TeamDriver } from '../teams/team-driver.js';
 
 export interface ExecuteTeamTaskInput {
@@ -11,12 +11,12 @@ export interface ExecuteTeamTaskInput {
 
 export class ExecuteTeamTask {
   public constructor(
-    private readonly invokables: InvokableRepository,
+    private readonly definitions: DefinitionReadApi,
     private readonly teamDriver: TeamDriver,
   ) {}
 
   public async execute(input: ExecuteTeamTaskInput): Promise<Run> {
-    const teamVersion = await this.invokables.findPublishedTeamVersionById(
+    const teamVersion = await this.definitions.findPublishedTeamVersionById(
       input.task.invokableVersionId,
       {
         tenantId: input.task.tenantId,

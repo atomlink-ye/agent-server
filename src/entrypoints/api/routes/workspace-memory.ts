@@ -3,16 +3,10 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import {
-  CreateMemoryProposal,
-  SourceTaskNotFoundError,
-} from '../../../application/memory/create-memory-proposal.js';
-import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
-import type { ListMemoryEntries } from '../../../application/memory/list-memory-entries.js';
+import { SourceTaskNotFoundError } from '../../../application/memory/create-memory-proposal.js';
 import {
   MemoryProposalAlreadyReviewedError,
   MemoryProposalNotFoundError,
-  type ReviewMemoryProposal,
 } from '../../../application/memory/review-memory-proposal.js';
 import type { MemoryProposal } from '../../../domain/workspace-memory/memory-proposal.js';
 import type { WorkspaceMemoryEntry } from '../../../domain/workspace-memory/memory-proposal.js';
@@ -33,17 +27,29 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
-import type { ApiEnvironment } from '../http-types.js';
-import type { ManagedMemory } from '../../../application/memory/managed-memory.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
+import type {
+  MemoryReviewApi,
+  MemoryWorkspaceHttpApi,
+} from '../../../application/ports/memory-review-api.js';
 import type { SessionRepository } from '../../../application/ports/session-repository.js';
 
 interface WorkspaceMemoryRouteDependencies {
   readonly config: AppConfig;
-  readonly createMemoryProposal: CreateMemoryProposal;
-  readonly listMemoryProposals: ListMemoryProposals;
-  readonly reviewMemoryProposal: ReviewMemoryProposal;
-  readonly listMemoryEntries: ListMemoryEntries;
-  readonly managedMemory?: ManagedMemory;
+  readonly createMemoryProposal: Pick<
+    import('../../../application/memory/create-memory-proposal.js').CreateMemoryProposal,
+    'execute'
+  >;
+  readonly listMemoryProposals: Pick<
+    import('../../../application/memory/list-memory-proposals.js').ListMemoryProposals,
+    'execute'
+  >;
+  readonly reviewMemoryProposal: MemoryReviewApi['review'];
+  readonly listMemoryEntries: Pick<
+    import('../../../application/memory/list-memory-entries.js').ListMemoryEntries,
+    'execute'
+  >;
+  readonly managedMemory?: MemoryWorkspaceHttpApi['managedMemory'];
   readonly sessions?: SessionRepository;
 }
 

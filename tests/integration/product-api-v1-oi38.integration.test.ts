@@ -1,25 +1,30 @@
 import { randomUUID } from 'node:crypto';
 
 import { serve, type ServerType } from '@hono/node-server';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Hono } from 'hono';
 import { Pool } from 'pg';
 
-import { createProductProjection } from '../../src/application/product-projection/product-projection.js';
-import { QueryWorkProjectionFacts } from '../../src/application/work/query-work-projection-facts.js';
-import { WorkProjectionFactsSource } from '../../src/application/product-projection/work-projection-facts-source.js';
-import { PostgresWorkProjectionFactsQuery } from '../../src/infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
-import { PostgresWorkIdentityRepository } from '../../src/infrastructure/postgres/postgres-work-identity-repository.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
-import { registerProductWorkCommandRoutes } from '../../src/entrypoints/api/routes/product-work-commands.js';
-import { registerProductWorkRoutes } from '../../src/entrypoints/api/routes/product-work.js';
-import { ErrorResponseSchema, HttpError } from '../../src/contracts/http.js';
-import type { ApiEnvironment } from '../../src/entrypoints/api/http-types.js';
+import { ErrorResponseSchema } from '../../src/contracts/http.js';
 import type { AppConfig } from '../../src/shared/config.js';
+import { createApp } from '../../src/entrypoints/api/app.js';
+import { createWorkModule } from '../../src/modules/work/work-module.js';
+import { AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
+import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
+import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createMemoryReadRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
+import { createRuntimeToolRegistry } from '../../src/entrypoints/mcp/runtime-tool-composition.js';
+import type { MemoryApiRepository } from '../../src/application/ports/memory-api-repository.js';
+import {
+  AGENT_SERVER_MEMORY_READ_MCP_NAME,
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+} from '../../src/application/extensions/runtime-tool-grant-service.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const required = process.env.REAL_POSTGRES_REQUIRED === '1';
@@ -31,8 +36,8 @@ if (required && !connectionString)
 const describeRealPostgres = connectionString ? describe : describe.skip;
 
 const tenantId = 'oi38_product_api_tenant';
-const workspaceA = '00000000-0000-4000-8000-00000000a038';
-const workspaceB = '00000000-0000-4000-8000-00000000b038';
+const workspaceA = '00000000-0000-4000-8000-00000000a048';
+const workspaceB = '00000000-0000-4000-8000-00000000b048';
 const workA = '00000000-0000-4000-8000-0000000a0381';
 const workB = '00000000-0000-4000-8000-0000000b0381';
 const runA = '00000000-0000-4000-8000-0000000a0382';
@@ -42,7 +47,13 @@ const environmentDefinitionA = '00000000-0000-4000-8000-0000000a0385';
 const environmentVersionA = '00000000-0000-4000-8000-0000000a0386';
 const tokenA = 'oi38-token-owner-a';
 const tokenB = 'oi38-token-owner-b';
+const memoryStoreId = '00000000-0000-4000-8000-00000000c038';
+const memoryId = '00000000-0000-4000-8000-00000000c039';
 let httpBaseUrl = '';
+let workModule: ReturnType<typeof createWorkModule>;
+let memoryRepository: MemoryApiRepository;
+const generatedWorkIds: string[] = [];
+const generatedTaskIds: string[] = [];
 
 describeRealPostgres(
   'Product API v1 OI-38 cross-scope existence oracle',
@@ -57,22 +68,8 @@ describeRealPostgres(
       });
       await applyDurableKernelMigrations(pool);
       await seedIdentityRows(pool);
+      memoryRepository = runtimeRegistryMemoryRepository();
 
-      const repository = new PostgresWorkIdentityRepository(pool);
-      const projection = createProductProjection({
-        workIdentity: {
-          findWorkById: (id, owner) => repository.findWorkById(id, owner),
-          findWorkRunById: (id, owner) => repository.findWorkRunById(id, owner),
-          findLatestVisibleWorkRun: (workId, owner) =>
-            repository.findLatestVisibleWorkRun(workId, owner),
-        },
-        workFacts: new WorkProjectionFactsSource(
-          new QueryWorkProjectionFacts(
-            new PostgresWorkProjectionFactsQuery(pool),
-          ),
-        ),
-        executionFacts: new PostgresExecutionFactQuery(pool),
-      });
       const serviceAccounts = [
         {
           serviceAccountId: 'oi38-owner-a',
@@ -92,57 +89,44 @@ describeRealPostgres(
         },
       ];
       const config = { serviceAccounts } as unknown as AppConfig;
-      const app = new Hono<ApiEnvironment>();
-      app.use('*', async (context, next) => {
-        const requestId = context.req.header('x-request-id') ?? randomUUID();
-        context.set('requestId', requestId);
-        context.header('x-request-id', requestId);
-        await next();
-      });
-      app.onError((error, context) => {
-        const requestId = context.get('requestId');
-        if (error instanceof HttpError)
-          return context.json(
-            {
-              error: {
-                code: error.code,
-                message: error.message,
-                request_id: requestId,
-              },
-            },
-            error.status,
-          );
-        return context.json(
-          {
-            error: {
-              code: 'internal_error',
-              message: 'The request could not be completed.',
-              request_id: requestId,
-            },
+      const definition = definitionFixture();
+      const version = versionFixture();
+      workModule = createWorkModule({
+        database: pool,
+        definitions: {
+          async findTeamDefinitionById(id) {
+            return id === definition.id ? definition : null;
           },
-          500,
-        );
-      });
-      const workIdentity = {
-        listWorks: (input: any) => repository.listWorks(input.owner, input),
-        listWorkRuns: (input: any) =>
-          repository.listWorkRuns(input.owner, input.workId, input),
-        createWork: async () => {
-          throw new Error('not used');
-        },
-      };
-      registerProductWorkCommandRoutes(app, {
-        config,
-        workIdentity: workIdentity as never,
-        workExists: projection.getWork,
-        workListProjection: projection.getWorkListItem,
-        startWorkRun: {
-          execute: async () => {
-            throw new Error('not used');
+          async findPublishedTeamVersionById(id) {
+            return id === version.id ? version : null;
           },
         },
+        execution: {
+          async admitRoot(request) {
+            const id = randomUUID();
+            await pool.query(
+              `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at)
+               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,'work-e4','work-e4',now(),now())`,
+              [
+                id,
+                request.accessContext.tenantId,
+                request.accessContext.workspaceId,
+                request.accessContext.principalType,
+                request.accessContext.principalId,
+                request.accessContext.policySnapshotVersion,
+                request.invokable.kind,
+                request.invokable.versionId,
+              ],
+            );
+            generatedTaskIds.push(id);
+            return { taskId: id, reused: false };
+          },
+        },
+        executionFacts: new PostgresExecutionFactQuery(pool),
       });
-      registerProductWorkRoutes(app, { config, productProjection: projection });
+      const app = createApp(
+        Object.assign(minimalAppDependencies(config), { workModule }) as never,
+      );
 
       server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
       if (!server.listening)
@@ -158,6 +142,26 @@ describeRealPostgres(
         await new Promise<void>((resolve, reject) =>
           server.close((error) => (error ? reject(error) : resolve())),
         );
+      if (generatedWorkIds.length) {
+        await pool.query(
+          `DELETE FROM work_run_resource_manifest
+           WHERE work_run_id IN (
+             SELECT id FROM work_runs WHERE work_id = ANY($1::uuid[])
+           )`,
+          [generatedWorkIds],
+        );
+        await pool.query(
+          'DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])',
+          [generatedWorkIds],
+        );
+        await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [
+          generatedWorkIds,
+        ]);
+      }
+      if (generatedTaskIds.length)
+        await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
+          generatedTaskIds,
+        ]);
       await pool?.end();
     });
 
@@ -182,6 +186,8 @@ describeRealPostgres(
         '/api/v1/works/' + missingId + '/runs',
         tokenB,
       );
+      if (foreign.status === 403)
+        throw new Error('work_http_foreign_scope_leak:status=403');
       expect(foreign.status).toBe(404);
       expect(missing.status).toBe(404);
       const foreignError = await normalizeErrorJson(foreign);
@@ -214,12 +220,210 @@ describeRealPostgres(
         );
       }
     });
+
+    it('runs the real HTTP create, start, and read path', async () => {
+      const created = await request('/api/v1/works', tokenA, {
+        method: 'POST',
+        body: JSON.stringify({
+          definition_id: definitionA,
+          definition_version_id: versionA,
+          title: 'E4 walking slice',
+        }),
+      });
+      expect(created.status).toBe(201);
+      const workId = ((await created.json()) as any).work.id;
+      generatedWorkIds.push(workId);
+      const started = await request(`/api/v1/works/${workId}/runs`, tokenA, {
+        method: 'POST',
+        body: JSON.stringify({ trigger_kind: 'manual', trigger_ref: 'e4' }),
+      });
+      expect(started.status).toBe(202);
+      const runs = await request(`/api/v1/works/${workId}/runs`, tokenA);
+      expect(runs.status).toBe(200);
+      expect(((await runs.json()) as any).work_runs).toHaveLength(1);
+      const read = await request(`/api/v1/works/${workId}`, tokenA);
+      if (read.status === 404)
+        throw new Error(
+          'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+        );
+      expect(read.status).toBe(200);
+      expect(((await read.json()) as any).work.id).toBe(workId);
+    });
+
+    it('creates through real MCP and reads the same Work through HTTP', async () => {
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([workModule.contributeRuntime]),
+      );
+      const grant = mcp.grants.issue({
+        tenantId,
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'oi38-owner-a',
+        productSessionId: randomUUID(),
+        allowedTools: [AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF],
+      });
+      const url = await mcp.start();
+      const client = new Client({ name: 'work-e5', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(url), {
+            requestInit: {
+              headers: { authorization: `Bearer ${grant.token}` },
+            },
+          }) as never,
+        );
+        const tools = await client.listTools().catch(() => {
+          throw new Error(
+            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+          );
+        });
+        if (!tools.tools.some((tool) => tool.name === 'product_work_create'))
+          throw new Error(
+            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+          );
+        const result = await client.callTool({
+          name: 'product_work_create',
+          arguments: {
+            definition_id: definitionA,
+            definition_version_id: versionA,
+            title: 'E5 MCP walking slice',
+          },
+        });
+        expect(result.isError).not.toBe(true);
+        const content = result.content as { type: string; text?: string }[];
+        const text = content[0]?.type === 'text' ? (content[0].text ?? '') : '';
+        const workId = JSON.parse(text).work.id;
+        generatedWorkIds.push(workId);
+        const read = await request(`/api/v1/works/${workId}`, tokenA);
+        if (read.status === 404)
+          throw new Error(`work_mcp_readback_missing:work_id=${workId}`);
+        expect(read.status).toBe(200);
+        expect(((await read.json()) as any).work.id).toBe(workId);
+      } finally {
+        await client.close().catch(() => undefined);
+        await mcp.stop();
+      }
+    });
+
+    it('calls Work and Memory through the composed runtime tool registry', async () => {
+      const mcp = new RuntimeMcpServer(
+        createRuntimeToolRegistry({
+          work: workModule.contributeRuntime,
+          memory: createMemoryReadRuntimeContributor(memoryRepository),
+          legacy: () => undefined,
+        }),
+      );
+      const grant = mcp.grants.issue({
+        tenantId,
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'oi38-owner-a',
+        productSessionId: randomUUID(),
+        allowedTools: [
+          AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+          AGENT_SERVER_MEMORY_READ_TOOL_REF,
+        ],
+      });
+      const url = await mcp.start();
+      const client = new Client({ name: 'registry-e6', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(url), {
+            requestInit: {
+              headers: { authorization: `Bearer ${grant.token}` },
+            },
+          }) as never,
+        );
+        const tools = await client.listTools();
+        const names = tools.tools.map((tool) => tool.name).sort();
+        const workPresent = names.includes('product_work_create');
+        const memoryPresent = names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME);
+        let workOk = false;
+        let memoryOk = false;
+        if (workPresent) {
+          const work = await client.callTool({
+            name: 'product_work_create',
+            arguments: {
+              definition_id: definitionA,
+              definition_version_id: versionA,
+              title: 'E6 registry Work',
+            },
+          });
+          expect(work.isError).not.toBe(true);
+          const workText = (
+            work.content as { type: string; text?: string }[]
+          )[0]?.text;
+          const workId = JSON.parse(workText ?? '{}').work?.id;
+          expect(workId).toEqual(expect.any(String));
+          generatedWorkIds.push(workId);
+          workOk = true;
+          process.stdout.write(
+            `${JSON.stringify({
+              guard: 'runtime-tools-non-target-control',
+              control_identity: 'product_work_create',
+              work_present: workPresent,
+              product_work_create_ok: workOk,
+              work_call_raw_exit: 0,
+              work_call_observed_count: 1,
+              work_call_skip_count: 0,
+              work_call_todo_count: 0,
+            })}\n`,
+          );
+        }
+        if (memoryPresent) {
+          const memory = await client.callTool({
+            name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+            arguments: {
+              memory_store_id: memoryStoreId,
+              path: 'registry/e6.txt',
+            },
+          });
+          expect(memory.isError).not.toBe(true);
+          expect(memory.structuredContent).toMatchObject({
+            memory_id: memoryId,
+            content: 'runtime-registry-e6',
+          });
+          memoryOk = true;
+          process.stdout.write(
+            `${JSON.stringify({
+              guard: 'runtime-tools-non-target-control',
+              control_identity: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+              memory_read_ok: memoryOk,
+              memory_call_raw_exit: 0,
+              memory_call_observed_count: 1,
+              memory_call_skip_count: 0,
+              memory_call_todo_count: 0,
+            })}\n`,
+          );
+        }
+        if (!workPresent)
+          throw new Error(
+            `RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]:non_target_memory_ok=${memoryOk}`,
+          );
+        if (!memoryPresent)
+          throw new Error(
+            `RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]:non_target_work_ok=${workOk}`,
+          );
+      } finally {
+        await client.close().catch(() => undefined);
+        await mcp.stop();
+      }
+    });
   },
 );
 
-async function request(path: string, token: string): Promise<Response> {
+async function request(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+): Promise<Response> {
   return fetch(`${httpBaseUrl}${path}`, {
-    headers: { authorization: `Bearer ${token}` },
+    ...init,
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      ...init.headers,
+    },
   });
 }
 
@@ -230,8 +434,95 @@ async function normalizeErrorJson(response: Response): Promise<string> {
   });
 }
 
+function minimalAppDependencies(config: AppConfig): Record<string, unknown> {
+  return {
+    config,
+    logger: { log() {} },
+    readiness: {
+      async check() {
+        return [];
+      },
+    },
+    runtime: {},
+    submitRun: {},
+    getRun: {},
+    invokeTask: {},
+    getTask: {},
+    getTaskTree: {},
+    createMemoryProposal: {},
+    listMemoryProposals: {},
+    reviewMemoryProposal: {},
+    listMemoryEntries: {},
+    agentRegistry: {},
+  };
+}
+
+function definitionFixture() {
+  const now = '2026-08-14T00:00:00.000Z';
+  return {
+    id: definitionA,
+    tenantId,
+    workspaceId: workspaceA,
+    principalType: 'service_account',
+    principalId: 'oi38-owner-a',
+    name: 'OI38 Definition',
+    description: 'test',
+    createdAt: now,
+    updatedAt: now,
+  } as const;
+}
+
+function versionFixture() {
+  const now = '2026-08-14T00:00:00.000Z';
+  return {
+    id: versionA,
+    definitionId: definitionA,
+    tenantId,
+    workspaceId: workspaceA,
+    principalType: 'service_account',
+    principalId: 'oi38-owner-a',
+    status: 'published',
+    name: 'OI38 Version',
+    description: 'test',
+    spec: {
+      lead: { name: 'lead', agentVersionId: 'oi38-lead-agent' },
+      roster: [{ name: 'member', agentVersionId: 'oi38-member-agent' }],
+      environmentVersionId: environmentVersionA,
+    },
+    environmentVersionId: environmentVersionA,
+    createdAt: now,
+    updatedAt: now,
+    publishedAt: now,
+  } as const;
+}
+
 async function seedIdentityRows(pool: Pool): Promise<void> {
   const now = new Date().toISOString();
+  const residue = await pool.query<{ root_task_id: string }>(
+    `SELECT root_task_id FROM work_runs
+     WHERE work_id IN (SELECT id FROM works WHERE current_definition_version_id=$1)`,
+    [versionA],
+  );
+  await pool.query(
+    `DELETE FROM work_run_resource_manifest
+     WHERE work_run_id IN (
+       SELECT id FROM work_runs
+       WHERE work_id IN (SELECT id FROM works WHERE current_definition_version_id=$1)
+     )`,
+    [versionA],
+  );
+  await pool.query(
+    `DELETE FROM work_runs
+     WHERE work_id IN (SELECT id FROM works WHERE current_definition_version_id=$1)`,
+    [versionA],
+  );
+  await pool.query('DELETE FROM works WHERE current_definition_version_id=$1', [
+    versionA,
+  ]);
+  if (residue.rows.length)
+    await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
+      residue.rows.map((row) => row.root_task_id),
+    ]);
   await pool.query('DELETE FROM work_runs WHERE id=$1', [runA]);
   await pool.query('DELETE FROM works WHERE id IN ($1,$2)', [workA, workB]);
   await pool.query('DELETE FROM team_versions WHERE id=$1', [versionA]);
@@ -342,4 +633,54 @@ async function seedIdentityRows(pool: Pool): Promise<void> {
       new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     ],
   );
+}
+
+function runtimeRegistryMemoryRepository(): MemoryApiRepository {
+  const now = '2026-08-14T00:00:00.000Z';
+  const store = {
+    id: memoryStoreId,
+    owner: {
+      tenantId,
+      workspaceId: workspaceA,
+      principalType: 'service_account' as const,
+      principalId: 'oi38-owner-a',
+    },
+    name: 'Registry C',
+    description: 'E6 fixed read target',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const memory = {
+    id: memoryId,
+    storeId: memoryStoreId,
+    path: 'registry/e6.txt',
+    current: {
+      id: '00000000-0000-4000-8000-00000000c040',
+      memoryId,
+      version: 1,
+      content: 'runtime-registry-e6',
+      contentSha256: '0'.repeat(64),
+      contentSizeBytes: 19,
+      operation: 'created' as const,
+      previousVersionId: null,
+      createdAt: now,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+  return {
+    async getStore(
+      id: string,
+      principal: { readonly tenantId: string; readonly principalId: string },
+    ) {
+      return id === store.id &&
+        principal.tenantId === store.owner.tenantId &&
+        principal.principalId === store.owner.principalId
+        ? store
+        : null;
+    },
+    async listMemories(id: string) {
+      return id === store.id ? [memory] : null;
+    },
+  } as unknown as MemoryApiRepository;
 }

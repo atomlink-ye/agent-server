@@ -1,10 +1,9 @@
 import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { RunEventRepository } from '../ports/run-events.js';
-import type { ReviewMemoryProposal } from '../memory/review-memory-proposal.js';
-import type { ManagedMemory } from '../memory/managed-memory.js';
+import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
 import type { MemoryProposal } from '../../domain/workspace-memory/memory-proposal.js';
-import type { ServiceAccountAccessContext } from '../control-plane/access-context.js';
+import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
 import {
   evaluateMemoryPolicy,
   MEMORY_POLICY_CATEGORIES,
@@ -20,8 +19,11 @@ export class AcceptMemoryFromBoundDocument {
       RunEventRepository,
       'getProviderBindingForRunInSession'
     >,
-    private readonly review: Pick<ReviewMemoryProposal, 'execute'>,
-    private readonly managedMemory: Pick<ManagedMemory, 'acceptEntry'>,
+    private readonly review: Pick<MemoryReviewApi['review'], 'execute'>,
+    private readonly managedMemory: Pick<
+      MemoryReviewApi['managedMemory'],
+      'acceptEntry'
+    >,
     private readonly profile = 'agent-test',
   ) {
     if (!PROFILE.test(profile)) throw new Error('invalid Lark CLI profile');

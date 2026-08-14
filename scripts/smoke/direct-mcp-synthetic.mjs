@@ -6,6 +6,8 @@ import {
   createDirectMemoryMcpHandler,
   MCP_PATH,
 } from '../../src/entrypoints/mcp/direct-memory-mcp.ts';
+import { createLegacyRuntimeToolsContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.ts';
+import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.ts';
 import { SyntheticMarketAdapter } from '../../src/adapters/demo-market/synthetic-market-adapter.ts';
 import { RuntimeToolGrantService } from '../../src/application/extensions/runtime-tool-grant-service.ts';
 import { AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF } from '../../src/application/agents/built-in-skills.ts';
@@ -31,9 +33,13 @@ const repository = {
 };
 const server = createServer(
   createDirectMemoryMcpHandler({
-    repository,
     grants,
-    market: new SyntheticMarketAdapter(),
+    registry: new RuntimeToolRegistry([
+      createLegacyRuntimeToolsContributor({
+        repository,
+        market: new SyntheticMarketAdapter(),
+      }),
+    ]),
   }),
 );
 

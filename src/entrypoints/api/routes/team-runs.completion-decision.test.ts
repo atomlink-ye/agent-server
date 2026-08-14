@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TeamExecutionError } from '../../../application/ports/team-execution-repository.js';
 import { HttpError } from '../../../contracts/http.js';
 import { TeamRunResponseSchema } from '../../../contracts/teams.js';
-import type { ApiEnvironment } from '../http-types.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
 import { registerTeamRunRoutes } from './team-runs.js';
 
 const config = {

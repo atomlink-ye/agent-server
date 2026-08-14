@@ -74,6 +74,10 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     this.prompts.push(input.prompt);
     if (input.operation === 'create') {
       this.systemPrompts.push(input.systemPrompt);
+      await input.onProviderBinding?.({
+        providerAgentId: 'fake-agent-1',
+        runtimeWorkspaceId: 'fake-runtime-workspace-1',
+      });
     }
     this.activeRunIds.add(input.runId);
     const startedAt = Date.now();

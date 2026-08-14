@@ -14,7 +14,7 @@ export const PRODUCTION_MUTATION_EXPECTATIONS = Object.freeze({
   'unavailable-disclosure': 'Product status is currently unavailable for this Work.',
   'runs-n-plus-one': 'to have a length of 1 but got 3',
   'container-identity': '[data-testid="work-list"]',
-  'late-runs': 'request-ledger-incomplete:post-seal-activity',
+  'late-runs': 'to have a length of 1 but got 2',
   'never-settle': 'c3_e8_observation_missing:reason=request-ledger-incomplete',
 });
 

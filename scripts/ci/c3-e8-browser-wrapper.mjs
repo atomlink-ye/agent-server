@@ -8,7 +8,7 @@ export const OBSERVATION_MISSING_MARKER =
 
 function exactMarkerCount(stdout, stderr, marker) {
   return [stdout, stderr]
-    .flatMap((value) => value.toString('utf8').split(/\r?\n/u))
+    .flatMap((value) => stripAnsi(value.toString('utf8')).split(/\r?\n/u))
     .filter((line) => line === marker).length;
 }
 

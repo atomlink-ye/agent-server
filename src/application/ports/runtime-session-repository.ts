@@ -30,6 +30,7 @@ export interface RuntimeSession {
 }
 
 export interface RuntimeSessionRepository {
+  findById(id: string): Promise<RuntimeSession | null>;
   createOrGetForTeamMember?(input: {
     teamMemberRunId: string;
     taskId: string;

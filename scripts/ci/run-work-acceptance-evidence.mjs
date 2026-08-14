@@ -414,7 +414,6 @@ mutate(
         ['modularization:acceptance:work-http'],
         2,
         [
-          'runs the real HTTP create, start, and read path',
           'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
           'work_acceptance_missing:kind=http-projection',
         ],
@@ -442,10 +441,7 @@ mutate(
         'pnpm',
         ['modularization:acceptance:work-http'],
         1,
-        [
-          'requires owner positive control and makes foreign/missing Work indistinguishable',
-          'work_http_foreign_scope_leak:status=403',
-        ],
+        ['work_http_foreign_scope_leak:status=403'],
       ),
     );
     arms.push(
@@ -472,7 +468,6 @@ mutate(
         ['modularization:acceptance:work-mcp'],
         2,
         [
-          'creates through real MCP and reads the same Work through HTTP',
           'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
           'work_acceptance_missing:kind=mcp-registration',
         ],
@@ -501,10 +496,7 @@ mutate(
         'pnpm',
         ['modularization:acceptance:work-mcp'],
         1,
-        [
-          'creates through real MCP and reads the same Work through HTTP',
-          'work_mcp_readback_missing:work_id=',
-        ],
+        ['work_mcp_readback_missing:work_id='],
       ),
     );
     arms.push(

@@ -7,7 +7,7 @@ import {
   RuntimeTimedOutError,
 } from '../../src/application/ports/agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
-import { FakePaseoClient } from '../fixtures/fake-paseo-client.js';
+import { FakePaseoClientPort } from '../fixtures/fake-paseo-client.js';
 
 const logger = createLogger({
   service: 'adapter-test',
@@ -15,7 +15,7 @@ const logger = createLogger({
   write: () => undefined,
 });
 
-function createAdapter(client: FakePaseoClient) {
+function createAdapter(client: FakePaseoClientPort) {
   return new PaseoRuntimeAdapter(
     {
       wsUrl: 'ws://127.0.0.1:6767/ws',
@@ -32,7 +32,10 @@ function createAdapter(client: FakePaseoClient) {
 
 describe('PaseoRuntimeAdapter', () => {
   it('initializes and reuses one explicit workspace', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
+    client.connectHook = async (call) => {
+      if (call < 3) throw new Error('runtime is still starting');
+    };
     const adapter = createAdapter(client);
 
     await Promise.all([adapter.initialize(), adapter.initialize()]);
@@ -50,8 +53,9 @@ describe('PaseoRuntimeAdapter', () => {
     });
 
     expect(first.text).toBe('PASEO_FAKE_OK');
+    expect(first.runtimeWorkspaceId).toBe('workspace-1');
     expect(second.model).toBe('opencode/deepseek-v4-flash-free');
-    expect(client.connectCalls).toBe(1);
+    expect(client.connectCalls).toBe(3);
     expect(client.openWorkspaceCalls).toBe(1);
     expect(client.titleCalls).toBe(1);
     expect(client.listModelsCalls).toBe(1);
@@ -59,7 +63,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('reconnects a cached workspace when the websocket disconnects', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     const adapter = createAdapter(client);
 
     await adapter.initialize();
@@ -81,7 +85,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('does not let a stale reconnect clear a newer initialization attempt', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     const adapter = createAdapter(client);
     const staleReconnect = deferred<void>();
     const freshInitialization = deferred<void>();
@@ -111,7 +115,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('does not restore readiness when initialization finishes after close', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     const adapter = createAdapter(client);
     const staleConnection = deferred<void>();
     client.connectHook = async (call) => {
@@ -137,7 +141,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('does not let a stale reconnect close a newer completed connection', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     const adapter = createAdapter(client);
     const staleReconnect = deferred<void>();
     client.connectHook = async (call) => {
@@ -162,7 +166,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('fails readiness when no explicitly free model exists', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     client.models = [{ id: 'opencode/paid', label: 'Paid' }];
     const adapter = createAdapter(client);
 
@@ -173,7 +177,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('does not expose raw initialization errors through readiness', async () => {
-    const client = new FakePaseoClient();
+    const client = new FakePaseoClientPort();
     client.listModelsError = new Error(
       'catalog failed at /private/workspace with provider-secret',
     );
@@ -196,7 +200,7 @@ describe('PaseoRuntimeAdapter', () => {
   });
 
   it('maps Paseo timeout and error states to stable runtime errors', async () => {
-    const timeoutClient = new FakePaseoClient();
+    const timeoutClient = new FakePaseoClientPort();
     timeoutClient.finished = {
       status: 'timeout',
       error: null,
@@ -211,7 +215,7 @@ describe('PaseoRuntimeAdapter', () => {
       }),
     ).rejects.toThrow(RuntimeTimedOutError);
 
-    const errorClient = new FakePaseoClient();
+    const errorClient = new FakePaseoClientPort();
     errorClient.finished = {
       status: 'error',
       error: 'provider failed',

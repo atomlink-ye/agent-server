@@ -6,7 +6,7 @@ import type {
 import type { PaseoModelDescriptor } from '../../src/adapters/paseo/model-selector.js';
 import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
-export class FakePaseoClient implements PaseoClientPort {
+export class FakePaseoClientPort implements PaseoClientPort {
   public connectCalls = 0;
   public openWorkspaceCalls = 0;
   public titleCalls = 0;

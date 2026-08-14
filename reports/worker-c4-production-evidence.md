@@ -15,6 +15,28 @@ The direct positive browser runs both returned exit `0`:
 - `parallel-success`: `artifacts/c4-walking-direct/parallel-success/parallel-success.png` and `parallel-success.json`.
 - `rework-once`: `artifacts/c4-walking-direct/rework-once/rework-once.png` and `rework-once.json`.
 
+## Phase D direct browser demonstration
+
+The real Next + Chromium demonstration on Cube sandbox `8174cc0c35a44a568688d8492fe15745`, using the frozen current-schema-valid `rework-once` recording, completed with exit `0`. This was a positive browser demonstration, not a checker or a replacement E12/E13 instrument.
+
+| Phase D surface | Result | Direct observation |
+|---|---|---|
+| Timeline → Inspector selection | **PASS** | Clicking the third visible Attempt set `aria-pressed=true`; Inspector changed to the selected Work Item, actor, Attempt number, timing facts, and capture facts. After switching to Events and returning to Timeline, the same Attempt remained selected and Inspector content remained identical. |
+| Semantic Events table | **PASS** | Events displayed `50` body rows, exactly matching the `50` accepted `mcp_activities`, across `7` semantic columns: Sequence, Actor, Work Item, Kind, Category, MCP activity status, and Result capture. |
+| MCP-only coverage disclosure | **PASS** | The disclosure remained visible in Timeline and Events and stated MCP-only coverage, that other execution sources are not represented, that one recorded feedback edge is present, and that relation geometry is unavailable. |
+| Events → Inspector / Attempt synchronization | **BLOCKED** | Events currently has no Inspector or event-row selection. All `50` accepted activities lack `source_refs.attempt_id`; some have `work_item_id`, but the rework Work Item has multiple Attempts. The frontend cannot infer an activity-to-Attempt relation without inventing product data. This requires an accepted Product projection relation before an honest UI mapping is possible. |
+
+Raw screenshots:
+
+- `/root/workspace/mgr-frontend/artifacts/phase-d-direct-ui-3d8d503/timeline-inspector-selection.png`
+- `/root/workspace/mgr-frontend/artifacts/phase-d-direct-ui-3d8d503/semantic-events-table.png`
+
+The third representative `one failed/capture-gap run` recorder remains **MISSING**. The current-schema-valid OI-38 recording is a successful cross-tenant 404 negative-control capture, not a failed/capture-gap UI scenario. `lead-never-accept` reached `failed/done` but never invoked capture and produced no compliant recorder. Neither may be used as a substitute, and no fixture is synthesized here.
+
+Question ①, final outcome, remains blocked on B-owned Product fact capture: the accepted response still says `product_state=not_captured`, `result_summary=null`, and `result_capture_status=not_captured`. After B carries the durable outcome into Product projection and a new real recording exists, this question must be demonstrated again in the real browser; this report does not anticipate that result.
+
+`3d8d503` remains outside this bounded round and must not take effect or be merged before Phase D exit is reached. E12/E13 work is stopped; their earlier invocation is not used to claim Phase E completion.
+
 Existing decision references retain their exact scope:
 
 - O-H49 was corrected to the fifth branch `NEVER_PROJECTED`; its decisive DB/API evidence concerns durable feedback omitted by Product projection. It is not repurposed here as proof of a durable final-outcome value.

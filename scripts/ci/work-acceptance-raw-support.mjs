@@ -59,7 +59,13 @@ export async function requireCanonicalInputs({ kind, environmentMarker }) {
   return true;
 }
 
-export function runVitestTarget({ kind, zeroExecutionMarker, pattern }) {
+export function runVitestTarget({
+  kind,
+  expectedMinCount,
+  zeroExecutionMarker,
+  underExecutionMarker,
+  pattern,
+}) {
   const temp = fs.mkdtempSync(
     path.join(os.tmpdir(), `work-acceptance-${kind}-`),
   );
@@ -112,12 +118,17 @@ export function runVitestTarget({ kind, zeroExecutionMarker, pattern }) {
         passed: Number(report.numPassedTests ?? 0),
         failed: Number(report.numFailedTests ?? 0),
         pending: Number(report.numPendingTests ?? 0),
-        executed,
+        expected_min_count: expectedMinCount,
+        observed_count: executed,
         failure_messages: failureMessages.length,
       }),
     );
     if (executed === 0) {
       console.error(`WORK_ACCEPTANCE_MISSING[${zeroExecutionMarker}]`);
+      return 1;
+    }
+    if (executed < expectedMinCount) {
+      console.error(`WORK_ACCEPTANCE_MISSING[${underExecutionMarker}]`);
       return 1;
     }
     return result.status === null || result.signal || result.error

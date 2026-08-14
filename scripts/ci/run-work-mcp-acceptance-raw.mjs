@@ -22,7 +22,9 @@ if (
 
 const behaviorExit = runVitestTarget({
   kind: 'mcp-registration',
+  expectedMinCount: 1,
   zeroExecutionMarker: 'work_mcp_zero_execution',
+  underExecutionMarker: 'work_mcp_instrument_underexecution',
   pattern: 'creates through real MCP',
 });
 if (behaviorExit !== 0) process.exit(behaviorExit);

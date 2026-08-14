@@ -14,6 +14,7 @@ const classifications = {
     'work_http_database_unavailable',
     'work_http_environment_unavailable',
     'work_http_zero_execution',
+    'work_http_instrument_underexecution',
   ],
   'mcp-registration': [
     'work_mcp_registration_missing:product_work_create',
@@ -21,6 +22,7 @@ const classifications = {
     'work_mcp_database_unavailable',
     'work_mcp_environment_unavailable',
     'work_mcp_zero_execution',
+    'work_mcp_instrument_underexecution',
   ],
 };
 const exactMarkers = classifications[kind];

@@ -20,7 +20,9 @@ if (
 process.exit(
   runVitestTarget({
     kind: 'http-projection',
+    expectedMinCount: 3,
     zeroExecutionMarker: 'work_http_zero_execution',
+    underExecutionMarker: 'work_http_instrument_underexecution',
     pattern: 'requires owner positive control|fails closed|runs the real HTTP',
   }),
 );

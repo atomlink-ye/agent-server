@@ -31,6 +31,8 @@ const expectedArms = [
   ['canonical-http-zero-execution-mcp-control', 0],
   ['canonical-mcp-zero-execution', 2],
   ['canonical-mcp-zero-execution-http-control', 0],
+  ['canonical-http-partial-execution', 2],
+  ['canonical-http-partial-execution-mcp-control', 0],
   ['canonical-mcp-database-missing', 2],
   ['classifier-success', 0],
   ['classifier-registered-marker-raw-three-fail', 1],

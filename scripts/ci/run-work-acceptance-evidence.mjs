@@ -77,7 +77,8 @@ mutate(
         ['modularization:acceptance:work-http'],
         2,
         [
-          '"executed":0',
+          '"expected_min_count":3',
+          '"observed_count":0',
           'WORK_ACCEPTANCE_MISSING[work_http_zero_execution]',
           'work_acceptance_missing:kind=http-projection:marker=work_http_zero_execution',
         ],
@@ -89,7 +90,11 @@ mutate(
         'pnpm',
         ['modularization:acceptance:work-mcp'],
         0,
-        ['"kind":"mcp-registration"', '"executed":1'],
+        [
+          '"kind":"mcp-registration"',
+          '"expected_min_count":1',
+          '"observed_count":1',
+        ],
       ),
     );
   },
@@ -107,7 +112,8 @@ mutate(
         ['modularization:acceptance:work-mcp'],
         2,
         [
-          '"executed":0',
+          '"expected_min_count":1',
+          '"observed_count":0',
           'WORK_ACCEPTANCE_MISSING[work_mcp_zero_execution]',
           'work_acceptance_missing:kind=mcp-registration:marker=work_mcp_zero_execution',
         ],
@@ -119,7 +125,42 @@ mutate(
         'pnpm',
         ['modularization:acceptance:work-http'],
         0,
-        ['"kind":"http-projection"', '"executed":3'],
+        [
+          '"kind":"http-projection"',
+          '"expected_min_count":3',
+          '"observed_count":3',
+        ],
+      ),
+    );
+  },
+);
+mutate(
+  'canonical-http-partial-execution',
+  'scripts/ci/run-work-http-acceptance-raw.mjs',
+  `'requires owner positive control|fails closed|runs the real HTTP'`,
+  `'requires owner positive control|runs the real HTTP'`,
+  () => {
+    arms.push(
+      runArm(
+        'canonical-http-partial-execution',
+        'pnpm',
+        ['modularization:acceptance:work-http'],
+        2,
+        [
+          '"expected_min_count":3',
+          '"observed_count":2',
+          'WORK_ACCEPTANCE_MISSING[work_http_instrument_underexecution]',
+          'work_acceptance_missing:kind=http-projection:marker=work_http_instrument_underexecution',
+        ],
+      ),
+    );
+    arms.push(
+      runArm(
+        'canonical-http-partial-execution-mcp-control',
+        'pnpm',
+        ['modularization:acceptance:work-mcp'],
+        0,
+        ['"expected_min_count":1', '"observed_count":1'],
       ),
     );
   },
@@ -375,13 +416,15 @@ arms.push(
 arms.push(
   runArm('baseline-http', 'pnpm', ['modularization:acceptance:work-http'], 0, [
     '"kind":"http-projection"',
-    '"executed":3',
+    '"expected_min_count":3',
+    '"observed_count":3',
   ]),
 );
 arms.push(
   runArm('baseline-mcp', 'pnpm', ['modularization:acceptance:work-mcp'], 0, [
     '"kind":"mcp-registration"',
-    '"executed":1',
+    '"expected_min_count":1',
+    '"observed_count":1',
   ]),
 );
 arms.push(

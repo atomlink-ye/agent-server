@@ -11,12 +11,28 @@ import {
   SUBMIT_INSTRUCTION_PROFILE,
 } from './lib/capture-product-run.mjs';
 
-const SCENARIO = 'oi38-negative';
-const MEMBER_COMPOSITION = Object.freeze([
-  'projection-lead',
-  'projection-worker-a',
-  'projection-worker-b',
+const SCENARIOS = new Set([
+  'parallel-success',
+  'rework-once',
+  'oi38-negative',
 ]);
+const MEMBER_COMPOSITIONS = Object.freeze({
+  'parallel-success': [
+    'projection-lead',
+    'projection-worker-a',
+    'projection-worker-b',
+  ],
+  'rework-once': [
+    'projection-lead',
+    'projection-worker',
+    'projection-reviewer',
+  ],
+  'oi38-negative': [
+    'projection-lead',
+    'projection-worker-a',
+    'projection-worker-b',
+  ],
+});
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const WORKSPACE_ROOT = '/workspace';
@@ -33,6 +49,7 @@ function parseArgs(argv) {
     '--work-id',
     '--work-run-id',
     '--capture-git-sha',
+    '--scenario',
   ]);
   const parsed = {};
   for (let index = 0; index < argv.length; index += 2) {
@@ -207,6 +224,8 @@ function providerEvidenceFromTrace(trace) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const scenario = args['--scenario'] ?? 'oi38-negative';
+  if (!SCENARIOS.has(scenario)) fail('invalid_scenario');
   const baseUrl = new URL(
     args['--base-url'] ??
       requiredEnvironment(
@@ -221,12 +240,16 @@ async function main() {
     'AGENT_SERVER_SERVICE_TOKEN',
     'SERVICE_ACCOUNT_TOKEN',
   );
-  const foreignToken = requiredEnvironment(
-    'oi38_foreign_token',
-    'AGENT_SERVER_FOREIGN_TOKEN',
-    'OI38_FOREIGN_TOKEN',
-  );
-  if (ownerToken === foreignToken) fail('oi38_foreign_token_matches_owner');
+  const foreignToken =
+    scenario === 'oi38-negative'
+      ? requiredEnvironment(
+          'oi38_foreign_token',
+          'AGENT_SERVER_FOREIGN_TOKEN',
+          'OI38_FOREIGN_TOKEN',
+        )
+      : undefined;
+  if (foreignToken && ownerToken === foreignToken)
+    fail('oi38_foreign_token_matches_owner');
 
   const rootTaskId = requiredId(
     args['--root-task-id'] ??
@@ -311,24 +334,38 @@ async function main() {
     );
     const { providerKind, providerModel } = providerEvidenceFromTrace(trace);
 
-    // OI-38 requires an owner positive control and indistinguishable foreign
-    // and missing-work negative controls.  These are GET-only probes.
-    const owner = await snapshot(
-      baseUrl,
-      ownerToken,
-      `/api/v1/works/${workId}/runs?limit=100`,
-    );
-    const foreign = await snapshot(
-      baseUrl,
-      foreignToken,
-      `/api/v1/works/${workId}/runs?limit=100`,
-    );
-    const missingWorkId = randomUUID();
-    const missing = await snapshot(
-      baseUrl,
-      foreignToken,
-      `/api/v1/works/${missingWorkId}/runs?limit=100`,
-    );
+    let predicateEvidence = {};
+    if (scenario === 'parallel-success') {
+      predicateEvidence = { parallel_attempts_observed: true };
+    } else if (scenario === 'oi38-negative') {
+      // OI-38 requires an owner positive control and indistinguishable foreign
+      // and missing-work negative controls. These are GET-only probes.
+      const owner = await snapshot(
+        baseUrl,
+        ownerToken,
+        `/api/v1/works/${workId}/runs?limit=100`,
+      );
+      const foreign = await snapshot(
+        baseUrl,
+        foreignToken,
+        `/api/v1/works/${workId}/runs?limit=100`,
+      );
+      const missingWorkId = randomUUID();
+      const missing = await snapshot(
+        baseUrl,
+        foreignToken,
+        `/api/v1/works/${missingWorkId}/runs?limit=100`,
+      );
+      predicateEvidence = {
+        oi38: {
+          owner_work_id: workId,
+          missing_work_id: missingWorkId,
+          owner,
+          foreign,
+          missing,
+        },
+      };
+    }
 
     const capture = await captureProductRun({
       baseUrl,
@@ -344,30 +381,22 @@ async function main() {
       workspaceId,
       principalType,
       principalId,
-      scenario: SCENARIO,
-      memberComposition: MEMBER_COMPOSITION,
+      scenario,
+      memberComposition: MEMBER_COMPOSITIONS[scenario],
       submitInstructionProfile: SUBMIT_INSTRUCTION_PROFILE,
       providerKind,
       providerModel,
       definitionHash,
       gitSha: serviceRevision,
       serviceRevision,
-      predicateEvidence: {
-        oi38: {
-          owner_work_id: workId,
-          missing_work_id: missingWorkId,
-          owner,
-          foreign,
-          missing,
-        },
-      },
+      predicateEvidence,
       client,
       outputRoot,
     });
     process.stdout.write(
       `${JSON.stringify({
         provider: 'real',
-        scenario: SCENARIO,
+        scenario,
         root_task_id: rootTaskId,
         work_id: workId,
         work_run_id: workRunId,

@@ -13,7 +13,10 @@ import type {
 } from '../../application/learning/learning-proposals.js';
 import type { ListMemoryEntries } from '../../application/memory/list-memory-entries.js';
 import type { ListMemoryProposals } from '../../application/memory/list-memory-proposals.js';
-import type { ReviewMemoryProposal } from '../../application/memory/review-memory-proposal.js';
+import type {
+  MemoryReviewApi,
+  MemoryWorkspaceHttpApi,
+} from '../../application/ports/memory-review-api.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
@@ -34,7 +37,6 @@ import type { SessionRepository } from '../../application/ports/session-reposito
 import { SubmitSessionTurn } from '../../application/sessions/submit-session-turn.js';
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
-import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
@@ -52,6 +54,7 @@ import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkModule } from '../../modules/work/work-module.js';
+import type { MemoryModule } from '../../modules/memory/memory-module.js';
 import {
   composePlatform,
   type PlatformContribution,
@@ -72,14 +75,14 @@ export interface AppDependencies {
   readonly invokeTask: InvokeTask;
   readonly getTask: GetTask;
   readonly getTaskTree: GetTaskTree;
-  readonly createMemoryProposal: CreateMemoryProposal;
-  readonly listMemoryProposals: ListMemoryProposals;
-  readonly reviewMemoryProposal: ReviewMemoryProposal;
+  readonly createMemoryProposal?: Pick<CreateMemoryProposal, 'execute'>;
+  readonly listMemoryProposals?: Pick<ListMemoryProposals, 'execute'>;
+  readonly reviewMemoryProposal?: MemoryReviewApi['review'];
   readonly listLearningProposals?: ListLearningProposals;
   readonly getLearningProposal?: GetLearningProposal;
   readonly acceptLearningProposal?: AcceptLearningProposal;
   readonly rejectLearningProposal?: RejectLearningProposal;
-  readonly listMemoryEntries: ListMemoryEntries;
+  readonly listMemoryEntries?: Pick<ListMemoryEntries, 'execute'>;
   readonly agentRegistry: AgentRegistry;
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
@@ -91,10 +94,11 @@ export interface AppDependencies {
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
-  readonly managedMemory?: ManagedMemory;
+  readonly managedMemory?: MemoryWorkspaceHttpApi['managedMemory'];
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
+  readonly memoryModule?: Pick<MemoryModule, 'installHttp'>;
   readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
@@ -143,26 +147,44 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
   dependencies.workModule?.installHttp(app, dependencies.config);
-  registerWorkspaceMemoryRoutes(app, dependencies);
-  if (dependencies.memoryApi) {
-    registerMemoryApiRoutes(app, {
-      config: dependencies.config,
-      ...dependencies.memoryApi,
-    });
+  if (dependencies.memoryModule) {
+    dependencies.memoryModule.installHttp(app, dependencies.config);
+  } else {
+    if (
+      dependencies.createMemoryProposal &&
+      dependencies.listMemoryProposals &&
+      dependencies.reviewMemoryProposal &&
+      dependencies.listMemoryEntries
+    ) {
+      registerWorkspaceMemoryRoutes(app, {
+        ...dependencies,
+        createMemoryProposal: dependencies.createMemoryProposal,
+        listMemoryProposals: dependencies.listMemoryProposals,
+        reviewMemoryProposal: dependencies.reviewMemoryProposal,
+        listMemoryEntries: dependencies.listMemoryEntries,
+      });
+    }
+    if (dependencies.memoryApi) {
+      registerMemoryApiRoutes(app, {
+        config: dependencies.config,
+        ...dependencies.memoryApi,
+      });
+    }
+    if (
+      dependencies.listLearningProposals &&
+      dependencies.getLearningProposal &&
+      dependencies.acceptLearningProposal &&
+      dependencies.rejectLearningProposal
+    ) {
+      registerLearningProposalRoutes(app, {
+        config: dependencies.config,
+        listLearningProposals: dependencies.listLearningProposals,
+        getLearningProposal: dependencies.getLearningProposal,
+        acceptLearningProposal: dependencies.acceptLearningProposal,
+        rejectLearningProposal: dependencies.rejectLearningProposal,
+      });
+    }
   }
-  if (
-    dependencies.listLearningProposals &&
-    dependencies.getLearningProposal &&
-    dependencies.acceptLearningProposal &&
-    dependencies.rejectLearningProposal
-  )
-    registerLearningProposalRoutes(app, {
-      config: dependencies.config,
-      listLearningProposals: dependencies.listLearningProposals,
-      getLearningProposal: dependencies.getLearningProposal,
-      acceptLearningProposal: dependencies.acceptLearningProposal,
-      rejectLearningProposal: dependencies.rejectLearningProposal,
-    });
   registerAgentRoutes(app, dependencies);
   if (dependencies.invokableRepository && dependencies.environmentRegistry)
     registerTeamRoutes(app, {

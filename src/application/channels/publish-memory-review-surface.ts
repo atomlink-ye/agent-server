@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { ChannelRepository } from '../ports/channel-repository.js';
-import type { WorkspaceMemoryRepositoryOwnerScope } from '../ports/workspace-memory-repository.js';
-import type { MemoryProposal } from '../../domain/workspace-memory/memory-proposal.js';
+import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { Run } from '../../domain/runs/run.js';
 import type { Task } from '../../domain/tasks/task.js';
 import { selectMemoryReviewSurface } from './select-memory-review-surface.js';
@@ -16,12 +15,7 @@ const MAX_PAYLOAD_BYTES = 8192;
 
 export class PublishMemoryReviewSurface {
   public constructor(
-    private readonly memory: {
-      listPendingProposalsBySourceRunForOwner: (
-        sourceRunId: string,
-        ownerScope: WorkspaceMemoryRepositoryOwnerScope,
-      ) => Promise<readonly MemoryProposal[]>;
-    },
+    private readonly memory: MemoryReviewApi['workspaceMemory'],
     private readonly channels: {
       findBindingBySessionId: NonNullable<
         ChannelRepository['findBindingBySessionId']

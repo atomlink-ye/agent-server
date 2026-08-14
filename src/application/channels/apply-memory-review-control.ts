@@ -3,8 +3,7 @@ import type { ChannelIngress } from '../../domain/channels/channel-event.js';
 import type { ChannelRepository } from '../ports/channel-repository.js';
 import type { LarkCanaryEnabledConfig } from '../../shared/config.js';
 import type { LarkReviewSurfaceRepository } from '../ports/lark-review-surface-repository.js';
-import type { ReviewMemoryProposal } from '../memory/review-memory-proposal.js';
-import type { ManagedMemory } from '../memory/managed-memory.js';
+import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { WorkspaceMemoryEntry } from '../../domain/workspace-memory/memory-proposal.js';
 import { ownerFromLarkCanary } from './resolve-lark-binding.js';
 import type { MemoryReviewCardRenderer } from '../ports/memory-review-card-renderer.js';
@@ -28,8 +27,11 @@ export class ApplyMemoryReviewControl {
       | 'saveDocument'
       | 'savePreview'
     >,
-    private readonly review: Pick<ReviewMemoryProposal, 'execute'>,
-    private readonly managedMemory: Pick<ManagedMemory, 'acceptEntry'>,
+    private readonly review: Pick<MemoryReviewApi['review'], 'execute'>,
+    private readonly managedMemory: Pick<
+      MemoryReviewApi['managedMemory'],
+      'acceptEntry'
+    >,
     private readonly config: LarkCanaryEnabledConfig,
     private readonly cards: Pick<MemoryReviewCardRenderer, 'renderResolved'>,
     private readonly documents?: MemoryDocumentPort,

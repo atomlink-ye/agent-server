@@ -3,18 +3,6 @@ import { fileURLToPath } from 'node:url';
 
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
 import { ResolveAgentVersion } from './application/agents/resolve-agent-version.js';
-import { CreateMemoryProposal } from './application/memory/create-memory-proposal.js';
-import {
-  AcceptLearningProposal,
-  CreateLearningProposal,
-  GetLearningProposal,
-  ListLearningProposals,
-  RejectLearningProposal,
-} from './application/learning/learning-proposals.js';
-import { ListMemoryEntries } from './application/memory/list-memory-entries.js';
-import { ListMemoryProposals } from './application/memory/list-memory-proposals.js';
-import { ReviewMemoryProposal } from './application/memory/review-memory-proposal.js';
-import { ManagedMemory } from './application/memory/managed-memory.js';
 import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
@@ -38,8 +26,6 @@ import {
 import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
-import { PostgresWorkspaceMemoryRepository } from './infrastructure/postgres/postgres-workspace-memory-repository.js';
-import { PostgresLearningProposalRepository } from './infrastructure/postgres/postgres-learning-proposal-repository.js';
 import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresEnvironmentRegistry } from './infrastructure/postgres/postgres-environment-registry.js';
@@ -47,7 +33,6 @@ import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-r
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
-import { LocalFileStore } from './infrastructure/files/local-file-store.js';
 import { SubmitSessionTurn } from './application/sessions/submit-session-turn.js';
 import { ResolveLarkBinding } from './application/channels/resolve-lark-binding.js';
 import { ProcessChannelIngress } from './application/channels/process-channel-ingress.js';
@@ -57,31 +42,18 @@ import { createLarkWebsocketReceiver } from './adapters/lark/lark-websocket-rece
 import { createLarkDeliveryAdapter } from './adapters/lark/lark-delivery-adapter.js';
 import { larkMemoryReviewCardRenderer } from './adapters/lark/lark-memory-card.js';
 import { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
+import { PostgresLarkReviewSurfaceRepository } from './infrastructure/postgres/postgres-lark-review-surface-repository.js';
+import { DeliverChannelOutbox } from './application/channels/deliver-channel-outbox.js';
+import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { PublishMemoryReviewSurface } from './application/channels/publish-memory-review-surface.js';
 import { SynthesizeMemoryDocument } from './application/channels/synthesize-memory-document.js';
 import { createLarkMemoryDocumentAdapter } from './adapters/lark/lark-memory-document.js';
-import { PostgresLarkReviewSurfaceRepository } from './infrastructure/postgres/postgres-lark-review-surface-repository.js';
 import { createMemoryReviewActionTokenDeriver } from './application/channels/memory-review-action-token.js';
-import { DeliverChannelOutbox } from './application/channels/deliver-channel-outbox.js';
 import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
-import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
-import {
-  CreateMemory,
-  CreateMemoryStore,
-  GetMemory,
-  GetMemoryStore,
-  ListMemories,
-  ListMemoryStores,
-  UpdateMemory,
-} from './application/memory-api/memory-api.js';
-import { PostgresMemoryApiRepository } from './infrastructure/postgres/postgres-memory-api-repository.js';
 import { RuntimeMcpServer } from './infrastructure/extensions/runtime-mcp-server.js';
-import {
-  createLegacyRuntimeToolsContributor,
-  createMemoryReadRuntimeContributor,
-} from './entrypoints/mcp/runtime-tool-contributors.js';
+import { createLegacyRuntimeToolsContributor } from './entrypoints/mcp/runtime-tool-contributors.js';
 import { createRuntimeToolRegistry } from './entrypoints/mcp/runtime-tool-composition.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
@@ -107,6 +79,7 @@ import {
   AGENT_SERVER_MEMORY_API_SKILL_REF,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from './application/agents/built-in-skills.js';
+import { createMemoryModule } from './modules/memory/memory-module.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -306,37 +279,6 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const invokableRepository = new PostgresInvokableRepository(pool);
-  const workspaceMemoryRepository = new PostgresWorkspaceMemoryRepository(pool);
-  const learningProposalRepository = new PostgresLearningProposalRepository(
-    pool,
-  );
-  const createLearningProposal = new CreateLearningProposal(
-    learningProposalRepository,
-  );
-  const listLearningProposals = new ListLearningProposals(
-    learningProposalRepository,
-  );
-  const getLearningProposal = new GetLearningProposal(
-    learningProposalRepository,
-  );
-  const acceptLearningProposal = new AcceptLearningProposal(
-    learningProposalRepository,
-  );
-  const rejectLearningProposal = new RejectLearningProposal(
-    learningProposalRepository,
-  );
-  const memoryApiRepository = new PostgresMemoryApiRepository(pool);
-  const createMemoryStore = new CreateMemoryStore(memoryApiRepository);
-  const listMemoryStores = new ListMemoryStores(memoryApiRepository);
-  const getMemoryStore = new GetMemoryStore(memoryApiRepository);
-  const createMemory = new CreateMemory(memoryApiRepository);
-  const listMemories = new ListMemories(memoryApiRepository);
-  const getMemory = new GetMemory(memoryApiRepository);
-  const updateMemory = new UpdateMemory(memoryApiRepository);
-  const managedMemory = new ManagedMemory(
-    pool,
-    new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
-  );
   const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
@@ -346,24 +288,6 @@ export async function createService(
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
-  const reviewTokenDeriver = config.larkCanary?.enabled
-    ? createMemoryReviewActionTokenDeriver(config.larkCanary.appSecret)
-    : undefined;
-  const memoryDocument = config.larkCanary?.enabled
-    ? createLarkMemoryDocumentAdapter(config.larkCanary)
-    : undefined;
-  const memoryReviewSurface = config.larkCanary?.enabled
-    ? new PublishMemoryReviewSurface(
-        workspaceMemoryRepository,
-        channelRepository,
-        channelRepository,
-        config.larkCanary.connectionKey,
-        reviewSurfaceRepository,
-        reviewTokenDeriver,
-        memoryDocument,
-        config.larkCanary.allowedOpenId,
-      )
-    : undefined;
   const events = new PostgresRunEventRepository(pool);
   const teamPolicyEvaluator = new TeamPolicyEvaluator();
   const teamToolContextResolver = new TeamToolContextResolver(
@@ -406,7 +330,39 @@ export async function createService(
       },
       logger,
     );
+  const memoryModule = createMemoryModule({
+    database: pool,
+    tasks: taskRepository,
+    sessions,
+    config,
+    teamTools: { contextResolver: teamToolContextResolver },
+  });
+  const reviewTokenDeriver = config.larkCanary?.enabled
+    ? createMemoryReviewActionTokenDeriver(config.larkCanary.appSecret)
+    : undefined;
+  const memoryDocument = config.larkCanary?.enabled
+    ? createLarkMemoryDocumentAdapter(config.larkCanary)
+    : undefined;
+  const memoryReviewSurface = config.larkCanary?.enabled
+    ? new PublishMemoryReviewSurface(
+        memoryModule.reviewApi.workspaceMemory,
+        channelRepository,
+        channelRepository,
+        config.larkCanary.connectionKey,
+        reviewSurfaceRepository,
+        reviewTokenDeriver,
+        memoryDocument,
+        config.larkCanary.allowedOpenId,
+      )
+    : undefined;
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
+  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
+    runtime,
+    events,
+    memoryModule.reviewApi.review,
+    memoryModule.reviewApi.managedMemory,
+    process.env.LARK_CLI_PROFILE ?? 'agent-test',
+  );
   const cancelTask = new CancelTask(
     taskRepository,
     runRepository,
@@ -434,14 +390,12 @@ export async function createService(
   const runtimeMcpServer = new RuntimeMcpServer(
     createRuntimeToolRegistry({
       work: workModule.contributeRuntime,
-      memory: createMemoryReadRuntimeContributor(memoryApiRepository),
+      memory: memoryModule.contributeRuntime,
       legacy: createLegacyRuntimeToolsContributor({
-        repository: memoryApiRepository,
         teamTools: {
           contextResolver: teamToolContextResolver,
           commands: teamCommandService,
         },
-        createLearningProposal,
         market: new SyntheticMarketAdapter(),
         logger,
       }),
@@ -454,24 +408,6 @@ export async function createService(
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
-  const createMemoryProposal = new CreateMemoryProposal(
-    workspaceMemoryRepository,
-    taskRepository,
-  );
-  const listMemoryProposals = new ListMemoryProposals(
-    workspaceMemoryRepository,
-  );
-  const reviewMemoryProposal = new ReviewMemoryProposal(
-    workspaceMemoryRepository,
-  );
-  const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
-    runtime,
-    events,
-    reviewMemoryProposal,
-    managedMemory,
-    process.env.LARK_CLI_PROFILE ?? 'agent-test',
-  );
-  const listMemoryEntries = new ListMemoryEntries(workspaceMemoryRepository);
   const terminalWakeReconciler = options.deferTeamWakeReconcile
     ? {
         reconcileForRootTask: async () => 0,
@@ -538,8 +474,8 @@ export async function createService(
     undefined,
     resolveAgentVersion,
     events,
-    new LocalFileStore(`${config.paseo.agentCwd}/memory-store`),
-    createMemoryProposal,
+    memoryModule.fileStore,
+    memoryModule.createMemoryProposal,
     runtimeExtensionBinder,
     runtimeSessions,
     sessions,
@@ -605,15 +541,15 @@ export async function createService(
       processMessages,
       new ApplyMemoryReviewCommand(
         channelRepository,
-        reviewMemoryProposal,
-        managedMemory,
+        memoryModule.reviewApi.review,
+        memoryModule.reviewApi.managedMemory,
         larkConfig,
       ),
       new ApplyMemoryReviewControl(
         channelRepository,
-        reviewSurfaceRepository!,
-        reviewMemoryProposal,
-        managedMemory,
+        reviewSurfaceRepository,
+        memoryModule.reviewApi.review,
+        memoryModule.reviewApi.managedMemory,
         larkConfig,
         larkMemoryReviewCardRenderer,
         memoryDocument,
@@ -670,15 +606,6 @@ export async function createService(
     invokeTask,
     getTask,
     getTaskTree,
-    createMemoryProposal,
-    listMemoryProposals,
-    reviewMemoryProposal,
-    listLearningProposals,
-    getLearningProposal,
-    acceptLearningProposal,
-    rejectLearningProposal,
-    listMemoryEntries,
-    managedMemory,
     agentRegistry,
     invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
@@ -690,16 +617,8 @@ export async function createService(
     submitSessionTurn,
     events,
     cancelTask,
-    memoryApi: {
-      createMemoryStore,
-      listMemoryStores,
-      getMemoryStore,
-      createMemory,
-      listMemories,
-      getMemory,
-      updateMemory,
-    },
     workModule,
+    memoryModule,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

@@ -45,24 +45,37 @@ const proposalInput = z
 export function createMemoryReadRuntimeContributor(
   repository: MemoryApiRepository,
 ): RuntimeToolContributor {
+  return createMemoryRuntimeContributor({ repository });
+}
+
+export function createMemoryRuntimeContributor(input: {
+  readonly repository: MemoryApiRepository;
+  readonly createLearningProposal?: CreateLearningProposal;
+  readonly teamTools?: {
+    contextResolver: TeamToolContextResolver;
+  };
+}): RuntimeToolContributor {
   return ({ server, grant, grants }) => {
-    registerTools(server, grant, repository, {}, grants, 'memory');
+    registerTools(server, grant, input.repository, input, grants, 'memory');
   };
 }
 
 export function createLegacyRuntimeToolsContributor(input: {
-  readonly repository: MemoryApiRepository;
   readonly teamTools?: {
     contextResolver: TeamToolContextResolver;
     commands: TeamCommandService;
   };
-  readonly createLearningProposal?: CreateLearningProposal;
   readonly market?: SyntheticMarketAdapter;
   readonly logger?: Logger;
 }): RuntimeToolContributor {
   return ({ server, grant, grants }) => {
-    registerTools(server, grant, input.repository, input, grants, 'legacy');
-    if (input.teamTools && grant.teamMemberRunId && grant.taskId && grant.runId)
+    registerTools(server, grant, undefined, input, grants, 'legacy');
+    if (
+      input.teamTools?.commands &&
+      grant.teamMemberRunId &&
+      grant.taskId &&
+      grant.runId
+    )
       registerTeamMcpTools(
         server,
         grant.catalogTools,
@@ -83,12 +96,12 @@ export function createLegacyRuntimeToolsContributor(input: {
 function registerTools(
   server: McpServer,
   grant: RuntimeToolGrant,
-  repository: MemoryApiRepository,
+  repository: MemoryApiRepository | undefined,
   input: {
     readonly createLearningProposal?: CreateLearningProposal;
     readonly teamTools?: {
       contextResolver: TeamToolContextResolver;
-      commands: TeamCommandService;
+      commands?: TeamCommandService;
     };
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
@@ -127,9 +140,33 @@ function registerTools(
         annotations: { readOnlyHint: true },
         _meta: { risk: 'read_only' },
       },
-      async (args, currentGrant) => readMemory(args, currentGrant, repository),
+      async (args, currentGrant) => readMemory(args, currentGrant, repository!),
     );
   }
+  if (
+    mode === 'memory' &&
+    grant.catalogTools.includes(
+      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
+    ) &&
+    input.createLearningProposal &&
+    input.teamTools
+  )
+    register(
+      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
+      'learning_proposal_create',
+      {
+        description: 'Create a human-reviewed learning proposal.',
+        inputSchema: proposalInput.shape,
+      },
+      (args, currentGrant) =>
+        createProposal(
+          args,
+          currentGrant,
+          repository!,
+          input.createLearningProposal!,
+          input.teamTools,
+        ),
+    );
   if (mode === 'memory') return new Map();
   const market = input.market ?? new SyntheticMarketAdapter();
   if (
@@ -179,28 +216,6 @@ function registerTools(
           'synthetic_analog_summary',
           () => market.analogSummary(args),
           input.logger,
-        ),
-    );
-  if (
-    grant.catalogTools.includes(
-      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
-    ) &&
-    input.createLearningProposal
-  )
-    register(
-      AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
-      'learning_proposal_create',
-      {
-        description: 'Create a human-reviewed learning proposal.',
-        inputSchema: proposalInput.shape,
-      },
-      (args, currentGrant) =>
-        createProposal(
-          args,
-          currentGrant,
-          repository,
-          input.createLearningProposal!,
-          input.teamTools,
         ),
     );
   return new Map();

@@ -96,10 +96,24 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     return PASEO_PLANE_CAPABILITIES;
   }
 
+  /** Idempotent eager connection hook used by process startup compatibility. */
+  public async initialize(): Promise<void> {
+    try {
+      await this.#connections.initialize();
+    } catch (error) {
+      if (error instanceof ExecutionPlaneUnavailableError) throw error;
+      throw new ExecutionPlaneUnavailableError(
+        error instanceof Error
+          ? `Paseo initialization failed: ${error.name}`
+          : 'Paseo initialization failed.',
+      );
+    }
+  }
+
   public async createSession(
     spec: ExecutionSessionSpec,
   ): Promise<CreatedExecutionSession> {
-    await this.#initialize();
+    await this.initialize();
     const { provider, model } = this.#resolveLaunch(spec);
     const cwd = spec.workspace.cwd;
     await mkdir(cwd, { recursive: true });
@@ -196,7 +210,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     binding: ExecutionSessionBinding,
     spec: ExecutionSessionSpec,
   ): Promise<ExecutionSession> {
-    await this.#initialize();
+    await this.initialize();
     if (binding.plane !== PASEO_EXECUTION_PLANE_ID || !binding.externalSessionId)
       throw new ExecutionBindingUnavailableError(
         'The runtime session is not bound to Paseo.',
@@ -262,19 +276,6 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
 
   public close(): Promise<void> {
     return this.#connections.close();
-  }
-
-  async #initialize(): Promise<void> {
-    try {
-      await this.#connections.initialize();
-    } catch (error) {
-      if (error instanceof ExecutionPlaneUnavailableError) throw error;
-      throw new ExecutionPlaneUnavailableError(
-        error instanceof Error
-          ? `Paseo initialization failed: ${error.name}`
-          : 'Paseo initialization failed.',
-      );
-    }
   }
 
   #resolveLaunch(spec: ExecutionSessionSpec): {

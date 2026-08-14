@@ -139,3 +139,10 @@ fixtures still fail the full trace schema gate, so no E10/E11 production
 scenario is claimed as runtime PASS. The matrix keeps the corresponding
 scenario, response, DOM, marker, activity, cleanup, and schema verdicts at
 `MISSING_EVIDENCE`.
+
+The final symbolic full-range `git diff --check
+01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` is non-zero only because
+preserved raw ANSI captures are intentionally committed byte-for-byte: the
+historical four classifier evidence groups plus the new E8 production raw
+stdout/stderr. Scoped C4 source/test/report checks are exit 0; raw evidence
+was not trimmed and no full-range PASS is claimed.

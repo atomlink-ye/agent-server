@@ -347,3 +347,11 @@ E10 derives a closed method/path/query tuple set from the accepted recording;
 E11 replaces its response/pending Map with the observer's lifecycle, body,
 seal, exact response-count, and fail-closed verdict. No C4 runtime PASS is
 claimed without valid scenario fixtures.
+
+The final symbolic full-range check
+`git diff --check 01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` is
+intentionally non-zero: preserved raw ANSI captures in the historical four
+classifier evidence groups and the new E8 production raw stdout/stderr files
+contain their original trailing whitespace. Raw evidence was not trimmed or
+rewritten. Scoped source, tests, matrix, and report checks remain exit 0; no
+full-range PASS is claimed.

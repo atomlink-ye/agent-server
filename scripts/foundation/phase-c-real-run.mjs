@@ -68,7 +68,19 @@ async function waitFor(path, predicate) {
   const deadline =
     Date.now() + Number(process.env.PHASE_C_RUN_TIMEOUT_MS ?? 900000);
   while (Date.now() < deadline) {
-    const value = await request(path);
+    let value;
+    try {
+      value = await request(path);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === `request_failed:${path}:503:projection_unavailable`
+      ) {
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 1000));
+        continue;
+      }
+      throw error;
+    }
     if (predicate(value)) return value;
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 1000));
   }

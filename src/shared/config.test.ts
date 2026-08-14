@@ -10,6 +10,13 @@ describe('loadConfig', () => {
       port: 3_000,
       logLevel: 'info',
       serviceName: 'agent-server',
+      runtime: {
+        adapter: 'paseo',
+      },
+      runtimeMcp: {
+        listenHost: '127.0.0.1',
+        advertisedHost: '127.0.0.1',
+      },
       teamCompletionApprovalRequired: false,
       serviceAccounts: [],
       larkCanary: { enabled: false },

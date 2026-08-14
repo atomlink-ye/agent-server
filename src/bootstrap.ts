@@ -82,7 +82,7 @@ import {
   createLegacyRuntimeToolsContributor,
   createMemoryReadRuntimeContributor,
 } from './entrypoints/mcp/runtime-tool-contributors.js';
-import { RuntimeToolRegistry } from './platform/runtime-tool-registry.js';
+import { createRuntimeToolRegistry } from './entrypoints/mcp/runtime-tool-composition.js';
 import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-runtime-extension-binder.js';
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
@@ -432,10 +432,10 @@ export async function createService(
     executionFacts: new PostgresExecutionFactQuery(pool),
   });
   const runtimeMcpServer = new RuntimeMcpServer(
-    new RuntimeToolRegistry([
-      workModule.contributeRuntime,
-      createMemoryReadRuntimeContributor(memoryApiRepository),
-      createLegacyRuntimeToolsContributor({
+    createRuntimeToolRegistry({
+      work: workModule.contributeRuntime,
+      memory: createMemoryReadRuntimeContributor(memoryApiRepository),
+      legacy: createLegacyRuntimeToolsContributor({
         repository: memoryApiRepository,
         teamTools: {
           contextResolver: teamToolContextResolver,
@@ -445,7 +445,7 @@ export async function createService(
         market: new SyntheticMarketAdapter(),
         logger,
       }),
-    ]),
+    }),
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,

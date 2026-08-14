@@ -18,6 +18,13 @@ import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { PostgresMemoryApiRepository } from '../../src/infrastructure/postgres/postgres-memory-api-repository.js';
+import { createMemoryReadRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
+import { createRuntimeToolRegistry } from '../../src/entrypoints/mcp/runtime-tool-composition.js';
+import {
+  AGENT_SERVER_MEMORY_READ_MCP_NAME,
+  AGENT_SERVER_MEMORY_READ_TOOL_REF,
+} from '../../src/application/extensions/runtime-tool-grant-service.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 const required = process.env.REAL_POSTGRES_REQUIRED === '1';
@@ -40,8 +47,12 @@ const environmentDefinitionA = '00000000-0000-4000-8000-0000000a0385';
 const environmentVersionA = '00000000-0000-4000-8000-0000000a0386';
 const tokenA = 'oi38-token-owner-a';
 const tokenB = 'oi38-token-owner-b';
+const memoryStoreId = '00000000-0000-4000-8000-00000000c038';
+const memoryId = '00000000-0000-4000-8000-00000000c039';
+const memoryVersionId = '00000000-0000-4000-8000-00000000c040';
 let httpBaseUrl = '';
 let workModule: ReturnType<typeof createWorkModule>;
+let memoryRepository: PostgresMemoryApiRepository;
 const generatedWorkIds: string[] = [];
 const generatedTaskIds: string[] = [];
 
@@ -58,6 +69,30 @@ describeRealPostgres(
       });
       await applyDurableKernelMigrations(pool);
       await seedIdentityRows(pool);
+      memoryRepository = new PostgresMemoryApiRepository(pool);
+      const memoryPrincipal = {
+        tenantId,
+        principalType: 'service_account' as const,
+        principalId: 'oi38-owner-a',
+      };
+      await memoryRepository.createStore({
+        id: memoryStoreId,
+        principal: memoryPrincipal,
+        workspaceId: workspaceA,
+        name: 'Registry C',
+        description: 'E6 memory fixture',
+      });
+      await memoryRepository.createMemory(
+        {
+          id: memoryId,
+          versionId: memoryVersionId,
+          storeId: memoryStoreId,
+          path: 'registry/e6.txt',
+          content: 'runtime-registry-e6',
+          now: new Date().toISOString(),
+        },
+        memoryPrincipal,
+      );
 
       const serviceAccounts = [
         {
@@ -293,6 +328,79 @@ describeRealPostgres(
         await mcp.stop();
       }
     });
+
+    it('calls Work and Memory through the composed runtime tool registry', async () => {
+      const mcp = new RuntimeMcpServer(
+        createRuntimeToolRegistry({
+          work: workModule.contributeRuntime,
+          memory: createMemoryReadRuntimeContributor(memoryRepository),
+          legacy: () => undefined,
+        }),
+      );
+      const grant = mcp.grants.issue({
+        tenantId,
+        workspaceId: workspaceA,
+        principalType: 'service_account',
+        principalId: 'oi38-owner-a',
+        productSessionId: randomUUID(),
+        allowedTools: [
+          AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+          AGENT_SERVER_MEMORY_READ_TOOL_REF,
+        ],
+      });
+      const url = await mcp.start();
+      const client = new Client({ name: 'registry-e6', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(url), {
+            requestInit: {
+              headers: { authorization: `Bearer ${grant.token}` },
+            },
+          }) as never,
+        );
+        const tools = await client.listTools();
+        const names = tools.tools.map((tool) => tool.name).sort();
+        if (!names.includes('product_work_create'))
+          throw new Error(
+            'RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]',
+          );
+        if (!names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME))
+          throw new Error(
+            'RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]',
+          );
+
+        const work = await client.callTool({
+          name: 'product_work_create',
+          arguments: {
+            definition_id: definitionA,
+            definition_version_id: versionA,
+            title: 'E6 registry Work',
+          },
+        });
+        expect(work.isError).not.toBe(true);
+        const workText = (work.content as { type: string; text?: string }[])[0]
+          ?.text;
+        const workId = JSON.parse(workText ?? '{}').work?.id;
+        expect(workId).toEqual(expect.any(String));
+        generatedWorkIds.push(workId);
+
+        const memory = await client.callTool({
+          name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+          arguments: {
+            memory_store_id: memoryStoreId,
+            path: 'registry/e6.txt',
+          },
+        });
+        expect(memory.isError).not.toBe(true);
+        expect(memory.structuredContent).toMatchObject({
+          memory_id: memoryId,
+          content: 'runtime-registry-e6',
+        });
+      } finally {
+        await client.close().catch(() => undefined);
+        await mcp.stop();
+      }
+    });
   },
 );
 
@@ -382,6 +490,23 @@ function versionFixture() {
 
 async function seedIdentityRows(pool: Pool): Promise<void> {
   const now = new Date().toISOString();
+  const cleanup = await pool.connect();
+  try {
+    await cleanup.query('BEGIN');
+    await cleanup.query('DELETE FROM memory_versions WHERE memory_id=$1', [
+      memoryId,
+    ]);
+    await cleanup.query('DELETE FROM memories WHERE id=$1', [memoryId]);
+    await cleanup.query('DELETE FROM memory_stores WHERE id=$1', [
+      memoryStoreId,
+    ]);
+    await cleanup.query('COMMIT');
+  } catch (error) {
+    await cleanup.query('ROLLBACK');
+    throw error;
+  } finally {
+    cleanup.release();
+  }
   const residue = await pool.query<{ root_task_id: string }>(
     `SELECT root_task_id FROM work_runs
      WHERE work_id IN (SELECT id FROM works WHERE current_definition_version_id=$1)`,

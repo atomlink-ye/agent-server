@@ -3,8 +3,10 @@ import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  INDEPENDENT_EXPECTED_RULES,
+  SOURCE_OWNED_OPTIONAL_RULE,
+  SOURCE_OWNED_RULES,
   ZERO_EXECUTION_KINDS,
+  compareSourceOwnedRule,
   zeroExecutionMarker,
   zeroExecutionOutcome,
 } from './c3-c4-zero-execution.mjs';
@@ -12,61 +14,55 @@ import {
 const node = process.execPath;
 const script = fileURLToPath(new URL('./c3-c4-zero-execution.mjs', import.meta.url));
 
-function direct(kind, observedCount, expectedCount, observedSource = 'actual-ledger', expectedProvenance = 'fixture-manifest', unavailableClass = 'instrument') {
-  return zeroExecutionOutcome({
-    kind,
-    observedCount,
-    independentExpectedCount: expectedCount,
-    expectedRule: INDEPENDENT_EXPECTED_RULES[kind],
-    observedCountSource: observedSource,
-    expectedProvenance,
-    unavailableClass,
-  });
-}
-
-describe('C3 neutral zero-execution comparison', () => {
-  it('allows an independently declared empty rule to observe zero', () => {
-    assert.deepEqual(direct('e8-browser', 0, 0), { process: 0, marker: null });
+describe('C3 source-owned zero comparison', () => {
+  it('derives expected counts from the source registry, never caller input', () => {
+    const run = spawnSync(node, [script, 'e8-browser', '--observed', '2'], { encoding: null });
+    assert.equal(run.status, 0);
+    assert.deepEqual(run.stdout, Buffer.alloc(0));
+    const rejected = spawnSync(node, [script, 'e8-browser', '--observed', '2', '--expected', '2'], { encoding: null });
+    assert.equal(rejected.status, 2);
   });
 
-  it('maps expected zero with an unexpected observation to process 1', () => {
-    assert.deepEqual(direct('e8-browser', 1, 0), { process: 1, marker: null });
+  it('maps observed greater than expected to process 1', () => {
+    assert.deepEqual(zeroExecutionOutcome({
+      kind: 'e8-browser', observedCount: SOURCE_OWNED_RULES['e8-browser'].expectedCount + 1,
+      observedCountSource: 'actual-ledger',
+    }), { process: 1, marker: null });
   });
 
-  it('maps missing instrument and target evidence to distinct process-2 markers', () => {
-    assert.deepEqual(direct('e8-browser', 0, 1, 'actual-summary', 'fixed-rule', 'instrument'), {
-      process: 2,
-      marker: zeroExecutionMarker('e8-browser', 'instrument'),
-    });
-    assert.deepEqual(direct('e8-browser', 0, 1, 'actual-summary', 'fixed-rule', 'target-unavailable'), {
-      process: 2,
-      marker: zeroExecutionMarker('e8-browser', 'target-unavailable'),
-    });
+  it('maps observed less than expected to instrument process 2', () => {
+    assert.deepEqual(zeroExecutionOutcome({
+      kind: 'e8-browser', observedCount: 0, observedCountSource: 'actual-summary',
+    }), { process: 2, marker: zeroExecutionMarker('e8-browser', 'instrument', 'observed-less-than-independent-rule') });
   });
 
-  it('rejects unknown, missing, or non-independent count provenance', () => {
-    assert.equal(direct('not-c3', 0, 0).process, 2);
-    assert.equal(direct('e8-browser', 0, 0, 'same', 'same').process, 2);
-    assert.equal(direct('e8-browser', 0, 0, '', 'fixture-manifest').process, 2);
+  it('supports an explicitly source-owned optional rule with expected zero', () => {
+    assert.deepEqual(compareSourceOwnedRule({
+      kind: SOURCE_OWNED_OPTIONAL_RULE.id,
+      rule: SOURCE_OWNED_OPTIONAL_RULE,
+      observedCount: 0,
+      observedCountSource: 'optional-business-observation',
+      expectedProvenance: SOURCE_OWNED_OPTIONAL_RULE.provenance,
+    }), { process: 0, marker: null });
+    assert.deepEqual(compareSourceOwnedRule({
+      kind: SOURCE_OWNED_OPTIONAL_RULE.id,
+      rule: SOURCE_OWNED_OPTIONAL_RULE,
+      observedCount: 1,
+      observedCountSource: 'optional-business-observation',
+      expectedProvenance: SOURCE_OWNED_OPTIONAL_RULE.provenance,
+    }), { process: 1, marker: null });
   });
 
-  it('runs the production CLI duals for every closed kind with an independent rule', () => {
-    for (const kind of Object.values(ZERO_EXECUTION_KINDS)) {
-      const run = spawnSync(node, [
-        script, kind, '--observed', '0', '--expected', '0', '--subclass', 'instrument',
-      ], { encoding: null });
-      assert.equal(run.status, 0);
-      assert.deepEqual(run.stdout, Buffer.alloc(0));
-      assert.deepEqual(run.stderr, Buffer.alloc(0));
-    }
+  it('fails closed when expected provenance and observed source are not independent', () => {
+    assert.equal(zeroExecutionOutcome({
+      kind: 'e8-browser', observedCount: 2, observedCountSource: SOURCE_OWNED_RULES['e8-browser'].provenance,
+    }).process, 2);
+    assert.equal(zeroExecutionOutcome({
+      kind: 'c4-e10', observedCount: 0, observedCountSource: 'actual',
+    }).process, 2);
   });
 
-  it('emits the neutral exact subclass marker for missing declared evidence', () => {
-    const run = spawnSync(node, [
-      script, 'c3-classifier', '--observed', '0', '--expected', '12', '--subclass', 'instrument',
-    ], { encoding: null });
-    assert.equal(run.status, 2);
-    assert.deepEqual(run.stdout, Buffer.from(`${zeroExecutionMarker('c3-classifier', 'instrument')}\n`));
-    assert.deepEqual(run.stderr, Buffer.alloc(0));
+  it('keeps the production kind registry closed', () => {
+    assert.equal(new Set(Object.values(ZERO_EXECUTION_KINDS)).size, 10);
   });
 });

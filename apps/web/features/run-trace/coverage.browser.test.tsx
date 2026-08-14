@@ -2,8 +2,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
-import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { RunTrace } from './run-trace';
 import { parseRecordedTrace } from './recording-test-helpers';
 
@@ -13,7 +13,7 @@ import { parseRecordedTrace } from './recording-test-helpers';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-it('E6 keeps MCP-only coverage disclosure present across views and selection', async () => {
+it('keeps MCP-only coverage disclosure present across views and selection', async () => {
   for (const recording of [parallelRecording, reworkRecording]) {
     const trace = parseRecordedTrace(recording);
     const host = document.createElement('div');
@@ -50,19 +50,16 @@ it('E6 keeps MCP-only coverage disclosure present across views and selection', a
       });
       expect(
         host.querySelector('[data-testid="trace-coverage-disclosure"]'),
-      ).toBe(
-        coverage,
-      );
+      ).toBe(coverage);
 
-      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === 'Events');
+      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Events',
+      );
       expect(eventsTab).toBeDefined();
       await act(async () => eventsTab?.click());
       expect(
         host.querySelector('[data-testid="trace-coverage-disclosure"]'),
-      ).toBe(
-        coverage,
-      );
+      ).toBe(coverage);
       expect(coverage.textContent).toContain('MCP-only');
       for (const excluded of trace.timeline_coverage.excluded_execution) {
         expect(coverage.textContent?.toLowerCase()).toContain(

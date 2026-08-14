@@ -1,0 +1,30 @@
+{
+  "team_run_id": "79daa403-947b-4194-9507-c520652c65ed",
+  "work_id": "a79920a0-a1e2-4216-a486-64cda74dad9a",
+  "work_run_id": "69cacf0e-d8ca-49aa-9ba2-7ba659fab562",
+  "entry": "http://127.0.0.1:3001/works/a79920a0-a1e2-4216-a486-64cda74dad9a",
+  "outcome": "WORK OUTCOME\n\nFinal outcome unavailable\n\nThe final Work outcome was not captured for this run.",
+  "timeline": "phase-c-lead\nphase-c-worker-a\nphase-c-worker-b",
+  "inspector": "Inspector\n\nSelect an Attempt to inspect recorded facts.",
+  "attempts": [],
+  "disclosure": "MCP-only coverage. mcp dispatch and confirmation; other execution sources are not represented in this recording.",
+  "product": {
+    "product_state": "problem",
+    "result_summary": null,
+    "result_capture_status": "not_present",
+    "projection_status": "internally_anchored"
+  },
+  "events": {
+    "row_count": 0,
+    "headers": [
+      "SEQUENCE",
+      "ACTOR",
+      "WORK ITEM",
+      "KIND",
+      "CATEGORY",
+      "MCP ACTIVITY STATUS",
+      "RESULT CAPTURE"
+    ],
+    "text": "Recorded MCP activities. Sequence values are shown as captured; no additional ordering or timing is inferred.\n\nRecorded events\n0 captured rows\nSEQUENCE\tACTOR\tWORK ITEM\tKIND\tCATEGORY\tMCP ACTIVITY STATUS\tRESULT CAPTURE"
+  }
+}\n

@@ -52,11 +52,15 @@ const outcome = {
 };
 
 await mkdir(outcomeDirectory, { recursive: true });
-await mkdir(dirname(checkpointPath), { recursive: true, mode: 0o700 });
-await chmod(dirname(checkpointPath), 0o700);
-await unlink(checkpointPath).catch((error) => {
-  if (error?.code !== 'ENOENT') throw error;
-});
+try {
+  await mkdir(dirname(checkpointPath), { recursive: true, mode: 0o700 });
+  await chmod(dirname(checkpointPath), 0o700);
+  await unlink(checkpointPath).catch((error) => {
+    if (error?.code !== 'ENOENT') throw error;
+  });
+} catch {
+  addMonitorError('checkpoint_setup', 'checkpoint_setup_failed');
+}
 await writeOutcome();
 
 outcome.runtime_start = { started_at: new Date().toISOString() };
@@ -93,10 +97,14 @@ const realRunPromise = run(
 );
 const terminalMonitorPromise = monitorTerminalFallback(
   monitorController.signal,
-);
+).catch(async () => {
+  addMonitorError('monitor', 'monitor_failed');
+  await safeMonitorWrite();
+});
 const realRun = await realRunPromise;
+await waitForMonitorGrace(terminalMonitorPromise);
 monitorController.abort();
-await terminalMonitorPromise;
+await terminalMonitorPromise.catch(() => undefined);
 if (outcome.terminal_fallback.status === 'waiting_for_checkpoint') {
   outcome.terminal_fallback = {
     ...outcome.terminal_fallback,
@@ -251,8 +259,20 @@ async function monitorTerminalFallback(signal) {
         .update(resultSummary)
         .digest('hex');
     outcome.terminal_fallback = terminalFallback;
-    await writeOutcome();
+    await safeMonitorWrite();
     return;
+  }
+}
+
+async function waitForMonitorGrace(monitorPromise) {
+  let timeout;
+  const grace = new Promise((resolvePromise) => {
+    timeout = setTimeout(resolvePromise, 2000);
+  });
+  try {
+    await Promise.race([monitorPromise, grace]);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -350,6 +370,11 @@ function delayWithAbort(signal) {
 }
 
 async function recordMonitorError(stage, code) {
+  addMonitorError(stage, code);
+  await safeMonitorWrite();
+}
+
+function addMonitorError(stage, code) {
   const existing = outcome.terminal_fallback.monitor_errors.find(
     (item) => item.stage === stage && item.code === code,
   );
@@ -364,7 +389,14 @@ async function recordMonitorError(stage, code) {
       last_at: new Date().toISOString(),
     });
   }
-  await writeOutcome();
+}
+
+async function safeMonitorWrite() {
+  try {
+    await writeOutcome();
+  } catch {
+    addMonitorError('outcome', 'write_failed');
+  }
 }
 
 async function recordProof() {

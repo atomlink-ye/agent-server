@@ -175,7 +175,13 @@ const started = await request(`/api/v1/works/${created.work.id}/runs`, {
 });
 const workId = created.work.id;
 const workRunId = started.work_run.id;
-await persistCheckpoint({ workId, workRunId });
+try {
+  await persistCheckpoint({ workId, workRunId });
+} catch {
+  process.stderr.write(
+    `${JSON.stringify({ event: 'checkpoint_persist_failed', code: 'checkpoint_write_failed' })}\n`,
+  );
+}
 const product = await waitFor(
   `/api/v1/works/${workId}/runs/${workRunId}`,
   (value) => value?.work_run?.product_state === 'complete',

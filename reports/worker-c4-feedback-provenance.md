@@ -1,10 +1,10 @@
 # C4 feedback provenance report
 
-**Status: closed — `BRANCH_2_OVERBROAD_REDACTION`**
+**Status: closed — `NEVER_PROJECTED`**
 
-The sole supported branch is that the Product projection turns durable
-application feedback into presence-only data. This is not a recorder sanitizer
-deleting feedback. The distinguishing fact is direct: the captured Postgres
+The sole supported branch is that the Product projection never carries the
+durable application feedback field. No sanitizer or redaction rule participates
+in that omission. The distinguishing fact is direct: the captured Postgres
 row for attempt `524401a1-fd03-4dfa-93c7-621452a5e71d` contains the feedback
 string, while the Product API projection for that same attempt has
 `feedback_summary: null` and `feedback_capture_status: "redacted"`.
@@ -121,12 +121,26 @@ durable feedback was deleted.
 
 ## Branch decision
 
+Owner correction O-H48 establishes that the original four-way table was not
+exhaustive: its first three causal branches all presupposed that redaction had
+occurred, while `MISSING_EVIDENCE` covered lack of proof. This case instead has
+positive proof of the durable fact and positive proof that the Product query
+never reads its value. The required fifth branch is therefore
+`NEVER_PROJECTED`.
+
 | Branch | Decision | Evidence | Counterevidence / reason |
 |---|---|---|---|
 | `BRANCH_1_PROVIDER_DERIVED_REQUIRED_REDACTION` | Rejected | D10/D12 exclude provider raw payload, prompt, and credentials; D18.2 allows MCP return values to remain capture-status-only. | This is durable application feedback supplied to `requestChanges`, not a provider raw payload or prompt. D12 does not require ordinary application feedback to become presence-only. The scenario's prompt-derived instruction is not itself the raw prompt/payload, and cannot be used to relabel the persisted feedback as provider transcript content. |
-| `BRANCH_2_OVERBROAD_REDACTION` | **Selected; sole closed branch** | DB has the exact feedback; Product facts query reads only presence; mapper emits `null` plus `redacted`; lineage explicitly names `presence_to_redaction_status` and `capture_to_null`. | No contradictory evidence in the recorder. The DB snapshot and API snapshot differ exactly at this projection boundary. |
+| `BRANCH_2_OVERBROAD_REDACTION` | Rejected | The API labels presence as `redacted`, which made this branch initially appear plausible. | No sanitizer or redaction rule transforms or removes the durable value on this path. The Product facts query never selects the value, so the omission precedes any possible redaction step. |
 | `BRANCH_3_NOT_PRODUCED` | Rejected | `team_work_item_attempts.feedback` for `524401a1…` is a non-empty string; the recorder predicate also requires a non-empty later feedback row. | `not_present` on the other attempts is a separate null fact and does not apply to attempt 2. |
 | `MISSING_EVIDENCE` | Rejected for the question “was the feedback fact produced?” | The durable DB row is direct evidence, and the trace's feedback edge corroborates the relation. | Exact provider token/tool-call transcript is not required for this question. If such transcript is absent, the narrow statement is only “provider transcript not captured,” not “feedback was not produced.” |
+| `NEVER_PROJECTED` | **Selected; sole closed branch** | The durable DB fact exists; the Product facts query reads only `IS NOT NULL`; the facts source writes summary `null` and derives the status from presence. | No sanitizer/redaction implementation receives the durable value, so none can be the cause of its absence from the Product response. |
+
+The `BRANCH_2` prescription—change a redaction rule, re-sanitize, or perform a
+zero-cost re-capture—does not apply. Re-capturing the same projection would not
+change the response bytes. The future correction is B-owned Product projection
+work that carries the durable field through the Product contract, subject to a
+Human Gate. C does not implement that correction.
 
 ## Authority alignment
 
@@ -157,4 +171,4 @@ feedback production or sanitizer behavior. It does not change this branch
 decision, which is based on the independently inspected DB snapshot, API
 snapshot, source code, and lineage rules above.
 
-**Final verdict: `BRANCH_2_OVERBROAD_REDACTION`.**
+**Final verdict: `NEVER_PROJECTED`.**

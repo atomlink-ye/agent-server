@@ -20,9 +20,11 @@ The domain feedback is accepted application input and first-class durable data, 
 - For attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`, the durable DB snapshot contains a non-empty feedback value while the API snapshot has `feedback_summary: null` and `feedback_capture_status: "redacted"`: `reports/worker-c4-feedback-provenance.md:94-105`.
 - The Product facts query selects only `(a.feedback IS NOT NULL) AS feedback_present`: `src/infrastructure/postgres/postgres-work-projection-facts-query.ts:136-150` (field mapping at `:194-207`). The facts source unconditionally maps summary to null and presence to redacted: `src/application/product-projection/work-projection-facts-source.ts:93-113`. Lineage records `presence_to_redaction_status` and `capture_to_null`: `src/contracts/product-projection/lineage-manifest.ts:492-506,527-553`.
 
-### OWNER JUDGMENT — O-H49
+### OWNER JUDGMENT — O-H48/O-H49 corrected classification
 
-D10/D12 provider raw means raw completion, prompt, and credentials only; it does not mean domain-identified application feedback. `BRANCH_2_OVERBROAD_REDACTION` therefore holds. In this domain, `status: "redacted"` is a false statement: the durable fact is present, while the Product projection has discarded the content and relabeled presence as redaction. The product gap is the facts query’s `IS NOT NULL`-only behavior plus the facts-source summary’s unconditional `null/presence -> redacted` mapping and `capture_to_null` lineage.
+D10/D12 provider raw means raw completion, prompt, and credentials only; it does not mean domain-identified application feedback. The corrected closed branch is `NEVER_PROJECTED`: the durable fact exists, no sanitizer or redaction rule participates, and the Product projection never carries the field. In this domain, `status: "redacted"` is a false statement derived from presence, not evidence that redaction occurred. The product gap is the facts query’s `IS NOT NULL`-only behavior plus the facts-source summary’s unconditional `null/presence -> redacted` mapping.
+
+O-H48’s original causal enumeration was incomplete because its first three branches all presupposed that redaction occurred. `BRANCH_2_OVERBROAD_REDACTION` and its prescription—change a redaction rule, re-sanitize, or perform a zero-cost re-capture—do not apply here; re-capture would reproduce the same bytes. The correct future path is a B-owned Product projection change that carries the durable field through a Human Gate. C does not implement that change.
 
 This is deferred as a PLAN-D input. It is not fixed in C, and no B-product fix is included.
 

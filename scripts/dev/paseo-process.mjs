@@ -184,7 +184,10 @@ export async function removeStalePaseoPid(paseoHome) {
     }
     if (alive && process.platform === 'linux') {
       try {
-        const commandLine = await readFile(`/proc/${parsedPid}/cmdline`, 'utf8');
+        const commandLine = await readFile(
+          `/proc/${parsedPid}/cmdline`,
+          'utf8',
+        );
         alive = /(?:^|\0|\/)paseo(?:\0|$)/u.test(commandLine);
       } catch {
         alive = false;

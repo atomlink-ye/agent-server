@@ -1,0 +1,10 @@
+services:
+  paseo-runtime:
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        node scripts/dev/paseo-runtime.mjs >/tmp/runtime-child.stdout 2>/tmp/runtime-child.stderr;
+        child_exit=$$?;
+        printf '%s' "$$child_exit" >/tmp/runtime-child.exit;
+        exec node -e "process.title='phase-c-state-carrier';setInterval(()=>{},60000)"

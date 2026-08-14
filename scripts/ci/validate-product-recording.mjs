@@ -247,9 +247,7 @@ export async function validateRecording(directory, mode = 'pre-identity') {
     try {
       sanitizeRecording(value, file, {
         allowKeys:
-          file === 'db/run_events.json'
-            ? RUN_EVENT_PAYLOAD_KEYS
-            : undefined,
+          file === 'db/run_events.json' ? RUN_EVENT_PAYLOAD_KEYS : undefined,
         allowExactValues:
           file === 'manifest.json'
             ? new Map([['provider_run', new Set(['real'])]])

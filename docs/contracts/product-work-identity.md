@@ -30,12 +30,12 @@ workspace_id uuid
 
 ## 2. 产品身份
 
-| 对象 | id 取值 |
-|---|---|
-| `Work` | 产品 UUID，独立生成 |
-| `WorkRun` | 产品 UUID，独立生成 |
+| 对象       | id 取值             |
+| ---------- | ------------------- |
+| `Work`     | 产品 UUID，独立生成 |
+| `WorkRun`  | 产品 UUID，独立生成 |
 | `WorkItem` | 产品 UUID，独立生成 |
-| `Attempt` | 产品 UUID，独立生成 |
+| `Attempt`  | 产品 UUID，独立生成 |
 
 固定约束：
 
@@ -100,14 +100,14 @@ UNIQUE (production_receipt_id, artifact_id)
 
 产品响应的 leaf 路径中，下列前缀一律禁止：
 
-| 禁用前缀 | 原因 |
-|---|---|
-| `root_task` | technical id 泄漏到产品面 |
-| `team_run` | 同上 |
-| `team_member_run` | 同上 |
-| `team_version` | 同上 |
-| `compiled_` | 已删除的历史表 |
-| `node_execution` | 已删除的历史表 |
+| 禁用前缀          | 原因                      |
+| ----------------- | ------------------------- |
+| `root_task`       | technical id 泄漏到产品面 |
+| `team_run`        | 同上                      |
+| `team_member_run` | 同上                      |
+| `team_version`    | 同上                      |
+| `compiled_`       | 已删除的历史表            |
+| `node_execution`  | 已删除的历史表            |
 
 ---
 

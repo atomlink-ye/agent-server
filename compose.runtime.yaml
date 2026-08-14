@@ -1,0 +1,52 @@
+services:
+  provider-toolchain-init:
+    image: agent-server-runner:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    init: true
+    user: node
+    volumes:
+      - .:/workspace:ro
+      - provider-toolchain:/opt/provider-toolchain-volume
+    working_dir: /workspace
+    environment:
+      PROVIDER_VOLUME_ROOT: /opt/provider-toolchain-volume
+      PROVIDER_MANIFEST: /workspace/provider-toolchain/providers.manifest.json
+      HOME: /opt/provider-toolchain-volume/home
+      PNPM_HOME: /opt/provider-toolchain-volume/pnpm
+      PATH: /pnpm:/opt/provider-toolchain-volume/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command:
+      ['node', 'provider-toolchain/scripts/provider-toolchain.mjs', 'init']
+
+  agent-server:
+    depends_on:
+      provider-toolchain-init:
+        condition: service_completed_successfully
+    environment:
+      PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
+      PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: ${PASEO_DAEMON_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: ${PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: ${PASEO_PROVIDER_REFRESH_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: ${PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: ${PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: ${PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+
+  web:
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+
+  runner:
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro
+
+volumes:
+  provider-toolchain:
+    name: ${PROVIDER_TOOLCHAIN_VOLUME:?docker-compose wrapper must provide PROVIDER_TOOLCHAIN_VOLUME}
+    external: true

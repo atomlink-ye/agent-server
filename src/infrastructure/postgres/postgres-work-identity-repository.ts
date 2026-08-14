@@ -499,11 +499,22 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     };
   }
 
-  public async listWorks(owner: WorkIdentityOwnerScope, query: WorkIdentityListQuery): Promise<WorkListPage> {
+  public async listWorks(
+    owner: WorkIdentityOwnerScope,
+    query: WorkIdentityListQuery,
+  ): Promise<WorkListPage> {
     assertListLimit(query.limit);
-    const cursor = query.cursor ? decodeWorkCursor(query.cursor, 'works', owner) : null;
-    const values: unknown[] = [owner.tenantId, owner.workspaceId, query.limit + 1];
-    const cursorSql = cursor ? ' AND (created_at,id) > ($4::timestamptz,$5::uuid)' : '';
+    const cursor = query.cursor
+      ? decodeWorkCursor(query.cursor, 'works', owner)
+      : null;
+    const values: unknown[] = [
+      owner.tenantId,
+      owner.workspaceId,
+      query.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ' AND (created_at,id) > ($4::timestamptz,$5::uuid)'
+      : '';
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const rows = await this.database.query<WorkRow>(
       `SELECT ${workColumns} FROM works WHERE tenant_id=$1 AND workspace_id=$2 AND archived_at IS NULL${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $3`,
@@ -512,7 +523,13 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     const items = (rows.rows ?? []).map(mapWork);
     const pageItems = items.slice(0, query.limit);
     const last = pageItems[pageItems.length - 1];
-    return { items: pageItems, nextCursor: items.length > query.limit && last ? encodeWorkCursor('works', owner, last.createdAt, last.id) : null };
+    return {
+      items: pageItems,
+      nextCursor:
+        items.length > query.limit && last
+          ? encodeWorkCursor('works', owner, last.createdAt, last.id)
+          : null,
+    };
   }
 
   public async listWorkRuns(
@@ -521,9 +538,18 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     query: WorkIdentityListQuery,
   ): Promise<WorkRunListPage> {
     assertListLimit(query.limit);
-    const cursor = query.cursor ? decodeWorkCursor(query.cursor, 'work_runs', owner, workId) : null;
-    const values: unknown[] = [owner.tenantId, owner.workspaceId, workId, query.limit + 1];
-    const cursorSql = cursor ? ' AND (created_at,id) > ($5::timestamptz,$6::uuid)' : '';
+    const cursor = query.cursor
+      ? decodeWorkCursor(query.cursor, 'work_runs', owner, workId)
+      : null;
+    const values: unknown[] = [
+      owner.tenantId,
+      owner.workspaceId,
+      workId,
+      query.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ' AND (created_at,id) > ($5::timestamptz,$6::uuid)'
+      : '';
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const rows = await this.database.query<WorkRunRow>(
       `SELECT ${runColumns} FROM work_runs
@@ -535,7 +561,19 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     const items = (rows.rows ?? []).map(mapWorkRun);
     const pageItems = items.slice(0, query.limit);
     const last = pageItems[pageItems.length - 1];
-    return { items: pageItems, nextCursor: items.length > query.limit && last ? encodeWorkCursor('work_runs', owner, last.createdAt, last.id, workId) : null };
+    return {
+      items: pageItems,
+      nextCursor:
+        items.length > query.limit && last
+          ? encodeWorkCursor(
+              'work_runs',
+              owner,
+              last.createdAt,
+              last.id,
+              workId,
+            )
+          : null,
+    };
   }
 
   private async transactionClient(): Promise<WorkIdentityClient> {
@@ -675,22 +713,89 @@ function isWorkspaceScopeUnavailable(error: unknown): boolean {
 }
 
 type WorkCursorKind = 'works' | 'work_runs';
-type WorkCursor = { readonly kind: WorkCursorKind; readonly tenantId: string; readonly workspaceId: string; readonly createdAt: string; readonly id: string; readonly workId?: string };
-function encodeWorkCursor(kind: WorkCursorKind, owner: WorkIdentityOwnerScope, createdAt: string, id: string, workId?: string): string {
-  const payload: WorkCursor = { kind, tenantId: owner.tenantId, workspaceId: owner.workspaceId, createdAt, id, ...(workId !== undefined ? { workId } : {}) };
+type WorkCursor = {
+  readonly kind: WorkCursorKind;
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly createdAt: string;
+  readonly id: string;
+  readonly workId?: string;
+};
+function encodeWorkCursor(
+  kind: WorkCursorKind,
+  owner: WorkIdentityOwnerScope,
+  createdAt: string,
+  id: string,
+  workId?: string,
+): string {
+  const payload: WorkCursor = {
+    kind,
+    tenantId: owner.tenantId,
+    workspaceId: owner.workspaceId,
+    createdAt,
+    id,
+    ...(workId !== undefined ? { workId } : {}),
+  };
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
-function decodeWorkCursor(value: string, kind: WorkCursorKind, owner: WorkIdentityOwnerScope, workId?: string): WorkCursor {
+function decodeWorkCursor(
+  value: string,
+  kind: WorkCursorKind,
+  owner: WorkIdentityOwnerScope,
+  workId?: string,
+): WorkCursor {
   try {
-    if (value.length === 0 || value.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error();
-    const payload = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>;
-    const required = kind === 'works' ? ['createdAt', 'id', 'kind', 'tenantId', 'workspaceId'] : ['createdAt', 'id', 'kind', 'tenantId', 'workId', 'workspaceId'];
+    if (
+      value.length === 0 ||
+      value.length > 1024 ||
+      !/^[A-Za-z0-9_-]+$/.test(value)
+    )
+      throw new Error();
+    const payload = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+    const required =
+      kind === 'works'
+        ? ['createdAt', 'id', 'kind', 'tenantId', 'workspaceId']
+        : ['createdAt', 'id', 'kind', 'tenantId', 'workId', 'workspaceId'];
     const keys = Object.keys(payload).sort();
-    if (keys.length !== required.length || keys.some((key, index) => key !== required.slice().sort()[index])) throw new Error();
-    if (payload.kind !== kind || payload.tenantId !== owner.tenantId || payload.workspaceId !== owner.workspaceId || (kind === 'work_runs' && payload.workId !== workId) || typeof payload.tenantId !== 'string' || typeof payload.workspaceId !== 'string' || typeof payload.createdAt !== 'string' || payload.createdAt !== new Date(payload.createdAt).toISOString() || typeof payload.id !== 'string' || !isCanonicalUuid(payload.id) || (kind === 'work_runs' && (typeof payload.workId !== 'string' || !isCanonicalUuid(payload.workId)))) throw new Error();
-    if (Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url') !== value) throw new Error();
+    if (
+      keys.length !== required.length ||
+      keys.some((key, index) => key !== required.slice().sort()[index])
+    )
+      throw new Error();
+    if (
+      payload.kind !== kind ||
+      payload.tenantId !== owner.tenantId ||
+      payload.workspaceId !== owner.workspaceId ||
+      (kind === 'work_runs' && payload.workId !== workId) ||
+      typeof payload.tenantId !== 'string' ||
+      typeof payload.workspaceId !== 'string' ||
+      typeof payload.createdAt !== 'string' ||
+      payload.createdAt !== new Date(payload.createdAt).toISOString() ||
+      typeof payload.id !== 'string' ||
+      !isCanonicalUuid(payload.id) ||
+      (kind === 'work_runs' &&
+        (typeof payload.workId !== 'string' ||
+          !isCanonicalUuid(payload.workId)))
+    )
+      throw new Error();
+    if (
+      Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url') !==
+      value
+    )
+      throw new Error();
     return payload as unknown as WorkCursor;
-  } catch { throw new InvalidWorkListCursorError(); }
+  } catch {
+    throw new InvalidWorkListCursorError();
+  }
 }
-function assertListLimit(limit: number): void { if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('The requested Work list limit is invalid.'); }
-function isCanonicalUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
+function assertListLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw new Error('The requested Work list limit is invalid.');
+}
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}

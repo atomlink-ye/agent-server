@@ -9,12 +9,13 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const VERSION = '0029_product_work_identity';
-const TABLES = [
-  'works',
-  'work_runs',
-  'work_run_resource_manifest',
+const TABLES = ['works', 'work_runs', 'work_run_resource_manifest'];
+const OWNER_COLUMNS = [
+  'tenant_id',
+  'workspace_id',
+  'principal_type',
+  'principal_id',
 ];
-const OWNER_COLUMNS = ['tenant_id', 'workspace_id', 'principal_type', 'principal_id'];
 const migrationPath = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../src/infrastructure/postgres/migrations/0029_product_work_identity.sql',
@@ -137,8 +138,12 @@ async function collectEvidence(database) {
   const tableCounts = counts.rows[0];
   const expiredPendingCount = numberValue(tableCounts.expired_pending);
   const candidateCount = numberValue(source.candidate_count);
-  const missingWorkspaceUuidCount = numberValue(source.missing_workspace_uuid_count);
-  const missingTeamVersionCount = numberValue(source.missing_team_version_count);
+  const missingWorkspaceUuidCount = numberValue(
+    source.missing_workspace_uuid_count,
+  );
+  const missingTeamVersionCount = numberValue(
+    source.missing_team_version_count,
+  );
   const readyCount = numberValue(source.ready_count);
 
   return {
@@ -177,7 +182,8 @@ async function collectEvidence(database) {
       })),
     },
     backfill_source_preflight: {
-      source: 'team_runs.root_task_id IS NOT NULL joined to team_versions and workspaces',
+      source:
+        'team_runs.root_task_id IS NOT NULL joined to team_versions and workspaces',
       candidate_count: candidateCount,
       ready_count: readyCount,
       missing_workspace_uuid_count: missingWorkspaceUuidCount,
@@ -194,15 +200,18 @@ async function collectEvidence(database) {
       registry_0029: registryRow !== null,
       owner_columns_present: columns.rows.length === TABLES.length * 2,
       trigger_check_present: triggerChecks.rows.length > 0,
-      backfill_source_ready: missingWorkspaceUuidCount === 0 && missingTeamVersionCount === 0,
+      backfill_source_ready:
+        missingWorkspaceUuidCount === 0 && missingTeamVersionCount === 0,
     },
   };
 }
 
 function readFormat(argv) {
-  if (argv.includes('--ndjson') || argv.includes('--format=ndjson')) return 'ndjson';
+  if (argv.includes('--ndjson') || argv.includes('--format=ndjson'))
+    return 'ndjson';
   const formatArg = argv.find((arg) => arg.startsWith('--format='));
-  if (formatArg && formatArg !== '--format=json') fail('format must be json or ndjson.');
+  if (formatArg && formatArg !== '--format=json')
+    fail('format must be json or ndjson.');
   return 'json';
 }
 
@@ -217,7 +226,8 @@ function printEvidence(evidence, outputFormat) {
 
 function numberValue(value) {
   const number = Number(value);
-  if (!Number.isSafeInteger(number)) throw new Error('count is outside safe integer range');
+  if (!Number.isSafeInteger(number))
+    throw new Error('count is outside safe integer range');
   return number;
 }
 

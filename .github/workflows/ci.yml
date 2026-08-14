@@ -9,18 +9,16 @@ permissions:
   contents: read
 
 jobs:
-  deterministic-gates:
+  candidate-deterministic:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: make setup
-      - run: make ci
+      - run: make ci-deterministic
 
-  real-postgres:
+  candidate-real-postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: make setup
-      - run: make test-real-pg
+      - run: make ci-real-pg

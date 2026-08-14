@@ -323,21 +323,20 @@ function buildWorkRunDetail(
 ) {
   const summary = toWorkRunResponse(loaded.workRun);
   const state = deriveProductState(product, runs);
+  const result = deriveProductResult(product);
   if (state === 'not_captured')
     return {
       ...summary,
       product_state: 'not_captured' as const,
       problem_kind: 'not_captured' as const,
       attention_reason: 'not_captured' as const,
-      result_summary: null,
-      result_capture_status: 'not_captured' as const,
+      ...result,
       control_revision: null,
       cancel_availability: 'not_captured' as const,
       completion_decision_availability: 'not_captured' as const,
     };
 
   const approvalPending = isApprovalPending(product);
-  const resultPresent = product.finalText !== null;
   return {
     ...summary,
     product_state: state,
@@ -345,12 +344,7 @@ function buildWorkRunDetail(
     attention_reason: approvalPending
       ? ('completion_approval_pending' as const)
       : null,
-    result_summary:
-      state === 'complete' && resultPresent ? product.finalText : null,
-    result_capture_status:
-      state === 'complete' && resultPresent
-        ? ('present' as const)
-        : ('not_present' as const),
+    ...result,
     control_revision: product.revision,
     // OI-33 cancellation controls are not part of this projection slice.
     cancel_availability: 'not_captured' as const,
@@ -377,6 +371,8 @@ function deriveProductState(
     runs.some((run) => run.status === 'failed' || run.status === 'timed_out')
   )
     return 'problem';
+  if (product.status === 'active' || product.status === 'waiting')
+    return 'running';
   if (
     runs.some(
       (run) => run.status === 'running' || run.status === 'waiting_children',
@@ -384,6 +380,20 @@ function deriveProductState(
   )
     return 'running';
   return 'not_captured';
+}
+
+function deriveProductResult(product: ProductProjectionDurableFacts) {
+  if (product.finalTextPresent !== (product.finalText !== null))
+    return {
+      result_summary: null,
+      result_capture_status: 'not_captured' as const,
+    };
+  return {
+    result_summary: product.finalTextPresent ? product.finalText : null,
+    result_capture_status: product.finalTextPresent
+      ? ('present' as const)
+      : ('not_present' as const),
+  };
 }
 
 function hasProductFactConflict(
@@ -398,11 +408,6 @@ function hasProductFactConflict(
   )
     return true;
   if (product.finalTextPresent !== (product.finalText !== null)) return true;
-  if (
-    product.completionApprovalRequired === false &&
-    product.completionRequestedByRunId !== null
-  )
-    return true;
   return (
     product.completionApprovalRequired === true &&
     product.approvalAccepted &&

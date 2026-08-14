@@ -95,9 +95,7 @@ if (process.argv.includes('--print-leaves')) {
 
 const baseline = (await readFile(baselineFile, 'utf8')).trim().split(/\s+/)[0];
 if (!/^[a-f0-9]{64}$/.test(baseline)) {
-  process.stderr.write(
-    `Legacy schema baseline is invalid: ${baselineFile}\n`,
-  );
+  process.stderr.write(`Legacy schema baseline is invalid: ${baselineFile}\n`);
   process.exitCode = 1;
 } else {
   // Compare sets so a rename is reported as one addition and one removal.
@@ -163,7 +161,8 @@ function flattenObject(body, prefix, definitions, active = new Set()) {
           `${path}[]`,
           definitions,
           active,
-        )) leaves.add(leaf);
+        ))
+          leaves.add(leaf);
         continue;
       }
       const ref = referenceName(arrayInner);
@@ -176,7 +175,8 @@ function flattenObject(body, prefix, definitions, active = new Set()) {
           `${path}[]`,
           definitions,
           nextActive,
-        )) leaves.add(leaf);
+        ))
+          leaves.add(leaf);
         continue;
       }
     }

@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api check-fast web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean provider-toolchain-acceptance provider-toolchain-status buildkit-cache-acceptance \
+.PHONY: setup foundation-phase-b foundation-phase-b-deterministic foundation-phase-b-acceptance dev dev-api check-fast web-bootstrap web-dev web-build web-check-types web-e2e-smoke test-web build check check-backend check-web ci-deterministic ci-real-pg test test-unit test-integration test-real-pg test-contract e2e-smoke paseo-smoke eval-smoke ci managed-environment-smoke clean provider-toolchain-acceptance provider-toolchain-status buildkit-cache-acceptance \
 	internal-setup internal-dev internal-dev-api internal-build internal-check internal-test internal-test-unit internal-test-integration \
 	internal-test-real-pg internal-test-contract internal-test-web internal-e2e-smoke internal-paseo-smoke internal-eval-smoke internal-ci internal-clean \
 	setup-native dev-native dev-api-native build-native check-native test-native test-unit-native test-integration-native test-real-pg-native \
@@ -6,14 +6,23 @@
 
 setup:
 	node scripts/dev/provider-setup-status.mjs
-	./scripts/dev/docker-compose build agent-server runner
-	./scripts/dev/docker-run -- node scripts/dev/resolve-opencode.mjs --check
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml build agent-server runner
+	./scripts/dev/docker-run --runtime --real-provider-defaults -- node scripts/dev/resolve-opencode.mjs --check
+
+foundation-phase-b:
+	node scripts/foundation/phase-b.mjs --candidate-sha "$${FOUNDATION_CANDIDATE_SHA:-$$(git rev-parse HEAD)}"
+
+foundation-phase-b-deterministic:
+	node scripts/foundation/phase-b.mjs E2 E3 E8 --candidate-sha "$${FOUNDATION_CANDIDATE_SHA:-$$(git rev-parse HEAD)}"
+
+foundation-phase-b-acceptance:
+	node scripts/foundation/phase-b.mjs E1 --candidate-sha "$${FOUNDATION_CANDIDATE_SHA:-$$(git rev-parse HEAD)}"
 
 dev:
-	./scripts/dev/docker-compose up --build postgres agent-server
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build postgres agent-server
 
 dev-api:
-	./scripts/dev/docker-compose up --build postgres agent-server
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build postgres agent-server
 
 web-bootstrap:
 	mkdir -p .local
@@ -29,12 +38,14 @@ web-bootstrap:
 		runner node scripts/dev/web-bootstrap.mjs
 
 web-dev:
-	./scripts/dev/docker-compose up --build -d postgres agent-server
+	@./scripts/dev/runtime-only-preflight web-dev
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build -d postgres agent-server
 	@until curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; do sleep 1; done
 	$(MAKE) web-bootstrap
-	@set -a; . .local/web-bootstrap.env; set +a; ./scripts/dev/docker-compose up --build web
+	@set -a; . .local/web-bootstrap.env; set +a; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build web
 
 web-e2e-smoke:
+	@./scripts/dev/runtime-only-preflight web-e2e-smoke
 	@set -eu; \
 	. ./scripts/dev/source-real-provider-defaults; \
 	wait_for_url() { \
@@ -49,7 +60,7 @@ web-e2e-smoke:
 	}; \
 	cleanup() { \
 		status="$$?"; \
-		./scripts/dev/docker-compose -f compose.yaml -f e2e/compose.web-provider.yaml down --remove-orphans >/dev/null 2>&1 || true; \
+		./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml -f e2e/compose.web-provider.yaml down --remove-orphans >/dev/null 2>&1 || true; \
 		trap - EXIT; \
 		exit "$$status"; \
 	}; \
@@ -57,31 +68,32 @@ web-e2e-smoke:
 	trap 'exit 143' TERM; \
 	trap cleanup EXIT; \
 	test -n "$${OPENCODE_GO_API_KEY:-}" || { echo 'OPENCODE_GO_API_KEY is required' >&2; exit 1; }; \
-	./scripts/dev/docker-compose -f compose.yaml -f e2e/compose.web-provider.yaml up --build -d postgres agent-server; \
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml -f e2e/compose.web-provider.yaml up --build -d postgres agent-server; \
 	wait_for_url http://127.0.0.1:3000/health/ready; \
 	$(MAKE) web-bootstrap; \
-	./scripts/dev/docker-compose -f compose.yaml -f e2e/compose.web-provider.yaml up --build -d web; \
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml -f e2e/compose.web-provider.yaml up --build -d web; \
 	wait_for_url http://127.0.0.1:3001; \
-	WEB_E2E_BASE_URL=http://web.localhost:3001 WEB_E2E_PROVIDER="$$PASEO_PROVIDER" WEB_E2E_MODEL="$$PASEO_MODEL" WEB_E2E_ARTIFACT_DIR=/workspace/.local/web-e2e-artifacts ./scripts/dev/docker-run --real-provider-defaults --bind-local --pass-env WEB_E2E_BASE_URL --pass-env WEB_E2E_PROVIDER --pass-env WEB_E2E_MODEL --pass-env WEB_E2E_ARTIFACT_DIR -- pnpm test:e2e:web
+	WEB_E2E_BASE_URL=http://web.localhost:3001 WEB_E2E_PROVIDER="$$PASEO_PROVIDER" WEB_E2E_MODEL="$$PASEO_MODEL" WEB_E2E_ARTIFACT_DIR=/workspace/.local/web-e2e-artifacts ./scripts/dev/docker-run --runtime --real-provider-defaults --bind-local --pass-env WEB_E2E_BASE_URL --pass-env WEB_E2E_PROVIDER --pass-env WEB_E2E_MODEL --pass-env WEB_E2E_ARTIFACT_DIR -- pnpm test:e2e:web
 
 test-web:
 	./scripts/dev/docker-run -- pnpm test:web
 
 mixed-team-journey:
+	@./scripts/dev/runtime-only-preflight mixed-team-journey
 	@test -n "$${OPENCODE_GO_API_KEY:-}" || { echo 'mixed-team-journey requires OPENCODE_GO_API_KEY' >&2; exit 1; }
-	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose up --build -d postgres agent-server
+	AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up --build -d postgres agent-server
 	@. ./scripts/dev/source-real-provider-defaults; attempts=$$(expr "$$PASEO_DAEMON_STARTUP_TIMEOUT_MS" / 1000 + 60); for attempt in $$(seq 1 "$$attempts"); do \
 		if curl -fsS http://127.0.0.1:3000/health/ready >/dev/null; then break; fi; \
 		if [ "$$attempt" -eq "$$attempts" ]; then echo "agent-server did not become ready after $${attempts}s" >&2; exit 1; fi; \
 		sleep 1; \
 	done
-	@dispatch_log="$$(./scripts/dev/docker-compose logs --no-color --no-log-prefix agent-server | grep '"event":"run.dispatch.started"' | tail -n 1)"; \
+	@dispatch_log="$$(./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml logs --no-color --no-log-prefix agent-server | grep '"event":"run.dispatch.started"' | tail -n 1)"; \
 		if [ -z "$$dispatch_log" ]; then echo 'agent-server dispatcher startup log not found' >&2; exit 1; fi; \
 		printf '%s\n' "$$dispatch_log" | grep -Eq '"event":"run.dispatch.started".*"concurrency":3([,}])' || { \
 			echo 'agent-server dispatcher did not start with concurrency=3' >&2; \
 			exit 1; \
 		}
-	@. ./scripts/dev/source-real-provider-defaults; AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose run --rm --no-deps \
+	@. ./scripts/dev/source-real-provider-defaults; AGENT_SERVER_DISPATCHER_CONCURRENCY=3 ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml run --rm --no-deps \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
 		-e AGENT_SERVER_WORKSPACE_ID="$${AGENT_SERVER_WORKSPACE_ID:-workspace_main}" \
@@ -106,6 +118,12 @@ build:
 check:
 	./scripts/dev/docker-run -- pnpm check
 
+check-backend:
+	./scripts/dev/docker-run -- pnpm check:backend
+
+check-web:
+	./scripts/dev/docker-run -- pnpm check:web
+
 # Types only. `check` also runs the web type-check, a repo-wide prettier pass,
 # a docs audit and an exec-plan audit; during MVE-stage development those gate
 # on things a backend change cannot break, and they turned a per-iteration
@@ -113,6 +131,14 @@ check:
 # once before handing work over.
 check-fast:
 	./scripts/dev/docker-run -- pnpm check:fast
+
+ci-deterministic:
+	docker image inspect agent-server-runner:latest >/dev/null 2>&1 || ./scripts/dev/docker-compose build runner
+	./scripts/dev/docker-run -- pnpm ci:deterministic
+
+ci-real-pg:
+	docker image inspect agent-server-runner:latest >/dev/null 2>&1 || ./scripts/dev/docker-compose build runner
+	./scripts/dev/docker-run --postgres -- pnpm test:real-pg
 
 test:
 	./scripts/dev/docker-run -- pnpm test
@@ -133,10 +159,10 @@ e2e-smoke:
 	./scripts/dev/docker-run -- pnpm test:e2e
 
 paseo-smoke:
-	./scripts/dev/docker-run -- pnpm test:paseo-smoke
+	./scripts/dev/docker-run --runtime --real-provider-defaults -- pnpm test:paseo-smoke
 
 provider-toolchain-status:
-	./scripts/dev/docker-run -- node provider-toolchain/scripts/provider-toolchain.mjs status
+	./scripts/dev/docker-run --runtime -- node provider-toolchain/scripts/provider-toolchain.mjs status
 
 provider-toolchain-acceptance:
 	./scripts/dev/provider-toolchain-acceptance.sh
@@ -154,26 +180,26 @@ managed-environment-smoke:
 	./scripts/dev/docker-run --postgres -- pnpm smoke:managed-environment
 
 self-learning-team-phase2-smoke:
-	./scripts/dev/docker-run --real-provider-defaults --postgres --pass-env PHASE2_SMOKE_POLL_MS --pass-env PHASE2_SMOKE_TIMEOUT_MS -- pnpm smoke:self-learning-team-phase2
+	./scripts/dev/docker-run --runtime --real-provider-defaults --postgres --pass-env PHASE2_SMOKE_POLL_MS --pass-env PHASE2_SMOKE_TIMEOUT_MS -- pnpm smoke:self-learning-team-phase2
 
 self-learning-team-phase3-smoke:
-	./scripts/dev/docker-run --real-provider-defaults --postgres --pass-env PHASE3_SMOKE_POLL_MS --pass-env PHASE3_SMOKE_TIMEOUT_MS --pass-env PHASE3_SMOKE_RETAIN_FILE -- pnpm smoke:self-learning-team-phase3
+	./scripts/dev/docker-run --runtime --real-provider-defaults --postgres --pass-env PHASE3_SMOKE_POLL_MS --pass-env PHASE3_SMOKE_TIMEOUT_MS --pass-env PHASE3_SMOKE_RETAIN_FILE -- pnpm smoke:self-learning-team-phase3
 
 agent-teams-v2-smoke:
-	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --real-provider-defaults --postgres --bind-local --pass-env PASEO_PROVIDER --pass-env PASEO_MODEL --pass-env PASEO_CONNECT_TIMEOUT_MS --pass-env PASEO_DAEMON_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS --pass-env PASEO_PROVIDER_REFRESH_TIMEOUT_MS --pass-env PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS --pass-env OPENCODE_GO_API_KEY --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME --pass-env AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_FORCE_STALL --pass-env AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE --pass-env AGENT_TEAMS_V2_SMOKE_REWORK --pass-env PRODUCT_WORK_DURABLE_IDENTITY -- pnpm smoke:agent-teams-v2
+	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --runtime --real-provider-defaults --postgres --bind-local --pass-env PASEO_PROVIDER --pass-env PASEO_MODEL --pass-env PASEO_CONNECT_TIMEOUT_MS --pass-env PASEO_DAEMON_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS --pass-env PASEO_PROVIDER_REFRESH_TIMEOUT_MS --pass-env PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS --pass-env OPENCODE_GO_API_KEY --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME --pass-env AGENT_TEAMS_V2_SMOKE_EXPIRED_LEASE_RECOVERY --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_FORCE_STALL --pass-env AGENT_TEAMS_V2_SMOKE_FAILED_ATTEMPT_MODE --pass-env AGENT_TEAMS_V2_SMOKE_REWORK --pass-env PRODUCT_WORK_DURABLE_IDENTITY -- pnpm smoke:agent-teams-v2
 
 product-work-projection-smoke:
-	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --real-provider-defaults --postgres --bind-local --pass-env PASEO_PROVIDER --pass-env PASEO_MODEL --pass-env PASEO_CONNECT_TIMEOUT_MS --pass-env PASEO_DAEMON_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS --pass-env PASEO_PROVIDER_REFRESH_TIMEOUT_MS --pass-env PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS --pass-env OPENCODE_GO_API_KEY --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env PRODUCT_LINEAGE_GOLDEN_OUTPUT --pass-env PRODUCT_LINEAGE_SOURCE_REVISION -- pnpm smoke:product-work-projection
+	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --runtime --real-provider-defaults --postgres --bind-local --pass-env PASEO_PROVIDER --pass-env PASEO_MODEL --pass-env PASEO_CONNECT_TIMEOUT_MS --pass-env PASEO_DAEMON_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS --pass-env PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS --pass-env PASEO_PROVIDER_REFRESH_TIMEOUT_MS --pass-env PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS --pass-env OPENCODE_GO_API_KEY --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL --pass-env AGENT_TEAMS_V2_SMOKE_TIMEOUT_SECONDS --pass-env AGENT_TEAMS_V2_SMOKE_RUNTIME_TIMEOUT_SECONDS --pass-env PRODUCT_LINEAGE_GOLDEN_OUTPUT --pass-env PRODUCT_LINEAGE_SOURCE_REVISION -- pnpm smoke:product-work-projection
 
 claude-provider-smoke:
-	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --bind-local --pass-env OPENCODE_GO_API_KEY --pass-env CLAUDE_PROVIDER_SMOKE_OMIT_AUTH --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL -- node scripts/smoke/claude-provider-main-flow.mjs
+	ANTHROPIC_BASE_URL="$${ANTHROPIC_BASE_URL:-https://opencode.ai/zen/go}" ANTHROPIC_API_KEY="$${ANTHROPIC_API_KEY:-$${OPENCODE_GO_API_KEY:-}}" ANTHROPIC_MODEL="$${ANTHROPIC_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_HAIKU_MODEL="$${ANTHROPIC_DEFAULT_HAIKU_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_SONNET_MODEL="$${ANTHROPIC_DEFAULT_SONNET_MODEL:-deepseek-v4-flash}" ANTHROPIC_DEFAULT_OPUS_MODEL="$${ANTHROPIC_DEFAULT_OPUS_MODEL:-deepseek-v4-flash}" ANTHROPIC_SMALL_FAST_MODEL="$${ANTHROPIC_SMALL_FAST_MODEL:-deepseek-v4-flash}" CLAUDE_CODE_SUBAGENT_MODEL="$${CLAUDE_CODE_SUBAGENT_MODEL:-deepseek-v4-flash}" ./scripts/dev/docker-run --runtime --bind-local --pass-env OPENCODE_GO_API_KEY --pass-env CLAUDE_PROVIDER_SMOKE_OMIT_AUTH --pass-env ANTHROPIC_BASE_URL --pass-env ANTHROPIC_API_KEY --pass-env ANTHROPIC_MODEL --pass-env ANTHROPIC_DEFAULT_HAIKU_MODEL --pass-env ANTHROPIC_DEFAULT_SONNET_MODEL --pass-env ANTHROPIC_DEFAULT_OPUS_MODEL --pass-env ANTHROPIC_SMALL_FAST_MODEL --pass-env CLAUDE_CODE_SUBAGENT_MODEL -- node scripts/smoke/claude-provider-main-flow.mjs
 
 provider-smoke:
 	@test -n "$$(printf '%s' "$${OPENCODE_GO_API_KEY:-}" | tr -d '[:space:]')" || { echo 'provider-smoke requires OPENCODE_GO_API_KEY (load it from a mode-0600 external file or environment)' >&2; exit 1; }
-	./scripts/dev/docker-compose build runner
-	./scripts/dev/docker-compose run --rm --no-deps runner true
-	@. ./scripts/dev/source-real-provider-defaults; wait_seconds=$$(expr "$$PASEO_DAEMON_STARTUP_TIMEOUT_MS" / 1000 + 60); trap 'rc=$$?; if [ "$$rc" -ne 0 ]; then echo "provider-smoke agent-server log tail:"; ./scripts/dev/docker-compose logs --no-color --no-log-prefix --tail=40 agent-server 2>/dev/null || true; fi; exit "$$rc"' EXIT; ./scripts/dev/docker-compose up -d --wait --wait-timeout "$$wait_seconds" postgres agent-server
-	@trap 'rc=$$?; if [ "$$rc" -ne 0 ]; then echo "provider-smoke agent-server log tail:"; ./scripts/dev/docker-compose logs --no-color --no-log-prefix --tail=40 agent-server 2>/dev/null || true; fi; exit "$$rc"' EXIT; ./scripts/dev/docker-compose run --rm --no-deps --entrypoint node \
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml build runner
+	./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml run --rm --no-deps runner true
+	@. ./scripts/dev/source-real-provider-defaults; wait_seconds=$$(expr "$$PASEO_DAEMON_STARTUP_TIMEOUT_MS" / 1000 + 60); trap 'rc=$$?; if [ "$$rc" -ne 0 ]; then echo "provider-smoke agent-server log tail:"; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml logs --no-color --no-log-prefix --tail=40 agent-server 2>/dev/null || true; fi; exit "$$rc"' EXIT; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml up -d --wait --wait-timeout "$$wait_seconds" postgres agent-server
+	@trap 'rc=$$?; if [ "$$rc" -ne 0 ]; then echo "provider-smoke agent-server log tail:"; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml logs --no-color --no-log-prefix --tail=40 agent-server 2>/dev/null || true; fi; exit "$$rc"' EXIT; ./scripts/dev/docker-compose -f compose.yaml -f compose.runtime.yaml run --rm --no-deps --entrypoint node \
 		-e AGENT_SERVER_BASE_URL=http://agent-server:3000 \
 		-e AGENT_SERVER_SERVICE_TOKEN="$${AGENT_SERVER_SERVICE_TOKEN:-token-local-dev}" \
 		-e PASEO_PROVIDER="$${PASEO_PROVIDER}" \

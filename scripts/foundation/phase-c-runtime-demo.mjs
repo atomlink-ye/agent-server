@@ -40,11 +40,12 @@ await writeOutcome();
 
 outcome.runtime_start = { started_at: new Date().toISOString() };
 await writeOutcome();
-const start = await run('pnpm', ['dev:runtime'], { inherit: true });
-outcome.runtime_start = { ...outcome.runtime_start, exit_code: start.exitCode };
+outcome.readiness = {
+  ...outcome.readiness,
+  status: 'polling',
+  started_at: new Date().toISOString(),
+};
 await writeOutcome();
-if (start.exitCode !== 0) await finish(start.exitCode);
-
 const readiness = await waitForReady();
 outcome.readiness = readiness;
 await writeOutcome();

@@ -102,6 +102,25 @@ export class PostgresRuntimeSessionLookup implements RuntimeSessionLookup {
       throw new Error('Execution session binding resolves to multiple RuntimeSessions.');
     return result.rows?.[0] ? mapRuntimeSession(result.rows[0]) : null;
   }
+
+  public async findByExecutionSessionBinding(
+    binding: Parameters<RuntimeSessionLookup['findByExecutionSessionBinding']>[0],
+  ): Promise<RuntimeSession | null> {
+    if (binding.plane !== 'paseo') return null;
+    const result = await this.db.query(
+      `SELECT rs.*, sls.workspace_id, sls.agent_version_id,
+              sls.environment_version_id, sls.resolved_skills, sls.tool_refs
+       FROM runtime_sessions rs
+       JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
+       WHERE rs.provider_agent_id=$1
+       ORDER BY rs.created_at DESC
+       LIMIT 2`,
+      [binding.externalSessionId],
+    );
+    if ((result.rows?.length ?? 0) > 1)
+      throw new Error('Execution session binding resolves to multiple RuntimeSessions.');
+    return result.rows?.[0] ? mapRuntimeSession(result.rows[0]) : null;
+  }
 }
 
 function mapRuntimeSession(row: any): RuntimeSession {

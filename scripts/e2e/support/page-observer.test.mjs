@@ -100,7 +100,7 @@ describe('C4 page observer incomplete and fail-closed duals', () => {
       page: secondPage,
       origin: 'http://example.test',
       allowlist,
-      postSealGuardMs: 30,
+      postSealGuardMs: 150,
     });
     second.attach();
     const initial = request('/api/works');
@@ -108,7 +108,7 @@ describe('C4 page observer incomplete and fail-closed duals', () => {
     secondPage.emit('response', response(initial, 200, { works: [] }));
     secondPage.emit('requestfinished', initial);
     const sealing = second.seal();
-    setTimeout(() => secondPage.emit('request', request('/api/team-project')), 10);
+    setTimeout(() => secondPage.emit('request', request('/api/team-project')), 100);
     await assert.rejects(sealing, (error) =>
       error instanceof PageObserverIncompleteError && error.reason === 'post-seal-activity',
     );

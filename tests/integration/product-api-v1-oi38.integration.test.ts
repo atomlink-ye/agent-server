@@ -384,6 +384,17 @@ describeRealPostgres(
             content: 'runtime-registry-e6',
           });
           memoryOk = true;
+          process.stdout.write(
+            `${JSON.stringify({
+              guard: 'runtime-tools-non-target-control',
+              control_identity: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+              memory_read_ok: memoryOk,
+              memory_call_raw_exit: 0,
+              memory_call_observed_count: 1,
+              memory_call_skip_count: 0,
+              memory_call_todo_count: 0,
+            })}\n`,
+          );
         }
         if (!workPresent)
           throw new Error(

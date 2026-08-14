@@ -5,6 +5,21 @@ import fs from 'node:fs';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 
+if (process.argv.includes('--self-test-window-equality')) {
+  const arm = {
+    mutation_window_id: 'self-test',
+    active_mutations: ['self-test'],
+    mutation_applied_at: 1,
+    control_started_at: 1,
+    control_completed_at: 2,
+    restore_started_at: 3,
+    restore_completed_at: 4,
+  };
+  const rejected = !mutationWindow(arm, 'self-test');
+  console.log(`mutation_window_equality_rejected=${rejected}`);
+  process.exit(rejected ? 0 : 1);
+}
+
 const input = option('--input');
 if (!input || !readable(input))
   missing(`input_unreadable:${input ?? 'absent'}`);
@@ -23,6 +38,8 @@ const expectedExits = {
   'canonical-database-unreachable': 2,
   'baseline-change-budget': 0,
   'verifier-input-missing': 2,
+  'verifier-window-equality-self-red': 1,
+  'verifier-window-equality-runtime-control': 0,
   'canonical-zero-execution': 2,
   'zero-execution-change-budget-control': 0,
   'remove-work-registration': 2,
@@ -73,14 +90,44 @@ const assertions = {
   exact_arm_exits: Object.entries(expectedExits).every(
     ([name, exit]) => arms[name]?.raw_exit === exit && arms[name]?.ok === true,
   ),
-  work_missing_non_target:
+  verifier_equality_mutation_red_control_green:
+    arms['verifier-window-equality-self-red']?.raw_exit === 1 &&
+    mutationWindow(
+      arms['verifier-window-equality-self-red'],
+      'verifier-window-nonstrict-equality',
+    ) &&
+    arms['verifier-window-equality-self-red']?.marker_assertions?.[
+      'mutation_window_equality_rejected=false'
+    ] === true &&
+    mutationWindow(
+      arms['verifier-window-equality-runtime-control'],
+      'verifier-window-nonstrict-equality',
+    ) &&
+    executionGreen(arms['verifier-window-equality-runtime-control']) &&
+    workCallGreen(arms['verifier-window-equality-runtime-control']) &&
+    memoryCallGreen(arms['verifier-window-equality-runtime-control']),
+  work_missing_target_red_memory_green:
+    arms['remove-work-registration']?.raw_exit === 2 &&
+    mutationWindow(
+      arms['remove-work-registration'],
+      'remove-work-registration',
+    ) &&
+    targetExecutionRan(arms['remove-work-registration']) &&
     arms['remove-work-registration']?.marker_assertions?.[
-      'non_target_memory_ok=true'
-    ] === true,
-  memory_missing_non_target:
+      'RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]'
+    ] === true &&
+    memoryCallGreen(arms['remove-work-registration']),
+  memory_missing_target_red_work_green:
+    arms['remove-memory-registration']?.raw_exit === 2 &&
+    mutationWindow(
+      arms['remove-memory-registration'],
+      'remove-memory-registration',
+    ) &&
+    targetExecutionRan(arms['remove-memory-registration']) &&
     arms['remove-memory-registration']?.marker_assertions?.[
-      'non_target_work_ok=true'
-    ] === true,
+      'RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]'
+    ] === true &&
+    workCallGreen(arms['remove-memory-registration']),
   handler_wrongness_target_red_work_green:
     arms['memory-handler-wrongness']?.raw_exit === 1 &&
     mutationWindow(
@@ -206,7 +253,7 @@ function mutationWindow(arm, mutationName) {
     Number.isInteger(arm.control_completed_at) &&
     Number.isInteger(arm.restore_started_at) &&
     Number.isInteger(arm.restore_completed_at) &&
-    arm.mutation_applied_at <= arm.control_started_at &&
+    arm.mutation_applied_at < arm.control_started_at &&
     arm.control_started_at <= arm.control_completed_at &&
     arm.control_completed_at < arm.restore_started_at &&
     arm.restore_started_at <= arm.restore_completed_at
@@ -236,6 +283,28 @@ function workCallGreen(arm) {
     arm.work_call_result?.work_call_observed_count > 0 &&
     arm.work_call_result?.work_call_skip_count === 0 &&
     arm.work_call_result?.work_call_todo_count === 0
+  );
+}
+
+function memoryCallGreen(arm) {
+  return (
+    arm?.memory_call_result?.guard === 'runtime-tools-non-target-control' &&
+    arm.memory_call_result?.control_identity === 'agent_server_memory_read' &&
+    arm.memory_call_result?.memory_read_ok === true &&
+    arm.memory_call_result?.memory_call_raw_exit === 0 &&
+    arm.memory_call_result?.memory_call_observed_count > 0 &&
+    arm.memory_call_result?.memory_call_skip_count === 0 &&
+    arm.memory_call_result?.memory_call_todo_count === 0
+  );
+}
+
+function targetExecutionRan(arm) {
+  return (
+    arm?.execution_result?.control_identity === focusedIdentity &&
+    arm.execution_result?.child_raw_exit === 1 &&
+    arm.execution_result?.observed_count > 0 &&
+    arm.execution_result?.skip_count === 0 &&
+    arm.execution_result?.todo_count === 0
   );
 }
 

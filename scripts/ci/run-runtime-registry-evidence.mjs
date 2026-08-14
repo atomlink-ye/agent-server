@@ -57,6 +57,36 @@ arms.push(
     ],
   ),
 );
+
+mutate(
+  'verifier-window-nonstrict-equality',
+  'scripts/ci/verify-runtime-registry-evidence.mjs',
+  'arm.mutation_applied_at < arm.control_started_at',
+  'arm.mutation_applied_at <= arm.control_started_at',
+  () => {
+    arms.push(
+      runArm(
+        'verifier-window-equality-self-red',
+        'node',
+        [
+          'scripts/ci/verify-runtime-registry-evidence.mjs',
+          '--self-test-window-equality',
+        ],
+        1,
+        ['mutation_window_equality_rejected=false'],
+      ),
+    );
+    arms.push(
+      canonical('verifier-window-equality-runtime-control', 0, [
+        '"observed_count":1',
+        '"skip_count":0',
+        '"todo_count":0',
+        '"control_identity":"product_work_create"',
+        '"control_identity":"agent_server_memory_read"',
+      ]),
+    );
+  },
+);
 arms.push(canonical('baseline-runtime-tools', 0, ['"observed_count":1']));
 arms.push(
   runWithoutDatabase('canonical-database-missing', 2, [
@@ -137,6 +167,7 @@ mutate(
       canonical('remove-work-registration', 2, [
         'RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]',
         'non_target_memory_ok=true',
+        '"control_identity":"agent_server_memory_read","memory_read_ok":true,"memory_call_raw_exit":0,"memory_call_observed_count":1,"memory_call_skip_count":0,"memory_call_todo_count":0',
       ]),
     );
     arms.push(typecheck('remove-work-registration-type-control'));
@@ -154,6 +185,7 @@ mutate(
       canonical('remove-memory-registration', 2, [
         'RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]',
         'non_target_work_ok=true',
+        '"control_identity":"product_work_create","work_present":true,"product_work_create_ok":true,"work_call_raw_exit":0,"work_call_observed_count":1,"work_call_skip_count":0,"work_call_todo_count":0',
       ]),
     );
     arms.push(typecheck('remove-memory-registration-type-control'));
@@ -531,6 +563,12 @@ function execute(name, executable, argv, expectedExit, markers, env) {
   const workCallResult = jsonGuard(
     combined,
     'runtime-tools-non-target-control',
+    'product_work_create',
+  );
+  const memoryCallResult = jsonGuard(
+    combined,
+    'runtime-tools-non-target-control',
+    'agent_server_memory_read',
   );
   return {
     name,
@@ -550,6 +588,7 @@ function execute(name, executable, argv, expectedExit, markers, env) {
     restore_completed_at: null,
     execution_result: executionResult,
     work_call_result: workCallResult,
+    memory_call_result: memoryCallResult,
     stdout,
     stderr,
     marker_assertions: markerAssertions,
@@ -599,12 +638,16 @@ function nextSequence() {
   timelineSequence += 1;
   return timelineSequence;
 }
-function jsonGuard(combined, guard) {
+function jsonGuard(combined, guard, controlIdentity = null) {
   for (const line of combined.split(/\r?\n/)) {
     if (!line.startsWith('{')) continue;
     try {
       const value = JSON.parse(line);
-      if (value.guard === guard) return value;
+      if (
+        value.guard === guard &&
+        (controlIdentity === null || value.control_identity === controlIdentity)
+      )
+        return value;
     } catch {
       // Non-JSON command output is retained verbatim and is not a guard record.
     }

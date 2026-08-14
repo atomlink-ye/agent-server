@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -12,9 +11,6 @@ export const BLOCKER_STILL_PRESENT = 1;
 export const UNBLOCKED_CANDIDATE = 0;
 export const MISSING = 2;
 
-const REPOSITORY_ROOT = resolve(
-  fileURLToPath(new URL('../..', import.meta.url)),
-);
 const DEFAULT_BINDING_FILE = resolve(
   fileURLToPath(
     new URL(
@@ -30,7 +26,6 @@ const FULL_SHA = /^[0-9a-f]{40}$/iu;
 const FULL_HASH = /^[0-9a-f]{64}$/iu;
 const HISTORICAL_MODE = 'historical_blocker_only' as const;
 const FUTURE_MODE = 'future_fresh_candidate' as const;
-const MAX_FUTURE_AGE_MS = 24 * 60 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 
@@ -146,26 +141,6 @@ function mode(): typeof HISTORICAL_MODE | typeof FUTURE_MODE {
   throw new MissingInput('mode_invalid');
 }
 
-function explicitCandidateSha(): string {
-  const value = argument('--candidate-sha') ?? process.env.C4_CANDIDATE_SHA;
-  if (!value || !FULL_SHA.test(value))
-    throw new MissingInput('candidate_sha_missing_or_invalid');
-  return value.toLowerCase();
-}
-
-function currentHead(): string {
-  try {
-    return execFileSync('git', ['-C', REPOSITORY_ROOT, 'rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .trim()
-      .toLowerCase();
-  } catch {
-    throw new MissingInput('candidate_repository_head_unreadable');
-  }
-}
-
 function schemaIssues(result: {
   readonly success: boolean;
   readonly error?: {
@@ -183,6 +158,8 @@ function schemaIssues(result: {
 
 async function loadInput(): Promise<LoadedInput> {
   const selectedMode = mode();
+  if (selectedMode === FUTURE_MODE)
+    throw new MissingInput('future_capture_attestation_not_implemented');
   const bundleDirectory =
     argument('--bundle-dir') ?? process.env.C4_BLOCKER_BUNDLE_DIR;
   if (!bundleDirectory) throw new MissingInput('bundle_directory_missing');
@@ -213,10 +190,7 @@ async function loadInput(): Promise<LoadedInput> {
   );
   const manifest = object(manifestInput.value, 'manifest');
   const manifestSha256 = sha256(manifestInput.bytes);
-  if (
-    selectedMode === HISTORICAL_MODE &&
-    (binding === null || manifestSha256 !== binding.manifest_sha256)
-  )
+  if (binding === null || manifestSha256 !== binding.manifest_sha256)
     throw new MissingInput('historical_manifest_binding_hash_mismatch');
   if (
     stringField(manifest, 'format_version', 'manifest') !==
@@ -226,25 +200,24 @@ async function loadInput(): Promise<LoadedInput> {
   )
     throw new MissingInput('manifest_capture_identity_invalid');
   if (
-    selectedMode === HISTORICAL_MODE &&
-    (stringField(manifest, 'root_task_id', 'manifest') !==
+    stringField(manifest, 'root_task_id', 'manifest') !==
       stringField(
         bindingIdentity as JsonObject,
         'root_task_id',
         'binding_identity',
       ) ||
-      stringField(manifest, 'work_id', 'manifest') !==
-        stringField(
-          bindingIdentity as JsonObject,
-          'work_id',
-          'binding_identity',
-        ) ||
-      stringField(manifest, 'work_run_id', 'manifest') !==
-        stringField(
-          bindingIdentity as JsonObject,
-          'work_run_id',
-          'binding_identity',
-        ))
+    stringField(manifest, 'work_id', 'manifest') !==
+      stringField(
+        bindingIdentity as JsonObject,
+        'work_id',
+        'binding_identity',
+      ) ||
+    stringField(manifest, 'work_run_id', 'manifest') !==
+      stringField(
+        bindingIdentity as JsonObject,
+        'work_run_id',
+        'binding_identity',
+      )
   )
     throw new MissingInput('historical_identity_binding_mismatch');
   const recordedAt = Date.parse(
@@ -253,28 +226,18 @@ async function loadInput(): Promise<LoadedInput> {
   if (!Number.isFinite(recordedAt) || recordedAt > Date.now() + 5 * 60 * 1000)
     throw new MissingInput('recorded_at_not_freshly_verifiable');
   if (
-    selectedMode === HISTORICAL_MODE &&
-    (stringField(manifest, 'recorded_at', 'manifest') !==
+    stringField(manifest, 'recorded_at', 'manifest') !==
       (binding as Binding).recorded_at ||
-      stringField(manifest, 'service_revision', 'manifest') !==
-        (binding as Binding).service_revision)
+    stringField(manifest, 'service_revision', 'manifest') !==
+      (binding as Binding).service_revision
   )
     throw new MissingInput('historical_freshness_binding_mismatch');
-  if (
-    selectedMode === FUTURE_MODE &&
-    Date.now() - recordedAt > MAX_FUTURE_AGE_MS
-  )
-    throw new MissingInput('future_recording_too_old');
-  if (selectedMode === HISTORICAL_MODE) {
-    const reportBytes = await bytesFile(
-      (binding as Binding).authoritative_report,
-      'authoritative_report',
-    );
-    if (
-      sha256(reportBytes) !== (binding as Binding).authoritative_report_sha256
-    )
-      throw new MissingInput('authoritative_report_hash_mismatch');
-  }
+  const reportBytes = await bytesFile(
+    (binding as Binding).authoritative_report,
+    'authoritative_report',
+  );
+  if (sha256(reportBytes) !== (binding as Binding).authoritative_report_sha256)
+    throw new MissingInput('authoritative_report_hash_mismatch');
 
   const apiInput = await jsonFile(resolve(bundle, API_FILE), API_FILE);
   const dbInput = await jsonFile(resolve(bundle, DB_FILE), DB_FILE);
@@ -282,9 +245,8 @@ async function loadInput(): Promise<LoadedInput> {
   const apiSha256 = sha256(apiInput.bytes);
   const dbSha256 = sha256(dbInput.bytes);
   if (
-    (selectedMode === HISTORICAL_MODE &&
-      (apiSha256 !== (binding as Binding).files[API_FILE] ||
-        dbSha256 !== (binding as Binding).files[DB_FILE])) ||
+    apiSha256 !== (binding as Binding).files[API_FILE] ||
+    dbSha256 !== (binding as Binding).files[DB_FILE] ||
     object(manifestFiles[API_FILE], 'manifest_api_file').sha256 !== apiSha256 ||
     object(manifestFiles[DB_FILE], 'manifest_db_file').sha256 !== dbSha256
   )
@@ -292,44 +254,8 @@ async function loadInput(): Promise<LoadedInput> {
   if (!Array.isArray(dbInput.value))
     throw new MissingInput('db_feedback_rows_shape_unverifiable');
 
-  let candidate: string | null = null;
-  let productRevision: string | null =
-    selectedMode === HISTORICAL_MODE
-      ? (binding as Binding).product_revision
-      : null;
-  if (selectedMode === FUTURE_MODE) {
-    const manifestCandidate = manifest.candidate_sha;
-    if (
-      typeof manifestCandidate !== 'string' ||
-      !FULL_SHA.test(manifestCandidate)
-    )
-      throw new MissingInput('future_manifest_candidate_sha_missing');
-    candidate = explicitCandidateSha();
-    if (
-      manifestCandidate.toLowerCase() !== candidate ||
-      candidate !== currentHead()
-    )
-      throw new MissingInput('future_candidate_binding_mismatch');
-    const captureSource = object(
-      manifest.capture_source,
-      'manifest_capture_source',
-    );
-    if (
-      captureSource.kind !== 'accepted-endpoint-db-snapshot' ||
-      captureSource.api_file !== API_FILE ||
-      captureSource.db_file !== DB_FILE ||
-      captureSource.api_sha256 !== apiSha256 ||
-      captureSource.db_sha256 !== dbSha256 ||
-      typeof captureSource.provenance_sha256 !== 'string' ||
-      !FULL_HASH.test(captureSource.provenance_sha256) ||
-      captureSource.provenance_sha256 !==
-        createHash('sha256')
-          .update(`${candidate}\n${apiSha256}\n${dbSha256}`)
-          .digest('hex')
-    )
-      throw new MissingInput('future_capture_source_unverifiable');
-    productRevision = manifestCandidate;
-  }
+  const candidate: string | null = null;
+  const productRevision: string | null = (binding as Binding).product_revision;
 
   return {
     mode: selectedMode,
@@ -341,14 +267,11 @@ async function loadInput(): Promise<LoadedInput> {
     dbSha256,
     candidateSha: candidate,
     productRevision,
-    expectedAttemptId:
-      selectedMode === HISTORICAL_MODE
-        ? stringField(
-            bindingIdentity as JsonObject,
-            'attempt_id',
-            'binding_identity',
-          )
-        : null,
+    expectedAttemptId: stringField(
+      bindingIdentity as JsonObject,
+      'attempt_id',
+      'binding_identity',
+    ),
   };
 }
 

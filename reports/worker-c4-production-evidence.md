@@ -29,14 +29,13 @@ It cannot be overridden with `--binding-file`, and historical mode never
 accepts an unblock. The old/static replay bundle has no DB source and no
 current binding, so it can only return `MISSING` (exit `2`).
 
-`future_fresh_candidate` is a separate mode. It ignores the historical sidecar
-as a trust source and requires the capture manifest itself to contain a full
-40-hex `candidate_sha`, exact API/DB hashes, a bounded recording age (24 hours),
-and `capture_source.kind=accepted-endpoint-db-snapshot` with source evidence.
-The explicit candidate must equal both that manifest value and the current
-repository HEAD. `service_revision=0.1.0` is not a candidate revision. Missing
-manifest provenance or candidate closure returns `MISSING` (exit `2`); an
-external sidecar alone can never create a future candidate.
+`future_fresh_candidate` is currently a required command mode but is
+fail-closed as `MISSING` (exit `2`) with
+`reason=future_capture_attestation_not_implemented`. It does not inspect a
+self-described manifest as freshness proof and cannot report either
+`BLOCKER_STILL_PRESENT` or `UNBLOCKED_CANDIDATE`. Green reachability is pending
+the accepted contract plus trusted direct-capture attestation/PLAN-D; an
+external sidecar or old bundle cannot create that attestation.
 
 The accepted capture enum is currently only `not_present|redacted`
 (`src/contracts/product-projection/identity.ts`). Therefore
@@ -139,6 +138,8 @@ Command (current rework bundle, historical W-REC trust root):
 Observed exit `1` and JSON status `BLOCKER_STILL_PRESENT`; the JSON recorded
 `attempt_id=524401a1-fd03-4dfa-93c7-621452a5e71d`, `recorded_at`, service
 revision, product revision `08c0d8351dbacab6e7e0eff5a686be11be3583db`,
-`candidate_sha=null`, and all manifest/API/DB hashes. Static fixture replay
-was also checked and returned `MISSING` exit `2` (`manifest_file_missing`),
-proving it cannot be used as a future unblock.
+`candidate_sha=null`, and all manifest/API/DB hashes. The required future-mode
+command was also checked against this old bundle and returned `MISSING` exit
+`2` (`future_capture_attestation_not_implemented`). Static fixture replay was
+checked and returned `MISSING` exit `2` (`manifest_file_missing`); neither old
+bundle nor self-described manifest can unblock or establish a current blocker.

@@ -6,6 +6,8 @@ export class RequestLedgerIncompleteError extends Error {
     this.details = details;
   }
 }
+export const REQUEST_LEDGER_MISSING_MARKER =
+  'c3_e8_observation_missing:reason=request-ledger-incomplete';
 function requestUrl(input) {
   return new URL(String(input), 'http://c3-e8-request-ledger.invalid');
 }
@@ -31,6 +33,12 @@ export function createRequestLedger(
   let inFlight = 0;
   let sealed = false;
   let collectorError = null;
+
+  function incomplete(reason, details) {
+    const error = new RequestLedgerIncompleteError(reason, details);
+    error.marker = REQUEST_LEDGER_MISSING_MARKER;
+    return error;
+  }
 
   const fetch = async (input, init) => {
     let url;
@@ -81,7 +89,7 @@ export function createRequestLedger(
     let quiet = 0;
     while (quiet < quietTurns) {
       if (collectorError)
-        throw new RequestLedgerIncompleteError('collector-error', {
+        throw incomplete('collector-error', {
           cause: collectorError,
         });
       if (inFlight !== 0) {
@@ -90,22 +98,22 @@ export function createRequestLedger(
         quiet += 1;
       }
       if (Date.now() >= deadline)
-        throw new RequestLedgerIncompleteError('timeout-or-pending', {
+        throw incomplete('timeout-or-pending', {
           inFlight,
           records: records.slice(),
         });
       await quietTurn();
     }
     if (inFlight !== 0)
-      throw new RequestLedgerIncompleteError('pending-at-seal', { inFlight });
+      throw incomplete('pending-at-seal', { inFlight });
     sealed = true;
     await new Promise((resolve) => setTimeout(resolve, postSealGuardMs));
     if (postSealActivity.length > 0)
-      throw new RequestLedgerIncompleteError('post-seal-activity', {
+      throw incomplete('post-seal-activity', {
         records: postSealActivity.slice(),
       });
     if (collectorError)
-      throw new RequestLedgerIncompleteError('collector-error', {
+      throw incomplete('collector-error', {
         cause: collectorError,
       });
     return snapshot();

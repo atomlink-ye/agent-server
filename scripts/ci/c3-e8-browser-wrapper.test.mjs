@@ -1,6 +1,10 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { browserSummaryOutcome, parseVitestSummary } from './c3-e8-browser-wrapper.mjs';
+import {
+  OBSERVATION_MISSING_MARKER,
+  browserSummaryOutcome,
+  parseVitestSummary,
+} from './c3-e8-browser-wrapper.mjs';
 
 const positive = 'Test Files 1 passed (1)\nTests 2 passed (2)';
 
@@ -28,5 +32,10 @@ describe('C3/E8 browser summary wrapper', () => {
       assert.equal(outcome.process, 2);
       assert.match(outcome.marker, /^c3_e8_browser_zero_execution:/u);
     }
+  });
+
+  it('reserves complete-summary observation missing for process 2', () => {
+    assert.equal(OBSERVATION_MISSING_MARKER,
+      'c3_e8_observation_missing:reason=request-ledger-incomplete');
   });
 });

@@ -6,7 +6,10 @@ import { WorkListShell } from '@/components/work/work-shell';
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success-fa77ba9.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once-fa77ba9.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
-import { createRequestLedger } from '../../../../scripts/ci/c3-e8-request-ledger.mjs';
+import {
+  createRequestLedger,
+  REQUEST_LEDGER_MISSING_MARKER,
+} from '../../../../scripts/ci/c3-e8-request-ledger.mjs';
 
 (
   globalThis as typeof globalThis & {
@@ -74,8 +77,11 @@ function poisonWorkList(workList: typeof populatedWorkList) {
         if (property === 'id' || property === 'title') return true;
         throw new Error(`work-list-semantic-has:${String(property)}`);
       },
-      ownKeys() {
-        return ['id', 'title'];
+      ownKeys(target) {
+        const keys = Reflect.ownKeys(target);
+        if (keys.some((key) => key !== 'id' && key !== 'title'))
+          throw new Error('work-list-semantic-own-key');
+        return keys;
       },
       getOwnPropertyDescriptor(target, property) {
         if (property === 'id' || property === 'title')
@@ -117,8 +123,25 @@ async function settleNetworkTurn() {
 it(
   'renders both recorder-backed Work titles and exact detail links without N+1 reads',
   async () => {
+    const workWithStatus = {
+      ...populatedWorkList,
+      works: [{ ...populatedWorkList.works[0], status: 'succeeded' }],
+    };
+    const ownKeyPoisoned = poisonWorkList(workWithStatus).works[0];
+    expect(() => Object.keys(ownKeyPoisoned)).toThrow(
+      'work-list-semantic-own-key',
+    );
+    expect(() => ({ ...ownKeyPoisoned })).toThrow(
+      'work-list-semantic-own-key',
+    );
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes('c3_e8_observation_missing=ledger')) {
+          expect(init?.headers).toMatchObject({
+            'x-c3-e8-observation': 'request-ledger',
+          });
+          return new Promise<Response>(() => {});
+        }
         expect(input).toBe('/api/works');
         expect(init?.method).toBe('GET');
         return jsonResponse(poisonWorkList(populatedWorkList));
@@ -136,7 +159,24 @@ it(
         await Promise.resolve();
       });
 
-      const requestSnapshot = await requestLedger.seal();
+      let requestSnapshot;
+      try {
+        requestSnapshot = await requestLedger.seal();
+      } catch (error) {
+        if ((error as { reason?: string }).reason === 'post-seal-activity')
+          throw error;
+        expect(error).toMatchObject({ marker: REQUEST_LEDGER_MISSING_MARKER });
+        const incompleteSnapshot = requestLedger.snapshot();
+        expect(incompleteSnapshot.records).toHaveLength(1);
+        expect(incompleteSnapshot.inFlight).toBe(1);
+        expect(incompleteSnapshot.records[0]).toMatchObject({
+          method: 'GET',
+          query: '?c3_e8_observation_missing=ledger',
+          lifecycle: 'started',
+        });
+        console.log(REQUEST_LEDGER_MISSING_MARKER);
+        return;
+      }
       expect(requestSnapshot.sealed).toBe(true);
       expect(requestSnapshot.inFlight).toBe(0);
       expect(requestSnapshot.records).toHaveLength(1);

@@ -3,6 +3,14 @@ import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
 export const BROWSER_ZERO_MARKER = 'c3_e8_browser_zero_execution';
+export const OBSERVATION_MISSING_MARKER =
+  'c3_e8_observation_missing:reason=request-ledger-incomplete';
+
+function exactMarkerCount(stdout, stderr, marker) {
+  return [stdout, stderr]
+    .flatMap((value) => value.toString('utf8').split(/\r?\n/u))
+    .filter((line) => line === marker).length;
+}
 
 function stripAnsi(value) {
   return value.replaceAll(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '');
@@ -89,12 +97,18 @@ export async function runBrowserWrapper({ cwd = process.cwd(), evidenceDirectory
   const result = await runFixedVitest(cwd);
   const summary = parseVitestSummary(result.stdout.toString('utf8'));
   const summaryOutcome = browserSummaryOutcome(summary);
+  const observationMissing =
+    exactMarkerCount(result.stdout, result.stderr, OBSERVATION_MISSING_MARKER) === 1;
   const outcome = result.spawnError || result.signal || result.code === null
     ? { process: 2, marker: `${BROWSER_ZERO_MARKER}:reason=runner-unavailable` }
     : result.code === 0
-      ? summaryOutcome
+      ? observationMissing && summary
+        ? { process: 2, marker: null }
+        : summaryOutcome
       : summary
-        ? { process: result.code, marker: null }
+        ? observationMissing
+          ? { process: 2, marker: null }
+          : { process: result.code, marker: null }
         : { process: 2, marker: `${BROWSER_ZERO_MARKER}:reason=summary-unparseable` };
   if (evidenceDirectory) {
     const directory = resolve(evidenceDirectory);

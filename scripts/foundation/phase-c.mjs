@@ -233,49 +233,60 @@ function evaluateE4(options) {
   const runtime = record.runtime_inspection;
   const agentProcesses = runtime?.agent_server?.processes;
   const runtimeProcesses = runtime?.paseo_runtime?.processes;
-  const agentEvidenceValid = validateProcessEvidence({
-    processes: agentProcesses,
-    process_collection: runtime?.agent_server?.process_collection,
-  });
-  const runtimeEvidenceValid = validateProcessEvidence({
-    processes: runtimeProcesses,
-    process_collection: runtime?.paseo_runtime?.process_collection,
-  });
   const agentPaseoProcess =
     Array.isArray(agentProcesses) && agentProcesses.some(isPaseoProcess);
   const runtimePaseoProcess =
     Array.isArray(runtimeProcesses) &&
     runtimeProcesses.some(isPaseoExecutableProcess);
+  const processEvaluation = evaluateProcessEvidenceMatrix({
+    agent_server_process_collection: {
+      collection: runtime?.agent_server?.process_collection,
+      processes: agentProcesses,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    paseo_runtime_process_collection: {
+      collection: runtime?.paseo_runtime?.process_collection,
+      processes: runtimeProcesses,
+      expectation:
+        record.mutation?.instrumentation === 'failed-runtime-child-carrier'
+          ? 'absent'
+          : 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+  });
+  if (processEvaluation.status === 'MISSING') {
+    const names = processEvaluation.process_collection ?? [];
+    return result(
+      'E4',
+      'MISSING',
+      names.some((name) => name.startsWith('agent_server_'))
+        ? 'agent_server process collection is missing or incomplete'
+        : 'paseo_runtime process collection is missing or incomplete',
+    );
+  }
+  if (processEvaluation.status === 'FAIL') {
+    const failures = [];
+    if (
+      processEvaluation.process_collection?.includes(
+        'agent_server_process_collection_unexpected',
+      )
+    )
+      failures.push('agent_server_paseo_process');
+    if (
+      processEvaluation.process_collection?.includes(
+        'paseo_runtime_process_collection_missing',
+      )
+    )
+      failures.push('runtime_paseo_process_missing');
+    return result('E4', 'FAIL', 'runtime ownership proposition failed', {
+      failures,
+    });
+  }
   const agentCollectionComplete =
-    agentEvidenceValid &&
     runtime?.agent_server?.process_collection?.complete === true;
   const runtimeCollectionComplete =
-    runtimeEvidenceValid &&
     runtime?.paseo_runtime?.process_collection?.complete === true;
-  if (!agentEvidenceValid)
-    return result(
-      'E4',
-      'MISSING',
-      'agent_server process collection is missing or incomplete',
-    );
-  if (!agentPaseoProcess && !agentCollectionComplete)
-    return result(
-      'E4',
-      'MISSING',
-      'agent_server process collection is missing or incomplete',
-    );
-  if (!runtimeEvidenceValid)
-    return result(
-      'E4',
-      'MISSING',
-      'paseo_runtime process collection is missing or incomplete',
-    );
-  if (!agentPaseoProcess && !runtimePaseoProcess && !runtimeCollectionComplete)
-    return result(
-      'E4',
-      'MISSING',
-      'paseo_runtime process collection is missing or incomplete',
-    );
   const requiredCollections = [
     compose?.services,
     runtime?.containers,

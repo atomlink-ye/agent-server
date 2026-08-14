@@ -457,6 +457,45 @@ selfConsistentTamper.process_collection.record_hash = hashProcessRecords(
   selfConsistentTamper.processes,
 );
 assert.equal(validateProcessEvidence(selfConsistentTamper), true);
+const counterfeitCompleteEmpty = {
+  processes: [],
+  process_collection: {
+    snapshots: [
+      {
+        numeric_count: 1,
+        emitted_count: 1,
+        enoent_count: 0,
+        read_error_count: 0,
+        integrity_error_count: 0,
+        error_class: 'none',
+      },
+      {
+        numeric_count: 1,
+        emitted_count: 1,
+        enoent_count: 0,
+        read_error_count: 0,
+        integrity_error_count: 0,
+        error_class: 'none',
+      },
+    ],
+    emitted_count: 0,
+    record_hash: hashProcessRecords([]),
+    stable: true,
+    complete: true,
+  },
+};
+assert.equal(validateProcessEvidence(counterfeitCompleteEmpty), false);
+const counterfeitSnapshotCount = structuredClone(unreadableDirectCollection);
+counterfeitSnapshotCount.process_collection.complete = true;
+counterfeitSnapshotCount.process_collection.stable = true;
+counterfeitSnapshotCount.process_collection.snapshots.forEach((snapshot) => {
+  snapshot.enoent_count = 0;
+  snapshot.read_error_count = 0;
+  snapshot.error_class = 'none';
+  snapshot.numeric_count = 2;
+  snapshot.emitted_count = 2;
+});
+assert.equal(validateProcessEvidence(counterfeitSnapshotCount), false);
 assert.equal(
   validateProcessEvidence({
     processes: [{ pid: 73, identity: 'other', duplicate: true }],

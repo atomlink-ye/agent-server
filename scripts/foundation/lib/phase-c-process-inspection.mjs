@@ -622,7 +622,8 @@ function strictProcessCollection(value, processes) {
           snapshot.integrity_error_count !== 0 ||
           snapshot.error_class !== 'none' ||
           snapshot.numeric_count !== snapshot.emitted_count ||
-          snapshot.emitted_count === 0,
+          snapshot.emitted_count === 0 ||
+          snapshot.emitted_count !== value.emitted_count,
       ))
   )
     throw new Error('process_collection_complete_invalid');

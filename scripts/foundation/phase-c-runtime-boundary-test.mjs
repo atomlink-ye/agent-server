@@ -344,6 +344,69 @@ function evaluateE6Proof(proof) {
     output: JSON.parse(child.stdout.trim().split('\n').at(-1)),
   };
 }
+function incompleteProcessCollection(processes) {
+  const value = completeProcessCollection(processes);
+  value.complete = false;
+  value.stable = false;
+  value.snapshots[0].enoent_count = 1;
+  value.snapshots[0].error_class = 'enoent';
+  return value;
+}
+function fullE6ProcessProof() {
+  const absent = [{ pid: 1, identity: 'other' }];
+  const present = [{ pid: 2, identity: 'paseo-daemon' }];
+  return {
+    ...minimalProof,
+    agent_server_process_collection: completeProcessCollection(absent),
+    agent_server_processes: absent,
+    paseo_runtime_process_collection: completeProcessCollection(present),
+    paseo_runtime_processes: present,
+    e4_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(present),
+      runtime_processes: present,
+    },
+    e4_workspace_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(present),
+      runtime_processes: present,
+    },
+    e4_root_runtime_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(present),
+      runtime_processes: present,
+    },
+    e4_runtime_state_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(absent),
+      runtime_processes: absent,
+      child_process_collection: completeProcessCollection(absent),
+      child_processes: absent,
+    },
+    e4_no_paseo_process_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(absent),
+      runtime_processes: absent,
+    },
+    e4_declarative_environment_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(present),
+      runtime_processes: present,
+    },
+    e4_actual_environment_mutation: {
+      agent_process_collection: completeProcessCollection(absent),
+      agent_processes: absent,
+      runtime_process_collection: completeProcessCollection(present),
+      runtime_processes: present,
+    },
+  };
+}
 const minimalProof = {
   work_id: 'work',
   work_run_id: 'run',
@@ -387,6 +450,57 @@ assert.deepEqual(missingE6MutationEvidence.output.process_collection, [
   'e4_actual_environment_mutation_agent_process_collection',
   'e4_actual_environment_mutation_runtime_process_collection',
 ]);
+const e6ContradictionPlusInvalid = fullE6ProcessProof();
+e6ContradictionPlusInvalid.paseo_runtime_processes = [
+  { pid: 2, identity: 'other' },
+];
+e6ContradictionPlusInvalid.paseo_runtime_process_collection =
+  completeProcessCollection(e6ContradictionPlusInvalid.paseo_runtime_processes);
+e6ContradictionPlusInvalid.e4_mutation.agent_processes = [
+  { pid: 3, identity: 'paseo-daemon', unknown_field: true },
+];
+e6ContradictionPlusInvalid.e4_mutation.agent_process_collection =
+  completeProcessCollection(
+    e6ContradictionPlusInvalid.e4_mutation.agent_processes,
+  );
+const e6InvalidBinding = evaluateE6Proof(e6ContradictionPlusInvalid);
+assert.equal(e6InvalidBinding.exit, 2);
+assert.equal(e6InvalidBinding.output.status, 'MISSING');
+assert.equal(
+  e6InvalidBinding.output.process_collection.includes(
+    'e4_mutation_agent_process_collection',
+  ),
+  true,
+);
+const e6ForbiddenIncomplete = fullE6ProcessProof();
+e6ForbiddenIncomplete.agent_server_processes = [
+  { pid: 3, identity: 'paseo-daemon' },
+];
+e6ForbiddenIncomplete.agent_server_process_collection =
+  incompleteProcessCollection(e6ForbiddenIncomplete.agent_server_processes);
+const e6Forbidden = evaluateE6Proof(e6ForbiddenIncomplete);
+assert.equal(e6Forbidden.exit, 1);
+assert.equal(e6Forbidden.output.status, 'FAIL');
+const e6PresentCompleteNoWitness = fullE6ProcessProof();
+e6PresentCompleteNoWitness.paseo_runtime_processes = [
+  { pid: 4, identity: 'other' },
+];
+e6PresentCompleteNoWitness.paseo_runtime_process_collection =
+  completeProcessCollection(e6PresentCompleteNoWitness.paseo_runtime_processes);
+const e6PresentComplete = evaluateE6Proof(e6PresentCompleteNoWitness);
+assert.equal(e6PresentComplete.exit, 1);
+assert.equal(e6PresentComplete.output.status, 'FAIL');
+const e6PresentIncompleteNoWitness = fullE6ProcessProof();
+e6PresentIncompleteNoWitness.paseo_runtime_processes = [
+  { pid: 5, identity: 'other' },
+];
+e6PresentIncompleteNoWitness.paseo_runtime_process_collection =
+  incompleteProcessCollection(
+    e6PresentIncompleteNoWitness.paseo_runtime_processes,
+  );
+const e6PresentIncomplete = evaluateE6Proof(e6PresentIncompleteNoWitness);
+assert.equal(e6PresentIncomplete.exit, 2);
+assert.equal(e6PresentIncomplete.output.status, 'MISSING');
 const positive = evaluate(baseRecord);
 assert.equal(positive.exit, 0);
 const incompleteAgentCollection = structuredClone(baseRecord);
@@ -400,6 +514,40 @@ assert.deepEqual(evaluate(incompleteAgentCollection), {
     reason: 'agent_server process collection is missing or incomplete',
   },
 });
+const unknownAgentRuntimeAbsent = structuredClone(baseRecord);
+unknownAgentRuntimeAbsent.runtime_inspection.agent_server.process_collection.complete = false;
+unknownAgentRuntimeAbsent.runtime_inspection.agent_server.process_collection.stable = false;
+unknownAgentRuntimeAbsent.runtime_inspection.agent_server.process_collection.snapshots[0].enoent_count = 1;
+unknownAgentRuntimeAbsent.runtime_inspection.agent_server.process_collection.snapshots[0].error_class =
+  'enoent';
+unknownAgentRuntimeAbsent.runtime_inspection.paseo_runtime.processes = [
+  { pid: 7, identity: 'other' },
+];
+unknownAgentRuntimeAbsent.runtime_inspection.paseo_runtime.process_collection =
+  completeProcessCollection(
+    unknownAgentRuntimeAbsent.runtime_inspection.paseo_runtime.processes,
+  );
+assert.deepEqual(evaluate(unknownAgentRuntimeAbsent), {
+  exit: 1,
+  output: {
+    suite: 'E4',
+    status: 'FAIL',
+    code: 1,
+    reason: 'runtime ownership proposition failed',
+    failures: ['runtime_paseo_process_missing'],
+  },
+});
+const invalidAgentRuntimeAbsent = structuredClone(unknownAgentRuntimeAbsent);
+invalidAgentRuntimeAbsent.runtime_inspection.agent_server.process_collection =
+  completeProcessCollection([
+    { pid: 9, identity: 'other', unknown_field: true },
+  ]);
+invalidAgentRuntimeAbsent.runtime_inspection.agent_server.processes = [
+  { pid: 9, identity: 'other', unknown_field: true },
+];
+const invalidAgentEvaluation = evaluate(invalidAgentRuntimeAbsent);
+assert.equal(invalidAgentEvaluation.exit, 2);
+assert.equal(invalidAgentEvaluation.output.status, 'MISSING');
 const tamperedAgentProcess = structuredClone(baseRecord);
 tamperedAgentProcess.runtime_inspection.agent_server.processes[0].unknown_field = true;
 assert.deepEqual(evaluate(tamperedAgentProcess), {

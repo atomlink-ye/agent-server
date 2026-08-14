@@ -261,7 +261,8 @@ activity are incomplete evidence, not absence. The populated response is a
 poisoned closed shape derived from the C1 projection: only `id` and `title`
 can be read; status/runs/latest/attempt/order/time/product-state reads throw.
 
-The C4 implementation commits are `82edbe9` and `6560a85`. The shared
+The C4 implementation commits are `82edbe9`, `6560a85`, and delayed-activity
+dual follow-up `c243e0a`. The shared
 `scripts/e2e/support/page-observer.mjs` owns request, response,
 requestfinished, and requestfailed lifecycle records, exact method/path/query
 allowlist matching, body acquisition/parse outcomes, sealed response counts,

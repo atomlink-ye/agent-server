@@ -101,7 +101,8 @@ Expected future artifact paths, created only after real execution:
 
 ## Shared observer and cleanup hardening
 
-The C4 follow-up adds `scripts/e2e/support/page-observer.mjs`, which records
+The C4 follow-up (`82edbe9`, `6560a85`, `c243e0a`) adds
+`scripts/e2e/support/page-observer.mjs`, which records
 request/response/requestfinished/requestfailed lifecycle, exact method/path/
 query allowlist decisions, response body parse outcomes, duplicate counts,
 in-flight generations, bounded quiet-point sealing, and post-seal activity.

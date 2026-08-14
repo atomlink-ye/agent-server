@@ -9,14 +9,9 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Managed Workspace memory snapshots](contracts/managed-workspace-memory-api.md) documents Product Workspace-owned immutable entries, verified local projections, snapshot reads, and rebuild behavior.
 - [Managed Environment API](contracts/managed-environment-api.md) documents the fixed authenticated Environment package, ProductSession pin, and internal RuntimeSession/Cell baseline.
 - [Self-learning Web API](contracts/self-learning-web-api.md) documents the fixed Project Lab BFF launch, bounded aggregate, root-bound review, safe errors, and local-only boundary.
-- [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public Phase B registry surface.
+- [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public managed Agent registry surface.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.
-- [Web Chat + Paseo Streaming MVE evidence](evidence/web-chat-paseo-streaming-mve-evidence-packet.md) records the earlier sanitized assistant-text-only fresh-session evidence; it does not prove rich events.
-- [Web Chat rich-events MVE evidence](evidence/web-chat-rich-events-mve-evidence-packet.md) records the later sanitized real-session rich-event, Markdown, persistence, and token-boundary evidence; production hardening remains deferred.
-- [Managed Single-Agent V1 evidence packet](evidence/managed-single-agent-v1-evidence-packet.md) records approved minimum-scenario evidence; production hardening remains deferred.
-- [Lark Managed Memory command canary](evidence/lark-managed-memory-command-canary-evidence-packet.md) records the fixed compatibility boundary and sanitized command-only evidence; it is not a production identity or delivery guarantee.
-- [Lark Managed Memory Card/Doc canary](evidence/lark-managed-memory-card-doc-canary-evidence-packet.md) records sanitized normal-path deterministic/provider evidence; it is not production identity, physical exactly-once, multi-node, or crash-recovery evidence.
 
 Changing a public field, status meaning, model-selection authority, or runtime responsibility is a Human Gate and requires contract tests plus documentation updates.
 
@@ -52,7 +47,7 @@ is not canonical Lark identity or production authorization.
 
 ## Managed Agent package and registry API
 
-The Phase B managed Agent API is intentionally narrow. It exposes validation, import, owner-scoped reads, version listing, and publication only. Every route requires an enabled service-account bearer token. Managed Agent identity and read/publish scope are derived from authenticated `tenant` plus `principal`. The authenticated workspace is carried only as a legacy compatibility snapshot on import; it does not participate in managed identity, read, or publish scope. Callers cannot supply tenant, principal, or workspace values. Every response carries the supplied `x-request-id`, or a generated request ID when the header is absent. Errors use the common envelope:
+The managed Agent API is intentionally narrow. It exposes validation, import, owner-scoped reads, version listing, and publication only. Every route requires an enabled service-account bearer token. Managed Agent identity and read/publish scope are derived from authenticated `tenant` plus `principal`. The authenticated workspace is carried only as a legacy compatibility snapshot on import; it does not participate in managed identity, read, or publish scope. Callers cannot supply tenant, principal, or workspace values. Every response carries the supplied `x-request-id`, or a generated request ID when the header is absent. Errors use the common envelope:
 
 ```json
 {
@@ -125,7 +120,7 @@ The validated package is canonicalized to stable JSON and fingerprinted with SHA
 
 Canonical Task admission and execution resolution accept an explicit published managed Agent version ID. A draft version is rejected as not found at that Task boundary until it is published; foreign and missing versions are likewise hidden as the owner-safe not-found result. Owner-scoped draft definitions and versions remain readable/listable through the registry API and draft versions remain publishable. The existing legacy Run compatibility route and Team invokable compatibility remain; Team execution remains the implemented sequential compatibility subset rather than a claim of the full Team V1 graph contract.
 
-## Private Workspace and Session Lane API (Phase C minimum)
+## Private Workspace and Session Lane API (minimum)
 
 These routes require the existing service-account bearer authentication and derive
 tenant plus principal ownership from the authenticated request. A principal may
@@ -143,7 +138,7 @@ Workspace. Foreign or missing resources are hidden as `404`.
 | `POST` | `/api/v1/sessions/{session_id}/messages` | `202`   | Admits Message, root Task, Run attempt 1, idempotency record, dispatch intent, and lane metadata in one transaction.                                               |
 | `POST` | `/api/v1/sessions/{session_id}:reset`    | `200`   | Increments generation; requests cancellation for the active old-generation root and cancels only non-active queued old-generation roots with `cancelled_by_reset`. |
 
-Phase C workspace boundary: multi-workspace/requested-workspace authorization
+Workspace boundary: multi-workspace/requested-workspace authorization
 applies only to Session and Memory resources. Work and its Definition are
 workspace-scoped, but their workspace is derived from the authenticated
 service-account binding; callers cannot request a Work workspace. An
@@ -179,7 +174,7 @@ ordered by `(generation, sequence)`. Terminal completion promotes the oldest
 eligible queued root and clears the reset cancellation request. Responses never
 include owner IDs, raw prompts, provider errors, or database details. Runtime
 Full Runtime Session V2 create/resume/status remains outside this MVP contract.
-The minimum Phase D contract adds assistant/final Messages, replayable SSE/events,
+The minimum streaming/cancellation contract adds assistant/final Messages, replayable SSE/events,
 and owner-scoped provider cancellation; incremental deltas, rich usage, retries,
 and receipts remain deferred.
 

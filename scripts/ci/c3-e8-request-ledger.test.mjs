@@ -37,10 +37,15 @@ describe('C3/E8 request ledger', () => {
     );
     await ledger.fetch('/api/works');
     const sealing = ledger.seal();
-    setTimeout(() => {
-      void ledger.fetch('/api/works/work-1/runs');
-      release(response());
-    }, 10);
+    await new Promise((resolve) => {
+      const timer = setInterval(() => {
+        if (!ledger.sealed) return;
+        clearInterval(timer);
+        void ledger.fetch('/api/works/work-1/runs');
+        release(response());
+        resolve();
+      }, 1);
+    });
     await assert.rejects(sealing, (error) => {
       assert(error instanceof RequestLedgerIncompleteError);
       assert.equal(error.reason, 'post-seal-activity');

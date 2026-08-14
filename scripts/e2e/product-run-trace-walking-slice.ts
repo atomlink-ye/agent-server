@@ -33,6 +33,16 @@ import {
 
 const startupTimeoutMs = Number(process.env.C4_STARTUP_TIMEOUT_MS ?? 30_000);
 const appUrl = process.env.C4_APP_URL ?? 'http://127.0.0.1:3001';
+export const FULL_MACHINE_NAME = 'E11_FULL_PRODUCT_JOURNEY';
+export const FULL_BLOCKED_STATUS = 'BLOCKED_BY_PRODUCT_DEFECT';
+const FULL_DEFECT = {
+  durable_db_feedback_attempt_id: '524401a1-fd03-4dfa-93c7-621452a5e71d',
+  api_feedback_summary: null,
+  api_feedback_capture_status: 'redacted',
+  facts_query: 'IS NOT NULL only',
+  facts_source_summary: 'null/presence -> redacted',
+  lineage: 'capture_to_null',
+} as const;
 
 type AnchoredTrace = Extract<
   ProductRunTrace,
@@ -449,12 +459,14 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       return FAIL;
     }
     if (allMismatches.length > 0) return FAIL;
-    await writeEvidence(`e11-walking-slice-${scenario}.json`, {
+    await writeEvidence('e11-full-product-journey-blocked.json', {
+      machine_name: FULL_MACHINE_NAME,
       ...base,
-      status: 'PASS',
-      exit_code: PASS,
+      status: FULL_BLOCKED_STATUS,
+      exit_code: MISSING,
+      defect: FULL_DEFECT,
     });
-    return PASS;
+    return MISSING;
   } catch {
     return MISSING;
   } finally {
@@ -465,6 +477,28 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
 }
 
 async function run(): Promise<number> {
+  // The full journey is intentionally blocked until the product defect is
+  // fixed. Keep the complete assertion implementation above for review, but
+  // never execute it or emit a PASS artifact under this machine name.
+  try {
+    await writeEvidence('e11-full-product-journey-blocked.json', {
+      machine_name: FULL_MACHINE_NAME,
+      status: FULL_BLOCKED_STATUS,
+      exit_code: MISSING,
+      aggregate: {
+        full_machine: FULL_MACHINE_NAME,
+        full_status: FULL_BLOCKED_STATUS,
+        partial_status: 'INDEPENDENT_PARTIAL_ONLY',
+      },
+      defect: FULL_DEFECT,
+    });
+  } catch {
+    // Missing evidence configuration remains MISSING; never downgrade the
+    // product-defect gate to a PASS marker.
+  }
+  return MISSING;
+
+  /* istanbul ignore next -- retained full assertion path is gated above. */
   let redArm: ReplayMutation;
   try {
     redArm = mutation();

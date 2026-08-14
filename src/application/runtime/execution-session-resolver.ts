@@ -5,6 +5,7 @@ import {
   type ExecutionSessionSpec,
   type ExecutionWorkspaceBinding,
 } from '../ports/execution-plane.js';
+import { requirePlaneCapability } from './execution-capabilities.js';
 import type {
   RuntimeSession,
   RuntimeSessionRepository,
@@ -57,6 +58,8 @@ export class ExecutionSessionResolver {
     };
 
     if (runtime.sessionBinding) {
+      requirePlaneCapability(this.plane.capabilities(), 'reusable_session');
+      requirePlaneCapability(this.plane.capabilities(), 'external_workspace');
       if (!runtime.workspaceBinding)
         throw new ExecutionBindingUnavailableError(
           'Reusable execution session has no workspace binding.',
@@ -65,6 +68,8 @@ export class ExecutionSessionResolver {
       return { runtimeSession: runtime, session };
     }
 
+    if (effectiveWorkspaceBinding)
+      requirePlaneCapability(this.plane.capabilities(), 'external_workspace');
     const created = await this.plane.createSession(spec);
     let bound: RuntimeSession;
     try {

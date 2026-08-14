@@ -29,8 +29,11 @@ export interface RuntimeSession {
   readonly updatedAt: string;
 }
 
-export interface RuntimeSessionRepository {
+export interface RuntimeSessionLookup {
   findById(id: string): Promise<RuntimeSession | null>;
+}
+
+export interface RuntimeSessionRepository {
   createOrGetForTeamMember?(input: {
     teamMemberRunId: string;
     taskId: string;

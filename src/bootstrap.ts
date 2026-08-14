@@ -352,6 +352,7 @@ export async function createService(
   });
   const {
     runtime,
+    executionRuns,
     sessions: runtimeSessions,
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
@@ -367,7 +368,7 @@ export async function createService(
   const cancelTask = new CancelTask(
     taskRepository,
     runRepository,
-    runtime,
+    executionRuns,
     events,
   );
   const getTask = new GetTask(taskRepository);

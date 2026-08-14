@@ -12,8 +12,10 @@ import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import {
   RuntimeTimedOutError,
+  type AgentRuntimeExecuteInput,
   type AgentRuntimePort,
 } from '../ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
   RunCompletionConflictError,
@@ -35,6 +37,8 @@ import {
   createRuntimeExecutionReceipt,
   RunCompletionPersistenceError,
 } from './runtime-execution-receipt.js';
+
+type TestExecutionRuntime = AgentRuntimePort & ExecutionRuntimeService;
 
 describe('ExecuteRun', () => {
   it('fails a terminal run when the runtime rejects execution', async () => {
@@ -1713,7 +1717,7 @@ describe('ExecuteRun', () => {
 
 function createExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: AgentRuntimePort;
+  readonly runtime: TestExecutionRuntime;
   readonly task: Task;
   readonly logger?: Logger;
 }): ExecuteRun {
@@ -1882,7 +1886,7 @@ function createLeadRuntimeFixture() {
 
 function createDirectExecuteRun(input: {
   readonly completeRun: CompleteRun;
-  readonly runtime: AgentRuntimePort;
+  readonly runtime: TestExecutionRuntime;
   readonly task: Task;
   readonly resolver: ResolveAgentVersion;
   readonly createMemoryProposal?: CreateMemoryProposal;
@@ -1908,23 +1912,23 @@ function createDirectExecuteRun(input: {
 
 function createRuntimeWithCandidates(
   providerAgentId = 'agent-test',
-): AgentRuntimePort {
-  return {
-    ...createRuntime(),
-    execute: vi.fn(async () => ({
-      provider: 'test-provider',
-      model: 'test-model',
-      text: 'safe result',
-      providerAgentId,
-      memoryCandidates: [
-        { category: 'project_constraint', content: 'keep logs' },
-      ],
-    })),
-  };
+): TestExecutionRuntime {
+  const runtime = createRuntime();
+  runtime.execute = vi.fn(async () => ({
+    provider: 'test-provider',
+    model: 'test-model',
+    text: 'safe result',
+    providerAgentId,
+    runtimeWorkspaceId: 'workspace-test',
+    memoryCandidates: [
+      { category: 'project_constraint', content: 'keep logs' },
+    ],
+  }));
+  return runtime;
 }
 
-function createRuntime(error?: Error): AgentRuntimePort {
-  return {
+function createRuntime(error?: Error): TestExecutionRuntime {
+  const runtime = {
     initialize: vi.fn(async () => undefined),
     health: vi.fn(async () => ({
       ready: true,
@@ -1939,10 +1943,91 @@ function createRuntime(error?: Error): AgentRuntimePort {
         model: 'test-model',
         text: 'safe result',
         providerAgentId: 'agent-test',
+        runtimeWorkspaceId: 'workspace-test',
       };
     }),
+    cancel: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
-  };
+  } as unknown as TestExecutionRuntime;
+  runtime.ensureReady = vi.fn(async () => (await runtime.health()).ready);
+  runtime.executeTurn = vi.fn(async (input) => {
+    const legacyInput = (input.systemPrompt !== undefined
+      ? {
+          operation: 'create',
+          runId: input.runId,
+          prompt: input.prompt,
+          systemPrompt: input.systemPrompt,
+          ...(input.provider
+            ? { provider: input.provider, model: input.model ?? 'test-model' }
+            : {}),
+          ...(input.runtimeSessionId
+            ? { runtimeSessionId: input.runtimeSessionId }
+            : {}),
+          ...(input.workspaceBinding
+            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
+            : {}),
+          ...(input.cwd ? { cellCwd: input.cwd } : {}),
+          ...(input.workspaceTitle ? { workspaceTitle: input.workspaceTitle } : {}),
+          ...(input.sessionTitle ? { agentTitle: input.sessionTitle } : {}),
+          ...(input.labels ? { agentLabels: input.labels } : {}),
+          ...(input.extensions ? { extensions: input.extensions } : {}),
+          ...(input.proposalLimit !== undefined
+            ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
+            : {}),
+        }
+      : {
+          operation: 'continue',
+          runId: input.runId,
+          prompt: input.prompt,
+          providerAgentId:
+            input.compatibilitySessionBinding?.externalSessionId ?? 'agent-test',
+          ...(input.runtimeSessionId
+            ? { runtimeSessionId: input.runtimeSessionId }
+            : {}),
+          ...(input.workspaceBinding
+            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
+            : {}),
+          ...(input.cwd ? { cellCwd: input.cwd } : {}),
+          ...(input.proposalLimit !== undefined
+            ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
+            : {}),
+        }) as AgentRuntimeExecuteInput;
+    const execution = await runtime.execute(legacyInput);
+    return {
+      provider: execution.provider,
+      model: execution.model,
+      text: execution.text,
+      workspaceBinding: {
+        plane: 'paseo',
+        externalWorkspaceId:
+          execution.runtimeWorkspaceId ??
+          input.workspaceBinding?.externalWorkspaceId ??
+          'workspace-test',
+      },
+      sessionBinding: {
+        plane: 'paseo',
+        externalSessionId: execution.providerAgentId,
+      },
+      ...(execution.usage ? { usage: execution.usage } : {}),
+      ...(execution.memoryCandidates
+        ? { memoryCandidates: execution.memoryCandidates }
+        : {}),
+    };
+  });
+  runtime.cancelRun = vi.fn(async ({ runId }) => {
+    await runtime.cancel?.({ runId });
+  });
+  runtime.planeHealth = vi.fn(async () => {
+    const health = await runtime.health();
+    return {
+      ready: health.ready,
+      plane: 'test',
+      provider: health.provider,
+      ...(health.model ? { model: health.model } : {}),
+      checks: health.checks,
+    };
+  });
+  return runtime;
 }
 
 function createClaim(): ClaimedRun {

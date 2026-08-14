@@ -10,7 +10,7 @@ import {
   boundedRunEventPayload,
   type RunEventPayload,
 } from '../ports/run-events.js';
-import { runtimeEventPayload } from './execute-run.js';
+import { runtimeEventPayload } from './runtime-event-compatibility.js';
 import { InMemoryRunEventRepository } from '../../infrastructure/memory/in-memory-run-event-repository.js';
 
 const runId = '00000000-0000-4000-8000-000000000001';

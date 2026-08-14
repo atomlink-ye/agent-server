@@ -109,6 +109,10 @@ async function assertDom(page: any, expected: PartialFacts): Promise<DomFacts> {
   const markers = page.locator(feedbackMarkerSelector);
   const markerCount = await markers.count();
   if (markerCount !== expected.expectedMarkerCount) mismatches.push('feedback_marker_count');
+  if (markerCount > 0) {
+    const relation = await markers.nth(0).getAttribute('data-attempt-id');
+    if (relation !== expected.feedbackAttempt?.id) mismatches.push('feedback_edge');
+  }
 
   const attempts = page.locator('[data-testid="trace-attempt"]');
   const attemptCount = await attempts.count();
@@ -137,7 +141,7 @@ async function applyMutation(page: any, expected: PartialFacts, arm: RedArm): Pr
     const marker = document.querySelector(selector);
     if (mutationArm === 'edge') {
       if (!marker) return false;
-      marker.removeAttribute('aria-label');
+      marker.setAttribute('data-attempt-id', 'mutated-attempt-relation');
       return true;
     }
     if (mutationArm === 'marker') {

@@ -38,7 +38,7 @@ if (!configuration) {
     process.env.COMPOSE_PROJECT_NAME?.trim() || configuration.project;
   const args = ['-p', project];
   for (const file of configuration.files) args.push('-f', file);
-  args.push('up', '--build', '-d', '--wait', ...configuration.services);
+  args.push('up', '-d', '--wait', ...configuration.services);
 
   const child = spawn(compose, args, {
     cwd: repositoryRoot,

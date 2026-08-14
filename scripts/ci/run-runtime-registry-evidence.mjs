@@ -162,7 +162,7 @@ mutate(
   'memory-handler-wrongness',
   'src/entrypoints/mcp/runtime-tool-contributors.ts',
   'async (args, currentGrant) => readMemory(args, currentGrant, repository),',
-  "async () => { throw new Error('runtime-registry-e6-wrong'); },",
+  "async () => { process.stderr.write('runtime-registry-e6-wrong\\n'); throw new Error('runtime-registry-e6-wrong'); },",
   () => {
     arms.push(
       canonical('memory-handler-wrongness', 1, [

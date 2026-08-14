@@ -43,6 +43,15 @@ export function browserSummaryOutcome(summary) {
 
 function runFixedVitest(cwd) {
   return new Promise((resolveResult) => {
+    let finished = false;
+    let killTimer;
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(killTimer);
+      resolveResult(result);
+    };
     const child = spawn(
       'pnpm',
       ['exec', 'vitest', '--config', 'vitest.web.config.ts', '--run', 'apps/web/components/work/work-list.browser.test.tsx'],
@@ -62,8 +71,13 @@ function runFixedVitest(cwd) {
     const stderr = [];
     child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
-    child.on('error', (error) => resolveResult({ code: null, signal: null, spawnError: error, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) }));
-    child.on('close', (code, signal) => resolveResult({ code, signal, spawnError: null, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) }));
+    child.on('error', (error) => finish({ code: null, signal: null, spawnError: error, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) }));
+    child.on('close', (code, signal) => finish({ code, signal, spawnError: null, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) }));
+    const timeoutMs = Number(process.env.C3_E8_RUNNER_TIMEOUT_MS ?? 120_000);
+    const timeoutTimer = setTimeout(() => {
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
+    }, Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120_000);
   });
 }
 

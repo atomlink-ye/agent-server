@@ -27,6 +27,9 @@ process.stdout.write(stdout);
 process.stderr.write(stderr);
 
 const rawExit = result.status;
+console.error(
+  `work_acceptance_child_result:status=${rawExit ?? 'null'}:signal=${result.signal ?? 'none'}:error=${result.error?.code ?? 'none'}`,
+);
 const combined = `${stdout}\n${stderr}`;
 const taggedMarker = `WORK_ACCEPTANCE_MISSING[${exactMarker}]`;
 const exactMarkerPresent = combined

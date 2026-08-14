@@ -48,7 +48,10 @@ arms.push(
       `console.log('classifier_child_success');process.exit(0)`,
     ],
     0,
-    ['classifier_child_success'],
+    [
+      'classifier_child_success',
+      'work_acceptance_child_result:status=0:signal=none:error=none',
+    ],
   ),
 );
 arms.push(
@@ -117,7 +120,7 @@ arms.push(
 );
 arms.push(
   runArm(
-    'classifier-arbitrary-nonzero-fail',
+    'classifier-raw-three-fail',
     'node',
     [
       'scripts/ci/classify-work-acceptance.mjs',
@@ -126,10 +129,105 @@ arms.push(
       '--',
       'node',
       '-e',
-      `console.error('arbitrary_nonzero');process.exit(37)`,
+      `console.error('raw_three');process.exit(3)`,
     ],
     1,
-    ['arbitrary_nonzero'],
+    [
+      'raw_three',
+      'work_acceptance_child_result:status=3:signal=none:error=none',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-wrong-kind-marker-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]');process.exit(1)`,
+    ],
+    1,
+    [
+      'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+      'work_acceptance_child_result:status=1:signal=none:error=none',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-child-signal-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('classifier_child_signal');process.kill(process.pid, 'SIGTERM')`,
+    ],
+    1,
+    [
+      'classifier_child_signal',
+      'work_acceptance_child_result:status=null:signal=SIGTERM:error=none',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-spawn-unavailable-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      '/tmp/mgr-b-deliberately-absent-work-acceptance-command',
+    ],
+    1,
+    ['work_acceptance_child_result:status=null:signal=none:error=ENOENT'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-missing-kind-option',
+    'node',
+    ['scripts/ci/classify-work-acceptance.mjs', '--', 'node', '-e', ''],
+    2,
+    ['work_acceptance_classifier_invalid:missing_option:--kind'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-missing-command',
+    'node',
+    ['scripts/ci/classify-work-acceptance.mjs', '--kind', 'http-projection'],
+    2,
+    ['work_acceptance_classifier_invalid:missing_command'],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-unknown-kind',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'deliberately-unknown',
+      '--',
+      'node',
+      '-e',
+      '',
+    ],
+    2,
+    [
+      'work_acceptance_classifier_invalid:unknown_classification:deliberately-unknown',
+    ],
   ),
 );
 

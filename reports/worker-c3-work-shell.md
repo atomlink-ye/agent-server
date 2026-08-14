@@ -217,6 +217,7 @@ manifest.
 After the evidence commit, the canonical symbolic command
 `git diff --check 01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` is recorded as
 exit 2 because preserved raw ANSI captures in `e8-classifier-a02b54a/`,
-`e8-classifier-51c102f/`, and `e8-classifier-248d254/` contain whitespace
+`e8-classifier-51c102f/`, `e8-classifier-248d254/`, and
+`e8-classifier-6f1f0c3/` contain whitespace
 findings. Scoped source/tests/runner/report checks are exit 0; raw evidence is
 retained and no full-range PASS is claimed.

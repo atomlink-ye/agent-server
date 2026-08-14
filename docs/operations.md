@@ -1,37 +1,49 @@
 # Operations
 
-The baseline supports local development and external smoke only. It has no production deployment or SLO.
+Agent Server currently supports local development, deterministic verification, and explicit external-runtime smoke. Production deployment/SLO/backup/incident ownership remain future hardening work.
 
-- [Local development](operations/local-development.md) covers installation, commands, configuration, and process isolation.
-- [Runbook](operations/runbook.md) covers diagnosis and safe recovery for the current boundaries.
-- [Self-learning Project Lab runbook](operations/runbook.md#self-learning-project-lab-mve) covers the Phase 3 smoke, retained visual-evidence mode, and local-only boundary.
-- [Lark Managed Memory command canary runbook](operations/lark-memory-command-canary-runbook.md) covers fixed configuration, readiness, one-consumer operation, verification, and graceful shutdown.
-- [Lark Managed Memory Card/Doc evidence](evidence/lark-managed-memory-card-doc-canary-evidence-packet.md) records the sanitized normal-path provider boundary.
-- [Task 14 hardening plan](exec-plans/active/2026-07-25-lark-memory-task14-hardening.md) owns deferred lease, retry, recovery, multi-node, and performance work; it is not part of the current PR.
+- [Local development](operations/local-development.md) is the canonical environment and command guide.
+- [Runbook](operations/runbook.md) documents diagnosis and safe recovery for current runtime and datastore boundaries.
+- [Lark Managed Memory command canary runbook](operations/lark-memory-command-canary-runbook.md) documents the current fixed Lark compatibility configuration and operational flow.
+- `scripts/ops/` contains explicit human/operator migration and recovery utilities that remain part of the current repository.
 
-## Web Chat rich-events MVE
+## Local environment ownership
 
-The supported local path is Docker-first: Node `24.18.0`, pnpm `11.7.0`, Paseo
-`0.1.110`, and OpenCode `1.18.4`. The sanitized real-session evidence is in
-[the rich-events evidence packet](evidence/web-chat-rich-events-mve-evidence-packet.md).
-It proves a fresh ProductSession browser path with live assistant Markdown,
-cumulative sanitized Thinking, typed Tool detail, direct-child activity,
-terminal convergence, and refresh recovery. The formal ProductSession Messages
-remain transcript truth. The latest secure acceptance also proved same-provider
-Paseo rendering, exact CORS behavior (`101` for the reference origin and `403`
-for an untrusted origin), and a clean browser security scan.
+Development and infrastructure-backed tests share `config/local-environments.yaml` and `tooling/environment/`. Manual development uses the generic environment CLI:
 
-Do not place prompts, assistant bodies, service tokens, provider/call/child IDs,
-raw provider payloads, chain-of-thought, credentials, absolute paths, or
-unbounded output in operational evidence. The runtime projection may retain
-only bounded sanitized cumulative Thinking, safe Tool detail kind/text/exit
-code, and direct-child assistant/Thinking/Tool rows. Cancel UI and old-session
-restart recovery remain deferred.
+```bash
+pnpm env -- up core
+pnpm env -- up runtime
+pnpm env -- info
+pnpm env -- down
+```
 
-During evidence capture, a transient favicon `500` was caused by running
-`next build` concurrently with `next dev` while both shared generated `.next`
-state. Stopping Web, deleting only generated `.next`, and restarting resolved
-it; this is workflow evidence, not product behavior. The stack remains running
-and no volume is deleted by this procedure.
+A one-off command that needs infrastructure uses the same lifecycle:
 
-Production operations require a separate plan covering deployment topology, durable storage, migrations, backup/restore, secret management, metrics, alerts, reconciliation, and incident ownership.
+```bash
+pnpm env -- run postgres -- <command>
+pnpm env -- run runtime -- <command>
+```
+
+Do not create scenario-specific setup/acceptance runners for temporary debugging. Improve the shared environment or typed fixture APIs instead.
+
+## Generated diagnostics
+
+Operational/test diagnostics generated for one run belong under ignored `.local/test-runs/<run-id>/` or a CI artifact. Logs, screenshots, recordings, provider observations, evidence ledgers, and task handoffs are not durable repository documentation.
+
+Never place prompts, assistant bodies, service tokens, provider/call/child IDs, raw provider payloads, chain-of-thought, credentials, absolute private paths, or unbounded output in retained diagnostics.
+
+## External runtime verification
+
+Real Paseo/provider behavior is an explicit smoke boundary, not an ordinary deterministic PR prerequisite:
+
+```bash
+pnpm smoke:runtime
+pnpm smoke:agent-team
+```
+
+Credentials must come from an external environment/secret source. Provider availability is external state and may legitimately block a smoke without invalidating deterministic repository verification.
+
+## Production boundary
+
+Production operations still require separate work for deployment topology, durable storage policy, backup/restore, secret management, metrics/alerts, reconciliation, incident ownership, and release/hardening gates. This repository cleanup does not claim those capabilities.

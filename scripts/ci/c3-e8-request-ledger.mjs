@@ -6,7 +6,6 @@ export class RequestLedgerIncompleteError extends Error {
     this.details = details;
   }
 }
-
 function requestUrl(input) {
   return new URL(String(input), 'http://c3-e8-request-ledger.invalid');
 }
@@ -131,4 +130,3 @@ export function createRequestLedger(
     },
   };
 }
-

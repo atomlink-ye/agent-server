@@ -1,4 +1,8 @@
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
+import type {
+  ExecutionSessionBinding,
+  ExecutionWorkspaceBinding,
+} from './execution-plane.js';
 
 export interface RuntimeSession {
   readonly id: string;
@@ -15,7 +19,11 @@ export interface RuntimeSession {
     'ref' | 'digest'
   >[];
   readonly toolRefs: readonly string[];
+  readonly workspaceBinding: ExecutionWorkspaceBinding | null;
+  readonly sessionBinding: ExecutionSessionBinding | null;
+  /** @deprecated Compatibility projection while ExecuteRun migrates. */
   readonly paseoWorkspaceId: string | null;
+  /** @deprecated Compatibility projection while ExecuteRun migrates. */
   readonly providerAgentId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -41,6 +49,7 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
+  /** @deprecated Use RuntimeWorkspaceRepository.findForTeamRun. */
   findPaseoWorkspaceByTeamRun?(input: {
     teamRunId: string;
     tenantId: string;
@@ -82,6 +91,12 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
+  bindExecution(input: {
+    readonly id: string;
+    readonly workspaceBinding: ExecutionWorkspaceBinding;
+    readonly sessionBinding: ExecutionSessionBinding;
+  }): Promise<RuntimeSession>;
+  /** @deprecated Compatibility method while old runtime callers migrate. */
   bindProvider(input: {
     id: string;
     paseoWorkspaceId: string;

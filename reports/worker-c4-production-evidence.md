@@ -1,148 +1,66 @@
-# C4 production evidence harness · local implementation ledger
+# C4 production evidence ruling
 
-Status: implemented and statically reviewed; production/browser evidence remains `MISSING/NOT_RUN`. The contract-valid WREC bundle closes its own E2 third-recorder gate only; it is not a C4 scenario source.
+## Current verdict
 
-## Scope and ownership
+The full production journey is permanently gated as `E11_FULL_PRODUCT_JOURNEY` with status `BLOCKED_BY_PRODUCT_DEFECT`. It writes only `e11-full-product-journey-blocked.json` under the full evidence root (`C4_EVIDENCE_DIR`) and exits `2` (`MISSING`). It must never write a full `PASS` marker or a full artifact with status `PASS`.
 
-This C4 slice owns only the schema-gated static replay upstream, the E10 production network harness, the E11 walking-slice harness, and this report. The untracked `artifacts/c2-trace-ui/` directory is C2-owned and was preserved untouched. C4-owned paths are clean; the worktree remains globally dirty only because of that pre-existing C2 artifact.
+The separate partial journey is `E11_STRUCTURAL_RELATIONSHIP_PARTIAL`. It has its own command, evidence root (`C4_E11_PARTIAL_EVIDENCE_DIR`), marker, status, exit code, and aggregate fields. A partial `PASS` can exist only in the partial artifact and cannot fill or overwrite the full status; every partial aggregate continues to report full status `BLOCKED_BY_PRODUCT_DEFECT`.
 
-No `apps/web/**`, recorder fixture, contract, package/lock/config, or C1/C2/C3 report was edited.
+修好前任何让原内容断言变绿的做法都是掩盖产品缺陷
 
-## Implemented
+The durable defect facts are: DB feedback exists for attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`; the API feedback summary is `null` and the API capture status is `redacted`; facts queries are `IS NOT NULL` only; the facts-source summary is unconditionally `null/presence -> redacted`; and lineage is `capture_to_null`. No B-product fix is included.
 
-- `scripts/e2e/support/product-static-replay-upstream.ts`
-  - Reads only the two accepted positive recorder filenames.
-  - Performs a hard full `ProductRunTraceResponseSchema.safeParse` of `recording_documents[0]` before using a recorder for any replay response.
-  - Returns `MISSING` for the current `fa77ba9` recordings because both positive doc0 values fail the current target schema. No legacy recorder field is migrated or reshaped.
-  - Derives `/api/v1/works` and `/api/v1/works/{id}/runs` only through the existing `projectWorkList` / `projectWorkRunList` helpers.
-  - Serves Work, WorkRun, and trace responses only from the validated recording documents; it has no red-arm response mutation path.
+## Exact recorder inputs and loader gate
 
-- `scripts/e2e/product-run-trace-network.ts`
-  - Starts the replay upstream, production app command, and a dynamically imported Chromium browser in the future remote acceptance environment.
-  - Walks `/works` through the exact recorded Work title and href into Work Detail and counts only same-origin `/api/**` requests.
-  - Allows exactly the five current `/api/works` route shapes plus an exact `chat_detail.path` extracted only from a successful response on one of those five routes after the corresponding current product-contract schema full parse; every other same-origin `/api/**` path is the forbidden complement, including an unknown response such as `/api/evil` that self-claims a chat path.
-  - Requires works, runs, and trace hits, `allowed_hits >= 3`, and `forbidden_hits === 0`; zero required hits is `MISSING`, forbidden hits are `FAIL`.
-  - `C4_RED_ARM=forbidden-request` injects one forbidden product request and records a non-zero red-arm result only when the real browser run reaches that assertion.
+Only the exact `api/work.json`, `api/work-run.json`, and `api/trace.json` documents from the two immutable sources were copied into the C4-owned subtree:
 
-- `scripts/e2e/product-run-trace-walking-slice.ts`
-  - Runs the parallel-success and rework-once scenarios independently.
-  - Starts from the exact recorded Work title, requires exactly one matching link, verifies its recorded Work href, follows it, and verifies the navigated Work identity.
-  - Parses and compares the Work list, Work response, WorkRun list, WorkRun response, and trace response with the current full schemas.
-  - Compares recorded attempt timing/span facts, visible per-Attempt duration text and aria, proportional geometry styles, feedback marker count, MCP activity sequence/association facts, and rendered Events count.
-  - Red arms are DOM-only after clean response comparison and a clean unmutated run of the same DOM assertion (including expected counts): rework switches back to Timeline and removes exactly one feedback marker; the selected scenario changes exactly one Attempt duration/geometry. The same assertion then must contain a newly introduced targeted mismatch and no unrelated mismatch. A pre-existing DOM mismatch, inapplicable arm, missing selector, ineffective mutation, or green assertion produces `MISSING` with no red evidence; fixture/upstream responses are never altered.
+`scripts/e2e/support/recordings/c4/{parallel-success,rework-once}/api/`
 
-## Hard contract gate
+The machine provenance ledger is `scripts/e2e/support/recordings/c4/provenance.json`. It records each source root, source manifest hash, source byte hash, and copy byte hash. All six copies were checked with `cmp` and their source/copy SHA-256 values match. No DB documents, manifest, wrapper envelope, migration, or hand-edited fixture was added.
 
-The current two positive `fa77ba9` fixtures are not consumer-acceptance inputs: each `recording_documents[0]` fails the current full `ProductRunTraceResponseSchema`. Hash/count/provenance and selected-path checks cannot substitute for that parse. The contract-valid WREC directory
-`rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-third-recording/recording-artifacts/wrec-third/oi38-negative/20260813T213910949Z-c5f4a431-02ab-44e5-acd8-49d775db83ea`
-does pass the current full schemas for its own `api/trace.json`, `api/work-run.json`, and `api/work.json`; that closes the WREC E2 third-recorder gate. It is intentionally not a C4 My Work/trace scenario source and does not globally unlock the old invalid `fa77ba9` recordings.
+`product-static-replay-upstream.ts` reads the three documents independently and first runs the complete accepted parsers on all of them: Work through the accepted `{ work: ... }` boundary (`GetWorkResponseSchema`), WorkRun through `ProductWorkRunResponseSchema`, and Trace through `ProductRunTraceResponseSchema`. A schema failure is `MISSING`. Only after all three full parses succeed does it verify the ledger byte hashes and derive WorkList/RunList. Hash mismatch is fail-closed `MISSING`.
 
-WREC is only parallel-shaped: it has two work items with one attempt each and activities, with no work item having more than one attempt, zero feedback edges/markers, and no applicable omit-feedback arm. Those facts cannot satisfy E11's required two-scenario `parallel-success` plus `rework-once` evidence. Full E11 therefore remains `MISSING/NOT_RUN` until separate current-schema-valid `parallel-success` and `rework-once` captures exist and every consumed target document passes the full current schema parse.
+## Full E11 behavior
 
-E10 could be a separately authorized and explicitly labeled network/schema preflight if the authority requests an adapted check; it is not current product-scenario acceptance. No adapter was added: Worker self-judgment is YAGNI because aliasing WREC into C4 would create false acceptance risk. Recovery requires either authority asking for that distinct preflight or valid scenario captures arriving. Thus the C4 scenario-source prerequisite is still open even though the WREC third-recorder gate is closed; C4 cannot claim a runtime PASS, and no runtime evidence directory or evidence file was created in this local phase.
+The original E11 content assertions remain in `product-run-trace-walking-slice.ts`, including response identity, attempts, timing, geometry, feedback marker, activity, and the existing mutation assertions. The top-level full machine gate prevents those assertions from being used to produce a green result until the product defect is fixed. The blocked artifact contains the immutable machine name, blocked status, exit code `2`, defect facts, and an aggregate that explicitly keeps the partial status independent.
 
-## Future remote commands
+## Partial E11 behavior
 
-Run only after a current-schema-valid recorder is available and the remote production environment can run the app/browser. Set `C4_EVIDENCE_DIR` to a fresh evidence directory and bind `C4_CANDIDATE_SHA` to the full candidate SHA.
-
-Baseline E10:
+Run the independent production browser journey with:
 
 ```sh
-C4_CANDIDATE_SHA=<full-40-hex-sha> C4_EVIDENCE_DIR=<fresh-evidence-dir> C4_REPLAY_SCENARIO=parallel-success pnpm exec tsx scripts/e2e/product-run-trace-network.ts
+C4_CANDIDATE_SHA=<full-40-hex-sha> \
+C4_E11_PARTIAL_EVIDENCE_DIR=<fresh-partial-evidence-dir> \
+pnpm exec tsx scripts/e2e/product-run-trace-partial.ts
 ```
 
-E10 red arm:
+The partial path consumes only the rework-once scenario and proves:
 
-```sh
-C4_CANDIDATE_SHA=<full-40-hex-sha> C4_EVIDENCE_DIR=<fresh-evidence-dir> C4_REPLAY_SCENARIO=parallel-success C4_RED_ARM=forbidden-request pnpm exec tsx scripts/e2e/product-run-trace-network.ts
-```
+- a feedback edge exists;
+- the edge points to an existing attempt and its owning Work item;
+- attempts and feedback counts are nonzero and stable across the accepted trace response;
+- the feedback marker count is represented in the DOM;
+- the related attempt has `feedback_capture_status: redacted`, with the corresponding redacted capture label in the DOM.
 
-Baseline E11:
+Evidence declares these `included_fields` explicitly. Feedback content is declared in `excluded_fields` as `blocked_by_product_defect`; it is not silently skipped. The partial script does not read, compare, or emit feedback text/content/summary/reason/payload.
 
-```sh
-C4_CANDIDATE_SHA=<full-40-hex-sha> C4_EVIDENCE_DIR=<fresh-evidence-dir> pnpm exec tsx scripts/e2e/product-run-trace-walking-slice.ts
-```
+Partial red arms use `C4_E11_PARTIAL_RED_ARM=edge|attempt|count|status|marker`. Each starts with a clean baseline, applies exactly one DOM mutation, reruns the same assertion, and writes `red-arms/e11-partial-<arm>.json` with status `FAIL` and exit `1` only when the targeted assertion newly fails without unrelated mismatches. Ineffective, zero-execution, incomplete, or pre-existing failures return `MISSING` (`2`) without red evidence.
 
-E11 red arms:
+## E10 and runtime boundary
 
-```sh
-C4_CANDIDATE_SHA=<full-40-hex-sha> C4_EVIDENCE_DIR=<fresh-evidence-dir> C4_REPLAY_SCENARIO=rework-once C4_REPLAY_MUTATION=omit-feedback pnpm exec tsx scripts/e2e/product-run-trace-walking-slice.ts
-C4_CANDIDATE_SHA=<full-40-hex-sha> C4_EVIDENCE_DIR=<fresh-evidence-dir> C4_REPLAY_SCENARIO=parallel-success C4_REPLAY_MUTATION=constant-duration pnpm exec tsx scripts/e2e/product-run-trace-walking-slice.ts
-```
+E10 network semantics and the shared observer/cleanup behavior are unchanged. The fixture loader now gives E10 the accepted current-schema gate and exact copied bytes. No local browser, app, sandbox, provider, build, install, or full test run was performed. Runtime E10/E11 evidence remains `MISSING/NOT_RUN` in this worker lane.
 
-Expected future artifact paths, created only after real execution:
+## Commits
 
-- `<fresh-evidence-dir>/e10-network.json`
-- `<fresh-evidence-dir>/red-arms/e10-forbidden-request.json`
-- `<fresh-evidence-dir>/e11-walking-slice-parallel-success.json`
-- `<fresh-evidence-dir>/e11-walking-slice-rework-once.json`
-- `<fresh-evidence-dir>/red-arms/e11-<scenario>-<mutation>.json`
+- `4b958b6b28b1c9440afa0e1f3431c401e8ac0c16` — exact C4 recorder copies, provenance ledger, and accepted full-schema loader (8 files, 6693 insertions, 57 deletions).
+- `acaca9e33272fb7153a4306d098b67cf3144c969` — full blocked gate and independent partial production journey (2 files, 348 insertions, 4 deletions).
 
-## Validation performed locally
+Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 
-- `git diff --check`: passed for the C4 commits.
-- `rg` static scans: passed for schema-gate, endpoint classification, required hit counters, forbidden hit counters, and red-arm entry points.
-- TypeScript source review: completed manually; no `pnpm`, install, build, dev server, browser, provider Run, sandbox, Docker, or full test command was run.
-- E10 runtime/browser: `MISSING/NOT_RUN` by dispatch prohibition and current recorder contract gate.
-- E11 runtime/browser: `MISSING/NOT_RUN` by dispatch prohibition and the missing separate current-schema-valid two-scenario captures; the WREC E2 closure does not change this.
+## Static validation
 
-## Commit units
-
-- `2ea748840723a8b4dd2a6f2c2d97f802aa73b85e`: replay upstream — 1 file changed, 276 insertions(+).
-- `06c66bf4f12ec0bcddb22b871af52b6f3ffe81ad`: E10 network harness — 1 file changed, 293 insertions(+).
-- `81dfed20769af5020b7fede79ab25356e1529899`: E11 harness — 3 files changed, 272 insertions(+), 19 deletions(-).
-- `820f6339dfb966e48cd1c90327838239a12cd6af`: initial ledger/report — 1 file changed, 83 insertions(+).
-- `20a94e2c67b762a5db54cf1b7d3ee97c67f094e4`: first review fix — 2 files changed, 62 insertions(+), 16 deletions(-).
-- `33fd4f2c82c8578d67fa4ce249360e42242a1c16`: Oracle review fixes — 4 files changed, 266 insertions(+), 94 deletions(-).
-- `547f26863fa33f6dcb9233ec764595881e1bbf50`: full trace comparison microfix — 1 file changed, 1 insertion(+).
-- `575a7b56436e26df46bace09d1eebef6b73d8825`: clean DOM red-arm baseline fix — 2 files changed, 48 insertions(+), 10 deletions(-).
-- `faabd3eb04de17dcbfcedb8a6b3a66a59d2d9705`: final review fix — 2 files changed, 90 insertions(+), 30 deletions(-); latest C4 code integration before this report correction.
-- This report-correction commit is intentionally omitted to avoid self-reference; the repo/round mirror is updated together.
-
-## Shared observer and cleanup hardening
-
-The C4 follow-up (`82edbe9`, `6560a85`, `c243e0a`) adds
-`scripts/e2e/support/page-observer.mjs`, which records
-request/response/requestfinished/requestfailed lifecycle, exact method/path/
-query allowlist decisions, response body parse outcomes, duplicate counts,
-in-flight generations, bounded quiet-point sealing, and post-seal activity.
-`owned-process-cleanup.mjs` records collector-unavailable, awaited TERM exit,
-and TERM-ignoring residual outcomes fail-closed. E10 now uses the shared
-observer and both E10/E11 use the owned cleanup function.
-
-The C-box Node duals ran exit 0 with 10/10 tests, no skips/todos. The fixed E8
-browser command ran in a restored isolated target with exit 0, one file and two
-tests passed. These are harness evidence only; current C4 replay fixture/schema
-gates remain `MISSING_EVIDENCE` and no runtime E10/E11 PASS is claimed.
-
-The subsequent C3/C4 zero-execution guard (`3484079`) declares the expected
-minimum execution counts instead of inferring them from command exit. Its ten
-production CLI zero arms all emitted the exact C-owned zero marker and exited
-2 on C box; the zero dual suite exited 0 with no skips/todos. The shared matrix
-records these counts and keeps business-empty Work data separate from zero
-acceptance execution. Runtime C4 scenario/response/DOM/cleanup rows remain
-`MISSING_EVIDENCE` until their declared nonempty sets are actually exercised.
-
-## Production observer wiring follow-up
-
-Commit `67c496c` wires the shared page observer into the real E10 and E11
-orchestration paths. E10 now derives an exact closed set of expected
-method/path/query tuples from the accepted recording and passes those tuples
-to the observer; E11 no longer uses its previous response Map and pending
-snapshot, instead sealing request/response/body lifecycle and exact response
-counts before schema and DOM comparison. Both paths continue to route cleanup
-through `cleanupOwnedProcess`.
-
-This follow-up was statically checked and its C-box Node duals ran with raw
-exit 0, 14 tests, no skips, and no todos. The current `fa77ba9` scenario
-fixtures still fail the full trace schema gate, so no E10/E11 production
-scenario is claimed as runtime PASS. The matrix keeps the corresponding
-scenario, response, DOM, marker, activity, cleanup, and schema verdicts at
-`MISSING_EVIDENCE`.
-
-The final symbolic full-range `git diff --check
-01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` is non-zero only because
-preserved raw ANSI captures are intentionally committed byte-for-byte: the
-historical four classifier evidence groups plus the new E8 production raw
-stdout/stderr. Scoped C4 source/test/report checks are exit 0; raw evidence
-was not trimmed and no full-range PASS is claimed.
+- `git diff --check`: passed for both C4 commits.
+- `cmp`: passed for all six copied recorder documents.
+- Provenance JSON parse: passed.
+- Static scans: accepted-schema gate, provenance hash checks, immutable machine names, blocked full status, independent partial evidence root, five red arms, and partial excluded-field declaration present.
+- Runtime/browser/build/install/provider/sandbox execution: skipped by dispatch constraints; no runtime PASS is claimed.

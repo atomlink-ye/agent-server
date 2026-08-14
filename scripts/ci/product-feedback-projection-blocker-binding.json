@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "bundle_kind": "current-rework",
+  "scenario": "rework-once",
+  "manifest_sha256": "07129cc7d1dc04a6235bf06a521c3391c5f92321ffc36446a54d086a72f5baa1",
+  "recorded_at": "2026-08-14T01:06:07.741Z",
+  "service_revision": "0.1.0",
+  "files": {
+    "api/work-run.json": "1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933",
+    "db/team_work_item_attempts.json": "9d1b305133ff8e01415002fde7031a6fb539da86f446b54c452bee27beb3fa5f"
+  },
+  "candidate_binding": {
+    "kind": "repository-head",
+    "env": "C4_CANDIDATE_SHA"
+  }
+}

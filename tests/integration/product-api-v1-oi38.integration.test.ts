@@ -360,42 +360,51 @@ describeRealPostgres(
         );
         const tools = await client.listTools();
         const names = tools.tools.map((tool) => tool.name).sort();
-        if (!names.includes('product_work_create'))
+        const workPresent = names.includes('product_work_create');
+        const memoryPresent = names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME);
+        let workOk = false;
+        let memoryOk = false;
+        if (workPresent) {
+          const work = await client.callTool({
+            name: 'product_work_create',
+            arguments: {
+              definition_id: definitionA,
+              definition_version_id: versionA,
+              title: 'E6 registry Work',
+            },
+          });
+          expect(work.isError).not.toBe(true);
+          const workText = (
+            work.content as { type: string; text?: string }[]
+          )[0]?.text;
+          const workId = JSON.parse(workText ?? '{}').work?.id;
+          expect(workId).toEqual(expect.any(String));
+          generatedWorkIds.push(workId);
+          workOk = true;
+        }
+        if (memoryPresent) {
+          const memory = await client.callTool({
+            name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+            arguments: {
+              memory_store_id: memoryStoreId,
+              path: 'registry/e6.txt',
+            },
+          });
+          expect(memory.isError).not.toBe(true);
+          expect(memory.structuredContent).toMatchObject({
+            memory_id: memoryId,
+            content: 'runtime-registry-e6',
+          });
+          memoryOk = true;
+        }
+        if (!workPresent)
           throw new Error(
-            'RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]',
+            `RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]:non_target_memory_ok=${memoryOk}`,
           );
-        if (!names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME))
+        if (!memoryPresent)
           throw new Error(
-            'RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]',
+            `RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]:non_target_work_ok=${workOk}`,
           );
-
-        const work = await client.callTool({
-          name: 'product_work_create',
-          arguments: {
-            definition_id: definitionA,
-            definition_version_id: versionA,
-            title: 'E6 registry Work',
-          },
-        });
-        expect(work.isError).not.toBe(true);
-        const workText = (work.content as { type: string; text?: string }[])[0]
-          ?.text;
-        const workId = JSON.parse(workText ?? '{}').work?.id;
-        expect(workId).toEqual(expect.any(String));
-        generatedWorkIds.push(workId);
-
-        const memory = await client.callTool({
-          name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
-          arguments: {
-            memory_store_id: memoryStoreId,
-            path: 'registry/e6.txt',
-          },
-        });
-        expect(memory.isError).not.toBe(true);
-        expect(memory.structuredContent).toMatchObject({
-          memory_id: memoryId,
-          content: 'runtime-registry-e6',
-        });
       } finally {
         await client.close().catch(() => undefined);
         await mcp.stop();

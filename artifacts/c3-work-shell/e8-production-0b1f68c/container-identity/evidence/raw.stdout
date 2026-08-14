@@ -1,0 +1,12 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/root/workspace/mgr-frontend[39m
+
+ [31m❯[39m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1969[2mms[22m[39m
+[31m   [31m×[31m renders both recorder-backed Work titles and exact detail links without N+1 reads[39m[33m 1869[2mms[22m[39m
+   [32m✓[39m distinguishes loading, empty, and real network error without fabricating Work[32m 93[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 01:27:39
+[2m   Duration [22m 14.71s[2m (transform 0ms, setup 0ms, import 3.44s, tests 1.97s, environment 0ms)[22m
+

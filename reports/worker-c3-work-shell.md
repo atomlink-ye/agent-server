@@ -302,3 +302,48 @@ C-owned claim, including the four E8 behavior-arm rows, classifier/runner,
 request ledger, E10/E11, response, DOM, and cleanup probes. Zero runtime C4
 scenario/response/DOM/cleanup evidence remains `MISSING_EVIDENCE`; it is not
 reported as a pass.
+
+## Oracle proof-chain follow-up
+
+The C3 browser wrapper follow-up is `5ea797b`, `07363f0`, `359e07a`, and
+`0b1f68c`. It now gives each mutation an isolated `VITEST_CACHE_DIR`, bounds
+the child process, parses failed Vitest summaries, and maps a non-zero child
+with no parseable summary to an explicit browser-zero marker and process 2.
+The wrapper baseline on C box was raw 0 / wrapper 0 with one file, two tests,
+zero skipped and zero todo. The fixed command was the production path, not a
+summary-only helper.
+
+The C-box production WorkShell mutation evidence is under
+`artifacts/c3-work-shell/e8-production-0b1f68c/`. The four arms were run from
+the same restored source hash (`d975b44b30c2785dbb93729d5fa7c2f482b8c4b9f99db7bc80750193b7978287`):
+
+- `late-runs`: raw 1 / wrapper 1; the failed summary was parsed as one failed
+  and one passed test, proving the sealed request assertion executed.
+- `never-settle`: raw 1 / wrapper 2 with
+  `c3_e8_browser_zero_execution:reason=summary-unparseable`; the production
+  fetch stayed pending and the bounded runner recorded incomplete evidence.
+- `status-read`: raw 1 / wrapper 1; the poison Proxy exception caused the
+  populated assertion to fail, with one failed and one passed test.
+- `container-identity`: raw 1 / wrapper 1; the production list identity
+  mutation caused the exact container assertion to fail.
+
+Each arm has mutation output, candidate-before/after hashes, raw stdout/stderr,
+raw child exit, wrapper exit, capture exit, and an EXIT restoration trap. The
+remote candidate remained `02328517a0fe887464d0661d772a49ad9d88451b`; after the
+arms its WorkShell hash again matched the before hash. The C-box Node harness
+run for the wrapper, zero guard, page observer, and cleanup duals was raw exit
+0 with 14 tests, 0 skip, and 0 todo.
+
+The original projection poison now guards `get`, `has`, own-key enumeration,
+and property descriptors while allowing only `id` and `title`; the status red
+arm therefore traverses the actual WorkShell data path. The matrix updates
+the three production red arms and status-read control to
+`COMPLETE_AND_PROVEN_ABSENT`; C4 runtime rows remain
+`MISSING_EVIDENCE` because the current recorder fixture/schema gate still
+prevents a valid E10/E11 browser acceptance run.
+
+The shared C4 observer is now wired into both production E10 and E11 flows.
+E10 derives a closed method/path/query tuple set from the accepted recording;
+E11 replaces its response/pending Map with the observer's lifecycle, body,
+seal, exact response-count, and fail-closed verdict. No C4 runtime PASS is
+claimed without valid scenario fixtures.

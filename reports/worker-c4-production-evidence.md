@@ -122,3 +122,20 @@ production CLI zero arms all emitted the exact C-owned zero marker and exited
 records these counts and keeps business-empty Work data separate from zero
 acceptance execution. Runtime C4 scenario/response/DOM/cleanup rows remain
 `MISSING_EVIDENCE` until their declared nonempty sets are actually exercised.
+
+## Production observer wiring follow-up
+
+Commit `67c496c` wires the shared page observer into the real E10 and E11
+orchestration paths. E10 now derives an exact closed set of expected
+method/path/query tuples from the accepted recording and passes those tuples
+to the observer; E11 no longer uses its previous response Map and pending
+snapshot, instead sealing request/response/body lifecycle and exact response
+counts before schema and DOM comparison. Both paths continue to route cleanup
+through `cleanupOwnedProcess`.
+
+This follow-up was statically checked and its C-box Node duals ran with raw
+exit 0, 14 tests, no skips, and no todos. The current `fa77ba9` scenario
+fixtures still fail the full trace schema gate, so no E10/E11 production
+scenario is claimed as runtime PASS. The matrix keeps the corresponding
+scenario, response, DOM, marker, activity, cleanup, and schema verdicts at
+`MISSING_EVIDENCE`.

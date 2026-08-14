@@ -292,11 +292,32 @@ export async function runNetwork(): Promise<number> {
   let replay: { child: ChildProcess; url: string; output: { stdout: string[]; stderr: string[] } } | undefined;
   let app: { child: ChildProcess; output: { stdout: string[]; stderr: string[] } } | undefined;
   let browser: BrowserLike | undefined;
-    const chatDetailPaths = new Set<string>();
+  const chatDetailPaths = new Set<string>();
   try {
     // This check intentionally runs before any process launch. Current fa77ba9
     // doc0 recordings fail it, so this command remains an honest MISSING.
     const loaded = await loadStaticReplayRecording(scenario());
+    const expectedTupleKeys = new Set<string>();
+    const addExpected = (value: string) => {
+      const url = new URL(value, appUrl);
+      expectedTupleKeys.add(`GET ${url.pathname}${url.search}`);
+    };
+    addExpected('/api/works');
+    addExpected(`/api/works/${encodeURIComponent(loaded.work.id)}`);
+    addExpected(`/api/works/${encodeURIComponent(loaded.work.id)}/runs`);
+    addExpected(`/api/works/${encodeURIComponent(loaded.work.id)}/runs/${encodeURIComponent(loaded.run.work_run.id)}`);
+    addExpected(`/api/works/${encodeURIComponent(loaded.work.id)}/runs/${encodeURIComponent(loaded.run.work_run.id)}/trace`);
+    for (const activity of loaded.trace.mcp_activities) {
+      if (activity.chat_detail.path.startsWith('/api/')) {
+        chatDetailPaths.add(activity.chat_detail.path);
+        addExpected(activity.chat_detail.path);
+      }
+    }
+    const expectedRules = [...expectedTupleKeys].map((key) => {
+      const [method, ...parts] = key.split(' ');
+      const url = new URL(parts.join(' '), appUrl);
+      return { method, path: url.pathname, query: url.search };
+    });
     replay = await launchReplay();
     app = await launchApp(replay.url);
     browser = await loadChromium();
@@ -305,15 +326,7 @@ export async function runNetwork(): Promise<number> {
     const observer = createPageObserver({
       page,
       origin,
-      allowlist: [{
-        method: 'GET',
-        path: (path: string) =>
-          currentProductPath.test(path) ||
-          [...chatDetailPaths].some((value) => new URL(value, origin).pathname === path),
-        query: (query: string) =>
-          query === '' ||
-          [...chatDetailPaths].some((value) => new URL(value, origin).search === query),
-      }],
+      allowlist: expectedRules,
       parseBody: async (record: { readonly path: string }, body: unknown) => {
         const parsed = parseAcceptedProductResponse(record.path, body);
         if (parsed) collectValidatedChatDetailPaths(parsed, chatDetailPaths);
@@ -340,7 +353,9 @@ export async function runNetwork(): Promise<number> {
       timeout: startupTimeoutMs,
     });
     const observed = await observer.seal({ domStable: async () => true });
-    const observerVerdict = observer.verdict();
+    const observerVerdict = observer.verdict({
+      expectedResponseCounts: Object.fromEntries([...expectedTupleKeys].map((key) => [key, 1])),
+    });
     if (observerVerdict.verdict === 'MISSING_EVIDENCE') return MISSING;
     if (observerVerdict.verdict === 'UNSOUND_ABSENCE') return FAIL;
     const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);

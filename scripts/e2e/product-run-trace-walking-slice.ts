@@ -25,6 +25,7 @@ import {
   type BrowserLike,
 } from './product-run-trace-network.js';
 import { cleanupOwnedProcess } from './support/owned-process-cleanup.mjs';
+import { createPageObserver } from './support/page-observer.mjs';
 import {
   loadStaticReplayRecording,
   type RecordingScenario,
@@ -37,12 +38,6 @@ type AnchoredTrace = Extract<
   ProductRunTrace,
   { projection_status: 'internally_anchored' }
 >;
-
-type ResponseLike = {
-  url: () => string;
-  status: () => number;
-  json: () => Promise<unknown>;
-};
 
 const SKIP_SCENARIO = 3;
 type ReplayMutation = 'none' | 'omit-feedback' | 'constant-duration';
@@ -295,16 +290,24 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
     browser = await loadChromium();
     const page = (await browser.newPage()) as any;
     const responses = new Map<string, unknown>();
-    const pending: Promise<void>[] = [];
-    page.on('response', (response: ResponseLike) => {
-      const pathname = new URL(response.url()).pathname;
-      if (!pathname.startsWith('/api/works')) return;
-      pending.push(
-        response.json().then((body) => {
-          if (response.status() >= 200 && response.status() < 300) responses.set(pathname, body);
-        }).catch(() => undefined),
-      );
+    const origin = new URL(appUrl).origin;
+    const expectedResponsePaths = [
+      '/api/works',
+      `/api/works/${encodeURIComponent(loaded.work.id)}`,
+      `/api/works/${encodeURIComponent(loaded.work.id)}/runs`,
+      `/api/works/${encodeURIComponent(loaded.work.id)}/runs/${encodeURIComponent(loaded.run.work_run.id)}`,
+      `/api/works/${encodeURIComponent(loaded.work.id)}/runs/${encodeURIComponent(loaded.run.work_run.id)}/trace`,
+    ];
+    const observer = createPageObserver({
+      page,
+      origin,
+      allowlist: expectedResponsePaths.map((path) => ({ method: 'GET', path, query: '' })),
+      parseBody: async (record: { readonly path: string; readonly responseStatus: number | null }, body: unknown) => {
+        if (record.responseStatus !== null && record.responseStatus >= 200 && record.responseStatus < 300)
+          responses.set(record.path, body);
+      },
     });
+    observer.attach();
     await page.goto(`${appUrl}/works`, { waitUntil: 'domcontentloaded', timeout: startupTimeoutMs });
     const worksPath = '/api/works';
     const expectedWorkId = loaded.work.id;
@@ -321,8 +324,12 @@ async function runScenario(scenario: RecordingScenario, redArm: ReplayMutation):
       state: 'visible',
       timeout: startupTimeoutMs,
     });
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-    await Promise.all(pending);
+    await observer.seal({ domStable: async () => true });
+    const observerVerdict = observer.verdict({
+      expectedResponseCounts: Object.fromEntries(expectedResponsePaths.map((path) => [`GET ${path}`, 1])),
+    });
+    if (observerVerdict.verdict === 'MISSING_EVIDENCE') return MISSING;
+    if (observerVerdict.verdict === 'UNSOUND_ABSENCE') return FAIL;
 
     const workList = WorkListResponseSchema.safeParse(responses.get(worksPath));
     const workPath = `/api/works/${expectedWorkId}`;

@@ -22,6 +22,8 @@ import {
 import { createPageObserver } from './support/page-observer.mjs';
 import { cleanupOwnedProcess } from './support/owned-process-cleanup.mjs';
 
+export { FAIL, MISSING, PASS };
+
 export type EndpointClass = 'works' | 'runs' | 'trace';
 type ProductResponseRoute = 'works' | 'work' | 'runs' | 'run' | 'trace';
 export type RequestObservation = {
@@ -310,10 +312,9 @@ export async function runNetwork(): Promise<number> {
     for (const activity of loaded.trace.mcp_activities) {
       if (activity.chat_detail.path.startsWith('/api/')) {
         chatDetailPaths.add(activity.chat_detail.path);
-        addExpected(activity.chat_detail.path);
       }
     }
-    const expectedRules = [...expectedTupleKeys].map((key) => {
+    const expectedRules = [...expectedTupleKeys, ...chatDetailPaths].map((key) => {
       const [method, ...parts] = key.split(' ');
       const url = new URL(parts.join(' '), appUrl);
       return { method, path: url.pathname, query: url.search };
@@ -353,11 +354,18 @@ export async function runNetwork(): Promise<number> {
       timeout: startupTimeoutMs,
     });
     const observed = await observer.seal({ domStable: async () => true });
-    const observerVerdict = observer.verdict({
-      expectedResponseCounts: Object.fromEntries([...expectedTupleKeys].map((key) => [key, 1])),
-    });
+    const observerVerdict = observer.verdict();
     if (observerVerdict.verdict === 'MISSING_EVIDENCE') return MISSING;
     if (observerVerdict.verdict === 'UNSOUND_ABSENCE') return FAIL;
+    const observedResponseCounts = new Map<string, number>();
+    for (const record of observed.records) {
+      if (record.lifecycle !== 'finished') continue;
+      const key = `GET ${record.path}${record.query}`;
+      observedResponseCounts.set(key, (observedResponseCounts.get(key) ?? 0) + 1);
+    }
+    for (const key of expectedTupleKeys) {
+      if (observedResponseCounts.get(key) !== 1) return MISSING;
+    }
     const detailPath = new URL(page.url()).pathname.split('/').filter(Boolean);
     if (detailPath.length !== 2 || decodeURIComponent(detailPath[1] ?? '') !== loaded.work.id)
       return FAIL;

@@ -1,0 +1,30 @@
+name: Remove AgentRuntime Facade Codemod
+
+on:
+  push:
+    branches:
+      - refactor/execution-plane-paseo-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/execution-plane-paseo-architecture
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tooling/remove-agent-runtime-facade-codemod.mjs
+      - name: Commit facade cleanup
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/application/runtime/execution-plane-runtime-facade.ts
+          git commit -m "refactor(runtime): remove AgentRuntime compatibility facade"
+          git push origin HEAD:refactor/execution-plane-paseo-architecture

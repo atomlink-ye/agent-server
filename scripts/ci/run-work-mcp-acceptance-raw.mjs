@@ -3,6 +3,11 @@
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 
+if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+  console.error('WORK_ACCEPTANCE_MISSING[work_mcp_database_unavailable]');
+  process.exit(1);
+}
+
 const behavior = run('pnpm', [
   'exec',
   'vitest',
@@ -31,7 +36,7 @@ process.exit(bootstrap.status === 0 ? 0 : classifyRawFailure(bootstrap));
 function run(executable, argv) {
   const result = spawnSync(executable, argv, {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, REAL_POSTGRES_REQUIRED: '1' },
     encoding: 'utf8',
   });
   process.stdout.write(result.stdout ?? '');

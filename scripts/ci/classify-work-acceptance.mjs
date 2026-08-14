@@ -9,10 +9,14 @@ const separator = process.argv.indexOf('--');
 if (separator < 0 || !process.argv[separator + 1]) fail('missing_command', 2);
 
 const classifications = {
-  'http-projection': ['work_http_projection_installer_missing'],
+  'http-projection': [
+    'work_http_projection_installer_missing',
+    'work_http_database_unavailable',
+  ],
   'mcp-registration': [
     'work_mcp_registration_missing:product_work_create',
     'work_mcp_bootstrap_checker_missing',
+    'work_mcp_database_unavailable',
   ],
 };
 const exactMarkers = classifications[kind];

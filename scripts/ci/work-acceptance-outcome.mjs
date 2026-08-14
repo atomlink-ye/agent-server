@@ -49,9 +49,9 @@ export function outcomeRuleMatches(point) {
 
 export function structuralReachability({ status, signal, error }) {
   if (error !== null)
-    return status === null && signal === null
+    return status === null
       ? 'RUNTIME_REPRESENTATIVE'
-      : 'STRUCTURALLY_UNREACHABLE:spawnSync error implies status=null and signal=null';
+      : 'STRUCTURALLY_UNREACHABLE:observed spawnSync spawn/maxBuffer errors have status=null';
   if (signal !== null)
     return status === null
       ? 'RUNTIME_REPRESENTATIVE'

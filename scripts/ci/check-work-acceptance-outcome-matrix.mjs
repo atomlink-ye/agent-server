@@ -64,6 +64,7 @@ for (const markerClass of MARKER_CLASSES) {
   runtimeCases.push(runChild({ status: null, signal: 'SIGTERM', markerClass }));
 }
 runtimeCases.push(runSpawnError());
+runtimeCases.push(runMaxBufferError());
 
 console.log(
   JSON.stringify({
@@ -138,6 +139,31 @@ function runSpawnError() {
     signal: null,
     error: 'ENOENT',
     marker_class: 'absent',
+    classifier_exit: 1,
+  };
+}
+
+function runMaxBufferError() {
+  const result = spawnSync(
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error(${JSON.stringify(selected)});process.stdout.write('x'.repeat(2 * 1024 * 1024))`,
+    ],
+    { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
+  );
+  assert.equal(result.status, 1, 'runtime_max_buffer_error');
+  assert.match(result.stderr, /status=null:signal=SIGTERM:error=ENOBUFS/);
+  return {
+    status: null,
+    signal: 'SIGTERM',
+    error: 'ENOBUFS',
+    marker_class: 'exact-selected-kind',
     classifier_exit: 1,
   };
 }

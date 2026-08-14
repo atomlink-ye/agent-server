@@ -26,6 +26,8 @@ try {
 }
 const expectedArms = [
   ['classifier-outcome-matrix', 0],
+  ['canonical-http-database-missing', 2],
+  ['canonical-mcp-database-missing', 2],
   ['classifier-success', 0],
   ['classifier-registered-marker-raw-three-fail', 1],
   ['classifier-registered-marker-signal-fail', 1],

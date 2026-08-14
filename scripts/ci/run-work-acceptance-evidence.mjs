@@ -31,6 +31,7 @@ const inputs = [
   'scripts/ci/classify-work-acceptance.mjs',
   'scripts/ci/work-acceptance-outcome.mjs',
   'scripts/ci/check-work-acceptance-outcome-matrix.mjs',
+  'scripts/ci/run-work-http-acceptance-raw.mjs',
   'scripts/ci/run-work-mcp-acceptance-raw.mjs',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
 ];
@@ -48,6 +49,28 @@ arms.push(
       '"mutually_exclusive_and_exhaustive":true',
       'STRUCTURALLY_UNREACHABLE',
       '"ok":true',
+    ],
+  ),
+);
+arms.push(
+  runArmWithoutDatabase(
+    'canonical-http-database-missing',
+    ['modularization:acceptance:work-http'],
+    2,
+    [
+      'WORK_ACCEPTANCE_MISSING[work_http_database_unavailable]',
+      'work_acceptance_missing:kind=http-projection:marker=work_http_database_unavailable',
+    ],
+  ),
+);
+arms.push(
+  runArmWithoutDatabase(
+    'canonical-mcp-database-missing',
+    ['modularization:acceptance:work-mcp'],
+    2,
+    [
+      'WORK_ACCEPTANCE_MISSING[work_mcp_database_unavailable]',
+      'work_acceptance_missing:kind=mcp-registration:marker=work_mcp_database_unavailable',
     ],
   ),
 );
@@ -722,6 +745,31 @@ function runArm(name, executable, argv, expectedExit, markers = []) {
   return {
     name,
     argv: [executable, ...argv],
+    cwd: repo,
+    expected_exit: expectedExit,
+    raw_exit: result.status ?? 125,
+    stdout,
+    stderr,
+    marker_assertions: markerAssertions,
+    ok:
+      result.status === expectedExit &&
+      Object.values(markerAssertions).every(Boolean),
+  };
+}
+
+function runArmWithoutDatabase(name, argv, expectedExit, markers) {
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  delete env.POSTGRES_URL;
+  const result = spawnSync('pnpm', argv, { cwd: repo, env, encoding: 'utf8' });
+  const stdout = result.stdout ?? '';
+  const stderr = result.stderr ?? '';
+  const markerAssertions = Object.fromEntries(
+    markers.map((marker) => [marker, `${stdout}\n${stderr}`.includes(marker)]),
+  );
+  return {
+    name,
+    argv: ['env', '-u', 'DATABASE_URL', '-u', 'POSTGRES_URL', 'pnpm', ...argv],
     cwd: repo,
     expected_exit: expectedExit,
     raw_exit: result.status ?? 125,

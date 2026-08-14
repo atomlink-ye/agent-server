@@ -89,7 +89,9 @@ export async function runBrowserWrapper({ cwd = process.cwd(), evidenceDirectory
     ? { process: 2, marker: `${BROWSER_ZERO_MARKER}:reason=runner-unavailable` }
     : result.code === 0
       ? summaryOutcome
-      : { process: result.code, marker: null };
+      : summary
+        ? { process: result.code, marker: null }
+        : { process: 2, marker: `${BROWSER_ZERO_MARKER}:reason=summary-unparseable` };
   if (evidenceDirectory) {
     const directory = resolve(evidenceDirectory);
     await mkdir(directory, { recursive: true });

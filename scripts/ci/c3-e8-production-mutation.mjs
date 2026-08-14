@@ -12,7 +12,7 @@ export const PRODUCTION_MUTATION_ARMS = Object.freeze([
 export const PRODUCTION_MUTATION_EXPECTATIONS = Object.freeze({
   'completed-status': 'work-list-semantic-read:runs',
   'unavailable-disclosure': 'Product status is currently unavailable for this Work.',
-  'runs-n-plus-one': '/api/works/',
+  'runs-n-plus-one': '/api/works/<work-id>/runs',
   'container-identity': '[data-testid="work-list"]',
   'late-runs': 'request-ledger-incomplete:post-seal-activity',
   'never-settle': 'c3_e8_observation_missing:reason=request-ledger-incomplete',
@@ -58,7 +58,12 @@ export function applyProductionMutation(source, arm) {
 export function countTargetAssertions(arm, rawOutput) {
   const pattern = PRODUCTION_MUTATION_EXPECTATIONS[arm];
   if (!pattern) throw new Error(`unknown_production_mutation:${arm}`);
-  return String(rawOutput).split(/\r?\n/u).filter((line) => line.includes(pattern)).length;
+  return String(rawOutput).split(/\r?\n/u).filter((line) => {
+    if (arm === 'runs-n-plus-one')
+      return /\/api\/works\/[^\s/]+\/runs/u.test(line) &&
+        /received|expected|Received|Expected/u.test(line);
+    return line.includes(pattern);
+  }).length;
 }
 
 if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {

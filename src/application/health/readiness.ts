@@ -1,4 +1,4 @@
-import type { AgentRuntimePort } from '../ports/agent-runtime.js';
+import type { ExecutionPlanePort } from '../ports/execution-plane.js';
 
 export interface ReadinessCheckResult {
   readonly name: string;
@@ -17,10 +17,10 @@ export const noExternalDependencies: ReadinessProbe = {
 };
 
 export class RuntimeReadinessProbe implements ReadinessProbe {
-  public constructor(private readonly runtime: AgentRuntimePort) {}
+  public constructor(private readonly executionPlane: ExecutionPlanePort) {}
 
   public async check(): Promise<readonly ReadinessCheckResult[]> {
-    const health = await this.runtime.health();
+    const health = await this.executionPlane.health();
     return health.checks;
   }
 }

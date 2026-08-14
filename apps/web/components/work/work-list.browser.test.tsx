@@ -193,9 +193,23 @@ it(
           throw error;
         expect(error).toMatchObject({ marker: REQUEST_LEDGER_MISSING_MARKER });
         const incompleteSnapshot = requestLedger.snapshot();
-        expect(incompleteSnapshot.records).toHaveLength(1);
-        expect(incompleteSnapshot.inFlight).toBe(1);
-        expect(incompleteSnapshot.records[0]).toMatchObject({
+        const sentinelRecords = incompleteSnapshot.records.filter(
+          ({ query }) => query === '?c3_e8_observation_missing=ledger',
+        );
+        const initialListRecord = incompleteSnapshot.records.find(
+          ({ path, query }) => path === '/api/works' && query === '',
+        );
+        expect(initialListRecord).toMatchObject({
+          method: 'GET',
+          lifecycle: 'settled',
+          inFlightAtSettle: 0,
+        });
+        expect(sentinelRecords).toHaveLength(populatedWorkList.works.length);
+        expect(incompleteSnapshot.inFlight).toBe(populatedWorkList.works.length);
+        expect(sentinelRecords.every(({ method, lifecycle, inFlightAtSettle }) =>
+          method === 'GET' && lifecycle === 'started' && inFlightAtSettle === null,
+        )).toBe(true);
+        expect(sentinelRecords[0]).toMatchObject({
           method: 'GET',
           query: '?c3_e8_observation_missing=ledger',
           lifecycle: 'started',

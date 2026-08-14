@@ -400,3 +400,20 @@ evidence and does not justify an absence claim. A valid replacement must prove
 `mutation_applied < target_started/control_started < target_failed/control_completed
 < restore_started < restore_completed` while leaving the empty-work control
 green.
+
+The B fine-arm evidence model preserves the two old raw roots above and keeps
+the facts separate rather than replacing them with an aggregate summary:
+
+```json
+{"failure_id":"failure-1","raw_root":"artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/never-settle/evidence/raw.stderr","test":"renders both recorder-backed Work titles and exact detail links without N+1 reads","error":"expected [] to have a length of 1 but got +0","assertion":"work-list.browser.test.tsx:142:38 requestSnapshot.records toHaveLength(1)","first_point":"sealed snapshot records length 0","verdict":"UNSOUND"}
+{"failure_id":"failure-2","raw_root":"artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/never-settle/evidence/raw.stderr","test":"distinguishes loading, empty, and real network error without fabricating Work","error":"expected work-list-loading section to be null","assertion":"work-list.browser.test.tsx:253:6 loading selector remains present","first_point":"loading assertion while primary request is pending","verdict":"UNSOUND"}
+```
+
+The replacement mutation now leaves the initial list settled and emits one
+sentinel-bearing pending `/runs` request per populated Work; the empty control
+emits none. A future C-box run must write its new fine-arm root at
+`artifacts/c3-work-shell/e8-production-0b1f68c/b-never-settle-fine/`, including
+raw streams, `events.json` with separate `target_failed` and
+`control_completed`, `failure-1.json`, `failure-2.json`, restore hashes, and
+the runner outcome. This local B commit has not run browser or remote evidence
+and does not claim B closed.

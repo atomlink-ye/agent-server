@@ -39,10 +39,8 @@ const mutations = {
       "setWorks(response.works); setTimeout(() => { void fetch('/api/works/' + encodeURIComponent(response.works[0]?.id ?? '') + '/runs'); }, 100);"],
   ],
   'never-settle': [
-    ["readJson<WorkListResponse>('/api/works')",
-      "readJson<WorkListResponse>('/api/works?c3_e8_observation_missing=ledger')"],
-    ['const response = await fetch(path, {',
-      "const response = path === '/api/works?c3_e8_observation_missing=ledger' ? await fetch(path, { headers: { 'x-c3-e8-observation': 'request-ledger' } }) : await fetch(path, {"],
+    ['setWorks(response.works);',
+      "setWorks(response.works); if (response.works.length > 0) { setTimeout(() => { for (const work of response.works) void fetch('/api/works/' + encodeURIComponent(work.id) + '/runs?c3_e8_observation_missing=ledger', { headers: { 'x-c3-e8-observation': 'request-ledger' } }); }, 0); }"],
   ],
 };
 

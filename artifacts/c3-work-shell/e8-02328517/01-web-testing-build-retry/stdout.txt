@@ -1,0 +1,37 @@
+Sending build context to Docker daemon   7.91MB
+Step 1/27 : FROM node:24.18.0-bookworm-slim AS dependencies
+ ---> 2f35c3d18013
+Step 2/27 : ARG TARGETARCH
+ ---> Using cache
+ ---> 44a4479e3910
+Step 3/27 : ARG NPM_REGISTRY=https://registry.npmjs.org
+ ---> Using cache
+ ---> 3bcf7cd7a340
+Step 4/27 : ARG PNPM_CACHE_ID=agent-server-pnpm-store
+ ---> Using cache
+ ---> 768aa47dba78
+Step 5/27 : ARG PNPM_INSTALL_CACHE_BUST=stable
+ ---> Using cache
+ ---> cbd89413f1f2
+Step 6/27 : ENV COREPACK_HOME=/tmp/corepack     PNPM_HOME=/pnpm     PNPM_CONFIG_REGISTRY=$NPM_REGISTRY     PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false     NPM_CONFIG_REGISTRY=$NPM_REGISTRY     PATH=/pnpm:/opt/provider-toolchain-volume/current/bin:/opt/provider-toolchain-volume/current/paseo-toolchain/node_modules/.bin:$PATH     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers     DISABLE_UPDATES=1
+ ---> Using cache
+ ---> 3d3fe2661f26
+Step 7/27 : WORKDIR /workspace
+ ---> Using cache
+ ---> f7dd06b17130
+Step 8/27 : RUN corepack enable     && corepack install --global pnpm@11.7.0     && mkdir -p /pnpm /workspace/.local /workspace/node_modules /workspace/apps/web/node_modules /workspace/dist /home/node/image-node_modules /home/node/image-web-node_modules /opt/playwright-browsers     && chown -R node:node /pnpm /workspace /home/node/image-node_modules /home/node/image-web-node_modules
+ ---> Using cache
+ ---> b070b35790df
+Step 9/27 : USER node
+ ---> Using cache
+ ---> d624248d1d2b
+Step 10/27 : COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+ ---> Using cache
+ ---> a660842e4427
+Step 11/27 : COPY --chown=node:node apps/web/package.json ./apps/web/package.json
+ ---> Using cache
+ ---> 019a96ece49e
+Step 12/27 : COPY --chown=node:node patches/ ./patches/
+ ---> Using cache
+ ---> 7baa79305889
+Step 13/27 : RUN --mount=type=cache,id=${PNPM_CACHE_ID},target=/pnpm,uid=1000,gid=1000,sharing=locked test "$(id -u)" = 1000     && test -w /pnpm     && test -n "$PNPM_INSTALL_CACHE_BUST"     && pnpm install --store-dir /pnpm/store --frozen-lockfile

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
   ProductRunTrace,
@@ -9,6 +9,9 @@ import type {
   WorkResponse,
   WorkRunListResponse,
 } from '@atomlink-ye/agent-server/product-contract';
+
+import { RunTrace } from '@/features/run-trace/run-trace';
+import './work-shell.css';
 
 type LoadState = 'loading' | 'available' | 'error';
 
@@ -33,25 +36,88 @@ export function WorkListShell() {
   }, []);
 
   return (
-    <main className="work-shell" data-testid="work-list-shell">
-      <p className="work-shell-kicker">Work-first surface · read only</p>
-      <h1>Works</h1>
-      <p>This is a read-only Work-first surface.</p>
-      <p>Controls are explicitly unavailable.</p>
-      {state === 'loading' ? <p>Loading Works…</p> : null}
+    <WorkShellFrame testId="work-list-shell">
+      <header className="work-list-header">
+        <p className="work-shell-kicker">My Work</p>
+        <h1>Work that is available to review.</h1>
+        <p className="work-list-header__summary">
+          Open a Work to review its recorded historical run details.
+        </p>
+      </header>
+      {state === 'loading' ? (
+        <section
+          aria-live="polite"
+          className="work-list-state work-list-state--loading"
+          data-testid="work-list-loading"
+        >
+          <p className="work-list-state__eyebrow">Loading</p>
+          <h2>Getting your Work records</h2>
+          <p>We are retrieving the Work titles available to review.</p>
+          <div aria-hidden="true" className="work-list-skeleton">
+            <span />
+            <span />
+            <span />
+          </div>
+        </section>
+      ) : null}
       {state === 'error' ? (
-        <p role="alert">Work data could not be loaded.</p>
+        <section
+          className="work-list-state work-list-state--error"
+          data-testid="work-list-error"
+          role="alert"
+        >
+          <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+          <h2>Work records are temporarily unavailable.</h2>
+          <p>
+            This is a connection problem, not a statement about the status of
+            any Work. Refresh the page to try again.
+          </p>
+        </section>
       ) : null}
-      {state === 'available' ? (
-        <ul data-testid="work-list">
-          {works.map((work) => (
-            <li key={work.id}>
-              <a href={`/works/${encodeURIComponent(work.id)}`}>{work.title}</a>
-            </li>
-          ))}
-        </ul>
+      {state === 'available' && works.length === 0 ? (
+        <section
+          aria-labelledby="work-list-empty-heading"
+          className="work-list-state work-list-state--empty"
+          data-testid="work-list-empty"
+        >
+          <p className="work-list-state__eyebrow">No Work records</p>
+          <h2 id="work-list-empty-heading">
+            Nothing is available to review yet.
+          </h2>
+          <p>
+            When a Work becomes available here, its title will open its
+            recorded historical run details.
+          </p>
+        </section>
       ) : null}
-    </main>
+      {state === 'available' && works.length > 0 ? (
+        <section
+          aria-labelledby="work-list-heading"
+          className="work-list-region"
+        >
+          <div className="work-list-region__heading">
+            <p className="work-list-region__eyebrow">Available Work</p>
+            <h2 id="work-list-heading">Work records</h2>
+          </div>
+          <ul data-testid="work-list" className="work-list">
+            {works.map((work) => (
+              <li className="work-list-card" key={work.id}>
+                <div className="work-list-card__identity">
+                  <a href={`/works/${encodeURIComponent(work.id)}`}>
+                    {work.title}
+                  </a>
+                  <p>Open historical run details</p>
+                </div>
+                <p className="work-list-card__unavailable">
+                  <span aria-hidden="true">—</span>
+                  Product status is currently unavailable for this Work.
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </WorkShellFrame>
   );
 }
 
@@ -76,102 +142,65 @@ export function WorkDetailShell({ workId }: { readonly workId: string }) {
   }, [workId]);
 
   return (
-    <main className="work-shell" data-testid="work-detail-shell">
-      <p className="work-shell-kicker">Work-first surface · read only</p>
+    <WorkShellFrame testId="work-detail-shell">
       {state === 'loading' ? <p>Loading Work…</p> : null}
       {state === 'error' ? (
         <p role="alert">Work data could not be loaded.</p>
       ) : null}
       {detail ? <WorkDetail data={detail} /> : null}
-    </main>
+    </WorkShellFrame>
+  );
+}
+
+function WorkShellFrame({
+  children,
+  testId,
+}: {
+  readonly children: ReactNode;
+  readonly testId: string;
+}) {
+  return (
+    <div className="work-product-frame">
+      <aside className="work-product-nav" aria-label="Product areas">
+        <div className="work-product-brand">
+          <span aria-hidden="true">◆</span>
+          <span>Agent Server</span>
+        </div>
+        <nav>
+          <span aria-current="page" className="work-product-nav__current">
+            My Work
+          </span>
+        </nav>
+        <p className="work-product-nav__foot">Historical Work records</p>
+      </aside>
+      <main className="work-shell" data-testid={testId}>
+        {children}
+      </main>
+    </div>
   );
 }
 
 function WorkDetail({ data }: { readonly data: WorkDetailData }) {
   const { work, run, trace } = data;
-  const attempts = workItemsWithAttempts(trace.work_items);
-  const longest = longestCapturedAttempt(attempts);
-  const notCapturedFacts = collectNotCapturedFacts(run, trace, attempts);
+  const outcome = run.work_run.result_summary;
 
   return (
     <>
-      <h1>{work.title}</h1>
-      <p data-testid="work-id">Work ID: {work.id}</p>
-      <p>This is a read-only Work-first surface.</p>
-      <p>Controls are explicitly unavailable.</p>
-
-      <section aria-labelledby="outcome-heading">
-        <h2 id="outcome-heading">Outcome</h2>
-        <p data-testid="outcome-product-state">{run.work_run.product_state}</p>
-        <p data-testid="attention-basis">
-          Attention basis: {run.work_run.attention_reason ?? 'not specified'};
-          completion decision: {run.work_run.completion_decision_availability}
-        </p>
+      <p className="work-shell-breadcrumb">My Work / {work.title}</p>
+      <header className="work-detail-header">
+        <p className="work-shell-kicker">Work Detail</p>
+        <h1>{work.title}</h1>
+      </header>
+      <section aria-labelledby="work-outcome-heading" data-testid="work-outcome">
+        <p className="work-shell-kicker">Work outcome</p>
+        <h2 id="work-outcome-heading">
+          {outcome ?? 'Final outcome unavailable'}
+        </h2>
+        {outcome === null ? (
+          <p>The final Work outcome was not captured for this run.</p>
+        ) : null}
       </section>
-
-      <section aria-labelledby="result-heading">
-        <h2 id="result-heading">Latest result</h2>
-        <p data-testid="latest-result-summary">
-          Summary: {run.work_run.result_summary ?? 'not_captured'}
-        </p>
-        <p data-testid="latest-result-capture-status">
-          Capture status: {run.work_run.result_capture_status}
-        </p>
-        <p data-testid="latest-result-problem-kind">
-          Problem: {run.work_run.problem_kind ?? 'not specified'}
-        </p>
-      </section>
-
-      <section aria-labelledby="attempt-heading">
-        <h2 id="attempt-heading">Work item attempts</h2>
-        {attempts.length === 0 ? <p>No WorkItem attempts captured.</p> : null}
-        {attempts.map(({ workItem, attempt }) => (
-          <article key={attempt.id} data-testid="work-item-attempt">
-            <h3>{workItem.subject}</h3>
-            <p data-testid="attempt-id">Attempt ID: {attempt.id}</p>
-            <p data-testid="attempt-no">Attempt no: {attempt.attempt_no}</p>
-          </article>
-        ))}
-        <p data-testid="longest-attempt">
-          Longest captured attempt:{' '}
-          {longest
-            ? `${longest.id} · ${longest.duration_ms} ms`
-            : 'not captured'}
-        </p>
-      </section>
-
-      <section aria-labelledby="capture-heading">
-        <h2 id="capture-heading">Capture facts</h2>
-        {notCapturedFacts.length > 0 ? (
-          <ul data-testid="not-captured-facts">
-            {notCapturedFacts.map((fact) => (
-              <li key={fact}>{fact}</li>
-            ))}
-          </ul>
-        ) : (
-          <p data-testid="not-captured-facts">No capture gaps recorded.</p>
-        )}
-      </section>
-
-      {trace.timeline_coverage.completeness === 'mcp_only' ? (
-        <p data-testid="mcp-only-warning" role="status">
-          Coverage warning: MCP-only; direct shell, direct file edit, and other
-          non-MCP execution are excluded.
-        </p>
-      ) : null}
-
-      <section aria-labelledby="chat-heading">
-        <h2 id="chat-heading">Chat detail</h2>
-        {trace.mcp_activities.map((activity) => (
-          <a
-            key={activity.activity_id}
-            data-testid="chat-detail-link"
-            href={activity.chat_detail.path}
-          >
-            Chat detail {activity.activity_id}
-          </a>
-        ))}
-      </section>
+      <RunTrace trace={trace} />
     </>
   );
 }
@@ -233,54 +262,6 @@ function isAnchoredTrace(
     'projection_status' in value &&
     value.projection_status === 'internally_anchored'
   );
-}
-
-type ProductWorkItem = ProductRunTrace extends infer Trace
-  ? Trace extends { work_items: readonly (infer Item)[] }
-    ? Item
-    : never
-  : never;
-
-function workItemsWithAttempts(workItems: readonly ProductWorkItem[]) {
-  return workItems.flatMap((workItem) =>
-    workItem.attempts.map((attempt) => ({ workItem, attempt })),
-  );
-}
-
-function longestCapturedAttempt(
-  attempts: ReturnType<typeof workItemsWithAttempts>,
-) {
-  return attempts
-    .map(({ attempt }) => attempt)
-    .filter(
-      (attempt) =>
-        attempt.timing_capture_status === 'captured' &&
-        attempt.duration_ms !== null,
-    )
-    .sort((left, right) => right.duration_ms! - left.duration_ms!)[0];
-}
-
-function collectNotCapturedFacts(
-  run: WorkDetailData['run'],
-  trace: WorkDetailData['trace'],
-  attempts: ReturnType<typeof workItemsWithAttempts>,
-): readonly string[] {
-  const facts: string[] = [];
-  if (run.work_run.product_state === 'not_captured')
-    facts.push('WorkRun product state is not_captured.');
-  if (run.work_run.result_capture_status === 'not_captured')
-    facts.push('Latest result is not_captured.');
-  if (run.work_run.completion_decision_availability === 'not_captured')
-    facts.push('Completion decision is not_captured.');
-  if (
-    attempts.some(
-      ({ attempt }) => attempt.timing_capture_status === 'not_captured',
-    )
-  )
-    facts.push('At least one attempt timing span is not_captured.');
-  if (trace.timeline_coverage.completeness === 'mcp_only')
-    facts.push('Trace coverage is explicitly MCP-only.');
-  return facts;
 }
 
 async function readJson<T>(path: string): Promise<T> {

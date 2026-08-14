@@ -1,0 +1,5 @@
+kind=e8-request-ledger expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=e8-request-ledger:expected_min_count=1 outer_exit=2
+
+stdout_hex=63335f63345f7a65726f5f657865637574696f6e3a6b696e643d65382d726571756573742d6c65646765723a65787065637465645f6d696e5f636f756e743d310a
+stderr_hex=
+exit=2

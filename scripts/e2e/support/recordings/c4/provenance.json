@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "purpose": "C4 accepted API recorder byte provenance",
+  "documents": [
+    {
+      "scenario": "parallel-success",
+      "source_root": "/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/parallel-pull/recording-artifacts/wrec-rerecord-current/parallel-success/20260814T002416007Z-fb333f6f-757d-490a-a8c3-734a56de9fdd",
+      "source_manifest_sha256": "28404fb07dbf5ec2713ff4bc72819ac17d1c840e4003b1c2c52e2d5a15147d6d",
+      "files": {
+        "api/work.json": {
+          "source_sha256": "a48843891e1e44f6f3820f86ffec00b22d8bb1b3547484fafd3f38ac6fe1be4c",
+          "copy_sha256": "a48843891e1e44f6f3820f86ffec00b22d8bb1b3547484fafd3f38ac6fe1be4c"
+        },
+        "api/work-run.json": {
+          "source_sha256": "6d45fe91d24ff306194d22fb52f253f1288f299bbaeb8f8651898c4d87678df1",
+          "copy_sha256": "6d45fe91d24ff306194d22fb52f253f1288f299bbaeb8f8651898c4d87678df1"
+        },
+        "api/trace.json": {
+          "source_sha256": "ca341649e182c51aabdec4bd2702de65a9b5e6cd796486063d97358cb39eef67",
+          "copy_sha256": "ca341649e182c51aabdec4bd2702de65a9b5e6cd796486063d97358cb39eef67"
+        }
+      }
+    },
+    {
+      "scenario": "rework-once",
+      "source_root": "/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1",
+      "source_manifest_sha256": "07129cc7d1dc04a6235bf06a521c3391c5f92321ffc36446a54d086a72f5baa1",
+      "files": {
+        "api/work.json": {
+          "source_sha256": "ae710495e1a1b9dc66143e5ebc9782c0bf776f954dd58a271cd95eabc1d207ad",
+          "copy_sha256": "ae710495e1a1b9dc66143e5ebc9782c0bf776f954dd58a271cd95eabc1d207ad"
+        },
+        "api/work-run.json": {
+          "source_sha256": "1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933",
+          "copy_sha256": "1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933"
+        },
+        "api/trace.json": {
+          "source_sha256": "6123b4061e0615714fb9f969ca6edb6a2e9bd56d4b33c5a6b6906096d1386c7d",
+          "copy_sha256": "6123b4061e0615714fb9f969ca6edb6a2e9bd56d4b33c5a6b6906096d1386c7d"
+        }
+      }
+    }
+  ]
+}

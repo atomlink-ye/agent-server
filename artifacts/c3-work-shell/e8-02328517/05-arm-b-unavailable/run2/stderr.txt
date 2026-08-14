@@ -1,0 +1,187 @@
+Preparing worktree (detached HEAD 0232851)
+cp: cannot create regular file '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules/depd/index.js': No such file or directory
+cp: cannot create regular file '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules/depd/LICENSE': No such file or directory
+cp: cannot create regular file '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules/depd/Readme.md': No such file or directory
+cp: cannot create directory '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules/depd/lib': No such file or directory
+cp: preserving times for '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules/depd': No such file or directory
+cp: preserving times for '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0/node_modules': No such file or directory
+cp: preserving times for '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/depd@2.0.0': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/content-type@2.0.0/node_modules/content-type/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/content-type/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/bytes@3.1.2/node_modules/bytes/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/bytes/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/body-parser@2.3.0/node_modules/body-parser/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/compression/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/accepts@2.0.0/node_modules/accepts/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/mime-types@3.0.2/node_modules/mime-types/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/shebang-regex@3.0.0/node_modules/shebang-regex/license' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/is-docker/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/isexe@2.0.0/node_modules/isexe/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/semver@7.8.5/node_modules/semver/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/which@2.0.2/node_modules/which/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/semver@7.8.5/node_modules/semver/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/path-key@3.1.1/node_modules/path-key/license' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/is-docker/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/cross-spawn@7.0.6/node_modules/cross-spawn/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/cross-spawn/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/vary@1.1.2/node_modules/vary/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/content-disposition/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/content-type@1.0.5/node_modules/content-type/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/content-type/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/@types+node@22.20.1/node_modules/@types/node/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/@types+react-dom@19.1.7_@types+react@19.1.10/node_modules/@types/react-dom/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/typescript@7.0.2/node_modules/typescript/dist/api/async/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/@modelcontextprotocol+sdk@1.30.0_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/dist/esm/server/auth/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/typescript@7.0.2/node_modules/typescript/dist/api/async/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/lodash.pickby@4.6.0/node_modules/lodash.pickby/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/lodash.curry/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/mime-types@2.1.35/node_modules/mime-types/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/mime-types@3.0.2/node_modules/mime-types/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/LICENSE' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/zod/LICENSE': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/standard-schema.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/standard-schema.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/standard-schema.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/standard-schema.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/partialUtil.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/typeAliases.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/enumUtil.cjs' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/compiled/@next/font/dist/types.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/enumUtil.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/partialUtil.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v3/helpers/typeAliases.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/next@15.5.6_@opentelemetry+api@1.9.0_react-dom@19.1.1_react@19.1.1__react@19.1.1/node_modules/next/dist/next-devtools/userspace/app/app-dev-overlay-setup.d.ts': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/middleware/secure-headers/permissions-policy.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/adapter/service-worker/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/adapter/aws-lambda/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/adapter/deno/deno.d.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/helper/conninfo/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/helper/conninfo/index.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/validator/utils.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/client/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/types/package.json' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/long@5.3.2/node_modules/long/umd/package.json': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/utils/http-status.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/utils/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/utils/headers.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/cjs/package.json' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/long@5.3.2/node_modules/long/umd/package.json': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/cjs/adapter/deno/deno.d.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/jsx/intrinsic-elements.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hono@4.12.31/node_modules/hono/dist/jsx/types.js' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/server-only@0.0.1/node_modules/server-only/empty.js': No such file or directory
+cp: cannot create hard link '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/hast-util-whitespace@3.0.0/node_modules/hast-util-whitespace/license' to '/root/workspace/.c3-e8-02328517-arm-b/node_modules/.pnpm/rehype-sanitize@6.0.0/node_modules/rehype-sanitize/license': No such file or directory
+cp: cannot create directory '/root/workspace/.c3-e8-02328517-arm-b/apps/web/node_modules': No such file or directory
+sed: can't read /root/workspace/.c3-e8-02328517-arm-b/apps/web/components/work/work-shell.tsx: No such file or directory
+sha256sum: /root/workspace/.c3-e8-02328517-arm-b/apps/web/components/work/work-shell.tsx: No such file or directory
+warning: Not a git repository. Use --no-index to compare two paths outside a working tree
+usage: git diff --no-index [<options>] <path> <path>
+
+Diff output format options
+    -p, --patch           generate patch
+    -s, --no-patch        suppress diff output
+    -u                    generate patch
+    -U, --unified[=<n>]   generate diffs with <n> lines context
+    -W, --function-context
+                          generate diffs with <n> lines context
+    --raw                 generate the diff in raw format
+    --patch-with-raw      synonym for '-p --raw'
+    --patch-with-stat     synonym for '-p --stat'
+    --numstat             machine friendly --stat
+    --shortstat           output only the last line of --stat
+    -X, --dirstat[=<param1,param2>...]
+                          output the distribution of relative amount of changes for each sub-directory
+    --cumulative          synonym for --dirstat=cumulative
+    --dirstat-by-file[=<param1,param2>...]
+                          synonym for --dirstat=files,param1,param2...
+    --check               warn if changes introduce conflict markers or whitespace errors
+    --summary             condensed summary such as creations, renames and mode changes
+    --name-only           show only names of changed files
+    --name-status         show only names and status of changed files
+    --stat[=<width>[,<name-width>[,<count>]]]
+                          generate diffstat
+    --stat-width <width>  generate diffstat with a given width
+    --stat-name-width <width>
+                          generate diffstat with a given name width
+    --stat-graph-width <width>
+                          generate diffstat with a given graph width
+    --stat-count <count>  generate diffstat with limited lines
+    --compact-summary     generate compact summary in diffstat
+    --binary              output a binary diff that can be applied
+    --full-index          show full pre- and post-image object names on the "index" lines
+    --color[=<when>]      show colored diff
+    --ws-error-highlight <kind>
+                          highlight whitespace errors in the 'context', 'old' or 'new' lines in the diff
+    -z                    do not munge pathnames and use NULs as output field terminators in --raw or --numstat
+    --abbrev[=<n>]        use <n> digits to display object names
+    --src-prefix <prefix>
+                          show the given source prefix instead of "a/"
+    --dst-prefix <prefix>
+                          show the given destination prefix instead of "b/"
+    --line-prefix <prefix>
+                          prepend an additional prefix to every line of output
+    --no-prefix           do not show any source or destination prefix
+    --inter-hunk-context <n>
+                          show context between diff hunks up to the specified number of lines
+    --output-indicator-new <char>
+                          specify the character to indicate a new line instead of '+'
+    --output-indicator-old <char>
+                          specify the character to indicate an old line instead of '-'
+    --output-indicator-context <char>
+                          specify the character to indicate a context instead of ' '
+
+Diff rename options
+    -B, --break-rewrites[=<n>[/<m>]]
+                          break complete rewrite changes into pairs of delete and create
+    -M, --find-renames[=<n>]
+                          detect renames
+    -D, --irreversible-delete
+                          omit the preimage for deletes
+    -C, --find-copies[=<n>]
+                          detect copies
+    --find-copies-harder  use unmodified files as source to find copies
+    --no-renames          disable rename detection
+    --rename-empty        use empty blobs as rename source
+    --follow              continue listing the history of a file beyond renames
+    -l <n>                prevent rename/copy detection if the number of rename/copy targets exceeds given limit
+
+Diff algorithm options
+    --minimal             produce the smallest possible diff
+    -w, --ignore-all-space
+                          ignore whitespace when comparing lines
+    -b, --ignore-space-change
+                          ignore changes in amount of whitespace
+    --ignore-space-at-eol
+                          ignore changes in whitespace at EOL
+    --ignore-cr-at-eol    ignore carrier-return at the end of line
+    --ignore-blank-lines  ignore changes whose lines are all blank
+    -I, --ignore-matching-lines <regex>
+                          ignore changes whose all lines match <regex>
+    --indent-heuristic    heuristic to shift diff hunk boundaries for easy reading
+    --patience            generate diff using the "patience diff" algorithm
+    --histogram           generate diff using the "histogram diff" algorithm
+    --diff-algorithm <algorithm>
+                          choose a diff algorithm
+    --anchored <text>     generate diff using the "anchored diff" algorithm
+    --word-diff[=<mode>]  show word diff, using <mode> to delimit changed words
+    --word-diff-regex <regex>
+                          use <regex> to decide what a word is
+    --color-words[=<regex>]
+                          equivalent to --word-diff=color --word-diff-regex=<regex>
+    --color-moved[=<mode>]
+                          moved lines of code are colored differently
+    --color-moved-ws <mode>
+                          how white spaces are ignored in --color-moved
+
+Other diff options
+    --relative[=<prefix>]
+                          when run from subdir, exclude changes outside and show relative paths
+    -a, --text            treat all files as text
+    -R                    swap two inputs, reverse the diff
+    --exit-code           exit with 1 if there were differences, 0 otherwise
+    --quiet               disable all output of the program
+    --ext-diff            allow an external diff helper to be executed
+    --textconv            run external text conversion filters when comparing binary files
+    --ignore-submodules[=<when>]
+                          ignore changes to submodules in the diff generation
+    --submodule[=<format>]
+                          specify how differences in submodules are shown
+    --ita-invisible-in-index
+                          hide 'git add -N' entries from the index
+    --ita-visible-in-index
+                          treat 'git add -N' entries as real in the index
+    -S <string>           look for differences that change the number of occurrences of the specified string
+    -G <regex>            look for differences that change the number of occurrences of the specified regex
+    --pickaxe-all         show all changes in the changeset with -S or -G
+    --pickaxe-regex       treat <string> in -S as extended POSIX regular expression
+    -O <file>             control the order in which files appear in the output
+    --rotate-to <path>    show the change in the specified path first
+    --skip-to <path>      skip the output to the specified path
+    --find-object <object-id>
+                          look for differences that change the number of occurrences of the specified object
+    --diff-filter [(A|C|D|M|R|T|U|X|B)...[*]]
+                          select files by diff type
+    --output <file>       output to a specific file
+
+fatal: validation failed, cannot remove working tree: '/root/workspace/.c3-e8-02328517-arm-b/.git' does not exist

@@ -1,0 +1,4 @@
+argv=node /root/workspace/.c3-e8-reachability-1dbdc99/c3-e8-classifier.mjs test-file-absent -- /definitely/not/a/c3-reachability-command
+child_started=no
+raw_child_status=N/A (spawn ENOENT)
+expected=c3_e8_classifier_missing:reason=command-not-available:command=/definitely/not/a/c3-reachability-command

@@ -1,0 +1,16 @@
+C-box: 8174cc0c35a44a568688d8492fe15745
+Remote isolation: /root/workspace/.c3-e8-classifier-6f1f0c3
+Remote candidate HEAD: 02328517a0fe887464d0661d772a49ad9d88451b
+
+The production dual executes c3-e8-classifier.test.mjs, which imports and
+exercises c3-e8-classifier.mjs and c3-e8-absence-runner.mjs; the arm wrapper is
+the exact c3-e8-absence-arm.mjs used for canonical absence orchestration.
+
+| remote path | local path | remote SHA256 | local SHA256 | equal |
+| --- | --- | --- | --- | --- |
+| `/root/workspace/.c3-e8-classifier-6f1f0c3/c3-e8-classifier.mjs` | `scripts/ci/c3-e8-classifier.mjs` | `326ee8ad3ee18404f89b10ea6c251a5d8c93990a2dd8a8a10b9f9c72136a0bcf` | `326ee8ad3ee18404f89b10ea6c251a5d8c93990a2dd8a8a10b9f9c72136a0bcf` | yes |
+| `/root/workspace/.c3-e8-classifier-6f1f0c3/c3-e8-classifier.test.mjs` | `scripts/ci/c3-e8-classifier.test.mjs` | `6786815859aa88a5b51c9da7adaf4f1111f0fc12369b43728885b1ea27874b22` | `6786815859aa88a5b51c9da7adaf4f1111f0fc12369b43728885b1ea27874b22` | yes |
+| `/root/workspace/.c3-e8-classifier-6f1f0c3/c3-e8-absence-runner.mjs` | `scripts/ci/c3-e8-absence-runner.mjs` | `d5994c60478b5b02b8b693f0ac5c06baaa4db13e04553cc6fb2d47feb2b9a882` | `d5994c60478b5b02b8b693f0ac5c06baaa4db13e04553cc6fb2d47feb2b9a882` | yes |
+| `/root/workspace/.c3-e8-classifier-6f1f0c3/c3-e8-absence-arm.mjs` | `scripts/ci/c3-e8-absence-arm.mjs` | `c5b8778d7eeb616938d78a8e20f1aca4dc876d26d94d587f98ee519f4bb8a653` | `c5b8778d7eeb616938d78a8e20f1aca4dc876d26d94d587f98ee519f4bb8a653` | yes |
+
+All four remote scripts existed and matched; no MISSING classification applies.

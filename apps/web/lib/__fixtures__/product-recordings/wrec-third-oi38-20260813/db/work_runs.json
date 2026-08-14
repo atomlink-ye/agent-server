@@ -1,0 +1,16 @@
+[
+  {
+    "bound_at": "2026-08-13T17:33:10.836Z",
+    "created_at": "2026-08-13T17:33:10.630Z",
+    "definition_version_id": "aafd8a43-4c98-4eb5-bf42-b11443a6da29",
+    "expires_at": "2026-08-13T17:48:10.630Z",
+    "id": "cdeecf2b-b8c8-4929-ae48-8522768605af",
+    "root_task_id": "c5f4a431-02ab-44e5-acd8-49d775db83ea",
+    "tenant_id": "tenant_local",
+    "trigger_kind": "manual",
+    "trigger_ref": "product-projection:oi38-negative:ef71c222-ce17-4d36-9713-e3d68c6aff69",
+    "updated_at": "2026-08-13T17:33:10.836Z",
+    "work_id": "315df1a1-2a2f-4e10-a8ba-9f310bc42aed",
+    "workspace_id": "00000000-0000-4000-8000-000000000001"
+  }
+]

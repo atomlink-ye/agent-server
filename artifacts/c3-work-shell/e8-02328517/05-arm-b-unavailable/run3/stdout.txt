@@ -1,0 +1,5 @@
+arm=b
+mutation=remove unavailable disclosure
+command_env=PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false (disposable-worktree dependency check only)
+exit=1
+[ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE] No package found in this workspace

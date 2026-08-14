@@ -1,0 +1,71 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mAssertionError[22m: expected [] to have a length of 1 but got +0[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m142:38[22m[39m
+    [90m140|[39m       [34mexpect[39m(requestSnapshot[33m.[39msealed)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m141|[39m       [34mexpect[39m(requestSnapshot[33m.[39minFlight)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m142|[39m       [34mexpect[39m(requestSnapshot[33m.[39mrecords)[33m.[39m[34mtoHaveLength[39m([34m1[39m)[33m;[39m
+    [90m   |[39m                                      [31m^[39m
+    [90m143|[39m       [34mexpect[39m(requestSnapshot[33m.[39mrecords[[34m0[39m])[33m.[39m[34mtoMatchObject[39m({
+    [90m144|[39m         generation[33m:[39m [34m1[39m[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mdistinguishes loading, empty, and real network error without fabricating Work
+[31m[1mAssertionError[22m: expected <section …(3)>…(4)</section> to be null[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/distinguishes-loading--empty--and-real-network-error-without-fabricating-Work-1.png[22m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+<section
+  aria-live="polite"
+  class="work-list-state work-list-state--loading"
+  data-testid="work-list-loading"
+>
+  <p
+    class="work-list-state__eyebrow"
+  >
+    Loading
+  </p>
+  <h2>
+    Getting your Work records
+  </h2>
+  <p>
+    We are retrieving the Work titles available to review.
+  </p>
+  <div
+    aria-hidden="true"
+    class="work-list-skeleton"
+  >
+    <span />
+    <span />
+    <span />
+  </div>
+</section>
+
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m253:6[22m[39m
+    [90m251|[39m     [34mexpect[39m(
+    [90m252|[39m       loadingHost[33m.[39m[34mquerySelector[39m([32m'[data-testid="work-list-loading"]'[39m)[33m,[39m
+    [90m253|[39m     )[33m.[39m[34mtoBeNull[39m()[33m;[39m
+    [90m   |[39m      [31m^[39m
+    [90m254|[39m     [34mexpect[39m(
+    [90m255|[39m       loadingHost[33m.[39m[34mquerySelector[39m([32m'[data-testid="work-list-empty"]'[39m)[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+

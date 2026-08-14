@@ -1,0 +1,1 @@
+{"command":["sh","-lc","E=/root/workspace/.c3-e8-classifier-51c102f/dual; for f in exit manifest; do printf \"===== %s =====\\\\n\" \"$f\"; cat \"$E/$f\"; done; printf \"===== stdout =====\\\\n\"; cat \"$E/stdout\"; printf \"===== stderr =====\\\\n\"; cat \"$E/stderr\""],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-13T23:42:06.648Z"}

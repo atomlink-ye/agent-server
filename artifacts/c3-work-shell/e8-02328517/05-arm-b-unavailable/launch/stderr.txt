@@ -1,0 +1,3 @@
+Preparing worktree (detached HEAD 0232851)
+ln: failed to create symbolic link '/root/workspace/.c3-e8-02328517-arm-b/node_modules': File exists
+ln: failed to create symbolic link '/root/workspace/.c3-e8-02328517-arm-b/apps/web/node_modules': File exists

@@ -1,0 +1,88 @@
+=====test-b4.exit=====
+1
+=====test-b4.log=====
+Scope: all 2 workspace projects
+Recreating /root/workspace/mgr-frontend/node_modules
+✓ Lockfile passes supply-chain policies (verified 9h ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+dependencies:
++ @getpaseo/client 0.1.110
++ @hono/node-server 2.0.11
++ @larksuiteoapi/node-sdk 1.71.1
++ @modelcontextprotocol/sdk 1.30.0
++ hono 4.12.31
++ pg 8.16.3
++ re2js 2.8.6
++ yaml 2.9.0
++ zod 4.4.3
+
+devDependencies:
++ @electric-sql/pglite 0.3.14
++ @electric-sql/pglite-smoke <- @electric-sql/pglite 0.5.4
++ @electric-sql/pglite-socket 0.2.7
++ @types/node 22.20.1
++ @types/pg 8.15.5
++ @vitejs/plugin-react 6.0.4
++ @vitest/browser-playwright 4.1.10
++ playwright 1.62.1
++ prettier 3.9.6
++ tsx 4.23.1
++ typescript 7.0.2
++ vitest 4.1.10
+
+Done in 8.6s using pnpm v11.7.0
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/root/workspace/.c3-e8-02328517-arm-b4[39m
+
+[2m10:55:11 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
+[2m10:55:12 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] scanning dependencies...
+[2m10:55:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+ [31m❯[39m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1541[2mms[22m[39m
+[31m   [31m×[31m renders both recorder-backed Work titles and exact detail links without N+1 reads[39m[33m 1495[2mms[22m[39m
+   [32m✓[39m distinguishes loading, empty, and real network error without fabricating Work[32m 40[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[46m web-dom (chromium) [49m[39m components/work/work-list.browser.test.tsx[2m > [22mrenders both recorder-backed Work titles and exact detail links without N+1 reads
+[31m[1mAssertionError[22m: expected 'Product Projection parallel-success c…' to contain 'Product status is currently unavailab…'[39m
+
+Failure screenshot:
+  - [2mapps/web/components/work/__screenshots__/work-list.browser.test.tsx/renders-both-recorder-backed-Work-titles-and-exact-detail-links-without-N-1-reads-1.png[22m
+
+Expected: [32m"Product [7mstatus is currently unavailable for this Work.[27m"[39m
+Received: [31m"Product [7mProjection parallel-success c45f651cOpen historical run details[27m"[39m
+
+[36m [2m❯[22m components/work/work-list.browser.test.tsx:[2m136:33[22m[39m
+    [90m134|[39m         [34mexpect[39m(link[33m?.[39mtextContent)[33m.[39m[34mtoBe[39m(work[33m.[39mtitle)[33m;[39m
+    [90m135|[39m         [34mexpect[39m(link[33m?.[39m[34mgetAttribute[39m([32m'href'[39m))[33m.[39m[34mtoBe[39m([32m`/works/[39m[36m${[39mwork[33m.[39mid[36m}[39m[32m`[39m)[33m;[39m
+    [90m136|[39m         [34mexpect[39m(card[33m.[39mtextContent)[33m.[39m[34mtoContain[39m(
+    [90m   |[39m                                 [31m^[39m
+    [90m137|[39m           [32m'Product status is currently unavailable for this Work.'[39m[33m,[39m
+    [90m138|[39m         )[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 22:55:10
+[2m   Duration [22m 15.28s[2m (transform 0ms, setup 0ms, import 2.44s, tests 1.54s, environment 0ms)[22m
+
+=====mutation.diff=====
+diff --git a/apps/web/components/work/work-shell.tsx b/apps/web/components/work/work-shell.tsx
+index b40ccdf..0c817bb 100644
+--- a/apps/web/components/work/work-shell.tsx
++++ b/apps/web/components/work/work-shell.tsx
+@@ -108,10 +108,6 @@ export function WorkListShell() {
+                   </a>
+                   <p>Open historical run details</p>
+                 </div>
+-                <p className="work-list-card__unavailable">
+-                  <span aria-hidden="true">—</span>
+-                  Product status is currently unavailable for this Work.
+-                </p>
+               </li>
+             ))}
+           </ul>

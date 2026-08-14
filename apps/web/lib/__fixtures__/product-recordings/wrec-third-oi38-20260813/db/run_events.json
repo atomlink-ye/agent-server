@@ -1,0 +1,1960 @@
+[
+  {
+    "created_at": "2026-08-13T17:34:47.129Z",
+    "id": "012189f0-d6b8-4764-8933-fcfd507c6221",
+    "payload": {},
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.951Z",
+    "id": "0237ef7f-b43f-491d-b397-3a874eca11c6",
+    "payload": {
+      "text": "Work-1 submitted successfully and is marked completed. The canonical `team_work_submit` returned a successful receipt, so the turn ends here."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "23",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:16.962Z",
+    "id": "04a580cf-4dca-465c-ba24-45986a2f7e9e",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_finish"
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.793Z",
+    "id": "04b404a7-b9e6-4d0b-a8c1-3829c408d196",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "read",
+      "detail": {
+        "filePath": "skill-receipts",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "11",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.701Z",
+    "id": "07a40c8e-e92e-450b-9eb0-b0ad81caa53b",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "subagent",
+      "kind": "tool_status",
+      "label": "Sub-agent task",
+      "provider": "opencode",
+      "status": "failed",
+      "summary": "Subagent activity."
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "15",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.711Z",
+    "id": "084f6df0-2158-4142-ba69-11fff42899e6",
+    "payload": {
+      "activity_id": "activity-8",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_submit"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "21",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.993Z",
+    "id": "0fadfa5c-b28c-4b0f-84a4-56dd97bc7b95",
+    "payload": {},
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:36.008Z",
+    "id": "10701207-22c9-4374-b6d0-640e46d9389f",
+    "payload": {
+      "activity_id": "activity-9",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "17",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.178Z",
+    "id": "125b5166-3abe-45d1-b89a-736cec9d6144",
+    "payload": {
+      "activity_id": "activity-7",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_message_send"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "16",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:30.454Z",
+    "id": "18cc5388-9ef9-403b-bfbb-67daebb0267d",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:38.217Z",
+    "id": "2060b87d-985d-4912-a33b-e3e2e0b495e0",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.046Z",
+    "id": "2112a7a0-f7dc-4565-9ba5-dcccf5f16d41",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Submitted successfully. Work `work-2` (Projection slice B) is complete with a successful submit receipt."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "20",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.166Z",
+    "id": "227b0193-275e-43ea-b1fc-aff1a5abb62f",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "14",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:21.506Z",
+    "id": "25923a21-7cb5-4f13-9c03-a33d9aafda26",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "read",
+      "detail": {
+        "content": "[REDACTED]",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "detail_text": "<path>./<<path>> <type>directory<<path>> <entries> skill-receipts/ (1 entries) <<path>>",
+      "kind": "tool_status",
+      "label": "Read activity",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "10",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:16.959Z",
+    "id": "26c26614-2aaf-47f2-b539-48a9b5c6cb7c",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Board verified: exactly two accepted Work items (work-1, work-2). Finishing once."
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.510Z",
+    "id": "2865eff2-c4c7-43cc-8803-76d34d16c171",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_finish"
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:40.912Z",
+    "id": "29f6dfc2-8b00-4fa1-bf63-bd4b2009d623",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:33.771Z",
+    "id": "2c50bd7a-4183-4bad-9de0-fbf47d4da768",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:35.421Z",
+    "id": "2cc27aad-0763-402c-8885-053e5b2b6a5e",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.164Z",
+    "id": "2d4e5ab5-b653-4eef-b009-9a223acb7129",
+    "payload": {
+      "cached_input_tokens": 11392,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 11589,
+      "input_tokens": 173,
+      "kind": "usage",
+      "output_tokens": 24,
+      "total_cost_usd": 0.0009156392
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "24",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:35.879Z",
+    "id": "34ad58bd-3430-4528-828d-83bfd8266339",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_accept"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:50.294Z",
+    "id": "363e2282-841f-4258-ac0f-b60cdf8d33a1",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.687Z",
+    "id": "368e0f51-c457-4e2b-9760-72eb15678fc5",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Both Work items accepted (work-1, work-2); board holds exactly two accepted items. `team_finish` is not authorized this turn, so I end the turn with all required control actions complete."
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "11",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:37.578Z",
+    "id": "3805d9fa-c68b-46b5-9858-27e91b19aa1a",
+    "payload": {
+      "kind": "team_checkpoint",
+      "member": "projection-worker-b",
+      "status": "active",
+      "summary": "Projection slice B: producing projection evidence for the parallel-success scenario. Evidence collected and ready for submission."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "18",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:00.085Z",
+    "id": "38c37993-7e82-4c2f-9b14-ded67fe794ea",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:53.922Z",
+    "id": "38cb7b0b-ca31-46e8-9df6-707eae2709ef",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_accept"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.697Z",
+    "id": "3cb486a0-395d-459d-8987-024d767eaea8",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_accept"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "13",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.174Z",
+    "id": "42dc67d4-9d30-4fcc-ac55-d20e7628d8e9",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_message_send"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "15",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.627Z",
+    "id": "46f1bb7d-8c99-47f9-8fa6-c9e27941f364",
+    "payload": {},
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "10",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.564Z",
+    "id": "48848394-7616-4905-b78b-ec1ee5f19638",
+    "payload": {},
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:56.796Z",
+    "id": "488887d3-a21f-42ed-b0c4-6d5c4c38fd8c",
+    "payload": {
+      "cached_input_tokens": 11904,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 12154,
+      "input_tokens": 167,
+      "kind": "usage",
+      "output_tokens": 40,
+      "total_cost_usd": 0.0010347792
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.959Z",
+    "id": "4ac1c1c3-e0ea-4892-b3bf-3e44472d06e0",
+    "payload": {},
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "24",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.516Z",
+    "id": "4baf8fa6-735f-48b9-ad5b-7b6701449c58",
+    "payload": {
+      "cached_input_tokens": 17152,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 17201,
+      "input_tokens": 28,
+      "kind": "usage",
+      "output_tokens": 21,
+      "total_cost_usd": 0.0016515016
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.123Z",
+    "id": "4d34bf07-0ff0-4c1e-8379-a88553dd2793",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "21",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:42.114Z",
+    "id": "535f3698-e050-40a8-b4e4-ccc84ba87b6a",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "10",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:37.062Z",
+    "id": "54c30342-3910-4d58-8ba7-ff1b85647cfa",
+    "payload": {},
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:09.285Z",
+    "id": "54f81d7c-be21-4793-abc3-5dadccd1a2ab",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "shell",
+      "detail": {
+        "command": "find skill-receipts -type f | head -50",
+        "kind": "shell",
+        "output": "skill-receipts/grants/<id>.json"
+      },
+      "detail_kind": "shell",
+      "detail_text": "skill-receipts/grants/<id>.json",
+      "kind": "tool_status",
+      "label": "Shell activity: find skill-receipts -type f | head -50",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Shell activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "10",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.273Z",
+    "id": "55c3808a-b206-440e-8874-daf45b284f19",
+    "payload": {},
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "26",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.623Z",
+    "id": "597aeeed-c337-4b86-8056-040964045e6f",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Work-1 submitted successfully and is marked completed. The canonical `team_work_submit` returned a successful receipt, so the turn ends here."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "17",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:17.442Z",
+    "id": "5cf7359b-d374-4be2-8590-7eaa11839a9c",
+    "payload": {
+      "kind": "team_checkpoint",
+      "member": "projection-worker-a",
+      "status": "active",
+      "summary": "Produced projection evidence for slice A (projection-worker-a): projected expected outputs/observables for the slice, identified dependencies (none blocking), and noted assumptions. Ready to submit the bounded result."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "15",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:36.041Z",
+    "id": "5f5428e4-032b-4653-9c79-038a3f2cab48",
+    "payload": {
+      "text": "work-1 accepted (projection-worker-a's real submission verified). work-2 still running; not eligible for accept/cancel/rework yet. Board: 1 accepted, 1 in progress. Cannot finish until work-2 is accepted. Ending turn."
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "10",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:04.291Z",
+    "id": "6435170a-9790-4960-bc65-f43805867880",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Both Work items accepted — board holds exactly two accepted items. Attempting finish once."
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:28.265Z",
+    "id": "64bfbe85-7e6c-47a4-8623-0088adb0a92d",
+    "payload": {
+      "activity_id": "activity-7",
+      "category": "read",
+      "detail": {
+        "content": "[REDACTED]",
+        "filePath": "skill-receipts/grants",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "detail_text": "<path>./skill-receipts/grants<<path>> <type>directory<<path>> <entries> <id>.json (1 entries) <<path>>",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts/grants",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "13",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:56.794Z",
+    "id": "66532f27-276e-4286-9731-f939b6e2025a",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:08.431Z",
+    "id": "665bc096-e977-4cf8-8d74-94ac8ba99e9b",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.570Z",
+    "id": "68515f59-5231-4c53-b6a8-025f3d9c9406",
+    "payload": {
+      "text": "Team finished. Board held exactly two Work items, both accepted, and team_finish succeeded."
+    },
+    "run_id": "9c1c52c7-7860-4f7e-ba64-0ed661dd1150",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:35.872Z",
+    "id": "6a08cac5-1934-4be9-8480-80585cdbfe0c",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "work-1 accepted (projection-worker-a's real submission verified). work-2 still running; not eligible for accept/cancel/rework yet. Board: 1 accepted, 1 in progress. Cannot finish until work-2 is accepted. Ending turn."
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:35.875Z",
+    "id": "6a1432ee-54f6-4383-bebb-48a11abce5a4",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:00.047Z",
+    "id": "6a2b8f68-ebf4-4c9e-ad12-ce560b74c0d2",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "shell",
+      "detail": {
+        "command": "ls -la && ls -la <path> 2><path>",
+        "kind": "shell"
+      },
+      "detail_kind": "shell",
+      "kind": "tool_status",
+      "label": "Shell activity: ls -la && ls -la <path> 2><path>",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Shell activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.153Z",
+    "id": "6ba448ba-b8e8-4cc1-a780-8e6898ac8b29",
+    "payload": {
+      "activity_id": "activity-9",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "22",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:14.231Z",
+    "id": "6cf18091-611e-4929-845a-27939970f46c",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:16.928Z",
+    "id": "72b314bd-5a15-43d3-aabb-9c7ec64eed06",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "The grant confirms my allowed tools are only the canonical team tools. The assigned work-1 is to produce and submit projection evidence for slice A."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "13",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:34.296Z",
+    "id": "73f0531f-b9a5-45e0-b51b-97d9a3e049f3",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:35.999Z",
+    "id": "74075b9a-a498-453c-8d36-261c61655fb8",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "I have my assigned work: \"Projection slice B: produce and submit projection evidence.\" Let me record a checkpoint and submit my completed work."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "16",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:21.348Z",
+    "id": "77869a39-1911-44a2-bbe7-d2c6629257ea",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "read",
+      "detail": {
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "kind": "tool_status",
+      "label": "Read activity",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:48.857Z",
+    "id": "77fbebf4-d47c-4ed8-a8e1-9e0b8eb88e23",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_message_send"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "11",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:29.689Z",
+    "id": "7afcc53c-aa39-4fde-9d4c-6837b8b3877b",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:16.943Z",
+    "id": "7bab988b-1ac6-43f1-9e65-6829f98016cc",
+    "payload": {
+      "activity_id": "activity-7",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "14",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:48.333Z",
+    "id": "83afe77a-0d14-498e-a830-777ac65c52da",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:40.923Z",
+    "id": "872e8ec7-a2c8-4b97-831e-badaa5480d31",
+    "payload": {
+      "activity_id": "activity-10",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_submit"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "19",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:35:53.337Z",
+    "id": "87f78c2a-276f-41fc-8c34-b8025123fc5c",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:35:54.226Z",
+    "id": "88ae43e4-e9b5-4c1f-b23d-10fd84c3bb70",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:34.604Z",
+    "id": "8c64d508-519e-49af-b118-70bc03997730",
+    "payload": {},
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "9",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.141Z",
+    "id": "8d391cf4-f45a-4a91-a8ce-5022947589c2",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Board is set: exactly two independent Work items created — work-1 (projection-worker-a) and work-2 (projection-worker-b). Both workers woken; neither has submitted yet, so no accept/cancel/rework is eligible and team_finish must wait until both submissions are accepted. No further action this turn."
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "13",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:53.192Z",
+    "id": "8fe0dba0-770a-422d-a072-597d3dc2b62d",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:11.956Z",
+    "id": "91064cb2-3fb2-4a53-a15a-7a87103040d6",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "read",
+      "detail": {
+        "filePath": "skill-receipts/grants/<id>.json",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts/grants/<id>.json",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "11",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.699Z",
+    "id": "9129651c-bf89-4792-908c-669963fbb795",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "14",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:33:10.911Z",
+    "id": "922249da-99af-4fcc-9227-a80e67feda48",
+    "payload": {},
+    "run_id": "9c1c52c7-7860-4f7e-ba64-0ed661dd1150",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:34:48.859Z",
+    "id": "92d1cec9-aa84-4436-9785-bc78070d166d",
+    "payload": {
+      "activity_id": "activity-7",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_message_send"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "12",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.650Z",
+    "id": "9307b7b0-9b7e-4da3-962e-87b3f9495ab2",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "18",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:34.580Z",
+    "id": "93ebb75c-03ef-4cfc-af69-7a114d59cda5",
+    "payload": {
+      "text": "Acknowledged. Work-1's latest attempt is already `completed` per the authoritative team state, so no further submission is needed and none was made in response to this message."
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.303Z",
+    "id": "96e91ddc-a15c-4c4a-8146-70705d9d91d2",
+    "payload": {
+      "text": "Board is set: exactly two independent Work items created — work-1 (projection-worker-a) and work-2 (projection-worker-b). Both workers woken; neither has submitted yet, so no accept/cancel/rework is eligible and team_finish must wait until both submissions are accepted. No further action this turn."
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "18",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.162Z",
+    "id": "98f48791-8023-47c1-a1fb-f479d441984a",
+    "payload": {
+      "activity_id": "activity-10",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_submit"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "23",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:37.904Z",
+    "id": "992b0030-e3ce-413e-969d-a58c858d2f5e",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.681Z",
+    "id": "99c0a1bc-7c54-4f57-860b-ffda7a3b758b",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "19",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:29.228Z",
+    "id": "9a45719c-8012-4766-9511-640bf3551c29",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.843Z",
+    "id": "9f9f495a-28cc-436e-8444-f52730f5f91c",
+    "payload": {
+      "text": "Both Work items accepted (work-1, work-2); board holds exactly two accepted items. `team_finish` is not authorized this turn, so I end the turn with all required control actions complete."
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "17",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:56.868Z",
+    "id": "a27ec455-6900-4860-ae7b-4676db6e0aa4",
+    "payload": {
+      "text": "Work-2 is already completed: my `team_work_submit` call returned a successful receipt and the latest attempt shows status `completed`. No further submission is needed for this direct message."
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.995Z",
+    "id": "a2aa30e0-381f-4ce7-adc6-cafc2b35f44d",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "read",
+      "detail": {
+        "content": "[REDACTED]",
+        "filePath": "skill-receipts",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "detail_text": "<path>./skill-receipts<<path>> <type>directory<<path>> <entries> grants/ (1 entries) <<path>>",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "12",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:18.391Z",
+    "id": "a433493c-7705-4f93-a8bc-21703ed95ba0",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "read",
+      "detail": {
+        "kind": "search",
+        "query": "docs/exec-plans/active/**",
+        "toolName": "glob"
+      },
+      "detail_kind": "search",
+      "kind": "tool_status",
+      "label": "Read activity: docs/exec-plans/active/**",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:33.768Z",
+    "id": "a70d2247-1f95-4c85-8c77-a6a684db0114",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Acknowledged. Work-1's latest attempt is already `completed` per the authoritative team state, so no further submission is needed and none was made in response to this message."
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:35:53.246Z",
+    "id": "a8b1eb1e-81a3-40a1-9497-b9d4bebf12a5",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:36.048Z",
+    "id": "ad3c9f97-fd72-4d06-86dd-a79af8722d82",
+    "payload": {},
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "11",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:33:11.598Z",
+    "id": "b1a57e62-5baa-4c6e-a1d7-1986001a3477",
+    "payload": {},
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:48.294Z",
+    "id": "b2349d70-9113-4a3f-a37a-99d2297b2632",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.693Z",
+    "id": "ba6c878a-a89e-44e1-9b16-6847ed024b9d",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "12",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:56.753Z",
+    "id": "bd3e5fdc-5534-4602-a426-7ca87eb875a7",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Work-2 is already completed: my `team_work_submit` call returned a successful receipt and the latest attempt shows status `completed`. No further submission is needed for this direct message."
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.503Z",
+    "id": "c2df415e-ffed-4bbd-8ca9-d04ea7bdfbeb",
+    "payload": {
+      "kind": "assistant_text",
+      "text": "Team finished. Board held exactly two Work items, both accepted, and team_finish succeeded."
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:15.310Z",
+    "id": "c449340b-6af2-4bbc-b857-5af934160747",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "read",
+      "detail": {
+        "kind": "search",
+        "query": "**<path>",
+        "toolName": "glob"
+      },
+      "detail_kind": "search",
+      "kind": "tool_status",
+      "label": "Read activity: **<path>",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.191Z",
+    "id": "c83df2d0-8e33-4bc2-bf56-a807b01c99cf",
+    "payload": {
+      "cached_input_tokens": 12672,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 12956,
+      "input_tokens": 141,
+      "kind": "usage",
+      "output_tokens": 69,
+      "total_cost_usd": 0.00099386
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "17",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:08.205Z",
+    "id": "c87a7908-8a63-44c4-882e-f1860f6b1f80",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "shell",
+      "detail": {
+        "command": "find skill-receipts -type f | head -50",
+        "kind": "shell"
+      },
+      "detail_kind": "shell",
+      "kind": "tool_status",
+      "label": "Shell activity: find skill-receipts -type f | head -50",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Shell activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:48.330Z",
+    "id": "c923db38-61a6-4c32-b1db-f1ed1a5c6b9f",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.901Z",
+    "id": "cab66fa3-62f0-4f01-9b53-223c1429ab15",
+    "payload": {},
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "18",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:35.891Z",
+    "id": "cd5e9d97-70f9-4de3-862e-42cd92ce9b32",
+    "payload": {
+      "cached_input_tokens": 13952,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 14133,
+      "input_tokens": 81,
+      "kind": "usage",
+      "output_tokens": 54,
+      "total_cost_usd": 0.0011645872
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:14.984Z",
+    "id": "cdae6d53-0f1b-42e2-94f0-793e0bd1a90f",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:17.729Z",
+    "id": "ce632fa9-97eb-494c-872c-aaf0eeb727c8",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "read",
+      "detail": {
+        "kind": "search",
+        "query": "**<path>",
+        "toolName": "glob"
+      },
+      "detail_kind": "search",
+      "kind": "tool_status",
+      "label": "Read activity: **<path>",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:15.301Z",
+    "id": "ce84ab69-d2f8-4a2f-81b1-9a6be96becf3",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "read",
+      "detail": {
+        "kind": "search",
+        "query": "docs/exec-plans/active/**",
+        "toolName": "glob"
+      },
+      "detail_kind": "search",
+      "kind": "tool_status",
+      "label": "Read activity: docs/exec-plans/active/**",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:27.341Z",
+    "id": "cf5a74a9-2e40-4354-bea2-048934b9f38a",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:29.217Z",
+    "id": "d272a5b6-4028-47f7-8c15-956902193482",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:12.570Z",
+    "id": "d433fb59-8b18-43c8-a6d3-14396309458a",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "read",
+      "detail": {
+        "content": "[REDACTED]",
+        "filePath": "skill-receipts/grants/<id>.json",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "detail_text": "1: {\"grantId\":\"<id>\",\"workspaceId\":\"<id>\",\"productSessionId\":\"<id>\",\"allowedTools\":[\"agent-server/team-state\",\"agent-server/team-work-list\",\"agent-server/team-work-checkpoint\",\"agent-server/team-work-submit\"],\"expiresAt\":\"2026-08-13T17:49:37.193Z\"} (End of file - total 1 lines)",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts/grants/<id>.json",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "12",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:04.300Z",
+    "id": "d53cb656-6980-4d59-aedf-ced18ea1a83d",
+    "payload": {
+      "activity_id": "activity-6",
+      "category": "subagent",
+      "kind": "tool_status",
+      "label": "Sub-agent task",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Subagent activity."
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "10",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.683Z",
+    "id": "d5501ae2-6563-42e3-9183-934c85b5959b",
+    "payload": {
+      "activity_id": "activity-7",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": false,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_checkpoint"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "20",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.304Z",
+    "id": "d8474aa5-c8be-4714-bfba-66f55c5c308f",
+    "payload": {},
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:56.876Z",
+    "id": "d8a3cddd-91bb-4891-be41-1e45e3a6a8c4",
+    "payload": {},
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "9",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:32.831Z",
+    "id": "d8e6ac29-e957-4664-a289-47e0a077f1b0",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_accept"
+    },
+    "run_id": "ff3feeb2-e029-4db4-afda-9ddad64c07f8",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:08.445Z",
+    "id": "d903c65a-0577-4b4d-8cf0-658dab87599f",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.624Z",
+    "id": "dead82b7-6221-45de-bd63-79337a865d0c",
+    "payload": {
+      "text": "Team finished. Board held exactly two Work items, both accepted, and team_finish succeeded."
+    },
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "9",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:57.153Z",
+    "id": "e018da67-04d7-4c14-88ac-d1bee3983f01",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:35.409Z",
+    "id": "e0504332-29dc-4dbc-a57d-83159c6b9f6b",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "5",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:10.704Z",
+    "id": "e0b28e48-c382-4bd7-b845-190599e3ea7b",
+    "payload": {
+      "cached_input_tokens": 16128,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 16285,
+      "input_tokens": 24,
+      "kind": "usage",
+      "output_tokens": 45,
+      "total_cost_usd": 0.0015027460000000001
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "16",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:30.682Z",
+    "id": "e528cd45-850d-41dd-9bc6-3c7bf268b480",
+    "payload": {
+      "activity_id": "activity-8",
+      "category": "read",
+      "detail": {
+        "filePath": "skill-receipts/grants/<id>.json",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts/grants/<id>.json",
+      "provider": "opencode",
+      "status": "running",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "14",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:11.077Z",
+    "id": "e52b04d9-fa02-4889-9132-09d4165d646d",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "4",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:25.449Z",
+    "id": "e8666240-e47b-4d96-8f53-1c03536cac7e",
+    "payload": {},
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:37:11.089Z",
+    "id": "e9007960-bc70-44c1-8b0d-d891345c2914",
+    "payload": {},
+    "run_id": "c8e49807-3add-4885-bdd8-7ffd9419a4fc",
+    "sequence": "1",
+    "type": "started"
+  },
+  {
+    "created_at": "2026-08-13T17:36:28.818Z",
+    "id": "e957b0a4-023c-45f2-9370-8d9aecb4d8f5",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:57.982Z",
+    "id": "eb02cff2-d093-4a61-bfaa-aaf7474e2bb6",
+    "payload": {
+      "activity_id": "activity-5",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "completed",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:45.264Z",
+    "id": "ec0e02dc-0e66-45bf-bb76-1ccc1b73eda5",
+    "payload": {
+      "text": "Submitted successfully. Work `work-2` (Projection slice B) is complete with a successful submit receipt."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "25",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:32.009Z",
+    "id": "ef7efcbf-88f3-4a3f-8a7d-913bf02ddb85",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "write",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_create"
+    },
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:37:19.570Z",
+    "id": "f1f3cb44-015c-4743-8d99-4c23d401cb53",
+    "payload": {},
+    "run_id": "9c1c52c7-7860-4f7e-ba64-0ed661dd1150",
+    "sequence": "3",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:21.397Z",
+    "id": "f3ab5059-c737-4245-b455-ff4f5bc767b4",
+    "payload": {
+      "activity_id": "activity-8",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_submit"
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "16",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:28.285Z",
+    "id": "f44e4bc9-e695-4c3c-95c2-d9dc94ed4f69",
+    "payload": {
+      "activity_id": "activity-1",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "2",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:32.098Z",
+    "id": "f90802c8-738f-4af7-b30c-82a245b752d6",
+    "payload": {
+      "activity_id": "activity-8",
+      "category": "read",
+      "detail": {
+        "content": "[REDACTED]",
+        "filePath": "skill-receipts/grants/<id>.json",
+        "kind": "read"
+      },
+      "detail_kind": "read",
+      "detail_text": "1: {\"grantId\":\"<id>\",\"workspaceId\":\"<id>\",\"productSessionId\":\"<id>\",\"allowedTools\":[\"agent-server/team-state\",\"agent-server/team-work-list\",\"agent-server/team-work-checkpoint\",\"agent-server/team-work-submit\"],\"expiresAt\":\"2026-08-13T17:49:47.174Z\"} (End of file - total 1 lines)",
+      "kind": "tool_status",
+      "label": "Read activity: skill-receipts/grants/<id>.json",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Read activity."
+    },
+    "run_id": "dee547c7-fc13-4440-a23f-dddc8b0c07a4",
+    "sequence": "15",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:05.018Z",
+    "id": "f91e2d9c-a409-408e-b936-67d39c25b53c",
+    "payload": {
+      "activity_id": "activity-3",
+      "category": "shell",
+      "detail": {
+        "command": "ls -la && ls -la <path> 2><path>",
+        "kind": "shell",
+        "output": "total 12 drwxr-xr-x 3 node node 4096 Aug 13 17:34 . drwxr-xr-x 8 node node 4096 Aug 13 17:34 .. drwxr-xr-x 3 node node 4096 Aug 13 17:34 skill-receipts total 8 drwxr-xr-x 2 node node 4096 Aug 13 17:31 . drwxrwxrwt 1 root root 4096 Aug 13 17:35 .."
+      },
+      "detail_kind": "shell",
+      "detail_text": "total 12 drwxr-xr-x 3 node node 4096 Aug 13 17:34 . drwxr-xr-x 8 node node 4096 Aug 13 17:34 .. drwxr-xr-x 3 node node 4096 Aug 13 17:34 skill-receipts total 8 drwxr-xr-x 2 node node 4096 Aug 13 17:31 . drwxrwxrwt 1 root root 4096 Aug 13 17:35 ..",
+      "kind": "tool_status",
+      "label": "Shell activity: ls -la && ls -la <path> 2><path>",
+      "provider": "opencode",
+      "status": "completed",
+      "summary": "Shell activity."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "8",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:34:55.307Z",
+    "id": "fb36e48d-963f-4cdf-84a8-d88fcde8e01e",
+    "payload": {},
+    "run_id": "6dac9f00-8058-49f4-9a24-b50f296f5acf",
+    "sequence": "19",
+    "type": "succeeded"
+  },
+  {
+    "created_at": "2026-08-13T17:36:52.645Z",
+    "id": "fd1f46ab-7b94-47df-bc38-4affedc49f67",
+    "payload": {
+      "activity_id": "activity-2",
+      "category": "read",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_work_list"
+    },
+    "run_id": "4b05c3ea-ce1b-4a50-94f7-75e8d6e12f68",
+    "sequence": "3",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:57.118Z",
+    "id": "fdd06daf-0997-4c04-8d3f-fcb118a20ef7",
+    "payload": {
+      "activity_id": "activity-4",
+      "category": "subagent",
+      "kind": "tool_status",
+      "provenance": "server_authorized_team_mcp_catalog",
+      "response_observed": true,
+      "status": "running",
+      "tool_identity_capture_status": "present",
+      "tool_name": "team_state"
+    },
+    "run_id": "b34d4ed1-820e-4084-880c-11265d2ce9d1",
+    "sequence": "6",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:24.779Z",
+    "id": "fe360578-d379-4778-add8-41eb94e11029",
+    "payload": {
+      "cached_input_tokens": 11392,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 11617,
+      "input_tokens": 194,
+      "kind": "usage",
+      "output_tokens": 31,
+      "total_cost_usd": 0.0008713488
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "22",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:33.777Z",
+    "id": "fea3b56a-f129-43d3-9ef2-ab3b2dd3694c",
+    "payload": {
+      "cached_input_tokens": 11776,
+      "context_window_max_tokens": 1000000,
+      "context_window_used_tokens": 12260,
+      "input_tokens": 289,
+      "kind": "usage",
+      "output_tokens": 38,
+      "total_cost_usd": 0.0009825732
+    },
+    "run_id": "138d6be6-ffb5-497a-9ff1-755cda636fac",
+    "sequence": "7",
+    "type": "output"
+  },
+  {
+    "created_at": "2026-08-13T17:36:00.026Z",
+    "id": "ff359763-3f52-4115-9ce7-cd24f8612d57",
+    "payload": {
+      "kind": "team_checkpoint",
+      "member": "projection-worker-a",
+      "status": "active",
+      "summary": "Read team state and work list; work-1 assigned to projection-worker-a: \"Projection slice A: produce and submit projection evidence\". No dependency refs. Proceeding to produce the projection evidence."
+    },
+    "run_id": "4c5b0e4d-96c6-4d2a-89e5-e53aa7542a2a",
+    "sequence": "5",
+    "type": "output"
+  }
+]

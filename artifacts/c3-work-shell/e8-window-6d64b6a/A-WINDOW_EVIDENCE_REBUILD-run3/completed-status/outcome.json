@@ -1,0 +1,37 @@
+{
+  "process": 1,
+  "reason": "target-failed-control-completed",
+  "targetFailureCount": 1,
+  "summary": {
+    "files": 0,
+    "fileTotal": 1,
+    "tests": 1,
+    "skipped": 0,
+    "todo": 0,
+    "testTotal": 2
+  },
+  "events": [
+    {
+      "event": "target_started",
+      "wallTime": 1786678524194,
+      "stream": "stdout"
+    },
+    {
+      "event": "target_failed",
+      "wallTime": 1786678524677,
+      "stream": "stdout"
+    },
+    {
+      "event": "control_started",
+      "wallTime": 1786678525551,
+      "stream": "stdout"
+    },
+    {
+      "event": "control_completed",
+      "wallTime": 1786678525660,
+      "stream": "stdout"
+    }
+  ],
+  "restoreEqual": true,
+  "sourceBeforeHash": "d975b44b30c2785dbb93729d5fa7c2f482b8c4b9f99db7bc80750193b7978287"
+}

@@ -1,0 +1,161 @@
+{
+  "actors": [
+    {
+      "id": "022cb715-6d38-4bd0-960f-2e19dd1ac922",
+      "name": "projection-worker-b",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "team_member_run_id": "022cb715-6d38-4bd0-960f-2e19dd1ac922",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      }
+    },
+    {
+      "id": "0e6a56d8-f7d3-4d29-8260-875eaaea0eab",
+      "name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "team_member_run_id": "0e6a56d8-f7d3-4d29-8260-875eaaea0eab",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      }
+    },
+    {
+      "id": "85606103-df7c-42ef-81b2-8a2a558aa4da",
+      "name": "projection-worker-a",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "team_member_run_id": "85606103-df7c-42ef-81b2-8a2a558aa4da",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "2aca3638-89bc-42cf-a062-a02fbcf1e32c",
+      "recipient_id": "85606103-df7c-42ef-81b2-8a2a558aa4da",
+      "recipient_name": "projection-worker-a",
+      "sender_id": "0e6a56d8-f7d3-4d29-8260-875eaaea0eab",
+      "sender_name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "task_id": "318c5931-4902-4f61-9fb9-b0fbdbfa4311",
+        "team_message_id": "2aca3638-89bc-42cf-a062-a02fbcf1e32c",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      },
+      "summary": null,
+      "summary_capture_status": "redacted"
+    },
+    {
+      "id": "3270eafe-8177-431b-a6b3-3a5ebac3fdc9",
+      "recipient_id": "022cb715-6d38-4bd0-960f-2e19dd1ac922",
+      "recipient_name": "projection-worker-b",
+      "sender_id": "0e6a56d8-f7d3-4d29-8260-875eaaea0eab",
+      "sender_name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "task_id": "730cd62a-26df-44a0-ab06-866feea41cc7",
+        "team_message_id": "3270eafe-8177-431b-a6b3-3a5ebac3fdc9",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      },
+      "summary": null,
+      "summary_capture_status": "redacted"
+    }
+  ],
+  "projection_status": "internally_anchored",
+  "work": {
+    "archived_at": null,
+    "created_at": "2026-08-14T00:13:11.681Z",
+    "definition_id": "2cd62153-7150-43b9-a0fc-82b49603d92d",
+    "definition_version_id": "005b6956-30c8-4d62-8b84-c192e321034c",
+    "id": "23f16162-ca32-4d4d-a3a3-0de11ab23d0c",
+    "origin": "created",
+    "tenant_id": "tenant_local",
+    "title": "Product Projection parallel-success 0a6193b3",
+    "updated_at": "2026-08-14T00:13:11.681Z",
+    "workspace_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "work_items": [
+    {
+      "actor_id": "85606103-df7c-42ef-81b2-8a2a558aa4da",
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "duration_ms": 146172,
+          "ended_at": "2026-08-14T00:16:50.629Z",
+          "feedback_capture_status": "not_present",
+          "feedback_summary": null,
+          "id": "44697e40-b939-478f-ac03-2a2d7a79bcdb",
+          "result_capture_status": "redacted",
+          "result_summary": null,
+          "source_refs": {
+            "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+            "task_id": "318c5931-4902-4f61-9fb9-b0fbdbfa4311",
+            "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+          },
+          "started_at": "2026-08-14T00:14:24.457Z",
+          "status": "completed",
+          "timing_capture_status": "captured"
+        }
+      ],
+      "dependency_ids": [],
+      "description": "Make the real canonical team_work_submit call for this Work item using the canonical Team tools and your assigned logical member identity, then wait for and confirm its successful receipt (the submit result must be returned by the agent-server MCP tool). A successful submission result is the only acceptable completion evidence; describing the call in prose or text does not count and is invalid. Return the submitted receipt/reference value as proof of completion.",
+      "id": "93bfe85b-a7f7-428a-84bd-6bc29c6e52f5",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      },
+      "status": "accepted",
+      "subject": "Perform real team_work_submit for projection-worker-a"
+    },
+    {
+      "actor_id": "022cb715-6d38-4bd0-960f-2e19dd1ac922",
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "duration_ms": 142291,
+          "ended_at": "2026-08-14T00:16:56.676Z",
+          "feedback_capture_status": "not_present",
+          "feedback_summary": null,
+          "id": "c445546b-269b-4a7f-a7e6-38c6ff69c796",
+          "result_capture_status": "redacted",
+          "result_summary": null,
+          "source_refs": {
+            "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+            "task_id": "730cd62a-26df-44a0-ab06-866feea41cc7",
+            "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+          },
+          "started_at": "2026-08-14T00:14:34.385Z",
+          "status": "completed",
+          "timing_capture_status": "captured"
+        }
+      ],
+      "dependency_ids": [],
+      "description": "Make the real canonical team_work_submit call for this Work item using the canonical Team tools and your assigned logical member identity, then wait for and confirm its successful receipt (the submit result must be returned by the agent-server MCP tool). A successful submission result is the only acceptable completion evidence; describing the call in prose or text does not count and is invalid. Return the submitted receipt/reference value as proof of completion.",
+      "id": "e9acda45-154e-4bf9-99ca-38216d50a253",
+      "source_refs": {
+        "root_task_id": "fb333f6f-757d-490a-a8c3-734a56de9fdd",
+        "team_run_id": "1ab8ea60-2b50-4af9-bfbe-51b3224f98b5"
+      },
+      "status": "accepted",
+      "subject": "Perform real team_work_submit for projection-worker-b"
+    }
+  ],
+  "work_run": {
+    "attention_reason": "not_captured",
+    "bound_at": "2026-08-14T00:13:11.958Z",
+    "cancel_availability": "not_captured",
+    "completion_decision_availability": "not_captured",
+    "control_revision": null,
+    "created_at": "2026-08-14T00:13:11.741Z",
+    "definition_version_id": "005b6956-30c8-4d62-8b84-c192e321034c",
+    "expires_at": "2026-08-14T00:28:11.741Z",
+    "id": "b8ebb9d9-c2ba-4a64-9e00-f1391824a1e8",
+    "problem_kind": "not_captured",
+    "product_state": "not_captured",
+    "result_capture_status": "not_captured",
+    "result_summary": null,
+    "trigger_kind": "manual",
+    "trigger_ref": "product-projection:parallel-success:7d3b5263-28ec-4ea4-b6b2-9862ebfd46ec",
+    "updated_at": "2026-08-14T00:13:11.958Z",
+    "work_id": "23f16162-ca32-4d4d-a3a3-0de11ab23d0c"
+  }
+}

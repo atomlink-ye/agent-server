@@ -25,6 +25,7 @@ try {
   process.exit(1);
 }
 const expectedArms = [
+  ['classifier-success', 0],
   ['classifier-recognized-missing', 2],
   ['classifier-near-miss-fail', 1],
   ['verifier-input-missing', 2],

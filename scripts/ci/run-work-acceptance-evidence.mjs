@@ -36,6 +36,23 @@ const arms = [];
 
 arms.push(
   runArm(
+    'classifier-success',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.log('classifier_child_success');process.exit(0)`,
+    ],
+    0,
+    ['classifier_child_success'],
+  ),
+);
+arms.push(
+  runArm(
     'classifier-recognized-missing',
     'node',
     [

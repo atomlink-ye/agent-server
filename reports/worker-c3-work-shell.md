@@ -376,3 +376,27 @@ verdict vocabulary is limited to `PASS`, `UNSOUND`, and `MISSING_EVIDENCE`.
 | omitted target | `artifacts/c3-work-shell/e8-zero-3484079/arms/e8-behavior/{exit-code.txt,stdout.txt,stderr.txt}` | omitted target arm only | not emitted | not emitted | zero target evidence | not recorded | target unavailable | not emitted | not emitted | no mutation window | MISSING_EVIDENCE |
 | test absence / e | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/e/{exit-code.txt,stdout.txt,stderr.txt}` | test file absent | not started | not completed | 0 collection; direct exit 1 | no green summary | missing test input | not emitted | not emitted | no collection or restore event chain | MISSING_EVIDENCE |
 | fixture absence / f | `artifacts/c3-work-shell/e8-02328517/08-arm-evidence/f/{exit-code.txt,stdout.txt,stderr.txt}` | imported fixture absent | not started | not completed | 0 collection; direct exit 1 | no green summary | missing fixture input | not emitted | not emitted | no collection or restore event chain | MISSING_EVIDENCE |
+
+## Mutation-window audit B — never-settle two-failure diagnosis
+
+This diagnosis preserves the raw never-settle captures and does not use the
+aggregate summary as proof. Both runs are rooted at
+`artifacts/c3-work-shell/e8-production-0b1f68c/.c3-e8-final-07363f0/never-settle/`
+(the parallel `...-359e07a` capture has the same two failures). The mutation
+changed the primary `/api/works` request to a never-settling request; it did
+not create a marker-bearing per-Work `/runs` request after a populated response.
+That is a mutation artifact, owned by C3, rather than evidence about the
+intended production journey.
+
+| failure | exact test name | exact raw error/assertion | first failure point | diagnosis | C ownership / cross-line | restore condition | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `renders both recorder-backed Work titles and exact detail links without N+1 reads` | `AssertionError: expected [] to have a length of 1 but got +0`; `work-list.browser.test.tsx:142:38`, `expect(requestSnapshot.records).toHaveLength(1)` | sealed snapshot has zero records because the primary list request never settled | mutation prevents populated response, so target and control event chain never starts | C3 mutation arm; no C4 path change | restore WorkShell byte-for-byte to `candidate-before.tsx` hash, then mutate only a post-populated per-Work sentinel fetch | UNSOUND |
+| 2 | `distinguishes loading, empty, and real network error without fabricating Work` | `AssertionError: expected <section ... data-testid="work-list-loading">...</section> to be null`; `work-list.browser.test.tsx:253:6`, loading selector remains present | loading assertion runs while the same primary request is still pending | secondary failure is a consequence of the same invalid primary-request mutation, not an independent target/control result | C3 mutation arm; no C4 path change | restore the same source hash, rerun baseline, and require empty-work control to avoid the sentinel request | UNSOUND |
+
+The raw child exit is 1, wrapper exit is 2, and both raw failure files contain
+the two failures above; the mutation process itself exited 0. No green control
+was observed. This B diagnosis therefore remains separate from the A window
+evidence and does not justify an absence claim. A valid replacement must prove
+`mutation_applied < target_started/control_started < target_failed/control_completed
+< restore_started < restore_completed` while leaving the empty-work control
+green.

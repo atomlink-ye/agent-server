@@ -14,7 +14,7 @@ export const LIVE_CONFIRMATION_REQUIRED = 0;
 export const MISSING = 2;
 
 type TsApi = typeof import('typescript');
-type ShapeState = 'PRESENT' | 'ABSENT' | 'AMBIGUOUS' | 'UNAVAILABLE';
+type ShapeState = 'PRESENT' | 'ABSENT' | 'UNKNOWN' | 'UNAVAILABLE';
 
 export type ShapeResult = {
   readonly state: ShapeState;
@@ -139,6 +139,27 @@ function queryText(
     : null;
 }
 
+function unwrap(
+  ts: TsApi,
+  node: import('typescript').Expression | undefined,
+): import('typescript').Expression | undefined {
+  let current = node;
+  while (current) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      (ts.isSatisfiesExpression && ts.isSatisfiesExpression(current))
+    ) {
+      current = current.expression;
+      continue;
+    }
+    return current;
+  }
+  return undefined;
+}
+
 function hasAttemptRowType(
   ts: TsApi,
   call: import('typescript').CallExpression,
@@ -151,19 +172,45 @@ function hasAttemptRowType(
   );
 }
 
-function findMethod(
+function isThisDatabaseQuery(
+  ts: TsApi,
+  call: import('typescript').CallExpression,
+): boolean {
+  return (
+    ts.isPropertyAccessExpression(call.expression) &&
+    call.expression.name.text === 'query' &&
+    ts.isPropertyAccessExpression(call.expression.expression) &&
+    call.expression.expression.name.text === 'database' &&
+    call.expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword
+  );
+}
+
+function findTargetClass(
   ts: TsApi,
   source: import('typescript').SourceFile,
-  name: string,
-): readonly import('typescript').MethodDeclaration[] {
-  const matches: import('typescript').MethodDeclaration[] = [];
+): readonly import('typescript').ClassDeclaration[] {
+  const matches: import('typescript').ClassDeclaration[] = [];
   const visit = (node: import('typescript').Node): void => {
-    if (ts.isMethodDeclaration(node) && propertyName(ts, node.name) === name)
+    if (
+      ts.isClassDeclaration(node) &&
+      identifierText(ts, node.name) === 'PostgresWorkProjectionFactsQuery'
+    )
       matches.push(node);
     ts.forEachChild(node, visit);
   };
   visit(source);
   return matches;
+}
+
+function targetMethod(
+  ts: TsApi,
+  declaration: import('typescript').ClassDeclaration,
+): readonly import('typescript').MethodDeclaration[] {
+  return declaration.members.filter(
+    (member): member is import('typescript').MethodDeclaration =>
+      ts.isMethodDeclaration(member) &&
+      propertyName(ts, member.name) === 'getByRootTask',
+  );
 }
 
 function findInterface(
@@ -198,6 +245,17 @@ function interfaceBooleanProperty(
   );
 }
 
+function interfaceProperty(
+  ts: TsApi,
+  declaration: import('typescript').InterfaceDeclaration,
+  name: string,
+): import('typescript').PropertySignature | undefined {
+  return declaration.members.find(
+    (member): member is import('typescript').PropertySignature =>
+      ts.isPropertySignature(member) && propertyName(ts, member.name) === name,
+  );
+}
+
 function queryCallInMethod(
   ts: TsApi,
   method: import('typescript').MethodDeclaration,
@@ -206,8 +264,7 @@ function queryCallInMethod(
   const visit = (node: import('typescript').Node): void => {
     if (
       ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === 'query' &&
+      isThisDatabaseQuery(ts, node) &&
       hasAttemptRowType(ts, node) &&
       node.arguments.length >= 1
     )
@@ -218,11 +275,45 @@ function queryCallInMethod(
   return calls;
 }
 
+function localStringArgument(
+  ts: TsApi,
+  call: import('typescript').CallExpression,
+): import('typescript').Expression | undefined {
+  const argument = unwrap(ts, call.arguments[0]);
+  if (!argument) return undefined;
+  if (
+    ts.isStringLiteral(argument) ||
+    ts.isNoSubstitutionTemplateLiteral(argument)
+  )
+    return argument;
+  if (!ts.isIdentifier(argument)) return undefined;
+  const method = call.parent;
+  let scope: import('typescript').Node | undefined = method;
+  while (scope && !ts.isMethodDeclaration(scope)) scope = scope.parent;
+  if (!scope || !scope.body) return undefined;
+  let found: import('typescript').Expression | undefined;
+  let definitions = 0;
+  const visit = (node: import('typescript').Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === argument.text &&
+      node.initializer
+    ) {
+      definitions += 1;
+      found = unwrap(ts, node.initializer);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scope.body);
+  return definitions === 1 ? found : undefined;
+}
+
 function sqlHasKnownProjection(
   ts: TsApi,
   call: import('typescript').CallExpression,
 ): boolean {
-  const sql = queryText(ts, call.arguments[0]);
+  const sql = queryText(ts, localStringArgument(ts, call));
   if (sql === null) return false;
   const normalized = sql.replace(/\s+/gu, ' ').trim().toLowerCase();
   const selectEnd = normalized.indexOf(' from ');
@@ -240,116 +331,309 @@ function sqlHasKnownProjection(
   return presenceProjection && !durableTextProjection;
 }
 
+function sqlHasDurableProjection(
+  ts: TsApi,
+  call: import('typescript').CallExpression,
+): boolean {
+  const sql = queryText(ts, localStringArgument(ts, call));
+  if (sql === null) return false;
+  const normalized = sql.replace(/\s+/gu, ' ').trim().toLowerCase();
+  const selectEnd = normalized.indexOf(' from ');
+  if (!normalized.startsWith('select ') || selectEnd < 0) return false;
+  const projection = normalized.slice('select '.length, selectEnd);
+  return (
+    /(?:^|,)\s*a\.feedback\s*(?:,|$)/u.test(projection) ||
+    /a\.feedback\s+as\s+(?!feedback_present\b)[a-z_][a-z0-9_]*/u.test(
+      projection,
+    )
+  );
+}
+
 function mappingHasPresenceStructure(
   ts: TsApi,
   method: import('typescript').MethodDeclaration,
-): boolean {
-  const objects: import('typescript').ObjectLiteralExpression[] = [];
-  const visit = (node: import('typescript').Node): void => {
-    if (ts.isObjectLiteralExpression(node)) objects.push(node);
-    ts.forEachChild(node, visit);
+  query: import('typescript').CallExpression,
+): { readonly presence: boolean; readonly durable: boolean } {
+  const resultName = queryResultName(ts, query);
+  if (!resultName) return { presence: false, durable: false };
+  let attemptsName: string | undefined;
+  let attemptsDeclarations = 0;
+  const visitDeclarations = (node: import('typescript').Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      const initializer = unwrap(
+        ts,
+        node.initializer as import('typescript').Expression,
+      );
+      if (
+        initializer &&
+        ts.isBinaryExpression(initializer) &&
+        initializer.operatorToken.kind ===
+          ts.SyntaxKind.QuestionQuestionToken &&
+        ts.isPropertyAccessExpression(initializer.left) &&
+        ts.isIdentifier(initializer.left.expression) &&
+        initializer.left.expression.text === resultName &&
+        initializer.left.name.text === 'rows'
+      ) {
+        attemptsDeclarations += 1;
+        attemptsName = node.name.text;
+      }
+    }
+    ts.forEachChild(node, visitDeclarations);
   };
-  if (method.body) visit(method.body);
-  return objects.some((object) => {
-    const feedbackCapture = object.properties.find(
-      (property): property is import('typescript').PropertyAssignment =>
+  if (method.body) visitDeclarations(method.body);
+  if (!attemptsName || attemptsDeclarations !== 1)
+    return { presence: false, durable: false };
+  const objects: {
+    object: import('typescript').ObjectLiteralExpression;
+    loopName: string;
+  }[] = [];
+  const visitLoops = (node: import('typescript').Node): void => {
+    if (
+      ts.isForOfStatement(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === attemptsName &&
+      ts.isVariableDeclarationList(node.initializer) &&
+      node.initializer.declarations.length === 1 &&
+      ts.isIdentifier(node.initializer.declarations[0].name)
+    ) {
+      const loopName = node.initializer.declarations[0].name.text;
+      const visitBody = (child: import('typescript').Node): void => {
+        if (ts.isObjectLiteralExpression(child))
+          objects.push({ object: child, loopName });
+        ts.forEachChild(child, visitBody);
+      };
+      visitBody(node.statement);
+    }
+    ts.forEachChild(node, visitLoops);
+  };
+  if (method.body) visitLoops(method.body);
+  const object = objects.find(({ object }) =>
+    object.properties.some(
+      (property) =>
         ts.isPropertyAssignment(property) &&
         propertyName(ts, property.name) === 'feedbackCapture',
-    );
+    ),
+  );
+  if (!object) return { presence: false, durable: false };
+  const feedbackCapture = object.object.properties.find(
+    (property): property is import('typescript').PropertyAssignment =>
+      ts.isPropertyAssignment(property) &&
+      propertyName(ts, property.name) === 'feedbackCapture',
+  );
+  if (
+    !feedbackCapture ||
+    !ts.isConditionalExpression(feedbackCapture.initializer)
+  )
+    return { presence: false, durable: false };
+  const condition = feedbackCapture.initializer.condition;
+  const directPresence =
+    ts.isPropertyAccessExpression(condition) &&
+    ts.isIdentifier(condition.expression) &&
+    condition.expression.text === object.loopName &&
+    condition.name.text === 'feedback_present';
+  const comparedPresence =
+    ts.isBinaryExpression(condition) &&
+    condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+    ts.isPropertyAccessExpression(condition.left) &&
+    ts.isIdentifier(condition.left.expression) &&
+    condition.left.expression.text === object.loopName &&
+    condition.left.name.text === 'feedback_present' &&
+    isString(ts, condition.right, 'present');
+  const presence =
+    (directPresence || comparedPresence) &&
+    isString(ts, feedbackCapture.initializer.whenTrue, 'present') &&
+    isString(ts, feedbackCapture.initializer.whenFalse, 'absent');
+  let durable = false;
+  const scanDurable = (node: import('typescript').Node): void => {
     if (
-      !feedbackCapture ||
-      !ts.isConditionalExpression(feedbackCapture.initializer)
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === object.loopName &&
+      node.name.text === 'feedback'
     )
-      return false;
-    const condition = feedbackCapture.initializer.condition;
-    const directPresence =
-      ts.isPropertyAccessExpression(condition) &&
-      condition.name.text === 'feedback_present';
-    const comparedPresence =
-      ts.isBinaryExpression(condition) &&
-      condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
-      ts.isPropertyAccessExpression(condition.left) &&
-      condition.left.name.text === 'feedback_present' &&
-      isString(ts, condition.right, 'present');
-    if (!directPresence && !comparedPresence) return false;
-    return (
-      isString(ts, feedbackCapture.initializer.whenTrue, 'present') &&
-      isString(ts, feedbackCapture.initializer.whenFalse, 'absent')
-    );
-  });
+      durable = true;
+    ts.forEachChild(node, scanDurable);
+  };
+  scanDurable(object.object);
+  return { presence, durable };
+}
+
+function queryResultName(
+  ts: TsApi,
+  query: import('typescript').CallExpression,
+): string | undefined {
+  let array: import('typescript').ArrayLiteralExpression | undefined;
+  let node: import('typescript').Node | undefined = query;
+  while (node) {
+    if (ts.isArrayLiteralExpression(node)) {
+      array = node;
+      break;
+    }
+    node = node.parent;
+  }
+  if (!array) return undefined;
+  const index = array.elements.findIndex((element) => element === query);
+  if (index < 0) return undefined;
+  node = array.parent;
+  while (node && !ts.isVariableDeclaration(node)) node = node.parent;
+  if (!node || !ts.isVariableDeclaration(node)) return undefined;
+  if (!ts.isArrayBindingPattern(node.name)) return undefined;
+  const element = node.name.elements[index];
+  return element &&
+    ts.isBindingElement(element) &&
+    ts.isIdentifier(element.name)
+    ? element.name.text
+    : undefined;
 }
 
 function inspectShape1(
   ts: TsApi,
   source: import('typescript').SourceFile,
 ): ShapeResult {
-  const methods = findMethod(ts, source, 'getByRootTask');
+  const classes = findTargetClass(ts, source);
   const interfaces = findInterface(ts, source, 'AttemptRow');
-  if (methods.length !== 1 || interfaces.length !== 1)
+  if (classes.length !== 1 || interfaces.length !== 1)
     return {
-      state: 'AMBIGUOUS',
-      reason: 'getByRootTask_or_AttemptRow_not_unique',
+      state: 'UNKNOWN',
+      reason: 'target_class_or_AttemptRow_not_unique',
     };
+  const methods = targetMethod(ts, classes[0]);
+  if (methods.length !== 1)
+    return { state: 'UNKNOWN', reason: 'target_getByRootTask_not_unique' };
   const calls = queryCallInMethod(ts, methods[0]);
   if (calls.length !== 1)
-    return { state: 'AMBIGUOUS', reason: 'AttemptRow_query_call_not_unique' };
+    return {
+      state: 'UNKNOWN',
+      reason: 'target_AttemptRow_query_call_not_unique',
+    };
   const presenceField = interfaceBooleanProperty(
     ts,
     interfaces[0],
     'feedback_present',
   );
-  const mapping = mappingHasPresenceStructure(ts, methods[0]);
-  if (sqlHasKnownProjection(ts, calls[0]) && presenceField && mapping)
+  const durableField = interfaceProperty(ts, interfaces[0], 'feedback');
+  const mapping = mappingHasPresenceStructure(ts, methods[0], calls[0]);
+  if (sqlHasKnownProjection(ts, calls[0]) && presenceField && mapping.presence)
     return {
       state: 'PRESENT',
       reason: 'presence_only_query_and_presence_mapping',
     };
+  if (
+    sqlHasDurableProjection(ts, calls[0]) &&
+    !sqlHasKnownProjection(ts, calls[0])
+  )
+    return {
+      state: 'ABSENT',
+      reason: 'durable_feedback_query_replaces_presence_only_projection',
+    };
   return {
-    state: 'ABSENT',
-    reason: `known_shape_not_found:${[
+    state: 'UNKNOWN',
+    reason: `target_shape_not_explicitly_classified:${[
       !sqlHasKnownProjection(ts, calls[0]) ? 'query_projection' : '',
       !presenceField ? 'AttemptRow.feedback_present' : '',
-      !mapping ? 'feedbackCapture_mapping' : '',
+      !mapping.presence ? 'bound_presence_mapping' : '',
+      !sqlHasDurableProjection(ts, calls[0]) ? 'durable_query_projection' : '',
+      !durableField ? 'AttemptRow.feedback' : '',
+      !mapping.durable ? 'bound_durable_mapping' : '',
     ]
       .filter(Boolean)
       .join(',')}`,
   };
 }
 
-function mapAttemptObject(
+function actualAttemptObject(
   ts: TsApi,
-  source: import('typescript').SourceFile,
-): readonly import('typescript').ObjectLiteralExpression[] {
-  const objects: import('typescript').ObjectLiteralExpression[] = [];
-  const visit = (node: import('typescript').Node): void => {
-    if (
-      ts.isPropertyAssignment(node) &&
-      propertyName(ts, node.name) === 'attempts' &&
-      ts.isCallExpression(node.initializer) &&
-      ts.isPropertyAccessExpression(node.initializer.expression) &&
-      node.initializer.expression.name.text === 'map'
-    ) {
-      const callback = node.initializer.arguments[0];
-      if (
-        callback &&
-        ts.isArrowFunction(callback) &&
-        callback.body &&
-        ts.isParenthesizedExpression(callback.body)
-      ) {
-        if (ts.isObjectLiteralExpression(callback.body.expression))
-          objects.push(callback.body.expression);
-      } else if (
-        callback &&
-        ts.isArrowFunction(callback) &&
-        ts.isObjectLiteralExpression(callback.body)
-      ) {
-        objects.push(callback.body);
-      }
+  fn: import('typescript').FunctionDeclaration,
+):
+  | {
+      readonly object: import('typescript').ObjectLiteralExpression;
+      readonly parameter: string;
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return objects;
+  | undefined {
+  const directReturns =
+    fn.body?.statements.filter((statement) =>
+      ts.isReturnStatement(statement),
+    ) ?? [];
+  if (directReturns.length !== 1) return undefined;
+  let outer: import('typescript').ObjectLiteralExpression | undefined;
+  const expression = unwrap(ts, directReturns[0].expression);
+  if (
+    expression &&
+    ts.isCallExpression(expression) &&
+    ts.isPropertyAccessExpression(expression.expression) &&
+    expression.expression.name.text === 'parse' &&
+    ts.isIdentifier(expression.expression.expression) &&
+    expression.expression.expression.text ===
+      'ProductProjectionIdentitySchema' &&
+    expression.arguments.length === 1
+  ) {
+    const argument = unwrap(ts, expression.arguments[0]);
+    if (argument && ts.isObjectLiteralExpression(argument)) outer = argument;
+  }
+  if (!outer) return undefined;
+  const work = outer.properties.find(
+    (property): property is import('typescript').PropertyAssignment =>
+      ts.isPropertyAssignment(property) &&
+      propertyName(ts, property.name) === 'work_items',
+  );
+  if (!work) return undefined;
+  const workMap = unwrap(ts, work.initializer);
+  if (
+    !workMap ||
+    !ts.isCallExpression(workMap) ||
+    !ts.isPropertyAccessExpression(workMap.expression) ||
+    workMap.expression.name.text !== 'map' ||
+    !ts.isPropertyAccessExpression(workMap.expression.expression) ||
+    !ts.isIdentifier(workMap.expression.expression.expression) ||
+    workMap.expression.expression.expression.text !== 'facts' ||
+    workMap.expression.expression.name.text !== 'workItems'
+  )
+    return undefined;
+  const workCallback = workMap.arguments[0];
+  if (
+    !workCallback ||
+    !ts.isArrowFunction(workCallback) ||
+    workCallback.parameters.length !== 1 ||
+    !ts.isIdentifier(workCallback.parameters[0].name)
+  )
+    return undefined;
+  const workObject = unwrap(
+    ts,
+    workCallback.body as import('typescript').Expression,
+  );
+  if (!workObject || !ts.isObjectLiteralExpression(workObject))
+    return undefined;
+  const attempts = workObject.properties.find(
+    (property): property is import('typescript').PropertyAssignment =>
+      ts.isPropertyAssignment(property) &&
+      propertyName(ts, property.name) === 'attempts',
+  );
+  if (!attempts) return undefined;
+  const attemptsMap = unwrap(ts, attempts.initializer);
+  if (
+    !attemptsMap ||
+    !ts.isCallExpression(attemptsMap) ||
+    !ts.isPropertyAccessExpression(attemptsMap.expression) ||
+    attemptsMap.expression.name.text !== 'map' ||
+    !ts.isPropertyAccessExpression(attemptsMap.expression.expression) ||
+    !ts.isIdentifier(attemptsMap.expression.expression.expression) ||
+    attemptsMap.expression.expression.expression.text !==
+      workCallback.parameters[0].name.text ||
+    attemptsMap.expression.expression.name.text !== 'attempts'
+  )
+    return undefined;
+  const callback = attemptsMap.arguments[0];
+  if (
+    !callback ||
+    !ts.isArrowFunction(callback) ||
+    callback.parameters.length !== 1 ||
+    !ts.isIdentifier(callback.parameters[0].name)
+  )
+    return undefined;
+  const object = unwrap(ts, callback.body as import('typescript').Expression);
+  return object && ts.isObjectLiteralExpression(object)
+    ? { object, parameter: callback.parameters[0].name.text }
+    : undefined;
 }
 
 function inspectShape2(
@@ -367,11 +651,14 @@ function inspectShape2(
   };
   visit(source);
   if (functions.length !== 1)
-    return { state: 'AMBIGUOUS', reason: 'mapWorkProjectionFacts_not_unique' };
-  const objects = mapAttemptObject(ts, functions[0]);
-  if (objects.length !== 1)
-    return { state: 'AMBIGUOUS', reason: 'attempt_map_object_not_unique' };
-  const object = objects[0];
+    return { state: 'UNKNOWN', reason: 'mapWorkProjectionFacts_not_unique' };
+  const actual = actualAttemptObject(ts, functions[0]);
+  if (!actual)
+    return {
+      state: 'UNKNOWN',
+      reason: 'actual_product_parse_attempt_map_not_found',
+    };
+  const { object, parameter } = actual;
   const summary = object.properties.find(
     (property): property is import('typescript').PropertyAssignment =>
       ts.isPropertyAssignment(property) &&
@@ -382,8 +669,26 @@ function inspectShape2(
       ts.isPropertyAssignment(property) &&
       propertyName(ts, property.name) === 'feedback_capture_status',
   );
+  const summaryValue = summary && unwrap(ts, summary.initializer);
   const summaryPresent =
-    !!summary && summary.initializer.kind === ts.SyntaxKind.NullKeyword;
+    !!summaryValue && summaryValue.kind === ts.SyntaxKind.NullKeyword;
+  const summaryDurable =
+    !!summaryValue &&
+    (() => {
+      let found = false;
+      const visit = (node: import('typescript').Node): void => {
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          ts.isIdentifier(node.expression) &&
+          node.expression.text === parameter &&
+          node.name.text === 'feedback'
+        )
+          found = true;
+        ts.forEachChild(node, visit);
+      };
+      visit(summaryValue);
+      return found;
+    })();
   let statusPresent = false;
   if (status && ts.isConditionalExpression(status.initializer)) {
     const condition = status.initializer.condition;
@@ -391,6 +696,8 @@ function inspectShape2(
       ts.isBinaryExpression(condition) &&
       condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
       ts.isPropertyAccessExpression(condition.left) &&
+      ts.isIdentifier(condition.left.expression) &&
+      condition.left.expression.text === parameter &&
       condition.left.name.text === 'feedbackCapture' &&
       isString(ts, condition.right, 'present') &&
       isString(ts, status.initializer.whenTrue, 'redacted') &&
@@ -401,11 +708,39 @@ function inspectShape2(
       state: 'PRESENT',
       reason: 'null_summary_and_presence_to_status_mapping',
     };
+  const successorStatus =
+    !!status &&
+    ts.isConditionalExpression(status.initializer) &&
+    (() => {
+      const condition = status.initializer.condition;
+      return (
+        ts.isBinaryExpression(condition) &&
+        condition.operatorToken.kind ===
+          ts.SyntaxKind.EqualsEqualsEqualsToken &&
+        ts.isPropertyAccessExpression(condition.left) &&
+        ts.isIdentifier(condition.left.expression) &&
+        condition.left.expression.text === parameter &&
+        condition.left.name.text === 'feedbackCapture' &&
+        isString(ts, condition.right, 'present') &&
+        ts.isStringLiteral(status.initializer.whenTrue) &&
+        ['present', 'captured', 'available'].includes(
+          status.initializer.whenTrue.text,
+        ) &&
+        isString(ts, status.initializer.whenFalse, 'not_present')
+      );
+    })();
+  if (summaryDurable && successorStatus)
+    return {
+      state: 'ABSENT',
+      reason: 'durable_feedback_summary_and_non_redacted_status_mapping',
+    };
   return {
-    state: 'ABSENT',
-    reason: `known_shape_not_found:${[
+    state: 'UNKNOWN',
+    reason: `target_shape_not_explicitly_classified:${[
       !summaryPresent ? 'feedback_summary_null' : '',
+      !summaryDurable ? 'durable_feedback_summary' : '',
       !statusPresent ? 'feedback_capture_status_mapping' : '',
+      !successorStatus ? 'non_redacted_status_mapping' : '',
     ]
       .filter(Boolean)
       .join(',')}`,

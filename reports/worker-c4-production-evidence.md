@@ -29,11 +29,17 @@ The independent AST mutation runner is:
 pnpm exec tsx scripts/ci/run-feedback-projection-known-defect-shape-monitor.ts --artifact-dir <fresh-dir>
 ```
 
-The self-test passed all six cases: non-target AST mutation stayed exit `1`,
-each individual target mutation returned `2`, both target mutations returned
-`0`, and a missing parser module returned `2`. Its artifact and status are
-independent of the E11/full/partial and live arms; static green schedules live
-confirmation only and does not claim it.
+The current self-test passed nine cases: non-target AST mutation and the
+equivalent local-`const` query refactor stayed exit `1`; each incomplete target
+mutation returned `2`; the structurally explicit pair of successor target
+mutations returned `0`; parser-unavailable returned `2`; and decoy/dead-code
+AST mutations left the target at exit `1`. Each mutation records exact target
+count `1` where applicable plus before/after source and target hashes, and the
+runner checks exit, status, both shape states, and the live-scheduling flag.
+Its artifact and status are independent of the E11/full/partial and live arms;
+static green schedules live confirmation only and does not claim it. The
+previous six-case committed self-test artifact is retained and is not rewritten
+as evidence for this increment.
 
 The full production journey is permanently gated as `E11_FULL_PRODUCT_JOURNEY` with status `BLOCKED_BY_PRODUCT_DEFECT`. It writes only `e11-full-product-journey-blocked.json` under the full evidence root (`C4_EVIDENCE_DIR`) and exits `2` (`MISSING`). It must never write a full `PASS` marker or a full artifact with status `PASS`.
 

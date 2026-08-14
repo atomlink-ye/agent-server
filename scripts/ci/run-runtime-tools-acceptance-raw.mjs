@@ -2,23 +2,14 @@
 
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import {
-  requireCanonicalInputs,
-  runVitestTarget,
-} from './work-acceptance-raw-support.mjs';
+import { runVitestTarget } from './work-acceptance-raw-support.mjs';
+import { requireRuntimeToolsCanonicalInputs } from './runtime-tools-acceptance-inputs.mjs';
 
 if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
   console.error('RUNTIME_TOOLS_MISSING[runtime_tools_database_unavailable]');
   process.exit(1);
 }
-if (
-  !(await requireCanonicalInputs({
-    kind: 'runtime-tools',
-    environmentMarker: 'runtime_tools_environment_unavailable',
-    markerPrefix: 'RUNTIME_TOOLS_MISSING',
-  }))
-)
-  process.exit(1);
+if (!(await requireRuntimeToolsCanonicalInputs())) process.exit(1);
 
 const behaviorExit = runVitestTarget({
   kind: 'runtime-tools',

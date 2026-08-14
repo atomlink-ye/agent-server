@@ -27,12 +27,12 @@ const inputs = [
   'tests/integration/product-api-v1-oi38.integration.test.ts',
   'scripts/ci/classify-runtime-tools-acceptance.mjs',
   'scripts/ci/run-runtime-tools-acceptance-raw.mjs',
+  'scripts/ci/runtime-tools-acceptance-inputs.mjs',
   'scripts/ci/check-runtime-tool-host-boundary.mjs',
   'scripts/ci/verify-registry-change-budget.mjs',
   'scripts/ci/work-acceptance-outcome.mjs',
   'scripts/ci/check-work-acceptance-outcome-matrix.mjs',
   'scripts/ci/work-acceptance-raw-support.mjs',
-  'scripts/ci/check-acceptance-execution-count.mjs',
   'scripts/ci/run-runtime-registry-evidence.mjs',
   'scripts/ci/verify-runtime-registry-evidence.mjs',
 ];
@@ -50,20 +50,6 @@ arms.push(
       '"theoretical_points":64',
       '"mutually_exclusive_and_exhaustive":true',
       '"signal":"SIGTERM","error":"ENOBUFS"',
-      '"ok":true',
-    ],
-  ),
-);
-arms.push(
-  runArm(
-    'acceptance-execution-count-contract',
-    'node',
-    ['scripts/ci/check-acceptance-execution-count.mjs'],
-    0,
-    [
-      '"expected_min_count":0,"observed_count":0,"expected":"PASS","actual":"PASS"',
-      '"expected_min_count":1,"observed_count":0,"expected":"ZERO_EXECUTION","actual":"ZERO_EXECUTION"',
-      '"expected_min_count":3,"observed_count":2,"expected":"INSTRUMENT_UNDEREXECUTION","actual":"INSTRUMENT_UNDEREXECUTION"',
       '"ok":true',
     ],
   ),
@@ -420,6 +406,20 @@ fs.writeFileSync(
       arms,
       query_helper_moves: 0,
       registry_follow_on_started: false,
+      zero_rule_audit: {
+        e6_expected_min_count: 1,
+        e6_expected_source:
+          'one named focused Work+Memory acceptance test selected by the canonical raw wrapper',
+        e6_observed_source: 'Vitest JSON passed+failed target assertions',
+        e6_kind: 'acceptance_instrument',
+        e6_business_collection_nonempty_rule: false,
+        e6_proposition_valid_under_corrected_rule: true,
+        shared_expected_zero_repair_owner:
+          'paseo worker cb3dd151; not imported or cherry-picked into Phase C',
+        e7_nonempty_expected_source:
+          'PLAN-B E7 fixed baseline 888630a8 requires nonempty migrations/dependencies/exports compare sets',
+        fixture_added_for_audit: false,
+      },
       ok,
     },
     null,

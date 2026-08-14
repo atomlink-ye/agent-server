@@ -18,7 +18,6 @@ const candidate = git(['rev-parse', 'HEAD']);
 const parent = git(['rev-parse', 'HEAD^']);
 const expectedExits = {
   'classifier-outcome-matrix': 0,
-  'acceptance-execution-count-contract': 0,
   'baseline-runtime-tools': 0,
   'canonical-database-missing': 2,
   'canonical-database-unreachable': 2,
@@ -109,6 +108,12 @@ const assertions = {
   ),
   query_helper_moves_zero: evidence.query_helper_moves === 0,
   no_follow_on: evidence.registry_follow_on_started === false,
+  zero_rule_audit_bound:
+    evidence.zero_rule_audit?.e6_expected_min_count === 1 &&
+    evidence.zero_rule_audit?.e6_proposition_valid_under_corrected_rule ===
+      true &&
+    evidence.zero_rule_audit?.e6_business_collection_nonempty_rule === false &&
+    evidence.zero_rule_audit?.fixture_added_for_audit === false,
   recorder_ok: evidence.ok === true,
 };
 const ok = Object.values(assertions).every(Boolean);

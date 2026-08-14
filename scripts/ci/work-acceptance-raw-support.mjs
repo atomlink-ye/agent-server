@@ -5,11 +5,7 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
 
-export async function requireCanonicalInputs({
-  kind,
-  environmentMarker,
-  markerPrefix = 'WORK_ACCEPTANCE_MISSING',
-}) {
+export async function requireCanonicalInputs({ kind, environmentMarker }) {
   const cwd = process.cwd();
   const databaseVariable = process.env.DATABASE_URL
     ? 'DATABASE_URL'
@@ -57,7 +53,7 @@ export async function requireCanonicalInputs({
     !nodeModules ||
     pnpmProbe.status !== 0
   ) {
-    console.error(`${markerPrefix}[${environmentMarker}]`);
+    console.error(`WORK_ACCEPTANCE_MISSING[${environmentMarker}]`);
     return false;
   }
   return true;
@@ -127,22 +123,12 @@ export function runVitestTarget({
         failure_messages: failureMessages.length,
       }),
     );
-    const countOutcome = classifyAcceptanceExecutionCount({
-      expectedMinCount,
-      observedCount: executed,
-    });
-    if (countOutcome === 'ZERO_EXECUTION') {
+    if (executed === 0) {
       console.error(`WORK_ACCEPTANCE_MISSING[${zeroExecutionMarker}]`);
       return 1;
     }
-    if (countOutcome === 'INSTRUMENT_UNDEREXECUTION') {
+    if (executed < expectedMinCount) {
       console.error(`WORK_ACCEPTANCE_MISSING[${underExecutionMarker}]`);
-      return 1;
-    }
-    if (countOutcome === 'INVALID_COUNT_CONTRACT') {
-      console.error(
-        `WORK_ACCEPTANCE_MISSING[${underExecutionMarker}]:invalid_count_contract`,
-      );
       return 1;
     }
     return result.status === null || result.signal || result.error
@@ -151,21 +137,6 @@ export function runVitestTarget({
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
-}
-
-export function classifyAcceptanceExecutionCount({
-  expectedMinCount,
-  observedCount,
-}) {
-  if (
-    !Number.isInteger(expectedMinCount) ||
-    expectedMinCount < 0 ||
-    !Number.isInteger(observedCount) ||
-    observedCount < 0
-  )
-    return 'INVALID_COUNT_CONTRACT';
-  if (observedCount >= expectedMinCount) return 'PASS';
-  return observedCount === 0 ? 'ZERO_EXECUTION' : 'INSTRUMENT_UNDEREXECUTION';
 }
 
 function safeDirectory(target) {

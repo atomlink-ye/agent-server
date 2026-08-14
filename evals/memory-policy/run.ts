@@ -8,6 +8,8 @@ import {
 type Case = EvaluateMemoryPolicyInput & {
   readonly id: string;
   readonly expected: 'accept' | 'proposal' | 'reject';
+  /** Dataset-friendly alias mapped to the policy input's existingEntries. */
+  readonly existing?: EvaluateMemoryPolicyInput['existingEntries'];
 };
 type Dataset = { readonly version: string; readonly cases: readonly Case[] };
 const datasetPath = fileURLToPath(

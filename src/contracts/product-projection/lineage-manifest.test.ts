@@ -10,7 +10,7 @@ import {
   flattenProductProjectionSchemaPaths,
   scanProductProjectionVocabulary,
   validateProductProjectionLineageManifest,
-} from '../../../scripts/ci/check-product-projection-lineage.js';
+} from './lineage-analysis.js';
 import { PRODUCT_PROJECTION_LINEAGE_MANIFEST } from './lineage-manifest.js';
 
 const vocabulary = {

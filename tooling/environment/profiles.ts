@@ -155,9 +155,9 @@ export async function loadLocalEnvironmentProfiles(
 export async function resolveLocalEnvironment(
   name: LocalEnvironmentName,
   options: {
-    readonly filePath?: string;
-    readonly environment?: NodeJS.ProcessEnv;
-    readonly overrides?: RuntimeOverrides;
+    readonly filePath?: string | undefined;
+    readonly environment?: NodeJS.ProcessEnv | undefined;
+    readonly overrides?: RuntimeOverrides | undefined;
   } = {},
 ): Promise<LocalEnvironmentProfile> {
   const profiles = await loadLocalEnvironmentProfiles(options.filePath);

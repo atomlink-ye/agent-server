@@ -26,8 +26,27 @@ import type {
   RuntimeSessionLookup,
   RuntimeSessionRepository,
 } from '../ports/runtime-session-repository.js';
+import type { RuntimeWorkspaceRepository } from '../ports/runtime-workspace-repository.js';
 import { ExecutionRunRegistry } from './execution-run-registry.js';
 import { ExecutionSessionResolver } from './execution-session-resolver.js';
+
+export type ExecutionWorkspaceOwner =
+  | {
+      readonly kind: 'product_session';
+      readonly id: string;
+      readonly tenantId: string;
+      readonly productWorkspaceId: string;
+      readonly principalType: string;
+      readonly principalId: string;
+    }
+  | {
+      readonly kind: 'team_run';
+      readonly id: string;
+      readonly tenantId: string;
+      readonly productWorkspaceId: string;
+      readonly principalType: string;
+      readonly principalId: string;
+    };
 
 export interface ExecutionTurnRequest {
   readonly runId: string;
@@ -35,6 +54,8 @@ export interface ExecutionTurnRequest {
   readonly runtimeSessionId?: string;
   readonly cwd?: string;
   readonly workspaceBinding?: ExecutionWorkspaceBinding;
+  readonly workspaceOwner?: ExecutionWorkspaceOwner;
+  readonly requireExistingWorkspaceBinding?: boolean;
   readonly compatibilitySessionBinding?: ExecutionSessionBinding;
   readonly workspaceTitle?: string;
   readonly sessionTitle?: string;
@@ -77,9 +98,9 @@ interface CachedFreshSession {
 }
 
 /**
- * Application service over ExecutionPlanePort. It owns no Paseo SDK/wire logic.
- * AgentRuntimePort methods are temporary compatibility for call sites not yet
- * migrated to the operation-neutral service surface.
+ * Application service over ExecutionPlanePort. It owns runtime placement and
+ * session reuse policy but no Paseo SDK/wire logic. AgentRuntimePort methods are
+ * temporary compatibility for the last legacy callers/tests.
  */
 export class ExecutionPlaneRuntimeFacade
   implements ExecutionRuntimeService, AgentRuntimePort
@@ -91,6 +112,7 @@ export class ExecutionPlaneRuntimeFacade
     private readonly plane: ExecutionPlanePort,
     runtimeSessions: RuntimeSessionRepository,
     private readonly runtimeSessionLookup: RuntimeSessionLookup,
+    private readonly runtimeWorkspaces: RuntimeWorkspaceRepository,
     private readonly runRegistry: ExecutionRunRegistry,
     private readonly memoryCandidates: RuntimeMemoryCandidateCollector,
     private readonly defaultCwd: string,
@@ -112,6 +134,11 @@ export class ExecutionPlaneRuntimeFacade
     observer?: ExecutionObservationSink,
   ): Promise<ExecutionTurnOutcome> {
     const cwd = input.cwd ?? this.defaultCwd;
+    const ownerWorkspaceBinding = await this.#resolveWorkspaceBinding(input);
+    if (input.requireExistingWorkspaceBinding && !ownerWorkspaceBinding)
+      throw new RuntimeExecutionError(
+        'The owning runtime workspace has no execution-plane binding.',
+      );
     const candidateSession = await this.memoryCandidates.prepare({
       runId: input.runId,
       cwd,
@@ -146,7 +173,7 @@ export class ExecutionPlaneRuntimeFacade
           ...(input.labels ? { labels: input.labels } : {}),
           ...(input.extensions ? { extensions: input.extensions } : {}),
         },
-        workspaceBinding: input.workspaceBinding ?? null,
+        workspaceBinding: ownerWorkspaceBinding,
       });
       if (
         !resolved.runtimeSession.workspaceBinding ||
@@ -177,7 +204,7 @@ export class ExecutionPlaneRuntimeFacade
         runtimeSessionId: `run:${input.runId}`,
         workspace: {
           cwd,
-          ...(input.workspaceBinding ? { binding: input.workspaceBinding } : {}),
+          ...(ownerWorkspaceBinding ? { binding: ownerWorkspaceBinding } : {}),
           ...(input.workspaceTitle ? { title: input.workspaceTitle } : {}),
         },
         ...(input.provider ? { provider: input.provider } : {}),
@@ -223,6 +250,31 @@ export class ExecutionPlaneRuntimeFacade
     } finally {
       if (closeAfterTurn) await executionSession.close().catch(() => undefined);
     }
+  }
+
+  async #resolveWorkspaceBinding(
+    input: ExecutionTurnRequest,
+  ): Promise<ExecutionWorkspaceBinding | null> {
+    if (input.workspaceBinding) return input.workspaceBinding;
+    const owner = input.workspaceOwner;
+    if (!owner) return null;
+    const common = {
+      tenantId: owner.tenantId,
+      productWorkspaceId: owner.productWorkspaceId,
+      principalType: owner.principalType,
+      principalId: owner.principalId,
+    };
+    const workspace =
+      owner.kind === 'team_run'
+        ? await this.runtimeWorkspaces.findForTeamRun({
+            ...common,
+            teamRunId: owner.id,
+          })
+        : await this.runtimeWorkspaces.findForProductSession({
+            ...common,
+            productSessionId: owner.id,
+          });
+    return workspace.binding;
   }
 
   public async cancelRun(input: {

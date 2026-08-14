@@ -1141,12 +1141,32 @@ try {
   writeFileSync(runtimePath, `${JSON.stringify(runtimeRecord, null, 2)}\n`, {
     mode: 0o600,
   });
-  const topology = run(process.execPath, [
-    'scripts/foundation/phase-c.mjs',
-    'E4',
-    '--runtime-record',
-    runtimePath,
-  ]);
+  const topology = run(
+    process.execPath,
+    ['scripts/foundation/phase-c.mjs', 'E4', '--runtime-record', runtimePath],
+    { allow: [0, 1, 2], identity: 'e4-evaluator' },
+  );
+  if (topology.status !== 0) {
+    let diagnosticFailure = null;
+    try {
+      const diagnosticRoot = resolve(artifactRoot, 'diagnostics-e4');
+      mkdirSync(diagnosticRoot, { recursive: true, mode: 0o700 });
+      collectComposeFailureDiagnostics({
+        run,
+        composeCommand: rawCompose,
+        project,
+        artifactRoot: diagnosticRoot,
+      });
+    } catch (error) {
+      diagnosticFailure = error;
+    }
+    const error = new Error(`e4_evaluator_failed:${topology.status}`);
+    error.evaluator_exit = topology.status;
+    error.diagnostic_failure = diagnosticFailure
+      ? String(diagnosticFailure.message ?? diagnosticFailure).slice(0, 512)
+      : null;
+    throw error;
+  }
   const mutationProject = `${project}_e4red`;
   const mutationFiles = [
     ...composeFiles,

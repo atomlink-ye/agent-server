@@ -99,8 +99,14 @@ try {
   ])
     if (serialized.includes(`"${forbidden}"`))
       throw new Error(`unsafe projection field: ${forbidden}`);
-  if (projection.state.Health.Log[0].Output.length > 4096)
+  if (projection.state.health.log[0].output.length > 4096)
     throw new Error('health output was not bounded');
+  if (
+    projection.mounts[0].destination !== '/forbidden' ||
+    projection.mounts[0].read_only !== false ||
+    serialized.includes('source')
+  )
+    throw new Error('mount projection was not sanitized');
   if (
     record.all_services_requested !== true ||
     record.project_container_count !== 2

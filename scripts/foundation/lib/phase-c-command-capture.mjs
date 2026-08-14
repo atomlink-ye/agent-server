@@ -121,10 +121,14 @@ export function createCommandRunner({
       } catch (error) {
         if (!(error instanceof Error) || error.code !== 'EEXIST') throw error;
       }
-      throw new Error(
+      const commandError = new Error(
         `child_command_failed:identity=${identity}:status=${value.status ?? 'spawn_error'}\n` +
           `stderr_tail:\n${failure.sanitized_stderr_tail}`,
       );
+      commandError.raw_exit = value.status;
+      commandError.sanitized_stderr_tail = failure.sanitized_stderr_tail;
+      commandError.command_identity = identity;
+      throw commandError;
     }
     return value;
   };

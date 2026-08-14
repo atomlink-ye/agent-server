@@ -34,14 +34,14 @@ const defaultFixtureDirectory = resolve(
 
 const recordingFiles: Record<RecordingScenario, Record<'work' | 'run' | 'trace', string>> = {
   'parallel-success': {
-    work: 'api/work.json',
-    run: 'api/work-run.json',
-    trace: 'api/trace.json',
+    work: 'parallel-success/api/work.json',
+    run: 'parallel-success/api/work-run.json',
+    trace: 'parallel-success/api/trace.json',
   },
   'rework-once': {
-    work: 'api/work.json',
-    run: 'api/work-run.json',
-    trace: 'api/trace.json',
+    work: 'rework-once/api/work.json',
+    run: 'rework-once/api/work-run.json',
+    trace: 'rework-once/api/trace.json',
   },
 };
 
@@ -141,7 +141,7 @@ function deriveWorkList(work: WorkResponse, run: Extract<ProductWorkRun, { proje
   const latestRun = deriveRunSummary(run);
   return WorkListResponseSchema.parse({
     works: [WorkListItemSchema.parse({
-      ...work.work,
+      ...work,
       product_state: run.work_run.product_state,
       latest_run_summary: {
         id: latestRun.id,
@@ -209,7 +209,7 @@ export async function loadStaticReplayRecording(
     run: { relativePath: paths.run, bytes: runDocument.bytes },
     trace: { relativePath: paths.trace, bytes: traceDocument.bytes },
   });
-  const work = workResult.data;
+  const work = workResult.data.work;
   const run = runResult.data;
   const trace = traceResult.data;
   const workList = deriveWorkList(work, run);

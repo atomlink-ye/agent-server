@@ -181,7 +181,8 @@ function WorkShellFrame({
 }
 
 function WorkDetail({ data }: { readonly data: WorkDetailData }) {
-  const { work, trace } = data;
+  const { work, run, trace } = data;
+  const outcome = run.work_run.result_summary;
 
   return (
     <>
@@ -190,6 +191,15 @@ function WorkDetail({ data }: { readonly data: WorkDetailData }) {
         <p className="work-shell-kicker">Work Detail</p>
         <h1>{work.title}</h1>
       </header>
+      <section aria-labelledby="work-outcome-heading" data-testid="work-outcome">
+        <p className="work-shell-kicker">Work outcome</p>
+        <h2 id="work-outcome-heading">
+          {outcome ?? 'Final outcome unavailable'}
+        </h2>
+        {outcome === null ? (
+          <p>The final Work outcome was not captured for this run.</p>
+        ) : null}
+      </section>
       <RunTrace trace={trace} />
     </>
   );

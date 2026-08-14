@@ -4,6 +4,8 @@ import type {
 } from '../../application/ports/runtime-session-repository.js';
 import { randomUUID } from 'node:crypto';
 
+const PASEO_PLANE = 'paseo';
+
 export class PostgresRuntimeSessionRepository implements RuntimeSessionRepository {
   public constructor(
     private readonly db: {
@@ -267,9 +269,32 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     return result.rows?.[0] ? map(result.rows[0]) : null;
   }
 
+  public async bindExecution(
+    input: Parameters<RuntimeSessionRepository['bindExecution']>[0],
+  ): Promise<RuntimeSession> {
+    if (
+      input.workspaceBinding.plane !== PASEO_PLANE ||
+      input.sessionBinding.plane !== PASEO_PLANE
+    )
+      throw new Error('Unsupported execution plane binding.');
+    return this.#bind({
+      id: input.id,
+      paseoWorkspaceId: input.workspaceBinding.externalWorkspaceId,
+      providerAgentId: input.sessionBinding.externalSessionId,
+    });
+  }
+
   public async bindProvider(
     input: Parameters<RuntimeSessionRepository['bindProvider']>[0],
-  ) {
+  ): Promise<RuntimeSession> {
+    return this.#bind(input);
+  }
+
+  async #bind(input: {
+    readonly id: string;
+    readonly paseoWorkspaceId: string;
+    readonly providerAgentId: string;
+  }): Promise<RuntimeSession> {
     const result = await this.db.query(
       `UPDATE runtime_sessions SET paseo_workspace_id=$2, provider_agent_id=$3, updated_at=$4 WHERE id=$1 AND paseo_workspace_id IS NULL AND provider_agent_id IS NULL RETURNING *`,
       [
@@ -303,6 +328,8 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
 }
 
 function map(row: any): RuntimeSession {
+  const paseoWorkspaceId = row.paseo_workspace_id ?? null;
+  const providerAgentId = row.provider_agent_id ?? null;
   return {
     id: row.id,
     scopeKind: row.scope_kind,
@@ -320,8 +347,14 @@ function map(row: any): RuntimeSession {
     environmentVersionId: row.environment_version_id,
     resolvedSkills: row.resolved_skills ?? [],
     toolRefs: row.tool_refs ?? [],
-    paseoWorkspaceId: row.paseo_workspace_id ?? null,
-    providerAgentId: row.provider_agent_id ?? null,
+    workspaceBinding: paseoWorkspaceId
+      ? { plane: PASEO_PLANE, externalWorkspaceId: paseoWorkspaceId }
+      : null,
+    sessionBinding: providerAgentId
+      ? { plane: PASEO_PLANE, externalSessionId: providerAgentId }
+      : null,
+    paseoWorkspaceId,
+    providerAgentId,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

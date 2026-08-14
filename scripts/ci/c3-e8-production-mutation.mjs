@@ -32,7 +32,6 @@ export function applyProductionMutation(source, arm) {
   if (!source.includes(mutation[0])) throw new Error(`mutation_target_missing:${arm}`);
   return source.replace(mutation[0], mutation[1]);
 }
-
 if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {
   const [sourcePath, arm] = process.argv.slice(2);
   if (!sourcePath || !arm) {
@@ -43,4 +42,3 @@ if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {
     writeFileSync(sourcePath, applyProductionMutation(source, arm));
   }
 }
-

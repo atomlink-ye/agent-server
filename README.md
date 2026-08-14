@@ -44,13 +44,13 @@ Run the deterministic repository gate:
 pnpm check
 ```
 
-Run the full deterministic CI set locally when appropriate:
+Run the full deterministic verification aggregate locally when appropriate:
 
 ```bash
-pnpm ci
+pnpm run verify
 ```
 
-`pnpm ci` includes deterministic E2E but does not require a live model. Browser-specific tests remain explicit through `pnpm test:web` and `pnpm test:e2e:web`.
+The verification aggregate includes deterministic E2E but does not require a live model. Browser-specific tests remain explicit through `pnpm test:web` and `pnpm test:e2e:web`.
 
 ## Local environments
 

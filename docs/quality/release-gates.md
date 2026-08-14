@@ -20,7 +20,7 @@ Generated run diagnostics stay in `.local/test-runs/` or CI artifacts, not in HE
 
 ## Deterministic repository gate
 
-`pnpm ci` is the main deterministic aggregate. `pnpm test:real-pg` is a separate datastore-specific lane. Browser and live-provider paths are explicit when their boundary is in scope.
+`pnpm run verify` is the main deterministic aggregate. `pnpm test:real-pg` is a separate datastore-specific lane. Browser and live-provider paths are explicit when their boundary is in scope.
 
 External runtime smokes are never required merely because they exist; provider availability and credentials are external conditions.
 

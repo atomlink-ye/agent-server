@@ -20,7 +20,7 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm ci
+      - run: pnpm run verify
 
   real-postgres:
     runs-on: ubuntu-latest

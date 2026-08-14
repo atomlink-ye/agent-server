@@ -104,7 +104,7 @@ Stop the isolated owned processes, revoke any real credential, and inspect local
 
 ## CI and external verification
 
-`pnpm ci` is the main deterministic aggregate. `pnpm test:real-pg` is the PostgreSQL-specific lane. Real provider smokes are opt-in/scheduled external checks. Report only commands that actually ran and their actual outcomes.
+`pnpm run verify` is the main deterministic aggregate. `pnpm test:real-pg` is the PostgreSQL-specific lane. Real provider smokes are opt-in/scheduled external checks. Report only commands that actually ran and their actual outcomes.
 
 ## Generated diagnostics and cleanup
 

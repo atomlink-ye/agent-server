@@ -17,67 +17,105 @@ import type {
   PaseoToolCall,
 } from './paseo-client-port.js';
 
-/**
- * Stateful reducer for one Paseo Turn. It is the only Paseo integration object
- * that owns timeline sequence/deduplication and nested-activity projection.
- */
+type ToolProjection = {
+  readonly activityId: string;
+  readonly category: ExecutionToolCategory;
+  readonly status: ExecutionToolStatus;
+  readonly label: string;
+  readonly summary: string;
+  readonly toolName: string | undefined;
+  readonly detail: ExecutionToolDetail | undefined;
+  readonly quality: number;
+  readonly parentActivityId: string | undefined;
+};
+
+type ChildTextProjection = {
+  readonly activityId: string;
+  readonly parentActivityId: string;
+  readonly itemKind: 'assistant' | 'reasoning';
+  sourceText: string;
+  text: string;
+  status: ExecutionToolStatus;
+  quarantined: boolean;
+  emitted: boolean;
+};
+
+/** Stateful reducer for one Paseo turn. */
 export class PaseoObservationProjector {
   readonly #agentId: string;
   readonly #provider: string;
   readonly #executionCwd: string;
   readonly #roots: readonly string[];
-  readonly #sink?: ExecutionObservationSink;
+  readonly #sink: ExecutionObservationSink | undefined;
   #baseline: PaseoTimelinePage | null = null;
-  #queue = Promise.resolve();
-
-  readonly #seenSequences = new Set<string>();
-  readonly #emittedSnapshots = new Map<string, string>();
-  readonly #observedAssistantTexts = new Set<string>();
-  readonly #parentCallActivities = new Map<string, string>();
-  readonly #publishedParentActivities = new Set<string>();
-  readonly #childSessionToParentActivity = new Map<string, string>();
-  readonly #parentActivityToChildSession = new Map<string, string>();
-  readonly #conflictedChildSessionIds = new Set<string>();
-  readonly #childCallActivities = new Map<string, string>();
-  readonly #childSequenceKeys = new Set<string>();
-  readonly #childParents = new Map<string, string>();
-  readonly #childDescriptors = new Map<string, PaseoProviderSubagentDescriptor>();
-  readonly #pendingSubagents = new Map<string, PaseoProviderSubagentDescriptor>();
-  readonly #conflictedDescriptorIds = new Set<string>();
-  readonly #parentActivityToDescriptor = new Map<string, string>();
-  readonly #descriptorChildSessions = new Map<string, string>();
-  readonly #baselineSubagents = new Map<string, PaseoProviderSubagentDescriptor>();
-  readonly #activityStates = new Map<string, ProjectedToolState>();
-  readonly #deferredParentTerminals = new Map<string, DeferredTerminal>();
-  readonly #permissionActivities = new Map<
-    string,
-    { readonly activityId: string; readonly status: string; readonly decision?: string }
-  >();
-  readonly #childTimelineActivities = new Map<string, ChildTextState>();
-  readonly #currentChildTextSegments = new Map<
-    string,
-    { readonly itemKind: 'assistant' | 'reasoning'; readonly timelineKey?: string; readonly key: string }
-  >();
-  readonly #childTextSegmentCounters = new Map<string, number>();
-
+  #queue: Promise<void> = Promise.resolve();
   #nextActivity = 1;
   #nextPermission = 1;
   #reasoningActive = false;
   #reasoningSourceText = '';
   #reasoningText = '';
   #reasoningQuarantined = false;
-  #liveAssistant: { readonly epoch: string; readonly seq: number; readonly text: string } | null = null;
-  #assistantBlockObserved = false;
-  #assistantBlockBlocked = false;
-  #assistantBlockLastPublicText = '';
+  #liveAssistant:
+    | { readonly epoch: string; readonly seq: number; readonly text: string }
+    | null = null;
+  #assistantBlocked = false;
+  #assistantLastPublicText = '';
+  #assistantObserved = false;
+
+  readonly #seenSequences = new Set<string>();
+  readonly #emittedAssistant = new Map<string, string>();
+  readonly #observedAssistantTexts = new Set<string>();
+  readonly #parentCalls = new Map<string, string>();
+  readonly #publishedParents = new Set<string>();
+  readonly #tools = new Map<string, ToolProjection>();
+  readonly #deferredParentTerminals = new Map<
+    string,
+    Omit<ToolProjection, 'activityId' | 'parentActivityId'>
+  >();
   #deferParentTerminals = true;
+
+  readonly #childSessionParent = new Map<string, string>();
+  readonly #parentChildSession = new Map<string, string>();
+  readonly #descriptorParent = new Map<string, string>();
+  readonly #parentDescriptor = new Map<string, string>();
+  readonly #descriptors = new Map<string, PaseoProviderSubagentDescriptor>();
+  readonly #pendingDescriptors = new Map<
+    string,
+    PaseoProviderSubagentDescriptor
+  >();
+  readonly #conflictedDescriptors = new Set<string>();
+  readonly #conflictedChildSessions = new Set<string>();
+  readonly #baselineDescriptors = new Map<
+    string,
+    PaseoProviderSubagentDescriptor
+  >();
+  readonly #childToolCalls = new Map<string, string>();
+  readonly #childSequences = new Set<string>();
+  readonly #childText = new Map<string, ChildTextProjection>();
+  readonly #childTextCurrent = new Map<
+    string,
+    {
+      readonly itemKind: 'assistant' | 'reasoning';
+      readonly timelineKey: string | undefined;
+      readonly key: string;
+    }
+  >();
+  readonly #childTextCounters = new Map<string, number>();
+  readonly #permissions = new Map<
+    string,
+    {
+      readonly activityId: string;
+      readonly status: string;
+      readonly decision: string | undefined;
+    }
+  >();
 
   public constructor(input: {
     readonly agentId: string;
     readonly provider: string;
     readonly executionCwd: string;
-    readonly additionalRoots?: readonly string[];
-    readonly sink?: ExecutionObservationSink;
+    readonly additionalRoots?: readonly string[] | undefined;
+    readonly sink?: ExecutionObservationSink | undefined;
   }) {
     this.#agentId = input.agentId;
     this.#provider = input.provider;
@@ -91,11 +129,10 @@ export class PaseoObservationProjector {
     subagents: readonly PaseoProviderSubagentDescriptor[] = [],
   ): void {
     this.#baseline = timeline;
-    this.#baselineSubagents.clear();
-    for (const descriptor of subagents) {
+    this.#baselineDescriptors.clear();
+    for (const descriptor of subagents)
       if (descriptor.parentAgentId === this.#agentId)
-        this.#baselineSubagents.set(descriptor.id, descriptor);
-    }
+        this.#baselineDescriptors.set(descriptor.id, descriptor);
   }
 
   public emitTurnStarted(runId: string): void {
@@ -105,41 +142,53 @@ export class PaseoObservationProjector {
   public isAfterBaseline(epoch: string | null, seq: number | null): boolean {
     if (epoch === null || seq === null) return false;
     return (
-      !this.#baseline ||
+      this.#baseline === null ||
       this.#baseline.epoch !== epoch ||
-      !this.#baseline.endCursor ||
+      this.#baseline.endCursor === null ||
       seq > this.#baseline.endCursor.seq
     );
   }
 
   public consumeStreamEvent(event: PaseoAgentStreamEvent): void {
     if (event.agentId !== this.#agentId) return;
-    if (event.reasoningText) this.#consumeReasoningText(event.reasoningText);
-    this.#consumeProjectedActivity(event);
+    if (!this.isAfterBaseline(event.epoch, event.seq)) return;
+    if (event.reasoningText) this.#consumeReasoning(event.reasoningText);
+    if (event.reasoning) this.#startReasoning();
+    if (event.assistantText !== undefined || event.toolCall)
+      this.#completeReasoning();
+    if (event.toolCall) {
+      this.#flushAssistant();
+      this.#consumeParentTool(event.toolCall);
+    }
+    if (event.permission) this.#consumePermission(event.permission);
     if (
-      event.timelineItemType !== 'assistant_message' ||
-      event.assistantText === undefined ||
-      event.seq === null ||
-      event.epoch === null
+      event.timelineItemType === 'assistant_message' &&
+      event.assistantText !== undefined &&
+      event.epoch !== null &&
+      event.seq !== null
     )
-      return;
-    this.#consumeAssistantSnapshot(event.epoch, event.seq, event.assistantText);
+      this.#consumeAssistant(
+        event.epoch,
+        event.seq,
+        event.assistantText,
+        false,
+      );
   }
 
   public consumeParentTimeline(page: PaseoTimelinePage): void {
     for (const entry of [...page.entries].sort((a, b) => a.seqEnd - b.seqEnd)) {
       if (!this.isAfterBaseline(page.epoch, entry.seqEnd)) continue;
-      if (entry.reasoningText) this.#consumeReasoningText(entry.reasoningText);
+      if (entry.reasoningText) this.#consumeReasoning(entry.reasoningText);
       if (entry.toolCall) {
         this.#completeReasoning();
-        this.#resetAssistantBlock();
-        this.#consumeParentToolCall(entry.toolCall);
+        this.#flushAssistant();
+        this.#consumeParentTool(entry.toolCall);
       }
       if (
         entry.timelineItemType === 'assistant_message' &&
         entry.assistantText !== undefined
       )
-        this.#consumeAssistantSnapshot(
+        this.#consumeAssistant(
           page.epoch,
           entry.seqEnd,
           entry.assistantText,
@@ -161,8 +210,8 @@ export class PaseoObservationProjector {
       return;
     }
     if (update.kind === 'remove') return;
-    const descriptor = this.#childDescriptors.get(update.subagentId);
-    if (!descriptor || !this.#childParents.has(update.subagentId)) return;
+    const descriptor = this.#descriptors.get(update.subagentId);
+    if (!descriptor || !this.#descriptorParent.has(update.subagentId)) return;
     this.consumeChildTimeline(descriptor, {
       parentAgentId: update.parentAgentId,
       subagentId: update.subagentId,
@@ -173,91 +222,60 @@ export class PaseoObservationProjector {
     });
   }
 
-  /** Returns true when a descriptor has a safe parent correlation. */
   public consumeProviderSubagentDescriptor(
     descriptor: PaseoProviderSubagentDescriptor,
   ): boolean {
     if (descriptor.parentAgentId !== this.#agentId) return false;
     if (
-      this.#conflictedDescriptorIds.has(descriptor.id) ||
-      this.#conflictedChildSessionIds.has(descriptor.id)
+      this.#conflictedDescriptors.has(descriptor.id) ||
+      this.#conflictedChildSessions.has(descriptor.id)
     )
       return false;
-    const baseline = this.#baselineSubagents.get(descriptor.id);
+    const baseline = this.#baselineDescriptors.get(descriptor.id);
     if (
       baseline &&
       baseline.status === descriptor.status &&
-      !this.#childDescriptors.has(descriptor.id)
+      !this.#descriptors.has(descriptor.id)
     )
       return false;
 
-    // COMPAT(opencode-subagent-child-session-correlation): Paseo 0.1.110 may
-    // omit toolCallId, so childSessionId correlation remains the safe fallback.
     const parentActivityId = descriptor.toolCallId
-      ? this.#parentCallActivities.get(descriptor.toolCallId)
-      : this.#childSessionToParentActivity.get(descriptor.id);
-    if (!parentActivityId || !this.#publishedParentActivities.has(parentActivityId)) {
-      this.#pendingSubagents.set(descriptor.id, descriptor);
+      ? this.#parentCalls.get(descriptor.toolCallId)
+      : this.#childSessionParent.get(descriptor.id);
+    if (!parentActivityId || !this.#publishedParents.has(parentActivityId)) {
+      this.#pendingDescriptors.set(descriptor.id, descriptor);
       return false;
     }
+    if (!this.#bindDescriptor(descriptor.id, parentActivityId)) return false;
+    this.#descriptors.set(descriptor.id, descriptor);
+    this.#pendingDescriptors.delete(descriptor.id);
 
-    const existingParent = this.#childParents.get(descriptor.id);
-    if (existingParent && existingParent !== parentActivityId) {
-      this.#markDescriptorConflicted(descriptor.id);
-      const competing = this.#parentActivityToDescriptor.get(parentActivityId);
-      if (competing) this.#markDescriptorConflicted(competing);
-      return false;
-    }
-    const childSessionParent = this.#childSessionToParentActivity.get(descriptor.id);
-    if (childSessionParent && childSessionParent !== parentActivityId) {
-      this.#quarantineChildCompetition(
-        parentActivityId,
-        descriptor.id,
-        childSessionParent,
-      );
-      return false;
-    }
-    const parentChild = this.#parentActivityToChildSession.get(parentActivityId);
-    if (parentChild && parentChild !== descriptor.id) {
-      this.#quarantineChildCompetition(parentActivityId, descriptor.id);
-      return false;
-    }
-    const competing = this.#parentActivityToDescriptor.get(parentActivityId);
-    if (competing && competing !== descriptor.id) {
-      this.#markDescriptorConflicted(competing);
-      this.#markDescriptorConflicted(descriptor.id);
-      this.#parentActivityToDescriptor.delete(parentActivityId);
-      return false;
-    }
-
-    this.#childDescriptors.set(descriptor.id, descriptor);
-    this.#childParents.set(descriptor.id, parentActivityId);
-    this.#descriptorChildSessions.set(descriptor.id, descriptor.id);
-    this.#parentActivityToDescriptor.set(parentActivityId, descriptor.id);
-    this.#childSessionToParentActivity.set(descriptor.id, parentActivityId);
-    this.#parentActivityToChildSession.set(parentActivityId, descriptor.id);
-    this.#pendingSubagents.delete(descriptor.id);
-
-    const parentState = this.#activityStates.get(parentActivityId);
-    const descriptorText = descriptor.title ?? descriptor.description ?? '';
-    const descriptorLabel = safeSingleLine(
-      this.#sanitize(descriptorText, 8000, true) ?? '',
+    const parent = this.#tools.get(parentActivityId);
+    const safeTitle = sanitizeSingleLine(
+      this.#sanitize(
+        descriptor.title ?? descriptor.description ?? '',
+        8000,
+        true,
+      ) ?? '',
       80,
-      true,
     );
-    if (parentState && descriptorLabel)
-      this.#publishToolState({
+    if (parent && safeTitle)
+      this.#publishTool({
         activityId: parentActivityId,
-        category: parentState.category,
-        status: normalizeToolStatus(parentState.status) ?? 'running',
-        label:
-          safeSingleLine(`Sub-agent task: ${descriptorLabel}`, 80, false) ??
-          parentState.label,
-        summary: parentState.summary,
-        toolName: parentState.toolName,
-        quality: 2,
+        category: parent.category,
+        status: parent.status,
+        label: `Sub-agent task: ${safeTitle}`,
+        summary: parent.summary,
+        toolName: parent.toolName,
+        detail: parent.detail,
+        quality: Math.max(parent.quality, 2),
+        parentActivityId: undefined,
       });
     return true;
+  }
+
+  public hasProviderSubagent(descriptorId: string): boolean {
+    return this.#descriptorParent.has(descriptorId);
   }
 
   public consumeChildTimeline(
@@ -267,17 +285,18 @@ export class PaseoObservationProjector {
     if (
       descriptor.parentAgentId !== this.#agentId ||
       timeline.parentAgentId !== this.#agentId ||
-      timeline.subagentId !== descriptor.id
+      timeline.subagentId !== descriptor.id ||
+      !timeline.epoch
     )
       return;
-    const parentActivityId = this.#childParents.get(descriptor.id);
-    if (!parentActivityId || !timeline.epoch) return;
+    const parentActivityId = this.#descriptorParent.get(descriptor.id);
+    if (!parentActivityId) return;
     for (const row of [...timeline.rows].sort((a, b) => a.seq - b.seq)) {
-      const rowKey = `${descriptor.id}:${timeline.epoch}:${row.seq}`;
-      if (this.#childSequenceKeys.has(rowKey)) continue;
-      this.#childSequenceKeys.add(rowKey);
+      const sequenceKey = `${descriptor.id}:${timeline.epoch}:${row.seq}`;
+      if (this.#childSequences.has(sequenceKey)) continue;
+      this.#childSequences.add(sequenceKey);
       if (row.item.toolCall) {
-        this.#currentChildTextSegments.delete(descriptor.id);
+        this.#childTextCurrent.delete(descriptor.id);
         this.#publishToolCall(
           row.item.toolCall,
           `${descriptor.id}:${timeline.epoch}:${row.item.toolCall.callId}`,
@@ -285,80 +304,75 @@ export class PaseoObservationProjector {
         );
         continue;
       }
-      if (!row.item.assistantText && !row.item.reasoningText) continue;
-      const itemKind = row.item.assistantText ? 'assistant' : 'reasoning';
+      const itemKind = row.item.assistantText
+        ? 'assistant'
+        : row.item.reasoningText
+          ? 'reasoning'
+          : null;
+      if (!itemKind) continue;
       const text = row.item.assistantText ?? row.item.reasoningText ?? '';
-      const current = this.#currentChildTextSegments.get(descriptor.id);
+      const current = this.#childTextCurrent.get(descriptor.id);
       const sameSegment =
         current?.itemKind === itemKind &&
         (!row.item.timelineKey ||
           !current.timelineKey ||
-          current.timelineKey === row.item.timelineKey);
+          row.item.timelineKey === current.timelineKey);
       let segment = sameSegment ? current : undefined;
       if (!segment) {
-        const counter = (this.#childTextSegmentCounters.get(descriptor.id) ?? 0) + 1;
-        this.#childTextSegmentCounters.set(descriptor.id, counter);
+        const counter = (this.#childTextCounters.get(descriptor.id) ?? 0) + 1;
+        this.#childTextCounters.set(descriptor.id, counter);
         segment = {
           itemKind,
+          timelineKey: row.item.timelineKey,
           key: `${descriptor.id}:${itemKind}:${counter}`,
-          ...(row.item.timelineKey ? { timelineKey: row.item.timelineKey } : {}),
         };
-        this.#currentChildTextSegments.set(descriptor.id, segment);
+        this.#childTextCurrent.set(descriptor.id, segment);
       }
-      this.#emitChildTimeline(parentActivityId, segment.key, itemKind, text);
+      this.#consumeChildText(parentActivityId, segment.key, itemKind, text);
     }
   }
 
   public finalizeProviderSubagent(
     descriptor: PaseoProviderSubagentDescriptor,
   ): void {
-    const parentActivityId = this.#childParents.get(descriptor.id);
+    const parentActivityId = this.#descriptorParent.get(descriptor.id);
     if (!parentActivityId || descriptor.status === 'running') return;
-    const terminalStatus: ExecutionToolStatus =
+    const terminal: ExecutionToolStatus =
       descriptor.status === 'completed'
         ? 'completed'
         : descriptor.status === 'failed'
           ? 'failed'
           : 'cancelled';
-    for (const item of this.#childTimelineActivities.values()) {
-      if (item.parentActivityId !== parentActivityId || item.status !== 'running')
+    for (const child of this.#childText.values()) {
+      if (child.parentActivityId !== parentActivityId || child.status !== 'running')
         continue;
-      const finalText = item.quarantined
-        ? item.text
-        : (this.#sanitize(item.sourceText, 8000, true) ?? item.text);
-      if (!finalText && !item.emitted) continue;
-      this.#emit({
-        kind: 'child_activity_updated',
-        activityId: item.activityId,
-        parentActivityId,
-        itemKind: item.itemKind,
-        status: terminalStatus,
-        label: item.itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
-        summary:
-          safeSingleLine(finalText, 160, false) ??
-          (item.itemKind === 'assistant' ? 'Assistant' : 'Thinking'),
-        ...(finalText ? { text: finalText } : {}),
-        provider: this.#provider,
-      });
-      item.text = finalText;
-      item.status = terminalStatus;
+      const finalText = child.quarantined
+        ? child.text
+        : (this.#sanitize(child.sourceText, 8000, true) ?? child.text);
+      if (finalText || child.emitted)
+        this.#emit({
+          kind: 'child_activity_updated',
+          activityId: child.activityId,
+          parentActivityId,
+          itemKind: child.itemKind,
+          status: terminal,
+          label: child.itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
+          summary:
+            sanitizeSingleLine(finalText, 160) ??
+            (child.itemKind === 'assistant' ? 'Assistant' : 'Thinking'),
+          provider: this.#provider,
+          ...(finalText ? { text: finalText } : {}),
+        });
+      child.text = finalText;
+      child.status = terminal;
     }
-    const parent = this.#activityStates.get(parentActivityId);
+    const parent = this.#tools.get(parentActivityId);
     if (parent)
-      this.#publishToolState({
-        activityId: parentActivityId,
-        category: parent.category,
-        status: terminalStatus,
-        label: parent.label,
-        summary: parent.summary,
-        toolName: parent.toolName,
-        quality: parent.quality,
-        detail: parent.detail,
+      this.#publishTool({
+        ...parent,
+        status: terminal,
+        parentActivityId: undefined,
       });
-  }
-
-  public hasProviderSubagent(descriptorId: string): boolean {
-    return this.#childParents.has(descriptorId);
   }
 
   public async finalize(input: {
@@ -367,22 +381,22 @@ export class PaseoObservationProjector {
     readonly usage?: RunUsage;
   } = {}): Promise<void> {
     if (input.finalTimeline) {
-      this.#resetAssistantBlock();
+      this.#flushAssistant();
       this.consumeParentTimeline(input.finalTimeline);
       if (
-        !this.#assistantBlockObserved &&
+        !this.#assistantObserved &&
         input.finalMessage &&
         !this.#observedAssistantTexts.has(input.finalMessage) &&
         input.finalTimeline.endCursor
       )
-        this.#consumeAssistantSnapshot(
+        this.#consumeAssistant(
           input.finalTimeline.epoch,
           input.finalTimeline.endCursor.seq,
           input.finalMessage,
           true,
         );
     }
-    this.#flushAssistantBlock();
+    this.#flushAssistant();
     this.#flushDeferredParentTerminals();
     this.#completeReasoning();
     if (input.usage) this.#emit({ kind: 'usage_updated', usage: input.usage });
@@ -393,68 +407,96 @@ export class PaseoObservationProjector {
     await this.#queue;
   }
 
-  #consumeProjectedActivity(event: PaseoAgentStreamEvent): void {
-    if (!this.isAfterBaseline(event.epoch, event.seq)) return;
-    if (
-      this.#reasoningActive &&
-      ['lifecycle', 'agent_status', 'finished', 'completed', 'failed', 'cancelled'].includes(
-        event.eventType,
-      )
-    )
-      this.#completeReasoning();
-    if (event.reasoning) this.#emitReasoningStarted();
-    if (event.assistantText !== undefined) this.#completeReasoning();
-    if (event.toolCall) {
-      this.#completeReasoning();
-      this.#resetAssistantBlock();
-      this.#consumeParentToolCall(event.toolCall);
+  #consumeAssistant(
+    epoch: string,
+    seq: number,
+    incoming: string,
+    flush: boolean,
+  ): void {
+    if (!this.isAfterBaseline(epoch, seq)) return;
+    this.#observedAssistantTexts.add(incoming);
+    const sequenceKey = `${epoch}:${seq}`;
+    if (this.#seenSequences.has(sequenceKey)) return;
+    if (!this.#liveAssistant || this.#liveAssistant.epoch !== epoch) {
+      this.#flushAssistant();
+      this.#assistantBlocked = false;
+      this.#assistantLastPublicText = '';
+      this.#assistantObserved = false;
+      this.#liveAssistant = { epoch, seq, text: incoming };
+    } else if (seq <= this.#liveAssistant.seq) {
+      return;
+    } else {
+      this.#liveAssistant = {
+        epoch,
+        seq,
+        text: mergeText(this.#liveAssistant.text, incoming),
+      };
     }
-    if (event.permission) {
-      const previous = this.#permissionActivities.get(event.permission.requestId);
-      const activityId = previous?.activityId ?? `permission-${this.#nextPermission++}`;
-      if (previous?.status === 'resolved') return;
-      if (
-        previous?.status === event.permission.status &&
-        previous.decision === event.permission.decision
-      )
-        return;
-      this.#permissionActivities.set(event.permission.requestId, {
-        activityId,
-        status: event.permission.status,
-        ...(event.permission.decision ? { decision: event.permission.decision } : {}),
-      });
-      this.#emit({
-        kind: 'permission_updated',
-        activityId,
-        category: permissionCategory(event.permission.kind),
-        status: event.permission.status,
-        ...(event.permission.decision ? { decision: event.permission.decision } : {}),
-        summary: 'Permission activity is read-only.',
-      });
-    }
+    this.#seenSequences.add(sequenceKey);
+    this.#assistantObserved = true;
+    this.#publishAssistant(epoch, seq, this.#liveAssistant.text, flush);
   }
 
-  #consumeReasoningText(text: string): void {
+  #publishAssistant(
+    epoch: string,
+    seq: number,
+    text: string,
+    flush: boolean,
+  ): void {
+    const projected = projectText(text, 8000, this.#roots, flush);
+    if (projected.kind === 'blocked') {
+      if (this.#assistantBlocked) return;
+      this.#assistantBlocked = true;
+      const safe = this.#assistantLastPublicText
+        ? `${this.#assistantLastPublicText}\n\n[Content redacted by credential screening]`
+        : '[Content redacted by credential screening]';
+      const key = `${epoch}:${seq}`;
+      if (this.#emittedAssistant.get(key) === safe) return;
+      this.#emittedAssistant.set(key, safe);
+      this.#assistantLastPublicText = safe;
+      this.#emit({ kind: 'assistant_updated', text: safe });
+      return;
+    }
+    if (projected.kind !== 'visible') return;
+    const key = `${epoch}:${seq}`;
+    if (this.#emittedAssistant.get(key) === projected.text) return;
+    this.#emittedAssistant.set(key, projected.text);
+    this.#assistantLastPublicText = projected.text;
+    this.#emit({ kind: 'assistant_updated', text: projected.text });
+  }
+
+  #flushAssistant(): void {
+    if (!this.#liveAssistant) return;
+    this.#publishAssistant(
+      this.#liveAssistant.epoch,
+      this.#liveAssistant.seq,
+      this.#liveAssistant.text,
+      true,
+    );
+    this.#liveAssistant = null;
+  }
+
+  #consumeReasoning(incoming: string): void {
     if (this.#reasoningQuarantined) return;
-    this.#reasoningSourceText = mergeProjectedText(this.#reasoningSourceText, text);
-    const sanitized = this.#sanitize(this.#reasoningSourceText, 8000, false);
-    if (sanitized === null) {
+    this.#reasoningSourceText = mergeText(this.#reasoningSourceText, incoming);
+    const safe = this.#sanitize(this.#reasoningSourceText, 8000, false);
+    if (safe === null) {
       this.#reasoningQuarantined = true;
       this.#reasoningText = '';
       return;
     }
-    const changed = this.#reasoningText !== sanitized;
-    this.#reasoningText = sanitized;
     this.#reasoningActive = true;
-    if (changed)
+    if (safe !== this.#reasoningText) {
+      this.#reasoningText = safe;
       this.#emit({
         kind: 'reasoning_updated',
         status: 'started',
-        ...(this.#reasoningText ? { text: this.#reasoningText } : {}),
+        ...(safe ? { text: safe } : {}),
       });
+    }
   }
 
-  #emitReasoningStarted(): void {
+  #startReasoning(): void {
     if (this.#reasoningActive) return;
     this.#reasoningActive = true;
     this.#emit({
@@ -466,112 +508,27 @@ export class PaseoObservationProjector {
 
   #completeReasoning(): void {
     if (!this.#reasoningActive) return;
-    this.#reasoningActive = false;
-    const finalText = this.#reasoningQuarantined
+    const safe = this.#reasoningQuarantined
       ? null
       : this.#sanitize(this.#reasoningSourceText, 8000, true);
     this.#emit({
       kind: 'reasoning_updated',
       status: 'completed',
-      ...(finalText ? { text: finalText } : {}),
+      ...(safe ? { text: safe } : {}),
     });
-    this.#reasoningText = '';
+    this.#reasoningActive = false;
     this.#reasoningSourceText = '';
+    this.#reasoningText = '';
     this.#reasoningQuarantined = false;
   }
 
-  #consumeAssistantSnapshot(
-    epoch: string,
-    seq: number,
-    text: string,
-    flush = false,
-  ): void {
-    if (!this.isAfterBaseline(epoch, seq)) return;
-    this.#observedAssistantTexts.add(text);
-    const sequenceKey = `${epoch}:${seq}`;
-    if (this.#seenSequences.has(sequenceKey)) return;
-    if (!this.#liveAssistant || this.#liveAssistant.epoch !== epoch) {
-      if (this.#liveAssistant) this.#resetAssistantBlock();
-      this.#assistantBlockObserved = false;
-      this.#assistantBlockBlocked = false;
-      this.#assistantBlockLastPublicText = '';
-      this.#liveAssistant = { epoch, seq, text };
-    } else if (seq <= this.#liveAssistant.seq) {
-      return;
-    } else {
-      this.#liveAssistant = {
-        ...this.#liveAssistant,
-        seq,
-        text: mergeProjectedText(this.#liveAssistant.text, text),
-      };
-    }
-    this.#seenSequences.add(sequenceKey);
-    this.#assistantBlockObserved = true;
-    this.#emitAssistantSnapshot(epoch, seq, this.#liveAssistant.text, flush);
-  }
-
-  #emitAssistantSnapshot(
-    epoch: string,
-    seq: number,
-    text: string,
-    flush: boolean,
-  ): void {
-    if (!text) return;
-    const projection = projectText(text, 8000, this.#roots, flush);
-    if (projection.kind === 'blocked') {
-      if (this.#assistantBlockBlocked) return;
-      this.#assistantBlockBlocked = true;
-      const redactedText = this.#assistantBlockLastPublicText
-        ? `${this.#assistantBlockLastPublicText}\n\n[Content redacted by credential screening]`
-        : '[Content redacted by credential screening]';
-      const key = `${epoch}:${seq}`;
-      if (this.#emittedSnapshots.get(key) === redactedText) return;
-      this.#emittedSnapshots.set(key, redactedText);
-      this.#assistantBlockLastPublicText = redactedText;
-      this.#emit({ kind: 'assistant_updated', text: redactedText });
-      return;
-    }
-    if (projection.kind !== 'visible' || !projection.text) return;
-    if (
-      this.#baseline?.epoch === epoch &&
-      this.#baseline.endCursor &&
-      seq <= this.#baseline.endCursor.seq
-    )
-      return;
-    const key = `${epoch}:${seq}`;
-    if (this.#emittedSnapshots.get(key) === projection.text) return;
-    this.#emittedSnapshots.set(key, projection.text);
-    this.#assistantBlockLastPublicText = projection.text;
-    this.#emit({ kind: 'assistant_updated', text: projection.text });
-  }
-
-  #flushAssistantBlock(): void {
-    if (!this.#liveAssistant) return;
-    this.#emitAssistantSnapshot(
-      this.#liveAssistant.epoch,
-      this.#liveAssistant.seq,
-      this.#liveAssistant.text,
-      true,
-    );
-    this.#liveAssistant = null;
-  }
-
-  #resetAssistantBlock(): void {
-    this.#flushAssistantBlock();
-    this.#assistantBlockObserved = false;
-    this.#assistantBlockBlocked = false;
-    this.#assistantBlockLastPublicText = '';
-  }
-
-  #consumeParentToolCall(call: PaseoToolCall): void {
+  #consumeParentTool(call: PaseoToolCall): void {
     const activityId = this.#publishToolCall(call, `parent:${call.callId}`);
     if (!activityId) return;
-    if (this.#publishedParentActivities.has(activityId)) {
-      for (const pending of [...this.#pendingSubagents.values()]) {
+    if (this.#publishedParents.has(activityId))
+      for (const pending of [...this.#pendingDescriptors.values()])
         if (pending.toolCallId === call.callId)
           this.consumeProviderSubagentDescriptor(pending);
-      }
-    }
   }
 
   #publishToolCall(
@@ -581,465 +538,419 @@ export class PaseoObservationProjector {
   ): string | null {
     const status = normalizeToolStatus(call.status);
     if (!status) return null;
-    const activityId =
-      (parentActivityId
-        ? this.#childCallActivities.get(key)
-        : this.#parentCallActivities.get(call.callId)) ?? this.#allocateActivityId();
-    if (parentActivityId) this.#childCallActivities.set(key, activityId);
-    else this.#parentCallActivities.set(call.callId, activityId);
+    const map = parentActivityId ? this.#childToolCalls : this.#parentCalls;
+    const callKey = parentActivityId ? key : call.callId;
+    const activityId = map.get(callKey) ?? this.#allocateActivity();
+    map.set(callKey, activityId);
     const category = toolCategory(call.name, call.detail?.type);
-    const presentation = toolPresentation(
-      call,
-      category,
+    const detail = projectToolDetail(
+      call.detail,
       this.#executionCwd,
       (value, max = 8000, flush = true) => this.#sanitize(value, max, flush),
+      call.error,
     );
-    if (
-      !parentActivityId &&
-      this.#deferParentTerminals &&
-      category === 'subagent' &&
-      status !== 'running' &&
-      !this.#activityStates.has(activityId)
-    )
-      this.#publishToolState({
-        activityId,
-        category,
-        status: 'running',
-        label: presentation.label,
-        summary: presentation.summary,
-        toolName: call.name,
-        quality: presentation.quality,
-        detail: presentation.detail,
-        resultObserved: call.resultObserved,
-      });
-    this.#publishToolState({
+    const title = this.#sanitize(call.title ?? '', 8000, true);
+    const label =
+      sanitizeSingleLine(title ?? '', 80) ??
+      detailLabel(category, detail) ??
+      categoryLabel(category);
+    const projection: ToolProjection = {
       activityId,
       category,
       status,
-      label: presentation.label,
-      summary: presentation.summary,
+      label,
+      summary: `${categoryLabel(category)}.`,
       toolName: call.name,
+      detail,
+      quality: call.title ? 2 : detail ? 1 : 0,
       parentActivityId,
-      quality: presentation.quality,
-      detail: presentation.detail,
-      resultObserved: call.resultObserved,
-    });
-    if (!parentActivityId && this.#activityStates.has(activityId)) {
-      this.#publishedParentActivities.add(activityId);
-      this.#recordChildSessionCorrelation(
+    };
+    if (
+      this.#deferParentTerminals &&
+      parentActivityId === undefined &&
+      category === 'subagent' &&
+      status !== 'running'
+    ) {
+      if (!this.#tools.has(activityId))
+        this.#publishTool({ ...projection, status: 'running' });
+      this.#deferredParentTerminals.set(activityId, {
+        category,
+        status,
+        label,
+        summary: projection.summary,
+        toolName: call.name,
+        detail,
+        quality: projection.quality,
+      });
+    } else {
+      this.#publishTool(projection, call.resultObserved);
+    }
+    if (parentActivityId === undefined && this.#tools.has(activityId)) {
+      this.#publishedParents.add(activityId);
+      const childSessionId =
         call.childSessionId ??
-          (call.detail?.type === 'sub_agent'
-            ? call.detail.childSessionId
-            : undefined),
-        activityId,
-      );
+        (call.detail?.type === 'sub_agent'
+          ? call.detail.childSessionId
+          : undefined);
+      if (childSessionId)
+        this.#bindChildSession(childSessionId, activityId);
     }
     return activityId;
   }
 
-  #publishToolState(input: {
-    readonly activityId: string;
-    readonly category: ExecutionToolCategory;
-    readonly status: ExecutionToolStatus;
-    readonly label: string;
-    readonly summary: string;
-    readonly toolName?: string;
-    readonly parentActivityId?: string;
-    readonly quality?: number;
-    readonly detail?: ExecutionToolDetail;
-    readonly resultObserved?: boolean;
-  }): void {
-    const quality = input.quality ?? 0;
-    const previous = this.#activityStates.get(input.activityId);
-    const detailImproved =
-      input.detail !== undefined &&
-      JSON.stringify(input.detail).length > JSON.stringify(previous?.detail ?? {}).length &&
-      JSON.stringify(input.detail) !== JSON.stringify(previous?.detail);
-    const bestDetail = detailImproved ? input.detail : previous?.detail;
-    if (
-      this.#deferParentTerminals &&
-      !input.parentActivityId &&
-      input.category === 'subagent' &&
-      input.status !== 'running'
-    ) {
-      const deferred = this.#deferredParentTerminals.get(input.activityId);
-      if (deferred && deferred.status !== input.status) return;
-      if (deferred && quality <= deferred.quality) return;
-      this.#deferredParentTerminals.set(input.activityId, {
-        category: input.category,
-        status: input.status,
-        label: input.label,
-        summary: input.summary,
-        toolName: input.toolName ?? previous?.toolName ?? input.label,
-        quality,
-      });
-      return;
-    }
-    if (previous && isTerminalToolStatus(previous.status)) {
-      if (previous.status !== input.status || (quality <= previous.quality && !detailImproved))
+  #publishTool(projection: ToolProjection, resultObserved?: boolean): void {
+    const previous = this.#tools.get(projection.activityId);
+    if (previous && isTerminal(previous.status)) {
+      if (projection.status !== previous.status) return;
+      if (projection.quality <= previous.quality && !betterDetail(projection, previous))
         return;
     }
-    if (previous?.status === input.status && quality <= previous.quality && !detailImproved)
-      return;
-    const bestLabel = previous && previous.quality >= quality ? previous.label : input.label;
-    const bestSummary =
-      previous && previous.quality >= quality ? previous.summary : input.summary;
-    const bestQuality = Math.max(previous?.quality ?? 0, quality);
     if (
-      previous?.status === input.status &&
-      previous.category === input.category &&
-      previous.label === bestLabel &&
-      previous.summary === bestSummary &&
-      previous.parentActivityId === input.parentActivityId &&
-      !detailImproved
+      previous &&
+      previous.status === projection.status &&
+      previous.quality >= projection.quality &&
+      !betterDetail(projection, previous)
     )
       return;
-    this.#activityStates.set(input.activityId, {
-      category: input.category,
-      status: input.status,
-      label: bestLabel,
-      summary: bestSummary,
-      ...((input.toolName ?? previous?.toolName)
-        ? { toolName: input.toolName ?? previous?.toolName }
-        : {}),
-      ...(bestDetail ? { detail: bestDetail } : {}),
-      quality: bestQuality,
-      ...(input.parentActivityId ? { parentActivityId: input.parentActivityId } : {}),
-    });
-    if (input.parentActivityId) {
+    const next: ToolProjection = {
+      activityId: projection.activityId,
+      category: projection.category,
+      status: projection.status,
+      label:
+        previous && previous.quality > projection.quality
+          ? previous.label
+          : projection.label,
+      summary:
+        previous && previous.quality > projection.quality
+          ? previous.summary
+          : projection.summary,
+      toolName: projection.toolName ?? previous?.toolName,
+      detail:
+        betterDetail(projection, previous) || !previous
+          ? projection.detail
+          : previous.detail,
+      quality: Math.max(previous?.quality ?? 0, projection.quality),
+      parentActivityId: projection.parentActivityId,
+    };
+    this.#tools.set(next.activityId, next);
+    if (next.parentActivityId)
       this.#emit({
         kind: 'child_activity_updated',
-        activityId: input.activityId,
-        parentActivityId: input.parentActivityId,
+        activityId: next.activityId,
+        parentActivityId: next.parentActivityId,
         itemKind: 'tool',
-        status: input.status,
-        label: bestLabel,
-        summary: bestSummary,
-        ...(bestDetail ? { detail: bestDetail } : {}),
+        status: next.status,
+        label: next.label,
+        summary: next.summary,
         provider: this.#provider,
+        ...(next.detail ? { detail: next.detail } : {}),
       });
-    } else {
+    else
       this.#emit({
         kind: 'tool_updated',
-        activityId: input.activityId,
-        category: input.category,
-        status: input.status,
-        label: bestLabel,
-        summary: bestSummary,
-        ...((input.toolName ?? previous?.toolName)
-          ? { toolName: input.toolName ?? previous?.toolName }
-          : {}),
-        resultObserved: input.resultObserved ?? hasObservedToolResult(bestDetail),
-        ...(bestDetail ? { detail: bestDetail } : {}),
+        activityId: next.activityId,
+        category: next.category,
+        status: next.status,
+        label: next.label,
+        summary: next.summary,
         provider: this.#provider,
+        toolName: next.toolName,
+        detail: next.detail,
+        resultObserved: resultObserved ?? hasObservedResult(next.detail),
       });
-    }
   }
 
   #flushDeferredParentTerminals(): void {
     this.#deferParentTerminals = false;
-    for (const [activityId, state] of this.#deferredParentTerminals) {
-      const current = this.#activityStates.get(activityId);
-      this.#publishToolState({
+    for (const [activityId, terminal] of this.#deferredParentTerminals) {
+      const previous = this.#tools.get(activityId);
+      this.#publishTool({
         activityId,
-        category: state.category,
-        status: state.status,
-        label: current && current.quality >= state.quality ? current.label : state.label,
-        summary:
-          current && current.quality >= state.quality ? current.summary : state.summary,
-        toolName: current?.toolName ?? state.toolName,
-        quality: Math.max(current?.quality ?? 0, state.quality),
-        detail: current?.detail,
+        category: terminal.category,
+        status: terminal.status,
+        label: previous?.label ?? terminal.label,
+        summary: previous?.summary ?? terminal.summary,
+        toolName: previous?.toolName ?? terminal.toolName,
+        detail: previous?.detail ?? terminal.detail,
+        quality: Math.max(previous?.quality ?? 0, terminal.quality),
+        parentActivityId: undefined,
       });
     }
     this.#deferredParentTerminals.clear();
   }
 
-  #recordChildSessionCorrelation(
-    childSessionId: string | undefined,
-    parentActivityId: string,
-  ): void {
-    if (!childSessionId || this.#conflictedChildSessionIds.has(childSessionId)) return;
-    const previousParent = this.#childSessionToParentActivity.get(childSessionId);
-    const previousChild = this.#parentActivityToChildSession.get(parentActivityId);
+  #consumePermission(permission: NonNullable<PaseoAgentStreamEvent['permission']>): void {
+    const previous = this.#permissions.get(permission.requestId);
+    if (previous?.status === 'resolved') return;
     if (
-      (previousParent && previousParent !== parentActivityId) ||
-      (previousChild && previousChild !== childSessionId)
-    ) {
-      this.#quarantineChildCompetition(
-        parentActivityId,
-        childSessionId,
-        previousParent && previousParent !== parentActivityId
-          ? previousParent
-          : undefined,
-      );
-      return;
-    }
-    const currentDescriptor = this.#parentActivityToDescriptor.get(parentActivityId);
-    if (currentDescriptor && currentDescriptor !== childSessionId) {
-      this.#conflictedChildSessionIds.add(childSessionId);
-      this.#markDescriptorConflicted(currentDescriptor);
-      this.#markDescriptorConflicted(childSessionId);
-      this.#parentActivityToDescriptor.delete(parentActivityId);
-      return;
-    }
-    this.#childSessionToParentActivity.set(childSessionId, parentActivityId);
-    this.#parentActivityToChildSession.set(parentActivityId, childSessionId);
-    const pending = this.#pendingSubagents.get(childSessionId);
-    if (pending) this.consumeProviderSubagentDescriptor(pending);
-  }
-
-  #quarantineChildCompetition(
-    parentActivityId: string,
-    incomingChildSessionId: string,
-    competingParentActivityId?: string,
-  ): void {
-    const childIds = new Set<string>([incomingChildSessionId]);
-    const parents = new Set<string>([parentActivityId]);
-    if (competingParentActivityId) parents.add(competingParentActivityId);
-    const existingChild = this.#parentActivityToChildSession.get(parentActivityId);
-    if (existingChild) childIds.add(existingChild);
-    for (const [parent, child] of [...this.#parentActivityToChildSession]) {
-      if (parents.has(parent) || childIds.has(child)) {
-        childIds.add(child);
-        this.#parentActivityToChildSession.delete(parent);
-      }
-    }
-    for (const [child, parent] of [...this.#childSessionToParentActivity])
-      if (parents.has(parent)) childIds.add(child);
-    for (const child of childIds) {
-      this.#conflictedChildSessionIds.add(child);
-      this.#childSessionToParentActivity.delete(child);
-      this.#markDescriptorConflicted(child);
-    }
-  }
-
-  #markDescriptorConflicted(descriptorId: string): void {
-    this.#conflictedDescriptorIds.add(descriptorId);
-    const parentActivityId = this.#childParents.get(descriptorId);
-    if (
-      parentActivityId &&
-      this.#parentActivityToDescriptor.get(parentActivityId) === descriptorId
+      previous?.status === permission.status &&
+      previous.decision === permission.decision
     )
-      this.#parentActivityToDescriptor.delete(parentActivityId);
-    const childSessionId = this.#descriptorChildSessions.get(descriptorId);
-    if (childSessionId) this.#childSessionToParentActivity.delete(childSessionId);
-    if (parentActivityId) this.#parentActivityToChildSession.delete(parentActivityId);
-    this.#descriptorChildSessions.delete(descriptorId);
-    this.#childParents.delete(descriptorId);
-    this.#childDescriptors.delete(descriptorId);
-    this.#pendingSubagents.delete(descriptorId);
+      return;
+    const activityId = previous?.activityId ?? `permission-${this.#nextPermission++}`;
+    this.#permissions.set(permission.requestId, {
+      activityId,
+      status: permission.status,
+      decision: permission.decision,
+    });
+    this.#emit({
+      kind: 'permission_updated',
+      activityId,
+      category: permissionCategory(permission.kind),
+      status: permission.status,
+      decision: permission.decision,
+      summary: 'Permission activity is read-only.',
+    });
   }
 
-  #emitChildTimeline(
+  #consumeChildText(
     parentActivityId: string,
     key: string,
     itemKind: 'assistant' | 'reasoning',
-    text: string,
+    incoming: string,
   ): void {
-    const previous = this.#childTimelineActivities.get(key);
+    const previous = this.#childText.get(key);
     if (previous && (previous.status !== 'running' || previous.quarantined)) return;
-    const activityId = previous?.activityId ?? this.#allocateActivityId();
-    const sourceText = mergeProjectedText(previous?.sourceText ?? '', text);
-    const sanitized = this.#sanitize(sourceText, 8000, false);
-    if (sanitized === null) {
-      this.#childTimelineActivities.set(key, {
+    const sourceText = mergeText(previous?.sourceText ?? '', incoming);
+    const safe = this.#sanitize(sourceText, 8000, false);
+    const activityId = previous?.activityId ?? this.#allocateActivity();
+    if (safe === null) {
+      this.#childText.set(key, {
         activityId,
         parentActivityId,
         itemKind,
         sourceText,
         text: previous?.text ?? '',
+        status: 'running',
         quarantined: true,
         emitted: previous?.emitted ?? false,
-        status: 'running',
       });
       return;
     }
-    if (!sanitized) {
-      this.#childTimelineActivities.set(key, {
-        activityId,
-        parentActivityId,
-        itemKind,
-        sourceText,
-        text: previous?.text ?? '',
-        quarantined: false,
-        emitted: previous?.emitted ?? false,
-        status: 'running',
-      });
-      return;
-    }
-    const summary =
-      safeSingleLine(sanitized, 160, false) ??
-      (itemKind === 'assistant' ? 'Assistant' : 'Thinking');
-    this.#childTimelineActivities.set(key, {
+    this.#childText.set(key, {
       activityId,
       parentActivityId,
       itemKind,
       sourceText,
-      text: sanitized,
+      text: safe,
+      status: 'running',
       quarantined: false,
-      emitted: true,
-      status: 'running',
+      emitted: Boolean(safe),
     });
-    this.#emit({
-      kind: 'child_activity_updated',
-      activityId,
-      parentActivityId,
-      itemKind,
-      status: 'running',
-      label: itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
-      summary,
-      text: sanitized,
-      provider: this.#provider,
-    });
+    if (safe)
+      this.#emit({
+        kind: 'child_activity_updated',
+        activityId,
+        parentActivityId,
+        itemKind,
+        status: 'running',
+        label: itemKind === 'assistant' ? 'Assistant' : 'Reasoning',
+        summary:
+          sanitizeSingleLine(safe, 160) ??
+          (itemKind === 'assistant' ? 'Assistant' : 'Thinking'),
+        text: safe,
+        provider: this.#provider,
+      });
   }
 
-  #allocateActivityId(): string {
+  #bindChildSession(childSessionId: string, parentActivityId: string): void {
+    if (this.#conflictedChildSessions.has(childSessionId)) return;
+    const existingParent = this.#childSessionParent.get(childSessionId);
+    const existingChild = this.#parentChildSession.get(parentActivityId);
+    if (
+      (existingParent && existingParent !== parentActivityId) ||
+      (existingChild && existingChild !== childSessionId)
+    ) {
+      this.#quarantineDescriptor(childSessionId);
+      if (existingChild) this.#quarantineDescriptor(existingChild);
+      return;
+    }
+    this.#childSessionParent.set(childSessionId, parentActivityId);
+    this.#parentChildSession.set(parentActivityId, childSessionId);
+    const pending = this.#pendingDescriptors.get(childSessionId);
+    if (pending) this.consumeProviderSubagentDescriptor(pending);
+  }
+
+  #bindDescriptor(descriptorId: string, parentActivityId: string): boolean {
+    const oldParent = this.#descriptorParent.get(descriptorId);
+    const oldDescriptor = this.#parentDescriptor.get(parentActivityId);
+    const childParent = this.#childSessionParent.get(descriptorId);
+    const parentChild = this.#parentChildSession.get(parentActivityId);
+    if (
+      (oldParent && oldParent !== parentActivityId) ||
+      (oldDescriptor && oldDescriptor !== descriptorId) ||
+      (childParent && childParent !== parentActivityId) ||
+      (parentChild && parentChild !== descriptorId)
+    ) {
+      this.#quarantineDescriptor(descriptorId);
+      if (oldDescriptor) this.#quarantineDescriptor(oldDescriptor);
+      return false;
+    }
+    this.#descriptorParent.set(descriptorId, parentActivityId);
+    this.#parentDescriptor.set(parentActivityId, descriptorId);
+    this.#childSessionParent.set(descriptorId, parentActivityId);
+    this.#parentChildSession.set(parentActivityId, descriptorId);
+    return true;
+  }
+
+  #quarantineDescriptor(descriptorId: string): void {
+    this.#conflictedDescriptors.add(descriptorId);
+    this.#conflictedChildSessions.add(descriptorId);
+    const parent = this.#descriptorParent.get(descriptorId);
+    if (parent) {
+      this.#parentDescriptor.delete(parent);
+      this.#parentChildSession.delete(parent);
+    }
+    this.#descriptorParent.delete(descriptorId);
+    this.#childSessionParent.delete(descriptorId);
+    this.#descriptors.delete(descriptorId);
+    this.#pendingDescriptors.delete(descriptorId);
+  }
+
+  #allocateActivity(): string {
     return `activity-${this.#nextActivity++}`;
   }
 
   #sanitize(value: string, max: number, flush: boolean): string | null {
-    const projection = projectText(value, max, this.#roots, flush);
-    return projection.kind === 'visible' ? projection.text : null;
+    const result = projectText(value, max, this.#roots, flush);
+    return result.kind === 'visible' ? result.text : null;
   }
 
   #emit(observation: ExecutionObservation): void {
     if (!this.#sink) return;
-    this.#queue = this.#queue.then(() => this.#sink!.emit(observation));
+    this.#queue = this.#queue.then(async () => {
+      await this.#sink!.emit(observation);
+    });
   }
 }
 
-type ProjectedToolState = {
-  readonly category: ExecutionToolCategory;
-  status: string;
-  label: string;
-  summary: string;
-  readonly toolName?: string;
-  readonly detail?: ExecutionToolDetail;
-  readonly quality: number;
-  readonly parentActivityId?: string;
-};
-
-type DeferredTerminal = {
-  readonly category: ExecutionToolCategory;
-  readonly status: Exclude<ExecutionToolStatus, 'running'>;
-  readonly label: string;
-  readonly summary: string;
-  readonly toolName: string;
-  readonly quality: number;
-};
-
-type ChildTextState = {
-  readonly activityId: string;
-  readonly parentActivityId: string;
-  readonly itemKind: 'assistant' | 'reasoning';
-  sourceText: string;
-  text: string;
-  quarantined: boolean;
-  emitted: boolean;
-  status: ExecutionToolStatus;
-};
-
-type TextProjection =
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'empty' }
-  | { readonly kind: 'pending' }
-  | { readonly kind: 'visible'; readonly text: string; readonly redacted: boolean }
-  | { readonly kind: 'blocked'; readonly reason: 'credential' };
-
-function toolPresentation(
-  call: PaseoToolCall,
-  category: ExecutionToolCategory,
-  executionCwd: string,
-  sanitizeText: (value: string, max?: number, flush?: boolean) => string | null,
-): {
-  readonly label: string;
-  readonly summary: string;
-  readonly quality: number;
-  readonly detail?: ExecutionToolDetail;
-} {
-  const fallback = categoryLabel(category);
-  const detail = projectExecutionToolDetail(
-    call.detail,
-    executionCwd,
-    sanitizeText,
-    call.error,
-  );
-  const detailLabel = detail
-    ? 'command' in detail
-      ? detail.command
-      : 'filePath' in detail
-        ? detail.filePath
-        : 'query' in detail
-          ? detail.query
-          : 'url' in detail
-            ? detail.url
-            : 'description' in detail
-              ? detail.description
-              : undefined
-    : undefined;
-  const titleProjection = projectText(call.title, 8000, [executionCwd], true);
-  const providerTitle =
-    titleProjection.kind === 'visible'
-      ? flattenProviderTitle(titleProjection.text, 80)
-      : null;
-  const titleWasRedacted = titleProjection.kind === 'blocked';
-  const quality = call.title !== undefined ? 2 : detail ? 1 : 0;
-  return {
-    label: providerTitle
-      ? providerTitle
-      : titleWasRedacted
-        ? 'Tool title hidden by credential screening'
-        : detailLabel
-          ? (safeSingleLine(`${fallback}: ${detailLabel}`, 80, false) ?? fallback)
-          : fallback,
-    summary: toolSummary(category),
-    quality,
-    ...(detail ? { detail } : {}),
-  };
+function betterDetail(
+  next: ToolProjection,
+  previous: ToolProjection | undefined,
+): boolean {
+  if (!next.detail) return false;
+  if (!previous?.detail) return true;
+  return JSON.stringify(next.detail).length > JSON.stringify(previous.detail).length;
 }
 
-function projectExecutionToolDetail(
+function isTerminal(status: ExecutionToolStatus): boolean {
+  return status !== 'running';
+}
+
+function normalizeToolStatus(value: string): ExecutionToolStatus | null {
+  const status = value.toLowerCase();
+  if (['running', 'started', 'pending', 'in_progress'].includes(status))
+    return 'running';
+  if (['completed', 'complete', 'success', 'succeeded', 'done'].includes(status))
+    return 'completed';
+  if (['failed', 'error'].includes(status)) return 'failed';
+  if (['cancelled', 'canceled', 'cancel'].includes(status)) return 'cancelled';
+  return null;
+}
+
+function toolCategory(name: string, detailType?: string): ExecutionToolCategory {
+  const value = `${name} ${detailType ?? ''}`.toLowerCase();
+  if (/(shell|command|terminal|exec)/u.test(value)) return 'shell';
+  if (/(read|cat|list|glob|file)/u.test(value)) return 'read';
+  if (/(edit|patch|replace)/u.test(value)) return 'edit';
+  if (/(write|create|save)/u.test(value)) return 'write';
+  if (/(search|grep|find)/u.test(value)) return 'search';
+  if (/(fetch|http|url|web)/u.test(value)) return 'fetch';
+  if (/(agent|delegate|task)/u.test(value)) return 'subagent';
+  return 'other';
+}
+
+function categoryLabel(category: ExecutionToolCategory): string {
+  if (category === 'subagent') return 'Sub-agent task';
+  return `${category.charAt(0).toUpperCase()}${category.slice(1)} activity`;
+}
+
+function detailLabel(
+  category: ExecutionToolCategory,
+  detail: ExecutionToolDetail | undefined,
+): string | null {
+  if (!detail) return null;
+  let value: string | undefined;
+  if ('command' in detail) value = detail.command;
+  else if ('filePath' in detail) value = detail.filePath;
+  else if ('query' in detail) value = detail.query;
+  else if ('url' in detail) value = detail.url;
+  else if ('description' in detail) value = detail.description;
+  if (!value) return null;
+  return sanitizeSingleLine(`${categoryLabel(category)}: ${value}`, 80);
+}
+
+function permissionCategory(
+  kind: string | undefined,
+): 'tool' | 'plan' | 'question' | 'mode' | 'other' {
+  const value = (kind ?? '').toLowerCase();
+  if (value.includes('tool')) return 'tool';
+  if (value.includes('plan')) return 'plan';
+  if (value.includes('question')) return 'question';
+  if (value.includes('mode')) return 'mode';
+  return 'other';
+}
+
+function projectToolDetail(
   source: PaseoToolCall['detail'],
   executionCwd: string,
   sanitizeText: (value: string, max?: number, flush?: boolean) => string | null,
-  failedError?: string,
+  failedError: string | undefined,
 ): ExecutionToolDetail | undefined {
   if (!source) return undefined;
   const kind = source.type === 'sub_agent' ? 'subagent' : source.type;
   const output: Record<string, unknown> = { kind };
   const putText = (key: string, value: unknown): void => {
     if (typeof value !== 'string') return;
-    const sanitized = sanitizeText(value, 8000, true);
-    if (sanitized !== null) output[key] = sanitized;
+    const safe = sanitizeText(value, 8000, true);
+    if (safe !== null) output[key] = safe;
   };
-  if ('command' in source && source.command) putText('command', source.command);
-  if ('cwd' in source && source.cwd) putText('cwd', source.cwd);
+  if ('command' in source) putText('command', source.command);
+  if ('cwd' in source) putText('cwd', source.cwd);
   if ('filePath' in source && source.filePath) {
-    const path = workspaceRelativePath(executionCwd, source.filePath);
-    if (path && !containsCredentialMarker(path)) output.filePath = path;
+    const safePath = workspaceRelativePath(executionCwd, source.filePath);
+    if (safePath && !containsCredential(safePath)) output.filePath = safePath;
   }
-  if ('content' in source && source.content) putText('content', source.content);
-  if ('oldString' in source && source.oldString) putText('oldString', source.oldString);
-  if ('newString' in source && source.newString) putText('newString', source.newString);
-  if ('query' in source && source.query) putText('query', source.query);
+  for (const key of [
+    'content',
+    'oldString',
+    'newString',
+    'query',
+    'output',
+    'result',
+    'prompt',
+    'codeText',
+    'log',
+    'unifiedDiff',
+    'error',
+    'subAgentType',
+    'description',
+  ])
+    if (key in source)
+      putText(key, (source as unknown as Record<string, unknown>)[key]);
   if ('toolName' in source && source.toolName) output.toolName = source.toolName;
+  if ('url' in source && source.url) {
+    const safeUrl = safeHttpUrl(source.url);
+    if (safeUrl) output.url = safeUrl;
+  }
   if ('filePaths' in source && Array.isArray(source.filePaths))
     output.filePaths = source.filePaths
       .slice(0, 64)
-      .map((path) => workspaceRelativePath(executionCwd, path))
+      .map((value) => workspaceRelativePath(executionCwd, value))
       .filter(Boolean);
   if ('webResults' in source && Array.isArray(source.webResults))
     output.webResults = source.webResults.slice(0, 64).map((item) => ({
-      ...(item.title ? { title: sanitizeText(item.title, 8000, true) ?? undefined } : {}),
+      ...(item.title
+        ? { title: sanitizeText(item.title, 8000, true) ?? undefined }
+        : {}),
       ...(item.url ? { url: safeHttpUrl(item.url) ?? undefined } : {}),
     }));
   if ('annotations' in source && Array.isArray(source.annotations))
     output.annotations = source.annotations
       .slice(0, 64)
-      .filter((annotation): annotation is string => typeof annotation === 'string')
-      .map((annotation) => sanitizeText(annotation, 8000, true))
-      .filter((annotation): annotation is string => annotation !== null);
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => sanitizeText(value, 8000, true))
+      .filter((value): value is string => value !== null);
   for (const key of [
     'offset',
     'limit',
@@ -1051,37 +962,16 @@ function projectExecutionToolDetail(
     'bytes',
   ]) {
     const value = (source as unknown as Record<string, unknown>)[key];
-    if (
-      typeof value === 'number' &&
-      Number.isFinite(value) &&
-      (key === 'durationSeconds' || Number.isSafeInteger(value))
-    )
-      output[key] = value;
+    if (typeof value === 'number' && Number.isFinite(value)) output[key] = value;
   }
   if ('truncated' in source && typeof source.truncated === 'boolean')
     output.truncated = source.truncated;
   if ('mode' in source && source.mode) output.mode = source.mode;
-  if ('url' in source && source.url) {
-    const url = safeHttpUrl(source.url);
-    if (url) output.url = url;
-  }
-  if ('subAgentType' in source && source.subAgentType)
-    putText('subAgentType', source.subAgentType);
-  if ('description' in source && source.description)
-    putText('description', source.description);
-  for (const key of ['output', 'result', 'prompt', 'codeText', 'log', 'unifiedDiff', 'error'])
-    if (key in source)
-      putText(key, (source as unknown as Record<string, unknown>)[key]);
-  if (
-    'exitCode' in source &&
-    (source.exitCode === null || Number.isSafeInteger(source.exitCode))
-  )
+  if ('exitCode' in source && (source.exitCode === null || Number.isSafeInteger(source.exitCode)))
     output.exitCode = source.exitCode;
   if ('actions' in source && Array.isArray(source.actions))
     output.actions = source.actions.slice(0, 64).map((action) => ({
-      ...(typeof action.index === 'number' && Number.isSafeInteger(action.index)
-        ? { index: action.index }
-        : {}),
+      ...(typeof action.index === 'number' ? { index: action.index } : {}),
       ...(typeof action.toolName === 'string'
         ? { toolName: sanitizeText(action.toolName, 8000, true) ?? undefined }
         : {}),
@@ -1089,247 +979,133 @@ function projectExecutionToolDetail(
         ? { summary: sanitizeText(action.summary, 8000, true) ?? undefined }
         : {}),
     }));
-  if (failedError) {
-    const safeError = sanitizeText(failedError, 8000, true);
-    if (safeError) output.error = safeError;
-  }
+  if (failedError) putText('error', failedError);
   return output as ExecutionToolDetail;
 }
 
+function hasObservedResult(detail: ExecutionToolDetail | undefined): boolean {
+  if (!detail) return false;
+  const row = detail as unknown as Record<string, unknown>;
+  return ['output', 'result', 'content', 'log', 'error'].some(
+    (key) => row[key] !== undefined,
+  );
+}
+
+type TextProjection =
+  | { readonly kind: 'empty' | 'pending' | 'blocked' }
+  | { readonly kind: 'visible'; readonly text: string };
+
 function projectText(
-  value: string | undefined,
+  value: string,
   max: number,
   roots: readonly string[],
   flush: boolean,
 ): TextProjection {
-  if (value === undefined) return { kind: 'absent' };
   if (!value.trim()) return { kind: 'empty' };
-  const redacted = redactCredentialValues(value);
-  if (redacted.blocked) return { kind: 'blocked', reason: 'credential' };
+  const redacted = redactCredentials(value);
+  if (redacted.blocked) return { kind: 'blocked' };
   if (!flush && credentialPrefixPending(value)) return { kind: 'pending' };
-  let sanitized = formatProjectedText(redacted.text, roots);
-  sanitized = Array.from(sanitized).slice(0, max).join('');
+  let safe = formatProjectedText(redacted.text, roots);
+  safe = Array.from(safe).slice(0, max).join('');
   if (!flush) {
-    const tailSize = 512;
-    let committedEnd = Math.max(0, sanitized.length - tailSize);
-    const suspiciousStart = Math.max(
-      value.lastIndexOf('/'),
-      value.lastIndexOf('\\'),
-      value.toLowerCase().lastIndexOf('authorization'),
-      value.toLowerCase().lastIndexOf('password'),
-      value.toLowerCase().lastIndexOf('secret'),
-      value.toLowerCase().lastIndexOf('token'),
-    );
-    if (suspiciousStart >= 0 && value.length - suspiciousStart <= 4096)
-      committedEnd = Math.min(
-        committedEnd,
-        Math.max(0, sanitized.length - (value.length - suspiciousStart)),
-      );
+    const committedEnd = Math.max(0, safe.length - 512);
     if (committedEnd === 0) return { kind: 'pending' };
-    sanitized = sanitized.slice(0, committedEnd);
+    safe = safe.slice(0, committedEnd);
   }
-  if (!sanitized.trim()) return { kind: 'empty' };
-  return { kind: 'visible', text: sanitized, redacted: redacted.redacted };
+  return safe.trim() ? { kind: 'visible', text: safe } : { kind: 'empty' };
 }
 
-function formatProjectedText(value: string, roots: readonly string[]): string {
-  let sanitized = capDetail(value);
-  sanitized = sanitized.replace(
-    /\/workspace\/\.local\/runtime-cells\/[A-Za-z0-9_-]+\/?/gu,
-    './',
-  );
-  const normalizedRoots = roots
-    .map((root) => resolve(root).replaceAll('\\', '/').replace(/\/$/u, ''))
-    .filter(Boolean)
-    .sort((left, right) => right.length - left.length);
-  for (const root of normalizedRoots) sanitized = sanitized.split(root).join('./');
-  sanitized = sanitized
-    .replace(/(?<![\w:./])\/(?!\/)[^\s"'`<>()[\]{}]+/gu, '<path>')
-    .replace(/(?:[A-Za-z]:[\\/]|\\\\)[^\s"'`<>()[\]{}]+/gu, '<path>')
-    .replace(
-      /(?<![A-Za-z0-9])(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?![A-Za-z0-9])/giu,
-      '<id>',
-    );
-  return sanitized.replace(/\b[A-Za-z0-9_-]{32,}\b/gu, '<redacted>');
-}
-
-function redactCredentialValues(value: string): {
+function redactCredentials(value: string): {
   readonly text: string;
-  readonly redacted: boolean;
   readonly blocked: boolean;
 } {
   let text = value;
-  let redacted = false;
   const replace = (pattern: RegExp, replacement: string): void => {
-    const next = text.replace(pattern, replacement);
-    if (next !== text) redacted = true;
-    text = next;
+    text = text.replace(pattern, replacement);
   };
   replace(
     /((?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*)(?:(?:bearer|basic)\s+[^\s,;]+|"[^"]*"|'[^']*'|[^\s,;]+)/giu,
     '$1[REDACTED]',
   );
-  replace(
-    /((?:^|\s)(?:-u|--user|-H|--header|--auth|--authentication|--password|--secret|--token|--credential|--access[_-]?key|--session[_-]?key|--api[_-]?key|--private[_-]?key)(?:=|\s+))(?:"[^"]*"|'[^']*'|[^\s]+)/giu,
-    '$1[REDACTED]',
-  );
   replace(/(\b(?:bearer|basic)\s+)[A-Za-z0-9+/._~=-]+/giu, '$1[REDACTED]');
   replace(/((?:https?|ftp):\/\/)[^/?#\s]+@/giu, '$1[REDACTED]@');
   replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/giu, '[REDACTED]');
-  return { text, redacted, blocked: containsCredentialMarker(text) };
+  return { text, blocked: containsCredential(text) };
 }
 
-const credentialAssignmentPattern =
-  /(?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s,;]+)/i;
-const credentialHeaderPattern =
-  /(?:^|\s)(?:-u|--user|-H|--header|--auth|--authentication|--password|--secret|--token|--credential|--access[_-]?key|--session[_-]?key|--api[_-]?key|--private[_-]?key)(?:=|\s+)(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s]+)/i;
-const credentialBearerPattern =
-  /\b(?:bearer|basic)\s+(?!\[REDACTED\])[A-Za-z0-9+/._~=-]+/i;
-const credentialUrlPattern = /:\/\/(?!\[REDACTED\])[^/?#\s]+@/i;
-const credentialPemPattern = /-----BEGIN [^-]+-----/i;
-
-function containsCredentialMarker(value: string): boolean {
+function containsCredential(value: string): boolean {
   return (
-    credentialAssignmentPattern.test(value) ||
-    credentialHeaderPattern.test(value) ||
-    credentialBearerPattern.test(value) ||
-    credentialUrlPattern.test(value) ||
-    credentialPemPattern.test(value)
+    /(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key)\s*[:=]\s*(?!\[REDACTED\])[^\s,;]+/iu.test(
+      value,
+    ) ||
+    /\b(?:bearer|basic)\s+(?!\[REDACTED\])[A-Za-z0-9+/._~=-]+/iu.test(value) ||
+    /-----BEGIN [^-]+-----/iu.test(value)
   );
 }
 
 function credentialPrefixPending(value: string): boolean {
-  return /(?:^|[^\w])(?:"|')?(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key|[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|ACCESS_KEY|SESSION_KEY|PRIVATE_KEY))(?:"|')?\s*[:=]\s*$/i.test(
+  return /(?:authorization|cookie|password|secret|token|credential|access[_-]?key|session[_-]?key|api[_-]?key|private[ _-]?key)\s*[:=]\s*$/iu.test(
     value,
   );
 }
 
-function mergeProjectedText(existing: string, incoming: string): string {
-  const next = capDetail(incoming);
-  if (!existing) return next;
-  if (next.startsWith(existing)) return next;
-  if (existing.endsWith(next)) return existing;
-  return capDetail(existing + next);
+function formatProjectedText(value: string, roots: readonly string[]): string {
+  let safe = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
+  const normalizedRoots = roots
+    .map((root) => resolve(root).replaceAll('\\', '/').replace(/\/$/u, ''))
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+  for (const root of normalizedRoots) safe = safe.split(root).join('./');
+  safe = safe
+    .replace(/\/workspace\/\.local\/runtime-cells\/[A-Za-z0-9_-]+\/?/gu, './')
+    .replace(/(?<![\w:./])\/(?!\/)[^\s"'`<>()[\]{}]+/gu, '<path>')
+    .replace(/(?:[A-Za-z]:[\\/]|\\\\)[^\s"'`<>()[\]{}]+/gu, '<path>')
+    .replace(
+      /(?<![A-Za-z0-9])(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?![A-Za-z0-9])/giu,
+      '<id>',
+    )
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/gu, '<redacted>');
+  return safe;
 }
 
-function capDetail(value: string): string {
-  return Array.from(
-    value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ''),
-  )
-    .slice(0, 8000)
-    .join('');
+function mergeText(existing: string, incoming: string): string {
+  if (!existing) return incoming;
+  if (incoming.startsWith(existing)) return incoming;
+  if (existing.endsWith(incoming)) return existing;
+  return `${existing}${incoming}`;
 }
 
-function safeSingleLine(
-  value: string,
-  maxCodePoints: number,
-  screenCredentials: boolean,
-): string | null {
-  if (/\r|\n|[\u0000-\u001f\u007f]/u.test(value)) return null;
-  if (screenCredentials && containsCredentialMarker(value)) return null;
-  const normalized = value.replace(/[\p{Cc}\p{Cf}]/gu, '').trim();
-  if (!normalized) return null;
-  return Array.from(normalized).slice(0, maxCodePoints).join('');
-}
-
-function flattenProviderTitle(value: string, maxCodePoints: number): string | null {
-  const flattened = value.replace(/[\r\n\t ]+/gu, ' ').trim();
-  if (!flattened) return null;
-  return Array.from(flattened).slice(0, maxCodePoints).join('');
+function sanitizeSingleLine(value: string, max: number): string | null {
+  const normalized = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .replace(/[\r\n\t ]+/gu, ' ')
+    .trim();
+  if (!normalized || containsCredential(normalized)) return null;
+  return Array.from(normalized).slice(0, max).join('');
 }
 
 function workspaceRelativePath(cwd: string, value: string): string | null {
   if (!value || value.length > 4096) return null;
   const absolute = resolve(cwd, value);
-  const relativePath = relative(resolve(cwd), absolute).replaceAll('\\', '/');
-  if (
-    !relativePath ||
-    relativePath === '..' ||
-    relativePath.startsWith('../') ||
-    relativePath.split('/').includes('..')
-  )
-    return null;
-  const projected = relativePath
-    .split('/')
-    .map((part) => redactPathIdentifier(part))
-    .join('/');
-  return safeSingleLine(projected, 120, false);
-}
-
-function redactPathIdentifier(value: string): string {
-  const uuid =
-    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/giu;
-  const withUuidRedacted = value.replace(uuid, '<id>');
-  if (/^[0-9a-f]{32,}(\.[A-Za-z0-9._-]+)?$/iu.test(withUuidRedacted))
-    return withUuidRedacted.replace(/^[0-9a-f]{32,}/iu, '<id>');
-  return withUuidRedacted;
+  const path = relative(resolve(cwd), absolute).replaceAll('\\', '/');
+  if (!path || path === '..' || path.startsWith('../')) return null;
+  const safe = path.replace(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/giu,
+    '<id>',
+  );
+  return sanitizeSingleLine(safe, 120);
 }
 
 function safeHttpUrl(value: string): string | null {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
     parsed.username = '';
     parsed.password = '';
     parsed.search = '';
     parsed.hash = '';
-    return safeSingleLine(`${parsed.origin}${parsed.pathname}`, 80, true);
+    return sanitizeSingleLine(`${parsed.origin}${parsed.pathname}`, 160);
   } catch {
     return null;
   }
-}
-
-function normalizeToolStatus(value: string): ExecutionToolStatus | null {
-  const status = value.toLowerCase();
-  if (['running', 'started', 'pending', 'in_progress'].includes(status)) return 'running';
-  if (['completed', 'complete', 'success', 'succeeded', 'done'].includes(status))
-    return 'completed';
-  if (['failed', 'error'].includes(status)) return 'failed';
-  if (['cancelled', 'canceled', 'cancel'].includes(status)) return 'cancelled';
-  return null;
-}
-
-function toolCategory(name: string, detailType?: string): ExecutionToolCategory {
-  const value = `${name} ${detailType ?? ''}`.toLowerCase();
-  if (/(shell|command|terminal|exec)/.test(value)) return 'shell';
-  if (/(read|cat|list|glob|file)/.test(value)) return 'read';
-  if (/(edit|patch|replace)/.test(value)) return 'edit';
-  if (/(write|create|save)/.test(value)) return 'write';
-  if (/(search|grep|find)/.test(value)) return 'search';
-  if (/(fetch|http|url|web)/.test(value)) return 'fetch';
-  if (/(agent|delegate|task)/.test(value)) return 'subagent';
-  return 'other';
-}
-
-function categoryLabel(category: ExecutionToolCategory): string {
-  if (category === 'subagent') return 'Sub-agent task';
-  return `${category.charAt(0).toUpperCase()}${category.slice(1)} activity`;
-}
-
-function toolSummary(category: ExecutionToolCategory): string {
-  return `${category.charAt(0).toUpperCase()}${category.slice(1)} activity.`;
-}
-
-function permissionCategory(
-  kind?: string,
-): 'tool' | 'plan' | 'question' | 'mode' | 'other' {
-  const value = (kind ?? '').toLowerCase();
-  if (value.includes('tool')) return 'tool';
-  if (value.includes('plan')) return 'plan';
-  if (value.includes('question')) return 'question';
-  if (value.includes('mode')) return 'mode';
-  return 'other';
-}
-
-function isTerminalToolStatus(status: string): boolean {
-  return ['completed', 'failed', 'cancelled'].includes(status);
-}
-
-function hasObservedToolResult(detail: ExecutionToolDetail | undefined): boolean {
-  if (!detail) return false;
-  return ['output', 'result', 'content', 'log', 'error'].some(
-    (field) =>
-      Object.prototype.hasOwnProperty.call(detail, field) &&
-      (detail as unknown as Record<string, unknown>)[field] !== undefined,
-  );
 }

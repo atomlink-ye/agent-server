@@ -7,7 +7,7 @@ import {
 import { WorkProjectionFactsSource } from '../../application/product-projection/work-projection-facts-source.js';
 import type { ExecutionAdmission } from '../../application/ports/execution-admission.js';
 import type { ExecutionFactQuery } from '../../application/ports/execution-fact-query.js';
-import type { WorkDefinitionReadPort } from '../../application/ports/work-definition-read.js';
+import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { StartWorkRun } from '../../application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
 import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
@@ -57,7 +57,10 @@ export function installWorkHttpRoutes(
 
 export function createWorkModule(options: {
   readonly database: WorkIdentityConnectable;
-  readonly definitions: WorkDefinitionReadPort;
+  readonly definitions: Pick<
+    DefinitionReadApi,
+    'findTeamDefinitionById' | 'findPublishedTeamVersionById'
+  >;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
 }): WorkModule {

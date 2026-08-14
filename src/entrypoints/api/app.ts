@@ -55,6 +55,7 @@ import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team
 import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { WorkModule } from '../../modules/work/work-module.js';
 import type { MemoryModule } from '../../modules/memory/memory-module.js';
+import type { ResourceModule } from '../../modules/resource/resource-module.js';
 import {
   composePlatform,
   type PlatformContribution,
@@ -83,7 +84,8 @@ export interface AppDependencies {
   readonly acceptLearningProposal?: AcceptLearningProposal;
   readonly rejectLearningProposal?: RejectLearningProposal;
   readonly listMemoryEntries?: Pick<ListMemoryEntries, 'execute'>;
-  readonly agentRegistry: AgentRegistry;
+  /** Legacy fixture seam; production supplies resourceModule instead. */
+  readonly agentRegistry?: AgentRegistry;
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;
@@ -99,6 +101,7 @@ export interface AppDependencies {
   readonly version?: string;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
   readonly memoryModule?: Pick<MemoryModule, 'installHttp'>;
+  readonly resourceModule?: Pick<ResourceModule, 'installHttp'>;
   readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
@@ -185,13 +188,26 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       });
     }
   }
-  registerAgentRoutes(app, dependencies);
-  if (dependencies.invokableRepository && dependencies.environmentRegistry)
-    registerTeamRoutes(app, {
-      config: dependencies.config,
-      invokableRepository: dependencies.invokableRepository,
-      environmentRegistry: dependencies.environmentRegistry,
-    });
+  if (dependencies.resourceModule) {
+    dependencies.resourceModule.installHttp(app, dependencies.config);
+  } else {
+    if (dependencies.agentRegistry)
+      registerAgentRoutes(app, {
+        config: dependencies.config,
+        agentRegistry: dependencies.agentRegistry,
+      });
+    if (dependencies.invokableRepository && dependencies.environmentRegistry)
+      registerTeamRoutes(app, {
+        config: dependencies.config,
+        invokableRepository: dependencies.invokableRepository,
+        environmentRegistry: dependencies.environmentRegistry,
+      });
+    if (dependencies.environmentRegistry)
+      registerEnvironmentRoutes(app, {
+        ...dependencies,
+        environmentRegistry: dependencies.environmentRegistry,
+      });
+  }
   if (
     dependencies.teamExecutions &&
     dependencies.teamMessages &&
@@ -208,11 +224,6 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       ...(dependencies.teamDriver
         ? { teamDriver: dependencies.teamDriver }
         : {}),
-    });
-  if (dependencies.environmentRegistry)
-    registerEnvironmentRoutes(app, {
-      ...dependencies,
-      environmentRegistry: dependencies.environmentRegistry,
     });
   if (dependencies.sessions)
     registerSessionRoutes(app, {

@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 
 import { RuntimeReadinessProbe } from './application/health/readiness.js';
-import { ResolveAgentVersion } from './application/agents/resolve-agent-version.js';
 import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
@@ -18,7 +16,6 @@ import { InvokeTask } from './application/tasks/invoke-task.js';
 import { PaseoRuntimeAdapter } from './adapters/paseo/paseo-runtime-adapter.js';
 import { createApp } from './entrypoints/api/app.js';
 import { PostgresAdmissionRepository } from './infrastructure/postgres/postgres-admission-repository.js';
-import { PostgresInvokableRepository } from './infrastructure/postgres/postgres-invokable-repository.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -26,9 +23,7 @@ import {
 import { PostgresRunDispatcher } from './infrastructure/postgres/postgres-run-dispatcher.js';
 import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
-import { PostgresAgentRegistry } from './infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
-import { PostgresEnvironmentRegistry } from './infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
@@ -59,7 +54,6 @@ import { LocalRuntimeExtensionBinder } from './infrastructure/extensions/local-r
 import { PostgresRuntimeSessionRepository } from './infrastructure/postgres/postgres-runtime-session-repository.js';
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
-import { LocalSkillCatalog } from './infrastructure/filesystem/local-skill-catalog.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
 import { TeamToolContextResolver } from './application/teams/team-tool-context.js';
 import { TeamCommandService } from './application/teams/team-command-service.js';
@@ -70,16 +64,11 @@ import {
   revokeForRecoveredTeamRuns,
   revokeForTerminalTeamRun,
 } from './application/teams/runtime-grant-lifecycle.js';
-import { registerSkill } from './application/extensions/skill-registry.js';
 import { ensureServiceAccountWorkspaces } from './infrastructure/postgres/postgres-service-account-workspace-bootstrap.js';
 import { PostgresExecutionFactQuery } from './infrastructure/postgres/postgres-execution-fact-query.js';
 import { InvokeTaskExecutionAdmission } from './application/ports/execution-admission.js';
-import { InvokableWorkDefinitionReadAdapter } from './application/ports/work-definition-read.js';
-import {
-  AGENT_SERVER_MEMORY_API_SKILL_REF,
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-} from './application/agents/built-in-skills.js';
 import { createMemoryModule } from './modules/memory/memory-module.js';
+import { createResourceModule } from './modules/resource/resource-module.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -261,30 +250,21 @@ export async function createService(
     throw new Error('Debug service options require singleRunDebug.');
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
-  await registerSkill({
-    registryRoot: config.skillRegistryRoot,
-    ref: AGENT_SERVER_MEMORY_API_SKILL_REF,
-    name: AGENT_SERVER_MEMORY_API_SKILL_REF,
-    sourceRoot: fileURLToPath(
-      new URL('../skills/agent-server-memory-api', import.meta.url),
-    ),
-    requiredToolRefs: [AGENT_SERVER_MEMORY_READ_TOOL_REF],
-  });
-  const skillCatalog = new LocalSkillCatalog(config.skillRegistryRoot);
   const pool = createPostgresPool();
   await applyDurableKernelMigrations(pool);
   await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
+  const resourceModule = await createResourceModule({
+    database: pool,
+    config,
+  });
 
   const runRepository = new PostgresRunRepository(pool);
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
-  const invokableRepository = new PostgresInvokableRepository(pool);
-  const agentRegistry = new PostgresAgentRegistry(pool);
   const sessions = new PostgresSessionRepository(pool);
   const runtimeSessions = new PostgresRuntimeSessionRepository(pool);
   const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
   const teamMessages = new PostgresTeamMessageRepository(pool);
-  const environmentRegistry = new PostgresEnvironmentRegistry(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
@@ -309,11 +289,6 @@ export async function createService(
     events,
     teamMessages,
     teamWakeReconciler,
-  );
-  const resolveAgentVersion = new ResolveAgentVersion(
-    agentRegistry,
-    invokableRepository,
-    skillCatalog,
   );
   const runtime =
     options.debugRuntime ??
@@ -378,12 +353,12 @@ export async function createService(
   const getRun = new GetRun(runRepository);
   const invokeTask = new InvokeTask(
     admissionRepository,
-    invokableRepository,
-    resolveAgentVersion,
+    resourceModule.definitionReadApi,
+    resourceModule.agentResolutionApi,
   );
   const workModule = createWorkModule({
     database: pool,
-    definitions: new InvokableWorkDefinitionReadAdapter(invokableRepository),
+    definitions: resourceModule.definitionReadApi,
     execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(pool),
   });
@@ -463,23 +438,26 @@ export async function createService(
       },
     },
   );
-  const executeTeamTask = new ExecuteTeamTask(invokableRepository, teamDriver);
+  const executeTeamTask = new ExecuteTeamTask(
+    resourceModule.definitionReadApi,
+    teamDriver,
+  );
   const executeRun = new ExecuteRun(
     completeRun,
     taskRepository,
-    invokableRepository,
+    resourceModule.definitionReadApi,
     executeTeamTask,
     runtime,
     logger,
     undefined,
-    resolveAgentVersion,
+    resourceModule.agentResolutionApi,
     events,
     memoryModule.fileStore,
     memoryModule.createMemoryProposal,
     runtimeExtensionBinder,
     runtimeSessions,
     sessions,
-    environmentRegistry,
+    resourceModule.environmentReadApi,
     config.paseo.runtimeCellRoot,
     collaborativeTeamExecutions,
     runRepository,
@@ -606,19 +584,17 @@ export async function createService(
     invokeTask,
     getTask,
     getTaskTree,
-    agentRegistry,
-    invokableRepository,
     teamExecutions: collaborativeTeamExecutions,
     teamDriver,
     teamMessages,
     tasks: taskRepository,
-    environmentRegistry,
     sessions,
     submitSessionTurn,
     events,
     cancelTask,
     workModule,
     memoryModule,
+    resourceModule,
   });
   if (!options.singleRunDebug) {
     await teamWakeReconciler.reconcileQueuedWakeRoots();

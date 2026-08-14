@@ -29,11 +29,28 @@ const inputs = [
   'scripts/ci/check-work-import-boundary.mjs',
   'scripts/ci/check-work-bootstrap-boundary.mjs',
   'scripts/ci/classify-work-acceptance.mjs',
+  'scripts/ci/work-acceptance-outcome.mjs',
+  'scripts/ci/check-work-acceptance-outcome-matrix.mjs',
+  'scripts/ci/run-work-mcp-acceptance-raw.mjs',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
 ];
 const inputHashes = Object.fromEntries(inputs.map((file) => [file, sha(file)]));
 const arms = [];
 
+arms.push(
+  runArm(
+    'classifier-outcome-matrix',
+    'node',
+    ['scripts/ci/check-work-acceptance-outcome-matrix.mjs'],
+    0,
+    [
+      '"theoretical_points":64',
+      '"mutually_exclusive_and_exhaustive":true',
+      'STRUCTURALLY_UNREACHABLE',
+      '"ok":true',
+    ],
+  ),
+);
 arms.push(
   runArm(
     'classifier-success',
@@ -51,6 +68,46 @@ arms.push(
     [
       'classifier_child_success',
       'work_acceptance_child_result:status=0:signal=none:error=none',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-registered-marker-raw-three-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]');process.exit(3)`,
+    ],
+    1,
+    [
+      'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+      'work_acceptance_child_result:status=3:signal=none:error=none',
+    ],
+  ),
+);
+arms.push(
+  runArm(
+    'classifier-registered-marker-signal-fail',
+    'node',
+    [
+      'scripts/ci/classify-work-acceptance.mjs',
+      '--kind',
+      'http-projection',
+      '--',
+      'node',
+      '-e',
+      `console.error('WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]');process.kill(process.pid, 'SIGTERM')`,
+    ],
+    1,
+    [
+      'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+      'work_acceptance_child_result:status=null:signal=SIGTERM:error=none',
     ],
   ),
 );
@@ -261,15 +318,15 @@ mutate(
   `  void projection; // evidence mutation: omit projection installer`,
   () => {
     arms.push(
-      runClassifiedArm(
+      runArm(
         'projection-installer-missing',
-        'http-projection',
         'pnpm',
         ['modularization:acceptance:work-http'],
         2,
         [
           'runs the real HTTP create, start, and read path',
           'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+          'work_acceptance_missing:kind=http-projection',
         ],
       ),
     );
@@ -319,15 +376,15 @@ mutate(
   `      void input.contributeWorkRuntime; // evidence mutation: omit Work registration`,
   () => {
     arms.push(
-      runClassifiedArm(
+      runArm(
         'work-registration-missing',
-        'mcp-registration',
         'pnpm',
         ['modularization:acceptance:work-mcp'],
         2,
         [
           'creates through real MCP and reads the same Work through HTTP',
           'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+          'work_acceptance_missing:kind=mcp-registration',
         ],
       ),
     );
@@ -693,23 +750,6 @@ function runFocusedTest(name, pattern, expectedExit) {
       pattern,
     ],
     expectedExit,
-  );
-}
-
-function runClassifiedArm(name, kind, executable, argv, expectedExit, markers) {
-  return runArm(
-    name,
-    'node',
-    [
-      'scripts/ci/classify-work-acceptance.mjs',
-      '--kind',
-      kind,
-      '--',
-      executable,
-      ...argv,
-    ],
-    expectedExit,
-    [...markers, `work_acceptance_missing:kind=${kind}`],
   );
 }
 

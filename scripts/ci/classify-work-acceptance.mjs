@@ -2,17 +2,21 @@
 
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { classifyWorkAcceptanceOutcome } from './work-acceptance-outcome.mjs';
 
 const kind = option('--kind');
 const separator = process.argv.indexOf('--');
 if (separator < 0 || !process.argv[separator + 1]) fail('missing_command', 2);
 
 const classifications = {
-  'http-projection': 'work_http_projection_installer_missing',
-  'mcp-registration': 'work_mcp_registration_missing:product_work_create',
+  'http-projection': ['work_http_projection_installer_missing'],
+  'mcp-registration': [
+    'work_mcp_registration_missing:product_work_create',
+    'work_mcp_bootstrap_checker_missing',
+  ],
 };
-const exactMarker = classifications[kind];
-if (!exactMarker) fail(`unknown_classification:${kind}`, 2);
+const exactMarkers = classifications[kind];
+if (!exactMarkers) fail(`unknown_classification:${kind}`, 2);
 
 const executable = process.argv[separator + 1];
 const argv = process.argv.slice(separator + 2);
@@ -31,20 +35,27 @@ console.error(
   `work_acceptance_child_result:status=${rawExit ?? 'null'}:signal=${result.signal ?? 'none'}:error=${result.error?.code ?? 'none'}`,
 );
 const combined = `${stdout}\n${stderr}`;
-const taggedMarker = `WORK_ACCEPTANCE_MISSING[${exactMarker}]`;
-const exactMarkerPresent = combined
-  .split(/\r?\n/)
-  .some((line) =>
-    new RegExp(
-      `(?:^|[^A-Za-z0-9_])${escapeRegExp(taggedMarker)}(?:$|[^A-Za-z0-9_])`,
-    ).test(line),
-  );
-if (rawExit === 0) process.exit(0);
-if (exactMarkerPresent) {
-  console.error(`work_acceptance_missing:kind=${kind}:marker=${exactMarker}`);
-  process.exit(2);
+const matchedMarker = exactMarkers.find((exactMarker) => {
+  const taggedMarker = `WORK_ACCEPTANCE_MISSING[${exactMarker}]`;
+  return combined
+    .split(/\r?\n/)
+    .some((line) =>
+      new RegExp(
+        `(?:^|[^A-Za-z0-9_])${escapeRegExp(taggedMarker)}(?:$|[^A-Za-z0-9_])`,
+      ).test(line),
+    );
+});
+const markerClass = matchedMarker ? 'exact-selected-kind' : 'absent';
+const classifierExit = classifyWorkAcceptanceOutcome({
+  status: rawExit,
+  signal: result.signal,
+  error: result.error?.code ?? null,
+  markerClass,
+});
+if (classifierExit === 2) {
+  console.error(`work_acceptance_missing:kind=${kind}:marker=${matchedMarker}`);
 }
-process.exit(1);
+process.exit(classifierExit);
 
 function option(name) {
   const index = process.argv.indexOf(name);

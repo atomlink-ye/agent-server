@@ -25,7 +25,10 @@ try {
   process.exit(1);
 }
 const expectedArms = [
+  ['classifier-outcome-matrix', 0],
   ['classifier-success', 0],
+  ['classifier-registered-marker-raw-three-fail', 1],
+  ['classifier-registered-marker-signal-fail', 1],
   ['classifier-recognized-missing', 2],
   ['classifier-near-miss-fail', 1],
   ['verifier-input-missing', 2],

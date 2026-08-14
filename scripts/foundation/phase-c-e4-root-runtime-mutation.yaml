@@ -1,3 +1,0 @@
-services:
-  paseo-runtime:
-    user: '0:0'

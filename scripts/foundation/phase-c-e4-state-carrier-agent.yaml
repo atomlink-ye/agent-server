@@ -1,4 +1,0 @@
-services:
-  agent-server:
-    depends_on:
-      paseo-runtime: !reset null

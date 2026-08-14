@@ -1,6 +1,0 @@
-services:
-  paseo-runtime:
-    volumes: !override
-      - .:/workspace:ro
-      - provider-toolchain:/opt/provider-toolchain-volume:ro
-      - paseo-runtime-state:/runtime-state:ro

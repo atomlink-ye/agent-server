@@ -12,8 +12,6 @@ coverage
 .env
 .env.*
 !.env.example
-tasks/
-evidence/
 *.log
 .DS_Store
 .idea

@@ -1,4 +1,0 @@
-services:
-  agent-server:
-    environment:
-      PASEO_PROVIDER: actual-mutation-provider

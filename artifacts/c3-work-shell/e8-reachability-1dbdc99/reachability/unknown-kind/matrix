@@ -1,4 +1,0 @@
-argv=node /root/workspace/.c3-e8-reachability-1dbdc99/c3-e8-classifier.mjs unknown-c3-kind -- node -e <sentinel-write>
-child_started=no (sentinel remained absent)
-raw_child_status=N/A (unknown kind rejected before spawn)
-expected=c3_e8_classifier_invalid:reason=unknown-kind:kind=unknown-c3-kind

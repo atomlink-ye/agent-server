@@ -1,1 +1,0 @@
-{"command":["sh","-lc","cd /root/workspace/.c3-e8-final-0b1f68c/node && find . -type f -maxdepth 2 -print"],"cwd":"workspace/mgr-frontend","exitCode":0,"generatedAt":"2026-08-14T01:30:36.023Z"}

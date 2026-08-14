@@ -284,3 +284,21 @@ three-value verdict vocabulary, is
 `reports/worker-c3-absence-observation-matrix.md`. Existing C4 recorder/schema
 prerequisites still prevent a runtime E10/E11 acceptance claim; those rows are
 `MISSING_EVIDENCE`, not silent absence.
+
+## Zero-execution audit follow-up
+
+`3484079` adds a closed ten-kind C3/C4 zero-execution guard. Its declared
+minimums are source-owned (`e8-browser=2`, `c3-classifier=12`, both E11
+scenarios=2, and the relevant controls/arms at least 1); observed zero is
+always a distinct `c3_c4_zero_execution:kind=...:expected_min_count=...`
+marker with outer process 2. The production CLI zero duals ran all ten kinds
+on C box: each observed count was 0, exact marker was emitted, and exit was 2;
+the guard dual itself was exit 0 with four cases and no skips/todos. Business
+empty-state cardinality remains separate from acceptance execution counts.
+
+The matrix now appends `expected_min_count`, `observed_count_source`,
+`zero_trigger`, `zero_exit`, `canonical_zero_arm`, and final `verdict` to every
+C-owned claim, including the four E8 behavior-arm rows, classifier/runner,
+request ledger, E10/E11, response, DOM, and cleanup probes. Zero runtime C4
+scenario/response/DOM/cleanup evidence remains `MISSING_EVIDENCE`; it is not
+reported as a pass.

@@ -114,3 +114,11 @@ The C-box Node duals ran exit 0 with 10/10 tests, no skips/todos. The fixed E8
 browser command ran in a restored isolated target with exit 0, one file and two
 tests passed. These are harness evidence only; current C4 replay fixture/schema
 gates remain `MISSING_EVIDENCE` and no runtime E10/E11 PASS is claimed.
+
+The subsequent C3/C4 zero-execution guard (`3484079`) declares the expected
+minimum execution counts instead of inferring them from command exit. Its ten
+production CLI zero arms all emitted the exact C-owned zero marker and exited
+2 on C box; the zero dual suite exited 0 with no skips/todos. The shared matrix
+records these counts and keeps business-empty Work data separate from zero
+acceptance execution. Runtime C4 scenario/response/DOM/cleanup rows remain
+`MISSING_EVIDENCE` until their declared nonempty sets are actually exercised.

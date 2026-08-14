@@ -1,0 +1,96 @@
+node_exit=0
+
+node_stdout:
+TAP version 13
+# Subtest: C3/C4 zero-execution guard
+    # Subtest: declares a closed nonempty execution universe
+    ok 1 - declares a closed nonempty execution universe
+      ---
+      duration_ms: 2.383138
+      type: 'test'
+      ...
+    # Subtest: maps every canonical zero arm through the production guard to process 2
+    ok 2 - maps every canonical zero arm through the production guard to process 2
+      ---
+      duration_ms: 2611.689798
+      type: 'test'
+      ...
+    # Subtest: passes only when observed execution reaches the declared minimum
+    ok 3 - passes only when observed execution reaches the declared minimum
+      ---
+      duration_ms: 2141.412758
+      type: 'test'
+      ...
+    # Subtest: rejects unknown kinds and invalid counts as distinct process-2 evidence
+    ok 4 - rejects unknown kinds and invalid counts as distinct process-2 evidence
+      ---
+      duration_ms: 10.148578
+      type: 'test'
+      ...
+    1..4
+ok 1 - C3/C4 zero-execution guard
+  ---
+  duration_ms: 4769.124327
+  type: 'suite'
+  ...
+1..1
+# tests 4
+# suites 1
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5361.132001
+
+node_stderr:
+
+arm=e8-browser
+kind=e8-browser expected_min_count=2 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=e8-browser:expected_min_count=2 outer_exit=2
+stdout=c3_c4_zero_execution:kind=e8-browser:expected_min_count=2
+stderr=exit=2
+
+arm=e8-behavior
+kind=e8-behavior expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=e8-behavior:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=e8-behavior:expected_min_count=1
+stderr=exit=2
+
+arm=c3-classifier
+kind=c3-classifier expected_min_count=12 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c3-classifier:expected_min_count=12 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c3-classifier:expected_min_count=12
+stderr=exit=2
+
+arm=absence-runner
+kind=absence-runner expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=absence-runner:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=absence-runner:expected_min_count=1
+stderr=exit=2
+
+arm=e8-request-ledger
+kind=e8-request-ledger expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=e8-request-ledger:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=e8-request-ledger:expected_min_count=1
+stderr=exit=2
+
+arm=c4-e10
+kind=c4-e10 expected_min_count=2 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-e10:expected_min_count=2 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c4-e10:expected_min_count=2
+stderr=exit=2
+
+arm=c4-e11
+kind=c4-e11 expected_min_count=2 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-e11:expected_min_count=2 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c4-e11:expected_min_count=2
+stderr=exit=2
+
+arm=c4-response
+kind=c4-response expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-response:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c4-response:expected_min_count=1
+stderr=exit=2
+
+arm=c4-dom
+kind=c4-dom expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-dom:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c4-dom:expected_min_count=1
+stderr=exit=2
+
+arm=c4-cleanup
+kind=c4-cleanup expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-cleanup:expected_min_count=1 outer_exit=2
+stdout=c3_c4_zero_execution:kind=c4-cleanup:expected_min_count=1
+stderr=exit=2

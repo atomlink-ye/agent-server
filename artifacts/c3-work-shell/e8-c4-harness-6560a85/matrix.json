@@ -1,11 +1,13 @@
 {
   "candidate_head_before_evidence": "d29b4ddb387478ee401b0e5b637708f54187c357",
+  "zero_guard_commit": "3484079",
   "e8_commits": ["c9eb90f", "e4a61c4", "aae8479"],
-  "c4_commits": ["82edbe9", "6560a85"],
+  "c4_commits": ["82edbe9", "6560a85", "c243e0a"],
   "node_harness": {"command": "node --test scripts/ci/c3-e8-request-ledger.test.mjs scripts/e2e/support/page-observer.test.mjs scripts/e2e/support/owned-process-cleanup.test.mjs", "exit": 0, "tests": 10, "pass": 10, "skip": 0, "todo": 0},
   "browser": {"command": "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers pnpm exec vitest --config vitest.web.config.ts --run apps/web/components/work/work-list.browser.test.tsx", "exit": 0, "test_files": 1, "tests": 2, "pass": 2},
   "remote_candidate": "02328517a0fe887464d0661d772a49ad9d88451b",
   "remote_sync": "blocked_by_preexisting_remote_dirty_state",
   "runtime_c4": "MISSING_EVIDENCE",
+  "zero_execution": {"command": "node --test scripts/ci/c3-c4-zero-execution.test.mjs", "exit": 0, "cases": 10, "observed_count": 0, "outer_exit": 2, "marker_namespace": "c3_c4_zero_execution:"},
   "verdicts": ["COMPLETE_AND_PROVEN_ABSENT", "MISSING_EVIDENCE", "UNSOUND_ABSENCE"]
 }

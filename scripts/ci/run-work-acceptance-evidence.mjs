@@ -393,6 +393,40 @@ mutate(
 );
 
 mutate(
+  'bootstrap-parser-api-missing',
+  'scripts/ci/check-work-bootstrap-boundary.mjs',
+  `    import('typescript/unstable/sync'),`,
+  `    import('typescript/unstable/sync-deliberately-missing'),`,
+  () => {
+    arms.push(
+      runArm(
+        'bootstrap-parser-api-missing-e5',
+        'pnpm',
+        ['modularization:acceptance:work-mcp'],
+        2,
+        ['work_bootstrap_boundary_missing:'],
+      ),
+    );
+    arms.push(
+      runArm(
+        'bootstrap-parser-api-missing-type-control',
+        'pnpm',
+        ['check:types'],
+        0,
+      ),
+    );
+    arms.push(
+      runArm(
+        'bootstrap-parser-api-missing-http-control',
+        'pnpm',
+        ['modularization:acceptance:work-http'],
+        0,
+      ),
+    );
+  },
+);
+
+mutate(
   'bootstrap-template-static-text-control',
   'src/bootstrap.ts',
   `  const runtimeMcpServer = new RuntimeMcpServer(`,

@@ -64,20 +64,25 @@ function jsonResponse(body: unknown): Response {
 function poisonWorkList(workList: typeof populatedWorkList) {
   return {
     ...workList,
-    works: workList.works.map(({ id, title }) =>
-      new Proxy(
-        { id, title },
-        {
-          get(target, property, receiver) {
-            if (property === 'id' || property === 'title')
-              return Reflect.get(target, property, receiver);
-            throw new Error(
-              `work-list-semantic-read:${String(property)}`,
-            );
-          },
-        },
-      ),
-    ),
+    works: workList.works.map((work) => new Proxy(work, {
+      get(target, property, receiver) {
+        if (property === 'id' || property === 'title')
+          return Reflect.get(target, property, receiver);
+        throw new Error(`work-list-semantic-read:${String(property)}`);
+      },
+      has(_target, property) {
+        if (property === 'id' || property === 'title') return true;
+        throw new Error(`work-list-semantic-has:${String(property)}`);
+      },
+      ownKeys() {
+        return ['id', 'title'];
+      },
+      getOwnPropertyDescriptor(target, property) {
+        if (property === 'id' || property === 'title')
+          return Object.getOwnPropertyDescriptor(target, property);
+        throw new Error(`work-list-semantic-descriptor:${String(property)}`);
+      },
+    })),
   };
 }
 

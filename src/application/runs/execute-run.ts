@@ -8,9 +8,9 @@ import { transitionTask, type Task } from '../../domain/tasks/task.js';
 import { isManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import {
-  ResolveAgentVersion,
+  type AgentResolutionApi,
   type ResolvedAgentVersion,
-} from '../agents/resolve-agent-version.js';
+} from '../ports/agent-resolution-api.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
 import {
   AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
@@ -18,10 +18,8 @@ import {
   type RuntimeEvent,
   RuntimeTimedOutError,
 } from '../ports/agent-runtime.js';
-import type {
-  InvokableOwnerScope,
-  InvokableRepository,
-} from '../ports/invokable-repository.js';
+import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
+import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import {
   RunCompletionConflictError,
   type ClaimedRun,
@@ -52,7 +50,7 @@ import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-bin
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
-import type { EnvironmentRegistry } from '../ports/environment-registry.js';
+import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
 import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
 import {
@@ -87,23 +85,21 @@ export class ExecuteRun {
   public constructor(
     private readonly completeRun: CompleteRun,
     private readonly tasks: TaskRepository,
-    private readonly invokables: InvokableRepository,
+    private readonly definitions: DefinitionReadApi,
     private readonly executeTeamTask: ExecuteTeamTask,
     private readonly runtime: AgentRuntimePort,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
-    private readonly resolver: ResolveAgentVersion = new ResolveAgentVersion(
-      { findVersion: async () => null },
-      invokables,
-      { resolve: async () => null },
-    ),
+    private readonly resolver: AgentResolutionApi = {
+      resolvePublished: async () => null,
+    },
     private readonly events?: RunEventRepository,
     private readonly fileStore?: FileStore,
     private readonly createMemoryProposal?: CreateMemoryProposal,
     private readonly runtimeExtensionBinder?: RuntimeExtensionBinder,
     private readonly runtimeSessions?: RuntimeSessionRepository,
     private readonly sessions?: Pick<SessionRepository, 'getSession'>,
-    private readonly environments?: Pick<EnvironmentRegistry, 'findVersion'>,
+    private readonly environments?: EnvironmentReadApi,
     private readonly runtimeCellRoot?: string,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
     private readonly runs?: Pick<RunRepository, 'findByIdForOwner'>,

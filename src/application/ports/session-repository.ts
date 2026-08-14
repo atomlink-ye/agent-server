@@ -1,4 +1,4 @@
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type { SessionTurnOrigin } from '../sessions/session-turn-origin.js';
 export interface Workspace {
   readonly id: string;

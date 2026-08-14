@@ -13,7 +13,10 @@ import type {
 } from '../../application/learning/learning-proposals.js';
 import type { ListMemoryEntries } from '../../application/memory/list-memory-entries.js';
 import type { ListMemoryProposals } from '../../application/memory/list-memory-proposals.js';
-import type { ReviewMemoryProposal } from '../../application/memory/review-memory-proposal.js';
+import type {
+  MemoryReviewApi,
+  MemoryWorkspaceHttpApi,
+} from '../../application/ports/memory-review-api.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
@@ -23,7 +26,7 @@ import type { InvokeTask } from '../../application/tasks/invoke-task.js';
 import { HttpError, type ErrorResponse } from '../../contracts/http.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import type { ApiEnvironment } from './http-types.js';
+import type { ApiEnvironment } from '../../platform/http-types.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTaskRoutes } from './routes/tasks.js';
@@ -34,7 +37,6 @@ import type { SessionRepository } from '../../application/ports/session-reposito
 import { SubmitSessionTurn } from '../../application/sessions/submit-session-turn.js';
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { CancelTask } from '../../application/tasks/cancel-task.js';
-import type { ManagedMemory } from '../../application/memory/managed-memory.js';
 import { registerSessionRoutes } from './routes/sessions.js';
 import { registerEnvironmentRoutes } from './routes/environments.js';
 import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
@@ -51,11 +53,18 @@ import {
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
-import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
-import type { StartWorkRun } from '../../application/work/start-work-run.js';
-import { registerProductWorkCommandRoutes } from './routes/product-work-commands.js';
-import { registerProductWorkRoutes } from './routes/product-work.js';
-import type { ProductProjectionApi } from '../../application/product-projection/product-projection.js';
+import type { WorkModule } from '../../modules/work/work-module.js';
+import type { MemoryModule } from '../../modules/memory/memory-module.js';
+import type { ResourceModule } from '../../modules/resource/resource-module.js';
+import {
+  composePlatform,
+  type PlatformContribution,
+  type PlatformHttpInstaller,
+  type PlatformRuntimeRegistry,
+} from '../../platform/composition-shell.js';
+import { requireServiceAccountAccess } from './authentication.js';
+import { getAuthenticatedAccessContext } from '../../platform/access-context.js';
+import { ServiceAccountAuthenticator } from '../../application/control-plane/service-account-authenticator.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -67,15 +76,16 @@ export interface AppDependencies {
   readonly invokeTask: InvokeTask;
   readonly getTask: GetTask;
   readonly getTaskTree: GetTaskTree;
-  readonly createMemoryProposal: CreateMemoryProposal;
-  readonly listMemoryProposals: ListMemoryProposals;
-  readonly reviewMemoryProposal: ReviewMemoryProposal;
+  readonly createMemoryProposal?: Pick<CreateMemoryProposal, 'execute'>;
+  readonly listMemoryProposals?: Pick<ListMemoryProposals, 'execute'>;
+  readonly reviewMemoryProposal?: MemoryReviewApi['review'];
   readonly listLearningProposals?: ListLearningProposals;
   readonly getLearningProposal?: GetLearningProposal;
   readonly acceptLearningProposal?: AcceptLearningProposal;
   readonly rejectLearningProposal?: RejectLearningProposal;
-  readonly listMemoryEntries: ListMemoryEntries;
-  readonly agentRegistry: AgentRegistry;
+  readonly listMemoryEntries?: Pick<ListMemoryEntries, 'execute'>;
+  /** Legacy fixture seam; production supplies resourceModule instead. */
+  readonly agentRegistry?: AgentRegistry;
   readonly environmentRegistry?: EnvironmentRegistry;
   readonly invokableRepository?: InvokableRepository;
   readonly teamExecutions?: TeamExecutionRepository;
@@ -86,15 +96,13 @@ export interface AppDependencies {
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
-  readonly managedMemory?: ManagedMemory;
+  readonly managedMemory?: MemoryWorkspaceHttpApi['managedMemory'];
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
   readonly version?: string;
-  readonly workIdentity?: Pick<
-    WorkIdentityApi,
-    'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
-  >;
-  readonly startWorkRun?: Pick<StartWorkRun, 'execute'>;
-  readonly productProjection?: ProductProjectionApi;
+  readonly workModule?: Pick<WorkModule, 'installHttp'>;
+  readonly memoryModule?: Pick<MemoryModule, 'installHttp'>;
+  readonly resourceModule?: Pick<ResourceModule, 'installHttp'>;
+  readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
@@ -124,54 +132,82 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     readiness: dependencies.readiness,
     version,
   });
+  const platformAuthenticator = new ServiceAccountAuthenticator(
+    dependencies.config.serviceAccounts ?? [],
+  );
+  dependencies.installPlatformHttp?.(app, {
+    logger: dependencies.logger,
+    authenticate: requireServiceAccountAccess(platformAuthenticator),
+    accessContext: getAuthenticatedAccessContext,
+    safeError: errorResponse,
+    notFound: (requestId) =>
+      errorResponse(
+        'route_not_found',
+        'The requested route does not exist.',
+        requestId,
+      ),
+  });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  if (
-    dependencies.workIdentity &&
-    dependencies.startWorkRun &&
-    dependencies.productProjection
-  )
-    registerProductWorkCommandRoutes(app, {
-      config: dependencies.config,
-      workIdentity: dependencies.workIdentity,
-      startWorkRun: dependencies.startWorkRun,
-      workListProjection: dependencies.productProjection.getWorkListItem,
-      ...(dependencies.productProjection
-        ? { workExists: dependencies.productProjection.getWork }
-        : {}),
-    });
-  if (dependencies.productProjection)
-    registerProductWorkRoutes(app, {
-      config: dependencies.config,
-      productProjection: dependencies.productProjection,
-    });
-  registerWorkspaceMemoryRoutes(app, dependencies);
-  if (dependencies.memoryApi) {
-    registerMemoryApiRoutes(app, {
-      config: dependencies.config,
-      ...dependencies.memoryApi,
-    });
+  dependencies.workModule?.installHttp(app, dependencies.config);
+  if (dependencies.memoryModule) {
+    dependencies.memoryModule.installHttp(app, dependencies.config);
+  } else {
+    if (
+      dependencies.createMemoryProposal &&
+      dependencies.listMemoryProposals &&
+      dependencies.reviewMemoryProposal &&
+      dependencies.listMemoryEntries
+    ) {
+      registerWorkspaceMemoryRoutes(app, {
+        ...dependencies,
+        createMemoryProposal: dependencies.createMemoryProposal,
+        listMemoryProposals: dependencies.listMemoryProposals,
+        reviewMemoryProposal: dependencies.reviewMemoryProposal,
+        listMemoryEntries: dependencies.listMemoryEntries,
+      });
+    }
+    if (dependencies.memoryApi) {
+      registerMemoryApiRoutes(app, {
+        config: dependencies.config,
+        ...dependencies.memoryApi,
+      });
+    }
+    if (
+      dependencies.listLearningProposals &&
+      dependencies.getLearningProposal &&
+      dependencies.acceptLearningProposal &&
+      dependencies.rejectLearningProposal
+    ) {
+      registerLearningProposalRoutes(app, {
+        config: dependencies.config,
+        listLearningProposals: dependencies.listLearningProposals,
+        getLearningProposal: dependencies.getLearningProposal,
+        acceptLearningProposal: dependencies.acceptLearningProposal,
+        rejectLearningProposal: dependencies.rejectLearningProposal,
+      });
+    }
   }
-  if (
-    dependencies.listLearningProposals &&
-    dependencies.getLearningProposal &&
-    dependencies.acceptLearningProposal &&
-    dependencies.rejectLearningProposal
-  )
-    registerLearningProposalRoutes(app, {
-      config: dependencies.config,
-      listLearningProposals: dependencies.listLearningProposals,
-      getLearningProposal: dependencies.getLearningProposal,
-      acceptLearningProposal: dependencies.acceptLearningProposal,
-      rejectLearningProposal: dependencies.rejectLearningProposal,
-    });
-  registerAgentRoutes(app, dependencies);
-  if (dependencies.invokableRepository && dependencies.environmentRegistry)
-    registerTeamRoutes(app, {
-      config: dependencies.config,
-      invokableRepository: dependencies.invokableRepository,
-      environmentRegistry: dependencies.environmentRegistry,
-    });
+  if (dependencies.resourceModule) {
+    dependencies.resourceModule.installHttp(app, dependencies.config);
+  } else {
+    if (dependencies.agentRegistry)
+      registerAgentRoutes(app, {
+        config: dependencies.config,
+        agentRegistry: dependencies.agentRegistry,
+      });
+    if (dependencies.invokableRepository && dependencies.environmentRegistry)
+      registerTeamRoutes(app, {
+        config: dependencies.config,
+        invokableRepository: dependencies.invokableRepository,
+        environmentRegistry: dependencies.environmentRegistry,
+      });
+    if (dependencies.environmentRegistry)
+      registerEnvironmentRoutes(app, {
+        ...dependencies,
+        environmentRegistry: dependencies.environmentRegistry,
+      });
+  }
   if (
     dependencies.teamExecutions &&
     dependencies.teamMessages &&
@@ -188,11 +224,6 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       ...(dependencies.teamDriver
         ? { teamDriver: dependencies.teamDriver }
         : {}),
-    });
-  if (dependencies.environmentRegistry)
-    registerEnvironmentRoutes(app, {
-      ...dependencies,
-      environmentRegistry: dependencies.environmentRegistry,
     });
   if (dependencies.sessions)
     registerSessionRoutes(app, {
@@ -238,6 +269,33 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
 
   return app;
+}
+
+export function composePlatformApp(
+  dependencies: Omit<AppDependencies, 'installPlatformHttp'>,
+  contributions: readonly PlatformContribution[],
+  runtimeRegistry: PlatformRuntimeRegistry,
+  starts: readonly (() =>
+    | void
+    | (() => Promise<void> | void)
+    | Promise<void | (() => Promise<void> | void)>)[] = [],
+) {
+  let shell: ReturnType<typeof composePlatform> | undefined;
+  const app = createApp({
+    ...dependencies,
+    installPlatformHttp(hono, concerns) {
+      shell = composePlatform(contributions, concerns, starts);
+      shell.installHttp(hono);
+    },
+  });
+  if (!shell) throw new Error('platform_shell_not_installed');
+  const platform = shell;
+  platform.contributeRuntime(runtimeRegistry);
+  return {
+    app,
+    start: () => platform.start(),
+    stop: () => platform.stop(),
+  };
 }
 
 function errorResponse(

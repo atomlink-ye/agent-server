@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import { createRun, type Run } from '../../domain/runs/run.js';
 import {
   createDraftAgentVersion,

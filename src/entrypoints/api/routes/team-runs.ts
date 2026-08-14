@@ -21,7 +21,7 @@ import {
   getAuthenticatedAccessContext,
   requireServiceAccountAccess,
 } from '../authentication.js';
-import type { ApiEnvironment } from '../http-types.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
 import type { AppConfig } from '../../../shared/config.js';
 import { z } from 'zod';
 import { readBoundedJson } from '../read-bounded-json.js';
@@ -58,7 +58,8 @@ export function toAgenticTeamProjectResponse(
     ...(projection.decisionCapture.status === 'reported'
       ? {
           decision_capture_status: 'reported' as const,
-          decisions: [...projection.decisionCapture.decisions],
+          decisions:
+            projection.decisionCapture.decisions.map(completionDecision),
         }
       : { decision_capture_status: 'not_captured' as const }),
     project: {

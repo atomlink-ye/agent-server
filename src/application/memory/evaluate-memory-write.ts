@@ -1,4 +1,4 @@
-import type { ServiceAccountAccessContext } from '../control-plane/access-context.js';
+import type { ServiceAccountAccessContext } from '../../platform/access-context.js';
 import type { CreateMemoryProposal } from './create-memory-proposal.js';
 import {
   evaluateMemoryPolicy,

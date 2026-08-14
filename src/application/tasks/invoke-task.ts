@@ -1,17 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
+import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type {
   AdmissionOwnerScope,
   AdmissionRepository,
   AdmissionTransaction,
 } from '../ports/admission-repository.js';
 import { AdmissionAlreadyExistsError } from '../ports/admission-repository.js';
-import type {
-  InvokableOwnerScope,
-  InvokableRepository,
-} from '../ports/invokable-repository.js';
+import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
+import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type {
   TaskOwnerScope,
   TaskRecord,
@@ -45,10 +44,10 @@ export interface InvokeTaskResult {
 export class InvokeTask {
   public constructor(
     private readonly admissions: AdmissionRepository,
-    private readonly invokables: InvokableRepository,
-    resolverOrNow: ResolveAgentVersion | (() => Date) = new ResolveAgentVersion(
+    private readonly definitions: DefinitionReadApi,
+    resolverOrNow: AgentResolutionApi | (() => Date) = new ResolveAgentVersion(
       { findVersion: async () => null },
-      invokables,
+      definitions,
       { resolve: async () => null },
     ),
     now: () => Date = () => new Date(),
@@ -57,14 +56,14 @@ export class InvokeTask {
       typeof resolverOrNow === 'function'
         ? new ResolveAgentVersion(
             { findVersion: async () => null },
-            invokables,
+            definitions,
             { resolve: async () => null },
           )
         : resolverOrNow;
     this.now = typeof resolverOrNow === 'function' ? resolverOrNow : now;
   }
 
-  private readonly resolver: ResolveAgentVersion;
+  private readonly resolver: AgentResolutionApi;
   private readonly now: () => Date;
 
   public async execute(request: InvokeTaskRequest): Promise<InvokeTaskResult> {
@@ -223,7 +222,7 @@ export class InvokeTask {
             request.invokable.versionId,
             toInvokableOwnerScope(request.accessContext),
           )
-        : await this.invokables.findPublishedTeamVersionById(
+        : await this.definitions.findPublishedTeamVersionById(
             request.invokable.versionId,
             toInvokableOwnerScope(request.accessContext),
           );

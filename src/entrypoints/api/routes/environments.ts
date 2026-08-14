@@ -20,7 +20,7 @@ import {
 } from '../authentication.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import type { AppConfig } from '../../../shared/config.js';
-import type { ApiEnvironment } from '../http-types.js';
+import type { ApiEnvironment } from '../../../platform/http-types.js';
 import { readBoundedJson } from '../read-bounded-json.js';
 export function registerEnvironmentRoutes(
   app: Hono<ApiEnvironment>,

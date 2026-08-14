@@ -1,8 +1,5 @@
 import type { AgentRegistry } from '../ports/agent-registry.js';
-import type {
-  InvokableOwnerScope,
-  InvokableRepository,
-} from '../ports/invokable-repository.js';
+import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import {
   isModelPolicyRef,
@@ -16,23 +13,22 @@ import type {
   ResolvedSkillPackage,
   SkillCatalogPort,
 } from '../extensions/skill-catalog.js';
+import type {
+  AgentVersionResolutionScope,
+  AgentResolutionApi,
+  ResolvedAgentVersion,
+} from '../ports/agent-resolution-api.js';
 
-export type AgentVersionResolutionScope = InvokableOwnerScope;
-export type ResolvedAgentVersion = Readonly<{
-  source: 'managed' | 'legacy';
-  id: string;
-  instructions: string;
-  modelPolicyRef: ModelPolicyRef;
-  proposalLimit?: number;
-  skills: readonly ResolvedSkillPackage[];
-  toolRefs: readonly string[];
-}>;
+export type {
+  AgentVersionResolutionScope,
+  ResolvedAgentVersion,
+} from '../ports/agent-resolution-api.js';
 
-export class ResolveAgentVersion {
+export class ResolveAgentVersion implements AgentResolutionApi {
   public constructor(
     private readonly managed: Pick<AgentRegistry, 'findVersion'>,
     private readonly legacy: Pick<
-      InvokableRepository,
+      DefinitionReadApi,
       'findPublishedAgentVersionById'
     >,
     private readonly skillCatalog: SkillCatalogPort,

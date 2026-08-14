@@ -3,3 +3,10 @@ node_modules/
 .pnpm-store/
 pnpm-lock.yaml
 docs/generated/
+evidence/product-contract/*.json
+src/contracts/product-accepted-subset.v1.json
+src/contracts/product-contract-policy.ts
+scripts/ci/ownership-ledger-harness.mjs
+scripts/ci/ownership-ledger.json
+scripts/ci/transaction-ast-helper.mjs
+scripts/ci/verify-ownership-ledger.mjs

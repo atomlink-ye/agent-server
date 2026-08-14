@@ -61,7 +61,6 @@ root_volume="$NODE_MODULES_VOLUME"
 web_volume="$WEB_NODE_MODULES_VOLUME"
 provider_volume=''
 if ((runtime_compose)); then
-  provider_stamp="${PROVIDER_TOOLCHAIN_VOLUME##*-}"
   provider_volume="$PROVIDER_TOOLCHAIN_VOLUME"
 fi
 

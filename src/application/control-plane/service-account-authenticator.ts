@@ -1,7 +1,7 @@
 import {
   SERVICE_ACCOUNT_PRINCIPAL_TYPE,
   type ServiceAccountAccessContext,
-} from './access-context.js';
+} from '../../platform/access-context.js';
 
 export interface ServiceAccountRecord {
   readonly serviceAccountId: string;

@@ -12,7 +12,10 @@ export interface AgenticTeamProject {
   readonly stuck: boolean;
   readonly decisionCapture:
     | { readonly status: 'not_captured' }
-    | { readonly status: 'reported'; readonly decisions: readonly never[] };
+    | {
+        readonly status: 'reported';
+        readonly decisions: readonly TeamCompletionDecision[];
+      };
   readonly project: {
     readonly rootTaskId: string;
     readonly teamRunId: string;
@@ -217,16 +220,21 @@ export class ProjectAgenticTeam {
       noActiveAttempts &&
       allMembersIdle &&
       !allWorkAccepted;
+    const finalText =
+      typeof team.finalText === 'string' ? safeText(team.finalText) : null;
     return {
       stuck,
-      decisionCapture: { status: 'not_captured' },
+      decisionCapture:
+        completionDecisions.length > 0
+          ? { status: 'reported', decisions: completionDecisions }
+          : { status: 'not_captured' },
       project: {
         rootTaskId: team.rootTaskId,
         teamRunId: team.id,
         teamVersionId: team.teamVersionId,
         status: approvalPending ? 'waiting' : team.status,
         phase: team.phase,
-        finalText: safeText(team.finalText),
+        finalText,
         revision: team.revision,
         stopReason: approvalPending
           ? 'approval_required'

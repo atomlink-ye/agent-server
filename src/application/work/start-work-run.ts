@@ -1,4 +1,4 @@
-import type { AccessContext } from '../control-plane/access-context.js';
+import type { AccessContext } from '../../platform/access-context.js';
 import type { ExecutionAdmission } from '../ports/execution-admission.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
 import {

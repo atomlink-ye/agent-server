@@ -1,39 +1,20 @@
 import { createServer, type Server } from 'node:http';
 import { createDirectMemoryMcpHandler } from '../../entrypoints/mcp/direct-memory-mcp.js';
 import { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
-import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
-import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
-import type { TeamCommandService } from '../../application/teams/team-command-service.js';
-import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
-import type { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
-import type { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
-import type { Logger } from '../../shared/observability/logger.js';
-import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
-import type { StartWorkRun } from '../../application/work/start-work-run.js';
+import type { RuntimeToolRegistry } from '../../platform/runtime-tool-registry.js';
 
 export class RuntimeMcpServer {
   readonly grants: RuntimeToolGrantService;
-  readonly #repository: MemoryApiRepository;
   #server: Server | null = null;
   #url: string | null = null;
   #starting: Promise<string> | null = null;
 
   public constructor(
-    repository: MemoryApiRepository,
+    private readonly registry: RuntimeToolRegistry,
     grants = new RuntimeToolGrantService(),
-    private readonly teamTools?: {
-      contextResolver: TeamToolContextResolver;
-      commands: TeamCommandService;
-    },
-    private readonly createLearningProposal?: CreateLearningProposal,
-    private readonly market?: SyntheticMarketAdapter,
-    private readonly logger?: Logger,
-    private readonly workIdentity?: Pick<WorkIdentityApi, 'createWork'>,
-    private readonly startWorkRun?: Pick<StartWorkRun, 'execute'>,
     private readonly listenHost = '127.0.0.1',
     private readonly advertisedHost = '127.0.0.1',
   ) {
-    this.#repository = repository;
     this.grants = grants;
   }
 
@@ -43,16 +24,8 @@ export class RuntimeMcpServer {
     this.#starting = new Promise<string>((resolve, reject) => {
       const server = createServer(
         createDirectMemoryMcpHandler({
-          repository: this.#repository,
           grants: this.grants,
-          ...(this.teamTools ? { teamTools: this.teamTools } : {}),
-          ...(this.createLearningProposal
-            ? { createLearningProposal: this.createLearningProposal }
-            : {}),
-          ...(this.market ? { market: this.market } : {}),
-          ...(this.logger ? { logger: this.logger } : {}),
-          ...(this.workIdentity ? { workIdentity: this.workIdentity } : {}),
-          ...(this.startWorkRun ? { startWorkRun: this.startWorkRun } : {}),
+          registry: this.registry,
         }),
       );
       this.#server = server;

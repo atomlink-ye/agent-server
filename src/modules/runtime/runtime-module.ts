@@ -41,7 +41,10 @@ export function createRuntimeModule(options: {
       values?: readonly unknown[],
     ): Promise<{ rows?: readonly any[] }>;
   };
-  readonly config: Pick<AppConfig, 'paseo' | 'runtime' | 'skillRegistryRoot'>;
+  readonly config: Pick<
+    AppConfig,
+    'paseo' | 'runtime' | 'runtimeMcp' | 'skillRegistryRoot'
+  >;
   readonly logger: Logger;
   readonly toolContributors: readonly RuntimeToolContributor[];
   readonly debugRuntime?: AgentRuntimePort;
@@ -68,6 +71,9 @@ export function createRuntimeModule(options: {
         ));
   const mcpHost = new RuntimeMcpServer(
     new RuntimeToolRegistry(options.toolContributors),
+    undefined,
+    options.config.runtimeMcp?.listenHost,
+    options.config.runtimeMcp?.advertisedHost,
   );
   const extensions = new LocalRuntimeExtensionBinder(
     options.config.paseo.agentCwd,

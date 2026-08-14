@@ -1,0 +1,3 @@
+services:
+  agent-server:
+    ports: !reset []

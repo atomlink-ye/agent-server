@@ -1106,11 +1106,12 @@ export class ExecuteRun {
       this.runtimeSessions
         ? async (binding: {
             readonly providerAgentId: string;
-            readonly paseoWorkspaceId: string;
+            readonly runtimeWorkspaceId: string;
           }) => {
             await this.runtimeSessions!.bindProvider({
               id: sessionRuntime.id,
-              ...binding,
+              providerAgentId: binding.providerAgentId,
+              paseoWorkspaceId: binding.runtimeWorkspaceId,
             });
             providerBindingPersisted = true;
           }
@@ -1121,7 +1122,7 @@ export class ExecuteRun {
           ? {
               operation: 'continue',
               ...(sessionRuntime?.paseoWorkspaceId
-                ? { paseoWorkspaceId: sessionRuntime.paseoWorkspaceId }
+                ? { runtimeWorkspaceId: sessionRuntime.paseoWorkspaceId }
                 : {}),
               ...(sessionRuntime
                 ? { runtimeSessionId: sessionRuntime.id }
@@ -1148,7 +1149,7 @@ export class ExecuteRun {
                 ? { runtimeSessionId: sessionRuntime.id }
                 : {}),
               ...(teamPaseoWorkspaceId
-                ? { paseoWorkspaceId: teamPaseoWorkspaceId }
+                ? { runtimeWorkspaceId: teamPaseoWorkspaceId }
                 : {}),
               ...(cellCwd ? { cellCwd } : {}),
               ...(collaborativeTeam
@@ -1241,14 +1242,18 @@ export class ExecuteRun {
     if (
       sessionRuntime &&
       !sessionRuntime.providerAgentId &&
-      execution.paseoWorkspaceId &&
+      execution.runtimeWorkspaceId &&
       !providerBindingPersisted
     ) {
       const binding = {
-        paseoWorkspaceId: execution.paseoWorkspaceId,
+        paseoWorkspaceId: execution.runtimeWorkspaceId,
         providerAgentId: execution.providerAgentId,
       };
-      if (bindTeamProvider) await bindTeamProvider(binding);
+      if (bindTeamProvider)
+        await bindTeamProvider({
+          providerAgentId: binding.providerAgentId,
+          runtimeWorkspaceId: binding.paseoWorkspaceId,
+        });
       else
         await this.runtimeSessions!.bindProvider({
           id: sessionRuntime.id,

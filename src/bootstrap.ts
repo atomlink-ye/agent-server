@@ -246,6 +246,11 @@ export async function createService(
   const workerId = `agent-server:${process.pid}:${randomUUID()}`;
   const leaseDurationMs = turnLeaseDurationMs(config.paseo.executionTimeoutMs);
   const pool = createPostgresPool();
+  pool.on('error', (error) => {
+    logger.log('error', 'postgres.pool.error', {
+      error_name: error instanceof Error ? error.name : 'UnknownError',
+    });
+  });
   await applyDurableKernelMigrations(pool);
   await ensureServiceAccountWorkspaces(pool, config.serviceAccounts ?? []);
   const resourceModule = await createResourceModule({

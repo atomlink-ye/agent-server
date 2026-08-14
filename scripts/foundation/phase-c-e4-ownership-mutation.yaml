@@ -1,0 +1,7 @@
+services:
+  agent-server:
+    ports: !reset []
+    environment:
+      PASEO_PROVIDER: mutation-restored-owner
+    volumes:
+      - provider-toolchain:/opt/provider-toolchain-volume:ro

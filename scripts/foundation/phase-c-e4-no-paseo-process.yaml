@@ -1,0 +1,38 @@
+services:
+  paseo-runtime:
+    # Keep the runtime container alive with an explicit non-Paseo carrier.
+    # The no-port overlay is supplied separately by the harness.
+    command:
+      - node
+      - -e
+      - >-
+        process.title='phase-c-no-paseo-carrier';
+        setInterval(()=>{},60000)
+  agent-server:
+    # Explicitly neutralize the known Compose environment target so this
+    # mutation has one red proposition: the missing Paseo daemon process.
+    environment:
+      OPENCODE_GO_API_KEY: !reset null
+      PASEO_PROVIDER: !reset null
+      PASEO_MODEL: !reset null
+      PASEO_CONNECT_TIMEOUT_MS: !reset null
+      PASEO_EXECUTION_TIMEOUT_MS: !reset null
+      PASEO_SESSION_RPC_TIMEOUT_MS: !reset null
+      PASEO_DAEMON_STARTUP_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_SERVER_STARTUP_TIMEOUT_MS: !reset null
+      PASEO_PROVIDER_REFRESH_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_APP_AGENTS_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_PROVIDER_LIST_TIMEOUT_MS: !reset null
+      PASEO_OPENCODE_SESSION_CREATE_TIMEOUT_MS: !reset null
+      PASEO_PORT: !reset null
+      PASEO_LISTEN_HOST: !reset null
+      PASEO_CORS_ORIGINS: !reset null
+      PASEO_HOSTNAMES: !reset null
+      PASEO_HOME: !reset null
+      XDG_CONFIG_HOME: !reset null
+      XDG_DATA_HOME: !reset null
+      XDG_CACHE_HOME: !reset null
+      PASEO_RELAY_ENABLED: !reset null
+      PASEO_DICTATION_ENABLED: !reset null
+      PASEO_VOICE_MODE_ENABLED: !reset null
+      PASEO_DEV_WEB_UI: !reset null

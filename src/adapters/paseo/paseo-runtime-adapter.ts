@@ -14,7 +14,10 @@ import {
   RuntimeTimedOutError,
 } from '../../application/ports/agent-runtime.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
+import {
+  isManagedEnvironmentProvider,
+  type ManagedEnvironmentProvider,
+} from '../../domain/environments/managed-environment-package.js';
 import { PaseoConnectionError } from './errors.js';
 import {
   selectOpenCodeModel,
@@ -55,6 +58,8 @@ const MEMORY_CATEGORIES = new Set([
   'confirmed_workflow_procedure',
 ]);
 const MEMORY_CONTENT_MAX_CHARS = 4096;
+const STARTUP_CONNECT_ATTEMPTS = 3;
+const STARTUP_CONNECT_BACKOFF_MS = [500, 1_000] as const;
 
 export class PaseoRuntimeAdapter implements AgentRuntimePort {
   readonly #client: PaseoClientPort;
@@ -115,13 +120,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
   }
 
   async #reconnectOnce(generation: number): Promise<void> {
-    try {
-      await this.#client.connect();
-    } catch (error) {
-      throw new PaseoConnectionError(
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+    await this.#connectWithStartupRetry();
 
     if (await this.#discardStaleConnection(generation)) {
       return;
@@ -137,13 +136,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
 
   async #initializeOnce(generation: number): Promise<void> {
     await mkdir(this.#options.cwd, { recursive: true });
-    try {
-      await this.#client.connect();
-    } catch (error) {
-      throw new PaseoConnectionError(
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+    await this.#connectWithStartupRetry();
 
     if (await this.#discardStaleConnection(generation)) {
       return;
@@ -171,6 +164,26 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       provider: this.#options.provider,
       model: model.id,
     });
+  }
+
+  async #connectWithStartupRetry(): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < STARTUP_CONNECT_ATTEMPTS; attempt += 1) {
+      try {
+        await this.#client.connect();
+        return;
+      } catch (error) {
+        lastError = error;
+        const delayMs = STARTUP_CONNECT_BACKOFF_MS[attempt];
+        if (delayMs !== undefined)
+          await new Promise<void>((resolveDelay) => {
+            setTimeout(resolveDelay, delayMs);
+          });
+      }
+    }
+    throw new PaseoConnectionError(
+      lastError instanceof Error ? lastError.message : String(lastError),
+    );
   }
 
   async #discardStaleConnection(generation: number): Promise<boolean> {
@@ -201,10 +214,15 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       throw new RuntimeExecutionError(
         'Paseo continuation provenance is unavailable.',
       );
+    const requestedProvider =
+      input.operation === 'create' ? input.provider : undefined;
+    if (
+      requestedProvider !== undefined &&
+      !isManagedEnvironmentProvider(requestedProvider)
+    )
+      throw new RuntimeExecutionError('Runtime provider is unsupported.');
     const createProvider: ManagedEnvironmentProvider =
-      input.operation === 'create' && input.provider !== undefined
-        ? input.provider
-        : this.#options.provider;
+      requestedProvider ?? this.#options.provider;
     const effectiveProvider =
       input.operation === 'continue'
         ? continuationBinding!.provider
@@ -249,9 +267,9 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
     const managedCellExecution =
       Boolean(runtimeSessionId) ||
       Boolean(input.cellCwd) ||
-      (input.operation === 'continue' && Boolean(input.paseoWorkspaceId));
+      (input.operation === 'continue' && Boolean(input.runtimeWorkspaceId));
     let workspaceId =
-      input.paseoWorkspaceId ??
+      input.runtimeWorkspaceId ??
       (runtimeSessionId
         ? this.#sessionWorkspaces.get(runtimeSessionId)
         : undefined);
@@ -1377,7 +1395,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
       if (input.operation === 'create' && input.onProviderBinding)
         await input.onProviderBinding({
           providerAgentId: agent.id,
-          paseoWorkspaceId: workspaceId,
+          runtimeWorkspaceId: workspaceId,
         });
 
       if (this.#client.fetchAgentTimeline) {
@@ -1580,7 +1598,7 @@ export class PaseoRuntimeAdapter implements AgentRuntimePort {
         model: agent.model,
         text: finished.lastMessage,
         providerAgentId: agent.id,
-        paseoWorkspaceId: workspaceId,
+        runtimeWorkspaceId: workspaceId,
         ...(finished.usage ? { usage: finished.usage } : {}),
         ...(memory.memoryCandidates
           ? { memoryCandidates: memory.memoryCandidates }

@@ -12,6 +12,8 @@ export class RuntimeMcpServer {
   public constructor(
     private readonly registry: RuntimeToolRegistry,
     grants = new RuntimeToolGrantService(),
+    private readonly listenHost = '127.0.0.1',
+    private readonly advertisedHost = '127.0.0.1',
   ) {
     this.grants = grants;
   }
@@ -28,13 +30,13 @@ export class RuntimeMcpServer {
       );
       this.#server = server;
       server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(0, this.listenHost, () => {
         const address = server.address();
         if (!address || typeof address === 'string') {
           reject(new Error('Runtime MCP listener failed.'));
           return;
         }
-        this.#url = `http://127.0.0.1:${address.port}/mcp/agent-runtime`;
+        this.#url = `http://${this.advertisedHost}:${address.port}/mcp/agent-runtime`;
         resolve(this.#url);
       });
     }).catch(async (error) => {

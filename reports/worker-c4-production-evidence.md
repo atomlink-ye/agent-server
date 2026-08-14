@@ -11,6 +11,7 @@ inspect two source AST shapes:
 |---|---|---|---:|
 | shape1 | `PostgresWorkProjectionFactsQuery.getByRootTask` has the typed `AttemptRow` query selecting `(a.feedback IS NOT NULL) AS feedback_present` without durable `a.feedback` text, with `AttemptRow.feedback_present: boolean` and presence mapping | `KNOWN_DEFECT_SHAPE_PRESENT` | 1 |
 | shape2 | `mapWorkProjectionFacts` maps `feedback_summary: null` and `feedback_capture_status` from `attempt.feedbackCapture === 'present' ? 'redacted' : 'not_present'` | `KNOWN_DEFECT_SHAPE_PRESENT` | 1 |
+| static oracle | bound class/method/data-flow checks, successor/unknown duals, decoy/dead-code duals, exact AST target hashes, and same-tree mutation/control/restore receipts | `PASS` | 0 |
 
 The checker command is:
 
@@ -36,6 +37,10 @@ mutations returned `0`; parser-unavailable returned `2`; and decoy/dead-code
 AST mutations left the target at exit `1`. Each mutation records exact target
 count `1` where applicable plus before/after source and target hashes, and the
 runner checks exit, status, both shape states, and the live-scheduling flag.
+Every arm has a same-temporary-tree receipt with mutation application,
+target start/observed count/completion, non-target control start/observed
+count/completion, and restore start/hash confirmation; zero-observation arms
+would be marked `skip0` and fail the oracle.
 Its artifact and status are independent of the E11/full/partial and live arms;
 static green schedules live confirmation only and does not claim it. The
 previous six-case committed self-test artifact is retained and is not rewritten

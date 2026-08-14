@@ -256,6 +256,29 @@ function interfaceProperty(
   );
 }
 
+function interfaceDurableFeedbackProperty(
+  ts: TsApi,
+  declaration: import('typescript').InterfaceDeclaration,
+): boolean {
+  const property = interfaceProperty(ts, declaration, 'feedback');
+  if (!property?.type) return false;
+  const type = property.type;
+  if (ts.isUnionTypeNode(type)) {
+    return (
+      type.types.some(
+        (member) => member.kind === ts.SyntaxKind.StringKeyword,
+      ) &&
+      type.types.some(
+        (member) =>
+          member.kind === ts.SyntaxKind.NullKeyword ||
+          (ts.isLiteralTypeNode(member) &&
+            member.literal.kind === ts.SyntaxKind.NullKeyword),
+      )
+    );
+  }
+  return type.kind === ts.SyntaxKind.StringKeyword;
+}
+
 function queryCallInMethod(
   ts: TsApi,
   method: import('typescript').MethodDeclaration,
@@ -512,15 +535,28 @@ function inspectShape1(
     'feedback_present',
   );
   const durableField = interfaceProperty(ts, interfaces[0], 'feedback');
+  const durableFieldShape = interfaceDurableFeedbackProperty(ts, interfaces[0]);
   const mapping = mappingHasPresenceStructure(ts, methods[0], calls[0]);
-  if (sqlHasKnownProjection(ts, calls[0]) && presenceField && mapping.presence)
+  const knownPresence = sqlHasKnownProjection(ts, calls[0]);
+  const durableProjection = sqlHasDurableProjection(ts, calls[0]);
+  if (
+    knownPresence &&
+    presenceField &&
+    mapping.presence &&
+    !durableField &&
+    !mapping.durable
+  )
     return {
       state: 'PRESENT',
       reason: 'presence_only_query_and_presence_mapping',
     };
   if (
-    sqlHasDurableProjection(ts, calls[0]) &&
-    !sqlHasKnownProjection(ts, calls[0])
+    durableProjection &&
+    !knownPresence &&
+    durableFieldShape &&
+    mapping.durable &&
+    !presenceField &&
+    !mapping.presence
   )
     return {
       state: 'ABSENT',
@@ -529,11 +565,11 @@ function inspectShape1(
   return {
     state: 'UNKNOWN',
     reason: `target_shape_not_explicitly_classified:${[
-      !sqlHasKnownProjection(ts, calls[0]) ? 'query_projection' : '',
+      !knownPresence ? 'query_projection' : '',
       !presenceField ? 'AttemptRow.feedback_present' : '',
       !mapping.presence ? 'bound_presence_mapping' : '',
-      !sqlHasDurableProjection(ts, calls[0]) ? 'durable_query_projection' : '',
-      !durableField ? 'AttemptRow.feedback' : '',
+      !durableProjection ? 'durable_query_projection' : '',
+      !durableFieldShape ? 'AttemptRow.feedback:string_nullable' : '',
       !mapping.durable ? 'bound_durable_mapping' : '',
     ]
       .filter(Boolean)
@@ -703,7 +739,7 @@ function inspectShape2(
       isString(ts, status.initializer.whenTrue, 'redacted') &&
       isString(ts, status.initializer.whenFalse, 'not_present');
   }
-  if (summaryPresent && statusPresent)
+  if (summaryPresent && statusPresent && !summaryDurable)
     return {
       state: 'PRESENT',
       reason: 'null_summary_and_presence_to_status_mapping',

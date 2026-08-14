@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import {
   FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR,
@@ -53,6 +54,20 @@ type Mutation = {
   readonly after_target_sha256: string | null;
 };
 
+type WindowReceipt = {
+  readonly mutation_applied: boolean;
+  readonly target_started: boolean;
+  readonly target_observed_count: number;
+  readonly target_skip0: boolean;
+  readonly target_completed: boolean;
+  readonly control_started: boolean;
+  readonly control_observed_count: number;
+  readonly control_skip0: boolean;
+  readonly control_completed: boolean;
+  readonly restore_started: boolean;
+  readonly restore_hash_confirmed: boolean;
+};
+
 type ArmResult = {
   readonly arm: ArmName;
   readonly expected_exit_code: 0 | 1 | 2;
@@ -70,6 +85,7 @@ type ArmResult = {
   readonly observed_schedules_live_confirmation: boolean | null;
   readonly expected_schedules_live_confirmation: boolean;
   readonly mutations: { readonly query: Mutation; readonly mapper: Mutation };
+  readonly window: WindowReceipt;
   readonly stdout: string;
   readonly passed: boolean;
 };
@@ -123,6 +139,101 @@ function mutation(
     after_source_sha256: sha256(after),
     before_target_sha256: beforeTarget === null ? null : sha256(beforeTarget),
     after_target_sha256: afterTarget === null ? null : sha256(afterTarget),
+  };
+}
+
+function reparsedMutation(
+  ts: typeof import('typescript'),
+  path: string,
+  before: string,
+  after: string,
+  target: string,
+  count: number,
+): Mutation {
+  const base = mutation(target, before, after, null, null, count);
+  const targetNode = (
+    source: import('typescript').SourceFile,
+  ): import('typescript').Node | undefined => {
+    let found: import('typescript').Node | undefined;
+    const visit = (node: import('typescript').Node): void => {
+      if (found) return;
+      if (
+        target.includes('shape1.successor.target_class') &&
+        ts.isClassDeclaration(node) &&
+        node.name?.text === 'PostgresWorkProjectionFactsQuery'
+      ) {
+        found = node;
+      } else if (
+        (target.startsWith('shape1.') ||
+          target.startsWith('equivalent_query')) &&
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isPropertyAccessExpression(node.expression.expression) &&
+        node.expression.name.text === 'query' &&
+        node.expression.expression.name.text === 'database' &&
+        node.expression.expression.expression.kind ===
+          ts.SyntaxKind.ThisKeyword &&
+        node.typeArguments?.[0] &&
+        ts.isTypeReferenceNode(node.typeArguments[0]) &&
+        ts.isIdentifier(node.typeArguments[0].typeName) &&
+        node.typeArguments[0].typeName.text === 'AttemptRow'
+      ) {
+        found = node.arguments[0];
+      } else if (target.includes('feedback_summary')) {
+        if (
+          ts.isPropertyAssignment(node) &&
+          propertyName(ts, node.name) === 'feedback_summary'
+        )
+          found = node;
+      } else if (target.includes('attempt_projection.object')) {
+        if (
+          ts.isObjectLiteralExpression(node) &&
+          node.properties.some(
+            (property) =>
+              ts.isPropertyAssignment(property) &&
+              propertyName(ts, property.name) === 'feedback_summary',
+          ) &&
+          node.properties.some(
+            (property) =>
+              ts.isPropertyAssignment(property) &&
+              propertyName(ts, property.name) === 'feedback_capture_status',
+          )
+        )
+          found = node;
+      } else if (target.includes('result_summary')) {
+        if (
+          ts.isPropertyAssignment(node) &&
+          propertyName(ts, node.name) === 'result_summary'
+        )
+          found = node;
+      } else if (target.includes('decoy.query.target_class')) {
+        if (
+          ts.isClassDeclaration(node) &&
+          node.name?.text === 'PostgresWorkProjectionFactsQuery'
+        )
+          found = node;
+      } else if (target.includes('dead_code.actual_mapper')) {
+        if (
+          ts.isFunctionDeclaration(node) &&
+          node.name?.text === 'mapWorkProjectionFacts'
+        )
+          found = node;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return found;
+  };
+  const beforeSource = parse(ts, path, before);
+  const afterSource = parse(ts, path, after);
+  const beforeNode = targetNode(beforeSource);
+  const afterNode = targetNode(afterSource);
+  if (!beforeNode || !afterNode)
+    throw new Error(`mutation_target_reparse_failed:${target}`);
+  return {
+    ...base,
+    before_target_sha256: sha256(beforeNode.getText(beforeSource)),
+    after_target_sha256: sha256(afterNode.getText(afterSource)),
   };
 }
 
@@ -184,12 +295,12 @@ function mutateQuery(
   });
   return {
     text: transformed,
-    mutation: mutation(
-      'shape1.query.feedback_projection.node',
+    mutation: reparsedMutation(
+      ts,
+      querySource,
       text,
       transformed,
-      beforeTarget,
-      afterTarget,
+      'shape1.query.feedback_projection.node',
       count,
     ),
   };
@@ -200,35 +311,59 @@ function mutateQuerySuccessor(
   text: string,
 ): { readonly text: string; readonly mutation: Mutation } {
   const source = parse(ts, querySource, text);
-  let count = 0;
-  let beforeTarget: string | null = null;
-  let afterTarget: string | null = null;
-  const transformed = print(ts, source, (node) => {
+  let classNode: import('typescript').ClassDeclaration | undefined;
+  let interfaceNode: import('typescript').InterfaceDeclaration | undefined;
+  const visit = (node: import('typescript').Node): void => {
     if (
-      ts.isNoSubstitutionTemplateLiteral(node) &&
-      node.text.includes('feedback_present') &&
-      count === 0
-    ) {
-      count += 1;
-      beforeTarget = node.getText(source);
-      const replacement = node.text.replace(
-        '(a.feedback IS NOT NULL) AS feedback_present',
-        'a.feedback AS feedback_text',
-      );
-      afterTarget = `\`${replacement}\``;
-      return ts.factory.createNoSubstitutionTemplateLiteral(replacement);
-    }
-    return node;
-  });
+      ts.isClassDeclaration(node) &&
+      node.name?.text === 'PostgresWorkProjectionFactsQuery'
+    )
+      classNode = node;
+    if (ts.isInterfaceDeclaration(node) && node.name?.text === 'AttemptRow')
+      interfaceNode = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (!classNode || !interfaceNode)
+    throw new Error('successor_target_class_missing');
+  const beforeClass = classNode.getText(source);
+  const afterClass = beforeClass.replace(
+    "feedbackCapture: attempt.feedback_present ? 'present' : 'absent'",
+    "feedbackCapture: attempt.feedback ? 'present' : 'absent'",
+  );
+  const beforeInterface = interfaceNode.getText(source);
+  const afterInterface = beforeInterface.replace(
+    'feedback_present: boolean;',
+    'feedback: string | null;',
+  );
+  const firstNode =
+    classNode.getStart(source) < interfaceNode.getStart(source)
+      ? classNode
+      : interfaceNode;
+  const secondNode = firstNode === classNode ? interfaceNode : classNode;
+  const firstReplacement =
+    firstNode === classNode ? afterClass : afterInterface;
+  const secondReplacement =
+    secondNode === classNode ? afterClass : afterInterface;
+  const classAndInterface =
+    text.slice(0, firstNode.getStart(source)) +
+    firstReplacement +
+    text.slice(firstNode.end, secondNode.getStart(source)) +
+    secondReplacement +
+    text.slice(secondNode.end);
+  const transformed = classAndInterface.replace(
+    '(a.feedback IS NOT NULL) AS feedback_present',
+    'a.feedback AS feedback_text',
+  );
   return {
     text: transformed,
-    mutation: mutation(
-      'shape1.successor.query_projection.node',
+    mutation: reparsedMutation(
+      ts,
+      querySource,
       text,
       transformed,
-      beforeTarget,
-      afterTarget,
-      count,
+      'shape1.successor.target_class',
+      1,
     ),
   };
 }
@@ -271,14 +406,14 @@ function mutateMapper(
   });
   return {
     text: transformed,
-    mutation: mutation(
+    mutation: reparsedMutation(
+      ts,
+      mapperSource,
+      text,
+      transformed,
       target === 'shape2'
         ? 'shape2.feedback_summary.node'
         : 'non_target.result_summary.node',
-      text,
-      transformed,
-      beforeTarget,
-      afterTarget,
       count,
     ),
   };
@@ -291,15 +426,25 @@ function mutateEquivalentQueryRefactor(
   const source = parse(ts, querySource, text);
   let argumentNode: import('typescript').Expression | undefined;
   let method: import('typescript').MethodDeclaration | undefined;
+  let queryCount = 0;
   const visit = (node: import('typescript').Node): void => {
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
       node.expression.name.text === 'query' &&
+      node.expression.expression.name.text === 'database' &&
+      node.expression.expression.expression.kind ===
+        ts.SyntaxKind.ThisKeyword &&
+      node.typeArguments?.[0] &&
+      ts.isTypeReferenceNode(node.typeArguments[0]) &&
+      ts.isIdentifier(node.typeArguments[0].typeName) &&
+      node.typeArguments[0].typeName.text === 'AttemptRow' &&
       node.arguments.length > 0 &&
       (ts.isNoSubstitutionTemplateLiteral(node.arguments[0]) ||
         ts.isStringLiteral(node.arguments[0]))
     ) {
+      queryCount += 1;
       argumentNode = node.arguments[0];
       let parent: import('typescript').Node | undefined = node;
       while (parent && !ts.isMethodDeclaration(parent)) parent = parent.parent;
@@ -308,7 +453,7 @@ function mutateEquivalentQueryRefactor(
     ts.forEachChild(node, visit);
   };
   visit(source);
-  if (!argumentNode || !method?.body)
+  if (queryCount !== 1 || !argumentNode || !method?.body)
     throw new Error('equivalent_refactor_target_missing');
   const oldTarget = argumentNode.getText(source);
   const identifier = 'attemptsQuerySql';
@@ -323,12 +468,12 @@ function mutateEquivalentQueryRefactor(
     text.slice(end);
   return {
     text: replacement,
-    mutation: mutation(
-      'shape1.query.local_const_refactor.node',
+    mutation: reparsedMutation(
+      ts,
+      querySource,
       text,
       replacement,
-      oldTarget,
-      identifier,
+      'shape1.query.local_const_refactor.node',
       1,
     ),
   };
@@ -392,12 +537,12 @@ function mutateMapperSuccessor(
   });
   return {
     text: transformed,
-    mutation: mutation(
-      'shape2.successor.attempt_projection.object',
+    mutation: reparsedMutation(
+      ts,
+      mapperSource,
       text,
       transformed,
-      beforeTarget,
-      afterTarget,
+      'shape2.successor.attempt_projection.object',
       count,
     ),
   };
@@ -448,14 +593,86 @@ function appendDecoy(
   const transformed = ts.createPrinter().printFile(updated);
   return {
     text: transformed,
-    mutation: mutation(
-      dead ? 'dead_code_decoy.statement' : 'decoy.statement',
+    mutation: reparsedMutation(
+      ts,
+      mapperSource,
       text,
       transformed,
-      'source.end_of_file',
-      dead
-        ? 'if (false) { const deadFeedbackProjectionDecoy = { feedback_summary: null, feedback_capture_status: "redacted" }; }'
-        : 'const deadFeedbackProjectionDecoy = { feedback_summary: null, feedback_capture_status: "redacted" };',
+      dead ? 'dead_code_decoy.statement' : 'decoy.statement',
+      1,
+    ),
+  };
+}
+
+function appendQueryDecoyClass(
+  ts: typeof import('typescript'),
+  text: string,
+): { readonly text: string; readonly mutation: Mutation } {
+  const source = parse(ts, querySource, text);
+  const decoy = ts.factory.createClassDeclaration(
+    undefined,
+    'PostgresWorkProjectionFactsQuery',
+    undefined,
+    undefined,
+    [
+      ts.factory.createMethodDeclaration(
+        undefined,
+        undefined,
+        'getByRootTask',
+        undefined,
+        undefined,
+        [],
+        undefined,
+        ts.factory.createBlock([], true),
+      ),
+    ],
+  );
+  const updated = ts.factory.updateSourceFile(source, [
+    ...source.statements,
+    decoy,
+  ]);
+  const transformed = ts.createPrinter().printFile(updated);
+  return {
+    text: transformed,
+    mutation: reparsedMutation(
+      ts,
+      querySource,
+      text,
+      transformed,
+      'decoy.query.target_class.statement',
+      1,
+    ),
+  };
+}
+
+function appendMapperDeadCode(
+  ts: typeof import('typescript'),
+  text: string,
+): { readonly text: string; readonly mutation: Mutation } {
+  const source = parse(ts, mapperSource, text);
+  let fn: import('typescript').FunctionDeclaration | undefined;
+  const visit = (node: import('typescript').Node): void => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === 'mapWorkProjectionFacts'
+    )
+      fn = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (!fn?.body) throw new Error('dead_code_target_function_missing');
+  const dead = `if (false) { const deadAttempts = []; deadAttempts.map((attempt) => ({ feedback_summary: null, feedback_capture_status: 'redacted' })); }`;
+  const bodyStart = fn.body.getStart(source) + 1;
+  const transformed =
+    text.slice(0, bodyStart) + `\n  ${dead}\n` + text.slice(bodyStart);
+  return {
+    text: transformed,
+    mutation: reparsedMutation(
+      ts,
+      mapperSource,
+      text,
+      transformed,
+      'dead_code.actual_mapper.statement',
       1,
     ),
   };
@@ -496,6 +713,28 @@ function runChecker(
   };
 }
 
+function runNonTargetControl(
+  ts: typeof import('typescript'),
+  mapperFile: string,
+): { readonly observedCount: number; readonly completed: boolean } {
+  try {
+    const source = parse(ts, mapperSource, readFileSync(mapperFile, 'utf8'));
+    let observedCount = 0;
+    const visit = (node: import('typescript').Node): void => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        propertyName(ts, node.name) === 'result_summary'
+      )
+        observedCount += 1;
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return { observedCount, completed: true };
+  } catch {
+    return { observedCount: 0, completed: false };
+  }
+}
+
 async function main(): Promise<void> {
   const artifactDir = argument('--artifact-dir');
   const temp = await mkdtemp(join(tmpdir(), 'feedback-projection-shape-'));
@@ -519,8 +758,8 @@ async function main(): Promise<void> {
   const shape2Successor = mutateMapperSuccessor(ts, mapperText);
   const nonTarget = mutateMapper(ts, mapperText, 'non-target');
   const equivalent = mutateEquivalentQueryRefactor(ts, queryText);
-  const decoy = appendDecoy(ts, mapperText, false);
-  const deadDecoy = appendDecoy(ts, mapperText, true);
+  const decoyClass = appendQueryDecoyClass(ts, queryText);
+  const deadDecoy = appendMapperDeadCode(ts, mapperText);
   const cases: readonly {
     readonly arm: ArmName;
     readonly query: string;
@@ -616,14 +855,14 @@ async function main(): Promise<void> {
     },
     {
       arm: 'decoy_ast_mutation',
-      query: queryText,
-      mapper: decoy.text,
-      expected: KNOWN_DEFECT_SHAPE_PRESENT,
-      expectedStatus: 'KNOWN_DEFECT_SHAPE_PRESENT',
-      expectedShapeStates: { shape1: 'PRESENT', shape2: 'PRESENT' },
+      query: decoyClass.text,
+      mapper: mapperText,
+      expected: MISSING,
+      expectedStatus: 'MISSING',
+      expectedShapeStates: { shape1: 'UNKNOWN', shape2: 'PRESENT' },
       expectedSchedules: false,
-      queryMutation: noQueryMutation,
-      mapperMutation: decoy.mutation,
+      queryMutation: decoyClass.mutation,
+      mapperMutation: noMapperMutation,
     },
     {
       arm: 'dead_code_decoy',
@@ -640,9 +879,28 @@ async function main(): Promise<void> {
   const results: ArmResult[] = [];
   try {
     for (const test of cases) {
+      await writeFile(tempQuery, queryText);
+      await writeFile(tempMapper, mapperText);
+      const mutationApplied =
+        test.query !== queryText || test.mapper !== mapperText;
       await writeFile(tempQuery, test.query);
       await writeFile(tempMapper, test.mapper);
       const observed = runChecker(tempQuery, tempMapper, test.parser);
+      const targetObservedCount = (() => {
+        try {
+          JSON.parse(observed.stdout);
+          return 1;
+        } catch {
+          return 0;
+        }
+      })();
+      const control = runNonTargetControl(ts, tempMapper);
+      const restoreStarted = true;
+      await writeFile(tempQuery, queryText);
+      await writeFile(tempMapper, mapperText);
+      const restoreHashConfirmed =
+        sha256(await readFile(tempQuery, 'utf8')) === sha256(queryText) &&
+        sha256(await readFile(tempMapper, 'utf8')) === sha256(mapperText);
       let observedStatus: string | null = null;
       let observedShapeStates = {
         shape1: null as string | null,
@@ -688,6 +946,32 @@ async function main(): Promise<void> {
             entry.before_source_sha256 !== entry.after_source_sha256;
       const mutationIdentity =
         validMutation(test.queryMutation) && validMutation(test.mapperMutation);
+      const window: WindowReceipt = {
+        mutation_applied: mutationApplied,
+        target_started: true,
+        target_observed_count: targetObservedCount,
+        target_skip0: targetObservedCount === 0,
+        target_completed: targetObservedCount === 1,
+        control_started: true,
+        control_observed_count: control.observedCount,
+        control_skip0: control.observedCount === 0,
+        control_completed: control.completed,
+        restore_started: restoreStarted,
+        restore_hash_confirmed: restoreHashConfirmed,
+      };
+      const windowValid =
+        window.mutation_applied ===
+          (test.queryMutation.count > 0 || test.mapperMutation.count > 0) &&
+        window.target_started &&
+        window.target_observed_count > 0 &&
+        !window.target_skip0 &&
+        window.target_completed &&
+        window.control_started &&
+        window.control_observed_count > 0 &&
+        !window.control_skip0 &&
+        window.control_completed &&
+        window.restore_started &&
+        window.restore_hash_confirmed;
       const result: ArmResult = {
         arm: test.arm,
         expected_exit_code: test.expected,
@@ -699,6 +983,7 @@ async function main(): Promise<void> {
         observed_schedules_live_confirmation: observedSchedules,
         expected_schedules_live_confirmation: test.expectedSchedules,
         mutations: { query: test.queryMutation, mapper: test.mapperMutation },
+        window,
         stdout: observed.stdout,
         passed:
           observed.exitCode === test.expected &&
@@ -706,7 +991,8 @@ async function main(): Promise<void> {
           observedShapeStates.shape1 === test.expectedShapeStates.shape1 &&
           observedShapeStates.shape2 === test.expectedShapeStates.shape2 &&
           observedSchedules === test.expectedSchedules &&
-          mutationIdentity,
+          mutationIdentity &&
+          windowValid,
       };
       results.push(result);
       if (artifactDir) {

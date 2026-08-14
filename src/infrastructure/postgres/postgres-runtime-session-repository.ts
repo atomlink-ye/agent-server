@@ -87,43 +87,6 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     return result.rows?.[0] ? map(result.rows[0]) : null;
   }
 
-  public async findPaseoWorkspaceByTeamRun(
-    input: Parameters<
-      NonNullable<RuntimeSessionRepository['findPaseoWorkspaceByTeamRun']>
-    >[0],
-  ): Promise<string | null> {
-    const result = await this.db.query(
-      `SELECT DISTINCT rs.paseo_workspace_id
-       FROM runtime_sessions rs
-       JOIN team_member_runs tmr ON tmr.id=rs.scope_id
-       JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
-       WHERE rs.scope_kind='team_member'
-         AND tmr.team_run_id=$1
-         AND rs.tenant_id=$2
-         AND tmr.tenant_id=$2
-         AND sls.workspace_id=$3
-         AND tmr.workspace_id=$3
-         AND rs.principal_type=$4
-         AND tmr.principal_type=$4
-         AND rs.principal_id=$5
-         AND tmr.principal_id=$5
-         AND rs.paseo_workspace_id IS NOT NULL
-       ORDER BY rs.paseo_workspace_id`,
-      [
-        input.teamRunId,
-        input.tenantId,
-        input.workspaceId,
-        input.principalType,
-        input.principalId,
-      ],
-    );
-    const workspaceIds = (result.rows ?? []).map(
-      (row) => row.paseo_workspace_id as string,
-    );
-    if (workspaceIds.length > 1)
-      throw new Error('TeamRun Paseo Workspace binding conflict.');
-    return workspaceIds[0] ?? null;
-  }
 
   public async createOrGetForProductSession(
     input: Parameters<
@@ -284,11 +247,6 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     });
   }
 
-  public async bindProvider(
-    input: Parameters<RuntimeSessionRepository['bindProvider']>[0],
-  ): Promise<RuntimeSession> {
-    return this.#bind(input);
-  }
 
   async #bind(input: {
     readonly id: string;
@@ -353,8 +311,6 @@ function map(row: any): RuntimeSession {
     sessionBinding: providerAgentId
       ? { plane: PASEO_PLANE, externalSessionId: providerAgentId }
       : null,
-    paseoWorkspaceId,
-    providerAgentId,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

@@ -33,6 +33,7 @@ const inputs = [
   'scripts/ci/check-work-acceptance-outcome-matrix.mjs',
   'scripts/ci/run-work-http-acceptance-raw.mjs',
   'scripts/ci/run-work-mcp-acceptance-raw.mjs',
+  'scripts/ci/work-acceptance-raw-support.mjs',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
 ];
 const inputHashes = Object.fromEntries(inputs.map((file) => [file, sha(file)]));
@@ -62,6 +63,36 @@ arms.push(
       'work_acceptance_missing:kind=http-projection:marker=work_http_database_unavailable',
     ],
   ),
+);
+mutate(
+  'canonical-http-zero-execution',
+  'scripts/ci/run-work-http-acceptance-raw.mjs',
+  `'requires owner positive control|fails closed|runs the real HTTP'`,
+  `'mgr-b-deliberately-no-matching-http-test'`,
+  () => {
+    arms.push(
+      runArm(
+        'canonical-http-zero-execution',
+        'pnpm',
+        ['modularization:acceptance:work-http'],
+        2,
+        [
+          '"executed":0',
+          'WORK_ACCEPTANCE_MISSING[work_http_zero_execution]',
+          'work_acceptance_missing:kind=http-projection:marker=work_http_zero_execution',
+        ],
+      ),
+    );
+    arms.push(
+      runArm(
+        'canonical-http-zero-execution-mcp-control',
+        'pnpm',
+        ['modularization:acceptance:work-mcp'],
+        0,
+        ['"kind":"mcp-registration"', '"executed":1'],
+      ),
+    );
+  },
 );
 arms.push(
   runArmWithoutDatabase(

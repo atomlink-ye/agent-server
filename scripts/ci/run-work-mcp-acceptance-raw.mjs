@@ -2,24 +2,30 @@
 
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import {
+  requireCanonicalInputs,
+  runVitestTarget,
+} from './work-acceptance-raw-support.mjs';
 
 if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
   console.error('WORK_ACCEPTANCE_MISSING[work_mcp_database_unavailable]');
   process.exit(1);
 }
 
-const behavior = run('pnpm', [
-  'exec',
-  'vitest',
-  'run',
-  '--config',
-  'vitest.integration.config.ts',
-  '--no-file-parallelism',
-  'tests/integration/product-api-v1-oi38.integration.test.ts',
-  '-t',
-  'creates through real MCP',
-]);
-if (behavior.status !== 0) process.exit(classifyRawFailure(behavior));
+if (
+  !(await requireCanonicalInputs({
+    kind: 'mcp-registration',
+    environmentMarker: 'work_mcp_environment_unavailable',
+  }))
+)
+  process.exit(1);
+
+const behaviorExit = runVitestTarget({
+  kind: 'mcp-registration',
+  zeroExecutionMarker: 'work_mcp_zero_execution',
+  pattern: 'creates through real MCP',
+});
+if (behaviorExit !== 0) process.exit(behaviorExit);
 
 const bootstrap = run('node', ['scripts/ci/check-work-bootstrap-boundary.mjs']);
 if (

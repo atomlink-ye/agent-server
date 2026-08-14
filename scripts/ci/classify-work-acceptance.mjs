@@ -12,11 +12,15 @@ const classifications = {
   'http-projection': [
     'work_http_projection_installer_missing',
     'work_http_database_unavailable',
+    'work_http_environment_unavailable',
+    'work_http_zero_execution',
   ],
   'mcp-registration': [
     'work_mcp_registration_missing:product_work_create',
     'work_mcp_bootstrap_checker_missing',
     'work_mcp_database_unavailable',
+    'work_mcp_environment_unavailable',
+    'work_mcp_zero_execution',
   ],
 };
 const exactMarkers = classifications[kind];

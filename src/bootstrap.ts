@@ -227,7 +227,7 @@ export interface SingleRunDebugControl {
 export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
-  /** Debug-only runtime substitute; production composition always uses Paseo. */
+  /** Debug-only runtime substitute; production composition selects config.runtime.adapter. */
   readonly debugRuntime?: AgentRuntimePort;
   /** Keep terminal Team wakes durable until the debug control resumes them. */
   readonly deferTeamWakeReconcile?: boolean;

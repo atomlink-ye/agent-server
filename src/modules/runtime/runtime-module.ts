@@ -1,4 +1,5 @@
 import { PaseoRuntimeAdapter } from '../../adapters/paseo/paseo-runtime-adapter.js';
+import { UnavailableRuntime } from '../../adapters/runtime/unavailable-runtime.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
 import {
   RuntimeReadinessProbe,
@@ -40,28 +41,31 @@ export function createRuntimeModule(options: {
       values?: readonly unknown[],
     ): Promise<{ rows?: readonly any[] }>;
   };
-  readonly config: Pick<AppConfig, 'paseo' | 'skillRegistryRoot'>;
+  readonly config: Pick<AppConfig, 'paseo' | 'runtime' | 'skillRegistryRoot'>;
   readonly logger: Logger;
   readonly toolContributors: readonly RuntimeToolContributor[];
   readonly debugRuntime?: AgentRuntimePort;
 }): RuntimeModule {
+  const runtimeAdapter = options.config.runtime?.adapter ?? 'paseo';
   const runtime =
     options.debugRuntime ??
-    new PaseoRuntimeAdapter(
-      {
-        wsUrl: options.config.paseo.wsUrl,
-        provider: options.config.paseo.provider,
-        cwd: options.config.paseo.agentCwd,
-        workspaceTitle: options.config.paseo.workspaceTitle,
-        ...(options.config.paseo.model
-          ? { requestedModel: options.config.paseo.model }
-          : {}),
-        connectTimeoutMs: options.config.paseo.connectTimeoutMs,
-        executionTimeoutMs: options.config.paseo.executionTimeoutMs,
-        executionTimeoutSource: options.config.paseo.executionTimeoutSource,
-      },
-      options.logger,
-    );
+    (runtimeAdapter === 'none'
+      ? new UnavailableRuntime()
+      : new PaseoRuntimeAdapter(
+          {
+            wsUrl: options.config.paseo.wsUrl,
+            provider: options.config.paseo.provider,
+            cwd: options.config.paseo.agentCwd,
+            workspaceTitle: options.config.paseo.workspaceTitle,
+            ...(options.config.paseo.model
+              ? { requestedModel: options.config.paseo.model }
+              : {}),
+            connectTimeoutMs: options.config.paseo.connectTimeoutMs,
+            executionTimeoutMs: options.config.paseo.executionTimeoutMs,
+            executionTimeoutSource: options.config.paseo.executionTimeoutSource,
+          },
+          options.logger,
+        ));
   const mcpHost = new RuntimeMcpServer(
     new RuntimeToolRegistry(options.toolContributors),
   );

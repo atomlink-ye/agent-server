@@ -1,0 +1,5 @@
+kind=c4-response expected_min_count=1 observed_count=0 raw_inner_status=N/A exact_marker=c3_c4_zero_execution:kind=c4-response:expected_min_count=1 outer_exit=2
+
+stdout_hex=63335f63345f7a65726f5f657865637574696f6e3a6b696e643d63342d726573706f6e73653a65787065637465645f6d696e5f636f756e743d310a
+stderr_hex=
+exit=2

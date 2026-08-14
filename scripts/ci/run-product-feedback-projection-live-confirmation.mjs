@@ -394,16 +394,28 @@ export function evaluateFreshBundle(
   )
     throw new MissingInput('fresh_api_db_attempt_scope_mismatch');
 
-  const apiWorkItem = workRun.work_items.find((item) =>
+  const apiWorkItems = workRun.work_items.filter((item) =>
     item.attempts.some((attempt) => attempt.id === dbAttempt.id),
   );
   const traceAttempts = trace.work_items.flatMap((item) => item.attempts);
   const traceSameAttempts = traceAttempts.filter(
     (attempt) => attempt.id === dbAttempt.id,
   );
-  if (!apiWorkItem || traceSameAttempts.length !== 1)
+  const traceWorkItems = trace.work_items.filter((item) =>
+    item.attempts.some((attempt) => attempt.id === dbAttempt.id),
+  );
+  if (
+    apiWorkItems.length !== 1 ||
+    traceWorkItems.length !== 1 ||
+    traceSameAttempts.length !== 1
+  )
     throw new MissingInput('fresh_trace_api_attempt_join_invalid');
-  if (dbAttempt.work_item_id !== apiWorkItem.id)
+  const apiWorkItem = apiWorkItems[0];
+  const traceWorkItem = traceWorkItems[0];
+  if (
+    traceWorkItem.id !== apiWorkItem.id ||
+    dbAttempt.work_item_id !== apiWorkItem.id
+  )
     throw new MissingInput('fresh_db_api_work_item_join_invalid');
   const traceAttempt = traceSameAttempts[0];
   const sourceRefKeys = [
@@ -419,6 +431,20 @@ export function evaluateFreshBundle(
     )
   )
     throw new MissingInput('fresh_api_trace_attempt_source_refs_mismatch');
+  if (
+    apiAttempt.feedback_capture_status !== traceAttempt.feedback_capture_status
+  )
+    throw new MissingInput('fresh_api_trace_feedback_status_mismatch');
+  if (
+    (apiAttempt.feedback_summary === null) !==
+      (traceAttempt.feedback_summary === null) ||
+    (typeof apiAttempt.feedback_summary === 'string' &&
+      typeof traceAttempt.feedback_summary === 'string' &&
+      !Buffer.from(apiAttempt.feedback_summary, 'utf8').equals(
+        Buffer.from(traceAttempt.feedback_summary, 'utf8'),
+      ))
+  )
+    throw new MissingInput('fresh_api_trace_feedback_value_mismatch');
   const feedbackEdges = trace.edges.filter(
     (edge) => edge.kind === 'feedback' && edge.attempt_id === dbAttempt.id,
   );

@@ -245,6 +245,9 @@ It passed with `LIVE_CONFIRMATION_PATH_INJECTED_HARNESS_PASSED`: fake HTTP, DB,
 and capture adapters reached the real full-schema/identity/trace evaluator and
 returned the known-blocker branch. Caller-bundle rejection remained exit `2`,
 and missing-live-env behavior remained exit `2`.
+The same harness independently mutated the trace work-item identity and the
+trace feedback value; both ran through `runFreshCaptureEvaluatorPath` and
+returned `MISSING` / exit `2`.
 No provider, build, dev server, browser, install, sandbox, or live service was
 run in this lane; no live artifact or completion claim exists.
 

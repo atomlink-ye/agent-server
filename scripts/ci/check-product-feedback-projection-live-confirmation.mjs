@@ -289,6 +289,62 @@ if (
 )
   fail('injected_capture_evaluator_path');
 
+async function runInjectedNegative(mutatedBundle) {
+  try {
+    const result = await runFreshCaptureEvaluatorPath({
+      input,
+      baseUrl: new URL('http://live-harness.invalid'),
+      token: 'harness-token',
+      client: { name: 'fake-db' },
+      candidateSha,
+      serviceRevision: candidateSha,
+      startedAt: Date.parse(timestamp) - 1,
+      outputRoot: 'injected-output-root',
+      getJson: async (_path, name) =>
+        ({
+          live_work: { work },
+          live_work_run: workRunEnvelope,
+          live_trace: traceEnvelope,
+        })[name],
+      assertDb: async () => undefined,
+      capture: async () => ({ directory: mutatedBundle.directory }),
+      loadBundle: async () => mutatedBundle,
+    });
+    return result.verdict;
+  } catch (error) {
+    return {
+      status: 'MISSING',
+      exit_code: 2,
+      reason: error?.reason ?? 'injected_negative_unexpected_error',
+    };
+  }
+}
+
+const traceWorkItemMismatch = structuredClone(injectedBundle);
+traceWorkItemMismatch['api/trace.json'].work_items[0].id =
+  '00000000-0000-4000-8000-000000000012';
+const traceWorkItemMismatchResult = await runInjectedNegative(
+  traceWorkItemMismatch,
+);
+if (
+  traceWorkItemMismatchResult.status !== 'MISSING' ||
+  traceWorkItemMismatchResult.exit_code !== 2
+)
+  fail('injected_trace_work_item_mismatch_not_missing');
+
+const traceFeedbackMismatch = structuredClone(injectedBundle);
+traceFeedbackMismatch[
+  'api/trace.json'
+].work_items[0].attempts[0].feedback_summary = 'trace-only feedback';
+const traceFeedbackMismatchResult = await runInjectedNegative(
+  traceFeedbackMismatch,
+);
+if (
+  traceFeedbackMismatchResult.status !== 'MISSING' ||
+  traceFeedbackMismatchResult.exit_code !== 2
+)
+  fail('injected_trace_feedback_mismatch_not_missing');
+
 process.stdout.write(
-  `${JSON.stringify({ arm: 'FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION', status: 'LIVE_CONFIRMATION_PATH_INJECTED_HARNESS_PASSED', missing_env_exit: missing.code, caller_bundle_exit: bundleArg.code, injected_db_adapter: dbAdapterCalled, injected_capture_adapter: captureAdapterCalled, evaluator_status: injected.verdict.status })}\n`,
+  `${JSON.stringify({ arm: 'FEEDBACK_PROJECTION_LIVE_UNBLOCK_CONFIRMATION', status: 'LIVE_CONFIRMATION_PATH_INJECTED_HARNESS_PASSED', missing_env_exit: missing.code, caller_bundle_exit: bundleArg.code, injected_db_adapter: dbAdapterCalled, injected_capture_adapter: captureAdapterCalled, evaluator_status: injected.verdict.status, negative_trace_work_item_exit: traceWorkItemMismatchResult.exit_code, negative_trace_feedback_exit: traceFeedbackMismatchResult.exit_code })}\n`,
 );

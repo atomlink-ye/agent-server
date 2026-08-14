@@ -87,8 +87,10 @@ a started runner that cannot produce a count; callers cannot select either
 subclass.
 
 C-box C3 zero evidence: `node --test scripts/ci/c3-c4-zero-execution.test.mjs
-scripts/ci/c3-zero-production-runner.test.mjs` exited 0 with 10 tests, 0
-skips, and 0 todos. The production runner emitted real process-2
-`target-unavailable` arms for missing target and ENOENT spawn, plus a real
-process-2 `instrument` arm for a started command with no count; no caller
-provided expected count or subclass.
+scripts/ci/c3-zero-production-runner.test.mjs` exited 0 with 15 tests, 0
+skips, and 0 todos. The production runner was actually spawned for process-2
+`target-unavailable` missing-target and ENOENT arms, process-2 `instrument`
+no-count, observed-count=0 under-count, duplicate-count, and contradictory-
+count arms. The same spawned CLI run proved raw stdout/stderr Buffer forwarding
+and non-newline framing, while an independently expected observed-count=2 arm
+returned process 0. No caller provided expected count or subclass.

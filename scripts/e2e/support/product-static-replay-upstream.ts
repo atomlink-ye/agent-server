@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,18 +10,14 @@ import {
   GetWorkResponseSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
+  WorkListItemSchema,
   type ProductRunTrace,
   type ProductWorkRun,
   type WorkListResponse,
   type WorkResponse,
   type WorkRunListResponse,
+  WorkRunSummarySchema,
 } from '@atomlink-ye/agent-server/product-contract';
-
-import {
-  projectWorkList,
-  projectWorkRunList,
-  type ProductRecording,
-} from '../../../apps/web/lib/product-recording-projections.js';
 
 export const PASS = 0;
 export const FAIL = 1;
@@ -30,17 +27,37 @@ export const RECORDING_SCENARIOS = ['parallel-success', 'rework-once'] as const;
 export type RecordingScenario = (typeof RECORDING_SCENARIOS)[number];
 
 const defaultFixtureDirectory = resolve(
-  fileURLToPath(new URL('../../../apps/web/lib/__fixtures__/product-recordings', import.meta.url)),
+  fileURLToPath(new URL('./recordings/c4', import.meta.url)),
 );
 
-const recordingFiles: Record<RecordingScenario, string> = {
-  'parallel-success': 'parallel-success-fa77ba9.json',
-  'rework-once': 'rework-once-fa77ba9.json',
+const recordingFiles: Record<RecordingScenario, Record<'work' | 'run' | 'trace', string>> = {
+  'parallel-success': {
+    work: 'api/work.json',
+    run: 'api/work-run.json',
+    trace: 'api/trace.json',
+  },
+  'rework-once': {
+    work: 'api/work.json',
+    run: 'api/work-run.json',
+    trace: 'api/trace.json',
+  },
 };
 
-type RecordingEnvelope = ProductRecording & {
-  readonly scenario?: string;
-  readonly recording_documents: readonly unknown[];
+type ProvenanceFile = {
+  readonly source_sha256: string;
+  readonly copy_sha256: string;
+};
+
+type ProvenanceEntry = {
+  readonly scenario: RecordingScenario;
+  readonly source_root: string;
+  readonly source_manifest_sha256: string;
+  readonly files: Record<string, ProvenanceFile>;
+};
+
+type ProvenanceLedger = {
+  readonly schema_version: number;
+  readonly documents: readonly ProvenanceEntry[];
 };
 
 type LoadedReplay = {
@@ -51,6 +68,7 @@ type LoadedReplay = {
   readonly workList: WorkListResponse;
   readonly runList: WorkRunListResponse;
   readonly run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>;
+  readonly provenance: ProvenanceEntry;
 };
 
 export class ReplayMissingError extends Error {
@@ -76,21 +94,66 @@ function fixtureDirectory(): string {
   return resolve(process.env.C4_RECORDING_DIR ?? defaultFixtureDirectory);
 }
 
-function parseTraceDocument(
+function schemaIssues(result: { readonly success: boolean; readonly error?: { readonly issues: readonly { readonly path: readonly (string | number)[]; readonly message: string }[] } }): readonly string[] {
+  if (result.success || !result.error) return [];
+  return result.error.issues.slice(0, 8).map((issue) =>
+    `${issue.path.join('.') || '<root>'}:${issue.message}`,
+  );
+}
+
+async function readJsonDocument(path: string, scenario: RecordingScenario, name: string): Promise<{ readonly document: unknown; readonly bytes: Buffer }> {
+  try {
+    const bytes = await readFile(path);
+    return { document: JSON.parse(bytes.toString('utf8')) as unknown, bytes };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ReplayMissingError(`recording_${name}_unreadable:${scenario}`, [detail]);
+  }
+}
+
+async function verifyProvenance(
+  directory: string,
   scenario: RecordingScenario,
-  document: unknown,
-): Extract<ProductRunTrace, { projection_status: 'internally_anchored' }> {
-  const parsed = ProductRunTraceResponseSchema.safeParse(document);
-  if (!parsed.success) {
-    const issues = parsed.error.issues.slice(0, 8).map((issue) =>
-      `${issue.path.join('.') || '<root>'}:${issue.message}`,
-    );
-    throw new ReplayMissingError(`recording_trace_schema_invalid:${scenario}`, issues);
+  files: Readonly<Record<'work' | 'run' | 'trace', { readonly relativePath: string; readonly bytes: Buffer }>>,
+): Promise<ProvenanceEntry> {
+  const ledgerPath = resolve(directory, 'provenance.json');
+  let ledger: ProvenanceLedger;
+  try {
+    ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as ProvenanceLedger;
+  } catch (error) {
+    throw new ReplayMissingError(`recording_provenance_unreadable:${scenario}`, [error instanceof Error ? error.message : String(error)]);
   }
-  if (parsed.data.projection_status !== 'internally_anchored') {
-    throw new ReplayMissingError(`recording_trace_not_anchored:${scenario}`);
+  const entry = ledger.documents.find((candidate) => candidate.scenario === scenario);
+  if (!entry || ledger.schema_version !== 1)
+    throw new ReplayMissingError(`recording_provenance_missing:${scenario}`);
+  for (const { relativePath, bytes } of Object.values(files)) {
+    const expected = entry.files[relativePath];
+    const actual = createHash('sha256').update(bytes).digest('hex');
+    if (!expected || expected.source_sha256 !== expected.copy_sha256 || expected.copy_sha256 !== actual)
+      throw new ReplayMissingError(`recording_provenance_hash_mismatch:${scenario}`, [relativePath]);
   }
-  return parsed.data;
+  return entry;
+}
+
+function deriveWorkList(work: WorkResponse, run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>): WorkListResponse {
+  const latestRun = WorkRunSummarySchema.parse(run.work_run);
+  return {
+    works: [WorkListItemSchema.parse({
+      ...work.work,
+      product_state: run.work_run.product_state,
+      latest_run_summary: {
+        id: latestRun.id,
+        updated_at: latestRun.updated_at,
+        result_summary: run.work_run.result_summary,
+        result_capture_status: run.work_run.result_capture_status,
+      },
+    })],
+    next_cursor: null,
+  };
+}
+
+function deriveRunList(run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>): WorkRunListResponse {
+  return { work_runs: [WorkRunSummarySchema.parse(run.work_run)], next_cursor: null };
 }
 
 /**
@@ -101,41 +164,41 @@ function parseTraceDocument(
 export async function loadStaticReplayRecording(
   scenario: RecordingScenario = scenarioFromEnvironment(),
 ): Promise<LoadedReplay> {
-  const sourcePath = resolve(fixtureDirectory(), recordingFiles[scenario]);
-  let envelope: RecordingEnvelope;
-  try {
-    envelope = JSON.parse(await readFile(sourcePath, 'utf8')) as RecordingEnvelope;
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new ReplayMissingError(`recording_unreadable:${scenario}`, [detail]);
+  const directory = fixtureDirectory();
+  const paths = recordingFiles[scenario];
+  const sourcePath = resolve(directory, paths.trace);
+  const [workDocument, runDocument, traceDocument] = await Promise.all([
+    readJsonDocument(resolve(directory, paths.work), scenario, 'work'),
+    readJsonDocument(resolve(directory, paths.run), scenario, 'run'),
+    readJsonDocument(resolve(directory, paths.trace), scenario, 'trace'),
+  ]);
+
+  // Every consumed recorder document crosses its current complete response
+  // schema before any hash, count, projection, or derivation is attempted.
+  const workResult = GetWorkResponseSchema.safeParse({ work: workDocument.document });
+  const runResult = ProductWorkRunResponseSchema.safeParse(runDocument.document);
+  const traceResult = ProductRunTraceResponseSchema.safeParse(traceDocument.document);
+  if (!workResult.success || !runResult.success || !traceResult.success) {
+    throw new ReplayMissingError(`recording_schema_invalid:${scenario}`, [
+      ...schemaIssues(workResult).map((issue) => `work:${issue}`),
+      ...schemaIssues(runResult).map((issue) => `api/work-run:${issue}`),
+      ...schemaIssues(traceResult).map((issue) => `api/trace:${issue}`),
+    ]);
   }
+  if (runResult.data.projection_status !== 'internally_anchored' || traceResult.data.projection_status !== 'internally_anchored')
+    throw new ReplayMissingError(`recording_not_anchored:${scenario}`);
 
-  if (!Array.isArray(envelope.recording_documents) || envelope.recording_documents.length < 3)
-    throw new ReplayMissingError(`recording_documents_missing:${scenario}`);
-
-  // Do not reshape this document or translate legacy correlation fields into
-  // newer identity fields. The current schema is the acceptance boundary for
-  // any future recorder replacement.
-  const trace = parseTraceDocument(scenario, envelope.recording_documents[0]);
-  const recording: ProductRecording = {
-    recording_documents: envelope.recording_documents,
-  };
-  const workList = projectWorkList(recording);
-  const runList = projectWorkRunList(recording, trace.work.id);
-  const work = GetWorkResponseSchema.parse({ work: envelope.recording_documents[2] }).work;
-  const detail = envelope.recording_documents[1];
-  const run = ProductWorkRunResponseSchema.parse({
-    work,
-    work_run: detail,
-    projection_status: trace.projection_status,
-    work_items: trace.work_items,
-    actors: trace.actors,
-    messages: trace.messages,
+  const provenance = await verifyProvenance(directory, scenario, {
+    work: { relativePath: paths.work, bytes: workDocument.bytes },
+    run: { relativePath: paths.run, bytes: runDocument.bytes },
+    trace: { relativePath: paths.trace, bytes: traceDocument.bytes },
   });
-  if (run.projection_status !== 'internally_anchored')
-    throw new ReplayMissingError(`recording_run_not_anchored:${scenario}`);
-
-  return { scenario, sourcePath, trace, work, workList, runList, run };
+  const work = workResult.data;
+  const run = runResult.data;
+  const trace = traceResult.data;
+  const workList = deriveWorkList(work, run);
+  const runList = deriveRunList(run);
+  return { scenario, sourcePath, trace, work, workList, runList, run, provenance };
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

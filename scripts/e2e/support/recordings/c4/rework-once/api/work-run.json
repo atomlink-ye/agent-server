@@ -1,0 +1,194 @@
+{
+  "actors": [
+    {
+      "id": "9aa6c9f4-fcb0-4fae-8569-11bde92496e1",
+      "name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "team_member_run_id": "9aa6c9f4-fcb0-4fae-8569-11bde92496e1",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      }
+    },
+    {
+      "id": "a76e8e1a-2900-4ed8-aa17-b50aae61238c",
+      "name": "projection-worker",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "team_member_run_id": "a76e8e1a-2900-4ed8-aa17-b50aae61238c",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      }
+    },
+    {
+      "id": "c06c0178-6be2-4a1a-bc38-6d0ac96a0956",
+      "name": "projection-reviewer",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "team_member_run_id": "c06c0178-6be2-4a1a-bc38-6d0ac96a0956",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "d8945352-84ad-4927-8cf5-bbd1e235a718",
+      "recipient_id": "a76e8e1a-2900-4ed8-aa17-b50aae61238c",
+      "recipient_name": "projection-worker",
+      "sender_id": "9aa6c9f4-fcb0-4fae-8569-11bde92496e1",
+      "sender_name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "task_id": "ef7c16de-d723-4ed2-9d55-53fbc24939f4",
+        "team_message_id": "d8945352-84ad-4927-8cf5-bbd1e235a718",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      },
+      "summary": null,
+      "summary_capture_status": "redacted"
+    },
+    {
+      "id": "7da1edd6-395d-4a0c-ad99-0b250a354c21",
+      "recipient_id": "c06c0178-6be2-4a1a-bc38-6d0ac96a0956",
+      "recipient_name": "projection-reviewer",
+      "sender_id": "9aa6c9f4-fcb0-4fae-8569-11bde92496e1",
+      "sender_name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "task_id": "75feb201-1d99-4148-aacf-ec8ee98bed96",
+        "team_message_id": "7da1edd6-395d-4a0c-ad99-0b250a354c21",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      },
+      "summary": null,
+      "summary_capture_status": "redacted"
+    },
+    {
+      "id": "d207fa46-f895-462b-8abd-656998fda30b",
+      "recipient_id": "a76e8e1a-2900-4ed8-aa17-b50aae61238c",
+      "recipient_name": "projection-worker",
+      "sender_id": "9aa6c9f4-fcb0-4fae-8569-11bde92496e1",
+      "sender_name": "projection-lead",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "task_id": "4223026f-1966-46d2-928e-193eaa9ea41d",
+        "team_message_id": "d207fa46-f895-462b-8abd-656998fda30b",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      },
+      "summary": null,
+      "summary_capture_status": "redacted"
+    }
+  ],
+  "projection_status": "internally_anchored",
+  "work": {
+    "archived_at": null,
+    "created_at": "2026-08-14T01:01:48.926Z",
+    "definition_id": "09e51948-36db-4d4b-9acb-52ad4b1c38c7",
+    "definition_version_id": "a4e478a6-074d-42aa-b3ad-eccca7759f25",
+    "id": "238e5382-226f-4c0e-b175-2c0e7d4552d4",
+    "origin": "created",
+    "tenant_id": "tenant_local",
+    "title": "Product Projection rework-once 08270a88",
+    "updated_at": "2026-08-14T01:01:48.926Z",
+    "workspace_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "work_items": [
+    {
+      "actor_id": "a76e8e1a-2900-4ed8-aa17-b50aae61238c",
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "duration_ms": 117008,
+          "ended_at": "2026-08-14T01:04:55.293Z",
+          "feedback_capture_status": "not_present",
+          "feedback_summary": null,
+          "id": "125b4ac7-9264-4189-97c9-a5e0cd27ed5b",
+          "result_capture_status": "redacted",
+          "result_summary": null,
+          "source_refs": {
+            "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+            "task_id": "ef7c16de-d723-4ed2-9d55-53fbc24939f4",
+            "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+          },
+          "started_at": "2026-08-14T01:02:58.285Z",
+          "status": "completed",
+          "timing_capture_status": "captured"
+        },
+        {
+          "attempt_no": 2,
+          "duration_ms": 15818,
+          "ended_at": "2026-08-14T01:05:41.151Z",
+          "feedback_capture_status": "redacted",
+          "feedback_summary": null,
+          "id": "524401a1-fd03-4dfa-93c7-621452a5e71d",
+          "result_capture_status": "redacted",
+          "result_summary": null,
+          "source_refs": {
+            "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+            "task_id": "4223026f-1966-46d2-928e-193eaa9ea41d",
+            "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+          },
+          "started_at": "2026-08-14T01:05:25.333Z",
+          "status": "completed",
+          "timing_capture_status": "captured"
+        }
+      ],
+      "dependency_ids": [],
+      "description": "Implement the product projection change for rework-once:d00c9a22. Attempt 1 must include the ACCEPTANCE_SENTINEL marker in the submission. Subsequent attempts (if rework requested) must include WORKER_SUBMIT_V2 and the ACCEPTANCE_SENTINEL marker.",
+      "id": "2b01d44a-4117-44e7-9ae4-2cf3ab6174ba",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      },
+      "status": "accepted",
+      "subject": "Implement ACCEPTANCE_SENTINEL"
+    },
+    {
+      "actor_id": "c06c0178-6be2-4a1a-bc38-6d0ac96a0956",
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "duration_ms": 100581,
+          "ended_at": "2026-08-14T01:04:38.805Z",
+          "feedback_capture_status": "not_present",
+          "feedback_summary": null,
+          "id": "6863b0ce-eee9-482e-a2ae-c0508d2f6315",
+          "result_capture_status": "redacted",
+          "result_summary": null,
+          "source_refs": {
+            "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+            "task_id": "75feb201-1d99-4148-aacf-ec8ee98bed96",
+            "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+          },
+          "started_at": "2026-08-14T01:02:58.224Z",
+          "status": "completed",
+          "timing_capture_status": "captured"
+        }
+      ],
+      "dependency_ids": [],
+      "description": "Review the worker's work-1 submission and verify it contains the exact ACCEPTANCE_SENTINEL rule/marker as required.",
+      "id": "62094271-dd1d-46fa-ac3d-df9f20f9d110",
+      "source_refs": {
+        "root_task_id": "4345ef71-2138-42e5-bc44-b03efdef65b1",
+        "team_run_id": "6a8ce58c-d037-4c6e-8323-e1aa87dc737c"
+      },
+      "status": "accepted",
+      "subject": "Review ACCEPTANCE_SENTINEL rule"
+    }
+  ],
+  "work_run": {
+    "attention_reason": "not_captured",
+    "bound_at": "2026-08-14T01:01:49.105Z",
+    "cancel_availability": "not_captured",
+    "completion_decision_availability": "not_captured",
+    "control_revision": null,
+    "created_at": "2026-08-14T01:01:48.953Z",
+    "definition_version_id": "a4e478a6-074d-42aa-b3ad-eccca7759f25",
+    "expires_at": "2026-08-14T01:16:48.953Z",
+    "id": "7d6d8a8d-c207-4755-ab18-48152795d90d",
+    "problem_kind": "not_captured",
+    "product_state": "not_captured",
+    "result_capture_status": "not_captured",
+    "result_summary": null,
+    "trigger_kind": "manual",
+    "trigger_ref": "product-projection:rework-once:d00c9a22-d064-4269-ab2d-859d30d3dc3f",
+    "updated_at": "2026-08-14T01:01:49.105Z",
+    "work_id": "238e5382-226f-4c0e-b175-2c0e7d4552d4"
+  }
+}

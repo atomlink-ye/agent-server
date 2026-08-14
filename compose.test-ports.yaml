@@ -1,0 +1,7 @@
+services:
+  agent-server:
+    ports: !override
+      - '127.0.0.1:${AGENT_SERVER_TEST_API_PORT}:3000'
+  web:
+    ports: !override
+      - '127.0.0.1:${AGENT_SERVER_TEST_WEB_PORT}:3001'

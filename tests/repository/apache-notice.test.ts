@@ -10,6 +10,6 @@ describe('Apache NOTICE attribution', () => {
   it('keeps the Cloudflare OS attribution and source revision', () => {
     const notice = readFileSync(resolve(root, 'NOTICE'), 'utf8');
     expect(notice).toContain('Cloudflare OS');
-    expect(notice).toContain('0eaec6c5abc0b3909aadcc42cff25810fb9f7558');
+    expect(notice).toContain('0eaec6c5e8fc6b3298ea1aa73bf5c3e47b923c7f');
   });
 });

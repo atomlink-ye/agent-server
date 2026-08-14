@@ -11,11 +11,13 @@ import {
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
   WorkListItemSchema,
+  WorkListResponseSchema,
   type ProductRunTrace,
   type ProductWorkRun,
   type WorkListResponse,
   type WorkResponse,
   type WorkRunListResponse,
+  WorkRunListResponseSchema,
   WorkRunSummarySchema,
 } from '@atomlink-ye/agent-server/product-contract';
 
@@ -136,8 +138,8 @@ async function verifyProvenance(
 }
 
 function deriveWorkList(work: WorkResponse, run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>): WorkListResponse {
-  const latestRun = WorkRunSummarySchema.parse(run.work_run);
-  return {
+  const latestRun = deriveRunSummary(run);
+  return WorkListResponseSchema.parse({
     works: [WorkListItemSchema.parse({
       ...work.work,
       product_state: run.work_run.product_state,
@@ -149,17 +151,31 @@ function deriveWorkList(work: WorkResponse, run: Extract<ProductWorkRun, { proje
       },
     })],
     next_cursor: null,
-  };
+  });
+}
+
+function deriveRunSummary(run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>) {
+  return WorkRunSummarySchema.parse({
+    id: run.work_run.id,
+    work_id: run.work_run.work_id,
+    definition_version_id: run.work_run.definition_version_id,
+    trigger_kind: run.work_run.trigger_kind,
+    trigger_ref: run.work_run.trigger_ref,
+    expires_at: run.work_run.expires_at,
+    bound_at: run.work_run.bound_at,
+    created_at: run.work_run.created_at,
+    updated_at: run.work_run.updated_at,
+  });
 }
 
 function deriveRunList(run: Extract<ProductWorkRun, { projection_status: 'internally_anchored' }>): WorkRunListResponse {
-  return { work_runs: [WorkRunSummarySchema.parse(run.work_run)], next_cursor: null };
+  return WorkRunListResponseSchema.parse({ work_runs: [deriveRunSummary(run)], next_cursor: null });
 }
 
 /**
- * Load one recorder only after the current complete trace contract accepts
- * recording_documents[0]. This is intentionally a hard prerequisite: the
- * old recorder shape must remain MISSING rather than being migrated here.
+ * Load one recorder only after every current complete response contract
+ * accepts its copied API document. An unaccepted recorder remains MISSING
+ * rather than being migrated here.
  */
 export async function loadStaticReplayRecording(
   scenario: RecordingScenario = scenarioFromEnvironment(),

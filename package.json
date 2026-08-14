@@ -16,6 +16,7 @@
     "dev:api": "node --import tsx --watch src/entrypoints/api/server.ts",
     "dev:core": "node scripts/dev/dev-compose.mjs core",
     "dev:runtime": "node scripts/dev/dev-compose.mjs runtime",
+    "env:explain": "node scripts/dev/harness.mjs explain",
     "dev:lark": "node --import tsx --watch src/entrypoints/lark/worker.ts",
     "start": "node dist/entrypoints/api/server.js",
     "start:lark": "node dist/entrypoints/lark/worker.js",

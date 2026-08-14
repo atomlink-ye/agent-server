@@ -217,16 +217,22 @@ export class ProjectAgenticTeam {
       noActiveAttempts &&
       allMembersIdle &&
       !allWorkAccepted;
+    const finalText =
+      typeof team.finalText === 'string' ? safeText(team.finalText) : null;
+    const hasCompletedFinalText =
+      team.status === 'succeeded' && finalText !== null && finalText.length > 0;
     return {
       stuck,
-      decisionCapture: { status: 'not_captured' },
+      decisionCapture: hasCompletedFinalText
+        ? { status: 'reported', decisions: [] }
+        : { status: 'not_captured' },
       project: {
         rootTaskId: team.rootTaskId,
         teamRunId: team.id,
         teamVersionId: team.teamVersionId,
         status: approvalPending ? 'waiting' : team.status,
         phase: team.phase,
-        finalText: safeText(team.finalText),
+        finalText,
         revision: team.revision,
         stopReason: approvalPending
           ? 'approval_required'

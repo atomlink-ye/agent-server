@@ -18,6 +18,9 @@ Across the accepted surface there is no `runs.status` inference, four-state prod
 
 ## B2 classification: product-fact gap / PLAN-D input
 
+同类 blocker-liveness arm 仍需要，但本轮尚未建；B2 parity evidence does not
+claim or substitute that C4 arm.
+
 1. The design reference at `design/figma/01-work-detail/timeline-rework/` expresses a return edge from the feedback source Attempt to a later rework target Attempt across the timeline, including the corresponding interaction.
 2. The accepted `ProductRunTraceResponse` `data.trace.edges[]` feedback variant is `ProductFeedbackEdgeSchema` in `src/contracts/product-projection/edges.ts`; it contains only the source-side `attempt_id` and lacks a sibling `target_attempt_id` (product Attempt identity). The final field name is subject to PLAN-D/Human Gate decision, but the semantic position belongs on the feedback edge.
 3. `attempt_id` is currently taken directly by `projectFeedbackEdges` from the `attempt.id` that produced the feedback fact, so it anchors only the source. A Work Item may have multiple later Attempts; chronology or `attempt_no` cannot prove which one is the target, so the frontend cannot infer it.

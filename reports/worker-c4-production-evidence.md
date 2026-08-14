@@ -8,6 +8,40 @@ The separate partial journey is `E11_STRUCTURAL_RELATIONSHIP_PARTIAL`. It has it
 
 修好前任何让原内容断言变绿的做法都是掩盖产品缺陷
 
+## C4 blocker-liveness arm (independent of E11)
+
+The C-owned checker is `scripts/ci/check-product-feedback-projection-blocker.ts`.
+It reads the current rework recorder's authoritative `manifest.json`,
+`db/team_work_item_attempts.json`, and `api/work-run.json`, verifies the
+sidecar provenance binding and full current `ProductWorkRunResponseSchema`
+parse, then compares the unique non-empty DB feedback row with the same API
+attempt by exact UTF-8 bytes.
+
+| assertion | blocked_by | would_be_green_if | arm_that_proves_still_blocked | last_verified |
+|---|---|---|---|---|
+| Exactly one same-attempt DB feedback value is non-empty and the complete current ProductWorkRunResponseSchema parse reports that attempt as `feedback_summary=null`, `feedback_capture_status=redacted`; checker status `BLOCKER_STILL_PRESENT`, outer exit `1` | Product projection reads presence only and maps durable feedback to `null`/`redacted`; this is the B-owned projection defect | The same attempt's API summary is byte-for-byte equal to the durable DB feedback and its status is neither `not_present` nor `redacted`, under the accepted full current schema | Current rework-once recorder blocker-liveness arm; independent of E11 full/partial, and neither arm can mutually prove the other | `recorded_at=2026-08-14T01:06:07.741Z`; `service_revision=0.1.0`; manifest SHA `07129cc7d1dc04a6235bf06a521c3391c5f92321ffc36446a54d086a72f5baa1`; API SHA `1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933`; DB SHA `9d1b305133ff8e01415002fde7031a6fb539da86f446b54c452bee27beb3fa5f`; attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`; candidate bound to repository HEAD at invocation |
+
+The machine binding is `scripts/ci/product-feedback-projection-blocker-binding.json`.
+It marks only this `rework-once` bundle as `current-rework`, binds the exact
+manifest/API/DB hashes and recorded timestamp/service revision, and requires
+`C4_CANDIDATE_SHA` to equal the repository HEAD. The old/static replay bundle
+has no DB source and no current binding, so it can only return `MISSING` (exit
+`2`) and can never serve as a future unblock.
+
+The accepted capture enum is currently only `not_present|redacted`
+(`src/contracts/product-projection/identity.ts`). Therefore
+`UNBLOCKED_CANDIDATE` is intentionally unreachable under the current
+contract. The eventual non-redacted status and its public field semantics are
+a pending PLAN-D/Human Gate contract decision; this lane does not invent a
+preview schema or modify product contracts.
+
+The checker does not touch or reinterpret E11 full/partial status, does not
+change B product projection code, and does not treat E11 as evidence for this
+arm. Conversely, a future blocker-liveness result cannot establish E11.
+
+The exact checker invocation and machine result are recorded below in the
+verification section.
+
 ## Evidence layers and Manager interpretation
 
 ### HARD EVIDENCE
@@ -83,3 +117,17 @@ Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 - Provenance JSON parse: passed.
 - Static scans: accepted-schema gate, provenance hash checks, immutable machine names, blocked full status, independent partial evidence root, five red arms, and partial excluded-field declaration present.
 - Runtime/browser/build/install/provider/sandbox/full-test execution: skipped by dispatch constraints; no runtime PASS is claimed.
+
+## Blocker-liveness verification
+
+Command (current rework bundle, candidate bound to the checked-out HEAD):
+
+```sh
+C4_CANDIDATE_SHA="$(git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend rev-parse HEAD)" C4_BLOCKER_BUNDLE_DIR=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1 pnpm exec tsx scripts/ci/check-product-feedback-projection-blocker.ts
+```
+
+Observed exit `1` and JSON status `BLOCKER_STILL_PRESENT`; the JSON recorded
+`attempt_id=524401a1-fd03-4dfa-93c7-621452a5e71d`, `recorded_at`, service
+revision, candidate SHA, and all manifest/API/DB hashes. Static fixture replay
+was also checked and returned `MISSING` exit `2` (`manifest_file_missing`),
+proving it cannot be used as a future unblock.

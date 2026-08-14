@@ -4,7 +4,7 @@ import type { RunUsage } from '../../domain/runs/run.js';
 import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { PaseoFinishStatus } from './status-mapper.js';
 import type { PaseoModelDescriptor } from './model-selector.js';
-import type { RuntimeMcpServerConfig } from '../../application/ports/agent-runtime.js';
+import type { ExecutionMcpServerConfig } from '../../application/ports/execution-plane.js';
 
 export interface PaseoCreatedAgent {
   readonly id: string;
@@ -224,7 +224,7 @@ export interface PaseoClientPort {
     readonly runId: string;
     readonly title?: string;
     readonly labels?: Readonly<Record<string, string>>;
-    readonly mcpServers?: readonly RuntimeMcpServerConfig[];
+    readonly mcpServers?: readonly ExecutionMcpServerConfig[];
   }): Promise<PaseoCreatedAgent>;
   sendAgentMessage(agentId: string, text: string): Promise<void>;
   subscribeAgentStream?(
@@ -352,7 +352,7 @@ export class PaseoSdkClient implements PaseoClientPort {
     readonly runId: string;
     readonly title?: string;
     readonly labels?: Readonly<Record<string, string>>;
-    readonly mcpServers?: readonly RuntimeMcpServerConfig[];
+    readonly mcpServers?: readonly ExecutionMcpServerConfig[];
   }): Promise<PaseoCreatedAgent> {
     const agent = await this.#client.createAgent({
       provider: input.provider,

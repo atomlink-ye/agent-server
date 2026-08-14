@@ -94,6 +94,36 @@ mutate(
     );
   },
 );
+mutate(
+  'canonical-mcp-zero-execution',
+  'scripts/ci/run-work-mcp-acceptance-raw.mjs',
+  `pattern: 'creates through real MCP'`,
+  `pattern: 'mgr-b-deliberately-no-matching-mcp-test'`,
+  () => {
+    arms.push(
+      runArm(
+        'canonical-mcp-zero-execution',
+        'pnpm',
+        ['modularization:acceptance:work-mcp'],
+        2,
+        [
+          '"executed":0',
+          'WORK_ACCEPTANCE_MISSING[work_mcp_zero_execution]',
+          'work_acceptance_missing:kind=mcp-registration:marker=work_mcp_zero_execution',
+        ],
+      ),
+    );
+    arms.push(
+      runArm(
+        'canonical-mcp-zero-execution-http-control',
+        'pnpm',
+        ['modularization:acceptance:work-http'],
+        0,
+        ['"kind":"http-projection"', '"executed":3'],
+      ),
+    );
+  },
+);
 arms.push(
   runArmWithoutDatabase(
     'canonical-mcp-database-missing',
@@ -343,10 +373,16 @@ arms.push(
 );
 
 arms.push(
-  runArm('baseline-http', 'pnpm', ['modularization:acceptance:work-http'], 0),
+  runArm('baseline-http', 'pnpm', ['modularization:acceptance:work-http'], 0, [
+    '"kind":"http-projection"',
+    '"executed":3',
+  ]),
 );
 arms.push(
-  runArm('baseline-mcp', 'pnpm', ['modularization:acceptance:work-mcp'], 0),
+  runArm('baseline-mcp', 'pnpm', ['modularization:acceptance:work-mcp'], 0, [
+    '"kind":"mcp-registration"',
+    '"executed":1',
+  ]),
 );
 arms.push(
   runArm(

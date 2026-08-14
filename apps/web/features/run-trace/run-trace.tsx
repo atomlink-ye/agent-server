@@ -18,7 +18,13 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
   const geometry = useMemo(() => timelineGeometry(attempts), [attempts]);
   const capturedRange = useMemo(() => capturedTimelineRange(attempts), [attempts]);
   const recordedFeedbackCount = trace.edges.filter((edge) => edge.kind === 'feedback').length;
-  const feedbackAttemptIds = new Set(trace.edges.filter((edge) => edge.kind === 'feedback' && edge.attempt_id !== null).map((edge) => edge.attempt_id));
+  const feedbackAttemptIds = new Set(
+    trace.edges.flatMap((edge) =>
+      edge.kind === 'feedback' && edge.attempt_id !== null
+        ? [edge.attempt_id]
+        : [],
+    ),
+  );
   const actorRows = trace.actors.map((actor) => ({ key: actor.id, name: actor.name ?? 'Name not captured', items: trace.work_items.filter((workItem) => workItem.actor_id === actor.id) }));
   const unassignedItems = trace.work_items.filter((workItem) => !trace.actors.some((actor) => actor.id === workItem.actor_id));
   if (unassignedItems.length) actorRows.push({ key: 'uncaptured-actor', name: 'Name not captured', items: unassignedItems });
@@ -41,7 +47,7 @@ function TimeAxis({ range }: { readonly range: ReturnType<typeof capturedTimelin
 
 function AttemptSpan({ attempt, feedbackSource, geometry, selected, onSelect, subject }: { readonly attempt: Attempt; readonly feedbackSource: boolean; readonly geometry: Geometry | undefined; readonly selected: boolean; readonly onSelect: (id: string) => void; readonly subject: string }) {
   if (!geometry) return <span aria-label={`${subject}, Attempt ${attempt.attempt_no}, timing not captured`} className="run-trace__attempt-unpositioned">Attempt {attempt.attempt_no} · Timing not captured</span>;
-  return <button aria-label={`${subject}, Attempt ${attempt.attempt_no}, ${durationLabel(attempt)}`} aria-pressed={selected} className="run-trace__attempt" data-testid="trace-attempt" onClick={() => onSelect(attempt.id)} style={{ '--attempt-left': `${geometry?.left ?? 0}%`, '--attempt-width': `${geometry?.width ?? 0}%` } as CSSProperties} title={subject} type="button"><span className="run-trace__attempt-label">Attempt {attempt.attempt_no} · {durationLabel(attempt)}</span>{feedbackSource ? <span aria-label="Recorded feedback relation" data-attempt-id={attempt.id}>Feedback recorded</span> : null}</button>;
+  return <button aria-label={`${subject}, Attempt ${attempt.attempt_no}, ${durationLabel(attempt)}`} aria-pressed={selected} className="run-trace__attempt" data-testid="trace-attempt" onClick={() => onSelect(attempt.id)} style={{ '--attempt-left': `${geometry.left}%`, '--attempt-width': `${geometry.width}%` } as CSSProperties} title={subject} type="button"><span className="run-trace__attempt-label">Attempt {attempt.attempt_no} · {durationLabel(attempt)}</span>{feedbackSource ? <span aria-label="Recorded feedback relation" data-attempt-id={attempt.id}>Feedback recorded</span> : null}</button>;
 }
 
 function Events({ trace }: { readonly trace: Trace }) {
@@ -99,7 +105,7 @@ function relativeTicks(startedAt: string, endedAt: string) {
   const span = Math.max(0, end - start);
   const count = span > 20 * 60_000 ? 7 : span > 5 * 60_000 ? 6 : 5;
   return Array.from({ length: count }, (_, index) => {
-    const position = count === 1 ? 0 : (index / (count - 1)) * 100;
+    const position = (index / (count - 1)) * 100;
     const timestamp = new Date(start + (span * index) / (count - 1));
     return { position, label: index === 0 || index === count - 1 ? formatClock(timestamp) : `+${formatRelative(span * index / (count - 1))}` };
   });

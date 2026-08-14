@@ -1,5 +1,5 @@
 import {
-  ProductRunTraceResponseSchema,
+  ProductRunTraceSuccessSchema,
   type ProductRunTrace,
 } from '@atomlink-ye/agent-server/product-contract';
 
@@ -12,14 +12,9 @@ type Recording = {
   readonly recording_documents: readonly unknown[];
 };
 
-/** Read the original recorder's trace document through the accepted schema. */
+/** Parse a stable fixture trace through the accepted product contract. */
 export function parseRecordedTrace(
   recording: Recording,
 ): AnchoredRecordingTrace {
-  const parsed = ProductRunTraceResponseSchema.parse(
-    recording.recording_documents[0],
-  );
-  if (parsed.projection_status !== 'internally_anchored')
-    throw new Error('recording_trace_not_internally_anchored');
-  return parsed;
+  return ProductRunTraceSuccessSchema.parse(recording.recording_documents[0]);
 }

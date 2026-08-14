@@ -244,6 +244,7 @@ The canonical symbolic range check
 `git diff --check 01dce6d89baa89d21180159c5be8b0a5f1446f74..HEAD` remains exit 2
 because preserved raw ANSI captures in the earlier
 `e8-classifier-a02b54a/`, `e8-classifier-51c102f/`,
-`e8-classifier-248d254/`, `e8-classifier-6f1f0c3/`, and the reachability evidence
-contain whitespace findings. Scoped source/tests/runner/report checks are exit
-0. Raw evidence is retained and no full-range PASS is claimed.
+`e8-classifier-248d254/`, and `e8-classifier-6f1f0c3/` contain whitespace
+findings. The `e8-reachability-1dbdc99/` evidence does not trigger the check.
+Scoped source/tests/runner/report checks are exit 0. Raw evidence is retained
+and no full-range PASS is claimed.

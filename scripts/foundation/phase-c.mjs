@@ -11,6 +11,7 @@ import {
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
 import {
+  hashProcessRecords,
   isPaseoExecutableProcess,
   isPaseoProcess,
 } from './lib/phase-c-process-inspection.mjs';
@@ -64,12 +65,17 @@ function nonempty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function completeProcessCollection(value) {
+function completeProcessCollection(value, processes) {
   return (
     value &&
     typeof value === 'object' &&
     value.stable === true &&
     value.complete === true &&
+    Number.isSafeInteger(value.emitted_count) &&
+    typeof value.record_hash === 'string' &&
+    (!Array.isArray(processes) ||
+      (value.emitted_count === processes.length &&
+        value.record_hash === hashProcessRecords(processes))) &&
     Array.isArray(value.snapshots) &&
     value.snapshots.length === 2 &&
     value.snapshots.every(
@@ -87,6 +93,16 @@ function completeProcessCollection(value) {
         snapshot.read_error_count === 0 &&
         snapshot.emitted_count > 0,
     )
+  );
+}
+
+function processCollectionMetadataMatches(value, processes) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    Array.isArray(processes) &&
+    value.emitted_count === processes.length &&
+    value.record_hash === hashProcessRecords(processes)
   );
 }
 
@@ -204,13 +220,48 @@ function evaluateE4(options) {
   if (record.__error) return result('E4', 'MISSING', record.__error);
   const compose = record.effective_compose;
   const runtime = record.runtime_inspection;
-  if (!completeProcessCollection(runtime?.agent_server?.process_collection))
+  const agentProcesses = runtime?.agent_server?.processes;
+  const runtimeProcesses = runtime?.paseo_runtime?.processes;
+  const agentPaseoProcess =
+    Array.isArray(agentProcesses) && agentProcesses.some(isPaseoProcess);
+  const runtimePaseoProcess =
+    Array.isArray(runtimeProcesses) &&
+    runtimeProcesses.some(isPaseoExecutableProcess);
+  const agentCollectionComplete = completeProcessCollection(
+    runtime?.agent_server?.process_collection,
+    agentProcesses,
+  );
+  const runtimeCollectionComplete = completeProcessCollection(
+    runtime?.paseo_runtime?.process_collection,
+    runtimeProcesses,
+  );
+  const agentMetadataValid = processCollectionMetadataMatches(
+    runtime?.agent_server?.process_collection,
+    agentProcesses,
+  );
+  const runtimeMetadataValid = processCollectionMetadataMatches(
+    runtime?.paseo_runtime?.process_collection,
+    runtimeProcesses,
+  );
+  if (!agentMetadataValid)
     return result(
       'E4',
       'MISSING',
       'agent_server process collection is missing or incomplete',
     );
-  if (!completeProcessCollection(runtime?.paseo_runtime?.process_collection))
+  if (!agentPaseoProcess && !agentCollectionComplete)
+    return result(
+      'E4',
+      'MISSING',
+      'agent_server process collection is missing or incomplete',
+    );
+  if (!runtimeMetadataValid)
+    return result(
+      'E4',
+      'MISSING',
+      'paseo_runtime process collection is missing or incomplete',
+    );
+  if (!agentPaseoProcess && !runtimePaseoProcess && !runtimeCollectionComplete)
     return result(
       'E4',
       'MISSING',
@@ -219,9 +270,7 @@ function evaluateE4(options) {
   const requiredCollections = [
     compose?.services,
     runtime?.containers,
-    runtime?.agent_server?.processes,
     runtime?.agent_server?.environment_names,
-    runtime?.paseo_runtime?.processes,
     runtime?.paseo_runtime?.environment_names,
     runtime?.paseo_runtime?.mounts,
   ];
@@ -377,19 +426,25 @@ function evaluateE4(options) {
     )
   )
     failures.push('runtime_workspace_read_only_boundary');
-  if (runtime.agent_server.processes.some(isPaseoProcess))
-    failures.push('agent_server_paseo_process');
-  const runtimePaseoProcess = runtime.paseo_runtime.processes.some(
-    isPaseoExecutableProcess,
-  );
+  if (agentPaseoProcess) failures.push('agent_server_paseo_process');
   if (record.mutation?.instrumentation === 'failed-runtime-child-carrier') {
+    if (
+      !runtimePaseoProcess &&
+      !runtimeCollectionComplete &&
+      !agentPaseoProcess
+    )
+      return result(
+        'E4',
+        'MISSING',
+        'paseo_runtime process collection is missing or incomplete',
+      );
     if (
       runtimePaseoProcess ||
       record.mutation.real_runtime_child_exit !== 1 ||
       record.mutation.real_runtime_child_survived !== false
     )
       failures.push('runtime_child_failure_observation');
-  } else if (!runtimePaseoProcess)
+  } else if (!runtimePaseoProcess && runtimeCollectionComplete)
     failures.push('runtime_paseo_process_missing');
   if (runtime.agent_server.container_id === runtime.paseo_runtime.container_id)
     failures.push('container_identity_not_independent');
@@ -634,42 +689,115 @@ function evaluateE6(options) {
   ];
   if (required.some((value) => !nonempty(value)))
     return result('E6', 'MISSING', 'required proof identity is empty');
+  const runtimeNeedsCompleteness = (processes) =>
+    !Array.isArray(processes) || !processes.some(isPaseoExecutableProcess);
+  const evidence = (collection, processes, requireComplete) => ({
+    collection,
+    processes,
+    requireComplete,
+  });
   const requiredProcessEvidence = {
-    agent_server_process_collection: proof.agent_server_process_collection,
-    paseo_runtime_process_collection: proof.paseo_runtime_process_collection,
-    e4_mutation_agent_process_collection:
+    agent_server_process_collection: evidence(
+      proof.agent_server_process_collection,
+      proof.agent_server_processes,
+      true,
+    ),
+    paseo_runtime_process_collection: evidence(
+      proof.paseo_runtime_process_collection,
+      proof.paseo_runtime_processes,
+      runtimeNeedsCompleteness(proof.paseo_runtime_processes),
+    ),
+    e4_mutation_agent_process_collection: evidence(
       proof.e4_mutation?.agent_process_collection,
-    e4_mutation_runtime_process_collection:
+      proof.e4_mutation?.agent_processes,
+      true,
+    ),
+    e4_mutation_runtime_process_collection: evidence(
       proof.e4_mutation?.runtime_process_collection,
-    e4_workspace_mutation_agent_process_collection:
+      proof.e4_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(proof.e4_mutation?.runtime_processes),
+    ),
+    e4_workspace_mutation_agent_process_collection: evidence(
       proof.e4_workspace_mutation?.agent_process_collection,
-    e4_workspace_mutation_runtime_process_collection:
+      proof.e4_workspace_mutation?.agent_processes,
+      true,
+    ),
+    e4_workspace_mutation_runtime_process_collection: evidence(
       proof.e4_workspace_mutation?.runtime_process_collection,
-    e4_root_runtime_mutation_agent_process_collection:
+      proof.e4_workspace_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(proof.e4_workspace_mutation?.runtime_processes),
+    ),
+    e4_root_runtime_mutation_agent_process_collection: evidence(
       proof.e4_root_runtime_mutation?.agent_process_collection,
-    e4_root_runtime_mutation_runtime_process_collection:
+      proof.e4_root_runtime_mutation?.agent_processes,
+      true,
+    ),
+    e4_root_runtime_mutation_runtime_process_collection: evidence(
       proof.e4_root_runtime_mutation?.runtime_process_collection,
-    e4_runtime_state_mutation_agent_process_collection:
+      proof.e4_root_runtime_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(
+        proof.e4_root_runtime_mutation?.runtime_processes,
+      ),
+    ),
+    e4_runtime_state_mutation_agent_process_collection: evidence(
       proof.e4_runtime_state_mutation?.agent_process_collection,
-    e4_runtime_state_mutation_runtime_process_collection:
+      proof.e4_runtime_state_mutation?.agent_processes,
+      true,
+    ),
+    e4_runtime_state_mutation_runtime_process_collection: evidence(
       proof.e4_runtime_state_mutation?.runtime_process_collection,
-    e4_runtime_state_mutation_child_process_collection:
+      proof.e4_runtime_state_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(
+        proof.e4_runtime_state_mutation?.runtime_processes,
+      ),
+    ),
+    e4_runtime_state_mutation_child_process_collection: evidence(
       proof.e4_runtime_state_mutation?.child_process_collection,
-    e4_no_paseo_process_mutation_agent_process_collection:
+      proof.e4_runtime_state_mutation?.child_processes,
+      true,
+    ),
+    e4_no_paseo_process_mutation_agent_process_collection: evidence(
       proof.e4_no_paseo_process_mutation?.agent_process_collection,
-    e4_no_paseo_process_mutation_runtime_process_collection:
+      proof.e4_no_paseo_process_mutation?.agent_processes,
+      true,
+    ),
+    e4_no_paseo_process_mutation_runtime_process_collection: evidence(
       proof.e4_no_paseo_process_mutation?.runtime_process_collection,
-    e4_declarative_environment_mutation_agent_process_collection:
+      proof.e4_no_paseo_process_mutation?.runtime_processes,
+      true,
+    ),
+    e4_declarative_environment_mutation_agent_process_collection: evidence(
       proof.e4_declarative_environment_mutation?.agent_process_collection,
-    e4_declarative_environment_mutation_runtime_process_collection:
+      proof.e4_declarative_environment_mutation?.agent_processes,
+      true,
+    ),
+    e4_declarative_environment_mutation_runtime_process_collection: evidence(
       proof.e4_declarative_environment_mutation?.runtime_process_collection,
-    e4_actual_environment_mutation_agent_process_collection:
+      proof.e4_declarative_environment_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(
+        proof.e4_declarative_environment_mutation?.runtime_processes,
+      ),
+    ),
+    e4_actual_environment_mutation_agent_process_collection: evidence(
       proof.e4_actual_environment_mutation?.agent_process_collection,
-    e4_actual_environment_mutation_runtime_process_collection:
+      proof.e4_actual_environment_mutation?.agent_processes,
+      true,
+    ),
+    e4_actual_environment_mutation_runtime_process_collection: evidence(
       proof.e4_actual_environment_mutation?.runtime_process_collection,
+      proof.e4_actual_environment_mutation?.runtime_processes,
+      runtimeNeedsCompleteness(
+        proof.e4_actual_environment_mutation?.runtime_processes,
+      ),
+    ),
   };
   const incompleteProcessEvidence = Object.entries(requiredProcessEvidence)
-    .filter(([, collection]) => !completeProcessCollection(collection))
+    .filter(
+      ([, item]) =>
+        !processCollectionMetadataMatches(item.collection, item.processes) ||
+        (item.requireComplete &&
+          !completeProcessCollection(item.collection, item.processes)),
+    )
     .map(([name]) => name);
   if (incompleteProcessEvidence.length)
     return result(
@@ -924,6 +1052,7 @@ function evaluateE6(options) {
   if (
     !completeProcessCollection(
       proof.e4_runtime_state_mutation?.child_process_collection,
+      proof.e4_runtime_state_mutation?.child_processes,
     )
   )
     failures.push('e4_runtime_state_mutation_process_collection');
@@ -971,6 +1100,7 @@ function evaluateE6(options) {
   if (
     !completeProcessCollection(
       proof.e4_no_paseo_process_mutation?.runtime_process_collection,
+      proof.e4_no_paseo_process_mutation?.runtime_processes,
     )
   )
     failures.push('e4_no_paseo_process_mutation_process_collection');

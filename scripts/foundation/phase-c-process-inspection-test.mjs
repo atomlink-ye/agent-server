@@ -6,6 +6,7 @@ import {
   classifyProcessIdentity,
   collectServiceProcesses,
   collectProcessSnapshots,
+  hashProcessRecords,
   enumerateNumericProcessRecords,
   exactServiceContainerId,
   isPaseoExecutableProcess,
@@ -350,6 +351,8 @@ assert.throws(
           error_class: 'none',
         },
       ],
+      emitted_count: 1,
+      record_hash: '0'.repeat(64),
       stable: true,
       complete: true,
     }),
@@ -438,28 +441,41 @@ const run = (command, commandFields) => {
             error_class: 'none',
           },
         ],
+        emitted_count: 1,
+        record_hash: hashProcessRecords([
+          {
+            pid: 1000,
+            ppid: 999,
+            uid: 1000,
+            comm: 'paseo',
+            identity: 'paseo-daemon',
+          },
+        ]),
         stable: true,
         complete: true,
       },
     }),
   };
 };
-assert.deepEqual(
-  collectServiceProcesses({
-    run,
-    composeCommand: ['compose', '-p', 'phasec_fixture'],
-    service: 'paseo-runtime',
-    identity: 'runtime',
-  }).processes,
-  [
-    {
-      pid: 1000,
-      ppid: 999,
-      uid: 1000,
-      comm: 'paseo',
-      identity: 'paseo-daemon',
-    },
-  ],
+const collectedServiceProcesses = collectServiceProcesses({
+  run,
+  composeCommand: ['compose', '-p', 'phasec_fixture'],
+  service: 'paseo-runtime',
+  identity: 'runtime',
+});
+assert.deepEqual(collectedServiceProcesses.processes, [
+  {
+    pid: 1000,
+    ppid: 999,
+    uid: 1000,
+    comm: 'paseo',
+    identity: 'paseo-daemon',
+  },
+]);
+assert.equal(collectedServiceProcesses.process_collection.emitted_count, 1);
+assert.equal(
+  collectedServiceProcesses.process_collection.record_hash,
+  hashProcessRecords(collectedServiceProcesses.processes),
 );
 assert.match(calls[1].commandFields[4], /readdirSync\('\/proc'\)/u);
 assert.doesNotMatch(calls[1].commandFields[4], /(?:top|environ|args=)/iu);

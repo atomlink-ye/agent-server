@@ -26,16 +26,24 @@ import {
 } from './lib/phase-c-runtime-boundary.mjs';
 import {
   collectServiceProcesses,
+  hashProcessRecords,
   isPaseoExecutableProcess,
   isPaseoProcess,
 } from './lib/phase-c-process-inspection.mjs';
 import { runtimeBoundaryCleanupProbes } from './lib/phase-c-runtime-cleanup.mjs';
-import { executeStandaloneMutation } from './lib/phase-c-standalone-mutation.mjs';
+import {
+  assertMutationEvaluatorOutcome,
+  executeStandaloneMutation,
+} from './lib/phase-c-standalone-mutation.mjs';
 
-function completeProcessCollection(value) {
+function completeProcessCollection(value, processes) {
   return (
     value?.stable === true &&
     value?.complete === true &&
+    Number.isSafeInteger(value?.emitted_count) &&
+    (!Array.isArray(processes) ||
+      (value.emitted_count === processes.length &&
+        value.record_hash === hashProcessRecords(processes))) &&
     Array.isArray(value?.snapshots) &&
     value.snapshots.length === 2 &&
     value.snapshots.every(
@@ -373,6 +381,8 @@ function runRuntimeBoundaryMutation({
   mutationSource,
   overlays,
   expectedFailure,
+  expectedStatus = 'FAIL',
+  expectedExit = 1,
   instrumentation = null,
 }) {
   const runProject = `${project}_${suffix}`;
@@ -457,8 +467,14 @@ function runRuntimeBoundaryMutation({
           isPaseoExecutableProcess,
         ),
         child_process_collection: childInspection.process_collection,
+        child_processes: childInspection.processes,
       };
-      if (!completeProcessCollection(childInspection.process_collection))
+      if (
+        !completeProcessCollection(
+          childInspection.process_collection,
+          childInspection.processes,
+        )
+      )
         throw new Error(
           `${suffix}_runtime_child_process_collection_incomplete`,
         );
@@ -514,15 +530,17 @@ function runRuntimeBoundaryMutation({
     const evaluation = run(
       process.execPath,
       ['scripts/foundation/phase-c.mjs', 'E4', '--runtime-record', recordPath],
-      { allow: [1], identity: `${suffix}-e4-evaluator` },
+      { allow: [1, 2], identity: `${suffix}-e4-evaluator` },
     );
     const evaluated = JSON.parse(evaluation.stdout.trim().split('\n').at(-1));
-    if (
-      evaluation.status !== 1 ||
-      evaluated.status !== 'FAIL' ||
-      JSON.stringify(evaluated.failures) !== JSON.stringify([expectedFailure])
-    )
-      throw new Error(`${suffix}_mutation_not_exact_red`);
+    assertMutationEvaluatorOutcome({
+      evaluationExit: evaluation.status,
+      evaluated,
+      expectedExit,
+      expectedStatus,
+      expectedFailure,
+      mode: 'missing-paseo-process',
+    });
     resultRecord = {
       name,
       source: mutationSource,
@@ -536,6 +554,8 @@ function runRuntimeBoundaryMutation({
       workspace_write_probe:
         record.runtime_inspection.paseo_runtime.workspace_write_probe,
       processes: record.runtime_inspection.paseo_runtime.processes,
+      agent_processes: record.runtime_inspection.agent_server.processes,
+      runtime_processes: record.runtime_inspection.paseo_runtime.processes,
       agent_process_collection:
         record.runtime_inspection.agent_server.process_collection,
       runtime_process_collection:
@@ -855,6 +875,8 @@ function runEnvironmentOwnershipMutation({
       runtime_state_probe: runtime.runtime_state_probe,
       workspace_write_probe: runtime.workspace_write_probe,
       processes: runtime.processes,
+      agent_processes: agent.processes,
+      runtime_processes: runtime.processes,
       agent_process_collection: agent.process_collection,
       runtime_process_collection: runtime.process_collection,
     };
@@ -1256,6 +1278,9 @@ try {
       name: 'restore-agent-provider-ownership',
       exit: mutationRun.status,
       status: mutationResult.status,
+      agent_processes: mutationRecord.runtime_inspection.agent_server.processes,
+      runtime_processes:
+        mutationRecord.runtime_inspection.paseo_runtime.processes,
       agent_process_collection:
         mutationRecord.runtime_inspection.agent_server.process_collection,
       runtime_process_collection:
@@ -1479,6 +1504,10 @@ try {
       status: workspaceMutationResult.status,
       failures: workspaceMutationResult.failures,
       workspace_write_probe: workspaceProbe,
+      agent_processes:
+        workspaceMutationRecord.runtime_inspection.agent_server.processes,
+      runtime_processes:
+        workspaceMutationRecord.runtime_inspection.paseo_runtime.processes,
       agent_process_collection:
         workspaceMutationRecord.runtime_inspection.agent_server
           .process_collection,
@@ -1735,6 +1764,10 @@ try {
     runtimeRecord.runtime_inspection.agent_server.process_collection;
   proof.paseo_runtime_process_collection =
     runtimeRecord.runtime_inspection.paseo_runtime.process_collection;
+  proof.agent_server_processes =
+    runtimeRecord.runtime_inspection.agent_server.processes;
+  proof.paseo_runtime_processes =
+    runtimeRecord.runtime_inspection.paseo_runtime.processes;
   proof.e4_mutation = { ...mutation, cleanup: mutationCleanup };
   proof.e4_workspace_mutation = {
     ...workspaceMutation,

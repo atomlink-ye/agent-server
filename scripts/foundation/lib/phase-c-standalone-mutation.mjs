@@ -14,9 +14,15 @@ export async function executeStandaloneMutation({
   try {
     const result = await runMutation();
     output(`${JSON.stringify(result)}\n`);
-    exit(0);
-    return 0;
+    const code = result?.status === 'MISSING' ? 2 : 0;
+    exit(code);
+    return code;
   } catch (error) {
+    if (error?.standalone_result?.status === 'MISSING') {
+      output(`${JSON.stringify(error.standalone_result)}\n`);
+      exit(2);
+      return 2;
+    }
     output(
       `${JSON.stringify(
         projectStandaloneMutationFailure(error, { secretValues }),
@@ -25,4 +31,34 @@ export async function executeStandaloneMutation({
     exit(1);
     return 1;
   }
+}
+
+export function assertMutationEvaluatorOutcome({
+  evaluationExit,
+  evaluated,
+  expectedExit,
+  expectedStatus,
+  expectedFailure,
+  mode,
+}) {
+  if (evaluationExit === 2 && evaluated?.status === 'MISSING') {
+    const error = new Error('mutation_evaluator_missing');
+    error.standalone_result = {
+      status: 'MISSING',
+      mode,
+      reason: String(evaluated.reason ?? 'mutation evidence is missing').slice(
+        0,
+        512,
+      ),
+    };
+    throw error;
+  }
+  if (
+    evaluationExit !== expectedExit ||
+    evaluated?.status !== expectedStatus ||
+    (expectedStatus === 'FAIL' &&
+      JSON.stringify(evaluated.failures) !== JSON.stringify([expectedFailure]))
+  )
+    throw new Error('mutation_evaluator_outcome_invalid');
+  return evaluated;
 }

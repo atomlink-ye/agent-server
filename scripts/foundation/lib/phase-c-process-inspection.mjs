@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 const MAX_COMM_LENGTH = 64;
 const MAX_PROCESS_RECORDS = 4096;
 const MAX_RAW_CMDLINE_LENGTH = 8192;
@@ -204,6 +206,10 @@ function classifyProcessRecords(records) {
     .sort((left, right) => left.pid - right.pid);
 }
 
+export function hashProcessRecords(records) {
+  return createHash('sha256').update(JSON.stringify(records)).digest('hex');
+}
+
 function snapshotProcessRecords({
   procEntries,
   readComm,
@@ -341,6 +347,12 @@ export function collectProcessSnapshots({
     processes: second.records.length ? second.records : first.records,
     process_collection: {
       snapshots: snapshots.map(({ snapshot }) => snapshot),
+      emitted_count: second.records.length
+        ? second.records.length
+        : first.records.length,
+      record_hash: hashProcessRecords(
+        second.records.length ? second.records : first.records,
+      ),
       stable,
       complete,
     },
@@ -361,7 +373,7 @@ export function enumerateNumericProcessRecords({
   });
 }
 
-export const processInspectionScript = `const fs=require('node:fs');const MAX_COMM_LENGTH=${MAX_COMM_LENGTH};const MAX_PROCESS_RECORDS=${MAX_PROCESS_RECORDS};const MAX_RAW_CMDLINE_LENGTH=${MAX_RAW_CMDLINE_LENGTH};const PROCESS_IDENTITIES=${JSON.stringify(PROCESS_IDENTITIES)};const PROCESS_COLLECTION_ERROR_CLASSES=${JSON.stringify(PROCESS_COLLECTION_ERROR_CLASSES)};const isNodeExecutable=(${isNodeExecutable.toString()});const isRuntimeSupervisorInvocation=(${isRuntimeSupervisorInvocation.toString()});const isValidListenAddress=(${isValidListenAddress.toString()});const hasExactPaseoStartGrammar=(${hasExactPaseoStartGrammar.toString()});const classifyProcessIdentity=(${classifyProcessIdentity.toString()});const isStrongPaseoInvocation=(${isStrongPaseoInvocation.toString()});const classifyProcessRecords=(${classifyProcessRecords.toString()});const snapshotProcessRecords=(${snapshotProcessRecords.toString()});const emptyProcessSnapshot=(${emptyProcessSnapshot.toString()});const collectProcessSnapshots=(${collectProcessSnapshots.toString()});const output=JSON.stringify(collectProcessSnapshots({listProcEntries:()=>fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8'),readCmdline:pid=>fs.readFileSync('/proc/'+pid+'/cmdline','utf8')}));if(output.length>${MAX_PROCESS_OUTPUT_LENGTH})throw new Error('process_output_limit');process.stdout.write(output);`;
+export const processInspectionScript = `const fs=require('node:fs');const createHash=require('node:crypto').createHash;const MAX_COMM_LENGTH=${MAX_COMM_LENGTH};const MAX_PROCESS_RECORDS=${MAX_PROCESS_RECORDS};const MAX_RAW_CMDLINE_LENGTH=${MAX_RAW_CMDLINE_LENGTH};const PROCESS_IDENTITIES=${JSON.stringify(PROCESS_IDENTITIES)};const PROCESS_COLLECTION_ERROR_CLASSES=${JSON.stringify(PROCESS_COLLECTION_ERROR_CLASSES)};const isNodeExecutable=(${isNodeExecutable.toString()});const isRuntimeSupervisorInvocation=(${isRuntimeSupervisorInvocation.toString()});const isValidListenAddress=(${isValidListenAddress.toString()});const hasExactPaseoStartGrammar=(${hasExactPaseoStartGrammar.toString()});const classifyProcessIdentity=(${classifyProcessIdentity.toString()});const isStrongPaseoInvocation=(${isStrongPaseoInvocation.toString()});const classifyProcessRecords=(${classifyProcessRecords.toString()});const hashProcessRecords=(${hashProcessRecords.toString()});const snapshotProcessRecords=(${snapshotProcessRecords.toString()});const emptyProcessSnapshot=(${emptyProcessSnapshot.toString()});const collectProcessSnapshots=(${collectProcessSnapshots.toString()});const output=JSON.stringify(collectProcessSnapshots({listProcEntries:()=>fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8'),readCmdline:pid=>fs.readFileSync('/proc/'+pid+'/cmdline','utf8')}));if(output.length>${MAX_PROCESS_OUTPUT_LENGTH})throw new Error('process_output_limit');process.stdout.write(output);`;
 
 function strictProcessRecords(value) {
   if (!Array.isArray(value) || value.length === 0)
@@ -415,11 +427,11 @@ export function parseProcessRecords(output) {
   return strictProcessRecords(value);
 }
 
-function strictProcessCollection(value) {
+function strictProcessCollection(value, processes) {
   if (value === null || typeof value !== 'object')
     throw new Error('process_collection_invalid');
   const keys = Object.keys(value).sort();
-  if (keys.join(',') !== 'complete,snapshots,stable')
+  if (keys.join(',') !== 'complete,emitted_count,record_hash,snapshots,stable')
     throw new Error('process_collection_schema_invalid');
   if (!Array.isArray(value.snapshots) || value.snapshots.length !== 2)
     throw new Error('process_collection_snapshot_count_invalid');
@@ -458,8 +470,21 @@ function strictProcessCollection(value) {
       error_class: snapshot.error_class,
     };
   });
-  if (typeof value.stable !== 'boolean' || typeof value.complete !== 'boolean')
+  if (
+    typeof value.stable !== 'boolean' ||
+    typeof value.complete !== 'boolean' ||
+    !Number.isSafeInteger(value.emitted_count) ||
+    value.emitted_count < 0 ||
+    value.emitted_count > MAX_PROCESS_RECORDS ||
+    !/^[0-9a-f]{64}$/u.test(value.record_hash)
+  )
     throw new Error('process_collection_value_invalid');
+  if (
+    Array.isArray(processes) &&
+    (value.emitted_count !== processes.length ||
+      value.record_hash !== hashProcessRecords(processes))
+  )
+    throw new Error('process_collection_records_mismatch');
   if (
     value.complete &&
     (!value.stable ||
@@ -475,6 +500,8 @@ function strictProcessCollection(value) {
     throw new Error('process_collection_complete_invalid');
   return {
     snapshots,
+    emitted_count: value.emitted_count,
+    record_hash: value.record_hash,
     stable: value.stable,
     complete: value.complete,
   };
@@ -502,11 +529,15 @@ function parseCollectedProcesses(output) {
     throw new Error('process_collection_result_schema_invalid');
   if (!Array.isArray(value.processes))
     throw new Error('process_records_invalid');
+  const processes = value.processes.length
+    ? strictProcessRecords(value.processes)
+    : [];
   return {
-    processes: value.processes.length
-      ? strictProcessRecords(value.processes)
-      : [],
-    process_collection: strictProcessCollection(value.process_collection),
+    processes,
+    process_collection: strictProcessCollection(
+      value.process_collection,
+      processes,
+    ),
   };
 }
 

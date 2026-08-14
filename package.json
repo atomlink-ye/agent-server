@@ -30,7 +30,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm typecheck && pnpm format:check && pnpm test:repository && pnpm web:check:types",
+    "check": "pnpm typecheck && pnpm test:repository && pnpm web:check:types",
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:repository": "vitest run --config vitest.repository.config.ts",

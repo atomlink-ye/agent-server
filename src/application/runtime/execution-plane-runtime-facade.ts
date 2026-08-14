@@ -187,16 +187,47 @@ export class ExecutionPlaneRuntimeFacade
       sessionBinding = resolved.runtimeSession.sessionBinding;
       closeAfterTurn = true;
     } else if (input.compatibilitySessionBinding) {
-      const cached = this.#freshSessions.get(
-        input.compatibilitySessionBinding.externalSessionId,
-      );
-      if (!cached)
-        throw new RuntimeExecutionError(
-          'The non-durable compatibility session is no longer attached in this process.',
+      const durable =
+        await this.runtimeSessionLookup.findByExecutionSessionBinding(
+          input.compatibilitySessionBinding,
         );
-      executionSession = cached.session;
-      workspaceBinding = cached.workspaceBinding;
-      sessionBinding = cached.sessionBinding;
+      if (durable) {
+        const resolved = await this.#resolver.resolve({
+          runtimeSession: durable,
+          spec: {
+            workspace: {
+              cwd,
+              ...(input.workspaceTitle ? { title: input.workspaceTitle } : {}),
+            },
+            ...(input.provider ? { provider: input.provider } : {}),
+            ...(input.model ? { model: input.model } : {}),
+            systemPrompt: '',
+          },
+          workspaceBinding: ownerWorkspaceBinding,
+        });
+        if (
+          !resolved.runtimeSession.workspaceBinding ||
+          !resolved.runtimeSession.sessionBinding
+        )
+          throw new RuntimeExecutionError(
+            'Durable compatibility session resolved without complete execution bindings.',
+          );
+        executionSession = resolved.session;
+        workspaceBinding = resolved.runtimeSession.workspaceBinding;
+        sessionBinding = resolved.runtimeSession.sessionBinding;
+        closeAfterTurn = true;
+      } else {
+        const cached = this.#freshSessions.get(
+          input.compatibilitySessionBinding.externalSessionId,
+        );
+        if (!cached)
+          throw new RuntimeExecutionError(
+            'The compatibility session binding is unavailable.',
+          );
+        executionSession = cached.session;
+        workspaceBinding = cached.workspaceBinding;
+        sessionBinding = cached.sessionBinding;
+      }
     } else {
       if (!input.systemPrompt)
         throw new RuntimeExecutionError('Fresh execution requires a system prompt.');

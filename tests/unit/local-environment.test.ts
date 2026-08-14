@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ExecuteCommandInput } from '../../tooling/environment/compose.js';
-import { startLocalEnvironment } from '../../tooling/environment/lifecycle.js';
+import {
+  startLocalEnvironment,
+  stopLocalEnvironment,
+} from '../../tooling/environment/lifecycle.js';
 import { resolveLocalEnvironment } from '../../tooling/environment/profiles.js';
 
 describe('local environment profiles', () => {
@@ -20,15 +23,16 @@ describe('local environment profiles', () => {
 
   it('builds a self-contained postgres lifecycle without a scenario script', async () => {
     const calls: ExecuteCommandInput[] = [];
+    const executor = async (input: ExecuteCommandInput) => {
+      calls.push(input);
+      return { code: 0 } as const;
+    };
     const environment = await startLocalEnvironment({
       profile: 'postgres',
       projectName: 'test-postgres-profile',
       testMode: true,
       environment: {},
-      executor: async (input) => {
-        calls.push(input);
-        return { code: 0 };
-      },
+      executor,
     });
     expect(environment.urls.postgres).toMatch(
       /^postgresql:\/\/agent:agent@127\.0\.0\.1:\d+\/agent_server$/,
@@ -40,5 +44,28 @@ describe('local environment profiles', () => {
     await environment.stop();
     expect(calls).toHaveLength(2);
     expect(calls[1]?.args).toContain('down');
+    expect(calls[1]?.args).toContain('--volumes');
+  });
+
+  it('stops a recorded environment without starting it again', async () => {
+    const calls: ExecuteCommandInput[] = [];
+    await stopLocalEnvironment(
+      {
+        profile: 'core',
+        projectName: 'recorded-core',
+        testMode: false,
+        ports: {},
+      },
+      {
+        environment: {},
+        executor: async (input) => {
+          calls.push(input);
+          return { code: 0 } as const;
+        },
+      },
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args).toContain('down');
+    expect(calls[0]?.args).not.toContain('up');
   });
 });

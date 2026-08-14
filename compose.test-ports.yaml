@@ -1,4 +1,7 @@
 services:
+  postgres:
+    ports: !override
+      - '127.0.0.1:${AGENT_SERVER_TEST_POSTGRES_PORT}:5432'
   agent-server:
     ports: !override
       - '127.0.0.1:${AGENT_SERVER_TEST_API_PORT}:3000'

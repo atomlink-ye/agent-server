@@ -26,6 +26,13 @@ export interface StartLocalEnvironmentOptions {
   readonly inheritOutput?: boolean;
 }
 
+export interface StopLocalEnvironmentOptions {
+  readonly environment?: NodeJS.ProcessEnv;
+  readonly executor?: CommandExecutor;
+  readonly runDirectory?: string;
+  readonly inheritOutput?: boolean;
+}
+
 export interface LocalEnvironmentHandle {
   readonly state: LocalEnvironmentState;
   readonly urls: LocalEnvironmentUrls;
@@ -57,10 +64,14 @@ async function resolvePorts(
   if (profile === 'postgres') return { postgres: await freePort() };
   if (!testMode) return {};
   if (profile === 'core' || profile === 'runtime') {
-    return { api: await freePort() };
+    return { postgres: await freePort(), api: await freePort() };
   }
   if (profile === 'full') {
-    return { api: await freePort(), web: await freePort() };
+    return {
+      postgres: await freePort(),
+      api: await freePort(),
+      web: await freePort(),
+    };
   }
   return {};
 }
@@ -68,7 +79,11 @@ async function resolvePorts(
 function environmentFor(
   base: NodeJS.ProcessEnv,
   state: LocalEnvironmentState,
-  runtime: { readonly adapter: string; readonly provider?: string; readonly model?: string },
+  runtime: {
+    readonly adapter: string;
+    readonly provider?: string;
+    readonly model?: string;
+  },
 ): NodeJS.ProcessEnv {
   return {
     ...base,
@@ -111,6 +126,47 @@ function urlsFor(state: LocalEnvironmentState): LocalEnvironmentUrls {
   };
 }
 
+function extraComposeFiles(state: LocalEnvironmentState): readonly string[] {
+  return state.testMode && state.profile !== 'postgres'
+    ? ['compose.test-ports.yaml']
+    : [];
+}
+
+export async function stopLocalEnvironment(
+  state: LocalEnvironmentState,
+  options: StopLocalEnvironmentOptions = {},
+): Promise<void> {
+  const profile = await resolveLocalEnvironment(state.profile, {
+    environment: options.environment,
+    overrides: state.runtimeOverrides,
+  });
+  if (profile.compose.files.length === 0) return;
+  const invocation = composeInvocation(
+    profile,
+    state.projectName,
+    extraComposeFiles(state),
+  );
+  const logPath = options.runDirectory
+    ? resolve(options.runDirectory, 'compose.log')
+    : undefined;
+  await (options.executor ?? executeCommand)({
+    command: invocation.command,
+    args: [
+      ...invocation.args,
+      'down',
+      '--remove-orphans',
+      ...(state.testMode ? ['--volumes'] : []),
+    ],
+    environment: environmentFor(
+      options.environment ?? process.env,
+      state,
+      profile.runtime,
+    ),
+    ...(logPath ? { logPath } : {}),
+    inheritOutput: options.inheritOutput ?? !state.testMode,
+  });
+}
+
 export async function startLocalEnvironment(
   options: StartLocalEnvironmentOptions,
 ): Promise<LocalEnvironmentHandle> {
@@ -125,7 +181,9 @@ export async function startLocalEnvironment(
     profile: options.profile,
     projectName:
       options.projectName ??
-      (testMode ? `agent-server-test-${Date.now().toString(36)}` : `agent-server-${options.profile}`),
+      (testMode
+        ? `agent-server-test-${Date.now().toString(36)}`
+        : `agent-server-${options.profile}`),
     testMode,
     ports,
     ...(options.runtimeOverrides
@@ -135,16 +193,29 @@ export async function startLocalEnvironment(
   if (profile.compose.files.length === 0) {
     return { state, urls: urlsFor(state), stop: async () => undefined };
   }
-  const extraFiles =
-    testMode && options.profile !== 'postgres' ? ['compose.test-ports.yaml'] : [];
-  const invocation = composeInvocation(profile, state.projectName, extraFiles);
-  const environment = environmentFor(options.environment ?? process.env, state, profile.runtime);
+  const invocation = composeInvocation(
+    profile,
+    state.projectName,
+    extraComposeFiles(state),
+  );
+  const environment = environmentFor(
+    options.environment ?? process.env,
+    state,
+    profile.runtime,
+  );
   const logPath = options.runDirectory
     ? resolve(options.runDirectory, 'compose.log')
     : undefined;
   await executor({
     command: invocation.command,
-    args: [...invocation.args, 'up', '-d', '--wait', ...profile.services],
+    args: [
+      ...invocation.args,
+      'up',
+      ...(profile.compose.transport === 'repository' ? ['--build'] : []),
+      '-d',
+      '--wait',
+      ...profile.services,
+    ],
     environment,
     ...(logPath ? { logPath } : {}),
     inheritOutput: options.inheritOutput ?? !testMode,
@@ -152,15 +223,13 @@ export async function startLocalEnvironment(
   return {
     state,
     urls: urlsFor(state),
-    stop: async () => {
-      await executor({
-        command: invocation.command,
-        args: [...invocation.args, 'down', '--remove-orphans'],
+    stop: async () =>
+      stopLocalEnvironment(state, {
         environment,
-        ...(logPath ? { logPath } : {}),
+        executor,
+        ...(options.runDirectory ? { runDirectory: options.runDirectory } : {}),
         inheritOutput: options.inheritOutput ?? !testMode,
-      });
-    },
+      }),
   };
 }
 
@@ -176,13 +245,19 @@ export async function inspectLocalEnvironment(
     overrides: state.runtimeOverrides,
   });
   if (profile.compose.files.length === 0) return;
-  const extraFiles =
-    state.testMode && state.profile !== 'postgres' ? ['compose.test-ports.yaml'] : [];
-  const invocation = composeInvocation(profile, state.projectName, extraFiles);
+  const invocation = composeInvocation(
+    profile,
+    state.projectName,
+    extraComposeFiles(state),
+  );
   await (options.executor ?? executeCommand)({
     command: invocation.command,
     args: [...invocation.args, 'ps'],
-    environment: environmentFor(options.environment ?? process.env, state, profile.runtime),
+    environment: environmentFor(
+      options.environment ?? process.env,
+      state,
+      profile.runtime,
+    ),
     inheritOutput: true,
   });
 }

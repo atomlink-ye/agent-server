@@ -5,17 +5,21 @@ export default async function setup(): Promise<() => Promise<void>> {
     process.env.REAL_POSTGRES_REQUIRED = '1';
     return async () => undefined;
   }
+  const keepFailed = process.env.TEST_KEEP_FAILED === '1';
   const environment = await startTestEnvironment({
     profile: 'postgres',
-    keepFailed: process.env.TEST_KEEP_FAILED === '1',
+    keepFailed,
   });
   const databaseUrl = environment.urls.postgres;
-  if (!databaseUrl) throw new Error('postgres test environment did not expose a database URL');
+  if (!databaseUrl) {
+    await environment.stop('failed');
+    throw new Error('postgres test environment did not expose a database URL');
+  }
   process.env.DATABASE_URL = databaseUrl;
   process.env.POSTGRES_URL = databaseUrl;
   process.env.POSTGRES_ADMIN_URL = databaseUrl;
   process.env.REAL_POSTGRES_REQUIRED = '1';
   return async () => {
-    await environment.stop('passed');
+    await environment.stop(keepFailed ? 'failed' : 'passed');
   };
 }

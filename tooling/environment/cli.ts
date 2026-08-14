@@ -1,18 +1,43 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
+import { executeCommand } from './compose.js';
 import {
   inspectLocalEnvironment,
   localEnvironmentRepositoryRoot,
   startLocalEnvironment,
+  stopLocalEnvironment,
 } from './lifecycle.js';
 import { parseLocalEnvironmentName, resolveLocalEnvironment } from './profiles.js';
-import type { LocalEnvironmentState, RuntimeOverrides } from './types.js';
+import {
+  createTestRunDirectory,
+  removeTestRunDirectory,
+} from './run-directory.js';
+import type {
+  LocalEnvironmentState,
+  LocalEnvironmentUrls,
+  RuntimeOverrides,
+} from './types.js';
 
 const statePath = resolve(
   localEnvironmentRepositoryRoot,
   '.local/environment-state.json',
 );
+
+function splitRunArguments(args: string[]): {
+  readonly flags: string[];
+  readonly command: string[];
+} {
+  const separator = args.indexOf('--');
+  if (separator === -1) {
+    throw new Error(
+      'usage: pnpm env -- run <profile> [--provider X --model Y --adapter X] -- <command...>',
+    );
+  }
+  const command = args.slice(separator + 1);
+  if (command.length === 0) throw new Error('environment run requires a command after --');
+  return { flags: args.slice(0, separator), command };
+}
 
 function parseRuntimeOverrides(args: string[]): RuntimeOverrides | undefined {
   const result: Record<string, string> = {};
@@ -26,7 +51,9 @@ function parseRuntimeOverrides(args: string[]): RuntimeOverrides | undefined {
     result[flag.slice(2)] = value;
     index += 1;
   }
-  return Object.keys(result).length > 0 ? (result as RuntimeOverrides) : undefined;
+  return Object.keys(result).length > 0
+    ? (result as RuntimeOverrides)
+    : undefined;
 }
 
 async function saveState(state: LocalEnvironmentState): Promise<void> {
@@ -39,14 +66,93 @@ async function loadState(): Promise<LocalEnvironmentState> {
     return JSON.parse(await readFile(statePath, 'utf8')) as LocalEnvironmentState;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('no local environment is recorded; run `pnpm env -- up <profile>` first');
+      throw new Error(
+        'no local environment is recorded; run `pnpm env -- up <profile>` first',
+      );
     }
     throw error;
   }
 }
 
+function commandEnvironment(
+  base: NodeJS.ProcessEnv,
+  urls: LocalEnvironmentUrls,
+  runDirectory: string,
+): NodeJS.ProcessEnv {
+  return {
+    ...base,
+    AGENT_SERVER_TEST_RUN_DIR: runDirectory,
+    ...(urls.postgres
+      ? {
+          DATABASE_URL: urls.postgres,
+          POSTGRES_URL: urls.postgres,
+          POSTGRES_ADMIN_URL: urls.postgres,
+        }
+      : {}),
+    ...(urls.api
+      ? {
+          AGENT_SERVER_BASE_URL: urls.api,
+          AGENT_SERVER_SERVICE_TOKEN:
+            base.AGENT_SERVER_SERVICE_TOKEN ?? 'token-local-dev',
+          AGENT_SERVER_WORKSPACE_ID:
+            base.AGENT_SERVER_WORKSPACE_ID ??
+            '00000000-0000-4000-8000-000000000001',
+        }
+      : {}),
+  };
+}
+
+async function runInEnvironment(
+  profileValue: string | undefined,
+  args: string[],
+): Promise<void> {
+  if (!profileValue) throw new Error('usage: pnpm env -- run <profile> -- <command...>');
+  const profile = parseLocalEnvironmentName(profileValue);
+  const { flags, command } = splitRunArguments(args);
+  const runtimeOverrides = parseRuntimeOverrides(flags);
+  const run = await createTestRunDirectory();
+  const keepFailed = process.env.TEST_KEEP_FAILED === '1';
+  let handle: Awaited<ReturnType<typeof startLocalEnvironment>> | undefined;
+  let failed = false;
+  try {
+    handle = await startLocalEnvironment({
+      profile,
+      testMode: true,
+      projectName: `agent-server-run-${run.id}`,
+      runDirectory: run.path,
+      ...(runtimeOverrides ? { runtimeOverrides } : {}),
+      inheritOutput: false,
+    });
+    await executeCommand({
+      command: command[0]!,
+      args: command.slice(1),
+      environment: commandEnvironment(process.env, handle.urls, run.path),
+      logPath: resolve(run.path, 'command.log'),
+      inheritOutput: true,
+    });
+  } catch (error) {
+    failed = true;
+    throw error;
+  } finally {
+    let stopError: unknown;
+    try {
+      await handle?.stop();
+    } catch (error) {
+      stopError = error;
+      failed = true;
+    }
+    if (!failed || !keepFailed) await removeTestRunDirectory(run);
+    else process.stderr.write(`retained failed test run: ${run.path}\n`);
+    if (stopError) throw stopError;
+  }
+}
+
 async function main(args = process.argv.slice(2)): Promise<void> {
   const [command = 'info', profileValue, ...rest] = args;
+  if (command === 'run') {
+    await runInEnvironment(profileValue, rest);
+    return;
+  }
   if (command === 'up') {
     if (!profileValue) throw new Error('usage: pnpm env -- up <profile>');
     const profile = parseLocalEnvironmentName(profileValue);
@@ -57,30 +163,23 @@ async function main(args = process.argv.slice(2)): Promise<void> {
       inheritOutput: true,
     });
     await saveState(handle.state);
-    process.stdout.write(`${JSON.stringify({ state: handle.state, urls: handle.urls }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ state: handle.state, urls: handle.urls }, null, 2)}\n`,
+    );
     return;
   }
   if (command === 'down') {
+    if (profileValue) throw new Error('usage: pnpm env -- down');
     const state = await loadState();
-    const profile = await resolveLocalEnvironment(state.profile, {
-      overrides: state.runtimeOverrides,
-    });
-    if (profile.compose.files.length > 0) {
-      const handle = await startLocalEnvironment({
-        profile: state.profile,
-        projectName: state.projectName,
-        testMode: state.testMode,
-        runtimeOverrides: state.runtimeOverrides,
-        inheritOutput: false,
-      });
-      await handle.stop();
-    }
+    await stopLocalEnvironment(state, { inheritOutput: true });
     await rm(statePath, { force: true });
     return;
   }
   if (command === 'info') {
     if (profileValue) {
-      const profile = await resolveLocalEnvironment(parseLocalEnvironmentName(profileValue));
+      const profile = await resolveLocalEnvironment(
+        parseLocalEnvironmentName(profileValue),
+      );
       process.stdout.write(`${JSON.stringify(profile, null, 2)}\n`);
       return;
     }
@@ -89,10 +188,14 @@ async function main(args = process.argv.slice(2)): Promise<void> {
     await inspectLocalEnvironment(state);
     return;
   }
-  throw new Error('usage: pnpm env -- <up PROFILE|down|info [PROFILE]>');
+  throw new Error(
+    'usage: pnpm env -- <up PROFILE|down|info [PROFILE]|run PROFILE -- COMMAND...>',
+  );
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exitCode = 1;
 });

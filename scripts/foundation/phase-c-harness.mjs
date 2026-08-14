@@ -58,6 +58,7 @@ function completeProcessCollection(value, processes) {
         Number.isSafeInteger(snapshot?.read_error_count) &&
         snapshot?.enoent_count === 0 &&
         snapshot?.read_error_count === 0 &&
+        snapshot?.integrity_error_count === 0 &&
         snapshot?.emitted_count > 0,
     )
   );

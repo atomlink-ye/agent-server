@@ -17,6 +17,7 @@ import {
   executeStandaloneMutation,
 } from './lib/phase-c-standalone-mutation.mjs';
 import {
+  collectProcessSnapshots,
   enumerateNumericProcessRecords,
   hashProcessRecords,
 } from './lib/phase-c-process-inspection.mjs';
@@ -217,6 +218,7 @@ const completeProcessCollection = (processes) => ({
       emitted_count: processes.length,
       enoent_count: 0,
       read_error_count: 0,
+      integrity_error_count: 0,
       error_class: 'none',
     },
     {
@@ -224,6 +226,7 @@ const completeProcessCollection = (processes) => ({
       emitted_count: processes.length,
       enoent_count: 0,
       read_error_count: 0,
+      integrity_error_count: 0,
       error_class: 'none',
     },
   ],
@@ -458,6 +461,119 @@ assert.equal(
   JSON.stringify(strongAgentProcess).includes(strongPaseoArgv[0]),
   false,
 );
+let activeAgentSnapshot = -1;
+const activeAgentInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    activeAgentSnapshot += 1;
+    return ['1', '2'];
+  },
+  readComm: () => 'node\n',
+  readStatus: (pid) =>
+    `Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t${pid === '1' ? 0 : 999}\n`,
+  readCmdline: (pid) =>
+    `${pid === '1' ? strongPaseoArgv.join('\u0000') : 'Paseo Daemon'}\u0000`,
+});
+assert.equal(activeAgentSnapshot, 1);
+assert.equal(activeAgentInspection.process_collection.complete, false);
+assert.equal(
+  JSON.stringify(activeAgentInspection.processes).includes(strongPaseoArgv[0]),
+  false,
+);
+const activeAgentPaseo = structuredClone(baseRecord);
+activeAgentPaseo.runtime_inspection.agent_server.processes =
+  activeAgentInspection.processes;
+activeAgentPaseo.runtime_inspection.agent_server.process_collection =
+  activeAgentInspection.process_collection;
+assert.deepEqual(evaluate(activeAgentPaseo), {
+  exit: 1,
+  output: {
+    suite: 'E4',
+    status: 'FAIL',
+    code: 1,
+    reason: 'runtime ownership proposition failed',
+    failures: ['agent_server_paseo_process'],
+  },
+});
+let titleOnlySnapshot = -1;
+const titleOnlyInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    titleOnlySnapshot += 1;
+    return ['3'];
+  },
+  readComm: () => 'node\n',
+  readStatus: () =>
+    'Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t999\n',
+  readCmdline: () => 'Paseo Daemon\u0000',
+});
+assert.equal(titleOnlySnapshot, 1);
+const titleOnlyRecord = structuredClone(baseRecord);
+titleOnlyRecord.runtime_inspection.agent_server.processes =
+  titleOnlyInspection.processes;
+titleOnlyRecord.runtime_inspection.agent_server.process_collection =
+  titleOnlyInspection.process_collection;
+assert.deepEqual(evaluate(titleOnlyRecord), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'agent_server process collection is missing or incomplete',
+  },
+});
+let cycleSnapshot = -1;
+const cycleWithoutStrongInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    cycleSnapshot += 1;
+    return ['4', '5'];
+  },
+  readComm: () => 'node\n',
+  readStatus: (pid) =>
+    `Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t${pid === '4' ? 5 : 4}\n`,
+  readCmdline: (pid) =>
+    `${pid === '4' ? 'Paseo Supervisor' : 'Paseo Daemon'}\u0000`,
+});
+const cycleWithoutStrongRecord = structuredClone(baseRecord);
+cycleWithoutStrongRecord.runtime_inspection.agent_server.processes =
+  cycleWithoutStrongInspection.processes;
+cycleWithoutStrongRecord.runtime_inspection.agent_server.process_collection =
+  cycleWithoutStrongInspection.process_collection;
+assert.deepEqual(evaluate(cycleWithoutStrongRecord), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'agent_server process collection is missing or incomplete',
+  },
+});
+let runtimeCorruptSnapshot = -1;
+const runtimeStrongCorruptInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    runtimeCorruptSnapshot += 1;
+    return ['6', '7'];
+  },
+  readComm: () => 'node\n',
+  readStatus: (pid) =>
+    `Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t${pid === '6' ? 0 : 999}\n`,
+  readCmdline: (pid) =>
+    `${pid === '6' ? strongPaseoArgv.join('\u0000') : 'Paseo Daemon'}\u0000`,
+});
+const runtimeStrongCorruptRecord = structuredClone(baseRecord);
+runtimeStrongCorruptRecord.runtime_inspection.paseo_runtime.processes =
+  runtimeStrongCorruptInspection.processes;
+runtimeStrongCorruptRecord.runtime_inspection.paseo_runtime.process_collection =
+  runtimeStrongCorruptInspection.process_collection;
+assert.equal(runtimeStrongCorruptInspection.process_collection.complete, false);
+assert.deepEqual(evaluate(runtimeStrongCorruptRecord), {
+  exit: 0,
+  output: {
+    suite: 'E4',
+    status: 'PASS',
+    code: 0,
+    reason:
+      'effective and running topology establish external runtime ownership',
+  },
+});
 assert.deepEqual(evaluate(agentPaseo), {
   exit: 1,
   output: {

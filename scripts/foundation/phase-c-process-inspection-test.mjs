@@ -292,6 +292,63 @@ function deterministicCollection({
   assert.equal(snapshotIndex, 1);
   return observed;
 }
+function ancestryCollection({ pids, parents, cmdlines }) {
+  let snapshot = -1;
+  return collectProcessSnapshots({
+    listProcEntries: () => {
+      snapshot += 1;
+      return pids;
+    },
+    readComm: () => 'node\n',
+    readStatus: (pid) => status(1000, parents[pid] ?? 0),
+    readCmdline: (pid) => `${cmdlines[pid]}\u0000`,
+  });
+}
+const strongWithCorruptTitle = ancestryCollection({
+  pids: ['60', '61'],
+  parents: { 60: 0, 61: 999 },
+  cmdlines: {
+    60: directInvocation.join('\u0000'),
+    61: 'Paseo Daemon',
+  },
+});
+assert.equal(
+  strongWithCorruptTitle.processes.some(
+    (process) => process.identity === 'paseo-daemon' && process.pid === 60,
+  ),
+  true,
+);
+assert.equal(strongWithCorruptTitle.process_collection.complete, false);
+assert.equal(
+  strongWithCorruptTitle.process_collection.snapshots[0].integrity_error_count,
+  1,
+);
+const cycleWithStrong = ancestryCollection({
+  pids: ['62', '63', '64'],
+  parents: { 62: 0, 63: 64, 64: 63 },
+  cmdlines: {
+    62: directInvocation.join('\u0000'),
+    63: 'Paseo Supervisor',
+    64: 'Paseo Daemon',
+  },
+});
+assert.equal(
+  cycleWithStrong.processes.some(
+    (process) => process.identity === 'paseo-daemon',
+  ),
+  true,
+);
+assert.equal(cycleWithStrong.process_collection.complete, false);
+const cycleWithoutStrong = ancestryCollection({
+  pids: ['65', '66'],
+  parents: { 65: 66, 66: 65 },
+  cmdlines: { 65: 'Paseo Supervisor', 66: 'Paseo Daemon' },
+});
+assert.equal(
+  cycleWithoutStrong.processes.every((process) => process.identity === 'other'),
+  true,
+);
+assert.equal(cycleWithoutStrong.process_collection.complete, false);
 const completeCollection = deterministicCollection({
   lists: [['50'], ['50']],
 });
@@ -341,6 +398,7 @@ assert.throws(
           emitted_count: 1,
           enoent_count: 0,
           read_error_count: 0,
+          integrity_error_count: 0,
           error_class: 'none',
         },
         {
@@ -348,6 +406,7 @@ assert.throws(
           emitted_count: 1,
           enoent_count: 0,
           read_error_count: 0,
+          integrity_error_count: 0,
           error_class: 'none',
         },
       ],
@@ -431,6 +490,7 @@ const run = (command, commandFields) => {
             emitted_count: 1,
             enoent_count: 0,
             read_error_count: 0,
+            integrity_error_count: 0,
             error_class: 'none',
           },
           {
@@ -438,6 +498,7 @@ const run = (command, commandFields) => {
             emitted_count: 1,
             enoent_count: 0,
             read_error_count: 0,
+            integrity_error_count: 0,
             error_class: 'none',
           },
         ],

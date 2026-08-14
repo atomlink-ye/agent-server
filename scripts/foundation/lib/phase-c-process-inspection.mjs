@@ -9,6 +9,7 @@ const PROCESS_COLLECTION_ERROR_CLASSES = Object.freeze({
   NONE: 'none',
   ENOENT: 'enoent',
   READ_ERROR: 'read_error',
+  INTEGRITY_ERROR: 'integrity_error',
   LIMIT: 'limit',
   SNAPSHOT_ERROR: 'snapshot_error',
 });
@@ -161,10 +162,13 @@ function numericProcessRecords({
   }
   if (!records.length) throw new Error('process_records_empty');
 
-  return classifyProcessRecords(records);
+  return classifyProcessRecords(records).records;
 }
 
-function classifyProcessRecords(records) {
+function classifyProcessRecords(
+  records,
+  { allowIntegrityErrors = false } = {},
+) {
   const byPid = new Map(records.map((record) => [record.pid, record]));
   const anchoredByStrongCli = (record) => {
     if (!record || record.strong) return Boolean(record?.strong);
@@ -182,28 +186,36 @@ function classifyProcessRecords(records) {
     throw new Error('process_ancestry_cycle');
   };
 
-  return records
-    .map((record) => {
-      const anchored =
-        record.candidateIdentity === PROCESS_IDENTITIES.PASEO_SUPERVISOR ||
-        record.candidateIdentity === PROCESS_IDENTITIES.PASEO_DAEMON
-          ? anchoredByStrongCli(record)
-          : false;
-      let identity = PROCESS_IDENTITIES.OTHER;
-      if (
-        record.candidateIdentity === PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER
-      )
-        identity = PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER;
-      else if (record.strong || anchored) identity = record.candidateIdentity;
-      return {
-        pid: record.pid,
-        ppid: record.ppid,
-        uid: record.uid,
-        comm: record.comm,
-        identity,
-      };
-    })
-    .sort((left, right) => left.pid - right.pid);
+  let integrityErrorCount = 0;
+  const classified = records.map((record) => {
+    let anchored = false;
+    if (
+      record.candidateIdentity === PROCESS_IDENTITIES.PASEO_SUPERVISOR ||
+      record.candidateIdentity === PROCESS_IDENTITIES.PASEO_DAEMON
+    ) {
+      try {
+        anchored = anchoredByStrongCli(record);
+      } catch (error) {
+        if (!allowIntegrityErrors) throw error;
+        integrityErrorCount += 1;
+      }
+    }
+    let identity = PROCESS_IDENTITIES.OTHER;
+    if (record.candidateIdentity === PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER)
+      identity = PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER;
+    else if (record.strong || anchored) identity = record.candidateIdentity;
+    return {
+      pid: record.pid,
+      ppid: record.ppid,
+      uid: record.uid,
+      comm: record.comm,
+      identity,
+    };
+  });
+  return {
+    records: classified.sort((left, right) => left.pid - right.pid),
+    integrity_error_count: integrityErrorCount,
+  };
 }
 
 export function hashProcessRecords(records) {
@@ -225,6 +237,7 @@ function snapshotProcessRecords({
     emitted_count: 0,
     enoent_count: 0,
     read_error_count: numericEntries.length > MAX_PROCESS_RECORDS ? 1 : 0,
+    integrity_error_count: 0,
     error_class:
       numericEntries.length > MAX_PROCESS_RECORDS
         ? PROCESS_COLLECTION_ERROR_CLASSES.LIMIT
@@ -270,9 +283,14 @@ function snapshotProcessRecords({
     }
   }
   try {
-    const classified = records.length ? classifyProcessRecords(records) : [];
-    snapshot.emitted_count = classified.length;
-    return { snapshot, records: classified };
+    const classified = records.length
+      ? classifyProcessRecords(records, { allowIntegrityErrors: true })
+      : { records: [], integrity_error_count: 0 };
+    snapshot.integrity_error_count = classified.integrity_error_count;
+    if (snapshot.integrity_error_count > 0)
+      snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.INTEGRITY_ERROR;
+    snapshot.emitted_count = classified.records.length;
+    return { snapshot, records: classified.records };
   } catch {
     snapshot.read_error_count += 1;
     snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.READ_ERROR;
@@ -287,6 +305,7 @@ function emptyProcessSnapshot(errorClass) {
       emitted_count: 0,
       enoent_count: 0,
       read_error_count: 1,
+      integrity_error_count: 0,
       error_class: errorClass,
     },
     records: [],
@@ -340,6 +359,7 @@ export function collectProcessSnapshots({
         snapshot.enoent_count === 0 &&
         snapshot.read_error_count === 0 &&
         snapshot.error_class === PROCESS_COLLECTION_ERROR_CLASSES.NONE &&
+        snapshot.integrity_error_count === 0 &&
         snapshot.numeric_count === snapshot.emitted_count &&
         records.length > 0,
     );
@@ -441,13 +461,18 @@ function strictProcessCollection(value, processes) {
     const snapshotKeys = Object.keys(snapshot).sort();
     if (
       snapshotKeys.join(',') !==
-      'emitted_count,enoent_count,error_class,numeric_count,read_error_count'
+      'emitted_count,enoent_count,error_class,integrity_error_count,numeric_count,read_error_count'
     )
       throw new Error('process_snapshot_schema_invalid');
     if (
-      !['none', 'enoent', 'read_error', 'limit', 'snapshot_error'].includes(
-        snapshot.error_class,
-      ) ||
+      ![
+        'none',
+        'enoent',
+        'read_error',
+        'integrity_error',
+        'limit',
+        'snapshot_error',
+      ].includes(snapshot.error_class) ||
       !Number.isSafeInteger(snapshot.numeric_count) ||
       snapshot.numeric_count < 0 ||
       snapshot.numeric_count > MAX_PROCESS_RECORDS ||
@@ -459,7 +484,10 @@ function strictProcessCollection(value, processes) {
       snapshot.enoent_count > MAX_PROCESS_RECORDS ||
       !Number.isSafeInteger(snapshot.read_error_count) ||
       snapshot.read_error_count < 0 ||
-      snapshot.read_error_count > MAX_PROCESS_RECORDS
+      snapshot.read_error_count > MAX_PROCESS_RECORDS ||
+      !Number.isSafeInteger(snapshot.integrity_error_count) ||
+      snapshot.integrity_error_count < 0 ||
+      snapshot.integrity_error_count > MAX_PROCESS_RECORDS
     )
       throw new Error('process_snapshot_value_invalid');
     return {
@@ -467,6 +495,7 @@ function strictProcessCollection(value, processes) {
       emitted_count: snapshot.emitted_count,
       enoent_count: snapshot.enoent_count,
       read_error_count: snapshot.read_error_count,
+      integrity_error_count: snapshot.integrity_error_count,
       error_class: snapshot.error_class,
     };
   });
@@ -492,6 +521,7 @@ function strictProcessCollection(value, processes) {
         (snapshot) =>
           snapshot.enoent_count !== 0 ||
           snapshot.read_error_count !== 0 ||
+          snapshot.integrity_error_count !== 0 ||
           snapshot.error_class !== 'none' ||
           snapshot.numeric_count !== snapshot.emitted_count ||
           snapshot.emitted_count === 0,

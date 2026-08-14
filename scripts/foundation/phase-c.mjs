@@ -91,6 +91,7 @@ function completeProcessCollection(value, processes) {
         snapshot.error_class === 'none' &&
         snapshot.enoent_count === 0 &&
         snapshot.read_error_count === 0 &&
+        snapshot.integrity_error_count === 0 &&
         snapshot.emitted_count > 0,
     )
   );

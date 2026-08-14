@@ -188,7 +188,7 @@ export type ExecutionObservation =
   | {
       readonly kind: 'reasoning_updated';
       readonly status: 'started' | 'completed';
-      readonly text?: string;
+      readonly text?: string | undefined;
     }
   | {
       readonly kind: 'tool_updated';
@@ -197,12 +197,12 @@ export type ExecutionObservation =
       readonly status: ExecutionToolStatus;
       readonly label: string;
       readonly summary: string;
-      readonly toolName?: string;
-      readonly resultObserved?: boolean;
-      readonly parentActivityId?: string;
+      readonly toolName?: string | undefined;
+      readonly resultObserved?: boolean | undefined;
+      readonly parentActivityId?: string | undefined;
       readonly provider: string;
-      readonly detail?: ExecutionToolDetail;
-      readonly error?: string;
+      readonly detail?: ExecutionToolDetail | undefined;
+      readonly error?: string | undefined;
     }
   | {
       readonly kind: 'child_activity_updated';
@@ -213,16 +213,16 @@ export type ExecutionObservation =
       readonly label: string;
       readonly summary: string;
       readonly provider: string;
-      readonly text?: string;
-      readonly detail?: ExecutionToolDetail;
-      readonly error?: string;
+      readonly text?: string | undefined;
+      readonly detail?: ExecutionToolDetail | undefined;
+      readonly error?: string | undefined;
     }
   | {
       readonly kind: 'permission_updated';
       readonly activityId: string;
       readonly category: 'tool' | 'plan' | 'question' | 'mode' | 'other';
       readonly status: 'requested' | 'resolved';
-      readonly decision?: 'allowed' | 'denied';
+      readonly decision?: 'allowed' | 'denied' | undefined;
       readonly summary: string;
     }
   | {

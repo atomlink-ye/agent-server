@@ -16,7 +16,6 @@ import type {
   ExecutionPlanePort,
   ExecutionSession,
   ExecutionSessionBinding,
-  ExecutionSessionSpec,
   ExecutionWorkspaceBinding,
 } from '../ports/execution-plane.js';
 import type {
@@ -36,7 +35,6 @@ export interface ExecutionTurnRequest {
   readonly runtimeSessionId?: string;
   readonly cwd?: string;
   readonly workspaceBinding?: ExecutionWorkspaceBinding;
-  /** Process-local legacy continuation only; managed sessions use runtimeSessionId. */
   readonly compatibilitySessionBinding?: ExecutionSessionBinding;
   readonly workspaceTitle?: string;
   readonly sessionTitle?: string;
@@ -68,7 +66,7 @@ export interface ExecutionRuntimeService {
     readonly runId: string;
     readonly compatibilitySessionBinding?: ExecutionSessionBinding;
   }): Promise<void>;
-  health(): Promise<ExecutionPlaneHealth>;
+  planeHealth(): Promise<ExecutionPlaneHealth>;
   close(): Promise<void>;
 }
 
@@ -80,8 +78,8 @@ interface CachedFreshSession {
 
 /**
  * Application service over ExecutionPlanePort. It owns no Paseo SDK/wire logic.
- * The AgentRuntimePort methods at the bottom are temporary compatibility only;
- * new Application callers use ensureReady/executeTurn/cancelRun directly.
+ * AgentRuntimePort methods are temporary compatibility for call sites not yet
+ * migrated to the operation-neutral service surface.
  */
 export class ExecutionPlaneRuntimeFacade
   implements ExecutionRuntimeService, AgentRuntimePort
@@ -174,9 +172,7 @@ export class ExecutionPlaneRuntimeFacade
       sessionBinding = cached.sessionBinding;
     } else {
       if (!input.systemPrompt)
-        throw new RuntimeExecutionError(
-          'Fresh execution requires a system prompt.',
-        );
+        throw new RuntimeExecutionError('Fresh execution requires a system prompt.');
       const created = await this.plane.createSession({
         runtimeSessionId: `run:${input.runId}`,
         workspace: {
@@ -244,7 +240,7 @@ export class ExecutionPlaneRuntimeFacade
       await cached.session.cancel(input.runId).catch(() => undefined);
   }
 
-  public health(): Promise<ExecutionPlaneHealth> {
+  public planeHealth(): Promise<ExecutionPlaneHealth> {
     return this.plane.health();
   }
 
@@ -254,11 +250,6 @@ export class ExecutionPlaneRuntimeFacade
     this.#freshSessions.clear();
     await this.plane.close();
   }
-
-  // -------------------------------------------------------------------------
-  // Deprecated AgentRuntimePort compatibility. These methods translate old
-  // callers into the operation-neutral ExecutionRuntimeService contract.
-  // -------------------------------------------------------------------------
 
   public async initialize(): Promise<void> {
     const initializable = this.plane as ExecutionPlanePort & {
@@ -355,8 +346,8 @@ export class ExecutionPlaneRuntimeFacade
     });
   }
 
-  public async legacyHealth(): Promise<AgentRuntimeHealth> {
-    const health = await this.health();
+  public async health(): Promise<AgentRuntimeHealth> {
+    const health = await this.planeHealth();
     return {
       ready: health.ready,
       provider: health.provider ?? health.plane,

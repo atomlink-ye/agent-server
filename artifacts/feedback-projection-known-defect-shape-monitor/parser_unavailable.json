@@ -1,0 +1,8 @@
+{
+  "arm": "parser_unavailable",
+  "expected_exit_code": 2,
+  "observed_exit_code": 2,
+  "observed_status": "MISSING",
+  "stdout": "{\"machine\":\"FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR\",\"status\":\"MISSING\",\"exit_code\":2,\"shape1\":{\"state\":\"UNAVAILABLE\",\"reason\":\"typescript_parser_unavailable\"},\"shape2\":{\"state\":\"UNAVAILABLE\",\"reason\":\"typescript_parser_unavailable\"},\"independent_of\":[\"E11\",\"LIVE\"],\"schedules_live_confirmation\":false}",
+  "passed": true
+}

@@ -1,0 +1,8 @@
+{
+  "arm": "both_target_mutation",
+  "expected_exit_code": 0,
+  "observed_exit_code": 0,
+  "observed_status": "LIVE_CONFIRMATION_REQUIRED",
+  "stdout": "{\"machine\":\"FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR\",\"status\":\"LIVE_CONFIRMATION_REQUIRED\",\"exit_code\":0,\"shape1\":{\"state\":\"ABSENT\",\"reason\":\"known_shape_not_found:query_projection\"},\"shape2\":{\"state\":\"ABSENT\",\"reason\":\"known_shape_not_found:feedback_summary_null,feedback_capture_status_mapping\"},\"independent_of\":[\"E11\",\"LIVE\"],\"schedules_live_confirmation\":true}",
+  "passed": true
+}

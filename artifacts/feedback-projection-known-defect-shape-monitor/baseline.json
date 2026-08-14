@@ -1,0 +1,8 @@
+{
+  "arm": "baseline",
+  "expected_exit_code": 1,
+  "observed_exit_code": 1,
+  "observed_status": "KNOWN_DEFECT_SHAPE_PRESENT",
+  "stdout": "{\"machine\":\"FEEDBACK_PROJECTION_KNOWN_DEFECT_SHAPE_MONITOR\",\"status\":\"KNOWN_DEFECT_SHAPE_PRESENT\",\"exit_code\":1,\"shape1\":{\"state\":\"PRESENT\",\"reason\":\"presence_only_query_and_presence_mapping\"},\"shape2\":{\"state\":\"PRESENT\",\"reason\":\"null_summary_and_presence_to_status_mapping\"},\"independent_of\":[\"E11\",\"LIVE\"],\"schedules_live_confirmation\":false}",
+  "passed": true
+}

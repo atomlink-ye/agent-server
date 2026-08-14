@@ -1,0 +1,35 @@
+name: Execution Plane Test Codemod
+
+on:
+  push:
+    branches:
+      - refactor/execution-plane-paseo-architecture
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/execution-plane-paseo-architecture
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Apply compatibility test codemod
+        run: node tooling/execution-plane-test-codemod.mjs
+      - name: Commit refactor
+        run: |
+          if git diff --quiet; then
+            echo "No codemod changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/bootstrap.ts src/application/runs/execute-run.test.ts src/application/runs/runtime-event-detail.test.ts
+          git commit -m "test(runtime): align callers with execution service"
+          git push origin HEAD:refactor/execution-plane-paseo-architecture

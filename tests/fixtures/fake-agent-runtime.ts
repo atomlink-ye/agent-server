@@ -4,6 +4,15 @@ import type {
   AgentRuntimeHealth,
   AgentRuntimePort,
 } from '../../src/application/ports/agent-runtime.js';
+import type {
+  ExecutionObservationSink,
+  ExecutionPlaneHealth,
+} from '../../src/application/ports/execution-plane.js';
+import type {
+  ExecutionRuntimeService,
+  ExecutionTurnOutcome,
+  ExecutionTurnRequest,
+} from '../../src/application/runtime/execution-plane-runtime-facade.js';
 
 export interface FakeRuntimeOptions {
   readonly ready?: boolean;
@@ -31,7 +40,9 @@ export interface FakeRuntimeExecutionRecord {
   readonly finishedAt: number;
 }
 
-export class FakeAgentRuntime implements AgentRuntimePort {
+export class FakeAgentRuntime
+  implements AgentRuntimePort, ExecutionRuntimeService
+{
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
@@ -63,6 +74,16 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     this.initializeCalls += 1;
     if (!this.ready) {
       throw new Error('fake runtime unavailable');
+    }
+  }
+
+  public async ensureReady(): Promise<boolean> {
+    if (this.ready) return true;
+    try {
+      await this.initialize();
+      return this.ready;
+    } catch {
+      return false;
     }
   }
 
@@ -103,6 +124,7 @@ export class FakeAgentRuntime implements AgentRuntimePort {
         provider: 'opencode',
         model: 'opencode/fake-free',
         providerAgentId: 'fake-agent-1',
+        runtimeWorkspaceId: 'fake-runtime-workspace-1',
         text: isCanary
           ? (this.#options.canaryResponseText ?? 'FAKE_RUNTIME_OK')
           : this.#options.deriveMemoryResponse &&
@@ -127,6 +149,85 @@ export class FakeAgentRuntime implements AgentRuntimePort {
         finishedAt: Date.now(),
       });
     }
+  }
+
+  public async executeTurn(
+    input: ExecutionTurnRequest,
+    _observer?: ExecutionObservationSink,
+  ): Promise<ExecutionTurnOutcome> {
+    const creating = input.systemPrompt !== undefined;
+    const execution = await this.execute(
+      creating
+        ? {
+            operation: 'create',
+            runId: input.runId,
+            prompt: input.prompt,
+            systemPrompt: input.systemPrompt ?? '',
+            ...(input.provider
+              ? { provider: input.provider, model: input.model ?? 'opencode/fake-free' }
+              : {}),
+            ...(input.runtimeSessionId
+              ? { runtimeSessionId: input.runtimeSessionId }
+              : {}),
+            ...(input.workspaceBinding
+              ? {
+                  runtimeWorkspaceId:
+                    input.workspaceBinding.externalWorkspaceId,
+                }
+              : {}),
+            ...(input.cwd ? { cellCwd: input.cwd } : {}),
+            ...(input.workspaceTitle
+              ? { workspaceTitle: input.workspaceTitle }
+              : {}),
+            ...(input.sessionTitle ? { agentTitle: input.sessionTitle } : {}),
+            ...(input.labels ? { agentLabels: input.labels } : {}),
+            ...(input.extensions ? { extensions: input.extensions } : {}),
+            ...(input.proposalLimit !== undefined
+              ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
+              : {}),
+          }
+        : {
+            operation: 'continue',
+            runId: input.runId,
+            prompt: input.prompt,
+            providerAgentId:
+              input.compatibilitySessionBinding?.externalSessionId ??
+              'fake-agent-1',
+            ...(input.runtimeSessionId
+              ? { runtimeSessionId: input.runtimeSessionId }
+              : {}),
+            ...(input.workspaceBinding
+              ? {
+                  runtimeWorkspaceId:
+                    input.workspaceBinding.externalWorkspaceId,
+                }
+              : {}),
+            ...(input.cwd ? { cellCwd: input.cwd } : {}),
+            ...(input.proposalLimit !== undefined
+              ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
+              : {}),
+          },
+    );
+    return {
+      provider: execution.provider,
+      model: execution.model,
+      text: execution.text,
+      workspaceBinding: {
+        plane: 'paseo',
+        externalWorkspaceId:
+          execution.runtimeWorkspaceId ??
+          input.workspaceBinding?.externalWorkspaceId ??
+          'fake-runtime-workspace-1',
+      },
+      sessionBinding: {
+        plane: 'paseo',
+        externalSessionId: execution.providerAgentId,
+      },
+      ...(execution.usage ? { usage: execution.usage } : {}),
+      ...(execution.memoryCandidates
+        ? { memoryCandidates: execution.memoryCandidates }
+        : {}),
+    };
   }
 
   public armExecutionGate(runId?: string): {
@@ -164,9 +265,26 @@ export class FakeAgentRuntime implements AgentRuntimePort {
     };
   }
 
+  public async planeHealth(): Promise<ExecutionPlaneHealth> {
+    const health = await this.health();
+    return {
+      ready: health.ready,
+      plane: 'fake',
+      provider: health.provider,
+      ...(health.model ? { model: health.model } : {}),
+      checks: health.checks,
+    };
+  }
+
   public async cancel(input: { readonly runId: string }): Promise<void> {
     this.cancelCalls += 1;
     this.cancelledRunIds.push(input.runId);
+  }
+
+  public async cancelRun(input: {
+    readonly runId: string;
+  }): Promise<void> {
+    await this.cancel({ runId: input.runId });
   }
 
   public async close(): Promise<void> {

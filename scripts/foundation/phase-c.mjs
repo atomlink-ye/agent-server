@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { workspaceIsReadOnly } from './lib/phase-c-workspace-boundary.mjs';
 import {
@@ -11,9 +11,9 @@ import {
   runtimeStateIsWritable,
 } from './lib/phase-c-runtime-boundary.mjs';
 import {
-  hashProcessRecords,
   isPaseoExecutableProcess,
   isPaseoProcess,
+  validateProcessEvidence,
 } from './lib/phase-c-process-inspection.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -65,50 +65,60 @@ function nonempty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function completeProcessCollection(value, processes) {
-  return (
-    value &&
-    typeof value === 'object' &&
-    value.stable === true &&
-    value.complete === true &&
-    Number.isSafeInteger(value.emitted_count) &&
-    typeof value.record_hash === 'string' &&
-    (!Array.isArray(processes) ||
-      (value.emitted_count === processes.length &&
-        value.record_hash === hashProcessRecords(processes))) &&
-    Array.isArray(value.snapshots) &&
-    value.snapshots.length === 2 &&
-    value.snapshots.every(
-      (snapshot) =>
-        snapshot &&
-        Number.isSafeInteger(snapshot.numeric_count) &&
-        snapshot.numeric_count > 0 &&
-        Number.isSafeInteger(snapshot.emitted_count) &&
-        snapshot.emitted_count > 0 &&
-        snapshot.numeric_count === snapshot.emitted_count &&
-        Number.isSafeInteger(snapshot.enoent_count) &&
-        Number.isSafeInteger(snapshot.read_error_count) &&
-        snapshot.error_class === 'none' &&
-        snapshot.enoent_count === 0 &&
-        snapshot.read_error_count === 0 &&
-        snapshot.integrity_error_count === 0 &&
-        snapshot.emitted_count > 0,
-    )
-  );
-}
-
-function processCollectionMetadataMatches(value, processes) {
-  return (
-    value &&
-    typeof value === 'object' &&
-    Array.isArray(processes) &&
-    value.emitted_count === processes.length &&
-    value.record_hash === hashProcessRecords(processes)
-  );
-}
-
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+export function evaluateProcessEvidenceMatrix(processEvidence) {
+  const evidenceResults = Object.entries(processEvidence).map(
+    ([name, item]) => ({
+      name,
+      ...item,
+      valid: validateProcessEvidence({
+        processes: item.processes,
+        process_collection: item.collection,
+      }),
+      complete: item.collection?.complete === true,
+      witness:
+        Array.isArray(item.processes) && item.processes.some(item.forbidden),
+    }),
+  );
+  const invalid = evidenceResults
+    .filter((item) => !item.valid)
+    .map(({ name }) => name);
+  if (invalid.length)
+    return {
+      status: 'MISSING',
+      reason: 'required process collection evidence is missing or invalid',
+      process_collection: invalid,
+    };
+  const contradictions = evidenceResults
+    .filter(
+      (item) =>
+        (item.expectation === 'present' && item.complete && !item.witness) ||
+        (item.expectation === 'absent' && item.witness),
+    )
+    .map((item) =>
+      item.expectation === 'present'
+        ? `${item.name}_missing`
+        : `${item.name}_unexpected`,
+    );
+  if (contradictions.length)
+    return {
+      status: 'FAIL',
+      reason: 'process evidence proposition contradicted',
+      process_collection: contradictions,
+    };
+  const incomplete = evidenceResults
+    .filter((item) => !item.witness && !item.complete)
+    .map(({ name }) => name);
+  if (incomplete.length)
+    return {
+      status: 'MISSING',
+      reason: 'required process collection evidence is missing or incomplete',
+      process_collection: incomplete,
+    };
+  return { status: 'PASS', reason: 'process evidence satisfies polarity' };
 }
 
 const ownershipEnvironment = [
@@ -223,28 +233,26 @@ function evaluateE4(options) {
   const runtime = record.runtime_inspection;
   const agentProcesses = runtime?.agent_server?.processes;
   const runtimeProcesses = runtime?.paseo_runtime?.processes;
+  const agentEvidenceValid = validateProcessEvidence({
+    processes: agentProcesses,
+    process_collection: runtime?.agent_server?.process_collection,
+  });
+  const runtimeEvidenceValid = validateProcessEvidence({
+    processes: runtimeProcesses,
+    process_collection: runtime?.paseo_runtime?.process_collection,
+  });
   const agentPaseoProcess =
     Array.isArray(agentProcesses) && agentProcesses.some(isPaseoProcess);
   const runtimePaseoProcess =
     Array.isArray(runtimeProcesses) &&
     runtimeProcesses.some(isPaseoExecutableProcess);
-  const agentCollectionComplete = completeProcessCollection(
-    runtime?.agent_server?.process_collection,
-    agentProcesses,
-  );
-  const runtimeCollectionComplete = completeProcessCollection(
-    runtime?.paseo_runtime?.process_collection,
-    runtimeProcesses,
-  );
-  const agentMetadataValid = processCollectionMetadataMatches(
-    runtime?.agent_server?.process_collection,
-    agentProcesses,
-  );
-  const runtimeMetadataValid = processCollectionMetadataMatches(
-    runtime?.paseo_runtime?.process_collection,
-    runtimeProcesses,
-  );
-  if (!agentMetadataValid)
+  const agentCollectionComplete =
+    agentEvidenceValid &&
+    runtime?.agent_server?.process_collection?.complete === true;
+  const runtimeCollectionComplete =
+    runtimeEvidenceValid &&
+    runtime?.paseo_runtime?.process_collection?.complete === true;
+  if (!agentEvidenceValid)
     return result(
       'E4',
       'MISSING',
@@ -256,7 +264,7 @@ function evaluateE4(options) {
       'MISSING',
       'agent_server process collection is missing or incomplete',
     );
-  if (!runtimeMetadataValid)
+  if (!runtimeEvidenceValid)
     return result(
       'E4',
       'MISSING',
@@ -690,122 +698,124 @@ function evaluateE6(options) {
   ];
   if (required.some((value) => !nonempty(value)))
     return result('E6', 'MISSING', 'required proof identity is empty');
-  const runtimeNeedsCompleteness = (processes) =>
-    !Array.isArray(processes) || !processes.some(isPaseoExecutableProcess);
-  const evidence = (collection, processes, requireComplete) => ({
-    collection,
-    processes,
-    requireComplete,
-  });
-  const requiredProcessEvidence = {
-    agent_server_process_collection: evidence(
-      proof.agent_server_process_collection,
-      proof.agent_server_processes,
-      true,
-    ),
-    paseo_runtime_process_collection: evidence(
-      proof.paseo_runtime_process_collection,
-      proof.paseo_runtime_processes,
-      runtimeNeedsCompleteness(proof.paseo_runtime_processes),
-    ),
-    e4_mutation_agent_process_collection: evidence(
-      proof.e4_mutation?.agent_process_collection,
-      proof.e4_mutation?.agent_processes,
-      true,
-    ),
-    e4_mutation_runtime_process_collection: evidence(
-      proof.e4_mutation?.runtime_process_collection,
-      proof.e4_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(proof.e4_mutation?.runtime_processes),
-    ),
-    e4_workspace_mutation_agent_process_collection: evidence(
-      proof.e4_workspace_mutation?.agent_process_collection,
-      proof.e4_workspace_mutation?.agent_processes,
-      true,
-    ),
-    e4_workspace_mutation_runtime_process_collection: evidence(
-      proof.e4_workspace_mutation?.runtime_process_collection,
-      proof.e4_workspace_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(proof.e4_workspace_mutation?.runtime_processes),
-    ),
-    e4_root_runtime_mutation_agent_process_collection: evidence(
-      proof.e4_root_runtime_mutation?.agent_process_collection,
-      proof.e4_root_runtime_mutation?.agent_processes,
-      true,
-    ),
-    e4_root_runtime_mutation_runtime_process_collection: evidence(
-      proof.e4_root_runtime_mutation?.runtime_process_collection,
-      proof.e4_root_runtime_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(
-        proof.e4_root_runtime_mutation?.runtime_processes,
-      ),
-    ),
-    e4_runtime_state_mutation_agent_process_collection: evidence(
-      proof.e4_runtime_state_mutation?.agent_process_collection,
-      proof.e4_runtime_state_mutation?.agent_processes,
-      true,
-    ),
-    e4_runtime_state_mutation_runtime_process_collection: evidence(
-      proof.e4_runtime_state_mutation?.runtime_process_collection,
-      proof.e4_runtime_state_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(
-        proof.e4_runtime_state_mutation?.runtime_processes,
-      ),
-    ),
-    e4_runtime_state_mutation_child_process_collection: evidence(
-      proof.e4_runtime_state_mutation?.child_process_collection,
-      proof.e4_runtime_state_mutation?.child_processes,
-      true,
-    ),
-    e4_no_paseo_process_mutation_agent_process_collection: evidence(
-      proof.e4_no_paseo_process_mutation?.agent_process_collection,
-      proof.e4_no_paseo_process_mutation?.agent_processes,
-      true,
-    ),
-    e4_no_paseo_process_mutation_runtime_process_collection: evidence(
-      proof.e4_no_paseo_process_mutation?.runtime_process_collection,
-      proof.e4_no_paseo_process_mutation?.runtime_processes,
-      true,
-    ),
-    e4_declarative_environment_mutation_agent_process_collection: evidence(
-      proof.e4_declarative_environment_mutation?.agent_process_collection,
-      proof.e4_declarative_environment_mutation?.agent_processes,
-      true,
-    ),
-    e4_declarative_environment_mutation_runtime_process_collection: evidence(
-      proof.e4_declarative_environment_mutation?.runtime_process_collection,
-      proof.e4_declarative_environment_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(
-        proof.e4_declarative_environment_mutation?.runtime_processes,
-      ),
-    ),
-    e4_actual_environment_mutation_agent_process_collection: evidence(
-      proof.e4_actual_environment_mutation?.agent_process_collection,
-      proof.e4_actual_environment_mutation?.agent_processes,
-      true,
-    ),
-    e4_actual_environment_mutation_runtime_process_collection: evidence(
-      proof.e4_actual_environment_mutation?.runtime_process_collection,
-      proof.e4_actual_environment_mutation?.runtime_processes,
-      runtimeNeedsCompleteness(
-        proof.e4_actual_environment_mutation?.runtime_processes,
-      ),
-    ),
+  const processEvidence = {
+    agent_server_process_collection: {
+      collection: proof.agent_server_process_collection,
+      processes: proof.agent_server_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    paseo_runtime_process_collection: {
+      collection: proof.paseo_runtime_process_collection,
+      processes: proof.paseo_runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_mutation_agent_process_collection: {
+      collection: proof.e4_mutation?.agent_process_collection,
+      processes: proof.e4_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_mutation_runtime_process_collection: {
+      collection: proof.e4_mutation?.runtime_process_collection,
+      processes: proof.e4_mutation?.runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_workspace_mutation_agent_process_collection: {
+      collection: proof.e4_workspace_mutation?.agent_process_collection,
+      processes: proof.e4_workspace_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_workspace_mutation_runtime_process_collection: {
+      collection: proof.e4_workspace_mutation?.runtime_process_collection,
+      processes: proof.e4_workspace_mutation?.runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_root_runtime_mutation_agent_process_collection: {
+      collection: proof.e4_root_runtime_mutation?.agent_process_collection,
+      processes: proof.e4_root_runtime_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_root_runtime_mutation_runtime_process_collection: {
+      collection: proof.e4_root_runtime_mutation?.runtime_process_collection,
+      processes: proof.e4_root_runtime_mutation?.runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_runtime_state_mutation_agent_process_collection: {
+      collection: proof.e4_runtime_state_mutation?.agent_process_collection,
+      processes: proof.e4_runtime_state_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_runtime_state_mutation_runtime_process_collection: {
+      collection: proof.e4_runtime_state_mutation?.runtime_process_collection,
+      processes: proof.e4_runtime_state_mutation?.runtime_processes,
+      expectation: 'absent',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_runtime_state_mutation_child_process_collection: {
+      collection: proof.e4_runtime_state_mutation?.child_process_collection,
+      processes: proof.e4_runtime_state_mutation?.child_processes,
+      expectation: 'absent',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_no_paseo_process_mutation_agent_process_collection: {
+      collection: proof.e4_no_paseo_process_mutation?.agent_process_collection,
+      processes: proof.e4_no_paseo_process_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_no_paseo_process_mutation_runtime_process_collection: {
+      collection:
+        proof.e4_no_paseo_process_mutation?.runtime_process_collection,
+      processes: proof.e4_no_paseo_process_mutation?.runtime_processes,
+      expectation: 'absent',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_declarative_environment_mutation_agent_process_collection: {
+      collection:
+        proof.e4_declarative_environment_mutation?.agent_process_collection,
+      processes: proof.e4_declarative_environment_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_declarative_environment_mutation_runtime_process_collection: {
+      collection:
+        proof.e4_declarative_environment_mutation?.runtime_process_collection,
+      processes: proof.e4_declarative_environment_mutation?.runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
+    e4_actual_environment_mutation_agent_process_collection: {
+      collection:
+        proof.e4_actual_environment_mutation?.agent_process_collection,
+      processes: proof.e4_actual_environment_mutation?.agent_processes,
+      expectation: 'absent',
+      forbidden: isPaseoProcess,
+    },
+    e4_actual_environment_mutation_runtime_process_collection: {
+      collection:
+        proof.e4_actual_environment_mutation?.runtime_process_collection,
+      processes: proof.e4_actual_environment_mutation?.runtime_processes,
+      expectation: 'present',
+      forbidden: isPaseoExecutableProcess,
+    },
   };
-  const incompleteProcessEvidence = Object.entries(requiredProcessEvidence)
-    .filter(
-      ([, item]) =>
-        !processCollectionMetadataMatches(item.collection, item.processes) ||
-        (item.requireComplete &&
-          !completeProcessCollection(item.collection, item.processes)),
-    )
-    .map(([name]) => name);
-  if (incompleteProcessEvidence.length)
+  const processEvaluation = evaluateProcessEvidenceMatrix(processEvidence);
+  if (processEvaluation.status !== 'PASS')
     return result(
       'E6',
-      'MISSING',
-      'required process collection evidence is missing or incomplete',
-      { process_collection: incompleteProcessEvidence },
+      processEvaluation.status,
+      processEvaluation.reason,
+      processEvaluation.process_collection
+        ? { process_collection: processEvaluation.process_collection }
+        : {},
     );
   const failures = [];
   if (
@@ -1051,10 +1061,12 @@ function evaluateE6(options) {
   )
     failures.push('e4_runtime_state_mutation_cleanup');
   if (
-    !completeProcessCollection(
-      proof.e4_runtime_state_mutation?.child_process_collection,
-      proof.e4_runtime_state_mutation?.child_processes,
-    )
+    !validateProcessEvidence({
+      process_collection:
+        proof.e4_runtime_state_mutation?.child_process_collection,
+      processes: proof.e4_runtime_state_mutation?.child_processes,
+    }) ||
+    proof.e4_runtime_state_mutation?.child_process_collection?.complete !== true
   )
     failures.push('e4_runtime_state_mutation_process_collection');
   if (
@@ -1099,10 +1111,13 @@ function evaluateE6(options) {
   )
     failures.push('e4_no_paseo_process_mutation_cleanup');
   if (
-    !completeProcessCollection(
-      proof.e4_no_paseo_process_mutation?.runtime_process_collection,
-      proof.e4_no_paseo_process_mutation?.runtime_processes,
-    )
+    !validateProcessEvidence({
+      process_collection:
+        proof.e4_no_paseo_process_mutation?.runtime_process_collection,
+      processes: proof.e4_no_paseo_process_mutation?.runtime_processes,
+    }) ||
+    proof.e4_no_paseo_process_mutation?.runtime_process_collection?.complete !==
+      true
   )
     failures.push('e4_no_paseo_process_mutation_process_collection');
   const declarativeEnvironmentMutation =
@@ -1344,24 +1359,29 @@ function evaluateE6(options) {
   );
 }
 
-let parsed;
-try {
-  parsed = parseArgs(process.argv.slice(2));
-} catch (error) {
-  process.stderr.write(
-    `${error instanceof Error ? error.message : String(error)}\n`,
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  let parsed;
+  try {
+    parsed = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(2);
+  }
+  const evaluations = parsed.suites.map((suite) =>
+    suite === 'E4'
+      ? evaluateE4(parsed.options)
+      : suite === 'E5'
+        ? evaluateE5()
+        : evaluateE6(parsed.options),
   );
-  process.exit(2);
+  for (const evaluation of evaluations)
+    process.stdout.write(`${JSON.stringify(evaluation)}\n`);
+  process.exitCode = Math.max(
+    ...evaluations.map((evaluation) => evaluation.code),
+  );
 }
-const evaluations = parsed.suites.map((suite) =>
-  suite === 'E4'
-    ? evaluateE4(parsed.options)
-    : suite === 'E5'
-      ? evaluateE5()
-      : evaluateE6(parsed.options),
-);
-for (const evaluation of evaluations)
-  process.stdout.write(`${JSON.stringify(evaluation)}\n`);
-process.exitCode = Math.max(
-  ...evaluations.map((evaluation) => evaluation.code),
-);

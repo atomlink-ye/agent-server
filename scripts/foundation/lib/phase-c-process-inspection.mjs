@@ -122,47 +122,81 @@ function numericProcessRecords({
 }) {
   if (!Array.isArray(procEntries)) throw new Error('process_entries_invalid');
   const records = [];
+  let numericCount = 0;
   for (const pidText of procEntries) {
     if (!/^\d+$/u.test(String(pidText))) continue;
-    if (records.length >= MAX_PROCESS_RECORDS)
+    numericCount += 1;
+    if (numericCount > MAX_PROCESS_RECORDS)
       throw new Error('process_records_limit');
     const pid = Number(pidText);
     if (!Number.isSafeInteger(pid) || pid < 1)
       throw new Error('process_pid_invalid');
 
-    let comm;
-    let status;
     let cmdline;
     try {
-      comm = readComm(String(pidText)).trim();
-      status = readStatus(String(pidText));
       cmdline = readCmdline(String(pidText));
     } catch (error) {
       if (error?.code === 'ENOENT') continue;
       throw error;
     }
-
-    const uid = /^Uid:\s+(\d+)(?:\s+\d+){3}\s*$/mu.exec(status)?.[1];
-    const ppid = /^PPid:\s+(\d+)\s*$/mu.exec(status)?.[1];
-    if (!comm || uid === undefined || ppid === undefined)
-      throw new Error('process_status_invalid');
     if (typeof cmdline !== 'string' || cmdline.length > MAX_RAW_CMDLINE_LENGTH)
       throw new Error('process_cmdline_limit');
     const argv = cmdline.split('\u0000');
     if (argv.at(-1) === '') argv.pop();
     const candidateIdentity = classifyProcessIdentity(argv);
+    const directWitness =
+      candidateIdentity === PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER ||
+      isStrongPaseoInvocation(argv);
+    try {
+      readComm(String(pidText)).trim();
+    } catch (error) {
+      if (!directWitness) {
+        if (error?.code === 'ENOENT') continue;
+        throw error;
+      }
+    }
+    let status;
+    try {
+      status = readStatus(String(pidText));
+    } catch (error) {
+      if (directWitness) {
+        records.push({
+          pid,
+          ppid: 0,
+          candidateIdentity,
+          strong: isStrongPaseoInvocation(argv),
+        });
+        continue;
+      }
+      if (error?.code === 'ENOENT') continue;
+      throw error;
+    }
+    const ppid = /^PPid:\s+(\d+)\s*$/mu.exec(status)?.[1];
+    if (ppid === undefined) {
+      if (directWitness) {
+        records.push({
+          pid,
+          ppid: 0,
+          candidateIdentity,
+          strong: isStrongPaseoInvocation(argv),
+        });
+        continue;
+      }
+      throw new Error('process_status_invalid');
+    }
     records.push({
       pid,
       ppid: Number(ppid),
-      uid: Number(uid),
-      comm: comm.slice(0, MAX_COMM_LENGTH),
       candidateIdentity,
       strong: isStrongPaseoInvocation(argv),
     });
   }
   if (!records.length) throw new Error('process_records_empty');
 
-  return classifyProcessRecords(records).records;
+  return classifyProcessRecords(records).records.map(({ pid, identity }) => ({
+    pid,
+    identity,
+  }));
 }
 
 function classifyProcessRecords(
@@ -207,8 +241,8 @@ function classifyProcessRecords(
     return {
       pid: record.pid,
       ppid: record.ppid,
-      uid: record.uid,
-      comm: record.comm,
+      candidateIdentity: record.candidateIdentity,
+      strong: record.strong,
       identity,
     };
   });
@@ -245,7 +279,8 @@ function mergeProcessRecords(firstRecords, secondRecords) {
         left.pid - right.pid,
     )
     .slice(0, MAX_PROCESS_RECORDS)
-    .sort((left, right) => left.pid - right.pid);
+    .sort((left, right) => left.pid - right.pid)
+    .map(({ pid, identity }) => ({ pid, identity }));
 }
 
 function snapshotProcessRecords({
@@ -271,32 +306,19 @@ function snapshotProcessRecords({
   };
   const records = [];
   for (const pidText of boundedEntries) {
-    let comm;
-    let status;
     let cmdline;
+    let argv;
+    let candidateIdentity;
     try {
-      comm = readComm(String(pidText)).trim();
-      status = readStatus(String(pidText));
       cmdline = readCmdline(String(pidText));
-      const uid = /^Uid:\s+(\d+)(?:\s+\d+){3}\s*$/mu.exec(status)?.[1];
-      const ppid = /^PPid:\s+(\d+)\s*$/mu.exec(status)?.[1];
-      if (!comm || uid === undefined || ppid === undefined)
-        throw new Error('process_status_invalid');
       if (
         typeof cmdline !== 'string' ||
         cmdline.length > MAX_RAW_CMDLINE_LENGTH
       )
         throw new Error('process_cmdline_limit');
-      const argv = cmdline.split('\u0000');
+      argv = cmdline.split('\u0000');
       if (argv.at(-1) === '') argv.pop();
-      records.push({
-        pid: Number(pidText),
-        ppid: Number(ppid),
-        uid: Number(uid),
-        comm: comm.slice(0, MAX_COMM_LENGTH),
-        candidateIdentity: classifyProcessIdentity(argv),
-        strong: isStrongPaseoInvocation(argv),
-      });
+      candidateIdentity = classifyProcessIdentity(argv);
     } catch (error) {
       if (error?.code === 'ENOENT') {
         snapshot.enoent_count += 1;
@@ -306,6 +328,54 @@ function snapshotProcessRecords({
         snapshot.read_error_count += 1;
         snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.READ_ERROR;
       }
+      continue;
+    }
+    const directWitness =
+      candidateIdentity === PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER ||
+      isStrongPaseoInvocation(argv);
+    let metadataError = false;
+    let ppid;
+    try {
+      const comm = readComm(String(pidText)).trim().slice(0, MAX_COMM_LENGTH);
+      if (!comm) throw new Error('process_comm_invalid');
+    } catch (error) {
+      metadataError = true;
+      if (error?.code === 'ENOENT') {
+        snapshot.enoent_count += 1;
+        if (snapshot.error_class === PROCESS_COLLECTION_ERROR_CLASSES.NONE)
+          snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.ENOENT;
+      } else {
+        snapshot.read_error_count += 1;
+        snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.READ_ERROR;
+      }
+    }
+    try {
+      const status = readStatus(String(pidText));
+      const uidValid = /^Uid:\s+(\d+)(?:\s+\d+){3}\s*$/mu.test(status);
+      ppid = /^PPid:\s+(\d+)\s*$/mu.exec(status)?.[1];
+      if (!uidValid || ppid === undefined) {
+        metadataError = true;
+        snapshot.read_error_count += 1;
+        snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.READ_ERROR;
+      }
+    } catch (error) {
+      metadataError = true;
+      if (error?.code === 'ENOENT') {
+        snapshot.enoent_count += 1;
+        if (snapshot.error_class === PROCESS_COLLECTION_ERROR_CLASSES.NONE)
+          snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.ENOENT;
+      } else {
+        snapshot.read_error_count += 1;
+        snapshot.error_class = PROCESS_COLLECTION_ERROR_CLASSES.READ_ERROR;
+      }
+    }
+    if (directWitness || (!metadataError && ppid !== undefined)) {
+      records.push({
+        pid: Number(pidText),
+        ppid: Number(ppid ?? 0),
+        candidateIdentity,
+        strong: isStrongPaseoInvocation(argv),
+      });
     }
   }
   try {
@@ -419,8 +489,7 @@ export function enumerateNumericProcessRecords({
 export const processInspectionScript = `const fs=require('node:fs');const createHash=require('node:crypto').createHash;const MAX_COMM_LENGTH=${MAX_COMM_LENGTH};const MAX_PROCESS_RECORDS=${MAX_PROCESS_RECORDS};const MAX_RAW_CMDLINE_LENGTH=${MAX_RAW_CMDLINE_LENGTH};const PROCESS_IDENTITIES=${JSON.stringify(PROCESS_IDENTITIES)};const PROCESS_COLLECTION_ERROR_CLASSES=${JSON.stringify(PROCESS_COLLECTION_ERROR_CLASSES)};const isNodeExecutable=(${isNodeExecutable.toString()});const isRuntimeSupervisorInvocation=(${isRuntimeSupervisorInvocation.toString()});const isValidListenAddress=(${isValidListenAddress.toString()});const hasExactPaseoStartGrammar=(${hasExactPaseoStartGrammar.toString()});const classifyProcessIdentity=(${classifyProcessIdentity.toString()});const isStrongPaseoInvocation=(${isStrongPaseoInvocation.toString()});const classifyProcessRecords=(${classifyProcessRecords.toString()});const hashProcessRecords=(${hashProcessRecords.toString()});const mergeProcessRecords=(${mergeProcessRecords.toString()});const snapshotProcessRecords=(${snapshotProcessRecords.toString()});const emptyProcessSnapshot=(${emptyProcessSnapshot.toString()});const collectProcessSnapshots=(${collectProcessSnapshots.toString()});const output=JSON.stringify(collectProcessSnapshots({listProcEntries:()=>fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8'),readCmdline:pid=>fs.readFileSync('/proc/'+pid+'/cmdline','utf8')}));if(output.length>${MAX_PROCESS_OUTPUT_LENGTH})throw new Error('process_output_limit');process.stdout.write(output);`;
 
 function strictProcessRecords(value) {
-  if (!Array.isArray(value) || value.length === 0)
-    throw new Error('process_records_empty');
+  if (!Array.isArray(value)) throw new Error('process_records_empty');
   if (value.length > MAX_PROCESS_RECORDS)
     throw new Error('process_records_limit');
   const seen = new Set();
@@ -428,19 +497,11 @@ function strictProcessRecords(value) {
     if (record === null || typeof record !== 'object')
       throw new Error('process_record_invalid');
     const keys = Object.keys(record).sort();
-    if (keys.join(',') !== 'comm,identity,pid,ppid,uid')
+    if (keys.join(',') !== 'identity,pid')
       throw new Error('process_record_schema_invalid');
     if (
       !Number.isSafeInteger(record.pid) ||
       record.pid < 1 ||
-      !Number.isSafeInteger(record.ppid) ||
-      record.ppid < 0 ||
-      !Number.isSafeInteger(record.uid) ||
-      record.uid < 0 ||
-      typeof record.comm !== 'string' ||
-      record.comm.length === 0 ||
-      record.comm.length > MAX_COMM_LENGTH ||
-      /[\u0000\r\n]/u.test(record.comm) ||
       !Object.values(PROCESS_IDENTITIES).includes(record.identity)
     )
       throw new Error('process_record_value_invalid');
@@ -448,9 +509,6 @@ function strictProcessRecords(value) {
     seen.add(record.pid);
     return {
       pid: record.pid,
-      ppid: record.ppid,
-      uid: record.uid,
-      comm: record.comm,
       identity: record.identity,
     };
   });
@@ -468,6 +526,23 @@ export function parseProcessRecords(output) {
     throw new Error('process_json_invalid');
   }
   return strictProcessRecords(value);
+}
+
+/**
+ * Validates the exact persisted process evidence projection. This is the only
+ * verifier entry point for process evidence; callers decide whether a valid
+ * collection is a present/absent proposition and whether completeness is
+ * required for that proposition.
+ */
+export function validateProcessEvidence({ processes, process_collection }) {
+  try {
+    if (!Array.isArray(processes)) throw new Error('process_records_invalid');
+    const strict = strictProcessRecords(processes);
+    strictProcessCollection(process_collection, strict);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function strictProcessCollection(value, processes) {

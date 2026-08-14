@@ -262,11 +262,9 @@ const baseRecord = {
     agent_server: {
       container_id: 'agent',
       environment_names: ['NODE_ENV'],
-      processes: [
-        { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
-      ],
+      processes: [{ pid: 1, identity: 'other' }],
       process_collection: completeProcessCollection([
-        { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
+        { pid: 1, identity: 'other' },
       ]),
       mounts: [{ destination: '/workspace', read_only: false }],
     },
@@ -276,14 +274,11 @@ const baseRecord = {
       processes: [
         {
           pid: 1,
-          ppid: 0,
-          uid: 1000,
-          comm: 'paseo',
           identity: 'paseo-daemon',
         },
       ],
       process_collection: completeProcessCollection([
-        { pid: 1, ppid: 0, uid: 1000, comm: 'paseo', identity: 'paseo-daemon' },
+        { pid: 1, identity: 'paseo-daemon' },
       ]),
       mounts: [
         {
@@ -360,22 +355,18 @@ assert.equal(missingE6ProcessEvidence.exit, 2);
 assert.equal(missingE6ProcessEvidence.output.status, 'MISSING');
 assert.equal(
   missingE6ProcessEvidence.output.reason,
-  'required process collection evidence is missing or incomplete',
+  'required process collection evidence is missing or invalid',
 );
 const baselineOnlyE6Proof = {
   ...minimalProof,
   agent_server_process_collection: completeProcessCollection([
-    { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
+    { pid: 1, identity: 'other' },
   ]),
-  agent_server_processes: [
-    { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
-  ],
+  agent_server_processes: [{ pid: 1, identity: 'other' }],
   paseo_runtime_process_collection: completeProcessCollection([
-    { pid: 1, ppid: 0, uid: 1000, comm: 'paseo', identity: 'paseo-daemon' },
+    { pid: 1, identity: 'paseo-daemon' },
   ]),
-  paseo_runtime_processes: [
-    { pid: 1, ppid: 0, uid: 1000, comm: 'paseo', identity: 'paseo-daemon' },
-  ],
+  paseo_runtime_processes: [{ pid: 1, identity: 'paseo-daemon' }],
 };
 const missingE6MutationEvidence = evaluateE6Proof(baselineOnlyE6Proof);
 assert.equal(missingE6MutationEvidence.exit, 2);
@@ -410,8 +401,7 @@ assert.deepEqual(evaluate(incompleteAgentCollection), {
   },
 });
 const tamperedAgentProcess = structuredClone(baseRecord);
-tamperedAgentProcess.runtime_inspection.agent_server.processes[0].comm =
-  'tampered';
+tamperedAgentProcess.runtime_inspection.agent_server.processes[0].unknown_field = true;
 assert.deepEqual(evaluate(tamperedAgentProcess), {
   exit: 2,
   output: {
@@ -627,7 +617,7 @@ const runtimeSecondStrongInspection = collectProcessSnapshots({
 });
 assert.equal(runtimeSecondStrongSnapshot, 1);
 assert.deepEqual(runtimeSecondStrongInspection.processes, [
-  { pid: 8, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+  { pid: 8, identity: 'paseo-daemon' },
 ]);
 const runtimeSecondStrongRecord = structuredClone(baseRecord);
 runtimeSecondStrongRecord.runtime_inspection.paseo_runtime.processes =
@@ -692,7 +682,7 @@ assert.deepEqual(evaluate(incompleteAgentPaseo), {
 });
 const agentPaseoWithIncompleteRuntime = structuredClone(agentPaseo);
 agentPaseoWithIncompleteRuntime.runtime_inspection.paseo_runtime.processes = [
-  { pid: 1, ppid: 0, uid: 1000, comm: 'carrier', identity: 'other' },
+  { pid: 1, identity: 'other' },
 ];
 rebindProcessCollection(
   agentPaseoWithIncompleteRuntime.runtime_inspection.paseo_runtime,
@@ -803,7 +793,7 @@ stateMutation.mutation = {
   real_runtime_child_survived: false,
 };
 stateMutation.runtime_inspection.paseo_runtime.processes = [
-  { pid: 1, ppid: 0, uid: 1000, comm: 'sh', identity: 'other' },
+  { pid: 1, identity: 'other' },
 ];
 rebindProcessCollection(stateMutation.runtime_inspection.paseo_runtime);
 stateMutation.runtime_inspection.paseo_runtime.mounts[2].read_only = true;
@@ -840,13 +830,7 @@ noPaseoMutation.mutation = {
   operational_overlays: ['scripts/foundation/phase-c-e4-no-ports.yaml'],
 };
 noPaseoMutation.runtime_inspection.paseo_runtime.processes = [
-  {
-    pid: 1,
-    ppid: 0,
-    uid: 1000,
-    comm: 'phase-c-no-paseo-carrier',
-    identity: 'other',
-  },
+  { pid: 1, identity: 'other' },
 ];
 rebindProcessCollection(noPaseoMutation.runtime_inspection.paseo_runtime);
 const noPaseoEvaluation = evaluate(noPaseoMutation);
@@ -895,13 +879,7 @@ assert.equal(
 );
 const wrapperOnlyMutation = structuredClone(baseRecord);
 wrapperOnlyMutation.runtime_inspection.paseo_runtime.processes = [
-  {
-    pid: 1,
-    ppid: 0,
-    uid: 1000,
-    comm: 'node',
-    identity: 'paseo-runtime-launcher',
-  },
+  { pid: 1, identity: 'paseo-runtime-launcher' },
 ];
 rebindProcessCollection(wrapperOnlyMutation.runtime_inspection.paseo_runtime);
 const wrapperOnlyEvaluation = evaluate(wrapperOnlyMutation);

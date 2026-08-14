@@ -26,9 +26,9 @@ import {
 } from './lib/phase-c-runtime-boundary.mjs';
 import {
   collectServiceProcesses,
-  hashProcessRecords,
   isPaseoExecutableProcess,
   isPaseoProcess,
+  validateProcessEvidence,
 } from './lib/phase-c-process-inspection.mjs';
 import { runtimeBoundaryCleanupProbes } from './lib/phase-c-runtime-cleanup.mjs';
 import {
@@ -38,29 +38,10 @@ import {
 
 function completeProcessCollection(value, processes) {
   return (
-    value?.stable === true &&
-    value?.complete === true &&
-    Number.isSafeInteger(value?.emitted_count) &&
-    (!Array.isArray(processes) ||
-      (value.emitted_count === processes.length &&
-        value.record_hash === hashProcessRecords(processes))) &&
-    Array.isArray(value?.snapshots) &&
-    value.snapshots.length === 2 &&
-    value.snapshots.every(
-      (snapshot) =>
-        snapshot?.error_class === 'none' &&
-        Number.isSafeInteger(snapshot?.numeric_count) &&
-        snapshot.numeric_count > 0 &&
-        Number.isSafeInteger(snapshot?.emitted_count) &&
-        snapshot.emitted_count > 0 &&
-        snapshot.numeric_count === snapshot.emitted_count &&
-        Number.isSafeInteger(snapshot?.enoent_count) &&
-        Number.isSafeInteger(snapshot?.read_error_count) &&
-        snapshot?.enoent_count === 0 &&
-        snapshot?.read_error_count === 0 &&
-        snapshot?.integrity_error_count === 0 &&
-        snapshot?.emitted_count > 0,
-    )
+    validateProcessEvidence({
+      processes,
+      process_collection: value,
+    }) && value?.complete === true
   );
 }
 

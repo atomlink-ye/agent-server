@@ -13,6 +13,7 @@ import {
   isPaseoProcess,
   parseProcessRecords,
   parseProcessCollection,
+  validateProcessEvidence,
 } from './lib/phase-c-process-inspection.mjs';
 
 const directInvocation = [
@@ -166,16 +167,10 @@ assert.deepEqual(
     uids: { 10: 2000, 11: 1000, 12: 3000, 13: 4000 },
   }),
   [
-    { pid: 10, ppid: 0, uid: 2000, comm: 'node', identity: 'paseo-daemon' },
-    {
-      pid: 11,
-      ppid: 10,
-      uid: 1000,
-      comm: 'node',
-      identity: 'paseo-supervisor',
-    },
-    { pid: 12, ppid: 11, uid: 3000, comm: 'node', identity: 'other' },
-    { pid: 13, ppid: 12, uid: 4000, comm: 'node', identity: 'paseo-daemon' },
+    { pid: 10, identity: 'paseo-daemon' },
+    { pid: 11, identity: 'paseo-supervisor' },
+    { pid: 12, identity: 'other' },
+    { pid: 13, identity: 'paseo-daemon' },
   ],
 );
 
@@ -250,7 +245,7 @@ assert.deepEqual(
     readStatus: () => status(1000, 0),
     readCmdline: () => 'carrier\u0000',
   }),
-  [{ pid: 31, ppid: 0, uid: 1000, comm: 'node', identity: 'other' }],
+  [{ pid: 31, identity: 'other' }],
 );
 assert.throws(
   () =>
@@ -368,6 +363,12 @@ const completeCollection = deterministicCollection({
 });
 assert.equal(completeCollection.process_collection.stable, true);
 assert.equal(completeCollection.process_collection.complete, true);
+assert.equal(
+  completeCollection.processes.every(
+    (process) => !isPaseoExecutableProcess(process),
+  ),
+  true,
+);
 assert.deepEqual(
   completeCollection.process_collection.snapshots.map((snapshot) => [
     snapshot.numeric_count,
@@ -385,7 +386,7 @@ const firstStrongCollection = changingCollection({
   cmdlines: [{ 70: directInvocation.join('\u0000') }, { 70: 'carrier' }],
 });
 assert.deepEqual(firstStrongCollection.processes, [
-  { pid: 70, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+  { pid: 70, identity: 'paseo-daemon' },
 ]);
 assert.equal(firstStrongCollection.process_collection.complete, false);
 assert.equal(
@@ -401,9 +402,69 @@ const secondStrongCollection = changingCollection({
   cmdlines: [{ 71: 'carrier' }, { 71: directInvocation.join('\u0000') }],
 });
 assert.deepEqual(secondStrongCollection.processes, [
-  { pid: 71, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+  { pid: 71, identity: 'paseo-daemon' },
 ]);
 assert.equal(secondStrongCollection.process_collection.complete, false);
+
+// Direct witnesses survive unreadable comm/Uid/PPid adapters. The collection
+// is incomplete for absence, but the independent strong witness is retained.
+const unreadableDirectCollection = collectProcessSnapshots({
+  listProcEntries: () => ['73'],
+  readCmdline: () => `${directInvocation.join('\u0000')}\u0000`,
+  readComm: () => {
+    const error = new Error('comm unreadable');
+    error.code = 'EACCES';
+    throw error;
+  },
+  readStatus: () => {
+    const error = new Error('Uid/PPid unreadable');
+    error.code = 'EACCES';
+    throw error;
+  },
+});
+assert.deepEqual(unreadableDirectCollection.processes, [
+  { pid: 73, identity: 'paseo-daemon' },
+]);
+assert.equal(unreadableDirectCollection.process_collection.complete, false);
+assert.equal(
+  unreadableDirectCollection.process_collection.snapshots[0].read_error_count,
+  2,
+);
+const unreadableLauncherCollection = collectProcessSnapshots({
+  listProcEntries: () => ['74'],
+  readCmdline: () => `${wrapperInvocation.join('\u0000')}\u0000`,
+  readComm: () => {
+    const error = new Error('comm unreadable');
+    error.code = 'EACCES';
+    throw error;
+  },
+  readStatus: () => {
+    const error = new Error('status unreadable');
+    error.code = 'EACCES';
+    throw error;
+  },
+});
+assert.deepEqual(unreadableLauncherCollection.processes, [
+  { pid: 74, identity: 'paseo-runtime-launcher' },
+]);
+assert.equal(unreadableLauncherCollection.process_collection.complete, false);
+
+assert.equal(validateProcessEvidence(unreadableDirectCollection), true);
+const selfConsistentTamper = structuredClone(unreadableDirectCollection);
+selfConsistentTamper.processes = [{ pid: 73, identity: 'other' }];
+selfConsistentTamper.process_collection.emitted_count = 1;
+selfConsistentTamper.process_collection.record_hash = hashProcessRecords(
+  selfConsistentTamper.processes,
+);
+assert.equal(validateProcessEvidence(selfConsistentTamper), true);
+assert.equal(
+  validateProcessEvidence({
+    processes: [{ pid: 73, identity: 'other', duplicate: true }],
+    process_collection: selfConsistentTamper.process_collection,
+  }),
+  false,
+);
+
 const changedNoWitnessCollection = changingCollection({
   lists: [['72'], ['73']],
   cmdlines: [{ 72: 'carrier' }, { 73: 'carrier' }],
@@ -482,35 +543,29 @@ assert.equal(
 
 assert.throws(() => parseProcessRecords(''), /process_json_empty/u);
 assert.throws(() => parseProcessRecords('not-json'), /process_json_invalid/u);
-assert.throws(() => parseProcessRecords('[]'), /process_records_empty/u);
+assert.deepEqual(parseProcessRecords('[]'), []);
 assert.throws(
-  () =>
-    parseProcessRecords(
-      '[{"pid":1,"ppid":0,"uid":1000,"comm":"node","identity":"other","extra":true}]',
-    ),
+  () => parseProcessRecords('[{"pid":1,"identity":"other","extra":true}]'),
   /process_record_schema_invalid/u,
 );
 assert.throws(
   () =>
     parseProcessRecords(
-      '[{"pid":1,"ppid":0,"uid":1000,"comm":"node","identity":"other"},{"pid":1,"ppid":0,"uid":1000,"comm":"node","identity":"other"}]',
+      '[{"pid":1,"identity":"other"},{"pid":1,"identity":"other"}]',
     ),
   /process_pid_duplicate/u,
 );
 assert.throws(
-  () =>
-    parseProcessRecords(
-      '[{"pid":1,"ppid":-1,"uid":1000,"comm":"node","identity":"other"}]',
-    ),
+  () => parseProcessRecords('[{"pid":0,"identity":"other"}]'),
   /process_record_value_invalid/u,
 );
 assert.deepEqual(
   parseProcessRecords(
-    '[{"pid":2,"ppid":0,"uid":1000,"comm":"node","identity":"other"},{"pid":1,"ppid":0,"uid":1000,"comm":"node","identity":"other"}]',
+    '[{"pid":2,"identity":"other"},{"pid":1,"identity":"other"}]',
   ),
   [
-    { pid: 2, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
-    { pid: 1, ppid: 0, uid: 1000, comm: 'node', identity: 'other' },
+    { pid: 2, identity: 'other' },
+    { pid: 1, identity: 'other' },
   ],
 );
 
@@ -521,15 +576,7 @@ const run = (command, commandFields) => {
   if (commandFields.includes('ps')) return { stdout: `${containerId}\n` };
   return {
     stdout: JSON.stringify({
-      processes: [
-        {
-          pid: 1000,
-          ppid: 999,
-          uid: 1000,
-          comm: 'paseo',
-          identity: 'paseo-daemon',
-        },
-      ],
+      processes: [{ pid: 1000, identity: 'paseo-daemon' }],
       process_collection: {
         snapshots: [
           {
@@ -551,13 +598,7 @@ const run = (command, commandFields) => {
         ],
         emitted_count: 1,
         record_hash: hashProcessRecords([
-          {
-            pid: 1000,
-            ppid: 999,
-            uid: 1000,
-            comm: 'paseo',
-            identity: 'paseo-daemon',
-          },
+          { pid: 1000, identity: 'paseo-daemon' },
         ]),
         stable: true,
         complete: true,
@@ -574,9 +615,6 @@ const collectedServiceProcesses = collectServiceProcesses({
 assert.deepEqual(collectedServiceProcesses.processes, [
   {
     pid: 1000,
-    ppid: 999,
-    uid: 1000,
-    comm: 'paseo',
     identity: 'paseo-daemon',
   },
 ]);
@@ -638,10 +676,10 @@ for (const guardedSource of [source, harnessSource]) {
 assert.doesNotMatch(source, /docker\s+top/iu);
 assert.doesNotMatch(source, /(?:environ|args=)/iu);
 assert.doesNotMatch(source, /procps/iu);
-assert.match(source, /Uid:/u);
 assert.match(source, /\/comm/u);
 assert.match(source, /\/cmdline/u);
+assert.match(source, /PPid:/u);
 
 process.stdout.write(
-  `${JSON.stringify({ status: 'PASS', exact_toolchain_paths: true, ancestry_cycle_safe: true, wrapper_excluded_from_runtime_positive: true, two_snapshot_completeness: true, enoent_incomplete: true, non_enoent_incomplete: true, raw_argv_not_emitted: true, fields: ['pid', 'ppid', 'uid', 'comm', 'identity'] })}\n`,
+  `${JSON.stringify({ status: 'PASS', exact_toolchain_paths: true, ancestry_cycle_safe: true, wrapper_excluded_from_runtime_positive: true, two_snapshot_completeness: true, enoent_incomplete: true, non_enoent_incomplete: true, direct_witness_survives_metadata_errors: true, raw_argv_not_emitted: true, fields: ['pid', 'identity'] })}\n`,
 );

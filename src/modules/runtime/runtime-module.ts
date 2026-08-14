@@ -1,15 +1,22 @@
-import { PaseoRuntimeAdapter } from '../../adapters/paseo/paseo-runtime-adapter.js';
-import { UnavailableRuntime } from '../../adapters/runtime/unavailable-runtime.js';
+import { PaseoExecutionPlane } from '../../adapters/paseo/paseo-execution-plane.js';
+import { UnavailableExecutionPlane } from '../../adapters/runtime/unavailable-execution-plane.js';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
 import {
   RuntimeReadinessProbe,
   type ReadinessProbe,
 } from '../../application/health/readiness.js';
 import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
+import type { ExecutionPlanePort } from '../../application/ports/execution-plane.js';
 import type { RuntimeSessionRepository } from '../../application/ports/runtime-session-repository.js';
+import type { RuntimeWorkspaceRepository } from '../../application/ports/runtime-workspace-repository.js';
+import { ExecutionPlaneRuntimeFacade } from '../../application/runtime/execution-plane-runtime-facade.js';
+import { ExecutionRunRegistry } from '../../application/runtime/execution-run-registry.js';
 import { LocalRuntimeExtensionBinder } from '../../infrastructure/extensions/local-runtime-extension-binder.js';
 import { RuntimeMcpServer } from '../../infrastructure/extensions/runtime-mcp-server.js';
+import { LocalRuntimeMemoryCandidateCollector } from '../../infrastructure/files/runtime-memory-artifact-collector.js';
+import { PostgresRuntimeSessionLookup } from '../../infrastructure/postgres/postgres-runtime-session-lookup.js';
 import { PostgresRuntimeSessionRepository } from '../../infrastructure/postgres/postgres-runtime-session-repository.js';
+import { PostgresRuntimeWorkspaceRepository } from '../../infrastructure/postgres/postgres-runtime-workspace-repository.js';
 import {
   RuntimeToolRegistry,
   type RuntimeToolContributor,
@@ -26,8 +33,12 @@ export interface RuntimeMcpHostLifecycle {
 }
 
 export interface RuntimeModule {
+  /** @deprecated Temporary caller compatibility while application call sites migrate. */
   readonly runtime: AgentRuntimePort;
+  readonly executionPlane: ExecutionPlanePort;
+  readonly executionRuns: ExecutionRunRegistry;
   readonly sessions: RuntimeSessionRepository;
+  readonly workspaces: RuntimeWorkspaceRepository;
   readonly extensions: RuntimeExtensionControl;
   readonly readiness: ReadinessProbe;
   readonly runtimeCellRoot?: string;
@@ -50,11 +61,14 @@ export function createRuntimeModule(options: {
   readonly debugRuntime?: AgentRuntimePort;
 }): RuntimeModule {
   const runtimeAdapter = options.config.runtime?.adapter ?? 'paseo';
-  const runtime =
-    options.debugRuntime ??
-    (runtimeAdapter === 'none'
-      ? new UnavailableRuntime()
-      : new PaseoRuntimeAdapter(
+  const sessions = new PostgresRuntimeSessionRepository(options.database);
+  const sessionLookup = new PostgresRuntimeSessionLookup(options.database);
+  const workspaces = new PostgresRuntimeWorkspaceRepository(options.database);
+  const executionRuns = new ExecutionRunRegistry();
+  const executionPlane: ExecutionPlanePort =
+    runtimeAdapter === 'none'
+      ? new UnavailableExecutionPlane()
+      : new PaseoExecutionPlane(
           {
             wsUrl: options.config.paseo.wsUrl,
             provider: options.config.paseo.provider,
@@ -68,7 +82,17 @@ export function createRuntimeModule(options: {
             executionTimeoutSource: options.config.paseo.executionTimeoutSource,
           },
           options.logger,
-        ));
+        );
+  const runtime =
+    options.debugRuntime ??
+    new ExecutionPlaneRuntimeFacade(
+      executionPlane,
+      sessions,
+      sessionLookup,
+      executionRuns,
+      new LocalRuntimeMemoryCandidateCollector(),
+      options.config.paseo.agentCwd,
+    );
   const mcpHost = new RuntimeMcpServer(
     new RuntimeToolRegistry(options.toolContributors),
     undefined,
@@ -81,11 +105,23 @@ export function createRuntimeModule(options: {
     mcpHost,
   );
 
+  const readiness: ReadinessProbe = options.debugRuntime
+    ? {
+        async check() {
+          const health = await options.debugRuntime!.health();
+          return health.checks;
+        },
+      }
+    : new RuntimeReadinessProbe(executionPlane);
+
   return {
     runtime,
-    sessions: new PostgresRuntimeSessionRepository(options.database),
+    executionPlane,
+    executionRuns,
+    sessions,
+    workspaces,
     extensions,
-    readiness: new RuntimeReadinessProbe(runtime),
+    readiness,
     ...(options.config.paseo.runtimeCellRoot
       ? { runtimeCellRoot: options.config.paseo.runtimeCellRoot }
       : {}),

@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 const repo = process.cwd();
 const output = path.resolve(option('--output'));
 const activeMutations = [];
+let timelineSequence = 0;
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) fail('runtime_registry_evidence_missing_database_url', 2);
 const candidate = command('git', ['rev-parse', 'HEAD']);
@@ -28,6 +29,7 @@ const inputs = [
   'tests/integration/product-api-v1-oi38.integration.test.ts',
   'scripts/ci/classify-runtime-tools-acceptance.mjs',
   'scripts/ci/run-runtime-tools-acceptance-raw.mjs',
+  'scripts/ci/runtime-tools-acceptance-raw-support.mjs',
   'scripts/ci/runtime-tools-acceptance-inputs.mjs',
   'scripts/ci/check-runtime-tool-host-boundary.mjs',
   'scripts/ci/verify-registry-change-budget.mjs',
@@ -168,7 +170,7 @@ mutate(
     arms.push(
       canonical('memory-handler-wrongness', 1, [
         'runtime-registry-e6-wrong',
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true',
         'runtime_tools_child_result:status=1:signal=none:error=none',
       ]),
     );
@@ -326,7 +328,7 @@ mutate(
     arms.push(
       canonical('change-budget-migration-runtime-control', 0, [
         '"observed_count":1',
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true',
       ]),
     );
   },
@@ -350,7 +352,7 @@ mutate(
     arms.push(
       canonical('change-budget-dependency-runtime-control', 0, [
         '"observed_count":1',
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true',
       ]),
     );
   },
@@ -374,7 +376,7 @@ mutate(
     arms.push(
       canonical('change-budget-exports-runtime-control', 0, [
         '"observed_count":1',
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true',
       ]),
     );
   },
@@ -398,7 +400,7 @@ mutate(
     arms.push(
       canonical('change-budget-current-baseline-runtime-control', 0, [
         '"observed_count":1',
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true',
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true',
       ]),
     );
   },
@@ -512,19 +514,28 @@ function runArm(name, executable, argv, expectedExit, markers) {
   });
 }
 function execute(name, executable, argv, expectedExit, markers, env) {
+  const controlStartedAt = nextSequence();
   const result = spawnSync(executable, argv, {
     cwd: repo,
     env,
     encoding: 'utf8',
   });
+  const controlCompletedAt = nextSequence();
   const stdout = result.stdout ?? '';
   const stderr = result.stderr ?? '';
   const combined = `${stdout}\n${stderr}`;
   const markerAssertions = Object.fromEntries(
     markers.map((marker) => [marker, combined.includes(marker)]),
   );
+  const executionResult = jsonGuard(combined, 'runtime-tools-target-execution');
+  const workCallResult = jsonGuard(
+    combined,
+    'runtime-tools-non-target-control',
+  );
   return {
     name,
+    arm_identity: name,
+    mutation_window_id: activeMutations.at(-1) ?? null,
     argv: [executable, ...argv],
     cwd: repo,
     expected_exit: expectedExit,
@@ -532,6 +543,13 @@ function execute(name, executable, argv, expectedExit, markers, env) {
     signal: result.signal,
     error: result.error?.code ?? null,
     active_mutations: [...activeMutations],
+    mutation_applied_at: null,
+    control_started_at: controlStartedAt,
+    control_completed_at: controlCompletedAt,
+    restore_started_at: null,
+    restore_completed_at: null,
+    execution_result: executionResult,
+    work_call_result: workCallResult,
     stdout,
     stderr,
     marker_assertions: markerAssertions,
@@ -558,15 +576,40 @@ function mutate(name, file, before, after, action) {
   };
   mutations.push(record);
   fs.writeFileSync(target, changed);
+  record.mutation_applied_at = nextSequence();
   activeMutations.push(name);
   try {
     action();
   } finally {
     const completed = activeMutations.pop();
     if (completed !== name) fail(`${name}:mutation_stack_mismatch`, 2);
+    record.restore_started_at = nextSequence();
     fs.writeFileSync(target, original);
+    record.restore_completed_at = nextSequence();
+    for (const arm of arms) {
+      if (arm.mutation_window_id !== name) continue;
+      arm.mutation_applied_at = record.mutation_applied_at;
+      arm.restore_started_at = record.restore_started_at;
+      arm.restore_completed_at = record.restore_completed_at;
+    }
     record.restored = sha(file) === record.original_sha256;
   }
+}
+function nextSequence() {
+  timelineSequence += 1;
+  return timelineSequence;
+}
+function jsonGuard(combined, guard) {
+  for (const line of combined.split(/\r?\n/)) {
+    if (!line.startsWith('{')) continue;
+    try {
+      const value = JSON.parse(line);
+      if (value.guard === guard) return value;
+    } catch {
+      // Non-JSON command output is retained verbatim and is not a guard record.
+    }
+  }
+  return null;
 }
 function sha(file) {
   return digest(fs.readFileSync(path.join(repo, file)));

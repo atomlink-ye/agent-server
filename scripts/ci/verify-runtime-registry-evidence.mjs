@@ -61,6 +61,8 @@ const expectedExits = {
   'change-budget-current-baseline-runtime-control': 0,
 };
 const arms = Object.fromEntries(evidence.arms.map((arm) => [arm.name, arm]));
+const focusedIdentity =
+  'calls Work and Memory through the composed runtime tool registry';
 const assertions = {
   schema: evidence.schema_version === 1,
   candidate: evidence.candidate === candidate,
@@ -81,13 +83,16 @@ const assertions = {
     ] === true,
   handler_wrongness_target_red_work_green:
     arms['memory-handler-wrongness']?.raw_exit === 1 &&
-    JSON.stringify(arms['memory-handler-wrongness']?.active_mutations) ===
-      JSON.stringify(['memory-handler-wrongness']) &&
+    mutationWindow(
+      arms['memory-handler-wrongness'],
+      'memory-handler-wrongness',
+    ) &&
+    workCallGreen(arms['memory-handler-wrongness']) &&
     arms['memory-handler-wrongness']?.marker_assertions?.[
       'runtime-registry-e6-wrong'
     ] === true &&
     arms['memory-handler-wrongness']?.marker_assertions?.[
-      '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+      '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true'
     ] === true,
   constructor_reinjection_fail:
     arms['constructor-capability-reinjection']?.raw_exit === 1,
@@ -106,28 +111,39 @@ const assertions = {
   ].every(
     ([arm, target]) =>
       arms[`change-budget-${arm}-red`]?.raw_exit === 1 &&
+      mutationWindow(arms[`change-budget-${arm}-red`], `${arm}-change`) &&
       arms[`change-budget-${arm}-red`]?.marker_assertions?.[
         `registry_change_budget_violation:target=${target}`
       ] === true &&
       arms[`change-budget-${arm}-runtime-control`]?.raw_exit === 0 &&
-      JSON.stringify(
-        arms[`change-budget-${arm}-runtime-control`]?.active_mutations,
-      ) === JSON.stringify([`${arm}-change`]) &&
+      mutationWindow(
+        arms[`change-budget-${arm}-runtime-control`],
+        `${arm}-change`,
+      ) &&
+      executionGreen(arms[`change-budget-${arm}-runtime-control`]) &&
+      workCallGreen(arms[`change-budget-${arm}-runtime-control`]) &&
       arms[`change-budget-${arm}-runtime-control`]?.marker_assertions?.[
-        '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+        '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true'
       ] === true,
   ),
   e7_current_baseline_missing_runtime_green:
     arms['change-budget-current-baseline-missing']?.raw_exit === 2 &&
+    mutationWindow(
+      arms['change-budget-current-baseline-missing'],
+      'baseline-current-tree',
+    ) &&
     arms['change-budget-current-baseline-missing']?.marker_assertions?.[
       'registry_change_budget_missing:baseline_equals_candidate'
     ] === true &&
     arms['change-budget-current-baseline-runtime-control']?.raw_exit === 0 &&
-    JSON.stringify(
-      arms['change-budget-current-baseline-runtime-control']?.active_mutations,
-    ) === JSON.stringify(['baseline-current-tree']) &&
+    mutationWindow(
+      arms['change-budget-current-baseline-runtime-control'],
+      'baseline-current-tree',
+    ) &&
+    executionGreen(arms['change-budget-current-baseline-runtime-control']) &&
+    workCallGreen(arms['change-budget-current-baseline-runtime-control']) &&
     arms['change-budget-current-baseline-runtime-control']?.marker_assertions?.[
-      '"guard":"runtime-tools-non-target-control","work_present":true,"product_work_create_ok":true'
+      '"guard":"runtime-tools-non-target-control","control_identity":"product_work_create","work_present":true,"product_work_create_ok":true'
     ] === true,
   all_mutations_restored: evidence.mutations.every(
     (mutation) => mutation.restored === true,
@@ -180,6 +196,48 @@ console.log(
   ),
 );
 process.exit(ok ? 0 : 1);
+
+function mutationWindow(arm, mutationName) {
+  return (
+    arm?.mutation_window_id === mutationName &&
+    JSON.stringify(arm.active_mutations) === JSON.stringify([mutationName]) &&
+    Number.isInteger(arm.mutation_applied_at) &&
+    Number.isInteger(arm.control_started_at) &&
+    Number.isInteger(arm.control_completed_at) &&
+    Number.isInteger(arm.restore_started_at) &&
+    Number.isInteger(arm.restore_completed_at) &&
+    arm.mutation_applied_at <= arm.control_started_at &&
+    arm.control_started_at <= arm.control_completed_at &&
+    arm.control_completed_at < arm.restore_started_at &&
+    arm.restore_started_at <= arm.restore_completed_at
+  );
+}
+
+function executionGreen(arm) {
+  return (
+    arm?.raw_exit === 0 &&
+    arm.execution_result?.control_identity === focusedIdentity &&
+    arm.execution_result?.child_raw_exit === 0 &&
+    arm.execution_result?.observed_count > 0 &&
+    arm.execution_result?.passed > 0 &&
+    arm.execution_result?.failed === 0 &&
+    arm.execution_result?.skip_count === 0 &&
+    arm.execution_result?.todo_count === 0
+  );
+}
+
+function workCallGreen(arm) {
+  return (
+    arm?.work_call_result?.guard === 'runtime-tools-non-target-control' &&
+    arm.work_call_result?.control_identity === 'product_work_create' &&
+    arm.work_call_result?.work_present === true &&
+    arm.work_call_result?.product_work_create_ok === true &&
+    arm.work_call_result?.work_call_raw_exit === 0 &&
+    arm.work_call_result?.work_call_observed_count > 0 &&
+    arm.work_call_result?.work_call_skip_count === 0 &&
+    arm.work_call_result?.work_call_todo_count === 0
+  );
+}
 
 function readable(target) {
   try {

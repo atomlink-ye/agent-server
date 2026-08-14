@@ -9,6 +9,7 @@ const markers = [
   'runtime_tools_environment_unavailable',
   'runtime_tools_zero_execution',
   'runtime_tools_instrument_underexecution',
+  'runtime_tools_instrument_skip_or_todo',
   'runtime_work_registration_missing',
   'runtime_memory_registration_missing',
   'runtime_tools_host_boundary_checker_missing',

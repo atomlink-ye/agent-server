@@ -2,7 +2,7 @@
 
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { runVitestTarget } from './work-acceptance-raw-support.mjs';
+import { runRuntimeToolsVitestTarget } from './runtime-tools-acceptance-raw-support.mjs';
 import { requireRuntimeToolsCanonicalInputs } from './runtime-tools-acceptance-inputs.mjs';
 
 if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
@@ -11,27 +11,12 @@ if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
 }
 if (!(await requireRuntimeToolsCanonicalInputs())) process.exit(1);
 
-const originalConsoleError = console.error;
-console.error = (...values) =>
-  originalConsoleError(
-    ...values.map((value) =>
-      typeof value === 'string'
-        ? value.replaceAll('WORK_ACCEPTANCE_MISSING[', 'RUNTIME_TOOLS_MISSING[')
-        : value,
-    ),
-  );
-let behaviorExit;
-try {
-  behaviorExit = runVitestTarget({
-    kind: 'runtime-tools',
-    expectedMinCount: 1,
-    zeroExecutionMarker: 'runtime_tools_zero_execution',
-    underExecutionMarker: 'runtime_tools_instrument_underexecution',
-    pattern: 'calls Work and Memory through the composed runtime tool registry',
-  });
-} finally {
-  console.error = originalConsoleError;
-}
+const behaviorExit = runRuntimeToolsVitestTarget({
+  expectedMinCount: 1,
+  zeroExecutionMarker: 'runtime_tools_zero_execution',
+  underExecutionMarker: 'runtime_tools_instrument_underexecution',
+  pattern: 'calls Work and Memory through the composed runtime tool registry',
+});
 if (behaviorExit !== 0) process.exit(behaviorExit);
 
 const boundary = spawnSync(

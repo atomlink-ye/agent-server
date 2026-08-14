@@ -360,8 +360,13 @@ describeRealPostgres(
           process.stdout.write(
             `${JSON.stringify({
               guard: 'runtime-tools-non-target-control',
+              control_identity: 'product_work_create',
               work_present: workPresent,
               product_work_create_ok: workOk,
+              work_call_raw_exit: 0,
+              work_call_observed_count: 1,
+              work_call_skip_count: 0,
+              work_call_todo_count: 0,
             })}\n`,
           );
         }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from './application/runtime/execution-plane-runtime-facade.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
 import { CompleteRun } from './application/runs/complete-run.js';
@@ -73,7 +73,7 @@ export interface ServiceResources {
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
   >;
-  readonly runtime: Pick<AgentRuntimePort, 'close'>;
+  readonly runtime: Pick<ExecutionRuntimeService, 'close'>;
   readonly runtimeMcpServer?: { stop(): Promise<void> };
   readonly pool: { end(): Promise<void> };
 }
@@ -228,7 +228,7 @@ export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
   /** Debug-only runtime substitute; production composition selects config.runtime.adapter. */
-  readonly debugRuntime?: AgentRuntimePort;
+  readonly debugRuntime?: ExecutionRuntimeService;
   /** Keep terminal Team wakes durable until the debug control resumes them. */
   readonly deferTeamWakeReconcile?: boolean;
 }

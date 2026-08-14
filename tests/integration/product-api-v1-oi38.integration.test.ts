@@ -18,9 +18,9 @@ import { createWorkModule } from '../../src/modules/work/work-module.js';
 import { AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF } from '../../src/application/agents/built-in-skills.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
-import { PostgresMemoryApiRepository } from '../../src/infrastructure/postgres/postgres-memory-api-repository.js';
 import { createMemoryReadRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
 import { createRuntimeToolRegistry } from '../../src/entrypoints/mcp/runtime-tool-composition.js';
+import type { MemoryApiRepository } from '../../src/application/ports/memory-api-repository.js';
 import {
   AGENT_SERVER_MEMORY_READ_MCP_NAME,
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
@@ -49,10 +49,9 @@ const tokenA = 'oi38-token-owner-a';
 const tokenB = 'oi38-token-owner-b';
 const memoryStoreId = '00000000-0000-4000-8000-00000000c038';
 const memoryId = '00000000-0000-4000-8000-00000000c039';
-const memoryVersionId = '00000000-0000-4000-8000-00000000c040';
 let httpBaseUrl = '';
 let workModule: ReturnType<typeof createWorkModule>;
-let memoryRepository: PostgresMemoryApiRepository;
+let memoryRepository: MemoryApiRepository;
 const generatedWorkIds: string[] = [];
 const generatedTaskIds: string[] = [];
 
@@ -69,30 +68,7 @@ describeRealPostgres(
       });
       await applyDurableKernelMigrations(pool);
       await seedIdentityRows(pool);
-      memoryRepository = new PostgresMemoryApiRepository(pool);
-      const memoryPrincipal = {
-        tenantId,
-        principalType: 'service_account' as const,
-        principalId: 'oi38-owner-a',
-      };
-      await memoryRepository.createStore({
-        id: memoryStoreId,
-        principal: memoryPrincipal,
-        workspaceId: workspaceA,
-        name: 'Registry C',
-        description: 'E6 memory fixture',
-      });
-      await memoryRepository.createMemory(
-        {
-          id: memoryId,
-          versionId: memoryVersionId,
-          storeId: memoryStoreId,
-          path: 'registry/e6.txt',
-          content: 'runtime-registry-e6',
-          now: new Date().toISOString(),
-        },
-        memoryPrincipal,
-      );
+      memoryRepository = runtimeRegistryMemoryRepository();
 
       const serviceAccounts = [
         {
@@ -499,23 +475,6 @@ function versionFixture() {
 
 async function seedIdentityRows(pool: Pool): Promise<void> {
   const now = new Date().toISOString();
-  const cleanup = await pool.connect();
-  try {
-    await cleanup.query('BEGIN');
-    await cleanup.query('DELETE FROM memory_versions WHERE memory_id=$1', [
-      memoryId,
-    ]);
-    await cleanup.query('DELETE FROM memories WHERE id=$1', [memoryId]);
-    await cleanup.query('DELETE FROM memory_stores WHERE id=$1', [
-      memoryStoreId,
-    ]);
-    await cleanup.query('COMMIT');
-  } catch (error) {
-    await cleanup.query('ROLLBACK');
-    throw error;
-  } finally {
-    cleanup.release();
-  }
   const residue = await pool.query<{ root_task_id: string }>(
     `SELECT root_task_id FROM work_runs
      WHERE work_id IN (SELECT id FROM works WHERE current_definition_version_id=$1)`,
@@ -651,4 +610,51 @@ async function seedIdentityRows(pool: Pool): Promise<void> {
       new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     ],
   );
+}
+
+function runtimeRegistryMemoryRepository(): MemoryApiRepository {
+  const now = '2026-08-14T00:00:00.000Z';
+  const store = {
+    id: memoryStoreId,
+    owner: {
+      tenantId,
+      workspaceId: workspaceA,
+      principalType: 'service_account' as const,
+      principalId: 'oi38-owner-a',
+    },
+    name: 'Registry C',
+    description: 'E6 fixed read target',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const memory = {
+    id: memoryId,
+    storeId: memoryStoreId,
+    path: 'registry/e6.txt',
+    current: {
+      id: '00000000-0000-4000-8000-00000000c040',
+      memoryId,
+      version: 1,
+      content: 'runtime-registry-e6',
+      contentSha256: '0'.repeat(64),
+      contentSizeBytes: 19,
+      operation: 'created' as const,
+      previousVersionId: null,
+      createdAt: now,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+  return {
+    async getStore(id, principal) {
+      return id === store.id &&
+        principal.tenantId === store.owner.tenantId &&
+        principal.principalId === store.owner.principalId
+        ? store
+        : null;
+    },
+    async listMemories(id) {
+      return id === store.id ? [memory] : null;
+    },
+  } as unknown as MemoryApiRepository;
 }

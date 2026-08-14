@@ -318,7 +318,7 @@ export const AgenticTeamProjectResponseSchema = z.discriminatedUnion(
     }).strict(),
     AgenticTeamProjectResponseBaseSchema.extend({
       decision_capture_status: z.literal('reported'),
-      decisions: z.array(z.never()),
+      decisions: z.array(TeamCompletionDecisionResponseSchema),
     }).strict(),
   ],
 );

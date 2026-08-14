@@ -36,8 +36,8 @@ if (required && !connectionString)
 const describeRealPostgres = connectionString ? describe : describe.skip;
 
 const tenantId = 'oi38_product_api_tenant';
-const workspaceA = '00000000-0000-4000-8000-00000000a038';
-const workspaceB = '00000000-0000-4000-8000-00000000b038';
+const workspaceA = '00000000-0000-4000-8000-00000000a048';
+const workspaceB = '00000000-0000-4000-8000-00000000b048';
 const workA = '00000000-0000-4000-8000-0000000a0381';
 const workB = '00000000-0000-4000-8000-0000000b0381';
 const runA = '00000000-0000-4000-8000-0000000a0382';

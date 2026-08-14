@@ -175,7 +175,7 @@ it(
           lifecycle: 'started',
         });
         console.log(REQUEST_LEDGER_MISSING_MARKER);
-        return;
+        throw new Error(REQUEST_LEDGER_MISSING_MARKER);
       }
       expect(requestSnapshot.sealed).toBe(true);
       expect(requestSnapshot.inFlight).toBe(0);

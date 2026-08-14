@@ -461,6 +461,8 @@ export async function createService(
     logger,
     workIdentity,
     startWorkRun,
+    config.runtimeMcp?.listenHost,
+    config.runtimeMcp?.advertisedHost,
   );
   const runtimeExtensionBinder = new LocalRuntimeExtensionBinder(
     config.paseo.agentCwd,

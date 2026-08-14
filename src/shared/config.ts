@@ -127,6 +127,8 @@ const ConfigSchema = z
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     SERVICE_NAME: z.string().min(1).default('agent-server'),
     RUNTIME_ADAPTER: z.enum(['none', 'paseo']).default('paseo'),
+    RUNTIME_MCP_LISTEN_HOST: z.string().min(1).default('127.0.0.1'),
+    RUNTIME_MCP_ADVERTISED_HOST: z.string().min(1).default('127.0.0.1'),
     PASEO_WS_URL: z.url().default('ws://127.0.0.1:6767/ws'),
     PASEO_PROVIDER: z.enum(MANAGED_ENVIRONMENT_PROVIDERS).default('opencode'),
     PASEO_AGENT_CWD: z.string().min(1).default('.local/agent-workspace'),
@@ -263,6 +265,10 @@ export type AppConfig = Readonly<{
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
+  runtimeMcp?: {
+    listenHost: string;
+    advertisedHost: string;
+  };
   teamCompletionApprovalRequired: boolean;
   serviceAccounts?: readonly ServiceAccountRecord[];
   larkCanary?: LarkCanaryConfig;
@@ -322,6 +328,10 @@ export function loadConfig(
     serviceName: parsed.data.SERVICE_NAME,
     runtime: {
       adapter: parsed.data.RUNTIME_ADAPTER,
+    },
+    runtimeMcp: {
+      listenHost: parsed.data.RUNTIME_MCP_LISTEN_HOST,
+      advertisedHost: parsed.data.RUNTIME_MCP_ADVERTISED_HOST,
     },
     teamCompletionApprovalRequired:
       parsed.data.AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED,

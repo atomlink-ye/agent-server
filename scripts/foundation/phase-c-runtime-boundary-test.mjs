@@ -465,13 +465,19 @@ let activeAgentSnapshot = -1;
 const activeAgentInspection = collectProcessSnapshots({
   listProcEntries: () => {
     activeAgentSnapshot += 1;
-    return ['1', '2'];
+    return activeAgentSnapshot === 0 ? ['1', '2'] : ['1'];
   },
   readComm: () => 'node\n',
   readStatus: (pid) =>
     `Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t${pid === '1' ? 0 : 999}\n`,
   readCmdline: (pid) =>
-    `${pid === '1' ? strongPaseoArgv.join('\u0000') : 'Paseo Daemon'}\u0000`,
+    `${
+      activeAgentSnapshot === 0 && pid === '1'
+        ? strongPaseoArgv.join('\u0000')
+        : activeAgentSnapshot === 0
+          ? 'Paseo Daemon'
+          : 'carrier'
+    }\u0000`,
 });
 assert.equal(activeAgentSnapshot, 1);
 assert.equal(activeAgentInspection.process_collection.complete, false);
@@ -572,6 +578,94 @@ assert.deepEqual(evaluate(runtimeStrongCorruptRecord), {
     code: 0,
     reason:
       'effective and running topology establish external runtime ownership',
+  },
+});
+let runtimeFirstStrongSnapshot = -1;
+const runtimeFirstStrongInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    runtimeFirstStrongSnapshot += 1;
+    return ['11'];
+  },
+  readComm: () => 'node\n',
+  readStatus: () => 'Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t0\n',
+  readCmdline: () =>
+    `${
+      runtimeFirstStrongSnapshot === 0
+        ? strongPaseoArgv.join('\u0000')
+        : 'carrier'
+    }\u0000`,
+});
+const runtimeFirstStrongRecord = structuredClone(baseRecord);
+runtimeFirstStrongRecord.runtime_inspection.paseo_runtime.processes =
+  runtimeFirstStrongInspection.processes;
+runtimeFirstStrongRecord.runtime_inspection.paseo_runtime.process_collection =
+  runtimeFirstStrongInspection.process_collection;
+assert.deepEqual(evaluate(runtimeFirstStrongRecord), {
+  exit: 0,
+  output: {
+    suite: 'E4',
+    status: 'PASS',
+    code: 0,
+    reason:
+      'effective and running topology establish external runtime ownership',
+  },
+});
+let runtimeSecondStrongSnapshot = -1;
+const runtimeSecondStrongInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    runtimeSecondStrongSnapshot += 1;
+    return ['8'];
+  },
+  readComm: () => 'node\n',
+  readStatus: () => 'Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t0\n',
+  readCmdline: () =>
+    `${
+      runtimeSecondStrongSnapshot === 1
+        ? strongPaseoArgv.join('\u0000')
+        : 'carrier'
+    }\u0000`,
+});
+assert.equal(runtimeSecondStrongSnapshot, 1);
+assert.deepEqual(runtimeSecondStrongInspection.processes, [
+  { pid: 8, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+]);
+const runtimeSecondStrongRecord = structuredClone(baseRecord);
+runtimeSecondStrongRecord.runtime_inspection.paseo_runtime.processes =
+  runtimeSecondStrongInspection.processes;
+runtimeSecondStrongRecord.runtime_inspection.paseo_runtime.process_collection =
+  runtimeSecondStrongInspection.process_collection;
+assert.deepEqual(evaluate(runtimeSecondStrongRecord), {
+  exit: 0,
+  output: {
+    suite: 'E4',
+    status: 'PASS',
+    code: 0,
+    reason:
+      'effective and running topology establish external runtime ownership',
+  },
+});
+let changedNoWitnessSnapshot = -1;
+const changedNoWitnessInspection = collectProcessSnapshots({
+  listProcEntries: () => {
+    changedNoWitnessSnapshot += 1;
+    return changedNoWitnessSnapshot === 0 ? ['9'] : ['10'];
+  },
+  readComm: () => 'node\n',
+  readStatus: () => 'Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\nPPid:\t0\n',
+  readCmdline: () => 'carrier\u0000',
+});
+const changedNoWitnessRecord = structuredClone(baseRecord);
+changedNoWitnessRecord.runtime_inspection.paseo_runtime.processes =
+  changedNoWitnessInspection.processes;
+changedNoWitnessRecord.runtime_inspection.paseo_runtime.process_collection =
+  changedNoWitnessInspection.process_collection;
+assert.deepEqual(evaluate(changedNoWitnessRecord), {
+  exit: 2,
+  output: {
+    suite: 'E4',
+    status: 'MISSING',
+    code: 2,
+    reason: 'paseo_runtime process collection is missing or incomplete',
   },
 });
 assert.deepEqual(evaluate(agentPaseo), {

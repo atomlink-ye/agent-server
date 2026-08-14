@@ -304,6 +304,20 @@ function ancestryCollection({ pids, parents, cmdlines }) {
     readCmdline: (pid) => `${cmdlines[pid]}\u0000`,
   });
 }
+function changingCollection({ lists, cmdlines }) {
+  let snapshot = -1;
+  const observed = collectProcessSnapshots({
+    listProcEntries: () => {
+      snapshot += 1;
+      return lists[snapshot];
+    },
+    readComm: () => 'node\n',
+    readStatus: () => status(1000, 0),
+    readCmdline: (pid) => `${cmdlines[snapshot][pid]}\u0000`,
+  });
+  assert.equal(snapshot, 1);
+  return observed;
+}
 const strongWithCorruptTitle = ancestryCollection({
   pids: ['60', '61'],
   parents: { 60: 0, 61: 999 },
@@ -366,6 +380,39 @@ assert.deepEqual(
     [1, 1, 0, 0],
   ],
 );
+const firstStrongCollection = changingCollection({
+  lists: [['70'], ['70']],
+  cmdlines: [{ 70: directInvocation.join('\u0000') }, { 70: 'carrier' }],
+});
+assert.deepEqual(firstStrongCollection.processes, [
+  { pid: 70, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+]);
+assert.equal(firstStrongCollection.process_collection.complete, false);
+assert.equal(
+  firstStrongCollection.process_collection.emitted_count,
+  firstStrongCollection.processes.length,
+);
+assert.equal(
+  firstStrongCollection.process_collection.record_hash,
+  hashProcessRecords(firstStrongCollection.processes),
+);
+const secondStrongCollection = changingCollection({
+  lists: [['71'], ['71']],
+  cmdlines: [{ 71: 'carrier' }, { 71: directInvocation.join('\u0000') }],
+});
+assert.deepEqual(secondStrongCollection.processes, [
+  { pid: 71, ppid: 0, uid: 1000, comm: 'node', identity: 'paseo-daemon' },
+]);
+assert.equal(secondStrongCollection.process_collection.complete, false);
+const changedNoWitnessCollection = changingCollection({
+  lists: [['72'], ['73']],
+  cmdlines: [{ 72: 'carrier' }, { 73: 'carrier' }],
+});
+assert.deepEqual(
+  changedNoWitnessCollection.processes.map((process) => process.pid),
+  [72, 73],
+);
+assert.equal(changedNoWitnessCollection.process_collection.complete, false);
 for (const errorSnapshot of [0, 1]) {
   const enoentCollection = deterministicCollection({
     lists: [['51'], ['51']],

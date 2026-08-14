@@ -222,6 +222,32 @@ export function hashProcessRecords(records) {
   return createHash('sha256').update(JSON.stringify(records)).digest('hex');
 }
 
+// The persisted projection is the bounded union of both snapshots. A confirmed
+// identity wins over `other`; equal-strength conflicts keep the first snapshot
+// deterministically. Snapshot equality still controls stable/complete absence.
+function mergeProcessRecords(firstRecords, secondRecords) {
+  const strength = {
+    [PROCESS_IDENTITIES.OTHER]: 0,
+    [PROCESS_IDENTITIES.PASEO_RUNTIME_LAUNCHER]: 1,
+    [PROCESS_IDENTITIES.PASEO_SUPERVISOR]: 2,
+    [PROCESS_IDENTITIES.PASEO_DAEMON]: 3,
+  };
+  const byPid = new Map();
+  for (const record of [...firstRecords, ...secondRecords]) {
+    const current = byPid.get(record.pid);
+    if (!current || strength[record.identity] > strength[current.identity])
+      byPid.set(record.pid, record);
+  }
+  return [...byPid.values()]
+    .sort(
+      (left, right) =>
+        strength[right.identity] - strength[left.identity] ||
+        left.pid - right.pid,
+    )
+    .slice(0, MAX_PROCESS_RECORDS)
+    .sort((left, right) => left.pid - right.pid);
+}
+
 function snapshotProcessRecords({
   procEntries,
   readComm,
@@ -363,16 +389,13 @@ export function collectProcessSnapshots({
         snapshot.numeric_count === snapshot.emitted_count &&
         records.length > 0,
     );
+  const processes = mergeProcessRecords(first.records, second.records);
   return {
-    processes: second.records.length ? second.records : first.records,
+    processes,
     process_collection: {
       snapshots: snapshots.map(({ snapshot }) => snapshot),
-      emitted_count: second.records.length
-        ? second.records.length
-        : first.records.length,
-      record_hash: hashProcessRecords(
-        second.records.length ? second.records : first.records,
-      ),
+      emitted_count: processes.length,
+      record_hash: hashProcessRecords(processes),
       stable,
       complete,
     },
@@ -393,7 +416,7 @@ export function enumerateNumericProcessRecords({
   });
 }
 
-export const processInspectionScript = `const fs=require('node:fs');const createHash=require('node:crypto').createHash;const MAX_COMM_LENGTH=${MAX_COMM_LENGTH};const MAX_PROCESS_RECORDS=${MAX_PROCESS_RECORDS};const MAX_RAW_CMDLINE_LENGTH=${MAX_RAW_CMDLINE_LENGTH};const PROCESS_IDENTITIES=${JSON.stringify(PROCESS_IDENTITIES)};const PROCESS_COLLECTION_ERROR_CLASSES=${JSON.stringify(PROCESS_COLLECTION_ERROR_CLASSES)};const isNodeExecutable=(${isNodeExecutable.toString()});const isRuntimeSupervisorInvocation=(${isRuntimeSupervisorInvocation.toString()});const isValidListenAddress=(${isValidListenAddress.toString()});const hasExactPaseoStartGrammar=(${hasExactPaseoStartGrammar.toString()});const classifyProcessIdentity=(${classifyProcessIdentity.toString()});const isStrongPaseoInvocation=(${isStrongPaseoInvocation.toString()});const classifyProcessRecords=(${classifyProcessRecords.toString()});const hashProcessRecords=(${hashProcessRecords.toString()});const snapshotProcessRecords=(${snapshotProcessRecords.toString()});const emptyProcessSnapshot=(${emptyProcessSnapshot.toString()});const collectProcessSnapshots=(${collectProcessSnapshots.toString()});const output=JSON.stringify(collectProcessSnapshots({listProcEntries:()=>fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8'),readCmdline:pid=>fs.readFileSync('/proc/'+pid+'/cmdline','utf8')}));if(output.length>${MAX_PROCESS_OUTPUT_LENGTH})throw new Error('process_output_limit');process.stdout.write(output);`;
+export const processInspectionScript = `const fs=require('node:fs');const createHash=require('node:crypto').createHash;const MAX_COMM_LENGTH=${MAX_COMM_LENGTH};const MAX_PROCESS_RECORDS=${MAX_PROCESS_RECORDS};const MAX_RAW_CMDLINE_LENGTH=${MAX_RAW_CMDLINE_LENGTH};const PROCESS_IDENTITIES=${JSON.stringify(PROCESS_IDENTITIES)};const PROCESS_COLLECTION_ERROR_CLASSES=${JSON.stringify(PROCESS_COLLECTION_ERROR_CLASSES)};const isNodeExecutable=(${isNodeExecutable.toString()});const isRuntimeSupervisorInvocation=(${isRuntimeSupervisorInvocation.toString()});const isValidListenAddress=(${isValidListenAddress.toString()});const hasExactPaseoStartGrammar=(${hasExactPaseoStartGrammar.toString()});const classifyProcessIdentity=(${classifyProcessIdentity.toString()});const isStrongPaseoInvocation=(${isStrongPaseoInvocation.toString()});const classifyProcessRecords=(${classifyProcessRecords.toString()});const hashProcessRecords=(${hashProcessRecords.toString()});const mergeProcessRecords=(${mergeProcessRecords.toString()});const snapshotProcessRecords=(${snapshotProcessRecords.toString()});const emptyProcessSnapshot=(${emptyProcessSnapshot.toString()});const collectProcessSnapshots=(${collectProcessSnapshots.toString()});const output=JSON.stringify(collectProcessSnapshots({listProcEntries:()=>fs.readdirSync('/proc'),readComm:pid=>fs.readFileSync('/proc/'+pid+'/comm','utf8'),readStatus:pid=>fs.readFileSync('/proc/'+pid+'/status','utf8'),readCmdline:pid=>fs.readFileSync('/proc/'+pid+'/cmdline','utf8')}));if(output.length>${MAX_PROCESS_OUTPUT_LENGTH})throw new Error('process_output_limit');process.stdout.write(output);`;
 
 function strictProcessRecords(value) {
   if (!Array.isArray(value) || value.length === 0)

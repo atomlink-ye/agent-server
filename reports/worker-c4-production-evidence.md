@@ -19,14 +19,24 @@ attempt by exact UTF-8 bytes.
 
 | assertion | blocked_by | would_be_green_if | arm_that_proves_still_blocked | last_verified |
 |---|---|---|---|---|
-| Exactly one same-attempt DB feedback value is non-empty and the complete current ProductWorkRunResponseSchema parse reports that attempt as `feedback_summary=null`, `feedback_capture_status=redacted`; checker status `BLOCKER_STILL_PRESENT`, outer exit `1` | Product projection reads presence only and maps durable feedback to `null`/`redacted`; this is the B-owned projection defect | The same attempt's API summary is byte-for-byte equal to the durable DB feedback and its status is neither `not_present` nor `redacted`, under the accepted full current schema | Current rework-once recorder blocker-liveness arm; independent of E11 full/partial, and neither arm can mutually prove the other | `recorded_at=2026-08-14T01:06:07.741Z`; `service_revision=0.1.0`; manifest SHA `07129cc7d1dc04a6235bf06a521c3391c5f92321ffc36446a54d086a72f5baa1`; API SHA `1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933`; DB SHA `9d1b305133ff8e01415002fde7031a6fb539da86f446b54c452bee27beb3fa5f`; attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`; candidate bound to repository HEAD at invocation |
+| Exactly one same-attempt DB feedback value is non-empty and the complete current ProductWorkRunResponseSchema parse reports that attempt as `feedback_summary=null`, `feedback_capture_status=redacted`; historical checker status `BLOCKER_STILL_PRESENT`, outer exit `1` | Product projection reads presence only and maps durable feedback to `null`/`redacted`; this is the B-owned projection defect | In `future_fresh_candidate` mode only, the same attempt's API summary is byte-for-byte equal to the durable DB feedback and its status is neither `not_present` nor `redacted`, under the accepted full current schema | Checked-in W-REC historical blocker arm (`historical_blocker_only`); independent of E11 full/partial, and neither arm can mutually prove the other | `recorded_at=2026-08-14T01:06:07.741Z`; `service_revision=0.1.0`; product revision `08c0d8351dbacab6e7e0eff5a686be11be3583db`; manifest SHA `07129cc7d1dc04a6235bf06a521c3391c5f92321ffc36446a54d086a72f5baa1`; API SHA `1e2f253af54e4f99054bc07cd14d624eac091b8be74398d39c98dbda43952933`; DB SHA `9d1b305133ff8e01415002fde7031a6fb539da86f446b54c452bee27beb3fa5f`; attempt `524401a1-fd03-4dfa-93c7-621452a5e71d`; `candidate_sha=null` |
 
 The machine binding is `scripts/ci/product-feedback-projection-blocker-binding.json`.
-It marks only this `rework-once` bundle as `current-rework`, binds the exact
-manifest/API/DB hashes and recorded timestamp/service revision, and requires
-`C4_CANDIDATE_SHA` to equal the repository HEAD. The old/static replay bundle
-has no DB source and no current binding, so it can only return `MISSING` (exit
-`2`) and can never serve as a future unblock.
+It is a checked-in historical trust root: it binds this `rework-once` bundle's
+exact manifest/API/DB hashes, recorded timestamp, fixed identities, and the
+authoritative W-REC report/product revision `08c0d8351dbacab6e7e0eff5a686be11be3583db`.
+It cannot be overridden with `--binding-file`, and historical mode never
+accepts an unblock. The old/static replay bundle has no DB source and no
+current binding, so it can only return `MISSING` (exit `2`).
+
+`future_fresh_candidate` is a separate mode. It ignores the historical sidecar
+as a trust source and requires the capture manifest itself to contain a full
+40-hex `candidate_sha`, exact API/DB hashes, a bounded recording age (24 hours),
+and `capture_source.kind=accepted-endpoint-db-snapshot` with source evidence.
+The explicit candidate must equal both that manifest value and the current
+repository HEAD. `service_revision=0.1.0` is not a candidate revision. Missing
+manifest provenance or candidate closure returns `MISSING` (exit `2`); an
+external sidecar alone can never create a future candidate.
 
 The accepted capture enum is currently only `not_present|redacted`
 (`src/contracts/product-projection/identity.ts`). Therefore
@@ -120,14 +130,15 @@ Both commits retain ancestors `67c496c`, `6cc07f6`, and `16552e9`.
 
 ## Blocker-liveness verification
 
-Command (current rework bundle, candidate bound to the checked-out HEAD):
+Command (current rework bundle, historical W-REC trust root):
 
 ```sh
-(cd /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend && C4_CANDIDATE_SHA="$(git -C /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend rev-parse HEAD)" C4_BLOCKER_BUNDLE_DIR=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1 pnpm exec tsx /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend/scripts/ci/check-product-feedback-projection-blocker.ts)
+(cd /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend && C4_BLOCKER_MODE=historical_blocker_only C4_BLOCKER_BUNDLE_DIR=/Volumes/AgentsWorkspace/orgs/0xdtech/tasks/active/agent-server-implementation-20260722/rounds/2026-08-13-refactor-and-web-rebuild/artifacts/w-rec-rerecord-two-scenarios/rework-pull/recording-artifacts/wrec-rerecord-current/rework-once/20260814T010607741Z-4345ef71-2138-42e5-bc44-b03efdef65b1 pnpm exec tsx /Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/mgr-frontend/scripts/ci/check-product-feedback-projection-blocker.ts)
 ```
 
 Observed exit `1` and JSON status `BLOCKER_STILL_PRESENT`; the JSON recorded
 `attempt_id=524401a1-fd03-4dfa-93c7-621452a5e71d`, `recorded_at`, service
-revision, candidate SHA, and all manifest/API/DB hashes. Static fixture replay
+revision, product revision `08c0d8351dbacab6e7e0eff5a686be11be3583db`,
+`candidate_sha=null`, and all manifest/API/DB hashes. Static fixture replay
 was also checked and returned `MISSING` exit `2` (`manifest_file_missing`),
 proving it cannot be used as a future unblock.

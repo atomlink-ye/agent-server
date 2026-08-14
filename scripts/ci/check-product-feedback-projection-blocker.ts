@@ -27,21 +27,31 @@ const CURRENT_SCENARIO = 'rework-once';
 const API_FILE = 'api/work-run.json';
 const DB_FILE = 'db/team_work_item_attempts.json';
 const FULL_SHA = /^[0-9a-f]{40}$/iu;
+const FULL_HASH = /^[0-9a-f]{64}$/iu;
+const HISTORICAL_MODE = 'historical_blocker_only' as const;
+const FUTURE_MODE = 'future_fresh_candidate' as const;
+const MAX_FUTURE_AGE_MS = 24 * 60 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 
 type Binding = {
   readonly schema_version: 1;
-  readonly bundle_kind: 'current-rework';
+  readonly bundle_kind: 'historical_blocker_only';
   readonly scenario: 'rework-once';
+  readonly authoritative_report: string;
+  readonly authoritative_report_sha256: string;
+  readonly product_revision: string;
   readonly manifest_sha256: string;
   readonly recorded_at: string;
   readonly service_revision: string;
+  readonly identity: Readonly<{
+    readonly root_task_id: string;
+    readonly work_id: string;
+    readonly work_run_id: string;
+    readonly attempt_id: string;
+  }>;
   readonly files: Readonly<Record<typeof API_FILE | typeof DB_FILE, string>>;
-  readonly candidate_binding: {
-    readonly kind: 'repository-head';
-    readonly env: 'C4_CANDIDATE_SHA';
-  };
+  readonly trust_root: 'checked-in-historical-binding';
 };
 
 type VerdictStatus =
@@ -59,13 +69,16 @@ type Verdict = {
 };
 
 type LoadedInput = {
+  readonly mode: typeof HISTORICAL_MODE | typeof FUTURE_MODE;
   readonly manifest: JsonObject;
   readonly manifestSha256: string;
   readonly api: unknown;
   readonly apiSha256: string;
   readonly dbRows: readonly unknown[];
   readonly dbSha256: string;
-  readonly candidateSha: string;
+  readonly candidateSha: string | null;
+  readonly productRevision: string | null;
+  readonly expectedAttemptId: string | null;
 };
 
 class MissingInput extends Error {
@@ -109,6 +122,14 @@ async function jsonFile(
   }
 }
 
+async function bytesFile(path: string, name: string): Promise<Buffer> {
+  try {
+    return await readFile(path);
+  } catch {
+    throw new MissingInput(`${name}_file_missing`);
+  }
+}
+
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;
@@ -118,7 +139,14 @@ function argument(name: string): string | undefined {
   return value;
 }
 
-function candidateSha(): string {
+function mode(): typeof HISTORICAL_MODE | typeof FUTURE_MODE {
+  const value =
+    argument('--mode') ?? process.env.C4_BLOCKER_MODE ?? HISTORICAL_MODE;
+  if (value === HISTORICAL_MODE || value === FUTURE_MODE) return value;
+  throw new MissingInput('mode_invalid');
+}
+
+function explicitCandidateSha(): string {
   const value = argument('--candidate-sha') ?? process.env.C4_CANDIDATE_SHA;
   if (!value || !FULL_SHA.test(value))
     throw new MissingInput('candidate_sha_missing_or_invalid');
@@ -153,33 +181,31 @@ function schemaIssues(result: {
     .map((issue) => `${issue.path.join('.') || '<root>'}:${issue.message}`);
 }
 
-function bindingFile(): string {
-  return resolve(
-    argument('--binding-file') ??
-      process.env.C4_BLOCKER_BINDING_FILE ??
-      DEFAULT_BINDING_FILE,
-  );
-}
-
 async function loadInput(): Promise<LoadedInput> {
+  const selectedMode = mode();
   const bundleDirectory =
     argument('--bundle-dir') ?? process.env.C4_BLOCKER_BUNDLE_DIR;
   if (!bundleDirectory) throw new MissingInput('bundle_directory_missing');
   const bundle = resolve(bundleDirectory);
-  const bindingInput = await jsonFile(bindingFile(), 'binding');
-  const binding = object(bindingInput.value, 'binding') as unknown as Binding;
-  if (
-    binding.schema_version !== 1 ||
-    binding.bundle_kind !== 'current-rework' ||
-    binding.scenario !== CURRENT_SCENARIO ||
-    binding.candidate_binding?.kind !== 'repository-head' ||
-    binding.candidate_binding.env !== 'C4_CANDIDATE_SHA'
-  )
-    throw new MissingInput('binding_not_current_rework');
-
-  const candidate = candidateSha();
-  if (candidate !== currentHead())
-    throw new MissingInput('candidate_sha_not_current_repository_head');
+  if (argument('--binding-file') || process.env.C4_BLOCKER_BINDING_FILE)
+    throw new MissingInput('external_binding_forbidden');
+  let binding: Binding | null = null;
+  let bindingIdentity: JsonObject | null = null;
+  if (selectedMode === HISTORICAL_MODE) {
+    const bindingInput = await jsonFile(DEFAULT_BINDING_FILE, 'binding');
+    binding = object(bindingInput.value, 'binding') as unknown as Binding;
+    if (
+      binding.schema_version !== 1 ||
+      binding.bundle_kind !== 'historical_blocker_only' ||
+      binding.scenario !== CURRENT_SCENARIO ||
+      binding.trust_root !== 'checked-in-historical-binding' ||
+      !FULL_SHA.test(binding.product_revision) ||
+      !binding.authoritative_report ||
+      !FULL_HASH.test(binding.authoritative_report_sha256)
+    )
+      throw new MissingInput('binding_not_authoritative_historical_root');
+    bindingIdentity = object(binding.identity, 'binding_identity');
+  }
 
   const manifestInput = await jsonFile(
     resolve(bundle, 'manifest.json'),
@@ -187,21 +213,68 @@ async function loadInput(): Promise<LoadedInput> {
   );
   const manifest = object(manifestInput.value, 'manifest');
   const manifestSha256 = sha256(manifestInput.bytes);
-  if (manifestSha256 !== binding.manifest_sha256)
-    throw new MissingInput('manifest_binding_hash_mismatch');
+  if (
+    selectedMode === HISTORICAL_MODE &&
+    (binding === null || manifestSha256 !== binding.manifest_sha256)
+  )
+    throw new MissingInput('historical_manifest_binding_hash_mismatch');
   if (
     stringField(manifest, 'format_version', 'manifest') !==
       'product-projection-recording/v1' ||
     stringField(manifest, 'scenario', 'manifest') !== CURRENT_SCENARIO ||
-    stringField(manifest, 'provider_run', 'manifest') !== 'real' ||
-    stringField(manifest, 'recorded_at', 'manifest') !== binding.recorded_at ||
-    stringField(manifest, 'service_revision', 'manifest') !==
-      binding.service_revision
+    stringField(manifest, 'provider_run', 'manifest') !== 'real'
   )
-    throw new MissingInput('manifest_freshness_binding_mismatch');
-  const recordedAt = Date.parse(binding.recorded_at);
+    throw new MissingInput('manifest_capture_identity_invalid');
+  if (
+    selectedMode === HISTORICAL_MODE &&
+    (stringField(manifest, 'root_task_id', 'manifest') !==
+      stringField(
+        bindingIdentity as JsonObject,
+        'root_task_id',
+        'binding_identity',
+      ) ||
+      stringField(manifest, 'work_id', 'manifest') !==
+        stringField(
+          bindingIdentity as JsonObject,
+          'work_id',
+          'binding_identity',
+        ) ||
+      stringField(manifest, 'work_run_id', 'manifest') !==
+        stringField(
+          bindingIdentity as JsonObject,
+          'work_run_id',
+          'binding_identity',
+        ))
+  )
+    throw new MissingInput('historical_identity_binding_mismatch');
+  const recordedAt = Date.parse(
+    stringField(manifest, 'recorded_at', 'manifest'),
+  );
   if (!Number.isFinite(recordedAt) || recordedAt > Date.now() + 5 * 60 * 1000)
     throw new MissingInput('recorded_at_not_freshly_verifiable');
+  if (
+    selectedMode === HISTORICAL_MODE &&
+    (stringField(manifest, 'recorded_at', 'manifest') !==
+      (binding as Binding).recorded_at ||
+      stringField(manifest, 'service_revision', 'manifest') !==
+        (binding as Binding).service_revision)
+  )
+    throw new MissingInput('historical_freshness_binding_mismatch');
+  if (
+    selectedMode === FUTURE_MODE &&
+    Date.now() - recordedAt > MAX_FUTURE_AGE_MS
+  )
+    throw new MissingInput('future_recording_too_old');
+  if (selectedMode === HISTORICAL_MODE) {
+    const reportBytes = await bytesFile(
+      (binding as Binding).authoritative_report,
+      'authoritative_report',
+    );
+    if (
+      sha256(reportBytes) !== (binding as Binding).authoritative_report_sha256
+    )
+      throw new MissingInput('authoritative_report_hash_mismatch');
+  }
 
   const apiInput = await jsonFile(resolve(bundle, API_FILE), API_FILE);
   const dbInput = await jsonFile(resolve(bundle, DB_FILE), DB_FILE);
@@ -209,8 +282,9 @@ async function loadInput(): Promise<LoadedInput> {
   const apiSha256 = sha256(apiInput.bytes);
   const dbSha256 = sha256(dbInput.bytes);
   if (
-    apiSha256 !== binding.files[API_FILE] ||
-    dbSha256 !== binding.files[DB_FILE] ||
+    (selectedMode === HISTORICAL_MODE &&
+      (apiSha256 !== (binding as Binding).files[API_FILE] ||
+        dbSha256 !== (binding as Binding).files[DB_FILE])) ||
     object(manifestFiles[API_FILE], 'manifest_api_file').sha256 !== apiSha256 ||
     object(manifestFiles[DB_FILE], 'manifest_db_file').sha256 !== dbSha256
   )
@@ -218,7 +292,47 @@ async function loadInput(): Promise<LoadedInput> {
   if (!Array.isArray(dbInput.value))
     throw new MissingInput('db_feedback_rows_shape_unverifiable');
 
+  let candidate: string | null = null;
+  let productRevision: string | null =
+    selectedMode === HISTORICAL_MODE
+      ? (binding as Binding).product_revision
+      : null;
+  if (selectedMode === FUTURE_MODE) {
+    const manifestCandidate = manifest.candidate_sha;
+    if (
+      typeof manifestCandidate !== 'string' ||
+      !FULL_SHA.test(manifestCandidate)
+    )
+      throw new MissingInput('future_manifest_candidate_sha_missing');
+    candidate = explicitCandidateSha();
+    if (
+      manifestCandidate.toLowerCase() !== candidate ||
+      candidate !== currentHead()
+    )
+      throw new MissingInput('future_candidate_binding_mismatch');
+    const captureSource = object(
+      manifest.capture_source,
+      'manifest_capture_source',
+    );
+    if (
+      captureSource.kind !== 'accepted-endpoint-db-snapshot' ||
+      captureSource.api_file !== API_FILE ||
+      captureSource.db_file !== DB_FILE ||
+      captureSource.api_sha256 !== apiSha256 ||
+      captureSource.db_sha256 !== dbSha256 ||
+      typeof captureSource.provenance_sha256 !== 'string' ||
+      !FULL_HASH.test(captureSource.provenance_sha256) ||
+      captureSource.provenance_sha256 !==
+        createHash('sha256')
+          .update(`${candidate}\n${apiSha256}\n${dbSha256}`)
+          .digest('hex')
+    )
+      throw new MissingInput('future_capture_source_unverifiable');
+    productRevision = manifestCandidate;
+  }
+
   return {
+    mode: selectedMode,
     manifest,
     manifestSha256,
     api: apiInput.value,
@@ -226,6 +340,15 @@ async function loadInput(): Promise<LoadedInput> {
     dbRows: dbInput.value,
     dbSha256,
     candidateSha: candidate,
+    productRevision,
+    expectedAttemptId:
+      selectedMode === HISTORICAL_MODE
+        ? stringField(
+            bindingIdentity as JsonObject,
+            'attempt_id',
+            'binding_identity',
+          )
+        : null,
   };
 }
 
@@ -236,9 +359,11 @@ function lastVerified(
 ): JsonObject {
   return {
     status,
+    mode: input.mode,
     scenario: CURRENT_SCENARIO,
     recorded_at: input.manifest.recorded_at,
     service_revision: input.manifest.service_revision,
+    product_revision: input.productRevision,
     candidate_sha: input.candidateSha,
     manifest_sha256: input.manifestSha256,
     api_work_run_sha256: input.apiSha256,
@@ -277,6 +402,8 @@ function evaluate(input: LoadedInput): Verdict {
     throw new MissingInput('db_feedback_non_unique_or_empty');
   const dbRow = object(dbFeedbackRows[0], 'db_feedback_row');
   const attemptId = stringField(dbRow, 'id', 'db_feedback_row');
+  if (input.expectedAttemptId !== null && input.expectedAttemptId !== attemptId)
+    throw new MissingInput('historical_attempt_identity_mismatch');
   const dbFeedback = dbRow.feedback;
   if (typeof dbFeedback !== 'string' || dbFeedback.length === 0)
     throw new MissingInput('db_feedback_empty');
@@ -306,7 +433,7 @@ function evaluate(input: LoadedInput): Verdict {
     would_be_green_if:
       'the same attempt is byte-for-byte equal in DB/API and the accepted contract exposes a status other than not_present or redacted',
     arm_that_proves_still_blocked:
-      'current rework-once recorder bundle; no static replay or E11 full/partial arm can substitute',
+      'checked-in historical W-REC rework-once bundle; no static replay or E11 full/partial arm can substitute',
   } as const;
   if (apiFeedback === null && apiStatus === 'redacted')
     return {
@@ -315,6 +442,8 @@ function evaluate(input: LoadedInput): Verdict {
       exit_code: BLOCKER_STILL_PRESENT,
       last_verified: lastVerified(input, attemptId, 'BLOCKER_STILL_PRESENT'),
     };
+  if (input.mode === HISTORICAL_MODE)
+    throw new MissingInput('historical_nonblocking_cannot_unblock');
   if (
     typeof apiFeedback === 'string' &&
     Buffer.from(dbFeedback).equals(Buffer.from(apiFeedback)) &&

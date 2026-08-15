@@ -41,6 +41,64 @@ omitted when empty; omission normalizes to `{}` and grants no tool or skill.
 Agent `completion.command`, input schema/prompt, instructions, and declared
 resource bindings remain explicit author intent.
 
+## Agent-facing collaboration tools
+
+Collaboration commands are MCP tools for the Agents in a Team, not public HTTP
+commands for a Team owner. An Agent receives a tool only when its package
+explicitly authorizes the canonical ref below (or explicitly includes its
+reserved role profile). The HTTP routes in [Reads](#reads) are projections for
+the owner to inspect; they intentionally do not include equivalents of
+`message_send`, `board_claim`, or `board_request_changes`.
+
+| Group | Canonical tool ref | MCP name |
+| --- | --- | --- |
+| Read | `agent-server/collaboration-state` | `collaboration_state` |
+| Read | `agent-server/board-list` | `board_list` |
+| Board mutation | `agent-server/board-create` | `board_create` |
+| Board mutation | `agent-server/board-assign` | `board_assign` |
+| Board mutation | `agent-server/board-claim` | `board_claim` |
+| Board mutation | `agent-server/board-checkpoint` | `board_checkpoint` |
+| Board mutation | `agent-server/board-block` | `board_block` |
+| Board mutation | `agent-server/board-submit` | `board_submit` |
+| Board mutation | `agent-server/board-accept` | `board_accept` |
+| Board mutation | `agent-server/board-request-changes` | `board_request_changes` |
+| Board mutation | `agent-server/board-cancel` | `board_cancel` |
+| Mailbox | `agent-server/inbox-list` | `inbox_list` |
+| Mailbox | `agent-server/message-send` | `message_send` |
+| Mailbox | `agent-server/message-ack` | `message_ack` |
+| Run | `agent-server/collaboration-finish` | `collaboration_finish` |
+
+The lead role may receive board read/create/assign/review/cancel, mailbox
+read/send/ack, and run-finalize capabilities. A member may receive board
+read/claim/checkpoint/block/submit and mailbox read/send/ack capabilities.
+In particular, a member does **not** receive `board.create`: only the lead can
+create Work. The `tool-profile://team-lead` and
+`tool-profile://team-member` profiles grant precisely those respective role
+sets when explicitly included; an omitted profile or ref grants nothing.
+
+For example, a minimal Agent package can authorize a member to inspect state,
+list Work, and send an addressed message:
+
+```yaml
+spec:
+  tools:
+    - ref: agent-server/collaboration-state
+      kind: tool
+    - ref: agent-server/board-list
+      kind: tool
+    - ref: agent-server/message-send
+      kind: tool
+```
+
+For local integration work, `pnpm dev` starts the `core` profile and is not the
+Agent Team runtime/API process to target. Start the runtime profile with
+`pnpm dev:runtime` (or `pnpm local-env up runtime`) and inspect its connection
+metadata with `pnpm local-env info`. For an isolated command, use
+`pnpm local-env run runtime -- <command>`; that shared environment wrapper
+supplies `AGENT_SERVER_BASE_URL` and `AGENT_SERVER_SERVICE_TOKEN` to the
+command. Do not copy those connection values into an Agent package or source
+file.
+
 `agentctl` authoring failures emit an error `code`, resource-qualified `path`,
 and usable `message`. Native package and project-reference validation retain
 their original reason while unknown filesystem failures remain

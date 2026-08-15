@@ -160,7 +160,9 @@ async function main() {
       Number.isFinite(usage?.input_tokens) &&
       usage.input_tokens > 0 &&
       Number.isFinite(usage?.output_tokens) &&
-      usage.output_tokens > 0;
+      usage.output_tokens > 0 &&
+      Number.isFinite(usage?.total_cost_usd) &&
+      usage.total_cost_usd > 0;
     stage = 'assertions';
     if (!accepted) throw new Error('run_assertions_failed');
 

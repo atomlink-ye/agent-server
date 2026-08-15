@@ -21,4 +21,15 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm smoke:runtime
+      - name: Require real-provider credentials
+        run: |
+          if [ -z "${OPENCODE_GO_API_KEY:-}" ]; then
+            echo "::error::OPENCODE_GO_API_KEY is not set — the real-provider gate cannot run"
+            exit 1
+          fi
+      - name: Make the checkout writable by the runtime containers
+        run: sudo chown -R 1000:1000 "$GITHUB_WORKSPACE"
+      - name: Run real-provider runtime smoke
+        run: pnpm smoke:runtime
+      - name: Run real-provider agent-team smoke
+        run: pnpm smoke:agent-team

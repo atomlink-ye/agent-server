@@ -40,6 +40,61 @@ export const AGENT_SERVER_COLLABORATION_MCP_NAMES = Object.freeze({
   finish: 'collaboration_finish',
 } as const);
 
+const COLLABORATION_MCP_REF_BY_NAME = Object.freeze({
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.state]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardList]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCreate]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardAssign]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardClaim]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCheckpoint]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCheckpoint,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardBlock]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardBlock,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardSubmit]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardSubmit,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardAccept]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardRequestChanges]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCancel]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.inboxList]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.messageAck]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
+  [AGENT_SERVER_COLLABORATION_MCP_NAMES.finish]:
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+} as const);
+const COLLABORATION_MCP_NAME_SET: ReadonlySet<string> = new Set(
+  Object.values(AGENT_SERVER_COLLABORATION_MCP_NAMES),
+);
+const RUNTIME_MCP_PREFIX = 'agent-server_';
+
+export function collaborationMcpName(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') return null;
+  if (COLLABORATION_MCP_NAME_SET.has(value)) return value;
+  if (!value.startsWith(RUNTIME_MCP_PREFIX)) return null;
+  const publicName = value.slice(RUNTIME_MCP_PREFIX.length);
+  return COLLABORATION_MCP_NAME_SET.has(publicName) ? publicName : null;
+}
+
+export function collaborationMcpRefForName(name: string): string | null {
+  return (
+    COLLABORATION_MCP_REF_BY_NAME[
+      name as keyof typeof COLLABORATION_MCP_REF_BY_NAME
+    ] ?? null
+  );
+}
+
 export const COLLABORATION_TOOL_REF_BY_CAPABILITY: Readonly<
   Record<CollaborationCapability, readonly string[]>
 > = Object.freeze({

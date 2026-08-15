@@ -148,12 +148,16 @@ jobs:
           AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
 
+      - name: Real-provider user-defined Team Work lifecycle
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm smoke:user-defined-team-work-lifecycle
+
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
         run: |
           {
             echo "## Real runtime — executed"
             echo
-            echo "Both external main flows ran against the real provider and asserted"
+            echo "All external main flows ran against the real provider and asserted"
             echo "positive provider-side usage."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -43,6 +43,7 @@
     "smoke:runtime": "pnpm local-env run runtime -- node scripts/smoke/runtime-main-flow.mjs",
     "smoke:agent-team": "pnpm local-env run runtime -- node scripts/smoke/agent-team-main-flow.mjs",
     "smoke:team-registry-work": "pnpm local-env run runtime -- node scripts/smoke/team-registry-work-actor.mjs",
+    "smoke:user-defined-team-work-lifecycle": "pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs",
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",
     "verify": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
     "clean": "node scripts/dev/clean.mjs"

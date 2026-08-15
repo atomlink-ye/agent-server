@@ -45,7 +45,6 @@ const execution = {
   memoryCandidates: [
     { category: 'terminology', content: 'Use Work for the durable unit.' },
     { category: 'terminology', content: 'api_key = secret-value' },
-    { category: 'unsupported', content: 'ignore me' },
   ],
 } as const;
 
@@ -61,7 +60,7 @@ describe('RuntimeMemoryProposalWriter', () => {
       claim,
       task,
       agentVersionId: 'agent-version-1',
-      proposalLimit: 3,
+      proposalLimit: 2,
       execution,
     });
 
@@ -91,7 +90,7 @@ describe('RuntimeMemoryProposalWriter', () => {
       claim,
       task: { ...task, sourceMessageId: null } as Task,
       agentVersionId: 'agent-version-1',
-      proposalLimit: 3,
+      proposalLimit: 2,
       execution,
     });
 

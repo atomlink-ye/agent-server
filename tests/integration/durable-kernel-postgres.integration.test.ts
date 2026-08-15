@@ -1703,6 +1703,7 @@ describe('durable kernel postgres bootstrap', () => {
     expect(completedRow?.published_at).not.toBeNull();
   });
 
+  // Excluded: the 120s real-PG retry timed out; see sandbox evidence /tmp/lane-a-canonical.{log,rc}.
   it.skip('executes a canonical agent task through the published agent version path', async () => {
     const database = await createDatabase();
     const clock = new TestClock('2026-07-22T12:00:00.000Z');

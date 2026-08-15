@@ -14,6 +14,7 @@ import {
   AGENT_SERVER_COLLABORATION_MCP_NAMES,
   AGENT_SERVER_COLLABORATION_TOOL_REFS,
 } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 
 export interface CollaborationMcpContext {
   readonly resolve: (
@@ -98,7 +99,10 @@ export function registerCollaborationMcpTools(
       subject: z.string().min(1).max(4096),
       description: z.string().max(4096).optional(),
       assignee: z.string().min(1).max(256).optional(),
-      dependency_refs: z.array(WORK_REF).max(4).optional(),
+      dependency_refs: z
+        .array(WORK_REF)
+        .max(COLLABORATION_LIMITS.maxDependenciesPerWorkItem)
+        .optional(),
     },
     (input, ctx) =>
       context.kernel.createWork(ctx, {

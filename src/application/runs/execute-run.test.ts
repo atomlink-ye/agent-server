@@ -199,7 +199,7 @@ describe('ExecuteRun', () => {
     const runtime = createRuntime();
     vi.mocked(runtime.executeTurn).mockImplementation(async (_input, sink) => {
       await sink?.emit({
-        kind: 'tool_status',
+        kind: 'tool_updated',
         activityId: 'activity-shell-1',
         category: 'shell',
         status: 'completed',

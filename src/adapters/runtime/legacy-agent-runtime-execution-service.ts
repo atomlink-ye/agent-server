@@ -1,6 +1,7 @@
 import type {
+  AgentRuntimeExecution,
   AgentRuntimeExecuteInput,
-  AgentRuntimePort,
+  AgentRuntimeHealth,
 } from '../../application/ports/agent-runtime.js';
 import type {
   ExecutionObservationSink,
@@ -12,14 +13,19 @@ import type {
   ExecutionTurnRequest,
 } from '../../application/runtime/execution-plane-runtime-facade.js';
 
-/**
- * Test/debug-only bridge for callers that inject the pre-refactor runtime fake.
- * Production wiring never uses this adapter.
- */
+interface LegacyRuntime {
+  initialize(): Promise<void>;
+  execute(input: AgentRuntimeExecuteInput): Promise<AgentRuntimeExecution>;
+  cancel?(input: { readonly runId: string }): Promise<void>;
+  health(): Promise<AgentRuntimeHealth>;
+  close(): Promise<void>;
+}
+
+/** Test/debug-only bridge for callers that still provide the legacy shape. */
 export class LegacyAgentRuntimeExecutionService
   implements ExecutionRuntimeService
 {
-  public constructor(private readonly legacy: AgentRuntimePort) {}
+  public constructor(private readonly legacy: LegacyRuntime) {}
 
   public async ensureReady(): Promise<boolean> {
     try {
@@ -38,7 +44,7 @@ export class LegacyAgentRuntimeExecutionService
     const creating = input.systemPrompt !== undefined;
     const legacyInput = (creating
       ? {
-          operation: 'create',
+          operation: 'create' as const,
           runId: input.runId,
           prompt: input.prompt,
           systemPrompt: input.systemPrompt ?? '',
@@ -49,15 +55,10 @@ export class LegacyAgentRuntimeExecutionService
             ? { runtimeSessionId: input.runtimeSessionId }
             : {}),
           ...(input.workspaceBinding
-            ? {
-                runtimeWorkspaceId:
-                  input.workspaceBinding.externalWorkspaceId,
-              }
+            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
             : {}),
           ...(input.cwd ? { cellCwd: input.cwd } : {}),
-          ...(input.workspaceTitle
-            ? { workspaceTitle: input.workspaceTitle }
-            : {}),
+          ...(input.workspaceTitle ? { workspaceTitle: input.workspaceTitle } : {}),
           ...(input.sessionTitle ? { agentTitle: input.sessionTitle } : {}),
           ...(input.labels ? { agentLabels: input.labels } : {}),
           ...(input.extensions ? { extensions: input.extensions } : {}),
@@ -66,26 +67,22 @@ export class LegacyAgentRuntimeExecutionService
             : {}),
         }
       : {
-          operation: 'continue',
+          operation: 'continue' as const,
           runId: input.runId,
           prompt: input.prompt,
           providerAgentId:
-            input.compatibilitySessionBinding?.externalSessionId ??
-            'debug-session',
+            input.compatibilitySessionBinding?.externalSessionId ?? 'debug-session',
           ...(input.runtimeSessionId
             ? { runtimeSessionId: input.runtimeSessionId }
             : {}),
           ...(input.workspaceBinding
-            ? {
-                runtimeWorkspaceId:
-                  input.workspaceBinding.externalWorkspaceId,
-              }
+            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
             : {}),
           ...(input.cwd ? { cellCwd: input.cwd } : {}),
           ...(input.proposalLimit !== undefined
             ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
             : {}),
-        }) as AgentRuntimeExecuteInput;
+        }) satisfies AgentRuntimeExecuteInput;
     const execution = await this.legacy.execute(legacyInput);
     return {
       provider: execution.provider,
@@ -127,16 +124,4 @@ export class LegacyAgentRuntimeExecutionService
   public close(): Promise<void> {
     return this.legacy.close();
   }
-}
-
-export function isExecutionRuntimeService(
-  value: AgentRuntimePort,
-): value is AgentRuntimePort & ExecutionRuntimeService {
-  const candidate = value as AgentRuntimePort & Partial<ExecutionRuntimeService>;
-  return (
-    typeof candidate.ensureReady === 'function' &&
-    typeof candidate.executeTurn === 'function' &&
-    typeof candidate.cancelRun === 'function' &&
-    typeof candidate.planeHealth === 'function'
-  );
 }

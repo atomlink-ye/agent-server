@@ -1,4 +1,5 @@
 import type { RunUsage } from '../../domain/runs/run.js';
+import type { RuntimeMemoryCandidateCategory } from './runtime-memory-candidate-collector.js';
 
 export const AGENT_SERVER_RUNTIME_MCP_SERVER_NAME = 'agent-server';
 
@@ -108,7 +109,7 @@ export interface AgentRuntimeExecution {
   readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly {
     readonly content: string;
-    readonly category: string;
+    readonly category: RuntimeMemoryCandidateCategory;
   }[];
 }
 
@@ -222,20 +223,6 @@ export type AgentRuntimeExecuteInput =
         readonly proposalLimit?: number;
       };
     };
-
-export interface AgentRuntimePort {
-  initialize(): Promise<void>;
-  execute(
-    input: AgentRuntimeExecuteInput,
-    sink?: RuntimeEventSink,
-  ): Promise<AgentRuntimeExecution>;
-  cancel?(input: {
-    readonly runId: string;
-    readonly providerAgentId?: string;
-  }): Promise<void>;
-  health(): Promise<AgentRuntimeHealth>;
-  close(): Promise<void>;
-}
 
 export class RuntimeTimedOutError extends Error {
   public constructor(message = 'The runtime execution timed out.') {

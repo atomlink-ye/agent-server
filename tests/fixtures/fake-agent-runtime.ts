@@ -2,8 +2,8 @@ import type {
   AgentRuntimeExecution,
   AgentRuntimeExecuteInput,
   AgentRuntimeHealth,
-  AgentRuntimePort,
 } from '../../src/application/ports/agent-runtime.js';
+import type { RuntimeMemoryCandidateCategory } from '../../src/application/ports/runtime-memory-candidate-collector.js';
 import type {
   ExecutionObservationSink,
   ExecutionPlaneHealth,
@@ -22,13 +22,13 @@ export interface FakeRuntimeOptions {
   readonly error?: Error;
   readonly memoryCandidates?: readonly {
     readonly content: string;
-    readonly category: string;
+    readonly category: RuntimeMemoryCandidateCategory;
   }[];
   readonly canaryPrompt?: string;
   readonly canaryResponseText?: string;
   readonly canaryMemoryCandidates?: readonly {
     readonly content: string;
-    readonly category: string;
+    readonly category: RuntimeMemoryCandidateCategory;
   }[];
   readonly deriveMemoryResponse?: boolean;
 }
@@ -41,7 +41,7 @@ export interface FakeRuntimeExecutionRecord {
 }
 
 export class FakeAgentRuntime
-  implements AgentRuntimePort, ExecutionRuntimeService
+  implements ExecutionRuntimeService
 {
   public initializeCalls = 0;
   public executeCalls = 0;

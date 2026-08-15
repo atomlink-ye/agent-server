@@ -9,7 +9,7 @@ import {
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
-import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
+import { PaseoExecutionPlane } from '../../src/adapters/paseo/paseo-execution-plane.js';
 import type { PaseoClientPort } from '../../src/adapters/paseo/paseo-client-port.js';
 import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
@@ -114,7 +114,7 @@ describe('runtime memory PostgreSQL materialization', () => {
       }),
       close: async () => undefined,
     };
-    const runtime = new PaseoRuntimeAdapter(
+    const runtime = new PaseoExecutionPlane(
       {
         wsUrl: 'ws://test',
         cwd: '/tmp/runtime-memory-pglite',
@@ -127,15 +127,17 @@ describe('runtime memory PostgreSQL materialization', () => {
       client,
     );
     const bindings = new PostgresRunEventRepository(db);
-    const first = await runtime.execute({
-      operation: 'create',
-      runId: runtimeRunId,
-      prompt: 'first',
+    const firstSession = await runtime.createSession({
+      runtimeSessionId: runtimeRunId,
+      workspace: { cwd: '/tmp/runtime-memory-pglite' },
+      provider: 'opencode',
+      model: 'free/model',
       systemPrompt: '',
     });
+    await firstSession.session.run({ runId: runtimeRunId, prompt: 'first' });
     await bindings.bind({
       runId: runtimeRunId,
-      providerAgentId: first.providerAgentId,
+      providerAgentId: firstSession.sessionBinding.externalSessionId,
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await db.query(
@@ -154,16 +156,21 @@ describe('runtime memory PostgreSQL materialization', () => {
     const prior = await bindings.findLatestProviderAgentBySessionId(
       '00000000-0000-4000-8000-000000000902',
     );
-    const second = await runtime.execute({
-      operation: 'continue',
-      runId: continuationRunId,
-      prompt: 'second',
-      providerAgentId: prior!,
-    });
+    const secondSession = await runtime.attachSession(
+      { plane: 'paseo', externalSessionId: prior! },
+      {
+        runtimeSessionId: 'continuation-runtime-session',
+        workspace: {
+          cwd: '/tmp/runtime-memory-pglite',
+          binding: firstSession.workspaceBinding,
+        },
+        systemPrompt: '',
+      },
+    );
+    await secondSession.run({ runId: continuationRunId, prompt: 'second' });
 
-    expect(first.providerAgentId).toBe('agent-session-1');
+    expect(firstSession.sessionBinding.externalSessionId).toBe('agent-session-1');
     expect(prior).toBe('agent-session-1');
-    expect(second.providerAgentId).toBe('agent-session-1');
     expect(creates).toBe(1);
     expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);
   });

@@ -11,6 +11,7 @@ permissions:
 jobs:
   runtime-smoke:
     runs-on: ubuntu-latest
+    environment: Test
     timeout-minutes: 30
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}

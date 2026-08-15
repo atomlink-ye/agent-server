@@ -47,7 +47,11 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    timeout-minutes: 30
+    # Four real-provider flows now run here, and the agent-team one may use up
+    # to its 900s budget on a slow day. A job kill would surface as an opaque
+    # cancellation rather than as a flow's own assertion, which is the failure
+    # mode this workflow exists to avoid.
+    timeout-minutes: 45
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
     steps:
@@ -148,12 +152,22 @@ jobs:
           AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
 
+      - name: 'Product chain: registry + work identity + projection reachability (no execution assertion)'
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          SMOKE_OUTPUT_FILE: .local/test-runs/team-registry-work.ndjson
+        run: pnpm smoke:team-registry-work
+
+      - name: Real-provider user-defined Team Work execution lifecycle
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
+
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
         run: |
           {
             echo "## Real runtime — executed"
             echo
-            echo "Both external main flows ran against the real provider and asserted"
+            echo "All external main flows ran against the real provider and asserted"
             echo "positive provider-side usage."
           } >> "$GITHUB_STEP_SUMMARY"

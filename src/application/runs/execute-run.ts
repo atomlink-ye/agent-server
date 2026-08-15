@@ -12,7 +12,7 @@ import {
   type ResolvedAgentVersion,
 } from '../ports/agent-resolution-api.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
-import { RuntimeTimedOutError } from '../ports/agent-runtime.js';
+import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionObservation } from '../ports/execution-plane.js';
 import type {
   ExecutionRuntimeService,
@@ -871,26 +871,6 @@ export class ExecuteRun {
         ? join(this.runtimeCellRoot, sessionRuntime.id)
         : undefined;
     if (cellCwd) await mkdir(cellCwd, { recursive: true });
-    let teamPaseoWorkspaceId: string | null = null;
-    if (
-      !priorProviderAgentId &&
-      collaborativeTeam &&
-      member &&
-      sessionRuntime
-    ) {
-      if (!this.runtimeSessions?.findPaseoWorkspaceByTeamRun)
-        throw new Error('TeamRun Paseo Workspace lookup is unavailable.');
-      teamPaseoWorkspaceId =
-        await this.runtimeSessions.findPaseoWorkspaceByTeamRun({
-          teamRunId: collaborativeTeam.id,
-          tenantId: task.tenantId,
-          workspaceId: task.workspaceId,
-          principalType: task.principalType,
-          principalId: task.principalId,
-        });
-      if (member.role !== 'lead' && !teamPaseoWorkspaceId)
-        throw new Error('TeamRun Paseo Workspace is unavailable.');
-    }
     if (member?.role === 'lead') {
       const capabilityBinder = this.runtimeExtensionBinder as
         | (RuntimeExtensionBinder & {
@@ -1090,12 +1070,19 @@ export class ExecuteRun {
           prompt: deliveredTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
-          ...(teamPaseoWorkspaceId
+          ...(!priorProviderAgentId && collaborativeTeam && member && sessionRuntime
             ? {
-                workspaceBinding: {
-                  plane: 'paseo',
-                  externalWorkspaceId: teamPaseoWorkspaceId,
+                workspaceOwner: {
+                  kind: 'team_run' as const,
+                  id: collaborativeTeam.id,
+                  tenantId: task.tenantId,
+                  productWorkspaceId: task.workspaceId,
+                  principalType: task.principalType,
+                  principalId: task.principalId,
                 },
+                ...(member.role !== 'lead'
+                  ? { requireExistingWorkspaceBinding: true }
+                  : {}),
               }
             : {}),
           ...(priorProviderAgentId && !sessionRuntime

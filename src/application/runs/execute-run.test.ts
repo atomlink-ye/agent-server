@@ -10,9 +10,7 @@ import {
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import {
-  RuntimeTimedOutError,
-} from '../ports/agent-runtime.js';
+import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
 import {
@@ -1855,7 +1853,6 @@ function createLeadRuntimeFixture() {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     })),
-    findPaseoWorkspaceByTeamRun: vi.fn(async () => null),
   };
   const collaborativeExecutions = {
     findTeamRunByRootTaskId: vi.fn(async () => team),

@@ -1,7 +1,7 @@
 import {
   RuntimeExecutionError,
   RuntimeTimedOutError,
-} from '../ports/agent-runtime.js';
+} from './execution-runtime-errors.js';
 import type { RunUsage } from '../../domain/runs/run.js';
 import type {
   ExecutionExtensionBinding,

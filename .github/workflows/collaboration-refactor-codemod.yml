@@ -5,7 +5,7 @@ on:
     branches:
       - refactor/collaboration-convergence-activation-v2
     paths:
-      - tooling/codemods/collaboration-convergence-2.mjs
+      - tooling/codemods/collaboration-convergence-3.mjs
       - .github/workflows/collaboration-refactor-codemod.yml
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - run: node tooling/codemods/collaboration-convergence-2.mjs
+      - run: node tooling/codemods/collaboration-convergence-3.mjs
       - name: Commit bounded refactor
         run: |
           if git diff --quiet; then
@@ -30,10 +30,8 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/application/ports/team-execution-repository.ts \
-                  src/infrastructure/postgres/postgres-collaborative-team-repository.ts \
-                  src/application/collaboration/collaboration-kernel.ts \
-                  src/bootstrap.ts \
-                  src/application/runs/execution-observation-payload.ts
-          git commit -m 'refactor(collaboration): converge activation boundaries'
+          git add src/application/product-projection/product-projection.ts \
+                  src/infrastructure/filesystem/local-agent-project-loader.ts \
+                  src/application/runs/execute-run.test.ts
+          git commit -m 'refactor(collaboration): remove legacy surface references'
           git push origin HEAD:refactor/collaboration-convergence-activation-v2

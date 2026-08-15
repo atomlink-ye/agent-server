@@ -1,3 +1,4 @@
+import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
 import {
   canonicalTeamToolRefsForDirectMessage,
@@ -143,9 +144,14 @@ export function deriveAgenticLeadCommandPolicy(
       continue;
     }
     const latest = attempts
-      .filter((a) => a.workItemId === item.id)
+      .filter((attempt) => attempt.workItemId === item.id)
       .sort((a, b) => b.attemptNo - a.attemptNo)[0];
     if (!latest) continue;
+    if (latest.status === 'blocked' && item.status === 'blocked') {
+      rework.push(item.id);
+      cancel.push(item.id);
+      continue;
+    }
     if (latest.status === 'failed' && item.status === 'in_progress') {
       cancel.push(item.id);
       continue;
@@ -191,6 +197,11 @@ export function canonicalTeamToolRefsForLeadPolicy(
     team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
   };
   return Object.freeze([
+    // New Collaboration commands are capability-based. Durable state
+    // transitions reject invalid operations; the Harness no longer hides an
+    // otherwise valid semantic tool just because of a precomputed phase.
+    ...collaborationToolRefsForRole('lead'),
+    // Legacy aliases stay dynamically narrowed during the cutover.
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,

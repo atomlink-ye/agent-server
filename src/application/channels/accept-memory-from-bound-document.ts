@@ -1,4 +1,4 @@
-import type { AgentRuntimePort } from '../ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { MemoryReviewApi } from '../ports/memory-review-api.js';
 import type { LarkMemoryReviewSurface } from '../../domain/channels/lark-memory-review-surface.js';
@@ -14,7 +14,7 @@ const DOC_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 
 export class AcceptMemoryFromBoundDocument {
   public constructor(
-    private readonly runtime: Pick<AgentRuntimePort, 'execute'>,
+    private readonly runtime: Pick<ExecutionRuntimeService, 'executeTurn'>,
     private readonly events: Pick<
       RunEventRepository,
       'getProviderBindingForRunInSession'
@@ -72,11 +72,13 @@ export class AcceptMemoryFromBoundDocument {
             input.proposal.sourceSessionId,
           );
           if (!binding) throw new Error('source_binding_missing');
-          return this.runtime.execute({
-            operation: 'continue',
+          return this.runtime.executeTurn({
             runId: input.ingressId,
-            providerAgentId: binding.providerAgentId,
-            memoryCandidates: { maxCandidates: 1, proposalLimit: 1 },
+            compatibilitySessionBinding: {
+              plane: 'paseo',
+              externalSessionId: binding.providerAgentId,
+            },
+            proposalLimit: 1,
             prompt: [
               'This is a server-owned memory acceptance control turn.',
               `Use lark-cli docs +fetch --profile ${this.profile} --as bot --doc ${input.surface.docToken}.`,

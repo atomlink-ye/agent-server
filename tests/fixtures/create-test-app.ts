@@ -9,7 +9,7 @@ import { ListMemoryEntries } from '../../src/application/memory/list-memory-entr
 import { ListMemoryProposals } from '../../src/application/memory/list-memory-proposals.js';
 import { ReviewMemoryProposal } from '../../src/application/memory/review-memory-proposal.js';
 import { ManagedMemory } from '../../src/application/memory/managed-memory.js';
-import type { AgentRuntimePort } from '../../src/application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../../src/application/runtime/execution-plane-runtime-facade.js';
 import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
 import { ExecuteRun } from '../../src/application/runs/execute-run.js';
@@ -141,7 +141,7 @@ export type TestDatabase = {
 };
 
 export async function createTestApp(
-  runtime: AgentRuntimePort,
+  runtime: ExecutionRuntimeService,
   options: CreateTestAppOptions = {},
 ) {
   const workerId = `agent-server-test:${process.pid}:${randomUUID()}`;
@@ -391,7 +391,9 @@ export async function createTestApp(
   return createApp({
     config: effectiveConfig,
     logger,
-    readiness: new RuntimeReadinessProbe(runtime),
+    readiness: new RuntimeReadinessProbe({
+      health: () => runtime.planeHealth(),
+    }),
     runtime,
     submitRun,
     getRun,

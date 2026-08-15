@@ -12,10 +12,11 @@ const logger = createLogger({
 });
 const { app, runtime, close } = await createService(config, logger);
 
-void runtime.initialize().catch((error: unknown) => {
-  logger.log('warn', 'runtime.initialization_failed', {
-    error_name: error instanceof Error ? error.name : 'UnknownError',
-  });
+void runtime.ensureReady().then((ready) => {
+  if (!ready)
+    logger.log('warn', 'runtime.initialization_failed', {
+      error_name: 'RuntimeUnavailable',
+    });
 });
 
 const server = serve(

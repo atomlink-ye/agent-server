@@ -351,15 +351,15 @@ export async function createService(
     ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
   });
   const {
-    runtime,
+    executionRuntime,
     executionRuns,
     sessions: runtimeSessions,
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
-  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
+  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(executionRuntime);
   const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
-    runtime,
+    executionRuntime,
     events,
     memoryModule.reviewApi.review,
     memoryModule.reviewApi.managedMemory,
@@ -437,7 +437,7 @@ export async function createService(
     taskRepository,
     resourceModule.definitionReadApi,
     executeTeamTask,
-    runtime,
+    executionRuntime,
     logger,
     undefined,
     resourceModule.agentResolutionApi,
@@ -568,7 +568,7 @@ export async function createService(
     config,
     logger,
     readiness,
-    runtime,
+    executionRuntime,
     submitRun,
     getRun,
     invokeTask,
@@ -593,7 +593,7 @@ export async function createService(
       ...(larkWorker ? { larkWorker } : {}),
       ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
       ...(larkReceiver ? { larkReceiver } : {}),
-      runtime,
+      runtime: executionRuntime,
       runtimeMcpServer,
       pool,
     });
@@ -637,7 +637,7 @@ export async function createService(
 
   return {
     app,
-    runtime,
+    runtime: executionRuntime,
     ...(singleRunDebug ? { singleRunDebug } : {}),
     close: async () => {
       await closeServiceResources({
@@ -645,7 +645,7 @@ export async function createService(
         ...(larkWorker ? { larkWorker } : {}),
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
         ...(larkReceiver ? { larkReceiver } : {}),
-        runtime,
+        runtime: executionRuntime,
         runtimeMcpServer,
         pool,
       });

@@ -12,8 +12,6 @@ import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import {
   RuntimeTimedOutError,
-  type AgentRuntimeExecuteInput,
-  type AgentRuntimePort,
 } from '../ports/agent-runtime.js';
 import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
@@ -38,7 +36,7 @@ import {
   RunCompletionPersistenceError,
 } from './runtime-execution-receipt.js';
 
-type TestExecutionRuntime = AgentRuntimePort & ExecutionRuntimeService;
+type TestExecutionRuntime = ExecutionRuntimeService;
 
 describe('ExecuteRun', () => {
   it('fails a terminal run when the runtime rejects execution', async () => {
@@ -199,7 +197,7 @@ describe('ExecuteRun', () => {
       bind: vi.fn(async () => undefined),
     };
     const runtime = createRuntime();
-    vi.mocked(runtime.execute).mockImplementation(async (_input, sink) => {
+    vi.mocked(runtime.executeTurn).mockImplementation(async (_input, sink) => {
       await sink?.emit({
         kind: 'tool_status',
         activityId: 'activity-shell-1',
@@ -213,7 +211,14 @@ describe('ExecuteRun', () => {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        providerAgentId: 'agent-test',
+        workspaceBinding: {
+          plane: 'test',
+          externalWorkspaceId: 'workspace-test',
+        },
+        sessionBinding: {
+          plane: 'test',
+          externalSessionId: 'agent-test',
+        },
       };
     });
     const completeRun = {
@@ -295,13 +300,15 @@ describe('ExecuteRun', () => {
 
     const out = await executeRun.execute(claim);
 
-    expect(runtime.execute).toHaveBeenCalledWith(
+    expect(runtime.executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        operation: 'continue',
-        providerAgentId: 'agent-prior',
+        compatibilitySessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'agent-prior',
+        },
         prompt:
           'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
-        memoryCandidates: { proposalLimit: 1 },
+        proposalLimit: 1,
       }),
       expect.objectContaining({ emit: expect.any(Function) }),
     );
@@ -470,10 +477,12 @@ describe('ExecuteRun', () => {
         runId: claim.run.id,
       }),
     );
-    expect(runtime.execute).toHaveBeenCalledWith(
+    expect(runtime.executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        operation: 'continue',
-        providerAgentId: 'agent-prior',
+        compatibilitySessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'agent-prior',
+        },
       }),
       expect.anything(),
     );
@@ -1036,10 +1045,9 @@ describe('ExecuteRun', () => {
       'managed-version-1',
     );
     expect(findLegacy).not.toHaveBeenCalled();
-    expect(runtime.execute).toHaveBeenCalledTimes(1);
-    expect(runtime.execute).toHaveBeenCalledWith(
+    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.executeTurn).toHaveBeenCalledWith(
       {
-        operation: 'create',
         runId: claim.run.id,
         prompt: 'private prompt',
         systemPrompt:
@@ -1048,7 +1056,7 @@ describe('ExecuteRun', () => {
       undefined,
     );
     expect(
-      JSON.stringify(vi.mocked(runtime.execute).mock.calls[0]?.[0]),
+      JSON.stringify(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]),
     ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
@@ -1097,7 +1105,7 @@ describe('ExecuteRun', () => {
     const completed = await executeRun.execute(claim);
 
     expect(completed.status).toBe('succeeded');
-    expect(runtime.execute).toHaveBeenCalledTimes(1);
+    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
     expect(batch).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
@@ -1136,7 +1144,7 @@ describe('ExecuteRun', () => {
 
     expect(completed.status).toBe('failed');
     expect(completed.error?.code).toBe('runtime_execution_failed');
-    expect(runtime.execute).not.toHaveBeenCalled();
+    expect(runtime.executeTurn).not.toHaveBeenCalled();
     expect(findLegacy).not.toHaveBeenCalled();
     expect(completeRun.execute).toHaveBeenCalledTimes(1);
   });
@@ -1167,9 +1175,8 @@ describe('ExecuteRun', () => {
 
     await executeRun.execute(claim);
 
-    expect(runtime.execute).toHaveBeenCalledWith(
+    expect(runtime.executeTurn).toHaveBeenCalledWith(
       {
-        operation: 'create',
         runId: claim.run.id,
         prompt: 'private prompt',
         systemPrompt:
@@ -1366,10 +1373,10 @@ describe('ExecuteRun', () => {
   it('retries an existing unbound Team runtime session through create and bind', async () => {
     const fixture = createLeadRuntimeFixture();
     await fixture.executeRun.execute(fixture.claim);
-    expect(fixture.runtime.execute).toHaveBeenCalled();
+    expect(fixture.runtime.executeTurn).toHaveBeenCalled();
 
-    expect(fixture.runtime.execute).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: 'create' }),
+    expect(fixture.runtime.executeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: expect.any(String) }),
       expect.anything(),
     );
     expect(fixture.binder.bind).toHaveBeenCalledWith(
@@ -1380,7 +1387,7 @@ describe('ExecuteRun', () => {
   it('keeps a runtime timeout classification when Team grant narrowing also fails', async () => {
     const fixture = createLeadRuntimeFixture();
     const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
-    vi.mocked(fixture.runtime.execute).mockRejectedValue(timeout);
+    vi.mocked(fixture.runtime.executeTurn).mockRejectedValue(timeout);
     fixture.binder.refreshForTeamMember.mockImplementation(() => {
       throw new Error('narrowing failed');
     });
@@ -1516,18 +1523,25 @@ describe('ExecuteRun', () => {
     const task = createTask('agent', 'managed-version-1');
     const runtime = {
       ...createRuntime(),
-      execute: vi.fn(async () => ({
+      executeTurn: vi.fn(async () => ({
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        providerAgentId: 'agent-test',
+        workspaceBinding: {
+          plane: 'test',
+          externalWorkspaceId: 'workspace-test',
+        },
+        sessionBinding: {
+          plane: 'test',
+          externalSessionId: 'agent-test',
+        },
         memoryCandidates: [
           { category: 'project_constraint', content: 'api_key=secret' },
           { category: 'project_constraint', content: 'safe constraint' },
           { category: 'project_constraint', content: 'over limit candidate' },
         ],
       })),
-    } as AgentRuntimePort;
+    } as TestExecutionRuntime;
     const completeRun = {
       execute: vi.fn(async ({ run }: { run: Run }) => run),
     } as unknown as CompleteRun;
@@ -1598,7 +1612,7 @@ describe('ExecuteRun', () => {
     ];
     const runtime = {
       ...createRuntime(),
-      execute: vi.fn(async ({ runId }: { runId: string }) => {
+      executeTurn: vi.fn(async ({ runId }: { runId: string }) => {
         await new Promise((resolve) =>
           setTimeout(resolve, runId === 'run-low' ? 10 : 0),
         );
@@ -1606,7 +1620,14 @@ describe('ExecuteRun', () => {
           provider: 'test-provider',
           model: 'test-model',
           text: runId,
-          providerAgentId: 'agent-test',
+          workspaceBinding: {
+            plane: 'test',
+            externalWorkspaceId: 'workspace-test',
+          },
+          sessionBinding: {
+            plane: 'test',
+            externalSessionId: 'agent-test',
+          },
           memoryCandidates: [
             { category: 'project_constraint', content: 'one' },
             { category: 'project_constraint', content: 'two' },
@@ -1614,7 +1635,7 @@ describe('ExecuteRun', () => {
           ],
         };
       }),
-    } as AgentRuntimePort;
+    } as TestExecutionRuntime;
     const batch = vi.fn(
       async (inputs: readonly { content: string }[]) => inputs as never,
     );
@@ -1658,7 +1679,7 @@ describe('ExecuteRun', () => {
       executeRun.execute(claims[0]!),
       executeRun.execute(claims[1]!),
     ]);
-    expect(runtime.execute).toHaveBeenCalledTimes(2);
+    expect(runtime.executeTurn).toHaveBeenCalledTimes(2);
     expect(batch).toHaveBeenCalledTimes(2);
     expect(batch.mock.calls.map(([inputs]) => inputs.length).sort()).toEqual([
       1, 3,
@@ -1800,12 +1821,18 @@ function createLeadRuntimeFixture() {
     revoke: vi.fn(),
   };
   const runtime = createRuntimeWithCandidates('agent-created');
-  vi.mocked(runtime.execute).mockResolvedValue({
+  vi.mocked(runtime.executeTurn).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    providerAgentId: 'agent-created',
-    runtimeWorkspaceId: 'workspace-provider-1',
+    workspaceBinding: {
+      plane: 'test',
+      externalWorkspaceId: 'workspace-provider-1',
+    },
+    sessionBinding: {
+      plane: 'test',
+      externalSessionId: 'agent-created',
+    },
   });
   const completeRun = {
     execute: vi.fn(async ({ run }: { run: Run }) => run),
@@ -1913,119 +1940,51 @@ function createRuntimeWithCandidates(
   providerAgentId = 'agent-test',
 ): TestExecutionRuntime {
   const runtime = createRuntime();
-  runtime.execute = vi.fn(async () => ({
+  vi.mocked(runtime.executeTurn).mockResolvedValue({
     provider: 'test-provider',
     model: 'test-model',
     text: 'safe result',
-    providerAgentId,
-    runtimeWorkspaceId: 'workspace-test',
+    workspaceBinding: {
+      plane: 'test',
+      externalWorkspaceId: 'workspace-test',
+    },
+    sessionBinding: { plane: 'test', externalSessionId: providerAgentId },
     memoryCandidates: [
       { category: 'project_constraint', content: 'keep logs' },
     ],
-  }));
+  });
   return runtime;
 }
 
 function createRuntime(error?: Error): TestExecutionRuntime {
   const runtime = {
-    initialize: vi.fn(async () => undefined),
-    health: vi.fn(async () => ({
-      ready: true,
-      provider: 'test-provider',
-      model: 'test-model',
-      checks: [],
-    })),
-    execute: vi.fn(async () => {
+    ensureReady: vi.fn(async () => true),
+    executeTurn: vi.fn(async () => {
       if (error) throw error;
       return {
         provider: 'test-provider',
         model: 'test-model',
         text: 'safe result',
-        providerAgentId: 'agent-test',
-        runtimeWorkspaceId: 'workspace-test',
+        workspaceBinding: {
+          plane: 'test',
+          externalWorkspaceId: 'workspace-test',
+        },
+        sessionBinding: {
+          plane: 'test',
+          externalSessionId: 'agent-test',
+        },
       };
     }),
-    cancel: vi.fn(async () => undefined),
+    cancelRun: vi.fn(async () => undefined),
+    planeHealth: vi.fn(async () => ({
+      ready: true,
+      plane: 'test',
+      provider: 'test-provider',
+      model: 'test-model',
+      checks: [],
+    })),
     close: vi.fn(async () => undefined),
   } as unknown as TestExecutionRuntime;
-  runtime.ensureReady = vi.fn(async () => (await runtime.health()).ready);
-  runtime.executeTurn = vi.fn(async (input) => {
-    const legacyInput = (input.systemPrompt !== undefined
-      ? {
-          operation: 'create',
-          runId: input.runId,
-          prompt: input.prompt,
-          systemPrompt: input.systemPrompt,
-          ...(input.provider
-            ? { provider: input.provider, model: input.model ?? 'test-model' }
-            : {}),
-          ...(input.runtimeSessionId
-            ? { runtimeSessionId: input.runtimeSessionId }
-            : {}),
-          ...(input.workspaceBinding
-            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
-            : {}),
-          ...(input.cwd ? { cellCwd: input.cwd } : {}),
-          ...(input.workspaceTitle ? { workspaceTitle: input.workspaceTitle } : {}),
-          ...(input.sessionTitle ? { agentTitle: input.sessionTitle } : {}),
-          ...(input.labels ? { agentLabels: input.labels } : {}),
-          ...(input.extensions ? { extensions: input.extensions } : {}),
-          ...(input.proposalLimit !== undefined
-            ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
-            : {}),
-        }
-      : {
-          operation: 'continue',
-          runId: input.runId,
-          prompt: input.prompt,
-          providerAgentId:
-            input.compatibilitySessionBinding?.externalSessionId ?? 'agent-test',
-          ...(input.runtimeSessionId
-            ? { runtimeSessionId: input.runtimeSessionId }
-            : {}),
-          ...(input.workspaceBinding
-            ? { runtimeWorkspaceId: input.workspaceBinding.externalWorkspaceId }
-            : {}),
-          ...(input.cwd ? { cellCwd: input.cwd } : {}),
-          ...(input.proposalLimit !== undefined
-            ? { memoryCandidates: { proposalLimit: input.proposalLimit } }
-            : {}),
-        }) as AgentRuntimeExecuteInput;
-    const execution = await runtime.execute(legacyInput);
-    return {
-      provider: execution.provider,
-      model: execution.model,
-      text: execution.text,
-      workspaceBinding: {
-        plane: 'paseo',
-        externalWorkspaceId:
-          execution.runtimeWorkspaceId ??
-          input.workspaceBinding?.externalWorkspaceId ??
-          'workspace-test',
-      },
-      sessionBinding: {
-        plane: 'paseo',
-        externalSessionId: execution.providerAgentId,
-      },
-      ...(execution.usage ? { usage: execution.usage } : {}),
-      ...(execution.memoryCandidates
-        ? { memoryCandidates: execution.memoryCandidates }
-        : {}),
-    };
-  });
-  runtime.cancelRun = vi.fn(async ({ runId }) => {
-    await runtime.cancel?.({ runId });
-  });
-  runtime.planeHealth = vi.fn(async () => {
-    const health = await runtime.health();
-    return {
-      ready: health.ready,
-      plane: 'test',
-      provider: health.provider,
-      ...(health.model ? { model: health.model } : {}),
-      checks: health.checks,
-    };
-  });
   return runtime;
 }
 

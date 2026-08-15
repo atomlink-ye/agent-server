@@ -1,13 +1,8 @@
 import {
-  type AgentRuntimeExecuteInput,
-  type AgentRuntimeExecution,
-  type AgentRuntimeHealth,
-  type AgentRuntimePort,
-  type RuntimeEvent,
-  type RuntimeEventSink,
   RuntimeExecutionError,
   RuntimeTimedOutError,
 } from '../ports/agent-runtime.js';
+import type { RunUsage } from '../../domain/runs/run.js';
 import type {
   ExecutionExtensionBinding,
   ExecutionObservation,
@@ -73,7 +68,7 @@ export interface ExecutionTurnOutcome {
   readonly text: string;
   readonly workspaceBinding: ExecutionWorkspaceBinding;
   readonly sessionBinding: ExecutionSessionBinding;
-  readonly usage?: AgentRuntimeExecution['usage'];
+  readonly usage?: RunUsage;
   readonly memoryCandidates?: readonly RuntimeMemoryCandidate[];
 }
 
@@ -99,12 +94,9 @@ interface CachedFreshSession {
 
 /**
  * Application service over ExecutionPlanePort. It owns runtime placement and
- * session reuse policy but no Paseo SDK/wire logic. AgentRuntimePort methods are
- * temporary compatibility for the last legacy callers/tests.
+ * session reuse policy but no Paseo SDK/wire logic.
  */
-export class ExecutionPlaneRuntimeFacade
-  implements ExecutionRuntimeService, AgentRuntimePort
-{
+export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
   readonly #resolver: ExecutionSessionResolver;
   readonly #freshSessions = new Map<string, CachedFreshSession>();
 
@@ -341,201 +333,4 @@ export class ExecutionPlaneRuntimeFacade
     if (initializable.initialize) await initializable.initialize();
     else await this.plane.health();
   }
-
-  public async execute(
-    input: AgentRuntimeExecuteInput,
-    sink?: RuntimeEventSink,
-  ): Promise<AgentRuntimeExecution> {
-    const outcome = await this.executeTurn(
-      {
-        runId: input.runId,
-        prompt: input.prompt,
-        ...(input.runtimeSessionId
-          ? { runtimeSessionId: input.runtimeSessionId }
-          : {}),
-        ...(input.cellCwd ? { cwd: input.cellCwd } : {}),
-        ...(input.runtimeWorkspaceId
-          ? {
-              workspaceBinding: {
-                plane: 'paseo',
-                externalWorkspaceId: input.runtimeWorkspaceId,
-              },
-            }
-          : {}),
-        ...(input.operation === 'continue'
-          ? {
-              compatibilitySessionBinding: {
-                plane: 'paseo',
-                externalSessionId: input.providerAgentId,
-              },
-            }
-          : {}),
-        ...(input.operation === 'create' && input.workspaceTitle
-          ? { workspaceTitle: input.workspaceTitle }
-          : {}),
-        ...(input.operation === 'create' && input.agentTitle
-          ? { sessionTitle: input.agentTitle }
-          : {}),
-        ...(input.operation === 'create' && input.agentLabels
-          ? { labels: input.agentLabels }
-          : {}),
-        ...(input.operation === 'create' && input.provider
-          ? { provider: input.provider, model: input.model }
-          : {}),
-        ...(input.operation === 'create'
-          ? { systemPrompt: input.systemPrompt }
-          : {}),
-        ...(input.operation === 'create' && input.extensions
-          ? { extensions: input.extensions }
-          : {}),
-        ...(input.memoryCandidates?.proposalLimit !== undefined
-          ? { proposalLimit: input.memoryCandidates.proposalLimit }
-          : {}),
-      },
-      sink ? compatibilityObservationSink(sink) : undefined,
-    );
-    if (input.operation === 'create' && input.onProviderBinding)
-      await input.onProviderBinding({
-        providerAgentId: outcome.sessionBinding.externalSessionId,
-        runtimeWorkspaceId: outcome.workspaceBinding.externalWorkspaceId,
-      });
-    return {
-      provider: outcome.provider,
-      model: outcome.model,
-      text: outcome.text,
-      providerAgentId: outcome.sessionBinding.externalSessionId,
-      runtimeWorkspaceId: outcome.workspaceBinding.externalWorkspaceId,
-      ...(outcome.usage ? { usage: outcome.usage } : {}),
-      ...(outcome.memoryCandidates
-        ? { memoryCandidates: outcome.memoryCandidates }
-        : {}),
-    };
-  }
-
-  public cancel(input: {
-    readonly runId: string;
-    readonly providerAgentId?: string;
-  }): Promise<void> {
-    return this.cancelRun({
-      runId: input.runId,
-      ...(input.providerAgentId
-        ? {
-            compatibilitySessionBinding: {
-              plane: 'paseo',
-              externalSessionId: input.providerAgentId,
-            },
-          }
-        : {}),
-    });
-  }
-
-  public async health(): Promise<AgentRuntimeHealth> {
-    const health = await this.planeHealth();
-    return {
-      ready: health.ready,
-      provider: health.provider ?? health.plane,
-      ...(health.model ? { model: health.model } : {}),
-      checks: health.checks,
-    };
-  }
-}
-
-function compatibilityObservationSink(
-  sink: RuntimeEventSink,
-): ExecutionObservationSink {
-  return {
-    async emit(observation) {
-      const event = runtimeEventFromObservation(observation);
-      if (event) await sink.emit(event);
-    },
-  };
-}
-
-function runtimeEventFromObservation(
-  observation: ExecutionObservation,
-): RuntimeEvent | null {
-  switch (observation.kind) {
-    case 'turn_started':
-    case 'turn_completed':
-    case 'turn_failed':
-      return null;
-    case 'assistant_updated':
-      return { kind: 'assistant_text', text: observation.text };
-    case 'reasoning_updated':
-      return {
-        kind: 'reasoning_progress',
-        status: observation.status,
-        ...(observation.text ? { text: observation.text } : {}),
-      };
-    case 'tool_updated':
-      return {
-        kind: 'tool_status',
-        activityId: observation.activityId,
-        category: observation.category,
-        status: observation.status,
-        label: observation.label,
-        summary: observation.summary,
-        ...(observation.toolName ? { toolName: observation.toolName } : {}),
-        ...(observation.resultObserved !== undefined
-          ? { resultObserved: observation.resultObserved }
-          : {}),
-        ...(observation.parentActivityId
-          ? { parentActivityId: observation.parentActivityId }
-          : {}),
-        provider: observation.provider,
-        ...(observation.detail ? { detail: observation.detail } : {}),
-        ...(observation.error ? { error: observation.error } : {}),
-      };
-    case 'child_activity_updated':
-      return {
-        kind: 'child_timeline_item',
-        parentActivityId: observation.parentActivityId,
-        activityId: observation.activityId,
-        itemKind: observation.itemKind,
-        status: observation.status,
-        label: observation.label,
-        summary: observation.summary,
-        provider: observation.provider,
-        ...(observation.text ? { text: observation.text } : {}),
-        ...(observation.detail ? { detail: observation.detail } : {}),
-        ...(observation.error ? { error: observation.error } : {}),
-      };
-    case 'permission_updated':
-      return {
-        kind: 'permission',
-        activityId: observation.activityId,
-        category: observation.category,
-        status: observation.status,
-        ...(observation.decision ? { decision: observation.decision } : {}),
-        summary: observation.summary,
-      };
-    case 'usage_updated':
-      return {
-        kind: 'usage',
-        ...(observation.usage.totalCostUsd !== undefined
-          ? { totalCostUsd: observation.usage.totalCostUsd }
-          : {}),
-        ...(observation.usage.inputTokens !== undefined
-          ? { inputTokens: observation.usage.inputTokens }
-          : {}),
-        ...(observation.usage.cachedInputTokens !== undefined
-          ? { cachedInputTokens: observation.usage.cachedInputTokens }
-          : {}),
-        ...(observation.usage.outputTokens !== undefined
-          ? { outputTokens: observation.usage.outputTokens }
-          : {}),
-        ...(observation.usage.contextWindowMaxTokens !== undefined
-          ? { contextWindowMaxTokens: observation.usage.contextWindowMaxTokens }
-          : {}),
-        ...(observation.usage.contextWindowUsedTokens !== undefined
-          ? { contextWindowUsedTokens: observation.usage.contextWindowUsedTokens }
-          : {}),
-      };
-    default:
-      return assertNever(observation);
-  }
-}
-
-function assertNever(observation: never): null {
-  throw new Error(`Unhandled execution observation ${String(observation)}`);
 }

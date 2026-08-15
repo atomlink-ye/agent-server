@@ -17,6 +17,7 @@ const stageTimeouts = {
   readiness: 480_000,
   run: 480_000,
 };
+const progressIntervalMs = 5_000;
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -27,6 +28,29 @@ function fail(stage, message) {
     `${JSON.stringify({ outcome: 'FAIL', stage, message })}\n`,
   );
   process.exitCode = 1;
+}
+
+function progress(stage, details = {}) {
+  process.stdout.write(
+    `${JSON.stringify({
+      event: 'runtime_smoke_progress',
+      at: new Date().toISOString(),
+      elapsed_ms: Date.now() - startedAt,
+      stage,
+      ...details,
+    })}\n`,
+  );
+}
+
+function usageSummary(usage) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const fields = ['input_tokens', 'output_tokens', 'total_cost_usd'];
+  const summary = Object.fromEntries(
+    fields
+      .filter((field) => Number.isFinite(usage[field]))
+      .map((field) => [field, usage[field]]),
+  );
+  return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
 function endpoint(path) {
@@ -63,12 +87,17 @@ async function readJson(response) {
 
 async function pollReady() {
   const deadline = Date.now() + stageTimeouts.readiness;
+  let nextProgressAt = Date.now();
   while (Date.now() < deadline) {
     try {
       const response = await request('/health/ready');
       if (response.ok) return;
     } catch {
       // Retry until the bounded deadline.
+    }
+    if (Date.now() >= nextProgressAt) {
+      progress('waiting_for_api_readiness');
+      nextProgressAt = Date.now() + progressIntervalMs;
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
@@ -78,6 +107,9 @@ async function pollReady() {
 async function pollRun(runId) {
   const deadline = Date.now() + stageTimeouts.run;
   let lastTransientFailure = 'none';
+  let lastStatus;
+  let lastUsage;
+  let nextProgressAt = Date.now();
   while (Date.now() < deadline) {
     try {
       const response = await request(
@@ -93,6 +125,24 @@ async function pollRun(runId) {
         lastTransientFailure = `http_${response.status}`;
       } else {
         const body = await readJson(response);
+        const usage = usageSummary(body.usage);
+        const usageChanged =
+          JSON.stringify(usage) !== JSON.stringify(lastUsage);
+        if (
+          body.status !== lastStatus ||
+          usageChanged ||
+          Date.now() >= nextProgressAt
+        ) {
+          progress('run_progress', {
+            run_id: runId,
+            status: body.status,
+            ...(body.runtime ? { runtime: body.runtime } : {}),
+            ...(usage ? { usage } : {}),
+          });
+          lastStatus = body.status;
+          lastUsage = usage;
+          nextProgressAt = Date.now() + progressIntervalMs;
+        }
         if (
           ['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
             body.status,
@@ -129,7 +179,13 @@ async function main() {
 
   let stage = 'readiness';
   try {
+    progress('started', {
+      provider: realProviderDefaults.PASEO_PROVIDER,
+      model: realProviderDefaults.PASEO_MODEL,
+      environment: 'runtime',
+    });
     await pollReady();
+    progress('api_ready');
 
     stage = 'create_run';
     const createdResponse = await request('/api/v1/runs', {
@@ -145,6 +201,7 @@ async function main() {
     if (typeof created.run_id !== 'string' || !created.run_id) {
       throw new Error('run_create_invalid_response');
     }
+    progress('run_created', { run_id: created.run_id });
 
     stage = 'poll_run';
     const completed = await pollRun(created.run_id);
@@ -165,6 +222,14 @@ async function main() {
       usage.total_cost_usd > 0;
     stage = 'assertions';
     if (!accepted) throw new Error('run_assertions_failed');
+
+    progress('agent_output', { run_id: created.run_id, text: resultText });
+    progress('completed', {
+      run_id: created.run_id,
+      status: completed.status,
+      runtime,
+      usage: usageSummary(usage),
+    });
 
     process.stdout.write(
       `${JSON.stringify({

@@ -489,7 +489,7 @@ describe('ExecuteRun', () => {
       }),
       expect.anything(),
     );
-    expect(runtime.executeTurn.mock.calls[0]?.[0]).not.toHaveProperty(
+    expect(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]).not.toHaveProperty(
       'compatibilitySessionBinding',
     );
   });

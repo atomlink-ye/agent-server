@@ -13,15 +13,11 @@ import {
 } from '../../src/infrastructure/postgres/postgres.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-const required = process.env.REAL_POSTGRES_REQUIRED === '1';
-
-if (required && !connectionString) {
+if (!connectionString) {
   throw new Error(
-    'REAL_POSTGRES_REQUIRED=1 requires DATABASE_URL or POSTGRES_URL for the real PostgreSQL integration lane',
+    'real PostgreSQL integration requires DATABASE_URL or POSTGRES_URL',
   );
 }
-
-const describeRealPostgres = connectionString ? describe : describe.skip;
 
 type Fixture = {
   owner: OwnerScope;
@@ -255,7 +251,7 @@ function failureInput(fixture: Fixture) {
   };
 }
 
-describeRealPostgres('Team attempt terminal race (real PostgreSQL)', () => {
+describe('Team attempt terminal race (real PostgreSQL)', () => {
   const schema = `team_attempt_race_${randomUUID().replaceAll('-', '')}`;
   let admin: Pool | undefined;
   let poolA: Pool | undefined;

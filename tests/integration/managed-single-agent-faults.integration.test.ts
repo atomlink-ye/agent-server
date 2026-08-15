@@ -24,10 +24,10 @@ import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-const required = process.env.REAL_POSTGRES_REQUIRED === '1';
-if (required && !connectionString)
-  throw new Error('real PostgreSQL is required');
-const describeRealPostgres = connectionString ? describe : describe.skip;
+if (!connectionString)
+  throw new Error(
+    'real PostgreSQL integration requires DATABASE_URL or POSTGRES_URL',
+  );
 const owner = {
   tenantId: 'h_faults',
   workspaceId: 'h_compat',
@@ -57,7 +57,7 @@ async function applyCurrentProvenanceMigration(pool: Pool): Promise<void> {
   ]);
 }
 
-describeRealPostgres('managed single-agent minimum fault evidence', () => {
+describe('managed single-agent minimum fault evidence', () => {
   it('restarts dispatcher discovery without duplicating execution', async () => {
     const pool = new Pool({ connectionString: connectionString!, max: 4 });
     try {

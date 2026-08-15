@@ -121,10 +121,49 @@ if (projection?.project?.status !== 'succeeded') {
     `agent team smoke projection did not succeed: ${JSON.stringify(projection)}`,
   );
 }
+
+const usageFields = [
+  'input_tokens',
+  'cached_input_tokens',
+  'output_tokens',
+  'total_cost_usd',
+  'context_window_max_tokens',
+  'context_window_used_tokens',
+];
+const runIds = [
+  ...new Set(
+    projection.sessions.flatMap((session) =>
+      session.turns.map((turn) => turn.run_id),
+    ),
+  ),
+];
+const usage = {};
+for (const runId of runIds) {
+  const run = await request(`/api/v1/runs/${encodeURIComponent(runId)}`);
+  for (const field of usageFields) {
+    const value = run.usage?.[field];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const total = (usage[field] ?? 0) + value;
+    if (!Number.isFinite(total)) {
+      throw new Error(`agent team smoke usage is not finite: ${field}`);
+    }
+    usage[field] = total;
+  }
+}
+if (
+  !(usage.input_tokens > 0) ||
+  !(usage.output_tokens > 0) ||
+  !(usage.total_cost_usd > 0)
+) {
+  throw new Error(
+    `agent team smoke did not report positive aggregate usage: ${JSON.stringify(usage)}`,
+  );
+}
 process.stdout.write(
   `${JSON.stringify({
     success: true,
     task_id: invoked.task_id,
     team_status: projection.project.status,
+    usage,
   })}\n`,
 );

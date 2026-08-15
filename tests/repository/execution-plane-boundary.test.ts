@@ -26,6 +26,15 @@ describe('Execution Plane architecture boundary', () => {
     expect(corpus).not.toContain('bindProvider(');
   });
 
+  it('keeps the Paseo client port free of the pinned SDK implementation', async () => {
+    const port = await readFile(
+      'src/adapters/paseo/paseo-client-port.ts',
+      'utf8',
+    );
+    expect(port).not.toContain('@getpaseo/client');
+    expect(port).not.toContain('class PaseoSdkClient');
+  });
+
   it('allows AgentRuntime compatibility only inside its retired contract file', async () => {
     const files = (await sourceFiles()).filter(
       (path) =>

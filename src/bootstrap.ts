@@ -49,9 +49,6 @@ import { createLegacyRuntimeToolsContributor } from './entrypoints/mcp/runtime-t
 import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
-import { TeamToolContextResolver } from './application/teams/team-tool-context.js';
-import { TeamCommandService } from './application/teams/team-command-service.js';
-import { TeamPolicyEvaluator } from './application/teams/team-policy-evaluator.js';
 import { TeamDriver } from './application/teams/team-driver.js';
 import { TeamWakeReconciler } from './application/teams/team-wake-reconciler.js';
 import {
@@ -64,6 +61,8 @@ import { InvokeTaskExecutionAdmission } from './application/ports/execution-admi
 import { createMemoryModule } from './modules/memory/memory-module.js';
 import { createResourceModule } from './modules/resource/resource-module.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
+import { createTeamModule } from './modules/team/team-module.js';
+import { createWorkModule } from './modules/work/work-module.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -262,33 +261,25 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
-  const collaborativeTeamExecutions = new PostgresTeamExecutionRepository(pool);
-  const teamMessages = new PostgresTeamMessageRepository(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
   const events = new PostgresRunEventRepository(pool);
-  const teamPolicyEvaluator = new TeamPolicyEvaluator();
-  const teamToolContextResolver = new TeamToolContextResolver(
-    collaborativeTeamExecutions,
-    taskRepository,
-    runRepository,
-    teamPolicyEvaluator,
-  );
-  const teamWakeReconciler = new TeamWakeReconciler(
-    teamMessages,
-    collaborativeTeamExecutions,
-    taskRepository,
-    admissionRepository,
-    undefined,
-    logger,
-  );
-  const teamCommandService = new TeamCommandService(
-    collaborativeTeamExecutions,
+  const teamModule = createTeamModule({
+    database: pool,
+    tasks: taskRepository,
+    runs: runRepository,
+    admissions: admissionRepository,
     events,
-    teamMessages,
-    teamWakeReconciler,
-  );
+    logger,
+  });
+  const {
+    executions: collaborativeTeamExecutions,
+    messages: teamMessages,
+    contextResolver: teamToolContextResolver,
+    wakeReconciler: teamWakeReconciler,
+    commands: teamCommandService,
+  } = teamModule;
   const memoryModule = createMemoryModule({
     database: pool,
     tasks: taskRepository,
@@ -652,4 +643,3 @@ export async function createService(
     },
   };
 }
-import { createWorkModule } from './modules/work/work-module.js';

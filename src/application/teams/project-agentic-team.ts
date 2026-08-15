@@ -39,13 +39,13 @@ export interface AgenticTeamProject {
     readonly dependencyRefs: readonly string[];
     readonly attempts: readonly {
       readonly attemptNo: number;
-      readonly status: 'queued' | 'running' | 'completed' | 'failed';
+      readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
       readonly feedbackSummary: string | null;
       readonly resultSummary: string | null;
     }[];
     readonly latestAttempt: {
       readonly attemptNo: number;
-      readonly status: 'queued' | 'running' | 'completed' | 'failed';
+      readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
       readonly feedbackSummary: string | null;
       readonly resultSummary: string | null;
     } | null;
@@ -337,18 +337,21 @@ function compareAttempts(
 }
 
 function compareTasks(a: TaskRecord, b: TaskRecord): number {
-  if (a.task.teamSequence != null && b.task.teamSequence != null)
-    return (
-      a.task.teamSequence - b.task.teamSequence ||
-      a.task.createdAt.localeCompare(b.task.createdAt) ||
-      a.task.id.localeCompare(b.task.id)
-    );
-  if (a.task.teamSequence != null) return -1;
-  if (b.task.teamSequence != null) return 1;
   return (
+    (a.task.teamSequence ?? Number.MAX_SAFE_INTEGER) -
+      (b.task.teamSequence ?? Number.MAX_SAFE_INTEGER) ||
     a.task.createdAt.localeCompare(b.task.createdAt) ||
     a.task.id.localeCompare(b.task.id)
   );
+}
+
+function mapTurnStatus(
+  value: string,
+): 'queued' | 'running' | 'completed' | 'failed' {
+  if (value === 'queued') return 'queued';
+  if (value === 'running') return 'running';
+  if (value === 'succeeded') return 'completed';
+  return 'failed';
 }
 
 function contextFor(
@@ -356,50 +359,41 @@ function contextFor(
   work:
     | { readonly subject: string; readonly description: string | null }
     | undefined,
-  attempt: { readonly feedback: string | null } | undefined,
-  message:
+  attempt:
     | {
-        readonly body: string;
-        readonly senderMemberRunId: string | null;
+        readonly attemptNo: number;
+        readonly feedback: string | null;
       }
     | undefined,
-  names: ReadonlyMap<string, string>,
+  message:
+    | {
+        readonly senderMemberRunId: string | null;
+        readonly body: string;
+      }
+    | undefined,
+  nameByMemberId: ReadonlyMap<string, string>,
   sequence: number,
 ): string {
-  if (record.task.teamTaskKind === 'lead_turn')
-    return `Lead coordination turn ${sequence}`;
-  if (record.task.teamTaskKind === 'direct_message') {
-    const sender = message?.senderMemberRunId
-      ? safeText(names.get(message.senderMemberRunId) ?? null, 256)
-      : null;
-    const body = safeText(message?.body ?? null, 512);
-    return sender && body
-      ? `Direct message from ${sender}: ${body}`
-      : 'Direct message';
+  if (record.task.teamTaskKind === 'work_attempt' && work && attempt) {
+    return [
+      `Assigned Work: ${safeText(work.subject, 256)}`,
+      work.description ? `Brief: ${safeText(work.description, 512)}` : null,
+      `Attempt: ${attempt.attemptNo}`,
+      attempt.feedback ? `Feedback: ${safeText(attempt.feedback, 512)}` : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(' · ');
   }
-  return (
-    safeText(
-      [
-        attempt?.feedback ? `Lead feedback: ${attempt.feedback}` : '',
-        work?.subject ?? 'Assigned work',
-        work?.description ?? '',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      512,
-    ) ?? 'Assigned work'
-  );
-}
-
-function mapTurnStatus(
-  status: TaskRecord['latestRun'] extends infer R
-    ? R extends { status: infer S }
-      ? S
-      : never
-    : never,
-): 'queued' | 'running' | 'completed' | 'failed' {
-  if (status === 'queued') return 'queued';
-  if (status === 'running') return 'running';
-  if (status === 'succeeded') return 'completed';
-  return 'failed';
+  if (record.task.teamTaskKind === 'direct_message' && message) {
+    return [
+      `Direct message from ${safeText(
+        message.senderMemberRunId
+          ? (nameByMemberId.get(message.senderMemberRunId) ?? 'team member')
+          : 'team member',
+        256,
+      )}`,
+      safeText(message.body, 512),
+    ].join(' · ');
+  }
+  return sequence === 1 ? 'Lead kickoff' : 'Lead review';
 }

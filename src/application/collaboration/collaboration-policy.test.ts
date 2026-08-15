@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+  collaborationToolRefsForRole,
+} from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { TeamToolContext } from '../teams/team-tool-context.js';
-import { CollaborationPolicy, CollaborationPolicyError } from './collaboration-policy.js';
+import {
+  CollaborationPolicy,
+  CollaborationPolicyError,
+} from './collaboration-policy.js';
 
 const policy = new CollaborationPolicy();
 
@@ -31,6 +38,29 @@ describe('CollaborationPolicy', () => {
         'mailbox.send',
         'mailbox.ack',
       ]),
+    );
+  });
+
+  it('derives runtime tool grants from the same role capability definition', () => {
+    expect(collaborationToolRefsForRole('lead')).toEqual(
+      expect.arrayContaining([
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+      ]),
+    );
+    expect(collaborationToolRefsForRole('member')).toEqual(
+      expect.arrayContaining([
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCheckpoint,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardBlock,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.boardSubmit,
+      ]),
+    );
+    expect(collaborationToolRefsForRole('member')).not.toContain(
+      AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
     );
   });
 

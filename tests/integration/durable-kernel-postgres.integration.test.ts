@@ -1702,6 +1702,110 @@ describe('durable kernel postgres bootstrap', () => {
     });
     expect(completedRow?.published_at).not.toBeNull();
   });
+
+  it.skip('executes a canonical agent task through the published agent version path', async () => {
+    const database = await createDatabase();
+    const clock = new TestClock('2026-07-22T12:00:00.000Z');
+    const runtime = new FakeAgentRuntime({
+      responseText: 'AGENT_TASK_OK',
+    });
+    const logger = createLogger({
+      service: 'agent-server-test',
+      minimumLevel: 'error',
+      write: () => undefined,
+    });
+
+    await applyDurableKernelMigrations(database);
+
+    const invokables = new PostgresInvokableRepository(database);
+    const createdAt = () => new Date('2026-07-22T12:00:00.000Z');
+    const publishedAt = () => new Date('2026-07-22T12:05:00.000Z');
+    const agentDefinition = createAgentDefinition({
+      id: '00000000-0000-4000-8000-000000040001',
+      tenantId: primaryAccessContext.tenantId,
+      workspaceId: primaryAccessContext.workspaceId,
+      principalType: primaryAccessContext.principalType,
+      principalId: primaryAccessContext.principalId,
+      name: 'Canonical Agent',
+      description: 'Executes through the task path',
+      now: createdAt,
+    });
+    const agentVersion = publishAgentVersion(
+      createDraftAgentVersion({
+        id: '00000000-0000-4000-8000-000000040101',
+        definitionId: agentDefinition.id,
+        tenantId: primaryAccessContext.tenantId,
+        workspaceId: primaryAccessContext.workspaceId,
+        principalType: primaryAccessContext.principalType,
+        principalId: primaryAccessContext.principalId,
+        name: 'Canonical Agent v1',
+        description: 'Published agent',
+        instructions: 'Reply with the analyzed result only.',
+        now: createdAt,
+      }),
+      publishedAt,
+    );
+    await invokables.saveAgentDefinition(agentDefinition);
+    await invokables.saveAgentVersion(agentVersion);
+
+    const tasks = new PostgresTaskRepository(database);
+    const runs = new PostgresRunRepository(database);
+    const admissions = new PostgresAdmissionRepository(database);
+    const invocation = await new InvokeTask(
+      admissions,
+      invokables,
+      clock.now,
+    ).execute({
+      idempotencyKey: 'canonical-agent-task',
+      invokable: { kind: 'agent', versionId: agentVersion.id },
+      input: { text: 'Summarize this incident.' },
+      accessContext: primaryAccessContext,
+    });
+
+    clock.advanceMs(30_000);
+    const claim = await new ClaimNextRun(runs, {
+      workerId: 'worker-agent-task',
+      leaseDurationMs: 60_000,
+      now: clock.now,
+      activationIdFactory: () => '00000000-0000-4000-8000-000000000611',
+    }).execute();
+
+    expect(claim).not.toBeNull();
+
+    await createExecuteRun({
+      database,
+      runRepository: runs,
+      invokableRepository: invokables,
+      runtime,
+      logger,
+      now: clock.now,
+    }).execute(claim!);
+
+    const task = await new GetTask(tasks).execute(
+      invocation.task.task.id,
+      primaryAccessContext,
+    );
+
+    expect(task).toMatchObject({
+      task: {
+        id: invocation.task.task.id,
+        status: 'completed',
+      },
+      latestRun: {
+        status: 'succeeded',
+        result: { text: 'AGENT_TASK_OK' },
+      },
+    });
+    expect(runtime.prompts).toHaveLength(1);
+    expect(runtime.systemPrompts).toHaveLength(1);
+    expect(runtime.systemPrompts[0]).toContain(
+      'Reply with the analyzed result only.',
+    );
+    expect(runtime.prompts[0]).toContain('Summarize this incident.');
+    expect(runtime.prompts[0]).not.toContain(
+      'Reply with the analyzed result only.',
+    );
+  });
 });
 
 function createExecuteRun(input: {

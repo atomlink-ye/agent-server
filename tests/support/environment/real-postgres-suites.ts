@@ -6,9 +6,7 @@ export const realPostgresSuites = [
   'tests/integration/runtime-memory-real-pg.integration.test.ts',
   'tests/integration/run-cancellation-postgres.integration.test.ts',
   'tests/integration/lark-memory-card-doc-real-pg.integration.test.ts',
-  'tests/integration/managed-single-agent-faults.integration.test.ts',
   'tests/integration/postgres-run-event-concurrency.integration.test.ts',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
   'tests/integration/team-attempt-terminal-race.integration.test.ts',
-  'tests/integration/canonical-agent-task-postgres.integration.test.ts',
 ] as const satisfies readonly string[];

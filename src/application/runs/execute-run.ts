@@ -24,7 +24,7 @@ import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-bin
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
-import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
+import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import { AgentRunExecutor } from './agent-run-executor.js';
 import { CompleteRun } from './complete-run.js';
 import { RunPromptContext } from './run-prompt-context.js';
@@ -40,13 +40,7 @@ import {
 } from './runtime-execution-receipt.js';
 import { RuntimeMemoryProposalWriter } from './runtime-memory-proposal-writer.js';
 
-/**
- * Durable Run process manager. Leaf-agent execution details live in
- * AgentRunExecutor; Team member turn lifecycle lives in RunTeamCoordinator.
- *
- * The positional constructor is retained in this behavior-preserving refactor
- * so existing integration fixtures do not need a broad wiring rewrite.
- */
+/** Durable Run process manager. */
 export class ExecuteRun {
   private readonly teamCoordinator: RunTeamCoordinator | undefined;
   private readonly agentRunExecutor: AgentRunExecutor;
@@ -59,9 +53,7 @@ export class ExecuteRun {
     private readonly runtime: ExecutionRuntimeService,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
-    resolver: AgentResolutionApi = {
-      resolvePublished: async () => null,
-    },
+    resolver: AgentResolutionApi = { resolvePublished: async () => null },
     private readonly events?: RunEventRepository,
     fileStore?: FileStore,
     createMemoryProposal?: CreateMemoryProposal,
@@ -72,13 +64,16 @@ export class ExecuteRun {
     runtimeCellRoot?: string,
     collaborativeExecutions?: TeamExecutionRepository,
     runs?: Pick<RunRepository, 'findByIdForOwner'>,
-    wakeReconciler?: Pick<TeamWakeReconciler, 'reconcileForRootTask'>,
+    activationReconciler?: Pick<
+      CollaborationActivationReconciler,
+      'reconcileForRootTask'
+    >,
   ) {
     this.teamCoordinator = collaborativeExecutions
       ? new RunTeamCoordinator(
           collaborativeExecutions,
           tasks,
-          wakeReconciler,
+          activationReconciler,
         )
       : undefined;
     const promptContext = new RunPromptContext(
@@ -144,14 +139,10 @@ export class ExecuteRun {
     let completed: Run;
     let teamContext: RunTeamContext | null = null;
     let task: Task | null | undefined;
-
     try {
       task = await this.tasks.findById(claim.taskId);
       if (!task)
-        throw new Error(
-          `Task ${claim.taskId} could not be loaded for execution`,
-        );
-
+        throw new Error(`Task ${claim.taskId} could not be loaded for execution`);
       if (
         ['lead_turn', 'work_attempt', 'direct_message'].includes(
           task.teamTaskKind ?? '',
@@ -165,16 +156,13 @@ export class ExecuteRun {
       teamContext = this.teamCoordinator
         ? await this.teamCoordinator.resolve(task)
         : null;
-
       await this.events?.append(claim.run.id, 'started', {});
       if (teamContext) await this.teamCoordinator!.markActive(teamContext);
-
       await this.events?.bind({
         runId: claim.run.id,
         ...(task.sessionId ? { sessionId: task.sessionId } : {}),
         createdAt: claim.run.updatedAt,
       });
-
       if (task.status === 'queued')
         await this.tasks.save(
           transitionTask(task, 'active', () => new Date(claim.run.updatedAt)),
@@ -195,12 +183,10 @@ export class ExecuteRun {
               task,
               teamContext,
             });
-
       completed =
         terminalRun.status === 'waiting_children'
           ? terminalRun
           : await this.completeTerminalRun(claim, terminalRun);
-
       if (teamContext && terminalRun.status !== 'waiting_children')
         await this.teamCoordinator!.updateTerminal({
           claimTaskId: claim.taskId,
@@ -232,14 +218,12 @@ export class ExecuteRun {
         this.reportPostPersistenceFailure(error);
         throw error;
       }
-
       await this.teamCoordinator?.updateTerminalBestEffort({
         claimTaskId: claim.taskId,
         task,
         context: teamContext,
         fallbackStatus: 'failed',
       });
-
       if (error instanceof RuntimeMemoryPersistenceError) {
         this.logger.log('error', 'run.memory_persistence_failed', {
           run_id: error.receipt.runId,
@@ -248,7 +232,6 @@ export class ExecuteRun {
         });
         throw error;
       }
-
       const timedOut = error instanceof RuntimeTimedOutError;
       const failure: RunFailure = timedOut
         ? {
@@ -275,7 +258,6 @@ export class ExecuteRun {
         throw completionError;
       }
     }
-
     this.reportCompletedRun(claim, completed);
     return completed;
   }
@@ -291,10 +273,7 @@ export class ExecuteRun {
       {
         run_id: claim.run.id,
         ...(completed.runtime
-          ? {
-              provider: completed.runtime.provider,
-              model: completed.runtime.model,
-            }
+          ? { provider: completed.runtime.provider, model: completed.runtime.model }
           : {}),
         ...(completed.error ? { failure_code: completed.error.code } : {}),
       },

@@ -84,6 +84,20 @@ pnpm smoke:agent-team
 
 It proves only the bounded current collaboration flow exercised by that smoke. It does not imply generalized dynamic rosters, restart recovery, retries, reconciliation, or production readiness.
 
+The public Team registry and Work lineage can be checked with an external HTTP
+actor (without invoking Tasks or TeamRun projections):
+
+```bash
+SMOKE_OUTPUT_FILE=.local/team-registry-work.ndjson pnpm smoke:team-registry-work
+```
+
+The actor creates and publishes its own two Agents and Environment, creates
+distinct published Teams A and B, verifies their public version specs differ,
+creates a Work and WorkRun from Team A, reads its successful trace projection,
+and verifies a Work using unpublished Team C is rejected with
+`invalid_work_definition`. Authorization is redacted in the local record;
+request and response bodies, headers, and statuses are retained.
+
 ## Memory policy evaluation
 
 Probabilistic/policy evaluation is separate from deterministic tests:

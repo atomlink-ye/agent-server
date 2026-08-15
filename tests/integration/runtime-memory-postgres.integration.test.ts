@@ -112,6 +112,13 @@ describe('runtime memory PostgreSQL materialization', () => {
         lastMessage: 'done',
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
+      fetchAgentTimeline: async () => ({
+        epoch: 'epoch-1',
+        startCursor: null,
+        endCursor: null,
+        window: { minSeq: 0, maxSeq: 0, nextSeq: 1 },
+        entries: [],
+      }),
       close: async () => undefined,
     };
     const runtime = new PaseoExecutionPlane(

@@ -11,6 +11,19 @@ const token = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
 const timeoutMs = Number(
   process.env.USER_DEFINED_TEAM_WORK_LIFECYCLE_TIMEOUT_MS ?? 420_000,
 );
+const defaultWorkspaceId = '00000000-0000-4000-8000-000000000001';
+const agentServerWorkspaceId =
+  process.env.AGENT_SERVER_WORKSPACE_ID?.trim() ?? defaultWorkspaceId;
+const webWorkspaceId =
+  process.env.WEB_WORKSPACE_ID?.trim() ?? defaultWorkspaceId;
+const completionApprovalRaw =
+  process.env.AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED?.trim() ?? 'false';
+const completionApprovalRequired = ['true', '1'].includes(
+  completionApprovalRaw.toLowerCase(),
+);
+const validCompletionApprovalValue = ['true', 'false', '1', '0'].includes(
+  completionApprovalRaw.toLowerCase(),
+);
 const startedAt = Date.now();
 const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 const transcriptDirectory = join(
@@ -24,6 +37,21 @@ const transcriptPath = join(transcriptDirectory, 'http-transcript.jsonl');
 if (!baseUrl || !token) {
   throw new Error(
     'AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN are required',
+  );
+}
+if (!validCompletionApprovalValue) {
+  throw new Error(
+    `AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED must be true, false, 1, or 0; received ${JSON.stringify(completionApprovalRaw)}`,
+  );
+}
+if (completionApprovalRequired) {
+  throw new Error(
+    'AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED must be false: the Product Work lifecycle has no completion approval command',
+  );
+}
+if (agentServerWorkspaceId !== webWorkspaceId) {
+  throw new Error(
+    `workspace configuration mismatch: AGENT_SERVER_WORKSPACE_ID=${agentServerWorkspaceId} WEB_WORKSPACE_ID=${webWorkspaceId}`,
   );
 }
 
@@ -49,17 +77,6 @@ function recordHttpTranscript(entry) {
 
 function pause(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-function usageSummary(usage) {
-  if (!usage || typeof usage !== 'object') return undefined;
-  const fields = ['input_tokens', 'output_tokens', 'total_cost_usd'];
-  const summary = Object.fromEntries(
-    fields
-      .filter((field) => Number.isFinite(usage[field]))
-      .map((field) => [field, usage[field]]),
-  );
-  return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
 async function request(
@@ -114,43 +131,6 @@ async function request(
   return json;
 }
 
-function managedAgentYaml(name, instructions, tools) {
-  return `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
-metadata:
-  name: ${name}
-spec:
-  description: User-defined Team Work lifecycle smoke role
-  instructions: ${JSON.stringify(instructions)}
-  runtime:
-    provider: paseo
-    modelPolicyRef: free-only
-    mode: isolated
-  tools:
-${tools.map((tool) => `    - ref: agent-server/${tool}\n      kind: tool`).join('\n')}
-  skills: []
-  input:
-    schema:
-      type: object
-      properties: {}
-      additionalProperties: false
-    prompt: "Execute exactly the next legal Team transition for your role."
-  session:
-    invocation: fresh_per_invocation
-    followUps: queued
-    binding: reusable
-  memory:
-    policy: workspace_snapshot
-    proposalLimit: 0
-  permissions:
-    network: read_only
-    filesystem: workspace_read
-  completion:
-    type: executable
-    command: "done"
-`;
-}
-
 async function importAndPublish(source, importPath, publishPath) {
   const imported = await request(importPath, {
     method: 'POST',
@@ -173,15 +153,12 @@ async function pollWorkRun(workId, workRunId) {
   while (Date.now() < deadline) {
     const observed = await request(
       `/api/v1/works/${workId}/runs/${workRunId}`,
-      {
-        allowStatuses: [200, 503],
-      },
+      { allowStatuses: [200, 503] },
     );
     if (observed.status === 503) {
-      const unavailable = observed.body;
-      if (unavailable?.error?.code !== 'projection_unavailable') {
+      if (observed.body?.error?.code !== 'projection_unavailable') {
         throw new Error(
-          `unexpected projection 503: ${JSON.stringify(unavailable)}`,
+          `unexpected projection 503: ${JSON.stringify(observed.body)}`,
         );
       }
       progress('projection_unavailable');
@@ -197,13 +174,115 @@ async function pollWorkRun(workId, workRunId) {
       });
       lastState = state;
     }
-    if (state !== 'running') return projection;
-    await pause(1_000);
+    if (state === 'running') {
+      await pause(1_000);
+      continue;
+    }
+    if (state === 'needs_you') {
+      throw new Error(
+        'WorkRun reached needs_you: the Product Work lifecycle has no completion approval command',
+      );
+    }
+    if (['complete', 'problem', 'not_captured'].includes(state)) {
+      return projection;
+    }
+    throw new Error(
+      `WorkRun returned an unknown product_state: ${JSON.stringify(projection.work_run)}`,
+    );
   }
   throw new Error('work_run_projection_timeout');
 }
 
+const leadSource = `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: smoke-lead
+spec:
+  description: Canonical Agent Team smoke role
+  instructions: 'Act as Team Lead using only canonical Team tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call team_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: agent-server/team-state
+      kind: tool
+    - ref: agent-server/team-work-list
+      kind: tool
+    - ref: agent-server/team-work-create
+      kind: tool
+    - ref: agent-server/team-work-accept-v2
+      kind: tool
+    - ref: agent-server/team-finish
+      kind: tool
+  skills: []
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: "Execute exactly the next legal Team transition for your role."
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: read_only
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: "done"
+`;
+
+const analystSource = `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: smoke-analyst
+spec:
+  description: Canonical Agent Team smoke role
+  instructions: 'Act as the assigned Team member using canonical Team tools. Read the board, locate your active Work, and submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.'
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools:
+    - ref: agent-server/team-state
+      kind: tool
+    - ref: agent-server/team-work-list
+      kind: tool
+    - ref: agent-server/team-work-submit
+      kind: tool
+  skills: []
+  input:
+    schema:
+      type: object
+      properties: {}
+      additionalProperties: false
+    prompt: "Execute exactly the next legal Team transition for your role."
+  session:
+    invocation: fresh_per_invocation
+    followUps: queued
+    binding: reusable
+  memory:
+    policy: workspace_snapshot
+    proposalLimit: 0
+  permissions:
+    network: read_only
+    filesystem: workspace_read
+  completion:
+    type: executable
+    command: "done"
+`;
+
 async function main() {
+  progress('configuration_verified', {
+    AGENT_SERVER_WORKSPACE_ID: agentServerWorkspaceId,
+    WEB_WORKSPACE_ID: webWorkspaceId,
+    AGENT_SERVER_TEAM_COMPLETION_APPROVAL_REQUIRED: completionApprovalRequired,
+  });
   progress('started', {
     provider: defaults.PASEO_PROVIDER,
     model: defaults.PASEO_MODEL,
@@ -212,26 +291,12 @@ async function main() {
   });
 
   const lead = await importAndPublish(
-    managedAgentYaml(
-      `user-work-lifecycle-lead-${scenarioId}`,
-      'Act as Team Lead using only canonical Team tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return lifecycle marker" and description "Submit exactly USER_DEFINED_TEAM_WORK_LIFECYCLE_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call team_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.',
-      [
-        'team-state',
-        'team-work-list',
-        'team-work-create',
-        'team-work-accept-v2',
-        'team-finish',
-      ],
-    ),
+    leadSource,
     '/api/v1/agents:import',
     (id) => `/api/v1/agent-versions/${id}:publish`,
   );
   const analyst = await importAndPublish(
-    managedAgentYaml(
-      `user-work-lifecycle-analyst-${scenarioId}`,
-      'Act as the assigned Team member using canonical Team tools. Read the board, locate your active Work, and submit it exactly once with result summary USER_DEFINED_TEAM_WORK_LIFECYCLE_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.',
-      ['team-state', 'team-work-list', 'team-work-submit'],
-    ),
+    analystSource,
     '/api/v1/agents:import',
     (id) => `/api/v1/agent-versions/${id}:publish`,
   );
@@ -333,7 +398,8 @@ spec:
     method: 'POST',
     body: {
       trigger_kind: 'manual',
-      trigger_ref: `user-defined-team-${scenarioId}`,
+      trigger_ref:
+        'Complete the canonical one-member Team smoke and return AGENT_TEAM_SMOKE_MEMBER_OK.',
     },
     expectedStatus: 202,
   });
@@ -355,9 +421,7 @@ spec:
 
   const trace = await request(
     `/api/v1/works/${workId}/runs/${workRunId}/trace`,
-    {
-      expectedStatus: 200,
-    },
+    { expectedStatus: 200 },
   );
   const traceRuns = Array.isArray(trace.runs) ? trace.runs : [];
   const providerRunIds = traceRuns
@@ -370,15 +434,20 @@ spec:
 
   const usage = { input_tokens: 0, output_tokens: 0, total_cost_usd: 0 };
   const runtimeModels = new Set();
+  let nullUsageRecordsSkipped = 0;
   for (const runId of providerRunIds) {
     const run = await request(`/api/v1/runs/${encodeURIComponent(runId)}`, {
       expectedStatus: 200,
     });
+    if (!run.usage || typeof run.usage !== 'object') {
+      nullUsageRecordsSkipped += 1;
+      continue;
+    }
     if (run.runtime?.provider && run.runtime?.model) {
       runtimeModels.add(`${run.runtime.provider}/${run.runtime.model}`);
     }
     for (const field of Object.keys(usage)) {
-      const value = run.usage?.[field];
+      const value = run.usage[field];
       if (typeof value === 'number' && Number.isFinite(value))
         usage[field] += value;
     }
@@ -398,6 +467,7 @@ spec:
     trace_run_count: traceRuns.length,
     orchestration_records_skipped: orchestrationRecordsSkipped,
     provider_run_count: providerRunIds.length,
+    null_usage_records_skipped: nullUsageRecordsSkipped,
     runtime_models: [...runtimeModels],
     usage,
   });
@@ -409,6 +479,7 @@ spec:
       product_state: projection.work_run.product_state,
       trace_run_count: traceRuns.length,
       orchestration_records_skipped: orchestrationRecordsSkipped,
+      null_usage_records_skipped: nullUsageRecordsSkipped,
       runtime_models: [...runtimeModels],
       usage,
       duration_ms: Date.now() - startedAt,

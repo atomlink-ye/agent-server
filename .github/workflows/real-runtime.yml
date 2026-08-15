@@ -148,15 +148,15 @@ jobs:
           AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
 
-      - name: Real-provider Team registry Work lineage
+      - name: 'Product chain: registry + work identity + projection reachability (no execution assertion)'
         if: steps.credentials.outputs.available == 'true'
         env:
           SMOKE_OUTPUT_FILE: .local/test-runs/team-registry-work.ndjson
         run: pnpm smoke:team-registry-work
 
-      - name: Real-provider user-defined Team Work lifecycle
+      - name: Real-provider user-defined Team Work execution lifecycle
         if: steps.credentials.outputs.available == 'true'
-        run: pnpm smoke:user-defined-team-work-lifecycle
+        run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
 
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'

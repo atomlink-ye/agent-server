@@ -460,16 +460,15 @@ export class PostgresCollaborationRepository
         owner: input.owner,
       });
       const attempt = await client.query<AttemptRow>(
-        `UPDATE team_work_item_attempts SET status='completed',result_summary=$7,completed_at=now(),updated_at=now()
+        `UPDATE team_work_item_attempts SET status='completed',result_summary=$6,completed_at=now(),updated_at=now()
           WHERE id=$1 AND team_run_id=$2 AND work_item_id=$3 AND assignee_member_id=$4
-            AND execution_task_id=$5 AND status='running' AND ${ownerSql('', 8)} RETURNING *`,
+            AND execution_task_id=$5 AND status='running' AND ${ownerSql('', 7)} RETURNING *`,
         [
           input.attemptId,
           input.teamRunId,
           input.workItemId,
           input.participantMemberId,
           input.sourceTaskId,
-          input.sourceRunId,
           input.summary,
           ...ownerValues(input.owner),
         ],

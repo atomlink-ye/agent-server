@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 
+// Scope: registry (agents/environments/teams import+publish) + work identity
+// + projection reachability. NOT execution: this actor does not wait for a
+// terminal WorkRun state or assert provider usage.
+//
+// Intentional limitations:
+// - agentYaml() uses tools: [], so its lead/member cannot use the Team board or
+//   finish tools; this Team cannot produce useful Team work even if awaited.
+// - POST /works/:id/runs omits trigger_ref. Work identity consequently assigns
+//   the lead a generated UUID target (triggerRef ?? randomUUID()).
+
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
@@ -380,5 +390,5 @@ await record({
   },
 });
 process.stdout.write(
-  `${JSON.stringify({ outcome: 'PASS', output_file: outputPath, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
+  `${JSON.stringify({ outcome: 'PASS', execution_asserted: false, output_file: outputPath, team_a: teamA, work_id: workId, work_run_id: workRunId, team_b: teamB, team_c: teamC })}\n`,
 );

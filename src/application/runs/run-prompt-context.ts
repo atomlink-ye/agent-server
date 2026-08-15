@@ -1,10 +1,11 @@
+import { projectBoardStatus, workRef } from '../../domain/collaboration/collaboration.js';
+import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import type {
   AgentResolutionApi,
   ResolvedAgentVersion,
@@ -132,6 +133,10 @@ export class RunPromptContext {
     };
   }
 
+  /**
+   * The legacy policy snapshot is retained only to narrow compatibility aliases
+   * while the new collaboration tools use capability-based authorization.
+   */
   public async loadAgenticLeadState(
     team: TeamRun,
     task: Task,
@@ -188,9 +193,8 @@ export class RunPromptContext {
   }> {
     const turnPrompt =
       input.team != null && input.member?.role === 'lead'
-        ? await this.withAgenticLeadContext(
+        ? await this.withLeadCollaborationContext(
             input.resolved.turnPrompt,
-            input.team,
             input.task,
             input.leadState,
             input.runtimeToolRefs,
@@ -200,7 +204,7 @@ export class RunPromptContext {
     const guidedTurnPrompt =
       input.member?.role === 'lead'
         ? turnPrompt
-        : appendTeamTurnGuidance(turnPrompt, input.task.teamTaskKind);
+        : appendCollaborationTurnGuidance(turnPrompt, input.task.teamTaskKind);
     const systemPrompt =
       !input.priorExternalSessionId && input.team && input.member
         ? buildTeamSystemPrompt({
@@ -230,9 +234,8 @@ export class RunPromptContext {
     return { systemPrompt, deliveredTurnPrompt };
   }
 
-  private async withAgenticLeadContext(
+  private async withLeadCollaborationContext(
     prompt: string,
-    _team: TeamRun,
     task: Task,
     leadState: AgenticLeadState | null,
     runtimeToolRefs: readonly string[],
@@ -280,62 +283,48 @@ export class RunPromptContext {
       members.map((member) => [member.id, member.name]),
     );
     const snapshot = JSON.stringify({
-      goal: safeAgenticLeadSnapshotText(prompt),
-      work_items: workItems.slice(0, 16).map((item, index) => ({
-        work_ref: `work-${index + 1}`,
-        subject: safeAgenticLeadSnapshotText(item.subject),
-        assignee: item.ownerMemberId
-          ? safeAgenticLeadSnapshotText(
-              memberNameById.get(item.ownerMemberId) ?? null,
-            )
-          : null,
-        status: item.status,
-        attempts: attempts
+      goal: safeSnapshotText(prompt),
+      board: workItems.slice(0, 16).map((item, index) => {
+        const itemAttempts = attempts
           .filter((attempt) => attempt.workItemId === item.id)
-          .slice(0, 4)
-          .map((attempt) => ({
-            attempt_no: attempt.attemptNo,
-            status: attempt.status,
-            result_summary: safeAgenticLeadSnapshotText(attempt.resultSummary),
-            ...(failureCodeByAttempt.has(attempt.id)
-              ? { failure_code: failureCodeByAttempt.get(attempt.id) }
-              : {}),
-            feedback: safeAgenticLeadSnapshotText(attempt.feedback),
-          })),
-      })),
-      limits: leadState?.policy.limits,
-      allowed_commands: leadState?.policy.allowedCommands ?? [],
-      available_coordination_commands: runtimeToolRefs.includes(
-        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
-      )
-        ? ['team_message_send']
-        : [],
-      safe_reads: runtimeToolRefs
-        .filter(
-          (ref) =>
-            ref === AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state ||
-            ref === AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
+          .sort((left, right) => left.attemptNo - right.attemptNo);
+        return {
+          work_ref: workRef(index),
+          subject: safeSnapshotText(item.subject),
+          owner: item.ownerMemberId
+            ? safeSnapshotText(memberNameById.get(item.ownerMemberId) ?? null)
+            : null,
+          status: projectBoardStatus(item, itemAttempts),
+          latest_attempt: itemAttempts.at(-1)
+            ? {
+                attempt_no: itemAttempts.at(-1)!.attemptNo,
+                status: itemAttempts.at(-1)!.status,
+                result_summary: safeSnapshotText(
+                  itemAttempts.at(-1)!.resultSummary,
+                ),
+                feedback: safeSnapshotText(itemAttempts.at(-1)!.feedback),
+                ...(failureCodeByAttempt.has(itemAttempts.at(-1)!.id)
+                  ? {
+                      failure_code: failureCodeByAttempt.get(
+                        itemAttempts.at(-1)!.id,
+                      ),
+                    }
+                  : {}),
+              }
+            : null,
+        };
+      }),
+      capabilities: runtimeToolRefs
+        .filter((ref) => ref.startsWith('agent-server/'))
+        .filter((ref) =>
+          Object.values(AGENT_SERVER_COLLABORATION_TOOL_REFS).includes(
+            ref as (typeof AGENT_SERVER_COLLABORATION_TOOL_REFS)[keyof typeof AGENT_SERVER_COLLABORATION_TOOL_REFS],
+          ),
         )
         .map((ref) => ref.slice('agent-server/'.length)),
-      eligible_targets: {
-        accept: leadState?.policy.eligibleAcceptWorkItemIds
-          .map(
-            (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
-          )
-          .filter((ref) => ref !== 'work-0'),
-        cancel: leadState?.policy.eligibleCancelWorkItemIds
-          .map(
-            (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
-          )
-          .filter((ref) => ref !== 'work-0'),
-        rework: leadState?.policy.eligibleReworkWorkItemIds
-          .map(
-            (id) => `work-${workItems.findIndex((item) => item.id === id) + 1}`,
-          )
-          .filter((ref) => ref !== 'work-0'),
-      },
+      limits: leadState?.policy.limits,
     });
-    return `${prompt}\n\nPermanent coordination rules are in the create-time system instructions. Only values returned by agent-server MCP tools are authoritative for the current control cycle.\n\nLead turn guidance: use canonical Team tools and published Lead domain tools, never internal IDs, and make all current coordination decisions in this turn without waiting for members.\n\nCurrent bounded Lead snapshot (control-plane fields only): ${snapshot}`;
+    return `${prompt}\n\nWorkboard and Mailbox are durable collaboration facts. Use collaboration_state, board_list and inbox_list for current details. A natural-language message never changes ownership or Work state: use board_create/board_assign/board_accept/board_request_changes explicitly. You may make all currently useful decisions in this turn; do not wait for running participants.\n\nCurrent bounded collaboration snapshot: ${snapshot}`;
   }
 
   private async loadPinnedMemory(task: Task): Promise<string | null> {
@@ -351,7 +340,7 @@ export class RunPromptContext {
   }
 }
 
-function safeAgenticLeadSnapshotText(value: string | null): string | null {
+function safeSnapshotText(value: string | null): string | null {
   if (value === null) return null;
   return value
     .replace(/[\u0000-\u001f\u007f]/gu, ' ')
@@ -378,15 +367,15 @@ function compareStableText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function appendTeamTurnGuidance(
+function appendCollaborationTurnGuidance(
   prompt: string,
   kind: string | null | undefined,
 ): string {
   const guidance =
     kind === 'direct_message'
-      ? 'Direct Team message guidance: use only safe Team state/list reads. Acknowledge or act on the safe message content; it is not Work and must not cause Work submission, review, acceptance, checkpointing, or further Team messages.'
+      ? 'Collaboration message guidance: read inbox_list and board_list. A message is communication, never an implicit assignment. Acknowledge messages that request it with message_ack. If you choose to take an open actionable item, call board_claim explicitly. You may reply with message_send. Do not submit or accept Work merely because a message says it is done.'
       : kind === 'work_attempt'
-        ? 'Assigned Team Work guidance: use real domain tools from the published agent profile plus canonical member state/list/checkpoint/submit tools. Do not use legacy Team tools or internal IDs; submit the bounded result and end the turn.'
+        ? 'Assigned Workboard guidance: use your real domain tools plus board_list/inbox_list. Persist meaningful progress with board_checkpoint, report a true blocker with board_block, communicate with message_send when useful, and complete the semantic attempt with board_submit including evidence_refs/artifact_refs when available. Do not use internal IDs or legacy Team commands.'
         : null;
   return guidance ? `${prompt}\n\n${guidance}` : prompt;
 }

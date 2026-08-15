@@ -10,6 +10,7 @@ Contracts are versioned boundaries that adapters and clients must test. They are
 - [Managed Environment API](contracts/managed-environment-api.md) documents the fixed authenticated Environment package, ProductSession pin, and internal RuntimeSession/Cell baseline.
 - [Self-learning Web API](contracts/self-learning-web-api.md) documents the fixed Project Lab BFF launch, bounded aggregate, root-bound review, safe errors, and local-only boundary.
 - [Agent and Team registry contract](contracts/agent-team-api.md) documents the durable registry model and Team compatibility boundary. The managed Agent HTTP contract below is the public managed Agent registry surface.
+- [Work lifecycle API](contracts/work-lifecycle-api.md) documents the minimum external client flow from managed Agent/Environment/Team publication through WorkRun polling and trace retrieval.
 - [Health API](contracts/health-api.md) defines liveness and dependency readiness.
 - [Runtime contract](contracts/runtime-contract.md) defines the leaf-agent application port and planned compatibility surface.
 

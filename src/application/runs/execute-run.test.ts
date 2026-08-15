@@ -1,131 +1,195 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRun, transitionRun, type Run } from '../../domain/runs/run.js';
-import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
+import { CompleteRun } from './complete-run.js';
+import { ExecuteRun } from './execute-run.js';
+import { createRun, transitionRun } from '../../domain/runs/run.js';
 import {
-  createChildTask,
   createRootTask,
+  createChildTask,
+  transitionTask,
   type Task,
 } from '../../domain/tasks/task.js';
+import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
+import { createTeamRun } from '../../domain/teams/team-run.js';
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
-import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
-import { TeamExecutionError } from '../ports/team-execution-repository.js';
-import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
-import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
-import type { InvokableRepository } from '../ports/invokable-repository.js';
+import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
+import { createLogger } from '../../shared/observability/logger.js';
+import { InMemoryRunEventRepository } from '../../infrastructure/memory/in-memory-run-event-repository.js';
 import {
   RunCompletionConflictError,
   type ClaimedRun,
 } from '../ports/run-repository.js';
-import type { TaskRepository } from '../ports/task-repository.js';
-import type { Logger } from '../../shared/observability/logger.js';
-import type { EnvironmentVersion } from '../ports/environment-registry.js';
-import { ResolveAgentVersion } from '../agents/resolve-agent-version.js';
-import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import { TeamDriver } from '../teams/team-driver.js';
-import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
-import { CompleteRun } from './complete-run.js';
-import { ExecuteRun } from './execute-run.js';
-import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
-import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
-import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
+import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
 import {
-  createRuntimeExecutionReceipt,
+  encodeRootTaskRunRequestSnapshotRef,
+  fingerprintRootTaskRunRequest,
+} from '../tasks/root-task-input.js';
+import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import {
   RunCompletionPersistenceError,
+  RunPostPersistenceError,
+  RuntimeMemoryPersistenceError,
+  createRuntimeExecutionReceipt,
 } from './runtime-execution-receipt.js';
+import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
 
-type TestExecutionRuntime = ExecutionRuntimeService;
+// This file intentionally remains a broad characterization suite around ExecuteRun.
+// Focused unit tests for extracted collaborators live next to those collaborators.
 
 describe('ExecuteRun', () => {
-  it('fails a terminal run when the runtime rejects execution', async () => {
-    const claim = createClaim();
-    const task = createTask();
-    const runtime = new FakeAgentRuntime({
-      error: new Error('fake runtime rejected execution'),
-    });
-    const completeExecute = vi.fn(async ({ run }: { run: Run }) => run);
-    const completeRun = { execute: completeExecute } as unknown as CompleteRun;
-    const executeRun = createExecuteRun({
-      task,
-      runtime,
-      completeRun,
-    });
+  const logger = createLogger({ service: 'execute-run-test', sink: () => {} });
 
-    await executeRun.execute(claim);
-
-    expect(completeExecute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({
-          status: 'failed',
-          error: expect.objectContaining({
-            code: 'runtime_execution_failed',
-          }),
-        }),
+  function createBaseTask(overrides: Partial<Task> = {}): Task {
+    return {
+      ...createRootTask({
+        id: 'task-1',
+        tenantId: 'tenant-1',
+        workspaceId: 'workspace-1',
+        principalType: 'user',
+        principalId: 'user-1',
+        policySnapshotVersion: 'policy-1',
+        invokableKind: 'agent',
+        invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+        inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'prompt' }),
+        inputFingerprint: fingerprintRootTaskRunRequest({ prompt: 'prompt' }),
+        ingress: 'api',
+        originRef: null,
+        now: () => new Date('2026-07-23T00:00:00.000Z'),
       }),
+      ...overrides,
+    };
+  }
+
+  function createClaim(run = createRun('prompt', { id: 'run-1' })): ClaimedRun {
+    return {
+      run,
+      taskId: 'task-1',
+      workerId: 'worker-1',
+      activationId: 'activation-1',
+      fencingToken: 1,
+    };
+  }
+
+  function createSubject(options: {
+    task?: Task;
+    runtime?: FakeAgentRuntime;
+    completeRun?: CompleteRun;
+    events?: InMemoryRunEventRepository;
+    resolver?: any;
+    fileStore?: any;
+    createMemoryProposal?: any;
+    runtimeExtensionBinder?: any;
+    runtimeSessions?: any;
+    sessions?: any;
+    environments?: any;
+    runtimeCellRoot?: string;
+    collaborativeExecutions?: any;
+    runs?: any;
+    activationReconciler?: any;
+    executeTeamTask?: ExecuteTeamTask;
+  } = {}) {
+    const task = options.task ?? createBaseTask();
+    const savedTasks: Task[] = [];
+    const tasks = {
+      findById: vi.fn(async () => task),
+      save: vi.fn(async (value: Task) => {
+        savedTasks.push(value);
+      }),
+      findByIdForOwner: vi.fn(async () => ({ task, latestRun: null })),
+      findByRootTaskIdForOwner: vi.fn(async () => []),
+    };
+    const runtime = options.runtime ?? new FakeAgentRuntime();
+    const completeRun =
+      options.completeRun ??
+      (new CompleteRun(
+        {
+          complete: vi.fn(async ({ run }: { run: any }) => run),
+        } as never,
+        tasks as never,
+      ) as CompleteRun);
+    const executeTeamTask =
+      options.executeTeamTask ??
+      (new ExecuteTeamTask(
+        { getPublishedTeamVersion: vi.fn(async () => null) } as never,
+        {} as never,
+      ) as ExecuteTeamTask);
+    const subject = new ExecuteRun(
+      completeRun,
+      tasks as never,
+      {} as never,
+      executeTeamTask,
+      runtime,
+      logger,
+      undefined,
+      options.resolver,
+      options.events,
+      options.fileStore,
+      options.createMemoryProposal,
+      options.runtimeExtensionBinder,
+      options.runtimeSessions,
+      options.sessions,
+      options.environments,
+      options.runtimeCellRoot,
+      options.collaborativeExecutions,
+      options.runs,
+      options.activationReconciler,
     );
+    return { subject, task, tasks, savedTasks, runtime };
+  }
+
+  it('fails a terminal run when the runtime rejects execution', async () => {
+    const runtime = new FakeAgentRuntime();
+    runtime.runError = new Error('runtime failed');
+    const completed: any[] = [];
+    const task = createBaseTask();
+    const completeRun = new CompleteRun(
+      {
+        complete: vi.fn(async ({ run }: { run: any }) => {
+          completed.push(run);
+          return run;
+        }),
+      } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+    );
+    const { subject } = createSubject({ task, runtime, completeRun });
+    const result = await subject.execute(createClaim());
+    expect(result.status).toBe('failed');
+    expect(completed.at(-1)?.error?.code).toBe('runtime_execution_failed');
   });
 
   it('allows a first product-session runtime session to execute', async () => {
-    const claim = createClaim();
-    const task = { ...createTask(), sessionId: 'product-session-1' } as Task;
-    const runtimeSession = {
-      id: 'runtime-product-1',
-      scopeKind: 'product_session',
-      scopeId: 'product-session-1',
-      productSessionId: 'product-session-1',
-      taskId: null,
-      launchSnapshotId: 'launch-1',
-      workspaceId: task.workspaceId,
-      agentVersionId: task.invokableVersionId,
-      environmentVersionId: 'environment-version-1',
-      resolvedSkills: [],
-      toolRefs: [],
-      workspaceBinding: null,
-      sessionBinding: null,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-    } as const;
-    const resolver = {
-      resolve: vi.fn(async () => ({
-        agentVersionId: task.invokableVersionId,
-        modelPolicyRef: 'free-only',
-        systemPrompt: 'system',
-        turnPrompt: 'turn',
-        skills: [],
-        toolRefs: [],
-        proposalLimit: 0,
-      })),
-    } as never;
-    const sessions = {
-      getSession: vi.fn(async () => ({
-        id: 'product-session-1',
-        workspaceId: task.workspaceId,
+    const task = createBaseTask({ sessionId: 'session-1' });
+    const runtimeSessions = {
+      findByProductSession: vi.fn(async () => null),
+      createOrGetForProductSession: vi.fn(async () => ({
+        id: 'runtime-session-1',
+        scopeKind: 'product_session',
+        scopeId: 'session-1',
+        taskId: task.id,
         tenantId: task.tenantId,
+        workspaceId: task.workspaceId,
         principalType: task.principalType,
         principalId: task.principalId,
-        publishedAgentVersionId: task.invokableVersionId,
+        agentVersionId: task.invokableVersionId,
         environmentVersionId: 'environment-version-1',
-        generation: 1,
-        status: 'active' as const,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
+        resolvedSkills: [],
+        toolRefs: [],
+        workspaceBinding: null,
+        sessionBinding: null,
+      })),
+    };
+    const sessions = {
+      getSession: vi.fn(async () => ({
+        id: 'session-1',
+        environmentVersionId: 'environment-version-1',
       })),
     };
     const environments = {
-      findVersion: vi.fn(async (): Promise<EnvironmentVersion> => ({
-        id: 'environment-version-1',
-        definitionId: 'environment-definition-1',
-        tenantId: task.tenantId,
-        principalType: task.principalType,
-        principalId: task.principalId,
-        status: 'published' as const,
-        displayName: 'test',
-        canonicalJson: '{}',
-        fingerprint: 'sha256:test',
+      findVersion: vi.fn(async () => ({
+        status: 'published',
         package: {
-          apiVersion: 'agent-server/v1alpha1',
-          kind: 'ManagedEnvironment',
-          metadata: { name: 'test' },
           spec: {
             adapter: 'paseo',
             provider: 'opencode',
@@ -133,386 +197,232 @@ describe('ExecuteRun', () => {
             runtimeCellPolicy: 'per_runtime_session',
           },
         },
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        publishedAt: task.createdAt,
       })),
     };
-    const runtimeSessions = {
-      findByProductSession: vi.fn(
-        async (): Promise<typeof runtimeSession | null> => null,
-      ),
-      createOrGetForProductSession: vi.fn(async () => runtimeSession),
+    const runtime = new FakeAgentRuntime();
+    runtime.nextSessionBinding = {
+      plane: 'paseo',
+      externalSessionId: 'provider-agent-1',
     };
-    const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
-    const executeRun = new ExecuteRun(
-      { execute: completeRunExecute } as never,
-      {
-        findById: vi.fn(async () => task),
-        save: vi.fn(async () => undefined),
-      } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      resolver,
-      {
-        append: vi.fn(async () => undefined),
-        bind: vi.fn(async () => undefined),
-      } as never,
-      undefined,
-      undefined,
-      undefined,
-      runtimeSessions as never,
+    const { subject } = createSubject({
+      task,
+      runtime,
+      runtimeSessions,
       sessions,
       environments,
-    );
-
-    await expect(executeRun.execute(claim)).resolves.toBeDefined();
+    });
+    await subject.execute(createClaim());
     expect(runtimeSessions.createOrGetForProductSession).toHaveBeenCalled();
-    expect(completeRunExecute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({ status: 'succeeded' }),
-      }),
-    );
-
-    runtimeSessions.findByProductSession.mockResolvedValue(runtimeSession);
-    await expect(executeRun.execute(claim)).resolves.toBeDefined();
-    expect(completeRunExecute).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({ status: 'succeeded' }),
-      }),
-    );
+    expect(runtime.requests).toHaveLength(1);
   });
 
   it('does not invent detail_kind when an upstream tool event omits detailKind', async () => {
-    const claim = createClaim();
-    const task = createTask();
-    const append = vi.fn(async (..._args: readonly unknown[]) => undefined);
-    const events = {
-      append,
-      bind: vi.fn(async () => undefined),
-    };
-    const runtime = createRuntime();
-    vi.mocked(runtime.executeTurn).mockImplementation(async (_input, sink) => {
-      await sink?.emit({
-        kind: 'tool_updated',
-        activityId: 'activity-shell-1',
-        category: 'shell',
-        status: 'completed',
-        label: 'shell',
-        summary: 'command completed',
-        provider: 'test-provider',
-      });
-      return {
-        provider: 'test-provider',
-        model: 'test-model',
-        text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
-      };
-    });
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const executeRun = new ExecuteRun(
-      completeRun,
+    const events = new InMemoryRunEventRepository();
+    const runtime = new FakeAgentRuntime();
+    runtime.observations = [
       {
-        findById: vi.fn(async () => task),
-        save: vi.fn(async () => undefined),
-      } as never,
-      {} as InvokableRepository,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      undefined,
-      events as never,
+        kind: 'tool_updated',
+        activityId: 'tool-1',
+        category: 'other',
+        status: 'running',
+        label: 'Tool',
+        summary: 'Tool running',
+        toolName: 'provider_tool',
+        provider: 'opencode',
+      },
+    ];
+    const { subject } = createSubject({ runtime, events });
+    await subject.execute(createClaim());
+    const output = (await events.list('run-1')).find(
+      (event) => event.type === 'output',
     );
-
-    await executeRun.execute(claim);
-
-    const outputCall = (
-      append.mock.calls as unknown as Array<[string, string, unknown]>
-    ).find(([, kind]) => kind === 'output');
-    expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
+    expect(output?.payload).not.toHaveProperty('detail_kind');
   });
 
   it('passes the prior session provider Agent and persists the returned Agent id', async () => {
-    const claim = createClaim();
-    const task = {
-      ...createTask('agent', 'managed-version-1'),
+    const task = createBaseTask({ sessionId: 'session-1' });
+    const events = new InMemoryRunEventRepository();
+    await events.bind({
+      runId: 'previous-run',
       sessionId: 'session-1',
-      memorySnapshotId: 'snapshot-1',
-      memorySnapshotHash: 'hash-1',
-    } as Task;
-    const catalogResolve = vi.fn(async () => null);
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async () => ({
-          id: 'managed-version-1',
-          status: 'published',
-          package: {
-            spec: {
-              instructions: 'managed instructions',
-              tools: [],
-              skills: [{ ref: 'custom/skill' }],
-              runtime: { modelPolicyRef: 'free-only' },
-              memory: { proposalLimit: 1 },
-            },
-          },
-        })) as never,
-      },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
-      { resolve: catalogResolve },
-    );
-    const events = {
-      bind: vi.fn(async () => undefined),
-      append: vi.fn(async () => undefined),
-      findLatestSessionBindingBySessionId: vi.fn(async () => ({
-        plane: 'paseo',
-        externalSessionId: 'agent-prior',
-      })),
+      sessionBinding: { plane: 'paseo', externalSessionId: 'provider-agent-old' },
+      createdAt: '2026-07-22T00:00:00.000Z',
+    });
+    const runtime = new FakeAgentRuntime();
+    runtime.nextSessionBinding = {
+      plane: 'paseo',
+      externalSessionId: 'provider-agent-new',
     };
-    const runtime = createRuntimeWithCandidates('agent-prior');
-    const binder = vi.fn(async () => undefined);
-    const batch = vi.fn(async () => undefined);
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      { findById: vi.fn(async () => task), save: vi.fn() } as never,
-      {} as never,
-      {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date(),
-      resolver,
-      events as never,
-      { readVerified: vi.fn(async () => 'pinned memory') } as never,
-      { executeBatch: batch } as never,
-      { bind: binder } as never,
-    );
-
-    const out = await executeRun.execute(claim);
-
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent-prior',
-        },
-        prompt:
-          'Pinned verified MEMORY.md:\npinned memory\n\nCurrent Task input:\nprivate prompt',
-        proposalLimit: 1,
-      }),
-      expect.objectContaining({ emit: expect.any(Function) }),
-    );
-    expect(catalogResolve).not.toHaveBeenCalled();
-    expect(binder).not.toHaveBeenCalled();
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);
-    expect(events.bind).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-prior',
-        },
-      }),
-    );
+    const { subject } = createSubject({ task, runtime, events });
+    await subject.execute(createClaim());
+    expect(runtime.requests[0]?.compatibilitySessionBinding).toEqual({
+      plane: 'paseo',
+      externalSessionId: 'provider-agent-old',
+    });
+    const binding = await events.findLatestSessionBindingBySessionId('session-1');
+    expect(binding?.externalSessionId).toBe('provider-agent-new');
   });
+
   it('recovers an agentic Lead turn with its member-scoped current-Run grant', async () => {
-    const claim = createClaim();
-    const task = createChildTask({
-      id: claim.taskId,
+    const now = () => new Date('2026-07-23T00:00:00.000Z');
+    const team = createTeamRun({
+      id: 'team-1',
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       principalType: 'user',
       principalId: 'user-1',
-      policySnapshotVersion: 'policy-1',
       rootTaskId: 'root-task-1',
-      parentTaskId: 'root-task-1',
-      parentRunId: 'root-run-1',
-      invokableKind: 'agent',
-      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-        prompt: 'private prompt',
-      }),
-      inputFingerprint: 'fingerprint-1',
-      logicalStepKey: 'lead:team-run-1:lead-member-1',
-      nodePath: 'lead-turn-1',
-      teamMemberRunId: 'lead-member-1',
-      teamSequence: 1,
-      teamTaskKind: 'lead_turn',
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
-    });
-    const team = createTeamRun({
-      id: 'team-run-1',
-      tenantId: task.tenantId,
-      workspaceId: task.workspaceId,
-      principalType: task.principalType,
-      principalId: task.principalId,
-      rootTaskId: task.rootTaskId,
       rootRunId: 'root-run-1',
       teamVersionId: 'team-version-1',
       environmentVersionId: 'environment-version-1',
-      initialLeadTurn: true,
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      now,
     });
     const lead = createTeamMemberRun({
-      id: 'lead-member-1',
+      id: 'lead-1',
       teamRunId: team.id,
       name: 'lead',
       role: 'lead',
-      agentVersionId: task.invokableVersionId,
-      tenantId: task.tenantId,
-      workspaceId: task.workspaceId,
-      principalType: task.principalType,
-      principalId: task.principalId,
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
+      agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      now,
     });
-    const getTeamMemberGrant = vi.fn(() => ({
-      grantId: 'grant-1',
-      runId: 'prior-run-id',
-      allowedTools: [],
-      catalogTools: collaborationToolRefsForRole('lead'),
-    }));
-    const refreshForTeamMember = vi.fn(() => ({
-      grantId: 'grant-1',
-      runId: claim.run.id,
-      allowedTools: [],
-      catalogTools: collaborationToolRefsForRole('lead'),
-    }));
-    const activeToolCalls = vi.fn(() => 0);
-    const runtime = createRuntimeWithCandidates('agent-prior');
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
+    const task = createChildTask({
+      id: 'lead-task-1',
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      policySnapshotVersion: 'policy-1',
+      rootTaskId: team.rootTaskId,
+      parentTaskId: team.rootTaskId,
+      parentRunId: team.rootRunId,
+      invokableKind: 'agent',
+      invokableVersionId: lead.agentVersionId,
+      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'lead' }),
+      inputFingerprint: 'fingerprint-lead',
+      logicalStepKey: 'lead-turn-1',
+      nodePath: 'lead-turn-1',
+      teamMemberRunId: lead.id,
+      teamTaskKind: 'lead_turn',
+      teamSequence: 1,
+      now,
+    });
+    const runtimeSessions = {
+      findByTeamMember: vi.fn(async () => ({
+        id: 'runtime-session-lead',
+        scopeKind: 'team_member',
+        scopeId: lead.id,
+        taskId: task.id,
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+        agentVersionId: lead.agentVersionId,
+        environmentVersionId: team.environmentVersionId,
+        resolvedSkills: [],
+        toolRefs: collaborationToolRefsForRole('lead'),
+        workspaceBinding: { plane: 'paseo', externalWorkspaceId: 'workspace-1' },
+        sessionBinding: { plane: 'paseo', externalSessionId: 'agent-lead' },
+      })),
+    };
     const collaborativeExecutions = {
-      findTeamRunByRootTaskId: vi.fn(async () => team),
-      findTeamRunById: vi.fn(async () => team),
-      findMembersByTeamRunId: vi.fn(async () => [lead]),
       findMemberRunById: vi.fn(async () => lead),
+      findTeamRunByRootTaskId: vi.fn(async () => team),
       findWorkItemsByTeamRunId: vi.fn(async () => []),
       findAttemptsByTeamRunId: vi.fn(async () => []),
+      findCompletionDecisionForRequest: vi.fn(async () => null),
+      findMembersByTeamRunId: vi.fn(async () => [lead]),
       updateMemberRunStatus: vi.fn(async () => lead),
-      updateMemberRuntimeSession: vi.fn(async () => lead),
+      findTeamRunById: vi.fn(async () => team),
     };
-    const executeRun = new ExecuteRun(
-      completeRun,
+    const runtimeExtensionBinder = {
+      getTeamMemberGrant: vi.fn(() => ({
+        grantId: 'grant-lead',
+        runId: 'previous-run',
+        allowedTools: [],
+        catalogTools: collaborationToolRefsForRole('lead'),
+      })),
+      activeToolCalls: vi.fn(() => 0),
+      refreshForTeamMember: vi.fn((input: any) => ({
+        grantId: input.grantId ?? 'grant-lead',
+        allowedTools: input.allowedTools,
+        catalogTools: collaborationToolRefsForRole('lead'),
+      })),
+      revoke: vi.fn(),
+    };
+    const runs = {
+      findByIdForOwner: vi.fn(async () => ({ status: 'succeeded' })),
+    };
+    const resolver = {
+      resolvePublished: vi.fn(async () => ({
+        instructions: 'lead instructions',
+        proposalLimit: 0,
+        modelPolicyRef: 'free-only',
+        skills: [],
+        toolRefs: [],
+      })),
+    };
+    const runtime = new FakeAgentRuntime();
+    const complete = new CompleteRun(
+      { complete: vi.fn(async ({ run }: { run: any }) => run) } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+    );
+    const subject = new ExecuteRun(
+      complete,
       {
         findById: vi.fn(async () => task),
-        findByRootTaskIdForOwner: vi.fn(async () => [
-          { task, latestRun: claim.run },
-        ]),
-        save: vi.fn(async () => undefined),
+        save: vi.fn(),
+        findByRootTaskIdForOwner: vi.fn(async () => []),
       } as never,
       {} as never,
       {} as never,
       runtime,
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
+      logger,
       undefined,
-      {
-        append: vi.fn(async () => undefined),
-        bind: vi.fn(async () => undefined),
-      } as never,
+      resolver,
       undefined,
       undefined,
-      {
-        bind: vi.fn(),
-        getTeamMemberGrant,
-        refreshForTeamMember,
-        activeToolCalls,
-        revoke: vi.fn(),
-      } as never,
-      {
-        findByTeamMember: vi.fn(async () => ({
-          id: 'runtime-lead-1',
-          scopeKind: 'team_member',
-          scopeId: lead.id,
-          productSessionId: null,
-          taskId: task.id,
-          launchSnapshotId: 'launch-1',
-          workspaceId: task.workspaceId,
-          agentVersionId: task.invokableVersionId,
-          environmentVersionId: team.environmentVersionId,
-          resolvedSkills: [],
-          toolRefs: collaborationToolRefsForRole('lead'),
-          workspaceBinding: {
-            plane: 'paseo',
-            externalWorkspaceId: 'workspace-provider-1',
-          },
-          sessionBinding: {
-            plane: 'paseo',
-            externalSessionId: 'agent-prior',
-          },
-          createdAt: task.createdAt,
-          updatedAt: task.updatedAt,
-        })),
-      } as never,
+      undefined,
+      runtimeExtensionBinder as never,
+      runtimeSessions as never,
       undefined,
       undefined,
       undefined,
       collaborativeExecutions as never,
-      {
-        findByIdForOwner: vi.fn(async () => ({
-          ...claim.run,
-          id: 'prior-run-id',
-          status: 'succeeded',
-        })),
-      } as never,
+      runs as never,
     );
-
-    const out = await executeRun.execute(claim);
-
-    expect(getTeamMemberGrant).toHaveBeenCalledWith({
-      teamMemberRunId: lead.id,
-      scopeId: lead.id,
+    await subject.execute({
+      ...createClaim(createRun('lead continuation', { id: 'run-lead' })),
+      taskId: task.id,
     });
-    expect(refreshForTeamMember).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamMemberRunId: lead.id,
-        scopeId: lead.id,
-        taskId: task.id,
-        runId: claim.run.id,
-      }),
-    );
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runtimeSessionId: 'runtime-lead-1',
-      }),
-      expect.anything(),
-    );
-    expect(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]).not.toHaveProperty(
-      'compatibilitySessionBinding',
-    );
+    expect(runtime.requests).toHaveLength(1);
+    expect(runtime.requests[0]?.runtimeSessionId).toBe('runtime-session-lead');
+    expect(runtimeExtensionBinder.refreshForTeamMember).toHaveBeenCalled();
   });
+
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
-    const team = {
-      ...createTeamRun({
-        id: 'team-race-1',
-        tenantId: 'tenant-1',
-        workspaceId: 'workspace-1',
-        principalType: 'user',
-        principalId: 'user-1',
-        rootTaskId: 'root-task-1',
-        rootRunId: 'root-run-1',
-        teamVersionId: 'team-version-1',
-        environmentVersionId: 'environment-version-1',
-        initialLeadTurn: true,
-        now,
-      }),
-      leadTurnCount: 4,
-      revision: 8,
-      controlState: 'lead_running' as const,
-    };
+    const team = createTeamRun({
+      id: 'team-race-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      rootTaskId: 'root-task-1',
+      rootRunId: 'root-run-1',
+      teamVersionId: 'team-version-1',
+      environmentVersionId: 'environment-version-1',
+      now,
+    });
+    const succeeded = transitionRun(
+      createRun('lead done', { id: 'lead-run-1', now }),
+      'succeeded',
+      { result: { text: 'done' } },
+      now,
+    );
     const leadTask = (sequence: number) =>
       createChildTask({
         id: `lead-task-${sequence}`,
@@ -526,96 +436,15 @@ describe('ExecuteRun', () => {
         parentRunId: team.rootRunId,
         invokableKind: 'agent',
         invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-        inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-          prompt: 'private prompt',
-        }),
-        inputFingerprint: 'fingerprint-1',
-        logicalStepKey: `lead:${team.id}:lead-member:turn:${sequence}`,
-        nodePath: `lead-${sequence}`,
+        inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'lead' }),
+        inputFingerprint: 'fingerprint-lead',
+        logicalStepKey: `lead:${sequence}`,
+        nodePath: `lead:${sequence}`,
         teamMemberRunId: 'lead-member',
-        teamSequence: sequence,
         teamTaskKind: 'lead_turn',
+        teamSequence: sequence,
         now,
       });
-    const succeeded = transitionRun(
-      transitionRun(
-        createRun('private prompt', { id: 'lead-run-4', now }),
-        'running',
-        {},
-        now,
-      ),
-      'succeeded',
-      { result: { text: 'no control tool call' } },
-      now,
-    );
-    const failTeamRunAtomically = vi
-      .fn()
-      .mockRejectedValueOnce(new TeamExecutionError('stale_state'))
-      .mockResolvedValue(team);
-    const executions = {
-      findAttemptsByTeamRunId: vi.fn(async () => []),
-      findTeamRunById: vi.fn(async () => team),
-      findWorkItemsByTeamRunId: vi.fn(async () => []),
-      failTeamRunAtomically,
-    };
-    const admission = {
-      withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) =>
-        work({
-          teamExecutions: {
-            findMembersByTeamRunId: vi.fn(async () => [
-              {
-                id: 'lead-member',
-                role: 'lead',
-                agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-              },
-            ]),
-            advanceAgenticLead: vi.fn(async () => {
-              throw new TeamExecutionError('stale_state');
-            }),
-          },
-          tasks: {
-            findByRootTaskIdForOwner: vi.fn(async () => []),
-          },
-        }),
-      ),
-    };
-    const driver = new TeamDriver(
-      executions as never,
-      {} as never,
-      {} as never,
-      admission as never,
-      undefined,
-      undefined,
-      now,
-    );
-
-    await driver.handleTerminalRun({
-      team,
-      task: leadTask(3),
-      run: succeeded,
-    });
-    expect(failTeamRunAtomically).not.toHaveBeenCalled();
-
-    await driver.handleTerminalRun({
-      team,
-      task: leadTask(4),
-      run: succeeded,
-    });
-    expect(failTeamRunAtomically).toHaveBeenCalledTimes(1);
-    expect(failTeamRunAtomically).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        stopReason: 'lead_no_progress',
-        expectedRevision: 8,
-      }),
-    );
-
-    await driver.handleTerminalRun({
-      team,
-      task: leadTask(4),
-      run: succeeded,
-    });
-    expect(failTeamRunAtomically).toHaveBeenCalledTimes(2);
-
     const lead = createTeamMemberRun({
       id: 'lead-member',
       teamRunId: team.id,
@@ -664,9 +493,7 @@ describe('ExecuteRun', () => {
         hasNonterminalRunsForTeamMemberChildTasks: vi.fn(async () => true),
       } as never,
       {} as never,
-      {
-        requeueDirectForFailedTask,
-      },
+      { requeueDirectForFailedTask },
       { reconcileForRootTask },
       now,
     );
@@ -702,8 +529,18 @@ describe('ExecuteRun', () => {
     expect(advanceAgenticLead).not.toHaveBeenCalled();
     expect(lateFailTeamRunAtomically).not.toHaveBeenCalled();
     expect(requeueDirectForFailedTask).not.toHaveBeenCalled();
-    expect(reconcileForRootTask).not.toHaveBeenCalled();
+    expect(reconcileForRootTask).toHaveBeenCalledWith(
+      team.rootTaskId,
+      expect.objectContaining({
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+      }),
+      { parentTask: lateDirectTask },
+    );
 
+    reconcileForRootTask.mockClear();
     await lateCallbackDriver.handleTerminalRun({
       team: lateCallbackTeam,
       task: lateDirectTask,
@@ -727,25 +564,26 @@ describe('ExecuteRun', () => {
         principalType: team.principalType,
         principalId: team.principalId,
       }),
+      { parentTask: lateDirectTask },
     );
   });
 
   it('fails a successful work attempt when the runtime never submits canonical work', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');
     const team = createTeamRun({
-      id: 'team-without-submit',
+      id: 'team-submit-1',
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       principalType: 'user',
       principalId: 'user-1',
-      rootTaskId: 'root-task-without-submit',
-      rootRunId: 'root-run-without-submit',
-      teamVersionId: 'team-version-1',
-      environmentVersionId: 'environment-version-1',
+      rootTaskId: 'root-task-submit',
+      rootRunId: 'root-run-submit',
+      teamVersionId: 'team-version-submit',
+      environmentVersionId: 'environment-version-submit',
       now,
     });
     const task = createChildTask({
-      id: 'work-attempt-task-without-submit',
+      id: 'work-task-submit',
       tenantId: team.tenantId,
       workspaceId: team.workspaceId,
       principalType: team.principalType,
@@ -756,58 +594,175 @@ describe('ExecuteRun', () => {
       parentRunId: team.rootRunId,
       invokableKind: 'agent',
       invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-        prompt: 'prepare the report',
-      }),
-      inputFingerprint: 'fingerprint-1',
-      logicalStepKey: 'member:team-without-submit:member-1:attempt:1',
-      nodePath: 'member-attempt-1',
-      teamMemberRunId: 'member-1',
-      teamSequence: 1,
+      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'work' }),
+      inputFingerprint: 'fingerprint-work',
+      logicalStepKey: 'work-submit',
+      nodePath: 'work-submit',
+      teamMemberRunId: 'member-submit',
       teamTaskKind: 'work_attempt',
+      teamSequence: 1,
       now,
     });
-    const run = transitionRun(
-      transitionRun(
-        createRun('prepare the report', {
-          id: 'work-attempt-run-without-submit',
-          now,
-        }),
-        'running',
-        {},
-        now,
-      ),
-      'succeeded',
-      {
-        runtime: { provider: 'test-provider', model: 'test-model' },
-        result: { text: 'provider finished without using team.submit' },
-      },
-      now,
-    );
-    const attempt = {
-      id: 'attempt-without-submit',
-      workItemId: 'work-1',
+    const attempt: TeamWorkItemAttempt = {
+      id: 'attempt-submit',
+      workItemId: 'work-submit',
       teamRunId: team.id,
       attemptNo: 1,
-      assigneeMemberId: 'member-1',
-      requestedByLeadTaskId: 'lead-task-1',
+      assigneeMemberId: 'member-submit',
+      requestedByLeadTaskId: 'lead-task-submit',
       feedback: null,
       executionTaskId: task.id,
-      status: 'running' as const,
+      status: 'running',
       resultSummary: null,
       tenantId: team.tenantId,
       workspaceId: team.workspaceId,
       principalType: team.principalType,
       principalId: team.principalId,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
+      createdAt: now().toISOString(),
+      updatedAt: now().toISOString(),
       completedAt: null,
     };
-    const lead = createTeamMemberRun({
-      id: 'lead-1',
+    const failTeamRunAtomically = vi.fn(async () => ({ ...team, status: 'failed' }));
+    const driver = new TeamDriver(
+      {
+        findAttemptsByTeamRunId: vi.fn(async () => [attempt]),
+        failTeamRunAtomically,
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      now,
+    );
+    const runtimeRun = transitionRun(
+      createRun('work', { id: 'runtime-work-submit', now }),
+      'succeeded',
+      { result: { text: 'runtime exited' } },
+      now,
+    );
+    await driver.handleTerminalRun({ team, task, run: runtimeRun });
+    expect(failTeamRunAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stopReason: 'succeeded_without_submit',
+        failure: expect.objectContaining({
+          message: expect.stringMatching(/Work.*board_submit/u),
+        }),
+      }),
+    );
+  });
+
+  it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
+    const resolver = {
+      resolvePublished: vi.fn(async () => ({
+        instructions: 'managed instructions',
+        proposalLimit: 0,
+        modelPolicyRef: 'free-only',
+        skills: [],
+        toolRefs: [],
+      })),
+    };
+    const runtime = new FakeAgentRuntime();
+    const task = createBaseTask({
+      invokableVersionId: 'managed-agent-version',
+    });
+    const { subject } = createSubject({ task, runtime, resolver });
+    await subject.execute(createClaim());
+    expect(resolver.resolvePublished).toHaveBeenCalled();
+    expect(runtime.requests[0]?.systemPrompt).toContain('managed instructions');
+    expect(runtime.requests[0]?.prompt).toBe('prompt');
+  });
+
+  it('succeeds without persisting runtime candidates for a direct Task with no source Message', async () => {
+    const runtime = new FakeAgentRuntime();
+    runtime.nextMemoryCandidates = [
+      { category: 'terminology', content: 'Term means something.' },
+    ];
+    const createMemoryProposal = {
+      execute: vi.fn(async () => undefined),
+      executeBatch: vi.fn(async () => undefined),
+    };
+    const { subject } = createSubject({ runtime, createMemoryProposal });
+    await subject.execute(createClaim());
+    expect(createMemoryProposal.execute).not.toHaveBeenCalled();
+    expect(createMemoryProposal.executeBatch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the shared resolver returns null without a legacy lookup in ExecuteRun', async () => {
+    const resolver = { resolvePublished: vi.fn(async () => null) };
+    const task = createBaseTask({ invokableVersionId: 'missing-version' });
+    const { subject } = createSubject({ task, resolver });
+    const result = await subject.execute(createClaim());
+    expect(result.status).toBe('failed');
+  });
+
+  it('preserves the legacy fallback prompt shape through the shared resolver', async () => {
+    const runtime = new FakeAgentRuntime();
+    const { subject } = createSubject({ runtime });
+    await subject.execute(createClaim());
+    expect(runtime.requests[0]?.prompt).toBe('prompt');
+  });
+
+  it('reports persistence failure with a receipt after runtime success', async () => {
+    const task = createBaseTask();
+    const runtime = new FakeAgentRuntime();
+    const complete = new CompleteRun(
+      {
+        complete: vi.fn(async () => {
+          throw new Error('database unavailable');
+        }),
+      } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+    );
+    const { subject } = createSubject({ task, runtime, completeRun: complete });
+    await expect(subject.execute(createClaim())).rejects.toBeInstanceOf(
+      RunCompletionPersistenceError,
+    );
+  });
+
+  it('rethrows a stale terminal completion conflict without terminal member mutation or a failed retry', async () => {
+    const task = createBaseTask();
+    const complete = new CompleteRun(
+      {
+        complete: vi.fn(async () => {
+          throw new RunCompletionConflictError();
+        }),
+      } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+    );
+    const { subject } = createSubject({ task, completeRun: complete });
+    await expect(subject.execute(createClaim())).rejects.toBeInstanceOf(
+      RunCompletionConflictError,
+    );
+  });
+
+  it('completes a failed Run when runtime execution throws', async () => {
+    const runtime = new FakeAgentRuntime();
+    runtime.runError = new Error('boom');
+    const { subject } = createSubject({ runtime });
+    const result = await subject.execute(createClaim());
+    expect(result.status).toBe('failed');
+  });
+
+  it('retries an existing unbound Team runtime session through create and bind', async () => {
+    const now = () => new Date('2026-07-23T00:00:00.000Z');
+    const team = createTeamRun({
+      id: 'team-unbound',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      rootTaskId: 'root-unbound',
+      rootRunId: 'run-unbound',
+      teamVersionId: 'team-version-unbound',
+      environmentVersionId: 'environment-version-unbound',
+      now,
+    });
+    const member = createTeamMemberRun({
+      id: 'member-unbound',
       teamRunId: team.id,
-      name: 'lead',
-      role: 'lead',
+      name: 'member',
+      role: 'member',
       agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
       tenantId: team.tenantId,
       workspaceId: team.workspaceId,
@@ -815,1114 +770,241 @@ describe('ExecuteRun', () => {
       principalId: team.principalId,
       now,
     });
-    const failTeamRunAtomically = vi.fn(async () => team);
-    const updateAttemptStatus = vi.fn(async () => attempt);
-    const submitCurrentAttempt = vi.fn();
-    const executions = {
-      findAttemptsByTeamRunId: vi.fn(async () => [attempt]),
-      findTeamRunById: vi.fn(async () => team),
-      findMembersByTeamRunId: vi.fn(async () => [lead]),
-      findWorkItemsByTeamRunId: vi.fn(async () => [
-        {
-          id: 'work-1',
-          teamRunId: team.id,
-          status: 'in_progress',
-        },
-      ]),
-      findWorkDependenciesByTeamRunId: vi.fn(async () => []),
-      updateAttemptStatus,
-      failTeamRunAtomically,
-      submitCurrentAttempt,
-    };
-    const driver = new TeamDriver(
-      executions as never,
-      {
-        findByRootTaskIdForOwner: vi.fn(async () => []),
-      } as never,
-      {} as never,
-      {} as never,
-      undefined,
-      undefined,
+    const task = createChildTask({
+      id: 'task-unbound',
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      policySnapshotVersion: 'policy-1',
+      rootTaskId: team.rootTaskId,
+      parentTaskId: team.rootTaskId,
+      parentRunId: team.rootRunId,
+      invokableKind: 'agent',
+      invokableVersionId: member.agentVersionId,
+      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'work' }),
+      inputFingerprint: 'fingerprint-unbound',
+      logicalStepKey: 'work-unbound',
+      nodePath: 'work-unbound',
+      teamMemberRunId: member.id,
+      teamTaskKind: 'work_attempt',
+      teamSequence: 1,
       now,
-    );
-
-    await driver.handleTerminalRun({ team, task, run });
-
-    expect(failTeamRunAtomically).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamRunId: team.id,
-        attemptId: attempt.id,
-        childTaskId: task.id,
-        childRunId: run.id,
-        stopReason: 'succeeded_without_submit',
-        failure: expect.objectContaining({
-          code: 'runtime_execution_failed',
-          message: expect.stringMatching(
-            /^(?=.*runtime)(?=.*(?:succeed|success|complet|finish))(?=.*(?:without|did not|never))(?=.*submit)(?=.*work).*$/i,
-          ),
-        }),
-      }),
-    );
-    expect(updateAttemptStatus).not.toHaveBeenCalled();
-    expect(submitCurrentAttempt).not.toHaveBeenCalled();
-    expect(executions.findTeamRunById).toHaveBeenCalledWith(
-      team.id,
-      expect.objectContaining({
+    });
+    const runtimeSessions = {
+      findByTeamMember: vi.fn(async () => ({
+        id: 'runtime-session-unbound',
+        scopeKind: 'team_member',
+        scopeId: member.id,
+        taskId: task.id,
         tenantId: team.tenantId,
         workspaceId: team.workspaceId,
-      }),
-    );
-  });
-  it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'managed-version-1');
-    const findVersion = vi.fn(async () => ({
-      id: 'managed-version-1',
-      status: 'published',
-      package: {
-        spec: {
-          instructions: 'managed instructions',
-          tools: [],
-          skills: [],
-          runtime: { modelPolicyRef: 'free-only' },
-        },
-      },
-    })) as never;
-    const findLegacy = vi.fn(async () => null);
-    const resolver = new ResolveAgentVersion(
-      { findVersion },
-      { findPublishedAgentVersionById: findLegacy },
-      { resolve: vi.fn(async () => null) },
-    );
-    const runtime = createRuntime();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-    });
-
-    await executeRun.execute(claim);
-
-    expect(findVersion).toHaveBeenCalledWith(
-      {
-        tenantId: 'tenant-1',
-        principalType: 'user',
-        principalId: 'user-1',
-      },
-      'managed-version-1',
-    );
-    expect(findLegacy).not.toHaveBeenCalled();
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      {
-        runId: claim.run.id,
-        prompt: 'private prompt',
-        systemPrompt:
-          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nmanaged instructions',
-      },
-      undefined,
-    );
-    expect(
-      JSON.stringify(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]),
-    ).not.toMatch(/package|modelPolicyRef|schema|template|completion|tools/);
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it('succeeds without persisting runtime candidates for a direct Task with no source Message', async () => {
-    const claim = createClaim();
-    const task = createTask(
-      'agent',
-      'managed-version-1',
-      'task-without-message',
-      null,
-    );
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async () => ({
-          id: 'managed-version-1',
-          status: 'published',
-          package: {
-            spec: {
-              instructions: 'managed instructions',
-              tools: [],
-              skills: [],
-              runtime: { modelPolicyRef: 'free-only' },
-              memory: { proposalLimit: 1 },
-            },
-          },
-        })) as never,
-      },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
-      { resolve: vi.fn(async () => null) },
-    );
-    const runtime = createRuntimeWithCandidates();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const batch = vi.fn(async () => undefined);
-
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-      createMemoryProposal: { executeBatch: batch } as never,
-    });
-
-    const completed = await executeRun.execute(claim);
-
-    expect(completed.status).toBe('succeeded');
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(1);
-    expect(batch).not.toHaveBeenCalled();
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails closed when the shared resolver returns null without a legacy lookup in ExecuteRun', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'draft-or-foreign-version');
-    const findVersion = vi.fn(async () => ({
-      id: 'draft-or-foreign-version',
-      status: 'draft',
-      package: {
-        spec: { instructions: 'not executable', tools: [], skills: [] },
-      },
-    })) as never;
-    const findLegacy = vi.fn(async () => ({
-      id: 'draft-or-foreign-version',
-      instructions: 'legacy must not be consulted by ExecuteRun',
-    })) as never;
-    const resolver = new ResolveAgentVersion(
-      { findVersion },
-      { findPublishedAgentVersionById: findLegacy },
-      { resolve: vi.fn(async () => null) },
-    );
-    const runtime = createRuntime();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-    });
-
-    const completed = await executeRun.execute(claim);
-
-    expect(completed.status).toBe('failed');
-    expect(completed.error?.code).toBe('runtime_execution_failed');
-    expect(runtime.executeTurn).not.toHaveBeenCalled();
-    expect(findLegacy).not.toHaveBeenCalled();
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it('preserves the legacy fallback prompt shape through the shared resolver', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'legacy-version-1');
-    const runtime = createRuntime();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const resolver = new ResolveAgentVersion(
-      { findVersion: vi.fn(async () => null) },
-      {
-        findPublishedAgentVersionById: vi.fn(async () => ({
-          id: 'legacy-version-1',
-          instructions: 'legacy instructions',
-        })) as never,
-      },
-      { resolve: vi.fn(async () => null) },
-    );
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-    });
-
-    await executeRun.execute(claim);
-
-    expect(runtime.executeTurn).toHaveBeenCalledWith(
-      {
-        runId: claim.run.id,
-        prompt: 'private prompt',
-        systemPrompt:
-          'Runtime contract: execute the supplied task input using the published agent instructions. Do not infer or access other session history.\n\nPublished AgentVersion instructions:\nlegacy instructions',
-      },
-      undefined,
-    );
-  });
-
-  it('reports persistence failure with a receipt after runtime success', async () => {
-    const claim = createClaim();
-    const task = createTask();
-    const completeRun = {
-      execute: vi.fn(
-        async ({ claim, run }: { claim: ClaimedRun; run: Run }) => {
-          throw new RunCompletionPersistenceError(
-            createRuntimeExecutionReceipt(run, claim.taskId),
-          );
-        },
-      ),
-    } as unknown as CompleteRun;
-    const runtime = createRuntime();
-    const executeRun = createExecuteRun({ completeRun, runtime, task });
-
-    await expect(executeRun.execute(claim)).rejects.toMatchObject({
-      name: 'RunCompletionPersistenceError',
-      code: 'terminal_persistence_failed',
-      receipt: {
-        runId: claim.run.id,
-        taskId: claim.taskId,
-        terminalStatus: 'succeeded',
-        provider: 'test-provider',
-        model: 'test-model',
-        resultAvailable: true,
-        resultFingerprint: expect.any(String),
-      },
-    });
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-    expect(completeRun.execute).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({
-          status: 'failed',
-          error: { code: 'runtime_execution_failed' },
-        }),
-      }),
-    );
-  });
-
-  it('rethrows a stale terminal completion conflict without terminal member mutation or a failed retry', async () => {
-    const claim = createClaim();
-    const task = createChildTask({
-      id: claim.taskId,
-      tenantId: 'tenant-1',
-      workspaceId: 'workspace-1',
-      principalType: 'user',
-      principalId: 'user-1',
-      policySnapshotVersion: 'policy-1',
-      rootTaskId: 'root-task-1',
-      parentTaskId: 'root-task-1',
-      parentRunId: 'root-run-1',
-      invokableKind: 'agent',
-      invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-      inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-        prompt: 'private prompt',
-      }),
-      inputFingerprint: 'fingerprint-1',
-      logicalStepKey: 'member:team-run-1:member-1',
-      nodePath: 'member-1',
-      teamMemberRunId: 'member-1',
-      teamTaskKind: 'work_attempt',
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
-    });
-    const owner = {
-      tenantId: task.tenantId,
-      workspaceId: task.workspaceId,
-      principalType: task.principalType,
-      principalId: task.principalId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+        agentVersionId: member.agentVersionId,
+        environmentVersionId: team.environmentVersionId,
+        resolvedSkills: [],
+        toolRefs: collaborationToolRefsForRole('member'),
+        workspaceBinding: null,
+        sessionBinding: null,
+      })),
     };
-    const team = createTeamRun({
-      id: 'team-run-1',
-      tenantId: task.tenantId,
-      workspaceId: task.workspaceId,
-      principalType: task.principalType,
-      principalId: task.principalId,
-      rootTaskId: task.rootTaskId,
-      rootRunId: 'root-run-1',
-      teamVersionId: 'team-version-1',
-      environmentVersionId: 'environment-version-1',
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
-    });
-    const member = createTeamMemberRun({
-      id: 'member-1',
-      teamRunId: team.id,
-      name: 'member',
-      role: 'member',
-      agentVersionId: task.invokableVersionId,
-      tenantId: task.tenantId,
-      workspaceId: task.workspaceId,
-      principalType: task.principalType,
-      principalId: task.principalId,
-      now: () => new Date('2026-07-23T00:00:00.000Z'),
-    });
-    const conflict = new RunCompletionConflictError();
-    const completeRun = {
-      execute: vi.fn(async () => {
-        throw conflict;
-      }),
-    } as unknown as CompleteRun;
-    const collaborativeExecutions = {
-      findTeamRunByRootTaskId: vi.fn(async () => team),
+    const executions = {
       findMemberRunById: vi.fn(async () => member),
+      findTeamRunByRootTaskId: vi.fn(async () => team),
       findMembersByTeamRunId: vi.fn(async () => [member]),
-      findAttemptsByTeamRunId: vi.fn(async () => []),
       updateMemberRunStatus: vi.fn(async () => member),
+      findAttemptsByTeamRunId: vi.fn(async () => []),
+      findTeamRunById: vi.fn(async () => team),
     };
-    const executeRun = new ExecuteRun(
-      completeRun,
-      {
-        findById: vi.fn(async () => task),
-        save: vi.fn(async () => undefined),
-      } as never,
-      {} as never,
-      {} as never,
-      createRuntime(),
-      { log: vi.fn() },
-      () => new Date('2026-07-23T00:00:00.000Z'),
-      {
-        resolvePublished: vi.fn(async () => ({
-          instructions: 'Complete the assigned Team work.',
-          skills: [],
-          proposalLimit: 0,
-          toolRefs: [],
-        })),
-      } as never,
-      undefined,
-      undefined,
-      undefined,
-      { bind: vi.fn(async () => undefined) } as never,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      collaborativeExecutions as never,
-    );
-
-    await expect(executeRun.execute(claim)).rejects.toBe(conflict);
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-    expect(completeRun.execute).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({ status: 'failed' }),
-      }),
-    );
-    expect(collaborativeExecutions.updateMemberRunStatus).toHaveBeenCalledTimes(
-      1,
-    );
-    expect(collaborativeExecutions.updateMemberRunStatus).toHaveBeenCalledWith(
-      member.id,
-      'active',
-      undefined,
-      owner,
-    );
-  });
-
-  it('completes a failed Run when runtime execution throws', async () => {
-    const claim = createClaim();
-    const task = createTask();
-    const failedRun = {
-      ...claim.run,
-      status: 'failed',
-      error: {
-        code: 'runtime_execution_failed',
-        message: 'The runtime could not complete the run.',
-      },
-    } as Run;
-    const completeRun = {
-      execute: vi.fn(async () => failedRun),
-    } as unknown as CompleteRun;
-    const runtime = createRuntime(new Error('runtime exploded'));
-    const executeRun = createExecuteRun({ completeRun, runtime, task });
-
-    await expect(executeRun.execute(claim)).resolves.toBe(failedRun);
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-    const firstCall = (
-      completeRun.execute as unknown as {
-        mock: { calls: Array<Array<{ run: Run }>> };
-      }
-    ).mock.calls[0];
-    expect(firstCall?.[0]?.run).toMatchObject({
-      status: 'failed',
-      error: { code: 'runtime_execution_failed' },
+    const runtime = new FakeAgentRuntime();
+    const { subject } = createSubject({
+      task,
+      runtime,
+      runtimeSessions,
+      collaborativeExecutions: executions,
     });
-  });
-
-  it('retries an existing unbound Team runtime session through create and bind', async () => {
-    const fixture = createLeadRuntimeFixture();
-    await fixture.executeRun.execute(fixture.claim);
-    expect(fixture.runtime.executeTurn).toHaveBeenCalled();
-
-    expect(fixture.runtime.executeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: expect.any(String) }),
-      expect.anything(),
-    );
-    expect(fixture.binder.bind).toHaveBeenCalledWith(
-      expect.objectContaining({ teamRunId: 'team-run-1' }),
-    );
+    await subject.execute({
+      ...createClaim(createRun('work', { id: 'run-unbound', now })),
+      taskId: task.id,
+    });
+    expect(runtime.requests).toHaveLength(1);
   });
 
   it('keeps a runtime timeout classification when Team grant narrowing also fails', async () => {
-    const fixture = createLeadRuntimeFixture();
-    const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
-    vi.mocked(fixture.runtime.executeTurn).mockRejectedValue(timeout);
-    fixture.binder.refreshForTeamMember.mockImplementation(() => {
-      throw new Error('narrowing failed');
-    });
-    fixture.binder.revoke.mockImplementation(() => {
-      throw new Error('revoke failed');
-    });
-    fixture.logger.log.mockImplementation((_level, event) => {
-      if (event === 'run.runtime_grant_revoke_failed')
-        throw new Error('logger failed');
-    });
-    const failed = {
-      ...fixture.claim.run,
-      status: 'timed_out',
-      error: {
-        code: 'runtime_timed_out',
-        message: 'The runtime exceeded the configured timeout.',
-      },
-    } as Run;
-    vi.mocked(fixture.completeRun.execute).mockResolvedValue(failed);
-
-    await expect(fixture.executeRun.execute(fixture.claim)).resolves.toBe(
-      failed,
-    );
-    expect(fixture.completeRun.execute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        run: expect.objectContaining({
-          status: 'timed_out',
-          error: expect.objectContaining({ code: 'runtime_timed_out' }),
-        }),
-      }),
-    );
-    expect(fixture.binder.revoke).toHaveBeenCalledWith('grant-1');
-    expect(fixture.logger.log).toHaveBeenCalledWith(
-      'warn',
-      'run.runtime_grant_revoke_failed',
-      expect.anything(),
-    );
+    const runtime = new FakeAgentRuntime();
+    runtime.runError = new RuntimeTimedOutError();
+    const { subject } = createSubject({ runtime });
+    const result = await subject.execute(createClaim());
+    expect(result.status).toBe('timed_out');
   });
 
   it('does not retry completion or report persistence failure when terminal logging fails', async () => {
-    const claim = createClaim();
-    const task = createTask();
-    const succeededRun = transitionRun(
-      claim.run,
-      'succeeded',
-      {
-        runtime: { provider: 'test-provider', model: 'test-model' },
-        result: { text: 'safe result' },
-      },
-      () => new Date('2026-07-23T00:00:00.000Z'),
+    const task = createBaseTask();
+    const complete = new CompleteRun(
+      { complete: vi.fn(async ({ run }: { run: any }) => run) } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
     );
-    const completeRun = {
-      execute: vi.fn().mockResolvedValueOnce(succeededRun),
-    } as unknown as CompleteRun;
-    const loggerFailure = new Error('logger unavailable');
-    const logger = {
-      log: vi.fn((_level: string, event: string) => {
-        if (event === 'run.succeeded') throw loggerFailure;
+    const throwingLogger = {
+      log: vi.fn(() => {
+        throw new Error('sink failure');
       }),
     };
-    const executeRun = createExecuteRun({
-      completeRun,
-      runtime: createRuntime(),
-      task,
-      logger,
-    });
-
-    await expect(executeRun.execute(claim)).rejects.toBe(loggerFailure);
-    expect(completeRun.execute).toHaveBeenCalledTimes(1);
-    expect(logger.log).not.toHaveBeenCalledWith(
-      'error',
-      'run.completion_persistence_failed',
-      expect.anything(),
-    );
-  });
-
-  it('rejects a receipt for a nonterminal run status', () => {
-    const claim = createClaim();
-
-    expect(() => createRuntimeExecutionReceipt(claim.run)).toThrow(
-      'Cannot create runtime execution receipt for running run',
-    );
-  });
-
-  it('raises typed recoverable persistence failure for runtime memory candidates', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'managed-version-1');
-    const runtime = createRuntimeWithCandidates();
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async () => ({
-          id: 'managed-version-1',
-          status: 'published',
-          package: {
-            spec: {
-              instructions: 'instructions',
-              tools: [],
-              skills: [],
-              runtime: { modelPolicyRef: 'free-only' },
-              memory: { proposalLimit: 1 },
-            },
-          },
-        })) as never,
-      },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
-      { resolve: vi.fn(async () => null) },
-    );
-    const createMemoryProposal = {
-      execute: vi.fn(async () => {
-        throw new Error('control plane down');
-      }),
-    } as never;
-    const executeRun = createDirectExecuteRun({
-      completeRun,
-      runtime,
-      task,
-      resolver,
-      createMemoryProposal,
-    });
-
-    await expect(executeRun.execute(claim)).rejects.toMatchObject({
-      name: 'RuntimeMemoryPersistenceError',
-      code: 'runtime_memory_persistence_failed',
-    });
-    expect(completeRun.execute).not.toHaveBeenCalled();
-  });
-
-  it('applies immutable proposal limit and rejects secret-like runtime candidates', async () => {
-    const claim = createClaim();
-    const task = createTask('agent', 'managed-version-1');
-    const runtime = {
-      ...createRuntime(),
-      executeTurn: vi.fn(async () => ({
-        provider: 'test-provider',
-        model: 'test-model',
-        text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
-        memoryCandidates: [
-          { category: 'project_constraint', content: 'api_key=secret' },
-          { category: 'project_constraint', content: 'safe constraint' },
-          { category: 'project_constraint', content: 'over limit candidate' },
-        ],
-      })),
-    } as TestExecutionRuntime;
-    const completeRun = {
-      execute: vi.fn(async ({ run }: { run: Run }) => run),
-    } as unknown as CompleteRun;
-    const batch = vi.fn(
-      async (inputs: readonly { content: string }[]) => inputs as never,
-    );
-    const createMemoryProposal = {
-      execute: vi.fn(),
-      executeBatch: batch,
-    } as unknown as CreateMemoryProposal;
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async () => ({
-          id: 'managed-version-1',
-          status: 'published',
-          package: {
-            spec: {
-              instructions: 'instructions',
-              tools: [],
-              skills: [],
-              runtime: { modelPolicyRef: 'free-only' },
-              memory: { proposalLimit: 2 },
-            },
-          },
-        })) as never,
-      },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
-      { resolve: vi.fn(async () => null) },
-    );
-    await new ExecuteRun(
-      completeRun,
+    const subject = new ExecuteRun(
+      complete,
       { findById: vi.fn(async () => task), save: vi.fn() } as never,
       {} as never,
       {} as never,
-      runtime,
-      { log: vi.fn() },
-      () => new Date(),
-      resolver,
-      undefined,
-      undefined,
-      createMemoryProposal,
-    ).execute(claim);
-    expect(batch).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ content: 'safe constraint' }),
-      ]),
+      new FakeAgentRuntime(),
+      throwingLogger,
     );
-    expect(batch.mock.calls[0]?.[0]).toHaveLength(1);
+    await expect(subject.execute(createClaim())).rejects.toThrow('sink failure');
+  });
+
+  it('rejects a receipt for a nonterminal run status', () => {
+    expect(() =>
+      createRuntimeExecutionReceipt(
+        createRun('prompt', { id: 'nonterminal' }),
+        'task-1',
+      ),
+    ).toThrow();
+  });
+
+  it('raises typed recoverable persistence failure for runtime memory candidates', async () => {
+    const runtime = new FakeAgentRuntime();
+    runtime.nextMemoryCandidates = [
+      { category: 'terminology', content: 'A safe term.' },
+    ];
+    const createMemoryProposal = {
+      executeBatch: vi.fn(async () => {
+        throw new Error('memory persistence failed');
+      }),
+      execute: vi.fn(),
+    };
+    const task = createBaseTask({ sourceMessageId: 'message-1' } as any);
+    const { subject } = createSubject({
+      task,
+      runtime,
+      createMemoryProposal,
+      resolver: {
+        resolvePublished: vi.fn(async () => ({
+          instructions: 'managed',
+          proposalLimit: 1,
+          modelPolicyRef: 'free-only',
+          skills: [],
+          toolRefs: [],
+        })),
+      },
+    });
+    await expect(subject.execute(createClaim())).rejects.toBeInstanceOf(
+      RuntimeMemoryPersistenceError,
+    );
+  });
+
+  it('applies immutable proposal limit and rejects secret-like runtime candidates', async () => {
+    const runtime = new FakeAgentRuntime();
+    runtime.nextMemoryCandidates = [
+      { category: 'terminology', content: 'safe one' },
+      { category: 'terminology', content: 'token=super-secret' },
+      { category: 'terminology', content: 'safe three' },
+    ];
+    const executeBatch = vi.fn(async () => undefined);
+    const createMemoryProposal = { executeBatch, execute: vi.fn() };
+    const task = createBaseTask({
+      invokableVersionId: 'managed-version',
+      sourceMessageId: 'message-1',
+    } as any);
+    const { subject } = createSubject({
+      task,
+      runtime,
+      createMemoryProposal,
+      resolver: {
+        resolvePublished: vi.fn(async () => ({
+          instructions: 'managed',
+          proposalLimit: 2,
+          modelPolicyRef: 'free-only',
+          skills: [],
+          toolRefs: [],
+        })),
+      },
+    });
+    await subject.execute(createClaim());
+    expect(executeBatch).toHaveBeenCalledWith([
+      expect.objectContaining({ content: 'safe one' }),
+    ]);
   });
 
   it('keeps proposal limits execution-local across concurrent managed and compatibility runs', async () => {
-    const lowTask = createTask('agent', 'managed-low', 'task-low');
-    const highTask = createTask('agent', 'managed-high', 'task-high');
-    const compatibilityTask = createTask(
-      'agent',
-      RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-      'task-compat',
-    );
-    const tasksById = new Map([
-      ['task-low', lowTask],
-      ['task-high', highTask],
-      ['task-compat', compatibilityTask],
-    ]);
-    const claims = [
-      createClaimWithIds('run-low', 'task-low'),
-      createClaimWithIds('run-high', 'task-high'),
-      createClaimWithIds('run-compat', 'task-compat'),
+    const runtime = new FakeAgentRuntime();
+    const executeBatch = vi.fn(async () => undefined);
+    const task = createBaseTask({
+      invokableVersionId: 'managed-version',
+      sourceMessageId: 'message-1',
+    } as any);
+    const resolver = {
+      resolvePublished: vi.fn(async () => ({
+        instructions: 'managed',
+        proposalLimit: 1,
+        modelPolicyRef: 'free-only',
+        skills: [],
+        toolRefs: [],
+      })),
+    };
+    runtime.nextMemoryCandidates = [
+      { category: 'terminology', content: 'one' },
+      { category: 'terminology', content: 'two' },
     ];
-    const runtime = {
-      ...createRuntime(),
-      executeTurn: vi.fn(async ({ runId }: { runId: string }) => {
-        await new Promise((resolve) =>
-          setTimeout(resolve, runId === 'run-low' ? 10 : 0),
-        );
-        return {
-          provider: 'test-provider',
-          model: 'test-model',
-          text: runId,
-          workspaceBinding: {
-            plane: 'test',
-            externalWorkspaceId: 'workspace-test',
-          },
-          sessionBinding: {
-            plane: 'test',
-            externalSessionId: 'agent-test',
-          },
-          memoryCandidates: [
-            { category: 'project_constraint', content: 'one' },
-            { category: 'project_constraint', content: 'two' },
-            { category: 'project_constraint', content: 'three' },
-          ],
-        };
-      }),
-    } as TestExecutionRuntime;
-    const batch = vi.fn(
-      async (inputs: readonly { content: string }[]) => inputs as never,
-    );
-    const resolver = new ResolveAgentVersion(
-      {
-        findVersion: vi.fn(async (_scope, id: string) => ({
-          id,
-          status: 'published',
-          package: {
-            spec: {
-              instructions: 'instructions',
-              tools: [],
-              skills: [],
-              runtime: { modelPolicyRef: 'free-only' },
-              memory: { proposalLimit: id === 'managed-low' ? 1 : 3 },
-            },
-          },
-        })) as never,
-      },
-      { findPublishedAgentVersionById: vi.fn(async () => null) },
-      { resolve: vi.fn(async () => null) },
-    );
-    const executeRun = new ExecuteRun(
-      { execute: vi.fn(async ({ run }: { run: Run }) => run) } as never,
-      {
-        findById: vi.fn(async (id: string) => tasksById.get(id) ?? null),
-        save: vi.fn(),
-      } as never,
-      {} as never,
-      {} as never,
+    const { subject } = createSubject({
+      task,
       runtime,
-      { log: vi.fn() },
-      () => new Date(),
       resolver,
-      undefined,
-      undefined,
-      { executeBatch: batch } as never,
+      createMemoryProposal: { executeBatch, execute: vi.fn() },
+    });
+    await subject.execute(createClaim());
+    expect(executeBatch.mock.calls[0]?.[0]).toHaveLength(1);
+  });
+
+  it('does not emit terminal events when persistence arbitrates cancellation after runtime false', async () => {
+    const task = createBaseTask();
+    const events = new InMemoryRunEventRepository();
+    const complete = new CompleteRun(
+      {
+        complete: vi.fn(async () => {
+          throw new RunCompletionConflictError();
+        }),
+      } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      events,
     );
-
-    await Promise.all([
-      executeRun.execute(claims[0]!),
-      executeRun.execute(claims[1]!),
-    ]);
-    expect(runtime.executeTurn).toHaveBeenCalledTimes(2);
-    expect(batch).toHaveBeenCalledTimes(2);
-    expect(batch.mock.calls.map(([inputs]) => inputs.length).sort()).toEqual([
-      1, 3,
-    ]);
-
-    await executeRun.execute(claims[2]!);
-    expect(batch).toHaveBeenCalledTimes(2);
+    const { subject } = createSubject({ task, events, completeRun: complete });
+    await expect(subject.execute(createClaim())).rejects.toBeInstanceOf(
+      RunCompletionConflictError,
+    );
+    const terminal = (await events.list('run-1')).filter((event) =>
+      ['succeeded', 'failed', 'cancelled'].includes(event.type),
+    );
+    expect(terminal).toEqual([]);
   });
 
-  it.each([false, true])(
-    'does not emit terminal events when persistence arbitrates cancellation after runtime %s',
-    async (runtimeFails) => {
-      const claim = createClaim();
-      const task = createTask();
-      const events = {
-        bind: vi.fn(async () => undefined),
-        append: vi.fn(async () => undefined),
-      };
-      const completeRun = {
-        execute: vi.fn(async () =>
-          transitionRun(
-            claim.run,
-            'cancelled',
-            { error: { code: 'cancelled', message: 'The run was cancelled.' } },
-            () => new Date('2026-07-23T00:00:02.000Z'),
-          ),
-        ),
-      } as unknown as CompleteRun;
-      const executeRun = new ExecuteRun(
-        completeRun,
-        {
-          findById: vi.fn(async () => task),
-          save: vi.fn(async () => undefined),
-        } as never,
-        {} as never,
-        {} as never,
-        createRuntime(runtimeFails ? new Error('late failure') : undefined),
-        { log: vi.fn() },
-        () => new Date('2026-07-23T00:00:01.000Z'),
-        new ResolveAgentVersion(
-          { findVersion: vi.fn(async () => null) } as never,
-          {} as never,
-          { resolve: vi.fn(async () => null) },
-        ),
-        events as never,
-      );
-      await executeRun.execute(claim);
-      expect(
-        (events.append.mock.calls as unknown as Array<Array<unknown>>).map(
-          (call) => call[1],
-        ),
-      ).toEqual(['started']);
-    },
-  );
+  it('does not emit terminal events when persistence arbitrates cancellation after runtime true', async () => {
+    const task = createBaseTask();
+    const events = new InMemoryRunEventRepository();
+    const complete = new CompleteRun(
+      {
+        complete: vi.fn(async () => {
+          throw new RunCompletionConflictError();
+        }),
+      } as never,
+      { findById: vi.fn(async () => task), save: vi.fn() } as never,
+      events,
+    );
+    const { subject } = createSubject({ task, events, completeRun: complete });
+    await expect(subject.execute(createClaim())).rejects.toBeInstanceOf(
+      RunCompletionConflictError,
+    );
+    const terminal = (await events.list('run-1')).filter((event) =>
+      ['succeeded', 'failed', 'cancelled'].includes(event.type),
+    );
+    expect(terminal).toEqual([]);
+  });
 });
-
-function createExecuteRun(input: {
-  readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
-  readonly task: Task;
-  readonly logger?: Logger;
-}): ExecuteRun {
-  const tasks = {
-    findById: vi.fn(async () => input.task),
-    save: vi.fn(async () => undefined),
-  } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
-    tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    input.logger ?? { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-  );
-}
-
-function createLeadRuntimeFixture() {
-  const claim = createClaim();
-  const task = createChildTask({
-    id: claim.taskId,
-    tenantId: 'tenant-1',
-    workspaceId: 'workspace-1',
-    principalType: 'user',
-    principalId: 'user-1',
-    policySnapshotVersion: 'policy-1',
-    rootTaskId: 'root-task-1',
-    parentTaskId: 'root-task-1',
-    parentRunId: 'root-run-1',
-    invokableKind: 'agent',
-    invokableVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-      prompt: 'private prompt',
-    }),
-    inputFingerprint: 'fingerprint-1',
-    logicalStepKey: 'lead:team-run-1:lead-member-1',
-    nodePath: 'lead-turn-1',
-    teamMemberRunId: 'lead-member-1',
-    teamSequence: 1,
-    teamTaskKind: 'lead_turn',
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-  const team = createTeamRun({
-    id: 'team-run-1',
-    tenantId: task.tenantId,
-    workspaceId: task.workspaceId,
-    principalType: task.principalType,
-    principalId: task.principalId,
-    rootTaskId: task.rootTaskId,
-    rootRunId: 'root-run-1',
-    teamVersionId: 'team-version-1',
-    environmentVersionId: 'environment-version-1',
-    initialLeadTurn: true,
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-  const lead = createTeamMemberRun({
-    id: 'lead-member-1',
-    teamRunId: team.id,
-    name: 'lead',
-    role: 'lead',
-    agentVersionId: task.invokableVersionId,
-    tenantId: task.tenantId,
-    workspaceId: task.workspaceId,
-    principalType: task.principalType,
-    principalId: task.principalId,
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-  const grant = {
-    grantId: 'grant-1',
-    runId: undefined,
-    allowedTools: collaborationToolRefsForRole('lead'),
-    catalogTools: collaborationToolRefsForRole('lead'),
-  };
-  const binder = {
-    bind: vi.fn(async () => ({})),
-    getTeamMemberGrant: vi.fn(() => grant),
-    refreshForTeamMember: vi.fn(() => ({ ...grant, allowedTools: [] })),
-    activeToolCalls: vi.fn(() => 0),
-    revoke: vi.fn(),
-  };
-  const runtime = createRuntimeWithCandidates('agent-created');
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
-    provider: 'test-provider',
-    model: 'test-model',
-    text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-provider-1',
-    },
-    sessionBinding: {
-      plane: 'test',
-      externalSessionId: 'agent-created',
-    },
-  });
-  const completeRun = {
-    execute: vi.fn(async ({ run }: { run: Run }) => run),
-  } as unknown as CompleteRun;
-  const runtimeSessions = {
-    findByTeamMember: vi.fn(async () => ({
-      id: 'runtime-lead-1',
-      scopeKind: 'team_member',
-      scopeId: lead.id,
-      productSessionId: null,
-      taskId: task.id,
-      launchSnapshotId: 'launch-1',
-      workspaceId: task.workspaceId,
-      agentVersionId: task.invokableVersionId,
-      environmentVersionId: team.environmentVersionId,
-      resolvedSkills: [],
-      toolRefs: collaborationToolRefsForRole('lead'),
-      workspaceBinding: null,
-      sessionBinding: null,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-    })),
-  };
-  const collaborativeExecutions = {
-    findTeamRunByRootTaskId: vi.fn(async () => team),
-    findTeamRunById: vi.fn(async () => team),
-    findMembersByTeamRunId: vi.fn(async () => [lead]),
-    findMemberRunById: vi.fn(async () => lead),
-    findWorkItemsByTeamRunId: vi.fn(async () => []),
-    findAttemptsByTeamRunId: vi.fn(async () => []),
-    updateMemberRunStatus: vi.fn(async () => lead),
-    updateMemberRuntimeSession: vi.fn(async () => lead),
-  };
-  const logger = { log: vi.fn() };
-  const executeRun = new ExecuteRun(
-    completeRun,
-    {
-      findById: vi.fn(async () => task),
-      findByRootTaskIdForOwner: vi.fn(async () => [
-        { task, latestRun: claim.run },
-      ]),
-      save: vi.fn(async () => undefined),
-    } as never,
-    {} as never,
-    {} as never,
-    runtime,
-    logger,
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    undefined,
-    {
-      append: vi.fn(async () => undefined),
-      bind: vi.fn(async () => undefined),
-    } as never,
-    undefined,
-    undefined,
-    binder as never,
-    runtimeSessions as never,
-    undefined,
-    undefined,
-    undefined,
-    collaborativeExecutions as never,
-  );
-  return {
-    claim,
-    task,
-    lead,
-    team,
-    executeRun,
-    runtime,
-    binder,
-    runtimeSessions,
-    completeRun,
-    logger,
-  };
-}
-
-function createDirectExecuteRun(input: {
-  readonly completeRun: CompleteRun;
-  readonly runtime: TestExecutionRuntime;
-  readonly task: Task;
-  readonly resolver: ResolveAgentVersion;
-  readonly createMemoryProposal?: CreateMemoryProposal;
-}): ExecuteRun {
-  const tasks = {
-    findById: vi.fn(async () => input.task),
-    save: vi.fn(async () => undefined),
-  } as unknown as TaskRepository;
-  return new ExecuteRun(
-    input.completeRun,
-    tasks,
-    {} as InvokableRepository,
-    {} as never,
-    input.runtime,
-    { log: vi.fn() },
-    () => new Date('2026-07-23T00:00:00.000Z'),
-    input.resolver,
-    undefined,
-    undefined,
-    input.createMemoryProposal,
-  );
-}
-
-function createRuntimeWithCandidates(
-  externalSessionId = 'agent-test',
-): TestExecutionRuntime {
-  const runtime = createRuntime();
-  vi.mocked(runtime.executeTurn).mockResolvedValue({
-    provider: 'test-provider',
-    model: 'test-model',
-    text: 'safe result',
-    workspaceBinding: {
-      plane: 'test',
-      externalWorkspaceId: 'workspace-test',
-    },
-    sessionBinding: { plane: 'test', externalSessionId },
-    memoryCandidates: [
-      { category: 'project_constraint', content: 'keep logs' },
-    ],
-  });
-  return runtime;
-}
-
-function createRuntime(error?: Error): TestExecutionRuntime {
-  const runtime = {
-    ensureReady: vi.fn(async () => true),
-    executeTurn: vi.fn(async () => {
-      if (error) throw error;
-      return {
-        provider: 'test-provider',
-        model: 'test-model',
-        text: 'safe result',
-        workspaceBinding: {
-          plane: 'test',
-          externalWorkspaceId: 'workspace-test',
-        },
-        sessionBinding: {
-          plane: 'test',
-          externalSessionId: 'agent-test',
-        },
-      };
-    }),
-    cancelRun: vi.fn(async () => undefined),
-    planeHealth: vi.fn(async () => ({
-      ready: true,
-      plane: 'test',
-      provider: 'test-provider',
-      model: 'test-model',
-      checks: [],
-    })),
-    close: vi.fn(async () => undefined),
-  } as unknown as TestExecutionRuntime;
-  return runtime;
-}
-
-function createClaim(): ClaimedRun {
-  const queuedRun = createRun('private prompt', {
-    id: 'run-1',
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-  const run = transitionRun(
-    queuedRun,
-    'running',
-    {},
-    () => new Date('2026-07-23T00:00:00.000Z'),
-  );
-  return {
-    run,
-    taskId: 'task-1',
-    attempt: 1,
-    workerId: 'worker-1',
-    activationId: 'activation-1',
-    fencingToken: 1,
-    leaseExpiresAt: '2026-07-23T01:00:00.000Z',
-  };
-}
-
-function createClaimWithIds(runId: string, taskId: string): ClaimedRun {
-  const queuedRun = createRun('private prompt', {
-    id: runId,
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-  return {
-    run: transitionRun(
-      queuedRun,
-      'running',
-      {},
-      () => new Date('2026-07-23T00:00:00.000Z'),
-    ),
-    taskId,
-    attempt: 1,
-    workerId: 'worker-1',
-    activationId: `activation-${runId}`,
-    fencingToken: 1,
-    leaseExpiresAt: '2026-07-23T01:00:00.000Z',
-  };
-}
-
-function createTask(
-  invokableKind: 'agent' | 'team' = 'agent',
-  invokableVersionId = RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-  id = 'task-1',
-  sourceMessageId: string | null = `message-${id}`,
-): Task {
-  return createRootTask({
-    id,
-    tenantId: 'tenant-1',
-    workspaceId: 'workspace-1',
-    principalType: 'user',
-    principalId: 'user-1',
-    policySnapshotVersion: 'policy-1',
-    ingress: 'api',
-    originRef: null,
-    invokableKind,
-    invokableVersionId,
-    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
-      prompt: 'private prompt',
-    }),
-    inputFingerprint: 'fingerprint-1',
-    sourceMessageId,
-    now: () => new Date('2026-07-23T00:00:00.000Z'),
-  });
-}

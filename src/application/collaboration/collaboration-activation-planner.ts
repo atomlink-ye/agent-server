@@ -5,9 +5,9 @@ import {
   type CollaborationActivation,
 } from '../../domain/collaboration/collaboration.js';
 import type { TeamMessage } from '../../domain/teams/team-message.js';
-import type { TeamWorkDependency } from '../../domain/teams/team-work-dependency.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import type { TeamWorkDependency } from '../ports/team-execution-repository.js';
 
 export interface PlannedCollaborationActivation {
   readonly activation: CollaborationActivation;
@@ -34,29 +34,34 @@ export class CollaborationActivationPlanner {
           message.recipientMemberRunId === input.participantId &&
           message.status === 'queued',
       )
-      .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id));
+      .sort(
+        (left, right) =>
+          left.sequence - right.sequence || left.id.localeCompare(right.id),
+      );
     if (!queued.length) return null;
 
     const workById = new Map(input.workItems.map((item) => [item.id, item]));
     const attemptsById = new Map(input.attempts.map((attempt) => [attempt.id, attempt]));
-    const primaryWorkMessage = queued.find((message) => {
-      if (message.kind === 'direct' || !message.attemptId) return false;
-      const attempt = attemptsById.get(message.attemptId);
-      if (
-        !attempt ||
-        attempt.assigneeMemberId !== input.participantId ||
-        attempt.status !== 'queued' ||
-        attempt.executionTaskId
-      )
-        return false;
-      const work = workById.get(attempt.workItemId);
-      if (!work || work.status !== 'pending') return false;
-      return input.dependencies
-        .filter((edge) => edge.workItemId === work.id)
-        .every(
-          (edge) => workById.get(edge.dependsOnWorkItemId)?.status === 'accepted',
-        );
-    }) ?? null;
+    const primaryWorkMessage =
+      queued.find((message) => {
+        if (message.kind === 'direct' || !message.attemptId) return false;
+        const attempt = attemptsById.get(message.attemptId);
+        if (
+          !attempt ||
+          attempt.assigneeMemberId !== input.participantId ||
+          attempt.status !== 'queued' ||
+          attempt.executionTaskId
+        )
+          return false;
+        const work = workById.get(attempt.workItemId);
+        if (!work || work.status !== 'pending') return false;
+        return input.dependencies
+          .filter((edge) => edge.workItemId === work.id)
+          .every(
+            (edge) =>
+              workById.get(edge.dependsOnWorkItemId)?.status === 'accepted',
+          );
+      }) ?? null;
     const workAttempt = primaryWorkMessage?.attemptId
       ? attemptsById.get(primaryWorkMessage.attemptId) ?? null
       : null;
@@ -80,7 +85,9 @@ export class CollaborationActivationPlanner {
     for (const message of directMessages)
       causes.push({ type: 'message', messageRef: messageRef(message.sequence) });
 
-    const priority = directMessages.some((message) => message.priority === 'urgent')
+    const priority = directMessages.some(
+      (message) => message.priority === 'urgent',
+    )
       ? 'urgent'
       : 'normal';
     const stableIds = [

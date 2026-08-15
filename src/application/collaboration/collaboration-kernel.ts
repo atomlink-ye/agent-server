@@ -179,7 +179,7 @@ export class CollaborationKernel {
         expectedRevision: context.teamRun.revision,
         owner: context.owner,
       });
-      this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+      this.kick(context);
       return {
         work_ref: await this.refForWork(context, result.item.id),
         status: 'assigned',
@@ -198,7 +198,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+    this.kick(context);
     return {
       work_ref: await this.refForWork(context, item.id),
       status: 'open',
@@ -224,7 +224,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+    this.kick(context);
     return { work_ref: input.workRef, status: 'assigned', owner: assignee.name, attempt_no: result.attempt.attemptNo };
   }
 
@@ -349,7 +349,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+    this.kick(context);
     return { work_ref: input.workRef, status: 'accepted' };
   }
 
@@ -374,7 +374,7 @@ export class CollaborationKernel {
         expectedRevision: context.teamRun.revision,
         owner: context.owner,
       });
-      this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+      this.kick(context);
       return { work_ref: input.workRef, status: 'in_progress', attempt_no: result.attempt.attemptNo, owner: assignee.name };
     }
     const attempt = await this.executions.requestRework({
@@ -388,7 +388,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+    this.kick(context);
     return { work_ref: input.workRef, status: 'in_progress', attempt_no: attempt.attemptNo, owner: assignee.name };
   }
 
@@ -481,7 +481,7 @@ export class CollaborationKernel {
       requiresAck: input.requiresAck ?? false,
       owner: context.owner,
     });
-    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
+    this.kick(context);
     return {
       sent: true,
       message_ref: messageRef(message.sequence),
@@ -563,6 +563,20 @@ export class CollaborationKernel {
     );
     if (matches.length !== 1) throw new TeamContextError('not_found');
     return matches[0]!;
+  }
+
+  private kick(context: TeamToolContext): void {
+    // Durable mutation success must never depend on the immediate delivery
+    // attempt. The reconciler is restart-safe and will recompute from facts.
+    try {
+      this.activation?.kick(
+        context.teamRun.rootTaskId,
+        context.owner,
+        context.task,
+      );
+    } catch {
+      // A synchronous kick failure is intentionally non-fatal.
+    }
   }
 
   private async allMessages(context: TeamToolContext) {

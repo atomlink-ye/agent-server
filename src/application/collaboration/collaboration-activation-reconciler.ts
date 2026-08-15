@@ -134,6 +134,9 @@ export class CollaborationActivationReconciler
     const senderNameById = new Map(
       members.map((member) => [member.id, member.name]),
     );
+    const taskRecords = this.tasks.findByRootTaskIdForOwner
+      ? await this.tasks.findByRootTaskIdForOwner(team.rootTaskId, owner)
+      : [];
 
     const lead = members.find((member) => member.role === 'lead');
     if (lead && isIdle(lead)) {
@@ -176,20 +179,37 @@ export class CollaborationActivationReconciler
       }
     }
 
-    const openActionable = orderedWorkItems(workItems).find(
-      (item) =>
-        item.status === 'open' &&
-        dependencies
+    const openActionable = orderedWorkItems(workItems).find((item) => {
+      if (item.status !== 'open') return false;
+      if (
+        !dependencies
           .filter((edge) => edge.workItemId === item.id)
           .every(
             (edge) =>
               workItems.find(
                 (candidate) => candidate.id === edge.dependsOnWorkItemId,
               )?.status === 'accepted',
-          ),
-    );
+          )
+      )
+        return false;
+      const discoveryToken = `available:${item.id}:${item.updatedAt}`;
+      return !taskRecords.some((record) =>
+        record.task.logicalStepKey?.includes(discoveryToken),
+      );
+    });
     const memberCandidates = members
-      .filter((member) => member.role === 'member' && isIdle(member))
+      .filter(
+        (member) =>
+          member.role === 'member' &&
+          isIdle(member) &&
+          !taskRecords.some(
+            (record) =>
+              record.task.teamMemberRunId === member.id &&
+              !['completed', 'failed', 'cancelled'].includes(
+                record.task.status,
+              ),
+          ),
+      )
       .sort(
         (left, right) =>
           left.name.localeCompare(right.name) || left.id.localeCompare(right.id),

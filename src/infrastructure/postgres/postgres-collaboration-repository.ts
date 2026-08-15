@@ -704,6 +704,8 @@ export class PostgresCollaborationRepository
     const unique = [...new Set(dependencyIds)];
     if (unique.length !== dependencyIds.length)
       throw new TeamExecutionError('invalid_transition');
+    if (unique.length > COLLABORATION_LIMITS.maxDependenciesPerWorkItem)
+      throw new TeamExecutionError('limit_exceeded');
     if (!unique.length) return;
     const existing = await client.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND id=ANY($2::uuid[]) AND ${ownerSql('', 3)}`,

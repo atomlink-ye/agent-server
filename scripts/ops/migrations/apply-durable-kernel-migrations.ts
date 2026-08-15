@@ -10,7 +10,7 @@ const pool = createPostgresPool();
 try {
   await applyDurableKernelMigrations(pool);
   process.stdout.write(
-    `${JSON.stringify({ applied: true, latest: '0029_product_work_identity' })}\n`,
+    `${JSON.stringify({ applied: true, latest: '0030_work_collaboration_kernel' })}\n`,
   );
 } finally {
   await pool.end();

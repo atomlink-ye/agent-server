@@ -109,10 +109,22 @@ function hasCompletionFacts(value) {
     value.gates?.all_members_idle !== true
   )
     return false;
-  const work = value.work_items?.find((item) => item.work_ref === 'work-1');
+  const builderWork = value.work_items?.find(
+    (item) => item.work_ref === 'work-1',
+  );
+  const work = value.work_items?.find((item) => item.work_ref === 'work-2');
   if (
     !Array.isArray(value.work_items) ||
-    value.work_items.length !== 1 ||
+    value.work_items.length !== 2 ||
+    !builderWork ||
+    builderWork.status !== 'accepted' ||
+    builderWork.assignee_name !== 'builder' ||
+    builderWork.attempts?.length !== 1 ||
+    builderWork.attempts[0]?.attempt_no !== 1 ||
+    builderWork.attempts[0]?.status !== 'completed' ||
+    !builderWork.attempts[0]?.result_summary?.includes(
+      'AGENT_TEAM_SMOKE_BUILDER_OK',
+    ) ||
     !work ||
     work.status !== 'accepted' ||
     work.assignee_name !== 'analyst'
@@ -142,7 +154,7 @@ function hasCompletionFacts(value) {
         'task_run_collaboration_activation_adapter' &&
       turn.activation.causes?.some(
         (cause) =>
-          cause.type === 'work_available' && cause.work_ref === 'W-1',
+          cause.type === 'work_available' && cause.work_ref === 'W-2',
       ),
   );
   const leadSession = value.sessions?.find(
@@ -157,33 +169,20 @@ function hasCompletionFacts(value) {
   );
   if (!analystAvailabilityTurn || !leadReworkReviewTurn) return false;
   const messages = value.direct_messages ?? [];
-  const leadMessage = messages.find(
-    (message) =>
-      message.sender_name === 'lead' &&
-      message.recipient_name === 'analyst' &&
-      message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
-  );
-  const analystReply = messages.find(
+  const analystMessage = messages.find(
     (message) =>
       message.sender_name === 'analyst' &&
       message.recipient_name === 'lead' &&
-      message.summary.includes('AGENT_TEAM_SMOKE_ANALYST_REPLY'),
+      message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
   );
   return (
     messages.filter(
       (message) =>
-        message.sender_name === 'lead' &&
-        message.recipient_name === 'analyst' &&
-        message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
-    ).length === 1 &&
-    messages.filter(
-      (message) =>
         message.sender_name === 'analyst' &&
         message.recipient_name === 'lead' &&
-        message.summary.includes('AGENT_TEAM_SMOKE_ANALYST_REPLY'),
+        message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
     ).length === 1 &&
-    leadMessage?.status === 'acknowledged' &&
-    Boolean(analystReply)
+    analystMessage?.status === 'acknowledged'
   );
 }
 
@@ -240,9 +239,11 @@ function agentYaml(name, instructions, refs) {
 }
 
 const leadInstructions =
-  'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, call board_create exactly once with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK"; omit assignee so W-1 is OPEN and unassigned. In that same kickoff turn call message_send exactly once to recipient analyst with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true, then stop. Do not assign or claim W-1. After analyst submits attempt 1, call board_request_changes exactly once for W-1 with assignee analyst and feedback "AGENT_TEAM_SMOKE_REWORK_REQUIRED"; do not accept attempt 1. After analyst submits attempt 2, call board_accept exactly once for W-1. Only after W-1 is accepted and no active attempt remains, call collaboration_finish exactly once. If the board has an open or in-progress W-1 without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, never use legacy Team command vocabulary, and never substitute prose for a required collaboration mutation.';
+  'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, make exactly two board_create calls before stopping: first create W-1 assigned to builder with subject "Builder smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_BUILDER_OK"; then create W-2 with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK" but omit assignee so it is OPEN. Do not assign or claim W-2. If you receive direct message M-1 from analyst, call message_ack for M-1 exactly once, then stop. During review, accept completed W-1 exactly once. After analyst submits W-2 attempt 1, call board_request_changes exactly once for W-2 with assignee analyst and feedback "AGENT_TEAM_SMOKE_REWORK_REQUIRED"; do not accept that attempt. After analyst submits W-2 attempt 2, call board_accept exactly once for W-2. Only after W-1 and W-2 are accepted and no active attempt remains, call collaboration_finish exactly once. If work is open or in progress without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, never use legacy Team command vocabulary, and never substitute prose for a required collaboration mutation.';
 const analystInstructions =
-  'Act as the analyst using only the canonical collaboration tools. On the first direct/message delivery, read collaboration_state, board_list, and inbox_list. Confirm M-1 from lead with body AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK, call message_ack for M-1, call message_send once to lead with body "AGENT_TEAM_SMOKE_ANALYST_REPLY", about_work_ref W-1, and reply_to_ref M-1, then explicitly call board_claim for W-1; perform these actions once and stop. On the resulting work-attempt turn for attempt 1, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_ATTEMPT_1". On the resulting rework attempt 2, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK". Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
+  'Act as the analyst using only the canonical collaboration tools. On the work-availability delivery, read collaboration_state, board_list, and inbox_list, then explicitly call board_claim for W-2 and message_send exactly once to lead with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-2, and requires_ack true; perform these actions once and stop. On the resulting work-attempt turn for attempt 1, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_ATTEMPT_1". On the resulting rework attempt 2, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK". Never create Work, request changes, accept Work, finish the collaboration, claim W-2 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
+const builderInstructions =
+  'Act as the builder using only the canonical collaboration tools. On your assigned work-attempt turn, read collaboration_state and board_list, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_BUILDER_OK" and stop. Never create Work, claim Work, request changes, accept Work, finish the collaboration, use provider subagents, or substitute prose for the required board_submit mutation.';
 
 const leadVersion = await importAndPublish(
   agentYaml('smoke-lead', leadInstructions, [
@@ -275,6 +276,19 @@ progress('agent_version_published', {
   role: 'analyst',
   version_id: analystVersion,
 });
+const builderVersion = await importAndPublish(
+  agentYaml('smoke-builder', builderInstructions, [
+    'collaboration-state',
+    'board-list',
+    'board-submit',
+  ]),
+  '/api/v1/agents:import',
+  (id) => `/api/v1/agent-versions/${id}:publish`,
+);
+progress('agent_version_published', {
+  role: 'builder',
+  version_id: builderVersion,
+});
 const environmentVersion = await importAndPublish(
   `apiVersion: agent-server/v1alpha1\nkind: ManagedEnvironment\nmetadata:\n  name: agent-team-smoke\nspec:\n  adapter: paseo\n  provider: opencode\n  modelPolicyRef: free-only\n  runtimeCellPolicy: per_runtime_session\n`,
   '/api/v1/environments:import',
@@ -285,7 +299,7 @@ const importedTeam = await request('/api/v1/teams:import', {
   method: 'POST',
   status: 201,
   body: {
-    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    agentVersionId: ${leadVersion}\n  roster:\n    - name: analyst\n      agentVersionId: ${analystVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
+    source: `apiVersion: agent-server/v1alpha1\nkind: ManagedTeam\nmetadata:\n  name: agent-team-smoke\nspec:\n  environmentVersionId: ${environmentVersion}\n  lead:\n    name: lead\n    agentVersionId: ${leadVersion}\n  roster:\n    - name: builder\n      agentVersionId: ${builderVersion}\n    - name: analyst\n      agentVersionId: ${analystVersion}\n  coordination:\n    taskAssignment: lead_or_self_claim\n`,
   },
 });
 const teamVersion = await request(
@@ -298,7 +312,7 @@ const invoked = await request('/api/v1/tasks:invoke', {
   status: 202,
   body: {
     invokable: { kind: 'team', version_id: teamVersion.id },
-    input: { text: 'Complete the canonical one-member Team smoke.' },
+    input: { text: 'Complete the canonical multi-member Team smoke.' },
     workspace_id: workspaceId,
   },
 });

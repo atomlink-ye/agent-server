@@ -127,6 +127,14 @@ spec:
     command: "done"
 ```
 
+> **`spec.permissions` is accepted and stored but is not enforced at runtime.**
+> The `network` and `filesystem` values above are recorded on the Agent version and
+> are visible when you read it back, and that is all they currently do — the runtime
+> does not restrict what a running Agent may reach. Do not rely on this field as a
+> security boundary, and do not read a successful import as confirmation that a
+> restriction is in effect. This is a known gap; the field is documented here because
+> it is part of the package shape you must send, not because it constrains execution.
+
 Send each YAML document as `{ "source": "<the YAML document>" }` to
 `POST /api/v1/agents:import`. Each `201` response returns the IDs needed for
 that Agent's publish step:

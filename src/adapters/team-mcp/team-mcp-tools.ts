@@ -23,9 +23,16 @@ export interface CanonicalTeamToolContext {
   readonly currentGrant: () => RuntimeToolGrant | null;
   readonly begin: (grantId: string) => void;
   readonly end: (grantId: string) => void;
-  readonly commands: TeamCommandService & { readonly collaboration?: CollaborationKernel };
+  readonly commands: TeamCommandService & {
+    readonly collaboration?: CollaborationKernel;
+  };
 }
 
+/**
+ * Legacy `team_*` names are compatibility aliases only. In production the
+ * mutating aliases delegate to the same CollaborationKernel used by the new
+ * board/mailbox surface, so there is no second coordination state machine.
+ */
 export function registerTeamMcpTools(
   server: McpServer,
   allowedTools: readonly string[],
@@ -67,18 +74,33 @@ export function registerTeamMcpTools(
   };
   const canonical = (ref: string, name: string, config: any, operation: any) =>
     catalog.has(ref) && register(ref, name, config, operation);
+  const collaboration = context.commands.collaboration;
 
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.state,
-    { description: 'Read current Team state.', inputSchema: {}, annotations: { readOnlyHint: true } },
-    () => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state, (ctx) => context.commands.state(ctx)),
+    {
+      description: 'Read current Team state.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    () =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state, (ctx) =>
+        context.commands.state(ctx),
+      ),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.workList,
-    { description: 'List Team work.', inputSchema: {}, annotations: { readOnlyHint: true } },
-    () => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList, (ctx) => context.commands.workList(ctx)),
+    {
+      description: 'List Team work.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    () =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList, (ctx) =>
+        context.commands.workList(ctx),
+      ),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
@@ -86,76 +108,217 @@ export function registerTeamMcpTools(
     {
       description: 'Create Team work.',
       inputSchema: {
-        subject: z.string().min(1), description: z.string().optional(), assignee: z.string().min(1),
-        dependency_refs: z.array(z.string().regex(/^work-\d+$/)).max(4).optional(),
+        subject: z.string().min(1),
+        description: z.string().optional(),
+        assignee: z.string().min(1),
+        dependency_refs: z
+          .array(z.string().regex(/^work-\d+$/))
+          .max(4)
+          .optional(),
       },
     },
-    (input: { subject: string; assignee: string; description?: string; dependency_refs?: string[] }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, (ctx) =>
-        context.commands.createWork(ctx, {
-          subject: input.subject, assignee: input.assignee,
-          ...(input.description === undefined ? {} : { description: input.description }),
-          ...(input.dependency_refs === undefined ? {} : { dependencyRefs: input.dependency_refs }),
-        }),
-      ),
+    (input: {
+      subject: string;
+      assignee: string;
+      description?: string;
+      dependency_refs?: string[];
+    }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, async (ctx) => {
+        if (!collaboration)
+          return context.commands.createWork(ctx, {
+            subject: input.subject,
+            assignee: input.assignee,
+            ...(input.description === undefined
+              ? {}
+              : { description: input.description }),
+            ...(input.dependency_refs === undefined
+              ? {}
+              : { dependencyRefs: input.dependency_refs }),
+          });
+        const value = await collaboration.createWork(ctx, {
+          subject: input.subject,
+          assignee: input.assignee,
+          ...(input.description === undefined
+            ? {}
+            : { description: input.description }),
+          ...(input.dependency_refs === undefined
+            ? {}
+            : {
+                dependencyRefs: input.dependency_refs.map(toCollaborationWorkRef),
+              }),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.messageSend,
-    { description: 'Send an addressed direct Team message.', inputSchema: { recipient: z.string().min(1), summary: z.string().min(1).max(4096) } },
-    (input: { recipient: string; summary: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend, (ctx) => context.commands.sendMessage(ctx, input)),
+    {
+      description: 'Send an addressed direct Team message.',
+      inputSchema: {
+        recipient: z.string().min(1),
+        summary: z.string().min(1).max(4096),
+      },
+    },
+    (input: { recipient: string; summary: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend, async (ctx) => {
+        if (!collaboration) return context.commands.sendMessage(ctx, input);
+        const value = await collaboration.sendMessage(ctx, {
+          recipient: input.recipient,
+          body: input.summary,
+        });
+        return {
+          sent: true,
+          recipient: value.recipient,
+          summary: input.summary,
+        };
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.accept,
-    { description: 'Accept submitted work.', inputSchema: { work_ref: z.string().regex(/^work-\d+$/) } },
-    (input: { work_ref: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept, (ctx) => context.commands.accept(ctx, { workRef: input.work_ref })),
+    {
+      description: 'Accept submitted work.',
+      inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
+    },
+    (input: { work_ref: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept, async (ctx) => {
+        if (!collaboration)
+          return context.commands.accept(ctx, { workRef: input.work_ref });
+        const value = await collaboration.acceptWork(ctx, {
+          workRef: toCollaborationWorkRef(input.work_ref),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.requestChanges,
-    { description: 'Request changes.', inputSchema: { work_ref: z.string().regex(/^work-\d+$/), assignee: z.string().min(1), feedback: z.string().min(1) } },
-    (input: { work_ref: string; assignee: string; feedback: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges, (ctx) => context.commands.requestChanges(ctx, { workRef: input.work_ref, assignee: input.assignee, feedback: input.feedback })),
+    {
+      description: 'Request changes.',
+      inputSchema: {
+        work_ref: z.string().regex(/^work-\d+$/),
+        assignee: z.string().min(1),
+        feedback: z.string().min(1),
+      },
+    },
+    (input: { work_ref: string; assignee: string; feedback: string }) =>
+      current(
+        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
+        async (ctx) => {
+          if (!collaboration)
+            return context.commands.requestChanges(ctx, {
+              workRef: input.work_ref,
+              assignee: input.assignee,
+              feedback: input.feedback,
+            });
+          const value = await collaboration.requestChanges(ctx, {
+            workRef: toCollaborationWorkRef(input.work_ref),
+            assignee: input.assignee,
+            feedback: input.feedback,
+          });
+          return legacyWorkResult(value);
+        },
+      ),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.cancel,
-    { description: 'Abandon failed work.', inputSchema: { work_ref: z.string().regex(/^work-\d+$/) } },
-    (input: { work_ref: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, (ctx) => context.commands.cancel(ctx, { workRef: input.work_ref })),
+    {
+      description: 'Abandon work.',
+      inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
+    },
+    (input: { work_ref: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, async (ctx) => {
+        if (!collaboration)
+          return context.commands.cancel(ctx, { workRef: input.work_ref });
+        const value = await collaboration.cancelWork(ctx, {
+          workRef: toCollaborationWorkRef(input.work_ref),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.finish,
     { description: 'Finish Team.', inputSchema: {} },
-    () => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish, (ctx) => context.commands.finish(ctx, {})),
+    () =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish, (ctx) =>
+        collaboration
+          ? collaboration.finish(ctx)
+          : context.commands.finish(ctx, {}),
+      ),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.checkpoint,
-    { description: 'Record a safe work checkpoint.', inputSchema: { summary: z.string().min(1) } },
-    (input: { summary: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint, (ctx) => context.commands.checkpoint(ctx, input)),
+    {
+      description: 'Record a safe work checkpoint.',
+      inputSchema: { summary: z.string().min(1) },
+    },
+    (input: { summary: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint, async (ctx) => {
+        if (!collaboration) return context.commands.checkpoint(ctx, input);
+        const value = await collaboration.checkpoint(ctx, input);
+        return {
+          checkpointed: value.checkpointed,
+          summary: value.summary,
+          status: ctx.member.status,
+        };
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.submit,
-    { description: 'Submit the current work attempt.', inputSchema: { summary: z.string().min(1) } },
-    (input: { summary: string }) => current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit, (ctx) => context.commands.submit(ctx, input)),
+    {
+      description: 'Submit the current work attempt.',
+      inputSchema: { summary: z.string().min(1) },
+    },
+    (input: { summary: string }) =>
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit, async (ctx) => {
+        if (!collaboration) return context.commands.submit(ctx, input);
+        const value = await collaboration.submitWork(ctx, input);
+        return {
+          work_ref: toLegacyWorkRef(value.work_ref),
+          submitted: value.submitted,
+          status: 'completed',
+          summary: value.summary,
+        };
+      }),
   );
 
-  // The new vocabulary is registered through the same grant/context machinery.
-  // Legacy Team tools remain aliases during the migration window, but there is
-  // only one provider-neutral CollaborationKernel implementation.
-  if (context.commands.collaboration)
+  if (collaboration)
     registerCollaborationMcpTools(server, allowedTools, authorize, {
       resolve: context.resolve,
       grantId: context.grantId,
       currentGrant: context.currentGrant,
       begin: context.begin,
       end: context.end,
-      kernel: context.commands.collaboration,
+      kernel: collaboration,
     });
 
   return () => undefined;
+}
+
+function toCollaborationWorkRef(value: string): string {
+  const match = /^work-(\d+)$/.exec(value);
+  if (!match) throw new TeamContextError('not_found');
+  return `W-${match[1]}`;
+}
+
+function toLegacyWorkRef(value: string): string {
+  const match = /^W-(\d+)$/.exec(value);
+  if (!match) return value;
+  return `work-${match[1]}`;
+}
+
+function legacyWorkResult<T extends Record<string, unknown>>(value: T): T {
+  return {
+    ...value,
+    ...(typeof value.work_ref === 'string'
+      ? { work_ref: toLegacyWorkRef(value.work_ref) }
+      : {}),
+  };
 }
 
 async function result(value: Promise<unknown>) {

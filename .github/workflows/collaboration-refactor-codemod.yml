@@ -5,7 +5,7 @@ on:
     branches:
       - refactor/collaboration-convergence-activation-v2
     paths:
-      - tooling/codemods/collaboration-convergence-6.mjs
+      - tooling/codemods/collaboration-convergence-7.mjs
       - .github/workflows/collaboration-refactor-codemod.yml
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - run: node tooling/codemods/collaboration-convergence-6.mjs
+      - run: node tooling/codemods/collaboration-convergence-7.mjs
       - name: Commit bounded refactor
         run: |
           if git diff --quiet; then
@@ -30,6 +30,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/application/teams/team-driver.ts src/application/runs/execute-run.test.ts
-          git commit -m 'test(collaboration): remove obsolete direct Lead scheduler assumptions'
+          git add src/application/teams/team-driver.completion-decision.approval.test.ts
+          git commit -m 'test(collaboration): type completion decision fixture explicitly'
           git push origin HEAD:refactor/collaboration-convergence-activation-v2

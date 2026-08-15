@@ -42,18 +42,24 @@ export function createTeamModule(options: {
     undefined,
     options.logger,
   );
-  const commands = new TeamCommandService(
-    executions,
-    options.events,
-    messages,
-    wakeReconciler,
-  );
   const collaboration = new CollaborationKernel(
     executions,
     collaborationRepository,
     messages,
     options.events,
     wakeReconciler,
+  );
+  // `bootstrap.ts` still passes the pre-refactor command surface to the MCP
+  // composition root. Carry the new kernel on that object only as a temporary
+  // cutover seam; both old aliases and new MCP names execute one kernel.
+  const commands = Object.assign(
+    new TeamCommandService(
+      executions,
+      options.events,
+      messages,
+      wakeReconciler,
+    ),
+    { collaboration },
   );
 
   return {

@@ -3,10 +3,12 @@ import {
   type RegisteredTool,
 } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import type { TeamCommandService } from '../../application/teams/team-command-service.js';
 import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
+import { registerCollaborationMcpTools } from '../../adapters/collaboration-mcp/collaboration-mcp-tools.js';
 import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
 import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { LearningProposal } from '../../domain/learning/learning-proposal.js';
@@ -64,6 +66,7 @@ export function createLegacyRuntimeToolsContributor(input: {
   readonly teamTools?: {
     contextResolver: TeamToolContextResolver;
     commands: TeamCommandService;
+    collaboration?: CollaborationKernel;
   };
   readonly market?: SyntheticMarketAdapter;
   readonly logger?: Logger;
@@ -75,21 +78,29 @@ export function createLegacyRuntimeToolsContributor(input: {
       grant.teamMemberRunId &&
       grant.taskId &&
       grant.runId
-    )
+    ) {
+      const common = {
+        resolve: (currentGrant: RuntimeToolGrant) =>
+          input.teamTools!.contextResolver.resolve(currentGrant),
+        grantId: grant.grantId,
+        currentGrant: () => grants.get(grant.grantId),
+        begin: (grantId: string) => grants.beginToolCall(grantId),
+        end: (grantId: string) => grants.endToolCall(grantId),
+      };
       registerTeamMcpTools(
         server,
         grant.catalogTools,
         (toolRef) => grants.isToolAllowed(grant.grantId, toolRef),
-        {
-          resolve: (currentGrant) =>
-            input.teamTools!.contextResolver.resolve(currentGrant),
-          grantId: grant.grantId,
-          currentGrant: () => grants.get(grant.grantId),
-          begin: (grantId) => grants.beginToolCall(grantId),
-          end: (grantId) => grants.endToolCall(grantId),
-          commands: input.teamTools.commands,
-        },
+        { ...common, commands: input.teamTools.commands },
       );
+      if (input.teamTools.collaboration)
+        registerCollaborationMcpTools(
+          server,
+          grant.catalogTools,
+          (toolRef) => grants.isToolAllowed(grant.grantId, toolRef),
+          { ...common, kernel: input.teamTools.collaboration },
+        );
+    }
   };
 }
 
@@ -102,6 +113,7 @@ function registerTools(
     readonly teamTools?: {
       contextResolver: TeamToolContextResolver;
       commands?: TeamCommandService;
+      collaboration?: CollaborationKernel;
     };
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
@@ -307,100 +319,50 @@ async function createProposal(
   },
   grant: RuntimeToolGrant,
   repository: MemoryApiRepository,
-  create: CreateLearningProposal,
-  teamTools?: { contextResolver: TeamToolContextResolver },
+  createLearningProposal: CreateLearningProposal,
+  teamTools: { contextResolver: TeamToolContextResolver },
 ) {
-  if (!grant.taskId || !grant.runId || !grant.teamMemberRunId || !teamTools)
-    return notFound();
-  const owner = {
-    tenantId: grant.tenantId,
-    workspaceId: grant.workspaceId,
-    principalType: grant.principalType,
-    principalId: grant.principalId,
-  };
   try {
-    const actor = await teamTools.contextResolver.resolve(grant);
-    const store = await repository.getStore(args.memory_store_id, owner);
-    if (!store || store.owner.workspaceId !== grant.workspaceId)
+    if (!grant.teamMemberRunId || !grant.taskId || !grant.runId)
       return notFound();
-    const memories = await repository.listMemories(args.memory_store_id, owner);
-    const memory = memories?.find(
-      (candidate) => candidate.path === normalizeMemoryPath(args.target_path),
-    );
-    if (!memory) return notFound();
-    const proposal = await create.execute({
-      sourceTeamRunId: actor.teamRun.id,
-      sourceTaskId: grant.taskId,
-      sourceRunId: grant.runId,
-      targetMemoryStoreId: args.memory_store_id,
-      targetMemoryId: memory.id,
-      targetPath: memory.path,
-      baseContentSha256: memory.current.contentSha256,
+    const context = await teamTools.contextResolver.resolve(grant);
+    const store = await repository.getStore(args.memory_store_id, context.owner);
+    if (!store || store.owner.workspaceId !== context.owner.workspaceId)
+      return notFound();
+    const proposal = await createLearningProposal.execute({
+      teamRunId: context.teamRun.id,
+      teamMemberRunId: context.member.id,
+      sourceTaskId: context.task.id,
+      sourceRunId: context.run.id,
+      memoryStoreId: args.memory_store_id,
+      targetPath: args.target_path,
       proposedContent: args.proposed_content,
       evidenceRefs: args.evidence_refs,
-      accessContext: {
-        ...owner,
-        policySnapshotVersion: 'runtime',
-      } as AccessContext,
+      owner: context.owner,
     });
-    return proposal ? success(toMcpProposalProjection(proposal)) : notFound();
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      /invalid|normalized|exceeds|evidence/i.test(error.message)
-    )
-      return invalidRequest();
+    return learningProposalResult(proposal);
+  } catch {
     return internalError();
   }
 }
 
-function toMcpProposalProjection(proposal: LearningProposal) {
-  return {
-    learning_proposal_id: proposal.id,
+function learningProposalResult(proposal: LearningProposal) {
+  const result = {
+    proposal_id: proposal.id,
     status: proposal.status,
-    source: {
-      team_run_id: proposal.sourceTeamRunId,
-      task_id: proposal.sourceTaskId,
-      run_id: proposal.sourceRunId,
-    },
-    target: {
-      memory_store_id: proposal.targetMemoryStoreId,
-      memory_id: proposal.targetMemoryId,
-      path: proposal.targetPath,
-      base_content_sha256: proposal.baseContentSha256,
-    },
-    evidence_refs: proposal.evidenceRefs,
-    created_at: proposal.createdAt,
+    target_path: proposal.targetPath,
   };
-}
-
-function success(value: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(value) }],
-    structuredContent: value as Record<string, unknown>,
-  };
-}
-
-function invalidRequest() {
-  const result = { error: 'invalid_request' as const };
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(result) }],
     structuredContent: result,
   };
 }
-
 function notFound() {
-  const result = { error: 'not_found' as const };
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-    structuredContent: result,
-  };
+  return { content: [{ type: 'text' as const, text: '{"error":"not_found"}' }], structuredContent: { error: 'not_found' } };
 }
-
 function internalError() {
-  const result = { error: 'internal_error' as const };
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-    structuredContent: result,
-  };
+  return { content: [{ type: 'text' as const, text: '{"error":"internal_error"}' }], structuredContent: { error: 'internal_error' } };
+}
+function invalidRequest() {
+  return { content: [{ type: 'text' as const, text: '{"error":"invalid_request"}' }], structuredContent: { error: 'invalid_request' } };
 }

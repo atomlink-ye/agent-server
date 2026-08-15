@@ -15,6 +15,7 @@ export interface CollaborationRepository {
     readonly subject: string;
     readonly description: string | null;
     readonly dependsOnWorkItemIds: readonly string[];
+    readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<TeamWorkItem>;
@@ -26,6 +27,7 @@ export interface CollaborationRepository {
     readonly actorMemberId: string;
     readonly sourceTaskId: string;
     readonly sourceRunId: string;
+    readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<{ item: TeamWorkItem; attempt: TeamWorkItemAttempt }>;
@@ -36,6 +38,7 @@ export interface CollaborationRepository {
     readonly claimantMemberId: string;
     readonly sourceTaskId: string;
     readonly sourceRunId: string;
+    readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<{ item: TeamWorkItem; attempt: TeamWorkItemAttempt }>;
@@ -59,6 +62,7 @@ export interface CollaborationRepository {
     readonly sourceTaskId: string;
     readonly sourceRunId: string;
     readonly feedback: string;
+    readonly commandHash: string;
     readonly expectedRevision: number;
     readonly owner: OwnerScope;
   }): Promise<{ item: TeamWorkItem; attempt: TeamWorkItemAttempt }>;

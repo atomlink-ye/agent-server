@@ -46,6 +46,8 @@ export type CollaborationMessageStatus =
   | 'acknowledged'
   | 'cancelled';
 
+export type CollaborationActivationPriority = 'normal' | 'urgent';
+
 export interface CollaborationMessage {
   readonly ref: string;
   readonly collaborationRunId: string;
@@ -54,7 +56,7 @@ export interface CollaborationMessage {
   readonly body: string;
   readonly aboutWorkRef: string | null;
   readonly replyToRef: string | null;
-  readonly priority: 'normal' | 'urgent';
+  readonly priority: CollaborationActivationPriority;
   readonly requiresAck: boolean;
   readonly status: CollaborationMessageStatus;
   readonly presentedByTaskId: string | null;
@@ -98,7 +100,7 @@ export type CollaborationActivationCause =
 export interface CollaborationActivation {
   readonly participantId: string;
   readonly causes: readonly CollaborationActivationCause[];
-  readonly priority: 'normal' | 'urgent';
+  readonly priority: CollaborationActivationPriority;
   readonly dedupeKey: string;
 }
 

@@ -243,6 +243,7 @@ describe('managed agent registry migration', () => {
       '0029_product_work_identity',
       '0030_work_collaboration_kernel',
       '0031_team_message_consumed_semantics',
+      '0032_run_dispatch_priority',
     ]);
   });
 

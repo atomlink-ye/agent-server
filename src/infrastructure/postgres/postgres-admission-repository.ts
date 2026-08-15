@@ -10,6 +10,7 @@ import { PostgresRunRepository } from './postgres-run-repository.js';
 import { PostgresTaskRepository } from './postgres-task-repository.js';
 import { PostgresTeamExecutionRepository } from './postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from './postgres-team-message-repository.js';
+import type { CollaborationActivationPriority } from '../../domain/collaboration/collaboration.js';
 
 interface PostgresQueryResult<Row> {
   readonly rows?: readonly Row[];
@@ -204,17 +205,19 @@ class PostgresAdmissionTransaction implements AdmissionTransaction {
   public async enqueueRunDispatch(
     runId: string,
     createdAt: string,
+    priority: CollaborationActivationPriority = 'normal',
   ): Promise<void> {
     await this.database.query(
       `
         INSERT INTO run_dispatches (
           run_id,
           event_type,
+          priority,
           published_at,
           created_at
-        ) VALUES ($1, 'run.enqueue', NULL, $2)
+        ) VALUES ($1, 'run.enqueue', $3, NULL, $2)
       `,
-      [runId, createdAt],
+      [runId, createdAt, priority],
     );
   }
 }

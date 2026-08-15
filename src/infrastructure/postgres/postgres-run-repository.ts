@@ -228,7 +228,10 @@ export class PostgresRunRepository implements RunRepository {
           AND runs.status = 'queued'
           AND runs.cancellation_requested = false
           AND (tasks.session_id IS NULL OR session_lanes.active_task_id = tasks.id)
-        ORDER BY run_dispatches.id ASC
+        ORDER BY
+          CASE WHEN run_dispatches.priority = 'urgent' THEN 0 ELSE 1 END,
+          run_dispatches.created_at ASC,
+          run_dispatches.id ASC
         LIMIT 1
       `),
       [

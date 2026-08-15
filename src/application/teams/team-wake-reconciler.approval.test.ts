@@ -81,6 +81,7 @@ const directMessage = {
     kind: 'direct',
     dedupKey: 'direct-approval',
     body: 'Please confirm the rejection feedback.',
+    priority: 'urgent',
     now,
   }),
   sequence: 1,
@@ -166,7 +167,9 @@ function setup(
   }));
   const saveTask = vi.fn(async () => undefined);
   const saveRun = vi.fn(async () => undefined);
-  const enqueue = vi.fn(async () => undefined);
+  const enqueue = vi.fn(
+    async (..._args: [string, string, string?]) => undefined,
+  );
   const withTransaction = vi.fn(
     async (work: (tx: unknown) => Promise<unknown>) =>
       work({
@@ -208,6 +211,7 @@ function setup(
     materialize,
     saveTask,
     saveRun,
+    enqueue,
   };
 }
 
@@ -246,5 +250,7 @@ describe('TeamWakeReconciler completion approval gating', () => {
     expect(setupState.materialize).toHaveBeenCalledTimes(1);
     expect(setupState.saveTask).toHaveBeenCalledTimes(2);
     expect(setupState.saveRun).toHaveBeenCalledTimes(2);
+    expect(setupState.enqueue.mock.calls[0]?.[2]).toBe('urgent');
+    expect(setupState.enqueue.mock.calls[1]?.[2]).toBe('normal');
   });
 });

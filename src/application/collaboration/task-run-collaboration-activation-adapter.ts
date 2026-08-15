@@ -7,7 +7,10 @@ import type { AdmissionRepository } from '../ports/admission-repository.js';
 import type { OwnerScope } from '../ports/team-execution-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import { formatTeamDeliveryPrompt } from '../context/runtime-prompts.js';
-import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
+import {
+  encodeRootTaskRunRequestSnapshotRef,
+  fingerprintRootTaskRunRequest,
+} from '../tasks/root-task-input.js';
 import type { PlannedCollaborationActivation } from './collaboration-activation-planner.js';
 
 /**
@@ -58,7 +61,7 @@ export class TaskRunCollaborationActivationAdapter {
       invokableKind: 'agent',
       invokableVersionId: input.member.agentVersionId,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt }),
-      inputFingerprint: rootTask.inputFingerprint,
+      inputFingerprint: fingerprintRootTaskRunRequest({ prompt }),
       logicalStepKey: input.plan.activation.dedupeKey,
       nodePath: `collaboration:${input.team.id}:${input.member.id}:${primary.sequence}`,
       teamMemberRunId: input.member.id,
@@ -119,7 +122,11 @@ export class TaskRunCollaborationActivationAdapter {
           owner: input.owner,
         });
       }
-      await tx.enqueueRunDispatch(run.id, run.createdAt);
+      await tx.enqueueRunDispatch(
+        run.id,
+        run.createdAt,
+        input.plan.activation.priority,
+      );
     });
     return { taskId: task.id, runId: run.id };
   }

@@ -272,7 +272,9 @@ export async function createService(
     admissions: admissionRepository,
     events,
     logger,
-    deferActivationKick: options.deferTeamWakeReconcile,
+    ...(options.deferTeamWakeReconcile === undefined
+      ? {}
+      : { deferActivationKick: options.deferTeamWakeReconcile }),
   });
   const {
     executions: collaborativeTeamExecutions,

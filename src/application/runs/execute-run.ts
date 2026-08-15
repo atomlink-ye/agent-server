@@ -1071,7 +1071,7 @@ export class ExecuteRun {
           prompt: deliveredTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
-          ...(priorSessionBinding
+          ...(priorSessionBinding && !sessionRuntime
             ? { compatibilitySessionBinding: priorSessionBinding }
             : {}),
           ...(!priorExternalSessionId && collaborativeTeam && member && sessionRuntime

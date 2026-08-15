@@ -485,12 +485,12 @@ describe('ExecuteRun', () => {
     );
     expect(runtime.executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        compatibilitySessionBinding: {
-          plane: 'paseo',
-          externalSessionId: 'agent-prior',
-        },
+        runtimeSessionId: 'runtime-lead-1',
       }),
       expect.anything(),
+    );
+    expect(runtime.executeTurn.mock.calls[0]?.[0]).not.toHaveProperty(
+      'compatibilitySessionBinding',
     );
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {

@@ -1068,8 +1068,36 @@ function formatProjectedText(value: string, roots: readonly string[]): string {
     .replace(
       /(?<![A-Za-z0-9])(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?![A-Za-z0-9])/giu,
       '<id>',
+    )
+    .replace(
+      /\b[A-Za-z0-9_-]{32,}\b/gu,
+      (token) => (looksLikeStandaloneSecret(token) ? '<redacted>' : token),
     );
   return safe;
+}
+
+const knownBareSecretPrefix =
+  /^(?:sk-(?:proj-)?|(?:sk|rk|pk)_(?:live|test)_|gh[pousr]_|github_pat_|xox[baprs]-|AIza|ya29\.|SG\.|npm_|pypi-)/iu;
+
+function looksLikeStandaloneSecret(value: string): boolean {
+  if (knownBareSecretPrefix.test(value)) return true;
+
+  const uniqueCharacters = new Set(value).size;
+  if (uniqueCharacters < 12 || /[_-]/u.test(value)) return false;
+
+  const counts = new Map<string, number>();
+  for (const character of value)
+    counts.set(character, (counts.get(character) ?? 0) + 1);
+  const entropy = [...counts.values()].reduce((sum, count) => {
+    const probability = count / value.length;
+    return sum - probability * Math.log2(probability);
+  }, 0);
+
+  return (
+    entropy >= 4.2 &&
+    uniqueCharacters >= 12 &&
+    (/[0-9]/u.test(value) || value.length >= 48)
+  );
 }
 
 function mergeText(existing: string, incoming: string): string {

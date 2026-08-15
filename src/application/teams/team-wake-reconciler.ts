@@ -92,7 +92,12 @@ export class TeamWakeReconciler {
     ]);
     const senderNameById = new Map(members.map((member) => [member.id, member.name]));
 
-    for (const member of members.filter((candidate) => candidate.role === 'member')) {
+    // Direct mailbox messages may target the Team Lead as well as a member.
+    // The planner still limits work-attempt wake messages to their assignee;
+    // iterating every live participant here lets a member→lead message become
+    // a canonical, traceable direct-message Task/Run instead of remaining
+    // permanently queued.
+    for (const member of members) {
       // Busy delivery is a durable queue, not a second concurrent Turn.
       if (member.status === 'active') continue;
       if (member.status === 'stopped' || member.status === 'failed') continue;

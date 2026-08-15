@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
+const realProviderDefaults = loadRealProviderDefaults();
 const baseUrl = process.env.AGENT_SERVER_BASE_URL?.trim();
 const token = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
 const workspaceId =
@@ -138,8 +140,13 @@ const runIds = [
   ),
 ];
 const usage = {};
+const runtimeModels = new Set();
 for (const runId of runIds) {
   const run = await request(`/api/v1/runs/${encodeURIComponent(runId)}`);
+  const runtime = run.runtime;
+  if (runtime?.provider && runtime?.model) {
+    runtimeModels.add(`${runtime.provider}/${runtime.model}`);
+  }
   for (const field of usageFields) {
     const value = run.usage?.[field];
     if (typeof value !== 'number' || !Number.isFinite(value)) continue;
@@ -153,10 +160,13 @@ for (const runId of runIds) {
 if (
   !(usage.input_tokens > 0) ||
   !(usage.output_tokens > 0) ||
-  !(usage.total_cost_usd > 0)
+  !(usage.total_cost_usd > 0) ||
+  !runtimeModels.has(
+    `${realProviderDefaults.PASEO_PROVIDER}/${realProviderDefaults.PASEO_MODEL}`,
+  )
 ) {
   throw new Error(
-    `agent team smoke did not report positive aggregate usage: ${JSON.stringify(usage)}`,
+    `agent team smoke did not report expected real-provider usage: ${JSON.stringify({ usage, runtime_models: [...runtimeModels] })}`,
   );
 }
 process.stdout.write(
@@ -164,6 +174,7 @@ process.stdout.write(
     success: true,
     task_id: invoked.task_id,
     team_status: projection.project.status,
+    runtime_models: [...runtimeModels],
     usage,
   })}\n`,
 );

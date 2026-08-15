@@ -21,7 +21,7 @@ import {
   type TeamWorkItem,
 } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import { AGENTIC_TEAM_LIMITS } from '../../application/teams/team-policy-evaluator.js';
+import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -1173,7 +1173,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         );
         if (
           Number(count.rows?.[0]?.count ?? 0) >=
-          AGENTIC_TEAM_LIMITS.maxWorkItems
+          COLLABORATION_LIMITS.maxWorkItems
         )
           throw new TeamExecutionError('limit_exceeded');
         const activeAttempt = await client.query(
@@ -1641,7 +1641,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       );
       const rejectionBypass = Boolean(rejection.rows?.[0]);
       if (
-        previous.attempt_no >= AGENTIC_TEAM_LIMITS.maxAttemptsPerItem &&
+        previous.attempt_no >= COLLABORATION_LIMITS.maxAttemptsPerItem &&
         !rejectionBypass
       )
         throw new TeamExecutionError('invalid_transition');
@@ -2085,7 +2085,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
         input.teamRunId,
         input.expectedRevision,
         ...ownerValues(input.owner),
-        AGENTIC_TEAM_LIMITS.maxLeadTurns,
+        COLLABORATION_LIMITS.maxLeadTurns,
       ],
     );
     if (!r.rows?.[0]) {
@@ -2116,11 +2116,11 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       const currentLeadTurnCount = current.rows?.[0]?.lead_turn_count ?? 0;
       const rejectionBaseline = current.rows?.[0]?.rejection_baseline;
       if (
-        currentLeadTurnCount >= AGENTIC_TEAM_LIMITS.maxLeadTurns &&
+        currentLeadTurnCount >= COLLABORATION_LIMITS.maxLeadTurns &&
         (rejectionBaseline === null ||
           rejectionBaseline === undefined ||
           currentLeadTurnCount - rejectionBaseline >=
-            AGENTIC_TEAM_LIMITS.maxLeadTurns)
+            COLLABORATION_LIMITS.maxLeadTurns)
       )
         throw new TeamExecutionError('limit_exceeded');
       throw new TeamExecutionError('stale_state');

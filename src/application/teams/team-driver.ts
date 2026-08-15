@@ -28,10 +28,10 @@ import {
 } from '../tasks/root-task-input.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import {
-  AGENTIC_TEAM_LIMITS,
   deriveAgenticLeadCommandPolicy,
   isTeamCompletionApprovalPending,
 } from './team-policy-evaluator.js';
+import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 
 export class TeamDriver {
   public constructor(
@@ -97,7 +97,7 @@ export class TeamDriver {
       claim.run.id,
       lead,
       `lead:${team.id}:${lead.id}:turn:1`,
-      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nSafe board snapshot: no Work items yet\nLimits: max ${AGENTIC_TEAM_LIMITS.maxWorkItems} Work items, max ${AGENTIC_TEAM_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${AGENTIC_TEAM_LIMITS.maxLeadTurns} Lead turns.`,
+      `You are the Lead coordinating a bounded team. Review the goal and safe board snapshot, then make all decisions currently needed in this turn. You may create multiple Work items, assign the fixed roster members, accept or request changes on multiple completed Work items, and finish when every Work item is accepted. Do not wait for running members during this turn.\n\nGoal: ${safeText(claim.run.prompt)}\nSafe board snapshot: no Work items yet\nLimits: max ${COLLABORATION_LIMITS.maxWorkItems} Work items, max ${COLLABORATION_LIMITS.maxAttemptsPerItem} attempts per Work item, max ${COLLABORATION_LIMITS.maxLeadTurns} Lead turns.`,
       lead.agentVersionId,
       'lead_turn',
       1,
@@ -353,7 +353,7 @@ export class TeamDriver {
         );
         if (
           policy.allowedCommands.length > 0 &&
-          !policy.allowedCommands.includes('team_work_cancel')
+          !policy.allowedCommands.includes('board_cancel')
         ) {
           try {
             await this.executions.failTeamRunAtomically({

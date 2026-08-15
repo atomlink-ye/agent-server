@@ -1,5 +1,9 @@
 export type TeamWorkItemAttemptStatus =
-  'queued' | 'running' | 'completed' | 'failed';
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'blocked';
 
 export interface TeamWorkItemAttempt {
   readonly id: string;

@@ -81,6 +81,8 @@ services:
       POSTGRES_URL: postgresql://agent:agent@postgres:5432/agent_server
       SERVICE_ACCOUNTS_JSON: '[{"serviceAccountId":"svc_local","token":"token-local-dev","tenantId":"tenant_local","workspaceId":"${WEB_WORKSPACE_ID:-00000000-0000-4000-8000-000000000001}","policyVersion":"policy-local"},{"serviceAccountId":"svc_local_2","token":"token-local-dev-2","tenantId":"tenant_local_2","workspaceId":"${WEB_WORKSPACE_ID_2:-00000000-0000-4000-8000-000000000002}","policyVersion":"policy-local-2"}]'
       PASEO_WS_URL: ws://paseo-runtime:16767/ws
+      PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
+      PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
     volumes: !override
       - .:/workspace
       - type: volume

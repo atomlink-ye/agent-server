@@ -4,11 +4,11 @@ name: Real Runtime
 # that Deterministic and Real Postgres stay runnable from a clean checkout and
 # stay free to run on every push.
 #
-# This does not run per commit. A branch under active development can push a
-# dozen times an hour, and paying a real provider for revisions that are already
-# obsolete buys nothing. It runs on `merge_group`: once, on the merge ref, at
-# the moment the change is actually about to enter master. That is the only
-# moment where the result changes a decision.
+# This deliberately does not run per commit. Three things keep it to roughly one
+# run per pull request: draft pull requests are skipped entirely, a new push
+# cancels the run its predecessor started, and a path filter keeps unrelated
+# changes out. Merge queue would express this more directly, but it is not
+# available on this repository.
 #
 # `workflow_dispatch` remains available for running it by hand or through the
 # API against any ref.
@@ -19,7 +19,23 @@ name: Real Runtime
 # reads as "passed".
 
 on:
-  merge_group:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/real-runtime.yml'
+      - '.nvmrc'
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - 'compose.runtime.yaml'
+      - 'compose.external-runtime.yaml'
+      - 'config/local-environments.yaml'
+      - 'config/real-provider-defaults.env'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/dev/**'
+      - 'scripts/smoke/**'
+      - 'src/**'
+      - 'tooling/environment/**'
   workflow_dispatch:
     inputs:
       ref:
@@ -27,11 +43,24 @@ on:
         required: false
         type: string
 
+# One run per pull request, not one per push. A superseded revision is not worth
+# paying a provider for, so an in-flight run is cancelled as soon as a newer
+# commit arrives. Manual dispatches are keyed by run id so they never cancel
+# each other.
+concurrency:
+  group: real-runtime-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   real-runtime:
+    # Draft pull requests do not run. That is where the churn lives: a branch is
+    # a draft precisely while it is still being reworked, and its intermediate
+    # revisions are obsolete before a real provider could finish checking them.
+    # Marking the pull request ready for review triggers this.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     environment: test
     timeout-minutes: 30

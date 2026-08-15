@@ -13,7 +13,7 @@ pnpm typecheck
 pnpm test:unit
 ```
 
-Use `pnpm env -- up <profile>` for interactive infrastructure and `pnpm env -- run <profile> -- <command>` for one-off infrastructure-backed commands. Tests that need infrastructure should normally start it through the shared TestEnvironment support rather than depending on a manual pre-step.
+Use `pnpm local-env -- up <profile>` for interactive infrastructure and `pnpm local-env -- run <profile> -- <command>` for one-off infrastructure-backed commands. Tests that need infrastructure should normally start it through the shared TestEnvironment support rather than depending on a manual pre-step.
 
 ## Repository hygiene
 

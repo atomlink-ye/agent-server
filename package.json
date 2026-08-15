@@ -12,12 +12,12 @@
     "node": ">=22 <25"
   },
   "scripts": {
-    "dev": "pnpm env -- up core",
-    "dev:runtime": "pnpm env -- up runtime",
-    "dev:full": "pnpm env -- up full",
+    "dev": "pnpm local-env -- up core",
+    "dev:runtime": "pnpm local-env -- up runtime",
+    "dev:full": "pnpm local-env -- up full",
     "dev:api": "node --import tsx --watch src/entrypoints/api/server.ts",
     "dev:lark": "node --import tsx --watch src/entrypoints/lark/worker.ts",
-    "env": "node --import tsx tooling/environment/cli.ts",
+    "local-env": "node --import tsx tooling/environment/cli.ts",
     "start": "node dist/entrypoints/api/server.js",
     "start:lark": "node dist/entrypoints/lark/worker.js",
     "skill:register": "node --import tsx src/entrypoints/cli/skill-register.ts",
@@ -40,8 +40,8 @@
     "test:web": "vitest run --config vitest.web.config.ts",
     "test:e2e:web": "vitest run --config vitest.e2e.config.ts e2e/web-product-session.e2e.test.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "smoke:runtime": "pnpm env -- run runtime -- node scripts/smoke/runtime-main-flow.mjs",
-    "smoke:agent-team": "pnpm env -- run runtime -- node scripts/smoke/agent-team-main-flow.mjs",
+    "smoke:runtime": "pnpm local-env -- run runtime -- node scripts/smoke/runtime-main-flow.mjs",
+    "smoke:agent-team": "pnpm local-env -- run runtime -- node scripts/smoke/agent-team-main-flow.mjs",
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",
     "verify": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
     "clean": "node scripts/dev/clean.mjs"

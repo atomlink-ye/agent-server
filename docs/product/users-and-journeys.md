@@ -42,10 +42,10 @@ The current repository developer loop is pnpm-native and selects infrastructure 
 
 1. `corepack enable && pnpm install --frozen-lockfile` installs repository dependencies.
 2. `pnpm check` runs the deterministic repository/type boundary for ordinary development.
-3. `pnpm env -- up core` starts PostgreSQL plus Agent Server without an execution plane.
-4. `pnpm env -- up runtime` starts the current Paseo-backed runtime topology when execution is required.
+3. `pnpm local-env -- up core` starts PostgreSQL plus Agent Server without an execution plane.
+4. `pnpm local-env -- up runtime` starts the current Paseo-backed runtime topology when execution is required.
 5. `POST /api/v1/runs` remains a compatibility path that returns `202` and a stable Run URL; canonical product work uses Task admission.
 6. Workspace-memory proposal routes create, review, and list accepted records under authenticated owner scope.
 7. `pnpm smoke:runtime` is the explicit real-provider seam check and is not an ordinary deterministic prerequisite.
 
-For focused infrastructure-backed verification, prefer a self-starting test or `pnpm env -- run <profile> -- <command>` over a scenario setup script. Generated diagnostics remain under ignored `.local/test-runs/` or CI artifacts.
+For focused infrastructure-backed verification, prefer a self-starting test or `pnpm local-env -- run <profile> -- <command>` over a scenario setup script. Generated diagnostics remain under ignored `.local/test-runs/` or CI artifacts.

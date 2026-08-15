@@ -52,7 +52,7 @@ Use **Topology × Fixture × Test Case**.
 
 Dev and Test share `config/local-environments.yaml` and `tooling/environment/`.
 
-An infrastructure-backed test should start the environment it needs. Manual setup through `pnpm env -- up ...` is for interactive debugging, not a prerequisite for tests. For one-off infrastructure commands use `pnpm env -- run <profile> -- <command>`.
+An infrastructure-backed test should start the environment it needs. Manual setup through `pnpm local-env -- up ...` is for interactive debugging, not a prerequisite for tests. For one-off infrastructure commands use `pnpm local-env -- run <profile> -- <command>`.
 
 If you are about to add `scripts/run-<scenario>` because setup is hard, improve `TestEnvironment`, the environment library, or fixture APIs instead.
 

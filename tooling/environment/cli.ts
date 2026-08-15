@@ -31,7 +31,7 @@ function splitRunArguments(args: string[]): {
   const separator = args.indexOf('--');
   if (separator === -1) {
     throw new Error(
-      'usage: pnpm env -- run <profile> [--provider X --model Y --adapter X] -- <command...>',
+      'usage: pnpm local-env -- run <profile> [--provider X --model Y --adapter X] -- <command...>',
     );
   }
   const command = args.slice(separator + 1);
@@ -67,7 +67,7 @@ async function loadState(): Promise<LocalEnvironmentState> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(
-        'no local environment is recorded; run `pnpm env -- up <profile>` first',
+        'no local environment is recorded; run `pnpm local-env -- up <profile>` first',
       );
     }
     throw error;
@@ -106,7 +106,7 @@ async function runInEnvironment(
   profileValue: string | undefined,
   args: string[],
 ): Promise<void> {
-  if (!profileValue) throw new Error('usage: pnpm env -- run <profile> -- <command...>');
+  if (!profileValue) throw new Error('usage: pnpm local-env -- run <profile> -- <command...>');
   const profile = parseLocalEnvironmentName(profileValue);
   const { flags, command } = splitRunArguments(args);
   const runtimeOverrides = parseRuntimeOverrides(flags);
@@ -154,7 +154,7 @@ async function main(args = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === 'up') {
-    if (!profileValue) throw new Error('usage: pnpm env -- up <profile>');
+    if (!profileValue) throw new Error('usage: pnpm local-env -- up <profile>');
     const profile = parseLocalEnvironmentName(profileValue);
     const runtimeOverrides = parseRuntimeOverrides(rest);
     const handle = await startLocalEnvironment({
@@ -169,7 +169,7 @@ async function main(args = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === 'down') {
-    if (profileValue) throw new Error('usage: pnpm env -- down');
+    if (profileValue) throw new Error('usage: pnpm local-env -- down');
     const state = await loadState();
     await stopLocalEnvironment(state, { inheritOutput: true });
     await rm(statePath, { force: true });
@@ -189,7 +189,7 @@ async function main(args = process.argv.slice(2)): Promise<void> {
     return;
   }
   throw new Error(
-    'usage: pnpm env -- <up PROFILE|down|info [PROFILE]|run PROFILE -- COMMAND...>',
+    'usage: pnpm local-env -- <up PROFILE|down|info [PROFILE]|run PROFILE -- COMMAND...>',
   );
 }
 

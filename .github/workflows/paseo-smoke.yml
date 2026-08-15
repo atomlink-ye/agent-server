@@ -2,6 +2,22 @@ name: Runtime external smoke
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/paseo-smoke.yml'
+      - '.nvmrc'
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - 'compose.runtime.yaml'
+      - 'compose.external-runtime.yaml'
+      - 'config/local-environments.yaml'
+      - 'config/real-provider-defaults.env'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/dev/**'
+      - 'scripts/smoke/**'
+      - 'src/**'
+      - 'tooling/environment/**'
   schedule:
     - cron: '17 3 * * *'
 
@@ -10,6 +26,9 @@ permissions:
 
 jobs:
   runtime-smoke:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: test
     timeout-minutes: 30

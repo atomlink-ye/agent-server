@@ -273,7 +273,7 @@ export class TeamDriver {
             failure: {
               code: 'runtime_execution_failed',
               message:
-                'The runtime completed successfully yet required board_submit did not occur.',
+                'The runtime completed successfully yet required Work board_submit did not occur.',
             },
           });
           if (failedTeam.status !== 'active') return;

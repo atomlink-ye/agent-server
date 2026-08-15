@@ -196,7 +196,7 @@ describeRealPostgres('real PostgreSQL run cancellation arbitration', () => {
     expect(claim).not.toBeNull();
     let calls = 0;
     const runtime = {
-      cancel: async () => {
+      cancelRun: async (_input: { readonly runId: string }) => {
         calls += 1;
       },
     };

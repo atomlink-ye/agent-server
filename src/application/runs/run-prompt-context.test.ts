@@ -104,8 +104,20 @@ describe('RunPromptContext', () => {
       leadState: {
         workItems: [],
         attempts: [],
-        policy: { allowedCommands: [] },
-      } as never,
+        policy: {
+          allowedCommands: [],
+          eligibleAcceptWorkItemIds: [],
+          eligibleReworkWorkItemIds: [],
+          eligibleCancelWorkItemIds: [],
+          limits: {
+            maxLeadTurns: 8,
+            remainingLeadTurns: 8,
+            maxWorkItems: 4,
+            remainingWorkItems: 4,
+            maxAttemptsPerItem: 2,
+          },
+        },
+      },
       runtimeToolRefs: [],
       task,
     });

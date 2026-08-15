@@ -137,10 +137,10 @@ function hasCompletionFacts(value) {
     work.attempts.length !== 2 ||
     !attempt1 ||
     !attempt2 ||
-    attempt1.status !== 'failed' ||
+    attempt1.status !== 'completed' ||
     attempt2.status !== 'completed' ||
-    !attempt1.feedback_summary?.includes('AGENT_TEAM_SMOKE_REWORK_REQUIRED') ||
     !attempt1.result_summary?.includes('AGENT_TEAM_SMOKE_ATTEMPT_1') ||
+    !attempt2.feedback_summary?.includes('AGENT_TEAM_SMOKE_REWORK_REQUIRED') ||
     !attempt2.result_summary?.includes('AGENT_TEAM_SMOKE_MEMBER_OK')
   )
     return false;

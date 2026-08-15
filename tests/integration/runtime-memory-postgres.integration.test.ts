@@ -137,7 +137,7 @@ describe('runtime memory PostgreSQL materialization', () => {
     await firstSession.session.run({ runId: runtimeRunId, prompt: 'first' });
     await bindings.bind({
       runId: runtimeRunId,
-      providerAgentId: firstSession.sessionBinding.externalSessionId,
+      sessionBinding: firstSession.sessionBinding,
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await db.query(
@@ -153,11 +153,11 @@ describe('runtime memory PostgreSQL materialization', () => {
       `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker','00000000-0000-4000-8000-000000000302',now()+interval '1 hour',1,now(),now())`,
       [continuationRunId, continuationTaskId],
     );
-    const prior = await bindings.findLatestProviderAgentBySessionId(
+    const prior = await bindings.findLatestSessionBindingBySessionId(
       '00000000-0000-4000-8000-000000000902',
     );
     const secondSession = await runtime.attachSession(
-      { plane: 'paseo', externalSessionId: prior! },
+      prior!,
       {
         runtimeSessionId: 'continuation-runtime-session',
         workspace: {
@@ -170,7 +170,7 @@ describe('runtime memory PostgreSQL materialization', () => {
     await secondSession.run({ runId: continuationRunId, prompt: 'second' });
 
     expect(firstSession.sessionBinding.externalSessionId).toBe('agent-session-1');
-    expect(prior).toBe('agent-session-1');
+    expect(prior?.externalSessionId).toBe('agent-session-1');
     expect(creates).toBe(1);
     expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);
   });

@@ -553,13 +553,13 @@ export class ExecuteRun {
         (runtimeSession.workspaceBinding === null)
     )
       throw new Error('Runtime session execution binding is partial.');
-    const legacyProviderAgentId =
+    const legacySessionBinding =
       task.sessionId &&
       productSession &&
       productSession.environmentVersionId == null &&
       !runtimeSession &&
-      this.events?.findLatestProviderAgentBySessionId
-        ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+      this.events?.findLatestSessionBindingBySessionId
+        ? await this.events.findLatestSessionBindingBySessionId(task.sessionId)
         : null;
     if (
       runtimeSession &&
@@ -589,16 +589,17 @@ export class ExecuteRun {
       )
         throw new Error('Product Session runtime session snapshot is invalid.');
     }
-    const priorProviderAgentId = member
-      ? (runtimeSession?.sessionBinding?.externalSessionId ?? null)
-      : (runtimeSession?.sessionBinding?.externalSessionId ??
-        legacyProviderAgentId ??
+    const priorSessionBinding = member
+      ? (runtimeSession?.sessionBinding ?? null)
+      : (runtimeSession?.sessionBinding ??
+        legacySessionBinding ??
         (!this.runtimeSessions &&
         task.sessionId &&
-        this.events?.findLatestProviderAgentBySessionId
-          ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+        this.events?.findLatestSessionBindingBySessionId
+          ? await this.events.findLatestSessionBindingBySessionId(task.sessionId)
           : null));
-    if (priorProviderAgentId && member?.role === 'lead' && collaborativeTeam) {
+    const priorExternalSessionId = priorSessionBinding?.externalSessionId ?? null;
+    if (priorExternalSessionId && member?.role === 'lead' && collaborativeTeam) {
       const fenceBinder = this
         .runtimeExtensionBinder as RuntimeExtensionBinder & {
         getTeamMemberGrant?: RuntimeExtensionBinder['getTeamMemberGrant'];
@@ -651,7 +652,7 @@ export class ExecuteRun {
       )
         throw new Error('Previous Team turn cannot be verified.');
     }
-    const resolved = priorProviderAgentId
+    const resolved = priorExternalSessionId
       ? await this.resolveContinuationPrompt(
           claim.run.prompt,
           ownerScope,
@@ -735,7 +736,7 @@ export class ExecuteRun {
         ? turnPrompt
         : appendTeamTurnGuidance(turnPrompt, task.teamTaskKind);
     const systemPrompt =
-      !priorProviderAgentId && collaborativeTeam && member
+      !priorExternalSessionId && collaborativeTeam && member
         ? buildTeamSystemPrompt({
             role: member.role,
             roster: teamRoster,
@@ -744,7 +745,7 @@ export class ExecuteRun {
               ...(member.role === 'lead' ? [TEAM_LEAD_CONTROL_PROTOCOL] : []),
             ].join('\n\n'),
           })
-        : !priorProviderAgentId
+        : !priorExternalSessionId
           ? resolved.systemPrompt
           : '';
     const deliveredTurnPrompt =
@@ -889,7 +890,7 @@ export class ExecuteRun {
     }
     let extensions;
     if (
-      !priorProviderAgentId &&
+      !priorExternalSessionId &&
       (resolved.skills.length > 0 || runtimeToolRefs.length > 0)
     ) {
       if (!this.runtimeExtensionBinder)
@@ -967,7 +968,7 @@ export class ExecuteRun {
       exactLeadGrantId = issued.grantId;
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       member &&
       member.role !== 'lead' &&
       collaborativeTeam
@@ -1020,7 +1021,7 @@ export class ExecuteRun {
       if (otherActive) throw new Error('Team member has another active Task.');
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       member &&
       collaborativeTeam &&
       refreshableBinder?.refreshForTeamMember
@@ -1037,7 +1038,7 @@ export class ExecuteRun {
       exactLeadGrantId = refreshed.grantId;
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       !member &&
       sessionRuntime &&
       sessionRuntime.toolRefs.length > 0 &&
@@ -1070,7 +1071,7 @@ export class ExecuteRun {
           prompt: deliveredTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
-          ...(!priorProviderAgentId && collaborativeTeam && member && sessionRuntime
+          ...(!priorExternalSessionId && collaborativeTeam && member && sessionRuntime
             ? {
                 workspaceOwner: {
                   kind: 'team_run' as const,
@@ -1085,21 +1086,21 @@ export class ExecuteRun {
                   : {}),
               }
             : {}),
-          ...(priorProviderAgentId && !sessionRuntime
+          ...(priorExternalSessionId && !sessionRuntime
             ? {
                 compatibilitySessionBinding: {
                   plane: 'paseo',
-                  externalSessionId: priorProviderAgentId,
+                  externalSessionId: priorExternalSessionId,
                 },
               }
             : {}),
-          ...(!priorProviderAgentId && runtimeModelPolicy
+          ...(!priorExternalSessionId && runtimeModelPolicy
             ? {
                 provider: runtimeModelPolicy.provider,
                 model: runtimeModelPolicy.model,
               }
             : {}),
-          ...(!priorProviderAgentId
+          ...(!priorExternalSessionId
             ? {
                 systemPrompt,
                 ...(collaborativeTeam
@@ -1184,7 +1185,7 @@ export class ExecuteRun {
     await this.events?.bind({
       runId: claim.run.id,
       ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-      providerAgentId: execution.sessionBinding.externalSessionId,
+      sessionBinding: execution.sessionBinding,
       createdAt: claim.run.updatedAt,
     });
     const candidateInputs = (

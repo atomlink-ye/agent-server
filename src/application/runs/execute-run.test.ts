@@ -276,7 +276,10 @@ describe('ExecuteRun', () => {
     const events = {
       bind: vi.fn(async () => undefined),
       append: vi.fn(async () => undefined),
-      findLatestProviderAgentBySessionId: vi.fn(async () => 'agent-prior'),
+      findLatestSessionBindingBySessionId: vi.fn(async () => ({
+        plane: 'paseo',
+        externalSessionId: 'agent-prior',
+      })),
     };
     const runtime = createRuntimeWithCandidates('agent-prior');
     const binder = vi.fn(async () => undefined);
@@ -313,9 +316,14 @@ describe('ExecuteRun', () => {
     expect(catalogResolve).not.toHaveBeenCalled();
     expect(binder).not.toHaveBeenCalled();
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(events.findLatestProviderAgentBySessionId).toHaveBeenCalledTimes(1);
+    expect(events.findLatestSessionBindingBySessionId).toHaveBeenCalledTimes(1);
     expect(events.bind).toHaveBeenLastCalledWith(
-      expect.objectContaining({ providerAgentId: 'agent-prior' }),
+      expect.objectContaining({
+        sessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'agent-prior',
+        },
+      }),
     );
   });
   it('recovers an agentic Lead turn with its member-scoped current-Run grant', async () => {
@@ -1934,7 +1942,7 @@ function createDirectExecuteRun(input: {
 }
 
 function createRuntimeWithCandidates(
-  providerAgentId = 'agent-test',
+  externalSessionId = 'agent-test',
 ): TestExecutionRuntime {
   const runtime = createRuntime();
   vi.mocked(runtime.executeTurn).mockResolvedValue({
@@ -1945,7 +1953,7 @@ function createRuntimeWithCandidates(
       plane: 'test',
       externalWorkspaceId: 'workspace-test',
     },
-    sessionBinding: { plane: 'test', externalSessionId: providerAgentId },
+    sessionBinding: { plane: 'test', externalSessionId },
     memoryCandidates: [
       { category: 'project_constraint', content: 'keep logs' },
     ],

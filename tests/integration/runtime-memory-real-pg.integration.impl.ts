@@ -165,7 +165,7 @@ describeReal('real PostgreSQL runtime memory replay', () => {
     );
   });
 
-  it('finds the latest non-null provider Agent through the durable run/task session relation', async () => {
+  it('finds the latest non-null execution session through the durable run/task session relation', async () => {
     if (!pool) return;
     const repository = new PostgresRunEventRepository(pool);
     await repository.bind({
@@ -173,8 +173,11 @@ describeReal('real PostgreSQL runtime memory replay', () => {
       createdAt: new Date().toISOString(),
     });
     await expect(
-      repository.findLatestProviderAgentBySessionId(ids.session),
-    ).resolves.toBe('agent-prior');
+      repository.findLatestSessionBindingBySessionId(ids.session),
+    ).resolves.toEqual({
+      plane: 'paseo',
+      externalSessionId: 'agent-prior',
+    });
   });
 
   afterAll(async () => {

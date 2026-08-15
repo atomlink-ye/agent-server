@@ -1,10 +1,6 @@
-import type {
-  AgentRuntimeExecution,
-  AgentRuntimeExecuteInput,
-  AgentRuntimeHealth,
-} from '../../src/application/ports/agent-runtime.js';
 import type { RuntimeMemoryCandidateCategory } from '../../src/application/ports/runtime-memory-candidate-collector.js';
 import type {
+  ExecutionExtensionBinding,
   ExecutionObservationSink,
   ExecutionPlaneHealth,
 } from '../../src/application/ports/execution-plane.js';
@@ -13,6 +9,55 @@ import type {
   ExecutionTurnOutcome,
   ExecutionTurnRequest,
 } from '../../src/application/runtime/execution-plane-runtime-facade.js';
+
+type FakeRuntimeHealth = {
+  readonly ready: boolean;
+  readonly provider: string;
+  readonly model?: string;
+  readonly checks: ExecutionPlaneHealth['checks'];
+};
+
+type FakeRuntimeExecution = {
+  readonly provider: string;
+  readonly model: string;
+  readonly text: string;
+  readonly externalSessionId: string;
+  readonly runtimeWorkspaceId?: string;
+  readonly usage?: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalCostUsd: number;
+  };
+  readonly memoryCandidates?: readonly {
+    readonly content: string;
+    readonly category: RuntimeMemoryCandidateCategory;
+  }[];
+};
+
+type FakeRuntimeExecuteInput = {
+  readonly operation: 'create' | 'continue';
+  readonly runId: string;
+  readonly prompt: string;
+  readonly systemPrompt?: string;
+  readonly externalSessionId?: string;
+  readonly runtimeSessionId?: string;
+  readonly runtimeWorkspaceId?: string;
+  readonly cellCwd?: string;
+  readonly workspaceTitle?: string;
+  readonly agentTitle?: string;
+  readonly agentLabels?: Readonly<Record<string, string>>;
+  readonly onSessionBinding?: (binding: {
+    readonly externalSessionId: string;
+    readonly runtimeWorkspaceId: string;
+  }) => Promise<void> | void;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly extensions?: ExecutionExtensionBinding;
+  readonly memoryCandidates?: {
+    readonly maxCandidates?: number;
+    readonly proposalLimit?: number;
+  };
+};
 
 export interface FakeRuntimeOptions {
   readonly ready?: boolean;
@@ -88,15 +133,15 @@ export class FakeAgentRuntime
   }
 
   public async execute(
-    input: AgentRuntimeExecuteInput,
-  ): Promise<AgentRuntimeExecution> {
+    input: FakeRuntimeExecuteInput,
+  ): Promise<FakeRuntimeExecution> {
     this.executeCalls += 1;
     this.executionRunIds.push(input.runId);
     this.prompts.push(input.prompt);
     if (input.operation === 'create') {
-      this.systemPrompts.push(input.systemPrompt);
-      await input.onProviderBinding?.({
-        providerAgentId: 'fake-agent-1',
+      this.systemPrompts.push(input.systemPrompt ?? '');
+      await input.onSessionBinding?.({
+        externalSessionId: 'fake-agent-1',
         runtimeWorkspaceId: 'fake-runtime-workspace-1',
       });
     }
@@ -123,7 +168,7 @@ export class FakeAgentRuntime
       return {
         provider: 'opencode',
         model: 'opencode/fake-free',
-        providerAgentId: 'fake-agent-1',
+        externalSessionId: 'fake-agent-1',
         runtimeWorkspaceId: 'fake-runtime-workspace-1',
         text: isCanary
           ? (this.#options.canaryResponseText ?? 'FAKE_RUNTIME_OK')
@@ -190,7 +235,7 @@ export class FakeAgentRuntime
             operation: 'continue',
             runId: input.runId,
             prompt: input.prompt,
-            providerAgentId:
+            externalSessionId:
               input.compatibilitySessionBinding?.externalSessionId ??
               'fake-agent-1',
             ...(input.runtimeSessionId
@@ -221,7 +266,7 @@ export class FakeAgentRuntime
       },
       sessionBinding: {
         plane: 'paseo',
-        externalSessionId: execution.providerAgentId,
+        externalSessionId: execution.externalSessionId,
       },
       ...(execution.usage ? { usage: execution.usage } : {}),
       ...(execution.memoryCandidates
@@ -250,7 +295,7 @@ export class FakeAgentRuntime
     return { entered, release: resolveRelease };
   }
 
-  public async health(): Promise<AgentRuntimeHealth> {
+  public async health(): Promise<FakeRuntimeHealth> {
     return {
       ready: this.ready,
       provider: 'opencode',

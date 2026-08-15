@@ -20,7 +20,10 @@ const owner = {
 
 function make(
   candidate: any,
-  binding: any = { runId: 'r', sessionId: 's', providerAgentId: 'agent' },
+  binding: any = {
+    plane: 'paseo',
+    externalSessionId: 'agent',
+  },
 ) {
   const runtime = {
     executeTurn: vi.fn().mockResolvedValue({
@@ -36,7 +39,7 @@ function make(
     }),
   };
   const events = {
-    getProviderBindingForRunInSession: vi.fn().mockResolvedValue(binding),
+    getSessionBindingForRunInSession: vi.fn().mockResolvedValue(binding),
   };
   const review = {
     execute: vi.fn().mockResolvedValue({ entry: { id: 'entry' } }),
@@ -101,6 +104,6 @@ describe('AcceptMemoryFromBoundDocument', () => {
       }),
     ).resolves.toMatchObject({ content: 'old' });
     expect(x.runtime.executeTurn).not.toHaveBeenCalled();
-    expect(x.events.getProviderBindingForRunInSession).not.toHaveBeenCalled();
+    expect(x.events.getSessionBindingForRunInSession).not.toHaveBeenCalled();
   });
 });

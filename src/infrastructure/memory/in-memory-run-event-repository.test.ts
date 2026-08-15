@@ -2,31 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryRunEventRepository } from './in-memory-run-event-repository.js';
 
 describe('InMemoryRunEventRepository', () => {
-  it('requires exact Run and Session for provider continuation', async () => {
+  it('requires exact Run and Session for execution continuation', async () => {
     const repository = new InMemoryRunEventRepository();
     await repository.bind({
       runId: 'run',
       sessionId: 'session',
-      providerAgentId: 'agent',
+      sessionBinding: { plane: 'paseo', externalSessionId: 'agent' },
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await expect(
-      repository.getProviderBindingForRunInSession('run', 'session'),
+      repository.getSessionBindingForRunInSession('run', 'session'),
     ).resolves.toEqual({
-      runId: 'run',
-      sessionId: 'session',
-      providerAgentId: 'agent',
+      plane: 'paseo',
+      externalSessionId: 'agent',
     });
     await expect(
-      repository.getProviderBindingForRunInSession('run', 'wrong'),
+      repository.getSessionBindingForRunInSession('run', 'wrong'),
     ).resolves.toBeNull();
   });
-  it('preserves a provider Agent when rebinding without a new provider ID', async () => {
+  it('preserves an execution session when rebinding without a new binding', async () => {
     const repository = new InMemoryRunEventRepository();
     await repository.bind({
       runId: 'run-1',
       sessionId: 'session-1',
-      providerAgentId: 'agent-original',
+      sessionBinding: { plane: 'paseo', externalSessionId: 'agent-original' },
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await repository.bind({
@@ -36,19 +35,25 @@ describe('InMemoryRunEventRepository', () => {
     });
 
     await expect(repository.getBinding('run-1')).resolves.toMatchObject({
-      providerAgentId: 'agent-original',
+      sessionBinding: {
+        plane: 'paseo',
+        externalSessionId: 'agent-original',
+      },
     });
     await expect(
-      repository.findLatestProviderAgentBySessionId('session-1'),
-    ).resolves.toBe('agent-original');
+      repository.findLatestSessionBindingBySessionId('session-1'),
+    ).resolves.toEqual({
+      plane: 'paseo',
+      externalSessionId: 'agent-original',
+    });
   });
 
-  it('finds the latest non-null provider Agent for a Product Session', async () => {
+  it('finds the latest non-null execution session for a Product Session', async () => {
     const repository = new InMemoryRunEventRepository();
     await repository.bind({
       runId: 'run-old',
       sessionId: 'session-1',
-      providerAgentId: 'agent-old',
+      sessionBinding: { plane: 'paseo', externalSessionId: 'agent-old' },
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await repository.bind({
@@ -58,8 +63,8 @@ describe('InMemoryRunEventRepository', () => {
     });
 
     await expect(
-      repository.findLatestProviderAgentBySessionId('session-1'),
-    ).resolves.toBe('agent-old');
+      repository.findLatestSessionBindingBySessionId('session-1'),
+    ).resolves.toEqual({ plane: 'paseo', externalSessionId: 'agent-old' });
   });
 
   it('keeps a monotonic timeline and makes terminal events idempotent', async () => {

@@ -17,7 +17,7 @@ export class AcceptMemoryFromBoundDocument {
     private readonly runtime: Pick<ExecutionRuntimeService, 'executeTurn'>,
     private readonly events: Pick<
       RunEventRepository,
-      'getProviderBindingForRunInSession'
+      'getSessionBindingForRunInSession'
     >,
     private readonly review: Pick<MemoryReviewApi['review'], 'execute'>,
     private readonly managedMemory: Pick<
@@ -67,17 +67,14 @@ export class AcceptMemoryFromBoundDocument {
       : await (async () => {
           if (!input.proposal.sourceSessionId || !input.proposal.sourceRunId)
             throw new Error('source_binding_missing');
-          const binding = await this.events.getProviderBindingForRunInSession(
+          const binding = await this.events.getSessionBindingForRunInSession(
             input.proposal.sourceRunId,
             input.proposal.sourceSessionId,
           );
           if (!binding) throw new Error('source_binding_missing');
           return this.runtime.executeTurn({
             runId: input.ingressId,
-            compatibilitySessionBinding: {
-              plane: 'paseo',
-              externalSessionId: binding.providerAgentId,
-            },
+            compatibilitySessionBinding: binding,
             proposalLimit: 1,
             prompt: [
               'This is a server-owned memory acceptance control turn.',

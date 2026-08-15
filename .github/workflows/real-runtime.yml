@@ -1,0 +1,94 @@
+name: Real Runtime
+
+# Everything that needs a real provider and its credentials, kept out of CI so
+# that Deterministic and Real Postgres stay runnable from a clean checkout and
+# stay free to run on every push.
+#
+# This does not run per commit. A branch under active development can push a
+# dozen times an hour, and paying a real provider for revisions that are already
+# obsolete buys nothing. It runs on `merge_group`: once, on the merge ref, at
+# the moment the change is actually about to enter master. That is the only
+# moment where the result changes a decision.
+#
+# `workflow_dispatch` remains available for running it by hand or through the
+# API against any ref.
+#
+# When the credential is absent this reports a skip rather than a failure: a
+# fork, or a clone without the `test` environment, genuinely cannot run these
+# checks. The skip is written to the job summary so that "did not run" never
+# reads as "passed".
+
+on:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Ref to check out (defaults to the dispatch ref)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  real-runtime:
+    runs-on: ubuntu-latest
+    environment: test
+    timeout-minutes: 30
+    env:
+      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+
+      - name: Resolve provider credentials
+        id: credentials
+        run: |
+          if [ -z "${OPENCODE_GO_API_KEY:-}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Real Runtime skipped::OPENCODE_GO_API_KEY is not available, so the real-provider checks did not run."
+            {
+              echo "## Real runtime — skipped"
+              echo
+              echo "\`OPENCODE_GO_API_KEY\` was not available to this run, so no real-provider"
+              echo "check executed. **This is a skip, not a pass.**"
+              echo
+              echo "Expected on forks and on clones without the \`test\` environment."
+              echo "On this repository it means the environment secret is missing or was revoked."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.credentials.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Make the checkout writable by the runner and runtime containers
+        if: steps.credentials.outputs.available == 'true'
+        run: |
+          runner_group="$(id -g)"
+          sudo chown -R 1000:"$runner_group" "$GITHUB_WORKSPACE"
+          sudo chmod -R g+rwX "$GITHUB_WORKSPACE"
+
+      - name: Real-provider runtime main flow
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm smoke:runtime
+
+      - name: Real-provider agent-team main flow
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm smoke:agent-team
+
+      - name: Record that the real-provider checks ran
+        if: steps.credentials.outputs.available == 'true'
+        run: |
+          {
+            echo "## Real runtime — executed"
+            echo
+            echo "Both external main flows ran against the real provider and asserted"
+            echo "positive provider-side usage."
+          } >> "$GITHUB_STEP_SUMMARY"

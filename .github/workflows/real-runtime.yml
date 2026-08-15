@@ -1,0 +1,159 @@
+name: Real Runtime
+
+# Everything that needs a real provider and its credentials, kept out of CI so
+# that Deterministic and Real Postgres stay runnable from a clean checkout and
+# stay free to run on every push.
+#
+# This is a required check, so the job must always run and always report. Both
+# ways of saying "this change does not need a real provider" are therefore
+# decided inside the job, never by a workflow-level `paths:` filter and never by
+# a job-level `if:`. A required check that is filtered out at the workflow level
+# is never reported at all, and the pull request waits for it forever.
+#
+# What actually decides:
+#   - a draft pull request is skipped, since that is where churn lives; a branch
+#     is a draft precisely while its intermediate revisions are still obsolete
+#     before a provider could finish checking them
+#   - a change touching none of the runtime-relevant paths is skipped
+# Either way the job reports success in seconds and says in the summary why it
+# did not run.
+#
+# A missing credential is also reported as a skip rather than a failure: a fork,
+# or a clone without the `test` environment, genuinely cannot run these checks.
+# Every skip is written to the job summary so that "did not run" never reads as
+# "passed".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Ref to check out (defaults to the dispatch ref)'
+        required: false
+        type: string
+
+# One run per pull request, not one per push: a superseded revision is not worth
+# paying a provider for. Manual dispatches are keyed by run id so they never
+# cancel each other.
+concurrency:
+  group: real-runtime-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-runtime:
+    runs-on: ubuntu-latest
+    environment: test
+    timeout-minutes: 30
+    env:
+      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Decide whether these changes can reach the real runtime
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          skip() {
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Real Runtime skipped::$1"
+            {
+              echo "## Real runtime — skipped"
+              echo
+              echo "$1"
+              echo
+              echo "**This is a skip, not a pass.** No real-provider check executed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            skip "The pull request is a draft. Mark it ready for review to run the real-provider checks."
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.scope.outputs.run == 'true'
+        with:
+          node-version-file: .nvmrc
+      - if: steps.scope.outputs.run == 'true'
+        run: corepack enable
+
+      - name: Resolve provider credentials
+        id: credentials
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          if [ -z "${OPENCODE_GO_API_KEY:-}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Real Runtime skipped::OPENCODE_GO_API_KEY is not available, so the real-provider checks did not run."
+            {
+              echo "## Real runtime — skipped"
+              echo
+              echo "\`OPENCODE_GO_API_KEY\` was not available to this run, so no real-provider"
+              echo "check executed. **This is a skip, not a pass.**"
+              echo
+              echo "Expected on forks and on clones without the \`test\` environment."
+              echo "On this repository it means the environment secret is missing or was revoked."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.credentials.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Make the checkout writable by the runner and runtime containers
+        if: steps.credentials.outputs.available == 'true'
+        run: |
+          runner_group="$(id -g)"
+          sudo chown -R 1000:"$runner_group" "$GITHUB_WORKSPACE"
+          sudo chmod -R g+rwX "$GITHUB_WORKSPACE"
+
+      - name: Real-provider runtime main flow
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm smoke:runtime
+
+      # The 300s default was calibrated before the Team collaboration flow grew
+      # its message/checkpoint round-trips, each of which is a real provider
+      # call. At 300s the smoke aborts before the run reaches any terminal
+      # state, so every failure reports "did not complete" regardless of cause
+      # — a lead that legitimately needs more turns and a lead that never
+      # converges are indistinguishable. A larger budget lets a genuine
+      # non-convergence surface as a maxLeadTurns violation instead. The job
+      # timeout-minutes is 30 and the whole job currently runs in ~7 minutes,
+      # so this stays well inside the existing envelope.
+      - name: Real-provider agent-team main flow
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
+        run: pnpm smoke:agent-team
+
+      - name: Record that the real-provider checks ran
+        if: steps.credentials.outputs.available == 'true'
+        run: |
+          {
+            echo "## Real runtime — executed"
+            echo
+            echo "Both external main flows ran against the real provider and asserted"
+            echo "positive provider-side usage."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -8,7 +8,10 @@ import {
   startLocalEnvironment,
   stopLocalEnvironment,
 } from './lifecycle.js';
-import { parseLocalEnvironmentName, resolveLocalEnvironment } from './profiles.js';
+import {
+  parseLocalEnvironmentName,
+  resolveLocalEnvironment,
+} from './profiles.js';
 import {
   createTestRunDirectory,
   removeTestRunDirectory,
@@ -35,7 +38,8 @@ function splitRunArguments(args: string[]): {
     );
   }
   const command = args.slice(separator + 1);
-  if (command.length === 0) throw new Error('environment run requires a command after --');
+  if (command.length === 0)
+    throw new Error('environment run requires a command after --');
   return { flags: args.slice(0, separator), command };
 }
 
@@ -47,7 +51,8 @@ function parseRuntimeOverrides(args: string[]): RuntimeOverrides | undefined {
       throw new Error(`unknown environment option: ${flag}`);
     }
     const value = args[index + 1]?.trim();
-    if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value`);
+    if (!value || value.startsWith('--'))
+      throw new Error(`${flag} requires a value`);
     result[flag.slice(2)] = value;
     index += 1;
   }
@@ -63,7 +68,9 @@ async function saveState(state: LocalEnvironmentState): Promise<void> {
 
 async function loadState(): Promise<LocalEnvironmentState> {
   try {
-    return JSON.parse(await readFile(statePath, 'utf8')) as LocalEnvironmentState;
+    return JSON.parse(
+      await readFile(statePath, 'utf8'),
+    ) as LocalEnvironmentState;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(
@@ -106,7 +113,8 @@ async function runInEnvironment(
   profileValue: string | undefined,
   args: string[],
 ): Promise<void> {
-  if (!profileValue) throw new Error('usage: pnpm local-env run <profile> -- <command...>');
+  if (!profileValue)
+    throw new Error('usage: pnpm local-env run <profile> -- <command...>');
   const profile = parseLocalEnvironmentName(profileValue);
   const { flags, command } = splitRunArguments(args);
   const runtimeOverrides = parseRuntimeOverrides(flags);
@@ -114,15 +122,36 @@ async function runInEnvironment(
   const keepFailed = process.env.TEST_KEEP_FAILED === '1';
   let handle: Awaited<ReturnType<typeof startLocalEnvironment>> | undefined;
   let failed = false;
+  const startedAt = Date.now();
+  const progress = (event: string, details: Record<string, unknown> = {}) =>
+    process.stdout.write(
+      `${JSON.stringify({
+        event: 'local_environment_progress',
+        stage: event,
+        profile,
+        elapsed_ms: Date.now() - startedAt,
+        ...details,
+      })}\n`,
+    );
   try {
-    handle = await startLocalEnvironment({
-      profile,
-      testMode: true,
-      projectName: `agent-server-run-${run.id}`,
-      runDirectory: run.path,
-      ...(runtimeOverrides ? { runtimeOverrides } : {}),
-      inheritOutput: false,
-    });
+    progress('starting');
+    const heartbeat = setInterval(() => progress('starting'), 10_000);
+    heartbeat.unref();
+    const environmentStartedAt = Date.now();
+    try {
+      handle = await startLocalEnvironment({
+        profile,
+        testMode: true,
+        projectName: `agent-server-run-${run.id}`,
+        runDirectory: run.path,
+        ...(runtimeOverrides ? { runtimeOverrides } : {}),
+        inheritOutput: false,
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
+    progress('ready', { startup_ms: Date.now() - environmentStartedAt });
+    progress('command_starting', { command: command[0] });
     await executeCommand({
       command: command[0]!,
       args: command.slice(1),
@@ -130,13 +159,16 @@ async function runInEnvironment(
       logPath: resolve(run.path, 'command.log'),
       inheritOutput: true,
     });
+    progress('command_completed');
   } catch (error) {
     failed = true;
     throw error;
   } finally {
     let stopError: unknown;
     try {
+      if (handle) progress('stopping');
       await handle?.stop();
+      if (handle) progress('stopped');
     } catch (error) {
       stopError = error;
       failed = true;

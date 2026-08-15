@@ -1,10 +1,10 @@
 import type { Task } from '../../domain/tasks/task.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
+import type { CollaborationActivationReconciler } from '../collaboration/collaboration-activation-reconciler.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
-import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
 
 export interface RunTeamContext {
   readonly member: TeamMemberRun;
@@ -12,11 +12,7 @@ export interface RunTeamContext {
   readonly owner: InvokableOwnerScope;
 }
 
-/**
- * Owns the process-local Team member turn lane and the durable Team-member
- * status projection around a Run. It deliberately does not execute agents or
- * mutate Run state.
- */
+/** Owns the process-local participant turn lane and durable member status. */
 export class RunTeamCoordinator {
   private readonly memberMutexes = new Map<
     string,
@@ -26,8 +22,8 @@ export class RunTeamCoordinator {
   public constructor(
     private readonly executions: TeamExecutionRepository,
     private readonly tasks: TaskRepository,
-    private readonly wakeReconciler?: Pick<
-      TeamWakeReconciler,
+    private readonly activationReconciler?: Pick<
+      CollaborationActivationReconciler,
       'reconcileForRootTask'
     >,
   ) {}
@@ -52,7 +48,6 @@ export class RunTeamCoordinator {
       !task.teamMemberRunId
     )
       throw new Error('Team task is missing member identity.');
-
     if (!task.teamMemberRunId) return null;
 
     const owner: InvokableOwnerScope = {
@@ -79,7 +74,6 @@ export class RunTeamCoordinator {
       member.agentVersionId !== task.invokableVersionId
     )
       throw new Error('Team member task identity is invalid.');
-
     return { member, team, owner };
   }
 
@@ -125,7 +119,7 @@ export class RunTeamCoordinator {
   }
 
   public async reconcile(context: RunTeamContext): Promise<void> {
-    if (!this.wakeReconciler) return;
+    if (!this.activationReconciler) return;
     const member = await this.executions.findMemberRunById(
       context.member.id,
       context.owner,
@@ -135,8 +129,9 @@ export class RunTeamCoordinator {
       member.teamRunId,
       context.owner,
     );
-    await this.wakeReconciler.reconcileForRootTask(
-      team?.rootTaskId ?? '',
+    if (!team) return;
+    await this.activationReconciler.reconcileForRootTask(
+      team.rootTaskId,
       context.owner,
     );
   }
@@ -153,7 +148,6 @@ export class RunTeamCoordinator {
       task.teamMemberRunId !== context.member.id
     )
       return input.fallbackStatus;
-
     const team = await this.executions.findTeamRunByRootTaskId(
       task.rootTaskId,
       context.owner,

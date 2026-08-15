@@ -237,4 +237,19 @@ export interface TeamExecutionRepository {
     readonly team: TeamRun;
     readonly recorded: boolean;
   }>;
+
+  /** Optional read seam installed by the Collaboration module for safe replay. */
+  listCollaborationCheckpoints?(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<
+    readonly import('../../domain/collaboration/collaboration.js').CollaborationCheckpoint[]
+  >;
+  /** Optional read seam installed by the Collaboration module for safe replay. */
+  listCollaborationSubmissions?(
+    teamRunId: string,
+    owner: OwnerScope,
+  ): Promise<
+    readonly import('../../domain/collaboration/collaboration.js').CollaborationSubmission[]
+  >;
 }

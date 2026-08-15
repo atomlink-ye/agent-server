@@ -1,3 +1,6 @@
+import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
+
 export const AGENT_SERVER_MEMORY_API_SKILL_REF = 'agent-server/memory-api';
 export const AGENT_SERVER_MEMORY_API_SKILL_VERSION = '1.0.0';
 export const AGENT_SERVER_MEMORY_READ_TOOL_REF = 'agent-server/memory-read';
@@ -14,7 +17,7 @@ export const AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF =
 export const AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF =
   'agent-server/product-work-run-start';
 
-/** The only public names emitted by the server's Team MCP surface. */
+/** Legacy Team names retained only as compatibility aliases during cutover. */
 export const AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES = Object.freeze({
   state: 'team_state',
   workList: 'team_work_list',
@@ -83,7 +86,8 @@ export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
   ...Object.values(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS),
+  ...Object.values(AGENT_SERVER_COLLABORATION_TOOL_REFS),
 ]);
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
 
+export { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 export { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';

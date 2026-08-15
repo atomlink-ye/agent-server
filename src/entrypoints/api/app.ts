@@ -46,6 +46,7 @@ import type { TeamMessageRepository } from '../../application/ports/team-message
 import type { TaskRepository } from '../../application/ports/task-repository.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerTeamRunRoutes } from './routes/team-runs.js';
+import { registerCollaborationRunRoutes } from './routes/collaboration-runs.js';
 import {
   registerMemoryApiRoutes,
   type MemoryApiRouteDependencies,
@@ -212,7 +213,7 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
     dependencies.teamExecutions &&
     dependencies.teamMessages &&
     dependencies.tasks
-  )
+  ) {
     registerTeamRunRoutes(app, {
       config: dependencies.config,
       teamExecutions: dependencies.teamExecutions,
@@ -225,6 +226,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
         ? { teamDriver: dependencies.teamDriver }
         : {}),
     });
+    registerCollaborationRunRoutes(app, {
+      config: dependencies.config,
+      teamExecutions: dependencies.teamExecutions,
+      teamMessages: dependencies.teamMessages,
+    });
+  }
   if (dependencies.sessions)
     registerSessionRoutes(app, {
       ...dependencies,

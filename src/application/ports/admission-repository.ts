@@ -4,6 +4,7 @@ import type { TaskRepository } from './task-repository.js';
 import type { TeamExecutionRepository } from './team-execution-repository.js';
 import type { TeamMessageRepository } from './team-message-repository.js';
 import type { AdmissionIngress } from '../sessions/session-turn-origin.js';
+import type { CollaborationActivationPriority } from '../../domain/collaboration/collaboration.js';
 
 export type AdmissionOwnerScope = Pick<
   AccessContext,
@@ -46,7 +47,11 @@ export interface AdmissionTransaction {
     scope: AdmissionOwnerScope,
   ): Promise<AdmissionRecord | null>;
   save(record: AdmissionRecord): Promise<void>;
-  enqueueRunDispatch(runId: string, createdAt: string): Promise<void>;
+  enqueueRunDispatch(
+    runId: string,
+    createdAt: string,
+    priority?: CollaborationActivationPriority,
+  ): Promise<void>;
 }
 
 export interface AdmissionRepository {

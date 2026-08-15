@@ -7,11 +7,13 @@ import {
   AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES,
   AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
 } from '../../application/agents/built-in-skills.js';
+import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
 import type { TeamCommandService } from '../../application/teams/team-command-service.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import type { RuntimeToolGrant } from '../../application/extensions/runtime-tool-grant-service.js';
 import { TeamContextError } from '../../application/teams/team-tool-context.js';
 import { TeamExecutionError } from '../../application/ports/team-execution-repository.js';
+import { registerCollaborationMcpTools } from '../collaboration-mcp/collaboration-mcp-tools.js';
 
 export interface CanonicalTeamToolContext {
   readonly resolve: (
@@ -21,9 +23,16 @@ export interface CanonicalTeamToolContext {
   readonly currentGrant: () => RuntimeToolGrant | null;
   readonly begin: (grantId: string) => void;
   readonly end: (grantId: string) => void;
-  readonly commands: TeamCommandService;
+  readonly commands: TeamCommandService & {
+    readonly collaboration?: CollaborationKernel;
+  };
 }
 
+/**
+ * Legacy `team_*` names are compatibility aliases only. In production the
+ * mutating aliases delegate to the same CollaborationKernel used by the new
+ * board/mailbox surface, so there is no second coordination state machine.
+ */
 export function registerTeamMcpTools(
   server: McpServer,
   allowedTools: readonly string[],
@@ -65,6 +74,7 @@ export function registerTeamMcpTools(
   };
   const canonical = (ref: string, name: string, config: any, operation: any) =>
     catalog.has(ref) && register(ref, name, config, operation);
+  const collaboration = context.commands.collaboration;
 
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
@@ -113,8 +123,19 @@ export function registerTeamMcpTools(
       description?: string;
       dependency_refs?: string[];
     }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, (ctx) =>
-        context.commands.createWork(ctx, {
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate, async (ctx) => {
+        if (!collaboration)
+          return context.commands.createWork(ctx, {
+            subject: input.subject,
+            assignee: input.assignee,
+            ...(input.description === undefined
+              ? {}
+              : { description: input.description }),
+            ...(input.dependency_refs === undefined
+              ? {}
+              : { dependencyRefs: input.dependency_refs }),
+          });
+        const value = await collaboration.createWork(ctx, {
           subject: input.subject,
           assignee: input.assignee,
           ...(input.description === undefined
@@ -122,9 +143,12 @@ export function registerTeamMcpTools(
             : { description: input.description }),
           ...(input.dependency_refs === undefined
             ? {}
-            : { dependencyRefs: input.dependency_refs }),
-        }),
-      ),
+            : {
+                dependencyRefs: input.dependency_refs.map(toCollaborationWorkRef),
+              }),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
@@ -137,9 +161,18 @@ export function registerTeamMcpTools(
       },
     },
     (input: { recipient: string; summary: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend, (ctx) =>
-        context.commands.sendMessage(ctx, input),
-      ),
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend, async (ctx) => {
+        if (!collaboration) return context.commands.sendMessage(ctx, input);
+        const value = await collaboration.sendMessage(ctx, {
+          recipient: input.recipient,
+          body: input.summary,
+        });
+        return {
+          sent: true,
+          recipient: value.recipient,
+          summary: input.summary,
+        };
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
@@ -149,9 +182,14 @@ export function registerTeamMcpTools(
       inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
     },
     (input: { work_ref: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept, (ctx) =>
-        context.commands.accept(ctx, { workRef: input.work_ref }),
-      ),
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept, async (ctx) => {
+        if (!collaboration)
+          return context.commands.accept(ctx, { workRef: input.work_ref });
+        const value = await collaboration.acceptWork(ctx, {
+          workRef: toCollaborationWorkRef(input.work_ref),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
@@ -165,25 +203,40 @@ export function registerTeamMcpTools(
       },
     },
     (input: { work_ref: string; assignee: string; feedback: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges, (ctx) =>
-        context.commands.requestChanges(ctx, {
-          workRef: input.work_ref,
-          assignee: input.assignee,
-          feedback: input.feedback,
-        }),
+      current(
+        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
+        async (ctx) => {
+          if (!collaboration)
+            return context.commands.requestChanges(ctx, {
+              workRef: input.work_ref,
+              assignee: input.assignee,
+              feedback: input.feedback,
+            });
+          const value = await collaboration.requestChanges(ctx, {
+            workRef: toCollaborationWorkRef(input.work_ref),
+            assignee: input.assignee,
+            feedback: input.feedback,
+          });
+          return legacyWorkResult(value);
+        },
       ),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
     AGENT_SERVER_CANONICAL_TEAM_MCP_NAMES.cancel,
     {
-      description: 'Abandon failed work.',
+      description: 'Abandon work.',
       inputSchema: { work_ref: z.string().regex(/^work-\d+$/) },
     },
     (input: { work_ref: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, (ctx) =>
-        context.commands.cancel(ctx, { workRef: input.work_ref }),
-      ),
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel, async (ctx) => {
+        if (!collaboration)
+          return context.commands.cancel(ctx, { workRef: input.work_ref });
+        const value = await collaboration.cancelWork(ctx, {
+          workRef: toCollaborationWorkRef(input.work_ref),
+        });
+        return legacyWorkResult(value);
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
@@ -191,7 +244,9 @@ export function registerTeamMcpTools(
     { description: 'Finish Team.', inputSchema: {} },
     () =>
       current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish, (ctx) =>
-        context.commands.finish(ctx, {}),
+        collaboration
+          ? collaboration.finish(ctx)
+          : context.commands.finish(ctx, {}),
       ),
   );
   canonical(
@@ -202,9 +257,15 @@ export function registerTeamMcpTools(
       inputSchema: { summary: z.string().min(1) },
     },
     (input: { summary: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint, (ctx) =>
-        context.commands.checkpoint(ctx, input),
-      ),
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint, async (ctx) => {
+        if (!collaboration) return context.commands.checkpoint(ctx, input);
+        const value = await collaboration.checkpoint(ctx, input);
+        return {
+          checkpointed: value.checkpointed,
+          summary: value.summary,
+          status: ctx.member.status,
+        };
+      }),
   );
   canonical(
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
@@ -214,11 +275,50 @@ export function registerTeamMcpTools(
       inputSchema: { summary: z.string().min(1) },
     },
     (input: { summary: string }) =>
-      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit, (ctx) =>
-        context.commands.submit(ctx, input),
-      ),
+      current(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit, async (ctx) => {
+        if (!collaboration) return context.commands.submit(ctx, input);
+        const value = await collaboration.submitWork(ctx, input);
+        return {
+          work_ref: toLegacyWorkRef(value.work_ref),
+          submitted: value.submitted,
+          status: 'completed',
+          summary: value.summary,
+        };
+      }),
   );
+
+  if (collaboration)
+    registerCollaborationMcpTools(server, allowedTools, authorize, {
+      resolve: context.resolve,
+      grantId: context.grantId,
+      currentGrant: context.currentGrant,
+      begin: context.begin,
+      end: context.end,
+      kernel: collaboration,
+    });
+
   return () => undefined;
+}
+
+function toCollaborationWorkRef(value: string): string {
+  const match = /^work-(\d+)$/.exec(value);
+  if (!match) throw new TeamContextError('not_found');
+  return `W-${match[1]}`;
+}
+
+function toLegacyWorkRef(value: string): string {
+  const match = /^W-(\d+)$/.exec(value);
+  if (!match) return value;
+  return `work-${match[1]}`;
+}
+
+function legacyWorkResult<T extends Record<string, unknown>>(value: T): T {
+  return {
+    ...value,
+    ...(typeof value.work_ref === 'string'
+      ? { work_ref: toLegacyWorkRef(value.work_ref) }
+      : {}),
+  };
 }
 
 async function result(value: Promise<unknown>) {
@@ -228,9 +328,7 @@ async function result(value: Promise<unknown>) {
       ? { items: resolved }
       : (resolved as Record<string, unknown>);
     return {
-      content: [
-        { type: 'text' as const, text: JSON.stringify(structuredContent) },
-      ],
+      content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
       structuredContent,
     };
   } catch (error) {
@@ -241,9 +339,7 @@ async function result(value: Promise<unknown>) {
           : 'internal_error',
     };
     return {
-      content: [
-        { type: 'text' as const, text: JSON.stringify(structuredContent) },
-      ],
+      content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
       structuredContent,
     };
   }
@@ -252,9 +348,7 @@ async function result(value: Promise<unknown>) {
 function authorizationError() {
   const structuredContent = { error: 'unauthorized' };
   return Promise.resolve({
-    content: [
-      { type: 'text' as const, text: JSON.stringify(structuredContent) },
-    ],
+    content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
     structuredContent,
     isError: true,
   });

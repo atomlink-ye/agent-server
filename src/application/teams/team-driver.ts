@@ -22,7 +22,10 @@ import type {
 import { TeamExecutionError } from '../ports/team-execution-repository.js';
 import type { TeamWakeReconciler } from './team-wake-reconciler.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
-import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js';
+import {
+  encodeRootTaskRunRequestSnapshotRef,
+  fingerprintRootTaskRunRequest,
+} from '../tasks/root-task-input.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
 import {
   AGENTIC_TEAM_LIMITS,
@@ -38,7 +41,7 @@ export class TeamDriver {
     private readonly admission: AdmissionRepository,
     private readonly messages?: Pick<
       TeamMessageRepository,
-      'markDirectDelivered'
+      'requeueDirectForFailedTask'
     >,
     private readonly reconciler?: Pick<
       TeamWakeReconciler,
@@ -227,15 +230,6 @@ export class TeamDriver {
       if (!input.task.sourceTeamMessageId)
         throw new Error('Direct Team message linkage is missing.');
       if (input.run.status === 'succeeded') {
-        if (!this.messages)
-          throw new Error('Team message delivery is unavailable.');
-        const delivered = await this.messages.markDirectDelivered({
-          messageId: input.task.sourceTeamMessageId,
-          taskId: input.task.id,
-          owner,
-        });
-        if (!delivered)
-          throw new Error('Direct Team message delivery is stale.');
         const fresh = await this.executions.findTeamRunById(
           input.team.id,
           owner,
@@ -257,6 +251,16 @@ export class TeamDriver {
           input.task,
           owner,
           this.reviewPrompt(decision),
+        );
+      } else if (input.task.inputTeamMessageIds?.length) {
+        await this.messages?.requeueDirectForFailedTask({
+          messageIds: input.task.inputTeamMessageIds,
+          taskId: input.task.id,
+          owner,
+        });
+        await this.reconciler?.reconcileForRootTask(
+          input.team.rootTaskId,
+          owner,
         );
       }
       return;
@@ -680,7 +684,7 @@ export class TeamDriver {
       invokableKind: 'agent',
       invokableVersionId: agentVersionId,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt }),
-      inputFingerprint: parent.inputFingerprint,
+      inputFingerprint: fingerprintRootTaskRunRequest({ prompt }),
       logicalStepKey: key,
       nodePath: key,
       teamTaskKind: kind,

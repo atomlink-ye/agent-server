@@ -63,7 +63,9 @@ export function createMemoryRuntimeContributor(input: {
 export function createLegacyRuntimeToolsContributor(input: {
   readonly teamTools?: {
     contextResolver: TeamToolContextResolver;
-    commands: TeamCommandService;
+    commands: TeamCommandService & {
+      readonly collaboration?: import('../../application/collaboration/collaboration-kernel.js').CollaborationKernel;
+    };
   };
   readonly market?: SyntheticMarketAdapter;
   readonly logger?: Logger;

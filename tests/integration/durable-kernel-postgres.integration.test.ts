@@ -219,6 +219,9 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0027_agent-team-roster-limits' },
       { version: '0028_team-completion-approval' },
       { version: '0029_product_work_identity' },
+      { version: '0030_work_collaboration_kernel' },
+      { version: '0031_team_message_consumed_semantics' },
+      { version: '0032_run_dispatch_priority' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -273,6 +276,9 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0027_agent-team-roster-limits' },
       { version: '0028_team-completion-approval' },
       { version: '0029_product_work_identity' },
+      { version: '0030_work_collaboration_kernel' },
+      { version: '0031_team_message_consumed_semantics' },
+      { version: '0032_run_dispatch_priority' },
     ]);
   });
 
@@ -1470,6 +1476,47 @@ describe('durable kernel postgres bootstrap', () => {
         published_at: '2026-07-22 12:00:30+00',
       },
     ]);
+  });
+
+  it('claims urgent canonical dispatches before older normal dispatches', async () => {
+    const database = await createDatabase();
+    const clock = new TestClock('2026-07-22T12:00:00.000Z');
+
+    await applyDurableKernelMigrations(database);
+
+    const runRepository = new PostgresRunRepository(database);
+    const useCase = new AdmitRootTask(
+      new PostgresTaskRepository(database),
+      runRepository,
+      new PostgresAdmissionRepository(database),
+      clock.now,
+    );
+    const normal = await useCase.execute({
+      prompt: 'normal canonical turn',
+      idempotencyKey: 'normal-canonical-turn',
+      accessContext: primaryAccessContext,
+    });
+    clock.advanceMs(1_000);
+    const urgent = await useCase.execute({
+      prompt: 'urgent canonical turn',
+      idempotencyKey: 'urgent-canonical-turn',
+      accessContext: primaryAccessContext,
+    });
+    await database.query(
+      `UPDATE run_dispatches SET priority='urgent' WHERE run_id=$1`,
+      [urgent.runId],
+    );
+
+    const claimed = await new ClaimNextRun(runRepository, {
+      workerId: 'priority-worker',
+      leaseDurationMs: 60_000,
+      now: clock.now,
+      activationIdFactory: () => '00000000-0000-4000-8000-000000000411',
+    }).execute();
+
+    expect(claimed?.run.id).toBe(urgent.runId);
+    const normalRun = await runRepository.findById(normal.runId);
+    expect(normalRun?.status).toBe('queued');
   });
 
   it('rejects a stale fenced terminal completion after a newer owner exists', async () => {

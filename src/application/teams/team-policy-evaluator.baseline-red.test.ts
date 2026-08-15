@@ -8,7 +8,12 @@ import type { TeamRun } from '../../domain/teams/team-run.js';
 import { createTeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import { deriveAgenticLeadCommandPolicy } from './team-policy-evaluator.js';
+import {
+  canonicalTeamToolRefsForLeadPolicy,
+  deriveAgenticLeadCommandPolicy,
+} from './team-policy-evaluator.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
+import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 
 const now = () => new Date('2026-08-08T00:00:00.000Z');
 const owner = {
@@ -102,6 +107,25 @@ function makeRejectDecision(
 }
 
 describe('deriveAgenticLeadCommandPolicy future rejection semantics (baseline RED)', () => {
+  it('does not grant collaboration rework when the current policy only finishes', () => {
+    const team = makeTeam();
+    const workItem = makeWork(team.id, 'work-1', 'accepted');
+    const policy = deriveAgenticLeadCommandPolicy(
+      team,
+      [workItem],
+      [makeAttempt(team.id, workItem.id)],
+    );
+
+    const refs = canonicalTeamToolRefsForLeadPolicy(policy);
+
+    expect(policy.allowedCommands).toEqual(['team_finish']);
+    expect(refs).toContain(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish);
+    expect(refs).toContain(AGENT_SERVER_COLLABORATION_TOOL_REFS.finish);
+    expect(refs).not.toContain(
+      AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
+    );
+  });
+
   it('allows request_changes on an accepted-only board after the latest reject instead of finish-only', () => {
     const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
     const workItem = makeWork(team.id);

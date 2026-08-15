@@ -71,7 +71,7 @@ describe('RunPromptContext', () => {
     expect(resolver.resolvePublished).not.toHaveBeenCalled();
   });
 
-  it('keeps the bounded Lead snapshot and delivery envelope in prompt assembly', async () => {
+  it('keeps the bounded collaboration snapshot and durable workboard/mailbox rules in Lead prompt assembly', async () => {
     const context = new RunPromptContext(
       { resolvePublished: vi.fn(async () => null) },
       {} as never,
@@ -123,9 +123,14 @@ describe('RunPromptContext', () => {
     });
 
     expect(prompts.deliveredTurnPrompt).toContain(
-      'Current bounded Lead snapshot (control-plane fields only):',
+      'Current bounded collaboration snapshot:',
     );
+    expect(prompts.deliveredTurnPrompt).toContain(
+      'A natural-language message never changes ownership or Work state',
+    );
+    expect(prompts.deliveredTurnPrompt).toContain('board_create/board_assign');
     expect(prompts.deliveredTurnPrompt).toContain('goal');
     expect(prompts.systemPrompt).toContain('base system');
+    expect(prompts.systemPrompt).toContain('durable Workboard and Mailbox');
   });
 });

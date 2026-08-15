@@ -43,12 +43,6 @@ ALTER TABLE team_messages ADD CONSTRAINT team_messages_kind_status_check CHECK (
   )
 );
 
-ALTER TABLE team_work_item_attempts
-  DROP CONSTRAINT IF EXISTS team_work_item_attempts_status_check;
-ALTER TABLE team_work_item_attempts
-  ADD CONSTRAINT team_work_item_attempts_status_check
-  CHECK (status IN ('queued','running','completed','failed','blocked'));
-
 CREATE TABLE IF NOT EXISTS collaboration_checkpoints (
   id uuid PRIMARY KEY,
   team_run_id uuid NOT NULL REFERENCES team_runs(id),

@@ -1,0 +1,39 @@
+name: Collaboration Refactor Codemod
+
+on:
+  push:
+    branches:
+      - refactor/collaboration-convergence-activation-v2
+    paths:
+      - tooling/codemods/collaboration-convergence.mjs
+      - .github/workflows/collaboration-refactor-codemod.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/collaboration-convergence-activation-v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tooling/codemods/collaboration-convergence.mjs
+      - name: Commit bounded refactor
+        run: |
+          if git diff --quiet; then
+            echo 'codemod produced no diff' >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/application/runs/agent-run-executor.ts \
+                  src/application/extensions/runtime-tool-grant-service.ts \
+                  src/application/teams/team-driver.ts \
+                  src/infrastructure/postgres/postgres-collaborative-team-repository.ts \
+                  src/infrastructure/postgres/postgres-collaboration-repository.ts
+          git commit -m 'refactor(collaboration): converge runtime policy references'
+          git push origin HEAD:refactor/collaboration-convergence-activation-v2

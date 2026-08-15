@@ -61,7 +61,7 @@ export interface AgenticTeamProject {
     readonly senderName: string;
     readonly recipientName: string;
     readonly summary: string;
-    readonly status: 'delivered' | 'read';
+    readonly status: 'presented' | 'acknowledged';
     readonly createdAt: string;
   }[];
   readonly sessions: readonly {
@@ -260,7 +260,7 @@ export class ProjectAgenticTeam {
         );
         const summary = safeText(message.body);
         if (!senderName || !recipientName || !summary) return [];
-        if (message.status !== 'delivered' && message.status !== 'read')
+        if (message.status !== 'consumed' && message.status !== 'acknowledged')
           return [];
         return [
           {
@@ -268,7 +268,7 @@ export class ProjectAgenticTeam {
             senderName,
             recipientName,
             summary,
-            status: message.status,
+            status: message.acknowledgedAt ? 'acknowledged' : 'presented',
             createdAt: message.createdAt,
           },
         ];

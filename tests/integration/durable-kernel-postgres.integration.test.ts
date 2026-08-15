@@ -219,6 +219,8 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0027_agent-team-roster-limits' },
       { version: '0028_team-completion-approval' },
       { version: '0029_product_work_identity' },
+      { version: '0030_work_collaboration_kernel' },
+      { version: '0031_team_message_consumed_semantics' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -273,6 +275,8 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0027_agent-team-roster-limits' },
       { version: '0028_team-completion-approval' },
       { version: '0029_product_work_identity' },
+      { version: '0030_work_collaboration_kernel' },
+      { version: '0031_team_message_consumed_semantics' },
     ]);
   });
 

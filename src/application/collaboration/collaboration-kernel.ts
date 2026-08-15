@@ -23,9 +23,9 @@ import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
 import { CollaborationPolicy, CollaborationPolicyError } from './collaboration-policy.js';
 
 /**
- * Provider-neutral collaboration semantics. It owns durable Workboard/Mailbox
- * mutations and knows nothing about Paseo, RuntimeSession bindings or provider
- * identities. Runtime delivery happens after these facts are committed.
+ * Execution-neutral collaboration semantics. It owns durable Workboard/Mailbox
+ * mutations and knows nothing about runtime adapters, session bindings, or
+ * execution identities. Runtime delivery happens after these facts are committed.
  */
 export class CollaborationKernel {
   public constructor(

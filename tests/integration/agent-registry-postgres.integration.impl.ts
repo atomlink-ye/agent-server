@@ -241,6 +241,8 @@ describe('managed agent registry migration', () => {
       '0027_agent-team-roster-limits',
       '0028_team-completion-approval',
       '0029_product_work_identity',
+      '0030_work_collaboration_kernel',
+      '0031_team_message_consumed_semantics',
     ]);
   });
 

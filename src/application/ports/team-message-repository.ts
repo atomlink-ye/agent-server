@@ -22,6 +22,11 @@ export interface TeamMessageRepository {
     readonly taskId: string;
     readonly owner: OwnerScope;
   }): Promise<readonly TeamMessage[]>;
+  requeueDirectForFailedTask(input: {
+    readonly messageIds: readonly string[];
+    readonly taskId: string;
+    readonly owner: OwnerScope;
+  }): Promise<readonly TeamMessage[]>;
   claimDirectForTask(input: {
     readonly messageId: string;
     readonly taskId: string;
@@ -36,11 +41,6 @@ export interface TeamMessageRepository {
     readonly recipientMemberRunId: string;
     readonly owner: OwnerScope;
   }): Promise<readonly TeamMessage[]>;
-  markDirectDelivered(input: {
-    readonly messageId: string;
-    readonly taskId: string;
-    readonly owner: OwnerScope;
-  }): Promise<TeamMessage | null>;
   sendDirect(input: {
     readonly teamRunId: string;
     readonly senderMemberRunId: string;

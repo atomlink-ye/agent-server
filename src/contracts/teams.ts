@@ -301,7 +301,7 @@ const AgenticTeamProjectResponseBaseSchema = z
           sender_name: z.string(),
           recipient_name: z.string(),
           summary: z.string(),
-          status: z.enum(['delivered', 'read']),
+          status: z.enum(['presented', 'acknowledged']),
           created_at: timestamp,
         })
         .strict(),
@@ -333,7 +333,7 @@ export const TeamDirectMessageResponseSchema = z
     sender_name: z.string(),
     recipient_name: z.string(),
     summary: z.string(),
-    status: z.enum(['delivered', 'read']),
+    status: z.enum(['presented', 'acknowledged']),
     created_at: timestamp,
   })
   .strict();

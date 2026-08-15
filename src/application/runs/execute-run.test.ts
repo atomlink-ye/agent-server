@@ -670,6 +670,8 @@ describe('ExecuteRun', () => {
     const lateCallbackTeam = { ...team, controlState: 'lead_ready' as const };
     const advanceAgenticLead = vi.fn();
     const lateFailTeamRunAtomically = vi.fn();
+    const requeueDirectForFailedTask = vi.fn(async () => []);
+    const reconcileForRootTask = vi.fn(async () => 0);
     const lateCallbackDriver = new TeamDriver(
       {
         findTeamRunById: vi.fn(async () => lateCallbackTeam),
@@ -689,8 +691,10 @@ describe('ExecuteRun', () => {
         hasNonterminalRunsForTeamMemberChildTasks: vi.fn(async () => true),
       } as never,
       {} as never,
-      { markDirectDelivered: vi.fn(async () => ({}) as never) },
-      undefined,
+      {
+        requeueDirectForFailedTask,
+      },
+      { reconcileForRootTask },
       now,
     );
     const lateDirectTask = createChildTask({
@@ -714,6 +718,7 @@ describe('ExecuteRun', () => {
       teamMemberRunId: member.id,
       teamTaskKind: 'direct_message',
       sourceTeamMessageId: 'direct-message-1',
+      inputTeamMessageIds: ['direct-message-1', 'direct-message-2'],
       now,
     });
     await lateCallbackDriver.handleTerminalRun({
@@ -723,6 +728,33 @@ describe('ExecuteRun', () => {
     });
     expect(advanceAgenticLead).not.toHaveBeenCalled();
     expect(lateFailTeamRunAtomically).not.toHaveBeenCalled();
+    expect(requeueDirectForFailedTask).not.toHaveBeenCalled();
+    expect(reconcileForRootTask).not.toHaveBeenCalled();
+
+    await lateCallbackDriver.handleTerminalRun({
+      team: lateCallbackTeam,
+      task: lateDirectTask,
+      run: { ...succeeded, status: 'failed' },
+    });
+    expect(requeueDirectForFailedTask).toHaveBeenCalledWith({
+      messageIds: ['direct-message-1', 'direct-message-2'],
+      taskId: 'late-direct-task',
+      owner: {
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+      },
+    });
+    expect(reconcileForRootTask).toHaveBeenCalledWith(
+      team.rootTaskId,
+      expect.objectContaining({
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+      }),
+    );
   });
 
   it('fails a successful work attempt when the runtime never submits canonical work', async () => {

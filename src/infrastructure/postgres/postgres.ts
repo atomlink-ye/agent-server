@@ -61,6 +61,7 @@ const durableKernelMigrationFileNames = [
   '0028_team-completion-approval.sql',
   '0029_product_work_identity.sql',
   '0030_work_collaboration_kernel.sql',
+  '0031_team_message_consumed_semantics.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

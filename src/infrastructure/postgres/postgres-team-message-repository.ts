@@ -108,6 +108,26 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
     return (result.rows ?? []).map(mapMessage);
   }
 
+  public async requeueDirectForFailedTask(input: {
+    messageIds: readonly string[];
+    taskId: string;
+    owner: OwnerScope;
+  }) {
+    if (!input.messageIds.length) return [];
+    const result = await this.database.query<MessageRow>(
+      `UPDATE team_messages
+          SET status='queued', consumed_by_task_id=NULL, consumed_at=NULL
+        WHERE id=ANY($1::uuid[])
+          AND kind='direct'
+          AND status='consumed'
+          AND consumed_by_task_id=$2
+          AND ${ownerSql('', 3)}
+        RETURNING *`,
+      [input.messageIds, input.taskId, ...ownerValues(input.owner)],
+    );
+    return (result.rows ?? []).map(mapMessage);
+  }
+
   public async claimDirectForTask(input: {
     messageId: string; taskId: string; teamRunId: string; recipientMemberRunId: string; owner: OwnerScope;
   }): Promise<TeamMessage> {
@@ -140,15 +160,6 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
     if ((result.rows?.length ?? 0) !== input.messageIds.length)
       throw new TeamExecutionError('invalid_transition');
     return (result.rows ?? []).map(mapMessage).sort((a,b)=>a.sequence-b.sequence);
-  }
-
-  public async markDirectDelivered(input: { messageId: string; taskId: string; owner: OwnerScope }) {
-    const result = await this.database.query<MessageRow>(
-      `UPDATE team_messages SET status=CASE WHEN requires_ack THEN 'delivered' ELSE 'delivered' END
-        WHERE id=$1 AND kind='direct' AND status='consumed' AND consumed_by_task_id=$2 AND ${ownerSql('',3)} RETURNING *`,
-      [input.messageId,input.taskId,...ownerValues(input.owner)],
-    );
-    return result.rows?.[0] ? mapMessage(result.rows[0]) : null;
   }
 
   public async sendDirect(input: Parameters<TeamMessageRepository['sendDirect']>[0]): Promise<TeamMessage> {
@@ -240,7 +251,7 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
     const result=await this.database.query<MessageRow>(
       `UPDATE team_messages SET status='acknowledged',acknowledged_at=COALESCE(acknowledged_at,now())
         WHERE id=$1 AND kind='direct' AND recipient_member_run_id=$2 AND requires_ack=true
-          AND status IN ('consumed','delivered','read','acknowledged') AND ${ownerSql('',3)} RETURNING *`,
+          AND status IN ('consumed','acknowledged') AND ${ownerSql('',3)} RETURNING *`,
       [input.messageId,input.recipientMemberRunId,...ownerValues(input.owner)],
     );
     if (!result.rows?.[0]) throw new TeamExecutionError('invalid_transition');
@@ -250,7 +261,7 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
   public async listDirectForTeamRun(teamRunId:string, owner:OwnerScope) {
     const result=await this.database.query<MessageRow>(
       `SELECT * FROM team_messages WHERE team_run_id=$1 AND kind='direct'
-        AND status IN ('delivered','read','acknowledged') AND ${ownerSql('',2)} ORDER BY sequence,id`,
+        AND status IN ('consumed','acknowledged') AND ${ownerSql('',2)} ORDER BY sequence,id`,
       [teamRunId,...ownerValues(owner)],
     );
     return (result.rows??[]).map(mapMessage);

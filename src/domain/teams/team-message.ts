@@ -3,8 +3,6 @@ import { randomUUID } from 'node:crypto';
 export type TeamMessageStatus =
   | 'queued'
   | 'consumed'
-  | 'delivered'
-  | 'read'
   | 'acknowledged'
   | 'cancelled';
 export type TeamMessageKind = 'wake' | 'work_update' | 'direct';

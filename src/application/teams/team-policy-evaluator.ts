@@ -200,12 +200,19 @@ export function canonicalTeamToolRefsForLeadPolicy(
       AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
     team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
   };
+  const sameTurnFinish = policy.allowedCommands.includes('team_work_accept')
+    ? [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish]
+    : [];
   return Object.freeze([
     ...collaborationToolRefsForRole('lead'),
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
     ...policy.allowedCommands.map((command) => commandRefs[command]),
+    // A Lead may accept the final submitted item and finish in this same
+    // runtime turn. The durable completion transition still validates the
+    // board and active-attempt gates server-side.
+    ...sameTurnFinish,
   ]);
 }
 

@@ -32,11 +32,20 @@ export class TaskRunCollaborationActivationAdapter {
   }): Promise<{ readonly taskId: string; readonly runId: string }> {
     const rootTask = await this.tasks.findById(input.team.rootTaskId);
     if (!rootTask) throw new Error('Collaboration root task is missing.');
-    const prompt = input.plan.workAttempt && input.workItem
-      ? this.workPrompt(input, input.workItem)
-      : this.messagePrompt(input);
-    const primary = input.plan.primaryWorkMessage ?? input.plan.directMessages[0];
-    if (!primary) throw new Error('Collaboration activation has no durable cause.');
+    const prompt =
+      input.plan.workAttempt && input.workItem
+        ? this.workPrompt(input, input.workItem)
+        : this.messagePrompt(input);
+    const primary =
+      input.plan.primaryWorkMessage ?? input.plan.directMessages[0];
+    if (!primary)
+      throw new Error('Collaboration activation has no durable cause.');
+    const causeMessageIds = Object.freeze([
+      ...(input.plan.primaryWorkMessage
+        ? [input.plan.primaryWorkMessage.id]
+        : []),
+      ...input.plan.directMessages.map((message) => message.id),
+    ]);
     const task = createChildTask({
       tenantId: input.owner.tenantId,
       workspaceId: input.owner.workspaceId,
@@ -50,27 +59,28 @@ export class TaskRunCollaborationActivationAdapter {
       invokableVersionId: input.member.agentVersionId,
       inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt }),
       inputFingerprint: rootTask.inputFingerprint,
-      logicalStepKey: `collaboration:${input.plan.activation.dedupeKey}`,
+      logicalStepKey: input.plan.activation.dedupeKey,
       nodePath: `collaboration:${input.team.id}:${input.member.id}:${primary.sequence}`,
       teamMemberRunId: input.member.id,
       teamSequence: input.plan.workAttempt?.attemptNo ?? primary.sequence,
       teamTaskKind: input.plan.workAttempt ? 'work_attempt' : 'direct_message',
       sourceTeamMessageId: primary.id,
-      inputTeamMessageIds: [
-        ...(input.plan.primaryWorkMessage ? [input.plan.primaryWorkMessage.id] : []),
-        ...input.plan.directMessages.map((message) => message.id),
-      ],
+      inputTeamMessageIds: causeMessageIds,
       now: this.now,
     });
     const run = createRun(prompt, { now: this.now });
     await this.admission.withTransaction(async (tx) => {
       if (!tx.teamMessages)
-        throw new Error('Collaboration message transaction dependency is unavailable.');
+        throw new Error(
+          'Collaboration message transaction dependency is unavailable.',
+        );
       await tx.tasks.save(task);
       await tx.runs.save(run, { taskId: task.id, attempt: 1 });
       if (input.plan.workAttempt) {
         if (!tx.teamExecutions)
-          throw new Error('Collaboration execution transaction dependency is unavailable.');
+          throw new Error(
+            'Collaboration execution transaction dependency is unavailable.',
+          );
         await tx.teamExecutions.materializeAttempt({
           attemptId: input.plan.workAttempt.id,
           executionTaskId: task.id,
@@ -80,25 +90,29 @@ export class TaskRunCollaborationActivationAdapter {
           owner: input.owner,
         });
         const bound = await tx.teamMessages.bindToTask({
-          messageIds: task.inputTeamMessageIds,
+          messageIds: causeMessageIds,
           taskId: task.id,
           owner: input.owner,
         });
-        if (bound.length !== task.inputTeamMessageIds.length)
-          throw new Error('Collaboration activation did not bind every durable cause.');
+        if (bound.length !== causeMessageIds.length)
+          throw new Error(
+            'Collaboration activation did not bind every durable cause.',
+          );
       } else if (tx.teamMessages.claimDirectBatchForTask) {
         await tx.teamMessages.claimDirectBatchForTask({
-          messageIds: task.inputTeamMessageIds,
+          messageIds: causeMessageIds,
           taskId: task.id,
           teamRunId: input.team.id,
           recipientMemberRunId: input.member.id,
           owner: input.owner,
         });
       } else {
-        if (task.inputTeamMessageIds.length !== 1)
-          throw new Error('Collaboration mailbox cannot coalesce without batch claiming.');
+        if (causeMessageIds.length !== 1)
+          throw new Error(
+            'Collaboration mailbox cannot coalesce without batch claiming.',
+          );
         await tx.teamMessages.claimDirectForTask({
-          messageId: task.inputTeamMessageIds[0]!,
+          messageId: causeMessageIds[0]!,
           taskId: task.id,
           teamRunId: input.team.id,
           recipientMemberRunId: input.member.id,
@@ -121,7 +135,9 @@ export class TaskRunCollaborationActivationAdapter {
       to: input.member.name,
       kind: attempt.attemptNo > 1 ? 'rework' : 'wake',
       from: input.plan.primaryWorkMessage?.senderMemberRunId
-        ? input.senderNameById.get(input.plan.primaryWorkMessage.senderMemberRunId) ?? 'collaboration'
+        ? (input.senderNameById.get(
+            input.plan.primaryWorkMessage.senderMemberRunId,
+          ) ?? 'collaboration')
         : 'collaboration',
       sequence: input.plan.primaryWorkMessage?.sequence ?? attempt.attemptNo,
       body: [
@@ -131,7 +147,9 @@ export class TaskRunCollaborationActivationAdapter {
         `Attempt number: ${attempt.attemptNo}.`,
         direct,
         'Use board_checkpoint while working and board_submit when the semantic result is ready. Use board_block for a real blocker. Board and mailbox state are durable; use board_list/inbox_list for details.',
-      ].filter((part): part is string => Boolean(part)).join('\n'),
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join('\n'),
     });
   }
 
@@ -144,7 +162,7 @@ export class TaskRunCollaborationActivationAdapter {
       to: input.member.name,
       kind: 'direct',
       from: first.senderMemberRunId
-        ? input.senderNameById.get(first.senderMemberRunId) ?? 'collaboration'
+        ? (input.senderNameById.get(first.senderMemberRunId) ?? 'collaboration')
         : 'collaboration',
       sequence: first.sequence,
       body: [
@@ -163,7 +181,7 @@ export class TaskRunCollaborationActivationAdapter {
       'Messages:',
       ...input.plan.directMessages.map((message) => {
         const sender = message.senderMemberRunId
-          ? input.senderNameById.get(message.senderMemberRunId) ?? 'participant'
+          ? (input.senderNameById.get(message.senderMemberRunId) ?? 'participant')
           : 'system';
         return `- M-${message.sequence} from ${safe(sender)}: ${safe(message.body)}`;
       }),

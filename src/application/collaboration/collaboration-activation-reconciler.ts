@@ -50,14 +50,16 @@ export class CollaborationActivationReconciler
   }
 
   public kick(rootTaskId: string, owner: OwnerScope, parentTask?: Task): void {
-    void this.reconcileForRootTask(rootTaskId, owner, { parentTask }).catch(
-      (error) => {
-        this.logger?.log('warn', 'collaboration.activation.kick_failed', {
-          root_task_id: rootTaskId,
-          error_name: error instanceof Error ? error.name : 'UnknownError',
-        });
-      },
-    );
+    void this.reconcileForRootTask(
+      rootTaskId,
+      owner,
+      parentTask ? { parentTask } : {},
+    ).catch((error) => {
+      this.logger?.log('warn', 'collaboration.activation.kick_failed', {
+        root_task_id: rootTaskId,
+        error_name: error instanceof Error ? error.name : 'UnknownError',
+      });
+    });
   }
 
   public async reconcilePendingRoots(): Promise<number> {
@@ -168,7 +170,7 @@ export class CollaborationActivationReconciler
           plan,
           workItems,
           senderNameById,
-          parentTask,
+          ...(parentTask ? { parentTask } : {}),
         });
         return true;
       }
@@ -204,6 +206,8 @@ export class CollaborationActivationReconciler
         member.id,
         owner,
       );
+      const hasDiscovery =
+        discoveryMember?.id === member.id && openActionable !== undefined;
       const plan = this.#planner.plan({
         participantId: member.id,
         participantRole: 'member',
@@ -212,8 +216,7 @@ export class CollaborationActivationReconciler
         workItems,
         attempts,
         dependencies,
-        workAvailableItem:
-          discoveryMember?.id === member.id ? openActionable : null,
+        ...(hasDiscovery ? { workAvailableItem: openActionable } : {}),
       });
       if (!plan) continue;
       await this.materialize({
@@ -223,7 +226,7 @@ export class CollaborationActivationReconciler
         plan,
         workItems,
         senderNameById,
-        parentTask,
+        ...(parentTask ? { parentTask } : {}),
       });
       return true;
     }
@@ -349,7 +352,8 @@ export class CollaborationActivationReconciler
       );
       if (
         directTasks.some(
-          (record) => !['completed', 'failed', 'cancelled'].includes(record.task.status),
+          (record) =>
+            !['completed', 'failed', 'cancelled'].includes(record.task.status),
         )
       )
         return false;

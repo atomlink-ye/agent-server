@@ -27,7 +27,7 @@ import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
-import { canonicalTeamToolRefsForRole } from '../teams/team-policy-evaluator.js';
+import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
   createRuntimeExecutionReceipt,
@@ -380,13 +380,13 @@ describe('ExecuteRun', () => {
       grantId: 'grant-1',
       runId: 'prior-run-id',
       allowedTools: [],
-      catalogTools: canonicalTeamToolRefsForRole('lead'),
+      catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const refreshForTeamMember = vi.fn(() => ({
       grantId: 'grant-1',
       runId: claim.run.id,
       allowedTools: [],
-      catalogTools: canonicalTeamToolRefsForRole('lead'),
+      catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const activeToolCalls = vi.fn(() => 0);
     const runtime = createRuntimeWithCandidates('agent-prior');
@@ -443,7 +443,7 @@ describe('ExecuteRun', () => {
           agentVersionId: task.invokableVersionId,
           environmentVersionId: team.environmentVersionId,
           resolvedSkills: [],
-          toolRefs: canonicalTeamToolRefsForRole('lead'),
+          toolRefs: collaborationToolRefsForRole('lead'),
           workspaceBinding: {
             plane: 'paseo',
             externalWorkspaceId: 'workspace-provider-1',
@@ -1848,8 +1848,8 @@ function createLeadRuntimeFixture() {
   const grant = {
     grantId: 'grant-1',
     runId: undefined,
-    allowedTools: canonicalTeamToolRefsForRole('lead'),
-    catalogTools: canonicalTeamToolRefsForRole('lead'),
+    allowedTools: collaborationToolRefsForRole('lead'),
+    catalogTools: collaborationToolRefsForRole('lead'),
   };
   const binder = {
     bind: vi.fn(async () => ({})),
@@ -1887,7 +1887,7 @@ function createLeadRuntimeFixture() {
       agentVersionId: task.invokableVersionId,
       environmentVersionId: team.environmentVersionId,
       resolvedSkills: [],
-      toolRefs: canonicalTeamToolRefsForRole('lead'),
+      toolRefs: collaborationToolRefsForRole('lead'),
       workspaceBinding: null,
       sessionBinding: null,
       createdAt: task.createdAt,

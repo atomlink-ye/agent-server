@@ -32,7 +32,7 @@ import type {
   ProductRunTrace,
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
-import { canonicalTeamMcpName } from '../agents/built-in-skills.js';
+import { collaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 
 export interface ProductProjectionOwnerScope {
   readonly tenantId: string;
@@ -502,7 +502,7 @@ function mapMcpActivity(
     !event.taskId
   )
     return null;
-  const canonicalToolName = canonicalTeamMcpName(event.toolName);
+  const canonicalToolName = collaborationMcpName(event.toolName);
   if (
     !canonicalToolName ||
     event.provenance !== 'server_authorized_team_mcp_catalog' ||

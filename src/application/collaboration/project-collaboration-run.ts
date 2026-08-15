@@ -5,7 +5,6 @@ import {
   projectMessageStatus,
   workRef,
 } from '../../domain/collaboration/collaboration.js';
-import type { CollaborationRepository } from '../ports/collaboration-repository.js';
 import type {
   OwnerScope,
   TeamExecutionRepository,
@@ -18,35 +17,42 @@ export class ProjectCollaborationRun {
   public constructor(
     private readonly executions: TeamExecutionRepository,
     private readonly messages: TeamMessageRepository,
-    private readonly journal: CollaborationRepository,
   ) {}
 
   public async project(teamRunId: string, owner: OwnerScope) {
     const team = await this.executions.findTeamRunById(teamRunId, owner);
     if (!team) return null;
-    const [members, items, attempts, dependencies, messages, checkpoints, submissions] =
-      await Promise.all([
-        this.executions.findMembersByTeamRunId(teamRunId, owner),
-        this.executions.findWorkItemsByTeamRunId(teamRunId, owner),
-        this.executions.findAttemptsByTeamRunId(teamRunId, owner),
-        this.executions.findWorkDependenciesByTeamRunId(teamRunId, owner),
-        this.messages.listForTeamRun?.(teamRunId, owner) ??
-          this.messages.listDirectForTeamRun(teamRunId, owner),
-        this.journal.listCheckpoints(teamRunId, owner),
-        this.journal.listSubmissions(teamRunId, owner),
-      ]);
+    const [
+      members,
+      items,
+      attempts,
+      dependencies,
+      messages,
+      checkpoints,
+      submissions,
+    ] = await Promise.all([
+      this.executions.findMembersByTeamRunId(teamRunId, owner),
+      this.executions.findWorkItemsByTeamRunId(teamRunId, owner),
+      this.executions.findAttemptsByTeamRunId(teamRunId, owner),
+      this.executions.findWorkDependenciesByTeamRunId(teamRunId, owner),
+      this.messages.listForTeamRun?.(teamRunId, owner) ??
+        this.messages.listDirectForTeamRun(teamRunId, owner),
+      this.executions.listCollaborationCheckpoints?.(teamRunId, owner) ?? [],
+      this.executions.listCollaborationSubmissions?.(teamRunId, owner) ?? [],
+    ]);
     const ordered = orderedWorkItems(items);
     const workRefById = new Map(
       ordered.map((item, index) => [item.id, workRef(index)]),
     );
     const participantNameById = new Map(
-      members.map((member) => [member.id, safeText(member.name) ?? 'participant']),
+      members.map((member) => [
+        member.id,
+        safeText(member.name) ?? 'participant',
+      ]),
     );
     const messageRefById = new Map(
       messages.map((message) => [message.id, messageRef(message.sequence)]),
     );
-    const checkpointById = new Map(checkpoints.map((entry) => [entry.id, entry]));
-    void checkpointById;
 
     return {
       collaboration_run_id: team.id,
@@ -109,7 +115,8 @@ export class ProjectCollaborationRun {
             ? participantNameById.get(message.senderMemberRunId) ?? 'participant'
             : 'system',
           to:
-            participantNameById.get(message.recipientMemberRunId) ?? 'participant',
+            participantNameById.get(message.recipientMemberRunId) ??
+            'participant',
           body: safeText(message.body) ?? '',
           about_work_ref: message.aboutWorkItemId
             ? workRefById.get(message.aboutWorkItemId) ?? null
@@ -139,7 +146,8 @@ export class ProjectCollaborationRun {
         work_ref: workRefById.get(entry.workItemId) ?? null,
         attempt_no: entry.attemptNo,
         participant:
-          participantNameById.get(entry.submittedByParticipantId) ?? 'participant',
+          participantNameById.get(entry.submittedByParticipantId) ??
+          'participant',
         summary: safeText(entry.summary) ?? '',
         evidence_refs: [...entry.evidenceRefs],
         artifact_refs: [...entry.artifactRefs],

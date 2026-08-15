@@ -47,7 +47,11 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    timeout-minutes: 30
+    # Four real-provider flows now run here, and the agent-team one may use up
+    # to its 900s budget on a slow day. A job kill would surface as an opaque
+    # cancellation rather than as a flow's own assertion, which is the failure
+    # mode this workflow exists to avoid.
+    timeout-minutes: 45
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
     steps:

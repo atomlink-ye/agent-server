@@ -195,7 +195,12 @@ export class TeamDriver {
         });
       return { decision: rejection.decision, team: rejection.team };
     });
-    await this.reconciler?.reconcileForRootTask(team.rootTaskId, input.owner);
+    try {
+      await this.reconciler?.reconcileForRootTask(team.rootTaskId, input.owner);
+    } catch {
+      // The rejection fact is already committed. Activation is best effort and
+      // can be retried from durable collaboration state by a later reconcile.
+    }
     return result;
   }
 

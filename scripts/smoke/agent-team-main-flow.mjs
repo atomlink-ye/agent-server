@@ -91,17 +91,17 @@ function agentYaml(name, instructions, refs) {
 }
 
 const leadInstructions =
-  'Act as Team Lead using only canonical Team tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call team_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.';
+  'Act as Team Lead using only canonical Team tools. Use board_list to read the board first. If no Work exists, use board_create to create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, use board_accept to accept it. When every Work is accepted and no active attempt remains, call collaboration_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.';
 const analystInstructions =
-  'Act as the assigned Team member using canonical Team tools. Read the board, locate your active Work, and submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.';
+  'Act as the assigned Team member using canonical Team tools. Use board_list to read the board, locate your active Work, and use board_submit to submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.';
 
 const leadVersion = await importAndPublish(
   agentYaml('smoke-lead', leadInstructions, [
-    'team-state',
-    'team-work-list',
-    'team-work-create',
-    'team-work-accept-v2',
-    'team-finish',
+    'collaboration-state',
+    'board-list',
+    'board-create',
+    'board-accept',
+    'collaboration-finish',
   ]),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,
@@ -109,9 +109,9 @@ const leadVersion = await importAndPublish(
 progress('agent_version_published', { role: 'lead', version_id: leadVersion });
 const analystVersion = await importAndPublish(
   agentYaml('smoke-analyst', analystInstructions, [
-    'team-state',
-    'team-work-list',
-    'team-work-submit',
+    'collaboration-state',
+    'board-list',
+    'board-submit',
   ]),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,

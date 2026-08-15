@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
 import { TeamDriver } from '../../src/application/teams/team-driver.js';
+import { CollaborationActivationReconciler } from '../../src/application/collaboration/collaboration-activation-reconciler.js';
 import {
   decodeRootTaskRunRequestSnapshotRef,
   encodeRootTaskRunRequestSnapshotRef,
@@ -10,6 +11,7 @@ import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/p
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTeamExecutionRepository } from '../../src/infrastructure/postgres/postgres-collaborative-team-repository.js';
+import { PostgresTeamMessageRepository } from '../../src/infrastructure/postgres/postgres-team-message-repository.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 
 const owner = {
@@ -259,7 +261,7 @@ async function seed(database: PGlite): Promise<void> {
       id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
       principal_type,principal_id,created_at,updated_at
     ) VALUES
-      ($1,$3,'lead','lead',$4,'active',$6,$7,$8,$9,$10,$10),
+      ($1,$3,'lead','lead',$4,'idle',$6,$7,$8,$9,$10,$10),
       ($2,$3,'worker','member',$5,'active',$6,$7,$8,$9,$10,$10)`,
     [
       ids.leadMember,
@@ -351,14 +353,25 @@ async function seed(database: PGlite): Promise<void> {
 
 function createDriver(database: PGlite): TeamDriver {
   const executions = new PostgresTeamExecutionRepository(database);
+  const tasks = new PostgresTaskRepository(database);
+  const admission = new PostgresAdmissionRepository(database);
+  const now = () => new Date('2026-08-08T00:05:00.000Z');
+  const reconciler = new CollaborationActivationReconciler(
+    new PostgresTeamMessageRepository(database),
+    executions,
+    tasks,
+    admission,
+    undefined,
+    now,
+  );
   return new TeamDriver(
     executions,
-    new PostgresTaskRepository(database),
+    tasks,
     new PostgresRunRepository(database),
-    new PostgresAdmissionRepository(database),
+    admission,
     undefined,
-    undefined,
-    () => new Date('2026-08-08T00:05:00.000Z'),
+    reconciler,
+    now,
   );
 }
 
@@ -380,7 +393,7 @@ const rejectInput = {
 };
 
 describe('TeamDriver completion rejection transaction (PGlite)', () => {
-  it('commits rejection, lead advance, next Lead task/run, and dispatch together', async () => {
+  it('commits rejection, then materializes the next Lead task/run and dispatch', async () => {
     const database = await createDatabase();
     const driver = createDriver(database);
 
@@ -424,7 +437,7 @@ describe('TeamDriver completion rejection transaction (PGlite)', () => {
     );
 
     expect(result.decision.feedback).toBe(rejectInput.feedback);
-    expect(result.team.revision).toBe(9);
+    expect(result.team.revision).toBe(8);
     expect(team.rows).toEqual([
       {
         revision: 9,
@@ -488,7 +501,7 @@ describe('TeamDriver completion rejection transaction (PGlite)', () => {
     expect(dispatches.rows).toHaveLength(1);
   });
 
-  it('rolls back every rejection side effect when dispatch enqueue fails', async () => {
+  it('commits rejection while rolling back a failed wake and dispatch transaction', async () => {
     const database = await createDatabase();
     await database.query(`
       CREATE OR REPLACE FUNCTION test_reject_dispatch_insert()
@@ -505,9 +518,7 @@ describe('TeamDriver completion rejection transaction (PGlite)', () => {
     `);
     const driver = createDriver(database);
 
-    await expect(driver.decideCompletion(rejectInput)).rejects.toThrow(
-      'forced dispatch failure',
-    );
+    const result = await driver.decideCompletion(rejectInput);
     const team = await database.query<{
       revision: number;
       lead_turn_count: number;
@@ -533,15 +544,17 @@ describe('TeamDriver completion rejection transaction (PGlite)', () => {
 
     expect(team.rows).toEqual([
       {
-        revision: 7,
+        revision: 8,
         lead_turn_count: 4,
         completion_requested_by_run_id: ids.requestRun,
       },
     ]);
-    expect(decisions.rows).toEqual([]);
+    expect(decisions.rows).toHaveLength(1);
     expect(leadTasks.rows).toEqual([]);
     expect(leadRuns.rows).toEqual([]);
     expect(dispatches.rows).toEqual([]);
+    expect(result.decision.feedback).toBe(rejectInput.feedback);
+    expect(result.team.revision).toBe(8);
   });
 });
 

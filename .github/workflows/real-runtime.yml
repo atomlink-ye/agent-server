@@ -148,6 +148,12 @@ jobs:
           AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
 
+      - name: Real-provider Team registry Work lineage
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          SMOKE_OUTPUT_FILE: .local/test-runs/team-registry-work.ndjson
+        run: pnpm smoke:team-registry-work
+
       - name: Real-provider user-defined Team Work lifecycle
         if: steps.credentials.outputs.available == 'true'
         run: pnpm smoke:user-defined-team-work-lifecycle

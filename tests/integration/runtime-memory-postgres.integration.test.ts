@@ -88,6 +88,7 @@ describe('runtime memory PostgreSQL materialization', () => {
       connect: async () => undefined,
       connectionStatus: () => 'connected',
       openWorkspace: async () => 'workspace-1',
+      createIndependentWorkspace: async () => 'workspace-1',
       setWorkspaceTitle: async () => undefined,
       listModels: async (
         _provider: ManagedEnvironmentProvider,

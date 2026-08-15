@@ -45,12 +45,12 @@ import { createMemoryReviewActionTokenDeriver } from './application/channels/mem
 import { ApplyMemoryReviewCommand } from './application/channels/apply-memory-review-command.js';
 import { ApplyMemoryReviewControl } from './application/channels/apply-memory-review-control.js';
 import { AcceptMemoryFromBoundDocument } from './application/channels/accept-memory-from-bound-document.js';
-import { createLegacyRuntimeToolsContributor } from './entrypoints/mcp/runtime-tool-contributors.js';
-import { PostgresTeamExecutionRepository } from './infrastructure/postgres/postgres-collaborative-team-repository.js';
-import { PostgresTeamMessageRepository } from './infrastructure/postgres/postgres-team-message-repository.js';
+import {
+  createCollaborationRuntimeContributor,
+  createSyntheticRuntimeToolsContributor,
+} from './entrypoints/mcp/runtime-tool-contributors.js';
 import { SyntheticMarketAdapter } from './adapters/demo-market/synthetic-market-adapter.js';
 import { TeamDriver } from './application/teams/team-driver.js';
-import { TeamWakeReconciler } from './application/teams/team-wake-reconciler.js';
 import {
   revokeForRecoveredTeamRuns,
   revokeForTerminalTeamRun,
@@ -272,13 +272,14 @@ export async function createService(
     admissions: admissionRepository,
     events,
     logger,
+    deferActivationKick: options.deferTeamWakeReconcile,
   });
   const {
     executions: collaborativeTeamExecutions,
     messages: teamMessages,
     contextResolver: teamToolContextResolver,
-    wakeReconciler: teamWakeReconciler,
-    commands: teamCommandService,
+    activationReconciler: collaborationActivationReconciler,
+    collaboration,
   } = teamModule;
   const memoryModule = createMemoryModule({
     database: pool,
@@ -330,11 +331,11 @@ export async function createService(
     toolContributors: [
       workModule.contributeRuntime,
       memoryModule.contributeRuntime,
-      createLegacyRuntimeToolsContributor({
-        teamTools: {
-          contextResolver: teamToolContextResolver,
-          commands: teamCommandService,
-        },
+      createCollaborationRuntimeContributor({
+        contextResolver: teamToolContextResolver,
+        kernel: collaboration,
+      }),
+      createSyntheticRuntimeToolsContributor({
         market: new SyntheticMarketAdapter(),
         logger,
       }),
@@ -364,18 +365,16 @@ export async function createService(
   );
   const getTask = new GetTask(taskRepository);
   const getTaskTree = new GetTaskTree(taskRepository);
-  const terminalWakeReconciler = options.deferTeamWakeReconcile
-    ? {
-        reconcileForRootTask: async () => 0,
-      }
-    : teamWakeReconciler;
+  const terminalActivationReconciler = options.deferTeamWakeReconcile
+    ? undefined
+    : collaborationActivationReconciler;
   const teamDriver = new TeamDriver(
     collaborativeTeamExecutions,
     taskRepository,
     runRepository,
     admissionRepository,
     teamMessages,
-    terminalWakeReconciler,
+    terminalActivationReconciler,
     undefined,
     { completionApprovalRequired: config.teamCompletionApprovalRequired },
   );
@@ -442,7 +441,7 @@ export async function createService(
     runtimeModule.runtimeCellRoot,
     collaborativeTeamExecutions,
     runRepository,
-    terminalWakeReconciler,
+    terminalActivationReconciler,
   );
   const dispatcher = new PostgresRunDispatcher(
     new ClaimNextRun(runRepository, {
@@ -476,7 +475,7 @@ export async function createService(
           });
         }
         try {
-          await teamWakeReconciler.reconcileQueuedWakeRoots();
+          await collaborationActivationReconciler.reconcilePendingRoots();
         } catch (error) {
           logger.log('error', 'team.wake_reconcile_failed', {
             error_name: error instanceof Error ? error.name : 'UnknownError',
@@ -578,7 +577,7 @@ export async function createService(
     resourceModule,
   });
   if (!options.singleRunDebug) {
-    await teamWakeReconciler.reconcileQueuedWakeRoots();
+    await collaborationActivationReconciler.reconcilePendingRoots();
     await startServiceResources({
       dispatcher,
       ...(larkWorker ? { larkWorker } : {}),
@@ -613,14 +612,7 @@ export async function createService(
             };
           },
           rebuildQueuedTeamWakes: () =>
-            new TeamWakeReconciler(
-              new PostgresTeamMessageRepository(pool),
-              new PostgresTeamExecutionRepository(pool),
-              new PostgresTaskRepository(pool),
-              new PostgresAdmissionRepository(pool),
-              undefined,
-              logger,
-            ).reconcileQueuedWakeRoots(),
+            collaborationActivationReconciler.reconcilePendingRoots(),
           startDispatcher: () => dispatcher.start(),
           stopDispatcher: () => dispatcher.stop(),
         }

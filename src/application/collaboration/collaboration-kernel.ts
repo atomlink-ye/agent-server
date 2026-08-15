@@ -19,7 +19,7 @@ import type { TeamMessageRepository } from '../ports/team-message-repository.js'
 import type { TeamToolContext } from '../teams/team-tool-context.js';
 import { TeamContextError } from '../teams/team-tool-context.js';
 import { safeText } from '../teams/safe-team-text.js';
-import type { TeamWakeReconciler } from '../teams/team-wake-reconciler.js';
+import type { CollaborationActivationKick } from './collaboration-activation-reconciler.js';
 import { CollaborationPolicy, CollaborationPolicyError } from './collaboration-policy.js';
 
 /**
@@ -33,7 +33,7 @@ export class CollaborationKernel {
     private readonly journal: CollaborationRepository,
     private readonly messages: TeamMessageRepository,
     private readonly events: Pick<RunEventRepository, 'append'>,
-    private readonly wake?: Pick<TeamWakeReconciler, 'reconcileForRootTask'>,
+    private readonly activation?: CollaborationActivationKick,
     private readonly policy = new CollaborationPolicy(),
   ) {}
 
@@ -179,7 +179,7 @@ export class CollaborationKernel {
         expectedRevision: context.teamRun.revision,
         owner: context.owner,
       });
-      await this.wake?.reconcileForRootTask(context.teamRun.rootTaskId, context.owner);
+      this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
       return {
         work_ref: await this.refForWork(context, result.item.id),
         status: 'assigned',
@@ -198,6 +198,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
+    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
     return {
       work_ref: await this.refForWork(context, item.id),
       status: 'open',
@@ -223,7 +224,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    await this.wake?.reconcileForRootTask(context.teamRun.rootTaskId, context.owner);
+    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
     return { work_ref: input.workRef, status: 'assigned', owner: assignee.name, attempt_no: result.attempt.attemptNo };
   }
 
@@ -348,6 +349,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
+    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
     return { work_ref: input.workRef, status: 'accepted' };
   }
 
@@ -372,7 +374,7 @@ export class CollaborationKernel {
         expectedRevision: context.teamRun.revision,
         owner: context.owner,
       });
-      await this.wake?.reconcileForRootTask(context.teamRun.rootTaskId, context.owner);
+      this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
       return { work_ref: input.workRef, status: 'in_progress', attempt_no: result.attempt.attemptNo, owner: assignee.name };
     }
     const attempt = await this.executions.requestRework({
@@ -386,7 +388,7 @@ export class CollaborationKernel {
       expectedRevision: context.teamRun.revision,
       owner: context.owner,
     });
-    await this.wake?.reconcileForRootTask(context.teamRun.rootTaskId, context.owner);
+    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
     return { work_ref: input.workRef, status: 'in_progress', attempt_no: attempt.attemptNo, owner: assignee.name };
   }
 
@@ -408,7 +410,13 @@ export class CollaborationKernel {
   public async inboxList(context: TeamToolContext) {
     this.policy.require(context, 'mailbox.read');
     const messages = await this.allMessages(context);
-    const items = await this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner);
+    const [items, members] = await Promise.all([
+      this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner),
+      this.executions.findMembersByTeamRunId(context.teamRun.id, context.owner),
+    ]);
+    const participantNameById = new Map(
+      members.map((member) => [member.id, member.name]),
+    );
     return messages
       .filter(
         (message) =>
@@ -416,7 +424,9 @@ export class CollaborationKernel {
       )
       .map((message) => ({
         message_ref: messageRef(message.sequence),
-        from: message.senderMemberRunId,
+        from: message.senderMemberRunId
+          ? participantNameById.get(message.senderMemberRunId) ?? 'participant'
+          : 'system',
         body: safeText(message.body),
         about_work_ref: message.aboutWorkItemId
           ? this.refForExistingWork(message.aboutWorkItemId, items)
@@ -471,7 +481,7 @@ export class CollaborationKernel {
       requiresAck: input.requiresAck ?? false,
       owner: context.owner,
     });
-    await this.wake?.reconcileForRootTask(context.teamRun.rootTaskId, context.owner);
+    this.activation?.kick(context.teamRun.rootTaskId, context.owner, context.task);
     return {
       sent: true,
       message_ref: messageRef(message.sequence),

@@ -197,6 +197,28 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     );
     return r.rows?.[0] ? mapRun(r.rows[0]) : null;
   }
+  public async listActiveTeamRunRoots() {
+    const result = await this.database.query<{
+      root_task_id: string;
+      tenant_id: string;
+      workspace_id: string;
+      principal_type: string;
+      principal_id: string;
+    }>(
+      `SELECT root_task_id,tenant_id,workspace_id,principal_type,principal_id
+         FROM team_runs WHERE status='active' ORDER BY created_at,id`,
+    );
+    return (result.rows ?? []).map((row) => ({
+      rootTaskId: row.root_task_id,
+      owner: {
+        tenantId: row.tenant_id,
+        workspaceId: row.workspace_id,
+        principalType: row.principal_type,
+        principalId: row.principal_id,
+      },
+    }));
+  }
+
   public async completeTeamRunAtomically(input: {
     readonly teamRunId: string;
     readonly rootRunId: string;
@@ -891,7 +913,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     owner: OwnerScope,
   ): Promise<TeamWorkItem[]> {
     const r = await this.database.query<WorkRow>(
-      `SELECT * FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)} ORDER BY created_at`,
+      `SELECT * FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)} ORDER BY created_at,id`,
       [id, ...ownerValues(owner)],
     );
     return (r.rows ?? []).map(mapWork);

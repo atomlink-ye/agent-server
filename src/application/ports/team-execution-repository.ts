@@ -67,6 +67,10 @@ export interface TeamExecutionRepository {
     owner: OwnerScope,
     rootTaskId?: string,
   ): Promise<TeamRun | null>;
+  /** Durable recovery scan used by the provider-neutral activation reconciler. */
+  listActiveTeamRunRoots?(): Promise<
+    readonly { readonly rootTaskId: string; readonly owner: OwnerScope }[]
+  >;
   completeTeamRunAtomically(input: {
     readonly teamRunId: string;
     readonly rootRunId: string;

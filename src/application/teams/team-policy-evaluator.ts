@@ -1,4 +1,4 @@
-import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
 import {
   canonicalTeamToolRefsForDirectMessage,
@@ -200,20 +200,41 @@ export function canonicalTeamToolRefsForLeadPolicy(
       AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
     team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
   };
+  const collaborationCommandRefs: Record<
+    AgenticLeadCommand,
+    string
+  > = {
+    team_work_create: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
+    team_work_accept: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
+    team_work_cancel: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
+    team_work_request_changes:
+      AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
+    team_finish: AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+  };
   const sameTurnFinish = policy.allowedCommands.includes('team_work_accept')
-    ? [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish]
+    ? [
+        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
+        AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+      ]
     : [];
-  return Object.freeze([
-    ...collaborationToolRefsForRole('lead'),
+  return Object.freeze([...new Set([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
     AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
     ...policy.allowedCommands.map((command) => commandRefs[command]),
+    ...policy.allowedCommands.map(
+      (command) => collaborationCommandRefs[command],
+    ),
     // A Lead may accept the final submitted item and finish in this same
     // runtime turn. The durable completion transition still validates the
     // board and active-attempt gates server-side.
     ...sameTurnFinish,
-  ]);
+  ])]);
 }
 
 export class TeamPolicyEvaluator {

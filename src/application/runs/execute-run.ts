@@ -549,10 +549,10 @@ export class ExecuteRun {
     if (
       member &&
       runtimeSession &&
-      (runtimeSession.providerAgentId === null) !==
-        (runtimeSession.paseoWorkspaceId === null)
+      (runtimeSession.sessionBinding === null) !==
+        (runtimeSession.workspaceBinding === null)
     )
-      throw new Error('Runtime session provider binding is partial.');
+      throw new Error('Runtime session execution binding is partial.');
     const legacyProviderAgentId =
       task.sessionId &&
       productSession &&
@@ -590,8 +590,8 @@ export class ExecuteRun {
         throw new Error('Product Session runtime session snapshot is invalid.');
     }
     const priorProviderAgentId = member
-      ? (runtimeSession?.providerAgentId ?? null)
-      : (runtimeSession?.providerAgentId ??
+      ? (runtimeSession?.sessionBinding?.externalSessionId ?? null)
+      : (runtimeSession?.sessionBinding?.externalSessionId ??
         legacyProviderAgentId ??
         (!this.runtimeSessions &&
         task.sessionId &&
@@ -834,8 +834,8 @@ export class ExecuteRun {
           sessionRuntime.toolRefs,
           member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
         ) ||
-        sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null
+        sessionRuntime.sessionBinding !== null ||
+        sessionRuntime.workspaceBinding !== null
       )
         throw new Error('New Team member runtime session is already bound.');
     } else if (createdRuntimeSession) {
@@ -848,8 +848,8 @@ export class ExecuteRun {
         sessionRuntime.environmentVersionId !==
           productSession?.environmentVersionId ||
         !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
-        sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null
+        sessionRuntime.sessionBinding !== null ||
+        sessionRuntime.workspaceBinding !== null
       )
         throw new Error(
           'New Product Session runtime session is already bound.',

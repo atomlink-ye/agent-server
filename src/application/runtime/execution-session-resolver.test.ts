@@ -25,8 +25,6 @@ function unboundRuntimeSession(): RuntimeSession {
     toolRefs: [],
     workspaceBinding: null,
     sessionBinding: null,
-    paseoWorkspaceId: null,
-    providerAgentId: null,
     createdAt: '2026-08-15T00:00:00.000Z',
     updatedAt: '2026-08-15T00:00:00.000Z',
   };
@@ -98,8 +96,6 @@ describe('ExecutionSessionResolver', () => {
           ...runtime,
           workspaceBinding: binding.workspaceBinding,
           sessionBinding: binding.sessionBinding,
-          paseoWorkspaceId: binding.workspaceBinding.externalWorkspaceId,
-          providerAgentId: binding.sessionBinding.externalSessionId,
         };
       },
     });
@@ -139,8 +135,6 @@ describe('ExecutionSessionResolver', () => {
         plane: 'paseo',
         externalSessionId: 'external-session-1',
       },
-      paseoWorkspaceId: 'external-workspace-1',
-      providerAgentId: 'external-session-1',
     };
     const resolver = new ExecutionSessionResolver(fakePlane(calls), {
       bindExecution: async () => {

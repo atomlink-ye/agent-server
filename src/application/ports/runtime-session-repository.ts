@@ -21,10 +21,6 @@ export interface RuntimeSession {
   readonly toolRefs: readonly string[];
   readonly workspaceBinding: ExecutionWorkspaceBinding | null;
   readonly sessionBinding: ExecutionSessionBinding | null;
-  /** @deprecated Compatibility projection while ExecuteRun migrates. */
-  readonly paseoWorkspaceId: string | null;
-  /** @deprecated Compatibility projection while ExecuteRun migrates. */
-  readonly providerAgentId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -102,11 +98,5 @@ export interface RuntimeSessionRepository {
     readonly id: string;
     readonly workspaceBinding: ExecutionWorkspaceBinding;
     readonly sessionBinding: ExecutionSessionBinding;
-  }): Promise<RuntimeSession>;
-  /** @deprecated Compatibility method while old runtime callers migrate. */
-  bindProvider(input: {
-    id: string;
-    paseoWorkspaceId: string;
-    providerAgentId: string;
   }): Promise<RuntimeSession>;
 }

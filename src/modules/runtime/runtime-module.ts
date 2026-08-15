@@ -95,6 +95,7 @@ export function createRuntimeModule(options: {
     executionPlane,
     sessions,
     sessionLookup,
+    workspaces,
     executionRuns,
     new LocalRuntimeMemoryCandidateCollector(),
     options.config.paseo.agentCwd,

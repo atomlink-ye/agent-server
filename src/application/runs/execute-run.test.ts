@@ -84,8 +84,8 @@ describe('ExecuteRun', () => {
       environmentVersionId: 'environment-version-1',
       resolvedSkills: [],
       toolRefs: [],
-      paseoWorkspaceId: null,
-      providerAgentId: null,
+      workspaceBinding: null,
+      sessionBinding: null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     } as const;
@@ -147,7 +147,6 @@ describe('ExecuteRun', () => {
         async (): Promise<typeof runtimeSession | null> => null,
       ),
       createOrGetForProductSession: vi.fn(async () => runtimeSession),
-      bindProvider: vi.fn(async () => runtimeSession),
     };
     const completeRunExecute = vi.fn(async ({ run }: { run: Run }) => run);
     const executeRun = new ExecuteRun(
@@ -432,8 +431,14 @@ describe('ExecuteRun', () => {
           environmentVersionId: team.environmentVersionId,
           resolvedSkills: [],
           toolRefs: canonicalTeamToolRefsForRole('lead'),
-          paseoWorkspaceId: 'workspace-provider-1',
-          providerAgentId: 'agent-prior',
+          workspaceBinding: {
+            plane: 'paseo',
+            externalWorkspaceId: 'workspace-provider-1',
+          },
+          sessionBinding: {
+            plane: 'paseo',
+            externalSessionId: 'agent-prior',
+          },
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
         })),
@@ -1367,11 +1372,6 @@ describe('ExecuteRun', () => {
       expect.objectContaining({ operation: 'create' }),
       expect.anything(),
     );
-    expect(fixture.runtimeSessions.bindProvider).toHaveBeenCalledWith({
-      id: 'runtime-lead-1',
-      paseoWorkspaceId: 'workspace-provider-1',
-      providerAgentId: 'agent-created',
-    });
     expect(fixture.binder.bind).toHaveBeenCalledWith(
       expect.objectContaining({ teamRunId: 'team-run-1' }),
     );
@@ -1823,13 +1823,12 @@ function createLeadRuntimeFixture() {
       environmentVersionId: team.environmentVersionId,
       resolvedSkills: [],
       toolRefs: canonicalTeamToolRefsForRole('lead'),
-      paseoWorkspaceId: null,
-      providerAgentId: null,
+      workspaceBinding: null,
+      sessionBinding: null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     })),
     findPaseoWorkspaceByTeamRun: vi.fn(async () => null),
-    bindProvider: vi.fn(async () => undefined),
   };
   const collaborativeExecutions = {
     findTeamRunByRootTaskId: vi.fn(async () => team),

@@ -1,32 +1,25 @@
-import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
 import {
-  canonicalTeamToolRefsForDirectMessage,
-  canonicalTeamToolRefsForRole,
-} from '../../domain/teams/canonical-team-role-tools.js';
-export {
-  canonicalTeamToolRefsForDirectMessage,
-  canonicalTeamToolRefsForRole,
-} from '../../domain/teams/canonical-team-role-tools.js';
-import type { TeamToolContext } from './team-tool-context.js';
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+  collaborationToolRefsForCapabilities,
+  collaborationToolRefsForMessageTurn,
+  collaborationToolRefsForRole,
+} from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
+import type { TeamToolContext } from './team-tool-context.js';
 
-export const AGENTIC_TEAM_LIMITS = Object.freeze({
-  maxLeadTurns: 8,
-  maxWorkItems: 4,
-  maxAttemptsPerItem: 2,
-});
-export type AgenticLeadCommand =
-  | 'team_work_create'
-  | 'team_work_accept'
-  | 'team_work_cancel'
-  | 'team_work_request_changes'
-  | 'team_finish';
+export type CollaborationLeadCommand =
+  | 'board_create'
+  | 'board_accept'
+  | 'board_cancel'
+  | 'board_request_changes'
+  | 'collaboration_finish';
+
 export interface AgenticLeadCommandPolicy {
-  readonly allowedCommands: readonly AgenticLeadCommand[];
+  readonly allowedCommands: readonly CollaborationLeadCommand[];
   readonly eligibleAcceptWorkItemIds: readonly string[];
   readonly eligibleReworkWorkItemIds: readonly string[];
   readonly eligibleCancelWorkItemIds: readonly string[];
@@ -81,17 +74,17 @@ export function deriveAgenticLeadCommandPolicy(
     ? Math.max(0, team.leadTurnCount - latestDecision.leadTurnCountAtDecision)
     : team.leadTurnCount;
   const limits = {
-    maxLeadTurns: AGENTIC_TEAM_LIMITS.maxLeadTurns,
+    maxLeadTurns: COLLABORATION_LIMITS.maxLeadTurns,
     remainingLeadTurns: Math.max(
       0,
-      AGENTIC_TEAM_LIMITS.maxLeadTurns - turnsSinceDecision,
+      COLLABORATION_LIMITS.maxLeadTurns - turnsSinceDecision,
     ),
-    maxWorkItems: AGENTIC_TEAM_LIMITS.maxWorkItems,
+    maxWorkItems: COLLABORATION_LIMITS.maxWorkItems,
     remainingWorkItems: Math.max(
       0,
-      AGENTIC_TEAM_LIMITS.maxWorkItems - workItems.length,
+      COLLABORATION_LIMITS.maxWorkItems - workItems.length,
     ),
-    maxAttemptsPerItem: AGENTIC_TEAM_LIMITS.maxAttemptsPerItem,
+    maxAttemptsPerItem: COLLABORATION_LIMITS.maxAttemptsPerItem,
   };
   const none = () => ({
     allowedCommands: [] as const,
@@ -109,7 +102,8 @@ export function deriveAgenticLeadCommandPolicy(
   if (limits.remainingLeadTurns === 0 && team.controlState !== 'lead_running')
     return none();
   if (!workItems.length)
-    return { ...none(), allowedCommands: ['team_work_create'] };
+    return { ...none(), allowedCommands: ['board_create'] };
+
   const eligibleRejectedTargets = new Set<string>();
   if (currentRejection) {
     const targetAttempts = new Map(
@@ -129,14 +123,16 @@ export function deriveAgenticLeadCommandPolicy(
         eligibleRejectedTargets.add(item.id);
     }
   }
+
   const acceptedOrCancelled = workItems.every((item) =>
     ['accepted', 'cancelled'].includes(item.status),
   );
   if (acceptedOrCancelled && eligibleRejectedTargets.size === 0)
-    return { ...none(), allowedCommands: ['team_finish'] };
-  const accept: string[] = [],
-    rework: string[] = [],
-    cancel: string[] = [];
+    return { ...none(), allowedCommands: ['collaboration_finish'] };
+
+  const accept: string[] = [];
+  const rework: string[] = [];
+  const cancel: string[] = [];
   for (const item of workItems) {
     const rejectedTarget = eligibleRejectedTargets.has(item.id);
     if (item.status === 'accepted' || item.status === 'cancelled') {
@@ -163,15 +159,16 @@ export function deriveAgenticLeadCommandPolicy(
     if (latest.status !== 'completed' || !latest.resultSummary) continue;
     accept.push(item.id);
     if (
-      latest.attemptNo < AGENTIC_TEAM_LIMITS.maxAttemptsPerItem ||
+      latest.attemptNo < COLLABORATION_LIMITS.maxAttemptsPerItem ||
       rejectedTarget
     )
       rework.push(item.id);
   }
-  const allowed: AgenticLeadCommand[] = [];
-  if (cancel.length) allowed.push('team_work_cancel');
-  if (accept.length) allowed.push('team_work_accept');
-  if (rework.length) allowed.push('team_work_request_changes');
+
+  const allowed: CollaborationLeadCommand[] = [];
+  if (cancel.length) allowed.push('board_cancel');
+  if (accept.length) allowed.push('board_accept');
+  if (rework.length) allowed.push('board_request_changes');
   if (allowed.length)
     return {
       ...none(),
@@ -181,76 +178,59 @@ export function deriveAgenticLeadCommandPolicy(
       eligibleCancelWorkItemIds: cancel,
     };
   if (limits.remainingWorkItems > 0)
-    return { ...none(), allowedCommands: ['team_work_create'] };
+    return { ...none(), allowedCommands: ['board_create'] };
   return none();
 }
 
 export type TeamPolicy = Readonly<{ allowedTools: readonly string[] }>;
 
-const canonicalTeamSafeReadToolRefs = canonicalTeamToolRefsForDirectMessage();
+const SAFE_READ_REFS = collaborationToolRefsForCapabilities([
+  'board.read',
+  'mailbox.read',
+]);
 
-export function canonicalTeamToolRefsForLeadPolicy(
+export function collaborationToolRefsForLeadPolicy(
   policy: Pick<AgenticLeadCommandPolicy, 'allowedCommands'>,
 ): readonly string[] {
-  const commandRefs: Record<AgenticLeadCommand, string> = {
-    team_work_create: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workCreate,
-    team_work_accept: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.accept,
-    team_work_cancel: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.cancel,
-    team_work_request_changes:
-      AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.requestChanges,
-    team_finish: AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
-  };
-  const collaborationCommandRefs: Record<
-    AgenticLeadCommand,
-    string
-  > = {
-    team_work_create: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
-    team_work_accept: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
-    team_work_cancel: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
-    team_work_request_changes:
+  const commandRefs: Record<CollaborationLeadCommand, string> = {
+    board_create: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
+    board_accept: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
+    board_cancel: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
+    board_request_changes:
       AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
-    team_finish: AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+    collaboration_finish: AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
   };
-  const sameTurnFinish = policy.allowedCommands.includes('team_work_accept')
-    ? [
-        AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish,
-        AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
-      ]
+  const sameTurnFinish = policy.allowedCommands.includes('board_accept')
+    ? [AGENT_SERVER_COLLABORATION_TOOL_REFS.finish]
     : [];
-  return Object.freeze([...new Set([
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
-    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.state,
-    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
-    AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
-    ...policy.allowedCommands.map((command) => commandRefs[command]),
-    ...policy.allowedCommands.map(
-      (command) => collaborationCommandRefs[command],
-    ),
-    // A Lead may accept the final submitted item and finish in this same
-    // runtime turn. The durable completion transition still validates the
-    // board and active-attempt gates server-side.
-    ...sameTurnFinish,
-  ])]);
+  return Object.freeze([
+    ...new Set([
+      ...collaborationToolRefsForCapabilities([
+        'board.read',
+        'mailbox.read',
+        'mailbox.send',
+        'mailbox.ack',
+      ]),
+      ...policy.allowedCommands.map((command) => commandRefs[command]),
+      ...sameTurnFinish,
+    ]),
+  ]);
 }
 
 export class TeamPolicyEvaluator {
   public evaluate(context: TeamToolContext): TeamPolicy {
     const permitted =
       context.task.teamTaskKind === 'direct_message'
-        ? canonicalTeamToolRefsForDirectMessage()
+        ? collaborationToolRefsForMessageTurn()
         : context.task.teamTaskKind === 'work_attempt' &&
             context.attempt?.status === 'completed'
-          ? canonicalTeamSafeReadToolRefs
+          ? SAFE_READ_REFS
           : context.task.teamTaskKind === 'work_attempt' &&
               context.member.role === 'member'
-            ? canonicalTeamToolRefsForRole('member')
+            ? collaborationToolRefsForRole('member')
             : context.task.teamTaskKind === 'lead_turn' &&
                 context.member.role === 'lead'
-              ? canonicalTeamToolRefsForRole('lead')
+              ? collaborationToolRefsForRole('lead')
               : [];
     return Object.freeze({
       allowedTools: Object.freeze(

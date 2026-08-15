@@ -163,7 +163,7 @@ export class PostgresCollaborationRepository
         input.owner,
       );
       await client.query(
-        `UPDATE team_runs SET revision=revision+1, updated_at=$2 WHERE id=$1`,
+        "UPDATE team_runs SET revision=revision+1, control_state='member_work_running', updated_at=$2 WHERE id=$1",
         [input.teamRunId, now],
       );
       await this.recordCommand(

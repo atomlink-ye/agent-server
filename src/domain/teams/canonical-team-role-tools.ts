@@ -1,3 +1,8 @@
+import {
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+  collaborationToolRefsForRole,
+} from '../collaboration/canonical-collaboration-tools.js';
+
 export const AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS = Object.freeze({
   state: 'agent-server/team-state',
   workList: 'agent-server/team-work-list',
@@ -16,10 +21,15 @@ const canonicalTeamSafeReadToolRefs = Object.freeze([
   AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.workList,
 ]);
 
+/**
+ * Legacy Team refs remain in the catalog during the cutover so old fixtures do
+ * not fork the behavior. New prompts use the collaboration refs, both surfaces
+ * resolve to the same durable collaboration facts.
+ */
 export function canonicalTeamToolRefsForRole(
   role: 'lead' | 'member',
 ): readonly string[] {
-  const actions =
+  const legacyActions =
     role === 'lead'
       ? [
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend,
@@ -33,9 +43,21 @@ export function canonicalTeamToolRefsForRole(
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.checkpoint,
           AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.submit,
         ];
-  return Object.freeze([...canonicalTeamSafeReadToolRefs, ...actions]);
+  return Object.freeze([
+    ...canonicalTeamSafeReadToolRefs,
+    ...legacyActions,
+    ...collaborationToolRefsForRole(role),
+  ]);
 }
 
 export function canonicalTeamToolRefsForDirectMessage(): readonly string[] {
-  return canonicalTeamSafeReadToolRefs;
+  return Object.freeze([
+    ...canonicalTeamSafeReadToolRefs,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
+  ]);
 }

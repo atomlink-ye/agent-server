@@ -18,12 +18,10 @@ import {
 } from '../../domain/environments/managed-environment-package.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import { PaseoConnectionManager } from './paseo-connection-manager.js';
+import type { PaseoClientPort } from './paseo-client-port.js';
 import { PaseoExecutionSession } from './paseo-execution-session.js';
 import { PaseoGateway } from './paseo-gateway.js';
-import {
-  PaseoSdkClient,
-  type PaseoClientPort,
-} from './paseo-client-port.js';
+import { PaseoSdkClient } from './paseo-sdk-client.js';
 import { PaseoTurnRunner } from './paseo-turn-runner.js';
 
 export const PASEO_EXECUTION_PLANE_ID = 'paseo';
@@ -302,7 +300,10 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
 
   #session(
     binding: ExecutionSessionBinding,
-    workspaceBinding: { readonly plane: string; readonly externalWorkspaceId: string },
+    workspaceBinding: {
+      readonly plane: string;
+      readonly externalWorkspaceId: string;
+    },
     provider: string,
     model: string,
     cwd: string,

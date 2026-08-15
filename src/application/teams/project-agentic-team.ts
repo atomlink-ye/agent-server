@@ -39,13 +39,13 @@ export interface AgenticTeamProject {
     readonly dependencyRefs: readonly string[];
     readonly attempts: readonly {
       readonly attemptNo: number;
-      readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
+      readonly status: 'queued' | 'running' | 'completed' | 'failed';
       readonly feedbackSummary: string | null;
       readonly resultSummary: string | null;
     }[];
     readonly latestAttempt: {
       readonly attemptNo: number;
-      readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
+      readonly status: 'queued' | 'running' | 'completed' | 'failed';
       readonly feedbackSummary: string | null;
       readonly resultSummary: string | null;
     } | null;

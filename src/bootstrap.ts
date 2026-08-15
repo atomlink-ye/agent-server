@@ -568,7 +568,7 @@ export async function createService(
     config,
     logger,
     readiness,
-    executionRuntime,
+    runtime: executionRuntime,
     submitRun,
     getRun,
     invokeTask,

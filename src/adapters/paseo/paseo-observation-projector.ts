@@ -434,7 +434,12 @@ export class PaseoObservationProjector {
     }
     this.#seenSequences.add(sequenceKey);
     this.#assistantObserved = true;
-    this.#publishAssistant(epoch, seq, this.#liveAssistant.text, flush);
+    this.#publishAssistant(
+      epoch,
+      seq,
+      this.#liveAssistant.text,
+      flush || !credentialPrefixPending(this.#liveAssistant.text),
+    );
   }
 
   #publishAssistant(

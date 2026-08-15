@@ -56,7 +56,7 @@ describe('executionObservationPayload', () => {
       status: 'completed',
       label: 'Team message',
       summary: 'Message.',
-      toolName: 'agent-server_agent_team_message_send',
+      toolName: 'agent-server_team_message_send',
       resultObserved: true,
       provider: 'opencode',
     } as const;

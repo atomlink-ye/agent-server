@@ -17,7 +17,7 @@ import type {
   MemoryReviewApi,
   MemoryWorkspaceHttpApi,
 } from '../../application/ports/memory-review-api.js';
-import type { AgentRuntimePort } from '../../application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../../application/runtime/execution-plane-runtime-facade.js';
 import type { GetRun } from '../../application/runs/get-run.js';
 import type { SubmitRun } from '../../application/runs/submit-run.js';
 import type { GetTask } from '../../application/tasks/get-task.js';
@@ -70,7 +70,7 @@ export interface AppDependencies {
   readonly config: AppConfig;
   readonly logger: Logger;
   readonly readiness: ReadinessProbe;
-  readonly runtime: AgentRuntimePort;
+  readonly runtime: ExecutionRuntimeService;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
   readonly invokeTask: InvokeTask;

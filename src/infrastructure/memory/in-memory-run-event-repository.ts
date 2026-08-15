@@ -11,34 +11,34 @@ export class InMemoryRunEventRepository implements RunEventRepository {
   readonly #bindings = new Map<string, RuntimeSessionBinding>();
   async bind(input: RuntimeSessionBinding) {
     const current = this.#bindings.get(input.runId);
-    const providerAgentId =
-      input.providerAgentId !== undefined
-        ? input.providerAgentId
-        : current?.providerAgentId;
+    const sessionBinding =
+      input.sessionBinding !== undefined
+        ? input.sessionBinding
+        : current?.sessionBinding;
     this.#bindings.set(input.runId, {
       ...current,
       ...input,
-      ...(providerAgentId !== undefined ? { providerAgentId } : {}),
+      ...(sessionBinding !== undefined ? { sessionBinding } : {}),
     });
   }
-  async findLatestProviderAgentBySessionId(sessionId: string) {
+  async findLatestSessionBindingBySessionId(sessionId: string) {
     return (
       [...this.#bindings.values()]
         .filter(
           (binding) =>
-            binding.sessionId === sessionId && binding.providerAgentId,
+            binding.sessionId === sessionId && binding.sessionBinding,
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-        ?.providerAgentId ?? null
+        ?.sessionBinding ?? null
     );
   }
   async getBinding(runId: string) {
     return this.#bindings.get(runId) ?? null;
   }
-  async getProviderBindingForRunInSession(runId: string, sessionId: string) {
+  async getSessionBindingForRunInSession(runId: string, sessionId: string) {
     const binding = this.#bindings.get(runId);
-    return binding?.sessionId === sessionId && binding.providerAgentId
-      ? { runId, sessionId, providerAgentId: binding.providerAgentId }
+    return binding?.sessionId === sessionId && binding.sessionBinding
+      ? binding.sessionBinding
       : null;
   }
   async append(

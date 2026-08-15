@@ -1,21 +1,26 @@
 import type { AccessContext } from '../../platform/access-context.js';
-import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { RunRepository } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import { transitionTask } from '../../domain/tasks/task.js';
+
+export interface ActiveExecutionCanceller {
+  cancelRun(input: { readonly runId: string }): Promise<void>;
+}
+
 export class CancelTask {
   constructor(
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
-    private readonly runtime: AgentRuntimePort,
+    private readonly executions: ActiveExecutionCanceller,
     private readonly events?: RunEventRepository,
   ) {}
+
   async execute(taskId: string, owner: AccessContext) {
     const record = await this.tasks.findByIdForOwner(taskId, owner);
     if (!record) return null;
-    const task = record.task,
-      run = await this.runs.findByTaskId(taskId);
+    const task = record.task;
+    const run = await this.runs.findByTaskId(taskId);
     if (!run) return null;
     const cancellation = await this.runs.requestCancellation(
       taskId,
@@ -24,7 +29,7 @@ export class CancelTask {
     if (!cancellation) return null;
     const { runId, outcome } = cancellation;
     if (outcome === 'running_requested') {
-      await this.runtime.cancel?.({ runId });
+      await this.executions.cancelRun({ runId });
       return {
         taskId,
         runId,

@@ -5,11 +5,7 @@ import type { CreateMemoryProposal } from '../../../application/memory/create-me
 import type { ListMemoryEntries } from '../../../application/memory/list-memory-entries.js';
 import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
 import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
-import type {
-  AgentRuntimeExecution,
-  AgentRuntimeHealth,
-  AgentRuntimePort,
-} from '../../../application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
 import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
@@ -135,17 +131,21 @@ describe('run routes', () => {
   });
 });
 
-function createRuntimeStub(): AgentRuntimePort {
+function createRuntimeStub(): ExecutionRuntimeService {
   return {
-    async initialize(): Promise<void> {
-      return undefined;
+    async ensureReady(): Promise<boolean> {
+      return true;
     },
-    async execute(): Promise<AgentRuntimeExecution> {
+    async executeTurn(): Promise<never> {
       throw new Error('not implemented in route tests');
     },
-    async health(): Promise<AgentRuntimeHealth> {
+    async cancelRun(): Promise<void> {
+      return undefined;
+    },
+    async planeHealth() {
       return {
         ready: true,
+        plane: 'paseo',
         provider: 'opencode',
         model: 'opencode/fake-free',
         checks: [],

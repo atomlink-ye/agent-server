@@ -31,7 +31,9 @@ describe('CancelTask', () => {
             : 'succeeded',
       );
       const order: string[] = [];
-      const runtime = { cancel: vi.fn(async () => undefined) };
+      const executions = {
+        cancelRun: vi.fn(async (_input: { readonly runId: string }) => undefined),
+      };
       const events = {
         append: vi.fn(async () => {
           order.push('event');
@@ -54,12 +56,12 @@ describe('CancelTask', () => {
       const result = await new CancelTask(
         tasks as never,
         runs as never,
-        runtime as never,
+        executions,
         events as never,
       ).execute(task.id, owner);
 
       expect(result).toMatchObject({ taskId: task.id, runId: run.id, status });
-      expect(runtime.cancel).toHaveBeenCalledTimes(
+      expect(executions.cancelRun).toHaveBeenCalledTimes(
         outcome === 'running_requested' ? 1 : 0,
       );
       expect(tasks.save).toHaveBeenCalledTimes(
@@ -86,7 +88,7 @@ describe('CancelTask', () => {
     const result = await new CancelTask(
       tasks as never,
       runs as never,
-      {} as never,
+      { cancelRun: vi.fn(async () => undefined) },
     ).execute('missing', owner);
     expect(result).toBeNull();
     expect(runs.requestCancellation).not.toHaveBeenCalled();
@@ -95,7 +97,9 @@ describe('CancelTask', () => {
   it('uses the authoritative run id returned by arbitration', async () => {
     const task = fixtureTask();
     const staleRun = fixtureRun('running');
-    const runtime = { cancel: vi.fn(async () => undefined) };
+    const executions = {
+      cancelRun: vi.fn(async (_input: { readonly runId: string }) => undefined),
+    };
     const runs = {
       findByTaskId: vi.fn(async () => staleRun),
       requestCancellation: vi.fn(async () => ({
@@ -108,10 +112,12 @@ describe('CancelTask', () => {
         findByIdForOwner: vi.fn(async () => ({ task, latestRun: null })),
       } as never,
       runs as never,
-      runtime as never,
+      executions,
     ).execute(task.id, owner);
     expect(result?.runId).toBe('authoritative-run');
-    expect(runtime.cancel).toHaveBeenCalledWith({ runId: 'authoritative-run' });
+    expect(executions.cancelRun).toHaveBeenCalledWith({
+      runId: 'authoritative-run',
+    });
   });
 });
 

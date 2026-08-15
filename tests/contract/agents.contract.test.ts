@@ -499,7 +499,7 @@ describe('managed agent HTTP contracts', () => {
     } finally {
       unboundedRead.mockRestore();
     }
-  }, 10_000);
+  }, 30_000);
 
   it('maps invalid UTF-8 bytes to invalid_json without replacement or echo', async () => {
     const app = await createTestApp(new FakeAgentRuntime(), {

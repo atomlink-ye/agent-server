@@ -3,8 +3,8 @@ import { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
 
 describe('SynthesizeMemoryDocument', () => {
   it('calls the runtime once with server-owned instructions and no candidates', async () => {
-    const execute = vi.fn().mockResolvedValue({ text: 'Synthesized memory' });
-    const result = await new SynthesizeMemoryDocument({ execute }).execute({
+    const executeTurn = vi.fn().mockResolvedValue({ text: 'Synthesized memory' });
+    const result = await new SynthesizeMemoryDocument({ executeTurn }).execute({
       ingressId: 'ingress-1',
       category: 'policy',
       draft: {
@@ -16,10 +16,10 @@ describe('SynthesizeMemoryDocument', () => {
       },
     });
     expect(result).toBe('Synthesized memory');
-    expect(execute).toHaveBeenCalledWith(
+    expect(executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: 'ingress-1',
-        memoryCandidates: { maxCandidates: 0, proposalLimit: 0 },
+        proposalLimit: 0,
         prompt: expect.stringContaining('category policy'),
       }),
     );
@@ -30,7 +30,7 @@ describe('SynthesizeMemoryDocument', () => {
     async (text) => {
       await expect(
         new SynthesizeMemoryDocument({
-          execute: vi.fn().mockResolvedValue({ text }),
+          executeTurn: vi.fn().mockResolvedValue({ text }),
         }).execute({
           ingressId: 'i',
           category: 'policy',

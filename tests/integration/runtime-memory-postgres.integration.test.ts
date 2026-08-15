@@ -9,7 +9,7 @@ import {
 import { PostgresWorkspaceMemoryRepository } from '../../src/infrastructure/postgres/postgres-workspace-memory-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
-import { PaseoRuntimeAdapter } from '../../src/adapters/paseo/paseo-runtime-adapter.js';
+import { PaseoExecutionPlane } from '../../src/adapters/paseo/paseo-execution-plane.js';
 import type { PaseoClientPort } from '../../src/adapters/paseo/paseo-client-port.js';
 import type { ManagedEnvironmentProvider } from '../../src/domain/environments/managed-environment-package.js';
 
@@ -88,6 +88,7 @@ describe('runtime memory PostgreSQL materialization', () => {
       connect: async () => undefined,
       connectionStatus: () => 'connected',
       openWorkspace: async () => 'workspace-1',
+      createIndependentWorkspace: async () => 'workspace-1',
       setWorkspaceTitle: async () => undefined,
       listModels: async (
         _provider: ManagedEnvironmentProvider,
@@ -112,9 +113,16 @@ describe('runtime memory PostgreSQL materialization', () => {
         lastMessage: 'done',
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
+      fetchAgentTimeline: async () => ({
+        epoch: 'epoch-1',
+        startCursor: null,
+        endCursor: null,
+        window: { minSeq: 0, maxSeq: 0, nextSeq: 1 },
+        entries: [],
+      }),
       close: async () => undefined,
     };
-    const runtime = new PaseoRuntimeAdapter(
+    const runtime = new PaseoExecutionPlane(
       {
         wsUrl: 'ws://test',
         cwd: '/tmp/runtime-memory-pglite',
@@ -127,15 +135,17 @@ describe('runtime memory PostgreSQL materialization', () => {
       client,
     );
     const bindings = new PostgresRunEventRepository(db);
-    const first = await runtime.execute({
-      operation: 'create',
-      runId: runtimeRunId,
-      prompt: 'first',
+    const firstSession = await runtime.createSession({
+      runtimeSessionId: runtimeRunId,
+      workspace: { cwd: '/tmp/runtime-memory-pglite' },
+      provider: 'opencode',
+      model: 'free/model',
       systemPrompt: '',
     });
+    await firstSession.session.run({ runId: runtimeRunId, prompt: 'first' });
     await bindings.bind({
       runId: runtimeRunId,
-      providerAgentId: first.providerAgentId,
+      sessionBinding: firstSession.sessionBinding,
       createdAt: '2026-01-01T00:00:00.000Z',
     });
     await db.query(
@@ -151,19 +161,24 @@ describe('runtime memory PostgreSQL materialization', () => {
       `INSERT INTO runs(id,task_id,attempt,status,lease_owner,activation_id,lease_expires_at,fencing_token,created_at,updated_at) VALUES ($1,$2,1,'running','worker','00000000-0000-4000-8000-000000000302',now()+interval '1 hour',1,now(),now())`,
       [continuationRunId, continuationTaskId],
     );
-    const prior = await bindings.findLatestProviderAgentBySessionId(
+    const prior = await bindings.findLatestSessionBindingBySessionId(
       '00000000-0000-4000-8000-000000000902',
     );
-    const second = await runtime.execute({
-      operation: 'continue',
-      runId: continuationRunId,
-      prompt: 'second',
-      providerAgentId: prior!,
-    });
+    const secondSession = await runtime.attachSession(
+      prior!,
+      {
+        runtimeSessionId: 'continuation-runtime-session',
+        workspace: {
+          cwd: '/tmp/runtime-memory-pglite',
+          binding: firstSession.workspaceBinding,
+        },
+        systemPrompt: '',
+      },
+    );
+    await secondSession.run({ runId: continuationRunId, prompt: 'second' });
 
-    expect(first.providerAgentId).toBe('agent-session-1');
-    expect(prior).toBe('agent-session-1');
-    expect(second.providerAgentId).toBe('agent-session-1');
+    expect(firstSession.sessionBinding.externalSessionId).toBe('agent-session-1');
+    expect(prior?.externalSessionId).toBe('agent-session-1');
     expect(creates).toBe(1);
     expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);
   });

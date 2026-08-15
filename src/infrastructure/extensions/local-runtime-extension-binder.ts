@@ -10,9 +10,9 @@ import {
 } from 'node:fs/promises';
 import type { RuntimeExtensionBinder } from '../../application/extensions/runtime-extension-binder.js';
 import {
-  AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
-  type RuntimeExtensionBinding,
-} from '../../application/ports/agent-runtime.js';
+  AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
+  type ExecutionExtensionBinding,
+} from '../../application/ports/execution-plane.js';
 import { materializeOpenCodeSkill } from '../filesystem/opencode-skill-materializer.js';
 import { RuntimeMcpServer } from './runtime-mcp-server.js';
 import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
@@ -34,7 +34,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
 
   public async bind(
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
-  ): Promise<RuntimeExtensionBinding | undefined> {
+  ): Promise<ExecutionExtensionBinding | undefined> {
     if (!input.skills.length && !input.toolRefs.length) return undefined;
     const projectCwd = resolve(input.cellCwd ?? this.#agentCwd);
     const runtimeRoot = input.cellCwd
@@ -96,7 +96,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
       return {
         mcpServers: [
           {
-            name: AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
+            name: AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
             url,
             headers: { Authorization: `Bearer ${receipt.token}` },
           },

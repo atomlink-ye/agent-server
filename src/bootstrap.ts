@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentRuntimePort } from './application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from './application/runtime/execution-plane-runtime-facade.js';
 import type { RunDispatcher } from './application/ports/run-dispatcher.js';
 import { ClaimNextRun } from './application/runs/claim-next-run.js';
 import { CompleteRun } from './application/runs/complete-run.js';
@@ -73,7 +73,7 @@ export interface ServiceResources {
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
   >;
-  readonly runtime: Pick<AgentRuntimePort, 'close'>;
+  readonly runtime: Pick<ExecutionRuntimeService, 'close'>;
   readonly runtimeMcpServer?: { stop(): Promise<void> };
   readonly pool: { end(): Promise<void> };
 }
@@ -228,7 +228,7 @@ export interface CreateServiceOptions {
   /** Debug-only seam for retained, manually stepped fixtures. */
   readonly singleRunDebug?: boolean;
   /** Debug-only runtime substitute; production composition selects config.runtime.adapter. */
-  readonly debugRuntime?: AgentRuntimePort;
+  readonly debugRuntime?: ExecutionRuntimeService;
   /** Keep terminal Team wakes durable until the debug control resumes them. */
   readonly deferTeamWakeReconcile?: boolean;
 }
@@ -351,14 +351,15 @@ export async function createService(
     ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
   });
   const {
-    runtime,
+    executionRuntime,
+    executionRuns,
     sessions: runtimeSessions,
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
-  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(runtime);
+  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(executionRuntime);
   const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
-    runtime,
+    executionRuntime,
     events,
     memoryModule.reviewApi.review,
     memoryModule.reviewApi.managedMemory,
@@ -367,7 +368,7 @@ export async function createService(
   const cancelTask = new CancelTask(
     taskRepository,
     runRepository,
-    runtime,
+    executionRuns,
     events,
   );
   const getTask = new GetTask(taskRepository);
@@ -436,7 +437,7 @@ export async function createService(
     taskRepository,
     resourceModule.definitionReadApi,
     executeTeamTask,
-    runtime,
+    executionRuntime,
     logger,
     undefined,
     resourceModule.agentResolutionApi,
@@ -567,7 +568,7 @@ export async function createService(
     config,
     logger,
     readiness,
-    runtime,
+    runtime: executionRuntime,
     submitRun,
     getRun,
     invokeTask,
@@ -592,7 +593,7 @@ export async function createService(
       ...(larkWorker ? { larkWorker } : {}),
       ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
       ...(larkReceiver ? { larkReceiver } : {}),
-      runtime,
+      runtime: executionRuntime,
       runtimeMcpServer,
       pool,
     });
@@ -636,7 +637,7 @@ export async function createService(
 
   return {
     app,
-    runtime,
+    runtime: executionRuntime,
     ...(singleRunDebug ? { singleRunDebug } : {}),
     close: async () => {
       await closeServiceResources({
@@ -644,7 +645,7 @@ export async function createService(
         ...(larkWorker ? { larkWorker } : {}),
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
         ...(larkReceiver ? { larkReceiver } : {}),
-        runtime,
+        runtime: executionRuntime,
         runtimeMcpServer,
         pool,
       });

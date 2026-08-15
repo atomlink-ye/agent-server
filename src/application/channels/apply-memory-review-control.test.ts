@@ -383,7 +383,7 @@ describe('ApplyMemoryReviewControl', () => {
       usage: { inputTokens: 1, outputTokens: 1, totalCostUsd: 0 },
     });
     const synthesize = new SynthesizeMemoryDocument({
-      execute: runtimeExecute,
+      executeTurn: runtimeExecute,
     });
     const review = {
       execute: vi.fn().mockResolvedValue({

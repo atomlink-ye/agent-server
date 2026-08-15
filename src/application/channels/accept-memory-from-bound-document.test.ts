@@ -20,19 +20,26 @@ const owner = {
 
 function make(
   candidate: any,
-  binding: any = { runId: 'r', sessionId: 's', providerAgentId: 'agent' },
+  binding: any = {
+    plane: 'paseo',
+    externalSessionId: 'agent',
+  },
 ) {
   const runtime = {
-    execute: vi.fn().mockResolvedValue({
+    executeTurn: vi.fn().mockResolvedValue({
       provider: 'p',
       model: 'm',
       text: 'ignored',
-      providerAgentId: 'agent',
+      workspaceBinding: {
+        plane: 'paseo',
+        externalWorkspaceId: 'workspace',
+      },
+      sessionBinding: { plane: 'paseo', externalSessionId: 'agent' },
       memoryCandidates: candidate,
     }),
   };
   const events = {
-    getProviderBindingForRunInSession: vi.fn().mockResolvedValue(binding),
+    getSessionBindingForRunInSession: vi.fn().mockResolvedValue(binding),
   };
   const review = {
     execute: vi.fn().mockResolvedValue({ entry: { id: 'entry' } }),
@@ -60,10 +67,13 @@ describe('AcceptMemoryFromBoundDocument', () => {
     await expect(
       x.service.execute({ ingressId: 'i', proposal, surface, owner }),
     ).resolves.toMatchObject({ content: 'changed marker' });
-    expect(x.runtime.execute).toHaveBeenCalledWith(
+    expect(x.runtime.executeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        providerAgentId: 'agent',
-        memoryCandidates: { maxCandidates: 1, proposalLimit: 1 },
+        compatibilitySessionBinding: {
+          plane: 'paseo',
+          externalSessionId: 'agent',
+        },
+        proposalLimit: 1,
         prompt: expect.stringContaining(
           'lark-cli docs +fetch --profile agent-test --as bot --doc doc-1',
         ),
@@ -93,7 +103,7 @@ describe('AcceptMemoryFromBoundDocument', () => {
         owner,
       }),
     ).resolves.toMatchObject({ content: 'old' });
-    expect(x.runtime.execute).not.toHaveBeenCalled();
-    expect(x.events.getProviderBindingForRunInSession).not.toHaveBeenCalled();
+    expect(x.runtime.executeTurn).not.toHaveBeenCalled();
+    expect(x.events.getSessionBindingForRunInSession).not.toHaveBeenCalled();
   });
 });

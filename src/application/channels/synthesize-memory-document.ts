@@ -1,13 +1,13 @@
-import type { AgentRuntimePort } from '../ports/agent-runtime.js';
 import type { MemoryDocumentDraft } from '../ports/lark-memory-document.js';
 import { buildBootstrapPrompt } from '../context/runtime-prompts.js';
+import type { ExecutionRuntimeService } from '../runtime/execution-plane-runtime-facade.js';
 
 const MAX_OUTPUT_BYTES = 4096;
 const MAX_COMMENT_BYTES = 32768;
 
 export class SynthesizeMemoryDocument {
   public constructor(
-    private readonly runtime: Pick<AgentRuntimePort, 'execute'>,
+    private readonly runtime: Pick<ExecutionRuntimeService, 'executeTurn'>,
   ) {}
 
   public async execute(input: {
@@ -22,12 +22,11 @@ export class SynthesizeMemoryDocument {
       .join('\n');
     if (Buffer.byteLength(instructions, 'utf8') > MAX_COMMENT_BYTES)
       throw new Error('document comments exceed bounds');
-    const result = await this.runtime.execute({
+    const result = await this.runtime.executeTurn({
       runId: input.ingressId,
-      operation: 'create',
       systemPrompt: buildBootstrapPrompt(),
       prompt: `Synthesize the proposed workspace memory in category ${input.category} from this collaborative Doc draft. Apply every unresolved comment and reply as a revision instruction. Return only the final memory content, with no preamble.\n\nDRAFT:\n${input.draft.body}\n\nUNRESOLVED REVISION INSTRUCTIONS:\n${instructions}`,
-      memoryCandidates: { maxCandidates: 0, proposalLimit: 0 },
+      proposalLimit: 0,
     });
     const output = result.text.trim();
     if (!output || Buffer.byteLength(output, 'utf8') > MAX_OUTPUT_BYTES)

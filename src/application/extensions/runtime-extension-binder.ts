@@ -1,5 +1,5 @@
 import type { ResolvedSkillPackage } from './skill-catalog.js';
-import type { RuntimeExtensionBinding } from '../ports/agent-runtime.js';
+import type { ExecutionExtensionBinding } from '../ports/execution-plane.js';
 
 export interface RuntimeExtensionBinder {
   bind(input: {
@@ -18,7 +18,7 @@ export interface RuntimeExtensionBinder {
     readonly skills: readonly ResolvedSkillPackage[];
     readonly toolRefs: readonly string[];
     readonly catalogTools?: readonly string[];
-  }): Promise<RuntimeExtensionBinding | undefined>;
+  }): Promise<ExecutionExtensionBinding | undefined>;
 
   refreshForTeamMember?(input: {
     readonly grantId?: string;

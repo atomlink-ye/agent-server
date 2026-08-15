@@ -1,4 +1,8 @@
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
+import type {
+  ExecutionSessionBinding,
+  ExecutionWorkspaceBinding,
+} from './execution-plane.js';
 
 export interface RuntimeSession {
   readonly id: string;
@@ -15,10 +19,17 @@ export interface RuntimeSession {
     'ref' | 'digest'
   >[];
   readonly toolRefs: readonly string[];
-  readonly paseoWorkspaceId: string | null;
-  readonly providerAgentId: string | null;
+  readonly workspaceBinding: ExecutionWorkspaceBinding | null;
+  readonly sessionBinding: ExecutionSessionBinding | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface RuntimeSessionLookup {
+  findById(id: string): Promise<RuntimeSession | null>;
+  findByExecutionSessionBinding(
+    binding: ExecutionSessionBinding,
+  ): Promise<RuntimeSession | null>;
 }
 
 export interface RuntimeSessionRepository {
@@ -41,13 +52,6 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
-  findPaseoWorkspaceByTeamRun?(input: {
-    teamRunId: string;
-    tenantId: string;
-    workspaceId: string;
-    principalType: string;
-    principalId: string;
-  }): Promise<string | null>;
   createOrGetForProductSession(input: {
     productSessionId: string;
     tenantId: string;
@@ -82,9 +86,9 @@ export interface RuntimeSessionRepository {
     principalType: string;
     principalId: string;
   }): Promise<RuntimeSession | null>;
-  bindProvider(input: {
-    id: string;
-    paseoWorkspaceId: string;
-    providerAgentId: string;
+  bindExecution(input: {
+    readonly id: string;
+    readonly workspaceBinding: ExecutionWorkspaceBinding;
+    readonly sessionBinding: ExecutionSessionBinding;
   }): Promise<RuntimeSession>;
 }

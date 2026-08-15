@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
-import type { AgentRuntimePort } from '../../../application/ports/agent-runtime.js';
+import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
 import { IdempotencyConflictError } from '../../../application/tasks/admit-root-task.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
@@ -23,7 +23,7 @@ import type { RunEventRepository } from '../../../application/ports/run-events.j
 
 interface RunRouteDependencies {
   readonly config: AppConfig;
-  readonly runtime: AgentRuntimePort;
+  readonly runtime: ExecutionRuntimeService;
   readonly submitRun: SubmitRun;
   readonly getRun: GetRun;
   readonly events?: RunEventRepository;
@@ -66,7 +66,7 @@ export function registerRunRoutes(
         : null;
 
       if (!submission) {
-        const health = await dependencies.runtime.health();
+        const health = await dependencies.runtime.planeHealth();
         if (!health.ready) {
           throw new HttpError(
             503,

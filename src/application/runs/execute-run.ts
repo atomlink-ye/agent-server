@@ -12,12 +12,12 @@ import {
   type ResolvedAgentVersion,
 } from '../ports/agent-resolution-api.js';
 import { resolveRuntimeModelPolicy } from '../agents/runtime-model-policy.js';
-import {
-  AGENT_SERVER_RUNTIME_MCP_SERVER_NAME,
-  type AgentRuntimePort,
-  type RuntimeEvent,
-  RuntimeTimedOutError,
-} from '../ports/agent-runtime.js';
+import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
+import type { ExecutionObservation } from '../ports/execution-plane.js';
+import type {
+  ExecutionRuntimeService,
+  ExecutionTurnOutcome,
+} from '../runtime/execution-plane-runtime-facade.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import {
@@ -26,10 +26,7 @@ import {
   type RunRepository,
 } from '../ports/run-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
-import type {
-  RunEventRepository,
-  RunEventPayload,
-} from '../ports/run-events.js';
+import type { RunEventRepository } from '../ports/run-events.js';
 import type { FileStore } from '../ports/file-store.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
@@ -41,11 +38,7 @@ import {
   type TeamPromptRosterMember,
 } from '../context/runtime-prompts.js';
 import { ExecuteTeamTask } from '../tasks/execute-team-task.js';
-import {
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
-  canonicalTeamMcpName,
-  canonicalTeamMcpRefForName,
-} from '../agents/built-in-skills.js';
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../agents/built-in-skills.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import type { ResolvedSkillPackage } from '../extensions/skill-catalog.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
@@ -76,6 +69,7 @@ import {
   RuntimeMemoryPersistenceError,
   RunPostPersistenceError,
 } from './runtime-execution-receipt.js';
+import { executionObservationPayload } from './execution-observation-payload.js';
 
 export class ExecuteRun {
   private readonly teamMemberMutexes = new Map<
@@ -87,7 +81,7 @@ export class ExecuteRun {
     private readonly tasks: TaskRepository,
     private readonly definitions: DefinitionReadApi,
     private readonly executeTeamTask: ExecuteTeamTask,
-    private readonly runtime: AgentRuntimePort,
+    private readonly runtime: ExecutionRuntimeService,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
     private readonly resolver: AgentResolutionApi = {
@@ -111,13 +105,7 @@ export class ExecuteRun {
 
   public async ensureRuntimeReady(): Promise<boolean> {
     try {
-      const health = await this.runtime.health();
-      if (health.ready) {
-        return true;
-      }
-
-      await this.runtime.initialize();
-      return (await this.runtime.health()).ready;
+      return await this.runtime.ensureReady();
     } catch (error) {
       this.logger.log('warn', 'run.runtime.unavailable', {
         error_name: error instanceof Error ? error.name : 'UnknownError',
@@ -561,17 +549,17 @@ export class ExecuteRun {
     if (
       member &&
       runtimeSession &&
-      (runtimeSession.providerAgentId === null) !==
-        (runtimeSession.paseoWorkspaceId === null)
+      (runtimeSession.sessionBinding === null) !==
+        (runtimeSession.workspaceBinding === null)
     )
-      throw new Error('Runtime session provider binding is partial.');
-    const legacyProviderAgentId =
+      throw new Error('Runtime session execution binding is partial.');
+    const legacySessionBinding =
       task.sessionId &&
       productSession &&
       productSession.environmentVersionId == null &&
       !runtimeSession &&
-      this.events?.findLatestProviderAgentBySessionId
-        ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+      this.events?.findLatestSessionBindingBySessionId
+        ? await this.events.findLatestSessionBindingBySessionId(task.sessionId)
         : null;
     if (
       runtimeSession &&
@@ -601,16 +589,17 @@ export class ExecuteRun {
       )
         throw new Error('Product Session runtime session snapshot is invalid.');
     }
-    const priorProviderAgentId = member
-      ? (runtimeSession?.providerAgentId ?? null)
-      : (runtimeSession?.providerAgentId ??
-        legacyProviderAgentId ??
+    const priorSessionBinding = member
+      ? (runtimeSession?.sessionBinding ?? null)
+      : (runtimeSession?.sessionBinding ??
+        legacySessionBinding ??
         (!this.runtimeSessions &&
         task.sessionId &&
-        this.events?.findLatestProviderAgentBySessionId
-          ? await this.events.findLatestProviderAgentBySessionId(task.sessionId)
+        this.events?.findLatestSessionBindingBySessionId
+          ? await this.events.findLatestSessionBindingBySessionId(task.sessionId)
           : null));
-    if (priorProviderAgentId && member?.role === 'lead' && collaborativeTeam) {
+    const priorExternalSessionId = priorSessionBinding?.externalSessionId ?? null;
+    if (priorExternalSessionId && member?.role === 'lead' && collaborativeTeam) {
       const fenceBinder = this
         .runtimeExtensionBinder as RuntimeExtensionBinder & {
         getTeamMemberGrant?: RuntimeExtensionBinder['getTeamMemberGrant'];
@@ -663,7 +652,7 @@ export class ExecuteRun {
       )
         throw new Error('Previous Team turn cannot be verified.');
     }
-    const resolved = priorProviderAgentId
+    const resolved = priorExternalSessionId
       ? await this.resolveContinuationPrompt(
           claim.run.prompt,
           ownerScope,
@@ -747,7 +736,7 @@ export class ExecuteRun {
         ? turnPrompt
         : appendTeamTurnGuidance(turnPrompt, task.teamTaskKind);
     const systemPrompt =
-      !priorProviderAgentId && collaborativeTeam && member
+      !priorExternalSessionId && collaborativeTeam && member
         ? buildTeamSystemPrompt({
             role: member.role,
             roster: teamRoster,
@@ -756,7 +745,7 @@ export class ExecuteRun {
               ...(member.role === 'lead' ? [TEAM_LEAD_CONTROL_PROTOCOL] : []),
             ].join('\n\n'),
           })
-        : !priorProviderAgentId
+        : !priorExternalSessionId
           ? resolved.systemPrompt
           : '';
     const deliveredTurnPrompt =
@@ -846,8 +835,8 @@ export class ExecuteRun {
           sessionRuntime.toolRefs,
           member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
         ) ||
-        sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null
+        sessionRuntime.sessionBinding !== null ||
+        sessionRuntime.workspaceBinding !== null
       )
         throw new Error('New Team member runtime session is already bound.');
     } else if (createdRuntimeSession) {
@@ -860,8 +849,8 @@ export class ExecuteRun {
         sessionRuntime.environmentVersionId !==
           productSession?.environmentVersionId ||
         !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
-        sessionRuntime.providerAgentId !== null ||
-        sessionRuntime.paseoWorkspaceId !== null
+        sessionRuntime.sessionBinding !== null ||
+        sessionRuntime.workspaceBinding !== null
       )
         throw new Error(
           'New Product Session runtime session is already bound.',
@@ -883,26 +872,6 @@ export class ExecuteRun {
         ? join(this.runtimeCellRoot, sessionRuntime.id)
         : undefined;
     if (cellCwd) await mkdir(cellCwd, { recursive: true });
-    let teamPaseoWorkspaceId: string | null = null;
-    if (
-      !priorProviderAgentId &&
-      collaborativeTeam &&
-      member &&
-      sessionRuntime
-    ) {
-      if (!this.runtimeSessions?.findPaseoWorkspaceByTeamRun)
-        throw new Error('TeamRun Paseo Workspace lookup is unavailable.');
-      teamPaseoWorkspaceId =
-        await this.runtimeSessions.findPaseoWorkspaceByTeamRun({
-          teamRunId: collaborativeTeam.id,
-          tenantId: task.tenantId,
-          workspaceId: task.workspaceId,
-          principalType: task.principalType,
-          principalId: task.principalId,
-        });
-      if (member.role !== 'lead' && !teamPaseoWorkspaceId)
-        throw new Error('TeamRun Paseo Workspace is unavailable.');
-    }
     if (member?.role === 'lead') {
       const capabilityBinder = this.runtimeExtensionBinder as
         | (RuntimeExtensionBinder & {
@@ -921,7 +890,7 @@ export class ExecuteRun {
     }
     let extensions;
     if (
-      !priorProviderAgentId &&
+      !priorExternalSessionId &&
       (resolved.skills.length > 0 || runtimeToolRefs.length > 0)
     ) {
       if (!this.runtimeExtensionBinder)
@@ -999,7 +968,7 @@ export class ExecuteRun {
       exactLeadGrantId = issued.grantId;
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       member &&
       member.role !== 'lead' &&
       collaborativeTeam
@@ -1052,7 +1021,7 @@ export class ExecuteRun {
       if (otherActive) throw new Error('Team member has another active Task.');
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       member &&
       collaborativeTeam &&
       refreshableBinder?.refreshForTeamMember
@@ -1069,7 +1038,7 @@ export class ExecuteRun {
       exactLeadGrantId = refreshed.grantId;
     }
     if (
-      priorProviderAgentId &&
+      priorExternalSessionId &&
       !member &&
       sessionRuntime &&
       sessionRuntime.toolRefs.length > 0 &&
@@ -1079,108 +1048,77 @@ export class ExecuteRun {
         task.sessionId ?? task.id,
         task.sessionId ? sessionRuntime.toolRefs : [],
       );
-    const runtimeEventSink = this.events
+    const runtimeObservationSink = this.events
       ? {
-          emit: async (event: RuntimeEvent) => {
-            await this.events!.append(claim.run.id, 'output', {
-              ...runtimeEventPayload(event, {
-                isTeamMember: member != null,
-                runtimeToolRefs,
-                catalogTools:
-                  member?.role === 'lead'
-                    ? leadCatalogToolRefs
-                    : runtimeToolRefs,
-              }),
+          emit: async (observation: ExecutionObservation) => {
+            const payload = executionObservationPayload(observation, {
+              isTeamMember: member != null,
+              runtimeToolRefs,
+              catalogTools:
+                member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
             });
+            if (payload) await this.events!.append(claim.run.id, 'output', payload);
           },
         }
       : undefined;
-    let execution: Awaited<ReturnType<AgentRuntimePort['execute']>> | undefined;
+    let execution: ExecutionTurnOutcome | undefined;
     let executionFailed = false;
     let executionError: unknown;
-    let providerBindingPersisted = false;
-    const bindTeamProvider =
-      collaborativeTeam &&
-      sessionRuntime &&
-      !sessionRuntime.providerAgentId &&
-      this.runtimeSessions
-        ? async (binding: {
-            readonly providerAgentId: string;
-            readonly runtimeWorkspaceId: string;
-          }) => {
-            await this.runtimeSessions!.bindProvider({
-              id: sessionRuntime.id,
-              providerAgentId: binding.providerAgentId,
-              paseoWorkspaceId: binding.runtimeWorkspaceId,
-            });
-            providerBindingPersisted = true;
-          }
-        : undefined;
     try {
-      execution = await this.runtime.execute(
-        priorProviderAgentId
-          ? {
-              operation: 'continue',
-              ...(sessionRuntime?.paseoWorkspaceId
-                ? { runtimeWorkspaceId: sessionRuntime.paseoWorkspaceId }
-                : {}),
-              ...(sessionRuntime
-                ? { runtimeSessionId: sessionRuntime.id }
-                : {}),
-              ...(cellCwd ? { cellCwd } : {}),
-              runId: claim.run.id,
-              prompt: deliveredTurnPrompt,
-              providerAgentId: priorProviderAgentId,
-              ...(resolved.proposalLimit > 0
-                ? {
-                    memoryCandidates: { proposalLimit: resolved.proposalLimit },
-                  }
-                : {}),
-            }
-          : {
-              operation: 'create',
-              ...(runtimeModelPolicy
-                ? {
-                    provider: runtimeModelPolicy.provider,
-                    model: runtimeModelPolicy.model,
-                  }
-                : {}),
-              ...(sessionRuntime
-                ? { runtimeSessionId: sessionRuntime.id }
-                : {}),
-              ...(teamPaseoWorkspaceId
-                ? { runtimeWorkspaceId: teamPaseoWorkspaceId }
-                : {}),
-              ...(cellCwd ? { cellCwd } : {}),
-              ...(collaborativeTeam
-                ? {
-                    workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
-                  }
-                : {}),
-              ...(member
-                ? {
-                    agentTitle: `${member.name} (${member.role})`,
-                    agentLabels: {
-                      team_run_id: member.teamRunId,
-                      member_name: member.name,
-                      role: member.role,
-                    },
-                  }
-                : {}),
-              ...(bindTeamProvider
-                ? { onProviderBinding: bindTeamProvider }
-                : {}),
-              runId: claim.run.id,
-              prompt: deliveredTurnPrompt,
-              systemPrompt,
-              ...(extensions ? { extensions } : {}),
-              ...(resolved.proposalLimit > 0
-                ? {
-                    memoryCandidates: { proposalLimit: resolved.proposalLimit },
-                  }
-                : {}),
-            },
-        runtimeEventSink,
+      execution = await this.runtime.executeTurn(
+        {
+          runId: claim.run.id,
+          prompt: deliveredTurnPrompt,
+          ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
+          ...(cellCwd ? { cwd: cellCwd } : {}),
+          ...(priorSessionBinding && !sessionRuntime
+            ? { compatibilitySessionBinding: priorSessionBinding }
+            : {}),
+          ...(!priorExternalSessionId && collaborativeTeam && member && sessionRuntime
+            ? {
+                workspaceOwner: {
+                  kind: 'team_run' as const,
+                  id: collaborativeTeam.id,
+                  tenantId: task.tenantId,
+                  productWorkspaceId: task.workspaceId,
+                  principalType: task.principalType,
+                  principalId: task.principalId,
+                },
+                ...(member.role !== 'lead'
+                  ? { requireExistingWorkspaceBinding: true }
+                  : {}),
+              }
+            : {}),
+          ...(!priorExternalSessionId && runtimeModelPolicy
+            ? {
+                provider: runtimeModelPolicy.provider,
+                model: runtimeModelPolicy.model,
+              }
+            : {}),
+          ...(!priorExternalSessionId
+            ? {
+                systemPrompt,
+                ...(collaborativeTeam
+                  ? { workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}` }
+                  : {}),
+                ...(member
+                  ? {
+                      sessionTitle: `${member.name} (${member.role})`,
+                      labels: {
+                        team_run_id: member.teamRunId,
+                        member_name: member.name,
+                        role: member.role,
+                      },
+                    }
+                  : {}),
+                ...(extensions ? { extensions } : {}),
+              }
+            : {}),
+          ...(resolved.proposalLimit > 0
+            ? { proposalLimit: resolved.proposalLimit }
+            : {}),
+        },
+        runtimeObservationSink,
       );
     } catch (error) {
       executionFailed = true;
@@ -1239,31 +1177,10 @@ export class ExecuteRun {
     if (executionFailed) throw executionError;
     if (narrowingError) throw narrowingError;
     if (!execution) throw new Error('Runtime execution returned no result.');
-    if (
-      sessionRuntime &&
-      !sessionRuntime.providerAgentId &&
-      execution.runtimeWorkspaceId &&
-      !providerBindingPersisted
-    ) {
-      const binding = {
-        paseoWorkspaceId: execution.runtimeWorkspaceId,
-        providerAgentId: execution.providerAgentId,
-      };
-      if (bindTeamProvider)
-        await bindTeamProvider({
-          providerAgentId: binding.providerAgentId,
-          runtimeWorkspaceId: binding.paseoWorkspaceId,
-        });
-      else
-        await this.runtimeSessions!.bindProvider({
-          id: sessionRuntime.id,
-          ...binding,
-        });
-    }
     await this.events?.bind({
       runId: claim.run.id,
       ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-      providerAgentId: execution.providerAgentId,
+      sessionBinding: execution.sessionBinding,
       createdAt: claim.run.updatedAt,
     });
     const candidateInputs = (
@@ -1692,149 +1609,6 @@ function isSafeRuntimeCandidate(candidate: {
   );
 }
 
-export function runtimeEventPayload(
-  event: import('../ports/agent-runtime.js').RuntimeEvent,
-  context?: {
-    readonly isTeamMember: boolean;
-    readonly runtimeToolRefs: readonly string[];
-    readonly catalogTools: readonly string[];
-  },
-): RunEventPayload {
-  switch (event.kind) {
-    case 'assistant_text':
-      return { kind: event.kind, text: event.text };
-    case 'reasoning_progress':
-      return {
-        kind: event.kind,
-        status: event.status,
-        ...(event.text ? { text: event.text } : {}),
-      };
-    case 'tool_status':
-      const canonicalTeamToolName = canonicalTeamMcpName(event.toolName);
-      const canonicalTeamToolRef = canonicalTeamToolName
-        ? canonicalTeamMcpRefForName(canonicalTeamToolName)
-        : null;
-      const authorizedTeamTool =
-        Boolean(context?.isTeamMember) &&
-        canonicalTeamToolRef !== null &&
-        context?.runtimeToolRefs.includes(canonicalTeamToolRef) === true &&
-        context?.catalogTools.includes(canonicalTeamToolRef) === true;
-      if (canonicalTeamToolName && authorizedTeamTool) {
-        return {
-          kind: event.kind,
-          activity_id: event.activityId,
-          category: event.category,
-          status: event.status,
-          tool_name: canonicalTeamToolName,
-          provenance: 'server_authorized_team_mcp_catalog',
-          tool_identity_capture_status: 'present',
-          response_observed: event.resultObserved === true,
-        };
-      }
-      return {
-        kind: event.kind,
-        activity_id: event.activityId,
-        category: event.category,
-        status: event.status,
-        label: event.label,
-        summary: event.summary,
-        ...safeRuntimeToolNamePayload(event.toolName),
-        ...(event.provider ? { provider: event.provider } : {}),
-        ...(event.detail ? { detail: event.detail } : {}),
-        ...flatDetailProjection(event.detail),
-        ...(event.parentActivityId
-          ? { parent_activity_id: event.parentActivityId }
-          : {}),
-      };
-    case 'child_timeline_item':
-      return {
-        kind: event.kind,
-        activity_id: event.activityId,
-        parent_activity_id: event.parentActivityId,
-        item_kind: event.itemKind,
-        status: event.status,
-        label: event.label,
-        summary: event.summary,
-        ...(event.provider ? { provider: event.provider } : {}),
-        ...(event.itemKind === 'tool' && event.detail
-          ? { detail: event.detail }
-          : {}),
-        ...(event.itemKind === 'tool'
-          ? flatDetailProjection(event.detail)
-          : event.text
-            ? { detail_text: event.text }
-            : {}),
-      };
-    case 'permission':
-      return {
-        kind: event.kind,
-        activity_id: event.activityId,
-        category: event.category,
-        status: event.status,
-        ...(event.decision ? { decision: event.decision } : {}),
-        summary: event.summary,
-      };
-    case 'usage': {
-      const payload: Record<string, string | number | boolean | null> = {
-        kind: event.kind,
-      };
-      if (event.inputTokens !== undefined)
-        payload.input_tokens = event.inputTokens;
-      if (event.cachedInputTokens !== undefined)
-        payload.cached_input_tokens = event.cachedInputTokens;
-      if (event.outputTokens !== undefined)
-        payload.output_tokens = event.outputTokens;
-      if (event.totalCostUsd !== undefined)
-        payload.total_cost_usd = event.totalCostUsd;
-      if (event.contextWindowMaxTokens !== undefined)
-        payload.context_window_max_tokens = event.contextWindowMaxTokens;
-      if (event.contextWindowUsedTokens !== undefined)
-        payload.context_window_used_tokens = event.contextWindowUsedTokens;
-      return payload;
-    }
-    default:
-      return assertNeverRuntimeEvent(event);
-  }
-}
-
-function flatDetailProjection(
-  detail: import('../ports/agent-runtime.js').RuntimeToolDetail | undefined,
-): RunEventPayload {
-  if (!detail) return {};
-  let text: string | undefined;
-  for (const key of [
-    'text',
-    'output',
-    'result',
-    'content',
-    'unifiedDiff',
-    'log',
-    'error',
-  ]) {
-    const candidate = (detail as unknown as Record<string, unknown>)[key];
-    if (typeof candidate === 'string') {
-      text = candidate;
-      break;
-    }
-  }
-  return {
-    detail_kind: detail.kind,
-    ...(text ? { detail_text: text } : {}),
-    ...('exitCode' in detail && detail.exitCode !== undefined
-      ? { exit_code: detail.exitCode }
-      : {}),
-  };
-}
-
-const safeRuntimeToolNames = new Set([
-  'synthetic_stock_snapshot',
-  'synthetic_event_batch',
-  'synthetic_analog_summary',
-  'learning_proposal_create',
-  'agent_server_memory_read',
-]);
-const runtimeMcpToolPrefix = `${AGENT_SERVER_RUNTIME_MCP_SERVER_NAME}_`;
-
 function sameToolRefs(
   left: readonly string[],
   right: readonly string[],
@@ -1847,18 +1621,4 @@ function sameToolRefs(
     rightSet.size === right.length &&
     [...leftSet].every((ref) => rightSet.has(ref))
   );
-}
-
-function safeRuntimeToolNamePayload(toolName: string | undefined) {
-  if (!toolName) return {};
-  const normalized = toolName.startsWith(runtimeMcpToolPrefix)
-    ? toolName.slice(runtimeMcpToolPrefix.length)
-    : toolName;
-  return safeRuntimeToolNames.has(normalized) ? { tool_name: normalized } : {};
-}
-
-function assertNeverRuntimeEvent(
-  event: never,
-): Readonly<Record<string, string | number | boolean | null>> {
-  throw new Error(`Unhandled runtime event kind: ${String(event)}`);
 }

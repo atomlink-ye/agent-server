@@ -8,6 +8,7 @@ import {
   rehydrateTask,
   type Task,
   type TaskSnapshot,
+  type TaskTeamActivation,
 } from '../../domain/tasks/task.js';
 
 interface PostgresQueryable {
@@ -53,10 +54,12 @@ export class PostgresTaskRepository implements TaskRepository {
            team_task_kind,
            source_team_message_id,
            input_team_message_ids,
+           team_activation_materializer,
+           team_activation_causes,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
         )
         ON CONFLICT (id) DO UPDATE SET
           tenant_id = EXCLUDED.tenant_id,
@@ -91,6 +94,8 @@ export class PostgresTaskRepository implements TaskRepository {
               THEN tasks.input_team_message_ids
             ELSE EXCLUDED.input_team_message_ids
           END,
+          team_activation_materializer = EXCLUDED.team_activation_materializer,
+          team_activation_causes = EXCLUDED.team_activation_causes,
           created_at = EXCLUDED.created_at,
           updated_at = EXCLUDED.updated_at
       `,
@@ -121,6 +126,8 @@ export class PostgresTaskRepository implements TaskRepository {
         task.teamTaskKind ?? null,
         task.sourceTeamMessageId ?? null,
         task.inputTeamMessageIds ?? [],
+        task.teamActivation?.materializer ?? null,
+        task.teamActivation ? JSON.stringify(task.teamActivation.causes) : null,
         task.createdAt,
         task.updatedAt,
       ],
@@ -250,6 +257,10 @@ interface TaskRow {
     'lead_turn' | 'work_attempt' | 'direct_message' | null;
   readonly source_team_message_id: string | null;
   readonly input_team_message_ids: readonly string[] | null;
+  readonly team_activation_materializer:
+    | 'task_run_collaboration_activation_adapter'
+    | null;
+  readonly team_activation_causes: readonly unknown[] | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;
   readonly session_id: string | null;
@@ -294,6 +305,8 @@ const TASK_SELECT_SQL = `
     tasks.team_task_kind,
     tasks.source_team_message_id,
     tasks.input_team_message_ids,
+    tasks.team_activation_materializer,
+    tasks.team_activation_causes,
     tasks.created_at,
     tasks.updated_at,
     tasks.session_id,
@@ -361,6 +374,13 @@ function mapTaskRow(row: TaskRow): TaskRecord {
     teamTaskKind: row.team_task_kind,
     sourceTeamMessageId: row.source_team_message_id,
     inputTeamMessageIds: row.input_team_message_ids ?? [],
+    teamActivation:
+      row.team_activation_materializer && row.team_activation_causes
+        ? {
+            materializer: row.team_activation_materializer,
+            causes: row.team_activation_causes as TaskTeamActivation['causes'],
+          }
+        : null,
     createdAt: toIsoInstant(row.created_at),
     updatedAt: toIsoInstant(row.updated_at),
     sessionId: row.session_id,

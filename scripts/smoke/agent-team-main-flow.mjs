@@ -91,6 +91,7 @@ function projectionSummary(value) {
                 sequence: turn.sequence ?? null,
                 kind: turn.kind ?? null,
                 status: turn.status ?? null,
+                activation: turn.activation ?? null,
                 context: outputSummary(turn.context),
               }))
             : [],
@@ -137,8 +138,12 @@ function hasCompletionFacts(value) {
   const analystAvailabilityTurn = analystSession?.turns?.find(
     (turn) =>
       turn.kind === 'direct_message' &&
-      turn.context.includes('Activation cause: work_available.') &&
-      /open actionable work is available:\s*W-1/i.test(turn.context),
+      turn.activation?.materializer ===
+        'task_run_collaboration_activation_adapter' &&
+      turn.activation.causes?.some(
+        (cause) =>
+          cause.type === 'work_available' && cause.work_ref === 'W-1',
+      ),
   );
   const leadSession = value.sessions?.find(
     (session) => session.name === 'lead' && session.role === 'lead',
@@ -146,7 +151,9 @@ function hasCompletionFacts(value) {
   const leadReworkReviewTurn = leadSession?.turns?.find(
     (turn) =>
       turn.kind === 'lead_turn' &&
-      turn.context.includes('Activation cause: final_review.'),
+      turn.activation?.materializer ===
+        'task_run_collaboration_activation_adapter' &&
+      turn.activation.causes?.some((cause) => cause.type === 'final_review'),
   );
   if (!analystAvailabilityTurn || !leadReworkReviewTurn) return false;
   const messages = value.direct_messages ?? [];

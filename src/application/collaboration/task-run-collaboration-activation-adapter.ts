@@ -80,6 +80,10 @@ export class TaskRunCollaborationActivationAdapter {
         teamMemberRunId: input.member.id,
         teamSequence: sequence,
         teamTaskKind: taskKind,
+        teamActivation: {
+          materializer: 'task_run_collaboration_activation_adapter',
+          causes: input.plan.activation.causes,
+        },
         ...(primaryMessage ? { sourceTeamMessageId: primaryMessage.id } : {}),
         ...(causeMessageIds.length
           ? { inputTeamMessageIds: causeMessageIds }

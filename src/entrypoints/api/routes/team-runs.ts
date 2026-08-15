@@ -125,6 +125,18 @@ export function toAgenticTeamProjectResponse(
         run_id: turn.runId,
         sequence: turn.sequence,
         kind: turn.kind,
+        activation: turn.activation
+          ? {
+              materializer: turn.activation.materializer,
+              causes: turn.activation.causes.map((cause) =>
+                cause.type === 'final_review'
+                  ? { type: cause.type }
+                  : cause.type === 'message'
+                    ? { type: cause.type, message_ref: cause.messageRef }
+                    : { type: cause.type, work_ref: cause.workRef },
+              ),
+            }
+          : null,
         status: turn.status,
         context: turn.context,
         result_text: turn.resultText,

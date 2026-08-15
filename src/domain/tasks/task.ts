@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { assertTaskTransition, type TaskStatus } from './task-status.js';
+import type { CollaborationActivationCause } from '../collaboration/collaboration.js';
+
+export interface TaskTeamActivation {
+  readonly materializer: 'task_run_collaboration_activation_adapter';
+  readonly causes: readonly CollaborationActivationCause[];
+}
 
 export type TaskOrigin =
   | { readonly ingress: 'api'; readonly originRef: null }
@@ -39,6 +45,7 @@ interface TaskFields {
   readonly teamSequence?: number | null;
   readonly teamTaskKind?:
     'lead_turn' | 'work_attempt' | 'direct_message' | null;
+  readonly teamActivation?: TaskTeamActivation | null;
 }
 
 export type Task = TaskFields & TaskOrigin;
@@ -95,6 +102,7 @@ export interface CreateChildTaskOptions {
     'lead_turn' | 'work_attempt' | 'direct_message' | null;
   readonly sourceTeamMessageId?: string | null;
   readonly inputTeamMessageIds?: readonly string[];
+  readonly teamActivation?: TaskTeamActivation | null;
 }
 
 const ROOT_TASK_DEPTH = 0;
@@ -138,6 +146,7 @@ export function createRootTask(options: CreateRootTaskOptions): Task {
     sourceMessageId: options.sourceMessageId ?? null,
     sourceTeamMessageId: options.sourceTeamMessageId ?? null,
     inputTeamMessageIds: options.inputTeamMessageIds ?? [],
+    teamActivation: null,
   });
 }
 
@@ -171,6 +180,7 @@ export function createChildTask(options: CreateChildTaskOptions): Task {
     teamTaskKind: options.teamTaskKind ?? null,
     sourceTeamMessageId: options.sourceTeamMessageId ?? null,
     inputTeamMessageIds: options.inputTeamMessageIds ?? [],
+    teamActivation: options.teamActivation ?? null,
   });
 }
 

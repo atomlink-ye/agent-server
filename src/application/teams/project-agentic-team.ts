@@ -3,6 +3,7 @@ import type {
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
 import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
+import type { CollaborationActivationCause } from '../../domain/collaboration/collaboration.js';
 import { isTeamCompletionApprovalPending } from './team-policy-evaluator.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
@@ -74,6 +75,10 @@ export interface AgenticTeamProject {
       readonly runId: string;
       readonly sequence: number;
       readonly kind: 'lead_turn' | 'work_attempt' | 'direct_message';
+      readonly activation: {
+        readonly materializer: 'task_run_collaboration_activation_adapter';
+        readonly causes: readonly CollaborationActivationCause[];
+      } | null;
       readonly status: 'queued' | 'running' | 'completed' | 'failed';
       readonly context: string;
       readonly resultText: string | null;
@@ -291,6 +296,12 @@ export class ProjectAgenticTeam {
                 runId: run.runId,
                 sequence: record.task.teamSequence ?? index + 1,
                 kind: record.task.teamTaskKind!,
+                activation: record.task.teamActivation
+                  ? {
+                      materializer: record.task.teamActivation.materializer,
+                      causes: record.task.teamActivation.causes,
+                    }
+                  : null,
                 status: mapTurnStatus(run.status),
                 context: contextFor(
                   record,
@@ -374,19 +385,8 @@ function contextFor(
   nameByMemberId: ReadonlyMap<string, string>,
   sequence: number,
 ): string {
-  const activationCause = [
-    record.task.logicalStepKey?.includes('available:')
-      ? 'Activation cause: work_available.'
-      : null,
-    record.task.logicalStepKey?.includes('review:')
-      ? 'Activation cause: final_review.'
-      : null,
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join(' ');
   if (record.task.teamTaskKind === 'work_attempt' && work && attempt) {
     return [
-      activationCause || null,
       `Assigned Work: ${safeText(work.subject, 256)}`,
       work.description ? `Brief: ${safeText(work.description, 512)}` : null,
       `Attempt: ${attempt.attemptNo}`,
@@ -397,7 +397,6 @@ function contextFor(
   }
   if (record.task.teamTaskKind === 'direct_message' && message) {
     return [
-      activationCause || null,
       `Direct message from ${safeText(
         message.senderMemberRunId
           ? (nameByMemberId.get(message.senderMemberRunId) ?? 'team member')
@@ -407,9 +406,5 @@ function contextFor(
       safeText(message.body, 512),
     ].join(' · ');
   }
-  if (record.task.teamTaskKind === 'direct_message' && activationCause)
-    return `${activationCause} · Work availability delivery`;
-  return [activationCause || null, sequence === 1 ? 'Lead kickoff' : 'Lead review']
-    .filter((part): part is string => Boolean(part))
-    .join(' · ');
+  return sequence === 1 ? 'Lead kickoff' : 'Lead review';
 }

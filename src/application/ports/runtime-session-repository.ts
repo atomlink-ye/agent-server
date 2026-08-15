@@ -31,6 +31,9 @@ export interface RuntimeSession {
 
 export interface RuntimeSessionLookup {
   findById(id: string): Promise<RuntimeSession | null>;
+  findByExecutionSessionBinding(
+    binding: ExecutionSessionBinding,
+  ): Promise<RuntimeSession | null>;
 }
 
 export interface RuntimeSessionRepository {

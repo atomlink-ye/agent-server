@@ -48,7 +48,9 @@ jobs:
     environment: test
     timeout-minutes: 30
     env:
-      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
+      # Intentional mutation for ci/verify-real-runtime-skip-path only: prove
+      # the credential-absent branch writes a visible skip rather than a pass.
+      OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY_DELIBERATELY_ABSENT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

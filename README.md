@@ -157,3 +157,5 @@ The repository documentation must remain usable without private Drive access. Ex
 This is not a production-ready platform. Important hardening remains deferred, including broader identity/ACL work, stronger runtime isolation, multi-worker recovery/reconciliation, generalized cancellation/retry UX, production credential brokerage, and broader Artifact services. Real provider availability can also change and therefore is not a pull-request prerequisite.
 
 See [Security](SECURITY.md) before connecting real credentials or deploying outside an isolated development environment.
+
+<!-- ci probe: verify a docs-only PR is not blocked by the real-runtime required check -->

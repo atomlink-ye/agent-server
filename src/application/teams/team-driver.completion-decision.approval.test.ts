@@ -107,7 +107,9 @@ function setupDriver(initialTeam = makeTeam()) {
     work({ teamExecutions: { recordCompletionRejectionInTransaction: recordRejection } }),
   );
   const completeTeamRunAtomically = vi.fn(async () => currentTeam);
-  const findCompletionDecisionForRequest = vi.fn(async () => null);
+  const findCompletionDecisionForRequest = vi.fn<
+    () => Promise<ReturnType<typeof createTeamCompletionDecision> | null>
+  >(async () => null);
   const reconcileForRootTask = vi.fn(async () => 0);
   const executions = {
     findTeamRunById: vi.fn(async () => currentTeam),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 
 describe('executionObservationPayload', () => {
@@ -45,8 +46,8 @@ describe('executionObservationPayload', () => {
   it('publishes canonical Team MCP identity only when the server-authorized catalog proves it', () => {
     const context = {
       isTeamMember: true,
-      runtimeToolRefs: ['builtin:agent-team-message-send'],
-      catalogTools: ['builtin:agent-team-message-send'],
+      runtimeToolRefs: [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend],
+      catalogTools: [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend],
     } as const;
     const observation = {
       kind: 'tool_updated',

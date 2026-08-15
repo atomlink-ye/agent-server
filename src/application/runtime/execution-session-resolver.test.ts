@@ -61,7 +61,9 @@ function createSessionHandle(
 
 function fakePlane(calls: string[]): ExecutionPlanePort {
   return {
-    capabilities: () => ({ supported: new Set() }),
+    capabilities: () => ({
+      supported: new Set(['reusable_session', 'external_workspace']),
+    }),
     createSession: async (_spec: ExecutionSessionSpec): Promise<CreatedExecutionSession> => {
       calls.push('create');
       return {

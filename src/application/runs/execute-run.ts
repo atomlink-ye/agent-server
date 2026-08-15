@@ -1071,6 +1071,9 @@ export class ExecuteRun {
           prompt: deliveredTurnPrompt,
           ...(sessionRuntime ? { runtimeSessionId: sessionRuntime.id } : {}),
           ...(cellCwd ? { cwd: cellCwd } : {}),
+          ...(priorSessionBinding
+            ? { compatibilitySessionBinding: priorSessionBinding }
+            : {}),
           ...(!priorExternalSessionId && collaborativeTeam && member && sessionRuntime
             ? {
                 workspaceOwner: {
@@ -1084,14 +1087,6 @@ export class ExecuteRun {
                 ...(member.role !== 'lead'
                   ? { requireExistingWorkspaceBinding: true }
                   : {}),
-              }
-            : {}),
-          ...(priorExternalSessionId && !sessionRuntime
-            ? {
-                compatibilitySessionBinding: {
-                  plane: 'paseo',
-                  externalSessionId: priorExternalSessionId,
-                },
               }
             : {}),
           ...(!priorExternalSessionId && runtimeModelPolicy

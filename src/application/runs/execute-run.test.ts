@@ -320,7 +320,7 @@ describe('ExecuteRun', () => {
     expect(events.bind).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sessionBinding: {
-          plane: 'paseo',
+          plane: 'test',
           externalSessionId: 'agent-prior',
         },
       }),

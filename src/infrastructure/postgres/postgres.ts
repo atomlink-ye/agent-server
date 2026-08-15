@@ -60,6 +60,7 @@ const durableKernelMigrationFileNames = [
   '0027_agent-team-roster-limits.sql',
   '0028_team-completion-approval.sql',
   '0029_product_work_identity.sql',
+  '0030_work_collaboration_kernel.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

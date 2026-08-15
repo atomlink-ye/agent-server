@@ -133,8 +133,19 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm smoke:runtime
 
+      # The 300s default was calibrated before the Team collaboration flow grew
+      # its message/checkpoint round-trips, each of which is a real provider
+      # call. At 300s the smoke aborts before the run reaches any terminal
+      # state, so every failure reports "did not complete" regardless of cause
+      # — a lead that legitimately needs more turns and a lead that never
+      # converges are indistinguishable. A larger budget lets a genuine
+      # non-convergence surface as a maxLeadTurns violation instead. The job
+      # timeout-minutes is 30 and the whole job currently runs in ~7 minutes,
+      # so this stays well inside the existing envelope.
       - name: Real-provider agent-team main flow
         if: steps.credentials.outputs.available == 'true'
+        env:
+          AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
 
       - name: Record that the real-provider checks ran

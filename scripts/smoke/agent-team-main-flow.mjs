@@ -219,7 +219,36 @@ while (Date.now() < deadline) {
   if (['completed', 'failed', 'cancelled'].includes(task.status)) break;
   await new Promise((resolve) => setTimeout(resolve, 1_000));
 }
+// When this smoke fails it is usually because a member turn ran but the Team
+// never reached a terminal state, and the message above only reports the outer
+// Task. That is not enough to tell a Lead that legitimately needs more turns
+// from a Lead that never converges. Dump the per-run event stream for every run
+// we observed so the failure is locatable from CI logs alone. Run events carry
+// no prompts, credentials, provider wire objects or raw provider errors
+// (docs/contracts/run-api.md), so this is safe to emit.
+async function dumpRunDiagnostics() {
+  progress('team_failure_projection', { projection: projection ?? null });
+  for (const runId of observedRuns.keys()) {
+    try {
+      const events = await request(
+        `/api/v1/runs/${encodeURIComponent(runId)}/events?after=0`,
+      );
+      progress('team_failure_run_events', {
+        run_id: runId,
+        events: events.events ?? events,
+      });
+    } catch (error) {
+      progress('team_failure_run_events_unavailable', {
+        run_id: runId,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
 if (task?.status !== 'completed') {
+  // Diagnostics must never replace or mask the real failure.
+  await dumpRunDiagnostics().catch(() => {});
   throw new Error(
     `agent team smoke task did not complete: ${JSON.stringify(task)}`,
   );

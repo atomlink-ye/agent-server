@@ -69,17 +69,17 @@ Stable topologies are:
 Start an interactive environment:
 
 ```bash
-pnpm local-env -- up core
-pnpm local-env -- up runtime
-pnpm local-env -- info
-pnpm local-env -- down
+pnpm local-env up core
+pnpm local-env up runtime
+pnpm local-env info
+pnpm local-env down
 ```
 
 For a one-off command that needs infrastructure, use the same environment library instead of creating a scenario script:
 
 ```bash
-pnpm local-env -- run postgres -- <command>
-pnpm local-env -- run runtime -- <command>
+pnpm local-env run postgres -- <command>
+pnpm local-env run runtime -- <command>
 ```
 
 The command gets isolated infrastructure, useful URLs/DB variables, and automatic cleanup. Generated diagnostics are written under ignored `.local/test-runs/<run-id>/`; failed runs can be retained with `TEST_KEEP_FAILED=1`.

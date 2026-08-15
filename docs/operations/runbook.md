@@ -4,17 +4,17 @@ This runbook covers the current Prove/MVE local and verification boundaries. It 
 
 ## API is not live
 
-1. Start the current core topology with `pnpm local-env -- up core`.
-2. Inspect it with `pnpm local-env -- info` and check `HOST`/`PORT` conflicts.
+1. Start the current core topology with `pnpm local-env up core`.
+2. Inspect it with `pnpm local-env info` and check `HOST`/`PORT` conflicts.
 3. Call `/health/live`; liveness does not depend on Paseo.
 4. Use `pnpm test:contract` when the question is public request/response behavior rather than local process state.
-5. Stop the owned topology with `pnpm local-env -- down`.
+5. Stop the owned topology with `pnpm local-env down`.
 
 For a one-off diagnostic command that needs infrastructure, use the generic environment runner instead of creating a setup script:
 
 ```bash
-pnpm local-env -- run core -- <command>
-pnpm local-env -- run runtime -- <command>
+pnpm local-env run core -- <command>
+pnpm local-env run runtime -- <command>
 ```
 
 ## Runtime readiness returns 503
@@ -59,7 +59,7 @@ The Web service is part of the `full` topology. The current local path is:
 
 ```bash
 pnpm web:bootstrap
-pnpm local-env -- up full
+pnpm local-env up full
 ```
 
 Use a fresh ProductSession for product-flow verification. Keep the service bearer server-side and never capture tokens in screenshots, logs, recordings, or committed files. Generated browser diagnostics belong under ignored `.local/test-runs/<run-id>/` or a CI artifact.

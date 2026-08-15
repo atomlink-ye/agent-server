@@ -29,17 +29,17 @@ full         runtime + Web
 Start/inspect/stop an interactive topology:
 
 ```bash
-pnpm local-env -- up core
-pnpm local-env -- up runtime
-pnpm local-env -- up full
-pnpm local-env -- info
-pnpm local-env -- down
+pnpm local-env up core
+pnpm local-env up runtime
+pnpm local-env up full
+pnpm local-env info
+pnpm local-env down
 ```
 
 Provider/model overrides are explicit and bounded:
 
 ```bash
-pnpm local-env -- up runtime --provider opencode --model opencode-go/deepseek-v4-flash
+pnpm local-env up runtime --provider opencode --model opencode-go/deepseek-v4-flash
 ```
 
 The CLI records only ignored local environment state under `.local/`.
@@ -49,8 +49,8 @@ The CLI records only ignored local environment state under `.local/`.
 Do not write a new scenario setup script. Use the generic runner:
 
 ```bash
-pnpm local-env -- run postgres -- <command>
-pnpm local-env -- run runtime -- <command>
+pnpm local-env run postgres -- <command>
+pnpm local-env run runtime -- <command>
 ```
 
 The runner allocates a unique Compose project, dynamic host ports, `.local/test-runs/<run-id>/`, useful DB/API environment variables, and cleanup. On failure set `TEST_KEEP_FAILED=1` to retain diagnostics.

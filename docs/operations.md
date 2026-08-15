@@ -12,17 +12,17 @@ Agent Server currently supports local development, deterministic verification, a
 Development and infrastructure-backed tests share `config/local-environments.yaml` and `tooling/environment/`. Manual development uses the generic environment CLI:
 
 ```bash
-pnpm local-env -- up core
-pnpm local-env -- up runtime
-pnpm local-env -- info
-pnpm local-env -- down
+pnpm local-env up core
+pnpm local-env up runtime
+pnpm local-env info
+pnpm local-env down
 ```
 
 A one-off command that needs infrastructure uses the same lifecycle:
 
 ```bash
-pnpm local-env -- run postgres -- <command>
-pnpm local-env -- run runtime -- <command>
+pnpm local-env run postgres -- <command>
+pnpm local-env run runtime -- <command>
 ```
 
 Do not create scenario-specific setup/acceptance runners for temporary debugging. Improve the shared environment or typed fixture APIs instead.

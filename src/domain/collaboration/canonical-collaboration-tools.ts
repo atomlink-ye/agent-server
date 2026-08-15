@@ -1,3 +1,9 @@
+import type { CollaborationCapability } from './collaboration.js';
+import {
+  collaborationCapabilitiesForRole,
+  type CollaborationRole,
+} from './collaboration-policy-definition.js';
+
 export const AGENT_SERVER_COLLABORATION_TOOL_REFS = Object.freeze({
   state: 'agent-server/collaboration-state',
   boardList: 'agent-server/board-list',
@@ -34,34 +40,78 @@ export const AGENT_SERVER_COLLABORATION_MCP_NAMES = Object.freeze({
   finish: 'collaboration_finish',
 } as const);
 
-const READ_REFS = Object.freeze([
-  AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
-  AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
-  AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
-]);
+export const COLLABORATION_TOOL_REF_BY_CAPABILITY: Readonly<
+  Record<CollaborationCapability, readonly string[]>
+> = Object.freeze({
+  'board.read': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardList,
+  ]),
+  'board.create': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
+  ]),
+  'board.assign': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
+  ]),
+  'board.claim': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
+  ]),
+  'board.checkpoint': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCheckpoint,
+  ]),
+  'board.block': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardBlock,
+  ]),
+  'board.submit': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardSubmit,
+  ]),
+  'board.review': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
+  ]),
+  'board.cancel': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
+  ]),
+  'mailbox.read': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.inboxList,
+  ]),
+  'mailbox.send': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
+  ]),
+  'mailbox.ack': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
+  ]),
+  'run.finalize': Object.freeze([
+    AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+  ]),
+});
+
+export function collaborationToolRefsForCapabilities(
+  capabilities: readonly CollaborationCapability[],
+): readonly string[] {
+  return Object.freeze([
+    ...new Set(
+      capabilities.flatMap(
+        (capability) => COLLABORATION_TOOL_REF_BY_CAPABILITY[capability],
+      ),
+    ),
+  ]);
+}
 
 export function collaborationToolRefsForRole(
-  role: 'lead' | 'member',
+  role: CollaborationRole,
 ): readonly string[] {
-  const actions =
-    role === 'lead'
-      ? [
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
-        ]
-      : [
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCheckpoint,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardBlock,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.boardSubmit,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend,
-          AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
-        ];
-  return Object.freeze([...READ_REFS, ...actions]);
+  return collaborationToolRefsForCapabilities(
+    collaborationCapabilitiesForRole(role),
+  );
+}
+
+export function collaborationToolRefsForMessageTurn(): readonly string[] {
+  return collaborationToolRefsForCapabilities([
+    'board.read',
+    'board.claim',
+    'mailbox.read',
+    'mailbox.send',
+    'mailbox.ack',
+  ]);
 }

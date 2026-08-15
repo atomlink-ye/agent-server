@@ -93,7 +93,7 @@ Stable topologies:
 - `runtime`
 - `full`
 
-Manual `pnpm env -- up ...` is for interactive debugging. It is not a hidden prerequisite for tests.
+Manual `pnpm local-env up ...` is for interactive debugging. It is not a hidden prerequisite for tests.
 
 ## Fixtures
 

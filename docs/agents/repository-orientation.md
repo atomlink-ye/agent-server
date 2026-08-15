@@ -48,7 +48,7 @@ git status --short --branch
 rg "term or contract" docs src tests e2e
 pnpm typecheck
 pnpm test:unit
-pnpm env -- info runtime
+pnpm local-env info runtime
 ```
 
 Use focused discovery. Avoid broad destructive cleanup, package upgrades, or speculative infrastructure before the relevant boundary is understood.

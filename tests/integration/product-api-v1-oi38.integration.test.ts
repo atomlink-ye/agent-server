@@ -27,13 +27,10 @@ import {
 } from '../../src/application/extensions/runtime-tool-grant-service.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-const required = process.env.REAL_POSTGRES_REQUIRED === '1';
-if (required && !connectionString)
+if (!connectionString)
   throw new Error(
-    'REAL_POSTGRES_REQUIRED=1 requires DATABASE_URL or POSTGRES_URL',
+    'real PostgreSQL integration requires DATABASE_URL or POSTGRES_URL',
   );
-
-const describeRealPostgres = connectionString ? describe : describe.skip;
 
 const tenantId = 'oi38_product_api_tenant';
 const workspaceA = '00000000-0000-4000-8000-00000000a048';
@@ -55,7 +52,7 @@ let memoryRepository: MemoryApiRepository;
 const generatedWorkIds: string[] = [];
 const generatedTaskIds: string[] = [];
 
-describeRealPostgres(
+describe(
   'Product API v1 OI-38 cross-scope existence oracle',
   () => {
     let pool: Pool;

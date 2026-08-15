@@ -6,12 +6,12 @@ import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/po
 import { createPostgresPool } from '../../src/infrastructure/postgres/postgres.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-const required = process.env.REAL_POSTGRES_REQUIRED === '1';
-if (required && !connectionString)
-  throw new Error('real PostgreSQL is required');
-const describeRealPostgres = connectionString ? describe : describe.skip;
+if (!connectionString)
+  throw new Error(
+    'real PostgreSQL integration requires DATABASE_URL or POSTGRES_URL',
+  );
 
-describeRealPostgres('real PostgreSQL run event concurrency', () => {
+describe('real PostgreSQL run event concurrency', () => {
   const schema = `run_event_concurrency_${randomUUID().replaceAll('-', '')}`;
   const appendCount = 64;
   let admin!: Pool;

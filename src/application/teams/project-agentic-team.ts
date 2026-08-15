@@ -407,6 +407,8 @@ function contextFor(
       safeText(message.body, 512),
     ].join(' · ');
   }
+  if (record.task.teamTaskKind === 'direct_message' && activationCause)
+    return `${activationCause} · Work availability delivery`;
   return [activationCause || null, sequence === 1 ? 'Lead kickoff' : 'Lead review']
     .filter((part): part is string => Boolean(part))
     .join(' · ');

@@ -254,7 +254,7 @@ export class TaskRunCollaborationActivationAdapter {
     return formatTeamDeliveryPrompt({
       teamId: input.team.id.slice(0, 8),
       to: input.member.name,
-      kind: 'direct',
+      kind: 'wake',
       from: 'collaboration',
       sequence,
       body: [

@@ -374,8 +374,19 @@ function contextFor(
   nameByMemberId: ReadonlyMap<string, string>,
   sequence: number,
 ): string {
+  const activationCause = [
+    record.task.logicalStepKey?.includes('available:')
+      ? 'Activation cause: work_available.'
+      : null,
+    record.task.logicalStepKey?.includes('review:')
+      ? 'Activation cause: final_review.'
+      : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' ');
   if (record.task.teamTaskKind === 'work_attempt' && work && attempt) {
     return [
+      activationCause || null,
       `Assigned Work: ${safeText(work.subject, 256)}`,
       work.description ? `Brief: ${safeText(work.description, 512)}` : null,
       `Attempt: ${attempt.attemptNo}`,
@@ -386,6 +397,7 @@ function contextFor(
   }
   if (record.task.teamTaskKind === 'direct_message' && message) {
     return [
+      activationCause || null,
       `Direct message from ${safeText(
         message.senderMemberRunId
           ? (nameByMemberId.get(message.senderMemberRunId) ?? 'team member')
@@ -395,5 +407,7 @@ function contextFor(
       safeText(message.body, 512),
     ].join(' · ');
   }
-  return sequence === 1 ? 'Lead kickoff' : 'Lead review';
+  return [activationCause || null, sequence === 1 ? 'Lead kickoff' : 'Lead review']
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 }

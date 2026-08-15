@@ -38,6 +38,148 @@ function outputSummary(text) {
   return typeof text === 'string' ? text.slice(0, 512) : undefined;
 }
 
+function projectionSummary(value) {
+  const project = value?.project;
+  return {
+    project: project
+      ? {
+          status: project.status ?? null,
+          phase: project.phase ?? null,
+          revision: project.revision ?? null,
+          stop_reason: project.stop_reason ?? null,
+        }
+      : null,
+    gates: value?.gates
+      ? {
+          finish_ready: value.gates.finish_ready ?? null,
+          all_work_accepted: value.gates.all_work_accepted ?? null,
+          no_active_attempts: value.gates.no_active_attempts ?? null,
+          all_members_idle: value.gates.all_members_idle ?? null,
+        }
+      : null,
+    work_items: Array.isArray(value?.work_items)
+      ? value.work_items.map((work) => ({
+          work_ref: work.work_ref ?? null,
+          status: work.status ?? null,
+          assignee_name: work.assignee_name ?? null,
+          attempts: Array.isArray(work.attempts)
+            ? work.attempts.map((attempt) => ({
+                attempt_no: attempt.attempt_no ?? null,
+                status: attempt.status ?? null,
+                feedback_summary: outputSummary(attempt.feedback_summary),
+                result_summary: outputSummary(attempt.result_summary),
+              }))
+            : [],
+        }))
+      : [],
+    direct_messages: Array.isArray(value?.direct_messages)
+      ? value.direct_messages.map((message) => ({
+          sequence: message.sequence ?? null,
+          sender_name: message.sender_name ?? null,
+          recipient_name: message.recipient_name ?? null,
+          summary: outputSummary(message.summary),
+          status: message.status ?? null,
+        }))
+      : [],
+    sessions: Array.isArray(value?.sessions)
+      ? value.sessions.map((session) => ({
+          name: session.name ?? null,
+          role: session.role ?? null,
+          status: session.status ?? null,
+          turns: Array.isArray(session.turns)
+            ? session.turns.map((turn) => ({
+                sequence: turn.sequence ?? null,
+                kind: turn.kind ?? null,
+                status: turn.status ?? null,
+                context: outputSummary(turn.context),
+              }))
+            : [],
+        }))
+      : [],
+  };
+}
+
+function hasCompletionFacts(value) {
+  if (!value?.project || value.project.status !== 'succeeded') return false;
+  if (
+    value.gates?.finish_ready !== true ||
+    value.gates?.all_work_accepted !== true ||
+    value.gates?.no_active_attempts !== true ||
+    value.gates?.all_members_idle !== true
+  )
+    return false;
+  const work = value.work_items?.find((item) => item.work_ref === 'work-1');
+  if (
+    !Array.isArray(value.work_items) ||
+    value.work_items.length !== 1 ||
+    !work ||
+    work.status !== 'accepted' ||
+    work.assignee_name !== 'analyst'
+  )
+    return false;
+  const attempt1 = work.attempts?.find((attempt) => attempt.attempt_no === 1);
+  const attempt2 = work.attempts?.find((attempt) => attempt.attempt_no === 2);
+  if (
+    !Array.isArray(work.attempts) ||
+    work.attempts.length !== 2 ||
+    !attempt1 ||
+    !attempt2 ||
+    attempt1.status !== 'failed' ||
+    attempt2.status !== 'completed' ||
+    !attempt1.feedback_summary?.includes('AGENT_TEAM_SMOKE_REWORK_REQUIRED') ||
+    !attempt1.result_summary?.includes('AGENT_TEAM_SMOKE_ATTEMPT_1') ||
+    !attempt2.result_summary?.includes('AGENT_TEAM_SMOKE_MEMBER_OK')
+  )
+    return false;
+  const analystSession = value.sessions?.find(
+    (session) => session.name === 'analyst' && session.role === 'member',
+  );
+  const analystAvailabilityTurn = analystSession?.turns?.find(
+    (turn) =>
+      turn.kind === 'direct_message' &&
+      turn.context.includes('Activation cause: work_available.') &&
+      /open actionable work is available:\s*W-1/i.test(turn.context),
+  );
+  const leadSession = value.sessions?.find(
+    (session) => session.name === 'lead' && session.role === 'lead',
+  );
+  const leadReworkReviewTurn = leadSession?.turns?.find(
+    (turn) =>
+      turn.kind === 'lead_turn' &&
+      turn.context.includes('Activation cause: final_review.'),
+  );
+  if (!analystAvailabilityTurn || !leadReworkReviewTurn) return false;
+  const messages = value.direct_messages ?? [];
+  const leadMessage = messages.find(
+    (message) =>
+      message.sender_name === 'lead' &&
+      message.recipient_name === 'analyst' &&
+      message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
+  );
+  const analystReply = messages.find(
+    (message) =>
+      message.sender_name === 'analyst' &&
+      message.recipient_name === 'lead' &&
+      message.summary.includes('AGENT_TEAM_SMOKE_ANALYST_REPLY'),
+  );
+  return (
+    messages.filter(
+      (message) =>
+        message.sender_name === 'lead' &&
+        message.recipient_name === 'analyst' &&
+        message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
+    ).length === 1 &&
+    messages.filter(
+      (message) =>
+        message.sender_name === 'analyst' &&
+        message.recipient_name === 'lead' &&
+        message.summary.includes('AGENT_TEAM_SMOKE_ANALYST_REPLY'),
+    ).length === 1 &&
+    leadMessage?.status === 'acknowledged' &&
+    Boolean(analystReply)
+  );
+}
+
 if (!baseUrl || !token) {
   throw new Error(
     'AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN are required',
@@ -91,9 +233,9 @@ function agentYaml(name, instructions, refs) {
 }
 
 const leadInstructions =
-  'Act as Team Lead using only canonical Team tools. Use board_list to read the board first. If no Work exists, use board_create to create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, use board_accept to accept it. When every Work is accepted and no active attempt remains, call collaboration_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.';
+  'Act as the Lead using only the canonical collaboration tools. On every turn read collaboration_state and board_list first. If the board is empty, call board_create exactly once with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK"; omit assignee so W-1 is OPEN and unassigned. In that same kickoff turn call message_send exactly once to recipient analyst with body "AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK", about_work_ref W-1, and requires_ack true, then stop. Do not assign or claim W-1. After analyst submits attempt 1, call board_request_changes exactly once for W-1 with assignee analyst and feedback "AGENT_TEAM_SMOKE_REWORK_REQUIRED"; do not accept attempt 1. After analyst submits attempt 2, call board_accept exactly once for W-1. Only after W-1 is accepted and no active attempt remains, call collaboration_finish exactly once. If the board has an open or in-progress W-1 without a submitted attempt to review, make no mutation and stop. Never create duplicate Work, never use legacy Team command vocabulary, and never substitute prose for a required collaboration mutation.';
 const analystInstructions =
-  'Act as the assigned Team member using canonical Team tools. Use board_list to read the board, locate your active Work, and use board_submit to submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.';
+  'Act as the analyst using only the canonical collaboration tools. On the first direct/message delivery, read collaboration_state, board_list, and inbox_list. Confirm M-1 from lead with body AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK, call message_ack for M-1, call message_send once to lead with body "AGENT_TEAM_SMOKE_ANALYST_REPLY", about_work_ref W-1, and reply_to_ref M-1, then explicitly call board_claim for W-1; perform these actions once and stop. On the resulting work-attempt turn for attempt 1, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_ATTEMPT_1". On the resulting rework attempt 2, call board_submit exactly once with summary "AGENT_TEAM_SMOKE_MEMBER_OK". Never create Work, request changes, accept Work, finish the collaboration, claim W-1 twice, use provider subagents, or substitute prose for a required collaboration mutation.';
 
 const leadVersion = await importAndPublish(
   agentYaml('smoke-lead', leadInstructions, [
@@ -101,6 +243,8 @@ const leadVersion = await importAndPublish(
     'board-list',
     'board-create',
     'board-accept',
+    'board-request-changes',
+    'message-send',
     'collaboration-finish',
   ]),
   '/api/v1/agents:import',
@@ -111,6 +255,10 @@ const analystVersion = await importAndPublish(
   agentYaml('smoke-analyst', analystInstructions, [
     'collaboration-state',
     'board-list',
+    'board-claim',
+    'inbox-list',
+    'message-send',
+    'message-ack',
     'board-submit',
   ]),
   '/api/v1/agents:import',
@@ -216,46 +364,43 @@ while (Date.now() < deadline) {
     }
     nextRunObservationAt = Date.now() + progressIntervalMs;
   }
-  if (['completed', 'failed', 'cancelled'].includes(task.status)) break;
+  if (task.status === 'completed' && hasCompletionFacts(projection)) break;
+  if (['failed', 'cancelled'].includes(task.status)) break;
   await new Promise((resolve) => setTimeout(resolve, 1_000));
 }
-// When this smoke fails it is usually because a member turn ran but the Team
-// never reached a terminal state, and the message above only reports the outer
-// Task. That is not enough to tell a Lead that legitimately needs more turns
-// from a Lead that never converges. Dump the per-run event stream for every run
-// we observed so the failure is locatable from CI logs alone. Run events carry
-// no prompts, credentials, provider wire objects or raw provider errors
-// (docs/contracts/run-api.md), so this is safe to emit.
+// Keep failure output bounded and provider-neutral while showing enough durable
+// state to locate the missing Completion Line fact from CI logs alone.
 async function dumpRunDiagnostics() {
-  progress('team_failure_projection', { projection: projection ?? null });
-  for (const runId of observedRuns.keys()) {
-    try {
-      const events = await request(
-        `/api/v1/runs/${encodeURIComponent(runId)}/events?after=0`,
-      );
-      progress('team_failure_run_events', {
-        run_id: runId,
-        events: events.events ?? events,
-      });
-    } catch (error) {
-      progress('team_failure_run_events_unavailable', {
-        run_id: runId,
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  progress('team_failure_projection', {
+    summary: projectionSummary(projection),
+  });
+  progress('team_failure_runs', {
+    runs: [...observedRuns].map(([run_id, observed]) => ({
+      run_id,
+      status: observed?.status ?? 'not_observed',
+      ...(observed?.runtime?.provider && observed?.runtime?.model
+        ? {
+            runtime: {
+              provider: observed.runtime.provider,
+              model: observed.runtime.model,
+            },
+          }
+        : {}),
+      ...(observed?.usage ? { usage: usageSummary(observed.usage) } : {}),
+    })),
+  });
 }
 
 if (task?.status !== 'completed') {
   // Diagnostics must never replace or mask the real failure.
   await dumpRunDiagnostics().catch(() => {});
   throw new Error(
-    `agent team smoke task did not complete: ${JSON.stringify(task)}`,
+    `agent team smoke task did not complete: ${JSON.stringify({ task_status: task?.status ?? null, projection: projectionSummary(projection) })}`,
   );
 }
-if (projection?.project?.status !== 'succeeded') {
+if (projection?.project?.status !== 'succeeded' || !hasCompletionFacts(projection)) {
   throw new Error(
-    `agent team smoke projection did not succeed: ${JSON.stringify(projection)}`,
+    `agent team smoke durable Completion Line facts missing: ${JSON.stringify(projectionSummary(projection))}`,
   );
 }
 

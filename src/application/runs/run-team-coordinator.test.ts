@@ -70,4 +70,39 @@ describe('RunTeamCoordinator', () => {
       'Team member task identity is invalid.',
     );
   });
+
+  it('allows a durable direct-message turn to target the Lead participant', async () => {
+    const executions = {
+      findMemberRunById: vi.fn(async () => ({
+        id: 'lead-1',
+        teamRunId: 'team-1',
+        role: 'lead',
+        agentVersionId: 'lead-version-1',
+      })),
+      findTeamRunByRootTaskId: vi.fn(async () => ({
+        id: 'team-1',
+        rootTaskId: 'root-task-1',
+      })),
+    };
+    const coordinator = new RunTeamCoordinator(
+      executions as never,
+      {} as never,
+    );
+    const task = {
+      teamTaskKind: 'direct_message',
+      teamMemberRunId: 'lead-1',
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'service_account',
+      principalId: 'principal-1',
+      rootTaskId: 'root-task-1',
+      invokableVersionId: 'lead-version-1',
+    } as Task;
+
+    await expect(coordinator.resolve(task)).resolves.toEqual(
+      expect.objectContaining({
+        member: expect.objectContaining({ id: 'lead-1', role: 'lead' }),
+      }),
+    );
+  });
 });

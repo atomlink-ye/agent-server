@@ -161,10 +161,12 @@ export function collaborationToolRefsForRole(
   );
 }
 
-export function collaborationToolRefsForMessageTurn(): readonly string[] {
+export function collaborationToolRefsForMessageTurn(
+  role: CollaborationRole,
+): readonly string[] {
   return collaborationToolRefsForCapabilities([
     'board.read',
-    'board.claim',
+    ...(role === 'member' ? (['board.claim'] as const) : []),
     'mailbox.read',
     'mailbox.send',
     'mailbox.ack',

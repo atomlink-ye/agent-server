@@ -221,7 +221,7 @@ export class TeamPolicyEvaluator {
   public evaluate(context: TeamToolContext): TeamPolicy {
     const permitted =
       context.task.teamTaskKind === 'direct_message'
-        ? collaborationToolRefsForMessageTurn()
+        ? collaborationToolRefsForMessageTurn(context.member.role)
         : context.task.teamTaskKind === 'work_attempt' &&
             context.attempt?.status === 'completed'
           ? SAFE_READ_REFS

@@ -268,6 +268,10 @@ export class AgentRunExecutor {
       ...domainToolRefs,
       ...collaborationToolRefsForRole('lead'),
     ];
+    const memberCatalogToolRefs = [
+      ...domainToolRefs,
+      ...collaborationToolRefsForRole('member'),
+    ];
     if (member?.role === 'lead' && sessionRuntime) {
       const persistedCanonical = sessionRuntime.toolRefs.filter((ref) =>
         collaborationRefs.has(ref),
@@ -278,9 +282,9 @@ export class AgentRunExecutor {
     }
     const runtimeToolRefs =
       collaborativeTeam != null && task.teamTaskKind === 'direct_message'
-        ? collaborationToolRefsForMessageTurn()
+        ? collaborationToolRefsForMessageTurn(member?.role ?? 'member')
         : collaborativeTeam != null && task.teamTaskKind === 'work_attempt'
-          ? [...domainToolRefs, ...collaborationToolRefsForRole('member')]
+          ? memberCatalogToolRefs
           : collaborativeTeam != null && member?.role === 'lead'
             ? [
                 ...domainToolRefs,
@@ -356,7 +360,9 @@ export class AgentRunExecutor {
               environmentVersionId: environmentVersionId!,
               resolvedSkills: resolved.skills,
               toolRefs:
-                member.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
+                member.role === 'lead'
+                  ? leadCatalogToolRefs
+                  : memberCatalogToolRefs,
             })
           : null;
       if (!sessionRuntime)
@@ -376,7 +382,7 @@ export class AgentRunExecutor {
           collaborativeTeam?.environmentVersionId ||
         !sameToolRefs(
           sessionRuntime.toolRefs,
-          member.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
+          member.role === 'lead' ? leadCatalogToolRefs : memberCatalogToolRefs,
         ) ||
         sessionRuntime.sessionBinding !== null ||
         sessionRuntime.workspaceBinding !== null
@@ -461,8 +467,10 @@ export class AgentRunExecutor {
         skills: resolved.skills,
         toolRefs: runtimeToolRefs,
         catalogTools:
-          collaborativeTeam && member?.role === 'lead'
-            ? leadCatalogToolRefs
+          collaborativeTeam && member
+            ? member.role === 'lead'
+              ? leadCatalogToolRefs
+              : memberCatalogToolRefs
             : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
@@ -586,7 +594,11 @@ export class AgentRunExecutor {
               isTeamMember: member != null,
               runtimeToolRefs,
               catalogTools:
-                member?.role === 'lead' ? leadCatalogToolRefs : runtimeToolRefs,
+                member?.role === 'lead'
+                  ? leadCatalogToolRefs
+                  : member
+                    ? memberCatalogToolRefs
+                    : runtimeToolRefs,
             });
             if (payload)
               await this.events!.append(claim.run.id, 'output', payload);

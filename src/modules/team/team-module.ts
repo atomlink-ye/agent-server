@@ -22,11 +22,19 @@ export function createTeamModule(options: {
   readonly events: RunEventRepository;
   readonly logger: Logger;
 }) {
-  const executions = new PostgresTeamExecutionRepository(options.database);
-  const messages = new PostgresTeamMessageRepository(options.database);
   const collaborationRepository = new PostgresCollaborationRepository(
     options.database,
   );
+  const executions = Object.assign(
+    new PostgresTeamExecutionRepository(options.database),
+    {
+      listCollaborationCheckpoints: (teamRunId: string, owner: Parameters<PostgresCollaborationRepository['listCheckpoints']>[1]) =>
+        collaborationRepository.listCheckpoints(teamRunId, owner),
+      listCollaborationSubmissions: (teamRunId: string, owner: Parameters<PostgresCollaborationRepository['listSubmissions']>[1]) =>
+        collaborationRepository.listSubmissions(teamRunId, owner),
+    },
+  );
+  const messages = new PostgresTeamMessageRepository(options.database);
   const policy = new TeamPolicyEvaluator();
   const contextResolver = new TeamToolContextResolver(
     executions,

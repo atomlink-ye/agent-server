@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-export type TeamMessageStatus = 'queued' | 'consumed' | 'delivered' | 'read';
+export type TeamMessageStatus =
+  | 'queued'
+  | 'consumed'
+  | 'delivered'
+  | 'read'
+  | 'acknowledged'
+  | 'cancelled';
 export type TeamMessageKind = 'wake' | 'work_update' | 'direct';
+export type TeamMessagePriority = 'normal' | 'urgent';
 
 export interface TeamMessage {
   readonly id: string;
@@ -15,13 +22,21 @@ export interface TeamMessage {
   readonly recipientMemberRunId: string;
   readonly workItemId: string | null;
   readonly attemptId: string | null;
+  readonly aboutWorkItemId: string | null;
+  readonly replyToMessageId: string | null;
   readonly kind: TeamMessageKind;
   readonly dedupKey: string;
   readonly body: string;
+  readonly priority: TeamMessagePriority;
+  readonly requiresAck: boolean;
   readonly status: TeamMessageStatus;
   readonly consumedByTaskId: string | null;
+  readonly sourceTaskId: string | null;
+  readonly sourceRunId: string | null;
   readonly createdAt: string;
   readonly consumedAt: string | null;
+  readonly acknowledgedAt: string | null;
+  readonly cancelledAt: string | null;
 }
 
 export interface CreateTeamMessageOptions {
@@ -35,9 +50,15 @@ export interface CreateTeamMessageOptions {
   readonly recipientMemberRunId: string;
   readonly workItemId?: string | null;
   readonly attemptId?: string | null;
+  readonly aboutWorkItemId?: string | null;
+  readonly replyToMessageId?: string | null;
   readonly kind: TeamMessageKind;
   readonly dedupKey: string;
   readonly body: string;
+  readonly priority?: TeamMessagePriority;
+  readonly requiresAck?: boolean;
+  readonly sourceTaskId?: string | null;
+  readonly sourceRunId?: string | null;
   readonly now?: () => Date;
 }
 
@@ -63,12 +84,20 @@ export function createTeamMessage(
     recipientMemberRunId: options.recipientMemberRunId,
     workItemId: options.workItemId ?? null,
     attemptId: options.attemptId ?? null,
+    aboutWorkItemId: options.aboutWorkItemId ?? options.workItemId ?? null,
+    replyToMessageId: options.replyToMessageId ?? null,
     kind: options.kind,
     dedupKey,
     body,
+    priority: options.priority ?? 'normal',
+    requiresAck: options.requiresAck ?? false,
     status: 'queued',
     consumedByTaskId: null,
+    sourceTaskId: options.sourceTaskId ?? null,
+    sourceRunId: options.sourceRunId ?? null,
     createdAt,
     consumedAt: null,
+    acknowledgedAt: null,
+    cancelledAt: null,
   });
 }

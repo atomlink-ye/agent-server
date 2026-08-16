@@ -144,14 +144,21 @@ describe('managed single-agent minimum transcript', () => {
       { headers },
     );
     const eventBody = (await events.json()) as {
-      events: Array<{ sequence: number; type: string }>;
+      events: Array<{
+        sequence: number;
+        type: string;
+        payload: Record<string, unknown>;
+      }>;
       next_cursor: number | null;
     };
-    expect(eventBody.events.map((event) => event.type)).toEqual([
-      'started',
-      'output',
-      'succeeded',
-    ]);
+    expect(eventBody.events[0]?.type).toBe('started');
+    expect(eventBody.events.at(-1)?.type).toBe('succeeded');
+    expect(eventBody.events.map((event) => event.payload)).toEqual(
+      expect.arrayContaining([
+        { kind: 'execution_stage', stage: 'agent_executor_started' },
+        { kind: 'execution_stage', stage: 'runtime_execute_requested' },
+      ]),
+    );
     expect(eventBody.next_cursor).toBeNull();
     const resumed = await app.request(
       `/api/v1/runs/${messageBody.run_id}/events?after=1`,
@@ -159,9 +166,11 @@ describe('managed single-agent minimum transcript', () => {
     );
     expect(
       (
-        (await resumed.json()) as { events: Array<{ type: string }> }
+        (await resumed.json()) as {
+          events: Array<{ type: string; payload: Record<string, unknown> }>;
+        }
       ).events.map((event) => event.type),
-    ).toEqual(['output', 'succeeded']);
+    ).toEqual(expect.arrayContaining(['output', 'succeeded']));
     const stream = await app.request(
       `/api/v1/runs/${messageBody.run_id}/events/stream`,
       { headers },

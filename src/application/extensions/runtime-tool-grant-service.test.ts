@@ -21,6 +21,9 @@ function issue(
     productSessionId: 'member-1',
     teamMemberRunId: 'member-1',
     teamRunId: 'team-1',
+    taskId: 'task-1',
+    runId: 'run-1',
+    contextEpoch: 'epoch-1',
     ...input,
   });
 }
@@ -34,7 +37,7 @@ describe('RuntimeToolGrantService', () => {
     const second = issue(service, { runId: 'run-2' });
 
     expect(service.resolve(first.token)).toBeNull();
-    expect(service.resolve(second.token)?.runId).toBe('run-2');
+    expect(service.resolve(second.token)?.activeTurn?.runId).toBe('run-2');
   });
 
   it('keeps grants for different scopes independent', () => {
@@ -156,11 +159,41 @@ describe('RuntimeToolGrantService', () => {
     expect(turnTwo.grantId).toBe(first.receipt.grantId);
     expect(service.resolve(first.token)).toMatchObject({
       grantId: first.receipt.grantId,
-      taskId: 'task-2',
-      runId: 'run-2',
-      contextEpoch: 'epoch-2',
+      activeTurn: {
+        taskId: 'task-2',
+        runId: 'run-2',
+        contextEpoch: 'epoch-2',
+      },
       allowedTools: [AGENT_SERVER_MEMORY_READ_TOOL_REF],
     });
+  });
+
+  it('closes a Team turn explicitly and fences active calls', () => {
+    const service = new RuntimeToolGrantService();
+    const grant = issue(service, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      contextEpoch: 'epoch-1',
+    });
+
+    service.beginToolCall(grant.receipt.grantId);
+    expect(() =>
+      service.closeTeamMemberTurn({
+        grantId: grant.receipt.grantId,
+        teamMemberRunId: 'member-1',
+        scopeId: 'member-1',
+      }),
+    ).toThrow('Runtime turn close fence is active.');
+    service.endToolCall(grant.receipt.grantId);
+
+    const closed = service.closeTeamMemberTurn({
+      grantId: grant.receipt.grantId,
+      teamMemberRunId: 'member-1',
+      scopeId: 'member-1',
+    });
+    expect(closed.activeTurn).toBeNull();
+    expect(closed.allowedTools).toEqual([]);
+    expect(service.resolve(grant.token)?.activeTurn).toBeNull();
   });
 
   it('deletes an expired Team tombstone when its TeamRun is revoked', () => {

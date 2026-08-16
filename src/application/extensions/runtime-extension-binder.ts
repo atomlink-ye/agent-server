@@ -16,6 +16,7 @@ export interface RuntimeExtensionBinder {
     readonly contextEpoch?: string;
     readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
+    /** User/domain tools only. Platform Collaboration tools are auto-mounted. */
     readonly toolRefs: readonly string[];
     readonly catalogTools?: readonly string[];
   }): Promise<ExecutionExtensionBinding | undefined>;
@@ -26,8 +27,16 @@ export interface RuntimeExtensionBinder {
     readonly scopeId: string;
     readonly taskId: string;
     readonly runId: string;
+    /** User/domain tools allowed for this turn. */
     readonly allowedTools: readonly string[];
     readonly contextEpoch: string;
+    readonly ttlMs?: number;
+  }): import('./runtime-tool-grant-service.js').RuntimeToolGrant;
+
+  closeTeamMemberTurn?(input: {
+    readonly grantId: string;
+    readonly teamMemberRunId: string;
+    readonly scopeId: string;
     readonly ttlMs?: number;
   }): import('./runtime-tool-grant-service.js').RuntimeToolGrant;
 

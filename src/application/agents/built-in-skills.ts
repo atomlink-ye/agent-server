@@ -16,6 +16,13 @@ export const AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF =
 export const AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF =
   'agent-server/product-work-run-start';
 
+/**
+ * User/ManagedAgent-declared tool refs.
+ *
+ * Agent Team collaboration is a platform capability and is intentionally not
+ * part of this set. Team participants receive the Collaboration MCP
+ * automatically from Agent Server runtime composition.
+ */
 export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   AGENT_SERVER_SYNTHETIC_STOCK_SNAPSHOT_TOOL_REF,
@@ -24,6 +31,10 @@ export const SUPPORTED_MANAGED_AGENT_TOOL_REFS = new Set([
   AGENT_SERVER_LEARNING_PROPOSAL_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+]);
+
+/** Internal platform catalog; never require users to list these in spec.tools. */
+export const AGENT_SERVER_PLATFORM_COLLABORATION_TOOL_REFS = Object.freeze([
   ...Object.values(AGENT_SERVER_COLLABORATION_TOOL_REFS),
 ]);
 

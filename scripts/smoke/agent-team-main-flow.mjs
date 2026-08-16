@@ -159,11 +159,12 @@ async function importAndPublish(source, importPath, publishPath) {
 }
 
 function agentYaml(name, instructions, refs) {
-  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Canonical Agent Team smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  tools:\n${refs
-    .map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`)
-    .join(
-      '\n',
-    )}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
+  const tools = refs.length
+    ? `tools:\n${refs
+        .map((ref) => `    - ref: agent-server/${ref}\n      kind: tool`)
+        .join('\n')}`
+    : 'tools: []';
+  return `apiVersion: agent-server/v1alpha1\nkind: ManagedAgent\nmetadata:\n  name: ${name}\nspec:\n  description: Canonical Agent Team smoke role\n  instructions: ${JSON.stringify(instructions)}\n  runtime:\n    provider: paseo\n    modelPolicyRef: free-only\n    mode: isolated\n  ${tools}\n  skills: []\n  input:\n    schema:\n      type: object\n      properties: {}\n      additionalProperties: false\n    prompt: "Execute exactly the next legal Team transition for your role."\n  session:\n    invocation: fresh_per_invocation\n    followUps: queued\n    binding: reusable\n  memory:\n    policy: workspace_snapshot\n    proposalLimit: 0\n  permissions:\n    network: read_only\n    filesystem: workspace_read\n  completion:\n    type: executable\n    command: "done"\n`;
 }
 
 const leadInstructions =
@@ -174,29 +175,13 @@ const builderInstructions =
   'Act as the builder using only the canonical collaboration tools. On your assigned work-attempt turn, read collaboration_state and board_list, then call board_submit exactly once with summary "AGENT_TEAM_SMOKE_BUILDER_OK" and stop. Never create Work, claim Work, request changes, accept Work, finish the collaboration, use provider subagents, or substitute prose for the required board_submit mutation.';
 
 const leadVersion = await importAndPublish(
-  agentYaml('smoke-lead', leadInstructions, [
-    'collaboration-state',
-    'board-list',
-    'board-create',
-    'board-accept',
-    'board-request-changes',
-    'message-send',
-    'collaboration-finish',
-  ]),
+  agentYaml('smoke-lead', leadInstructions, []),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,
 );
 progress('agent_version_published', { role: 'lead', version_id: leadVersion });
 const analystVersion = await importAndPublish(
-  agentYaml('smoke-analyst', analystInstructions, [
-    'collaboration-state',
-    'board-list',
-    'board-claim',
-    'inbox-list',
-    'message-send',
-    'message-ack',
-    'board-submit',
-  ]),
+  agentYaml('smoke-analyst', analystInstructions, []),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,
 );
@@ -205,11 +190,7 @@ progress('agent_version_published', {
   version_id: analystVersion,
 });
 const builderVersion = await importAndPublish(
-  agentYaml('smoke-builder', builderInstructions, [
-    'collaboration-state',
-    'board-list',
-    'board-submit',
-  ]),
+  agentYaml('smoke-builder', builderInstructions, []),
   '/api/v1/agents:import',
   (id) => `/api/v1/agent-versions/${id}:publish`,
 );

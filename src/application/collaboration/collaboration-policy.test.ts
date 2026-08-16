@@ -18,6 +18,18 @@ function context(role: 'lead' | 'member') {
   } as Pick<TeamToolContext, 'member'>;
 }
 
+function taskContext(
+  role: 'lead' | 'member',
+  teamTaskKind: 'lead_turn' | 'work_attempt' | 'direct_message',
+  attemptStatus: 'queued' | 'running' | 'completed' | 'failed' | null = null,
+) {
+  return {
+    member: { role },
+    task: { teamTaskKind },
+    attempt: attemptStatus ? { status: attemptStatus } : null,
+  } as Pick<TeamToolContext, 'member' | 'task' | 'attempt'>;
+}
+
 describe('CollaborationPolicy', () => {
   it('treats role as a capability preset rather than a domain state machine', () => {
     expect(policy.capabilities(context('lead'))).toEqual(
@@ -70,6 +82,47 @@ describe('CollaborationPolicy', () => {
       CollaborationPolicyError,
     );
     expect(() => policy.require(context('member'), 'board.review')).toThrow(
+      CollaborationPolicyError,
+    );
+  });
+
+  it('binds lead mutations to lead turns and member mutations to member work turns', () => {
+    expect(() =>
+      policy.requireLeadCommand(
+        taskContext('lead', 'direct_message'),
+        'collaboration_finish',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      policy.requireLeadCommand(taskContext('lead', 'direct_message'), 'board_accept'),
+    ).toThrow(CollaborationPolicyError);
+    expect(() =>
+      policy.requireLeadCommand(taskContext('lead', 'lead_turn'), 'board_accept'),
+    ).not.toThrow();
+    expect(() =>
+      policy.requireForTask(taskContext('member', 'direct_message'), 'board.submit'),
+    ).toThrow(CollaborationPolicyError);
+    expect(() =>
+      policy.requireForTask(
+        taskContext('member', 'work_attempt', 'queued'),
+        'board.submit',
+      ),
+    ).toThrow(CollaborationPolicyError);
+    expect(() =>
+      policy.requireForTask(
+        taskContext('member', 'work_attempt', 'running'),
+        'board.submit',
+      ),
+    ).not.toThrow();
+  });
+
+  it('keeps completed work attempts read-only for mailbox mutations', () => {
+    const completed = taskContext('member', 'work_attempt', 'completed');
+    expect(() => policy.requireForTask(completed, 'mailbox.read')).not.toThrow();
+    expect(() => policy.requireForTask(completed, 'mailbox.send')).toThrow(
+      CollaborationPolicyError,
+    );
+    expect(() => policy.requireForTask(completed, 'mailbox.ack')).toThrow(
       CollaborationPolicyError,
     );
   });

@@ -118,7 +118,6 @@ describe('RunPromptContext', () => {
           },
         },
       },
-      runtimeToolRefs: [],
       task,
     });
 
@@ -128,6 +127,13 @@ describe('RunPromptContext', () => {
     expect(prompts.deliveredTurnPrompt).toContain(
       'A natural-language message never changes ownership or Work state',
     );
+    expect(prompts.deliveredTurnPrompt).toContain(
+      'Tool availability does not imply that an operation is currently legal',
+    );
+    expect(prompts.deliveredTurnPrompt).toContain(
+      'If a collaboration tool returns a typed error, read collaboration_state again',
+    );
+    expect(prompts.deliveredTurnPrompt).not.toContain('capabilities');
     expect(prompts.deliveredTurnPrompt).toContain('board_create/board_assign');
     expect(prompts.deliveredTurnPrompt).toContain('goal');
     expect(prompts.systemPrompt).toContain('base system');

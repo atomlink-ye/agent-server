@@ -13,7 +13,6 @@ import type { Task } from '../../domain/tasks/task.js';
 import type { Run } from '../../domain/runs/run.js';
 import { terminalRunStatuses } from '../../domain/runs/run-status.js';
 import { terminalTaskStatuses } from '../../domain/tasks/task-status.js';
-import { TeamPolicyEvaluator } from './team-policy-evaluator.js';
 
 export type TeamToolContext = Readonly<{
   owner: OwnerScope;
@@ -23,7 +22,8 @@ export type TeamToolContext = Readonly<{
   run: Run;
   attempt: TeamWorkItemAttempt | null;
   grant: RuntimeToolGrant;
-  allowedTools: readonly string[];
+  /** User/domain tools allowed in the current runtime turn. */
+  domainTools: readonly string[];
   contextEpoch: string;
 }>;
 
@@ -44,6 +44,11 @@ export class TeamContextError extends Error {
   }
 }
 
+/**
+ * Resolve the authenticated runtime bearer to the current durable Team turn.
+ * Tool visibility is not an authorization input: every call re-reads the
+ * participant, Task, Run and Team state and validates the active-turn epoch.
+ */
 export class TeamToolContextResolver {
   public constructor(
     private readonly teams: TeamExecutionRepository,
@@ -52,27 +57,28 @@ export class TeamToolContextResolver {
       'findByIdForOwner' | 'findByRootTaskIdForOwner'
     >,
     private readonly runs: Pick<RunRepository, 'findByIdForOwner'>,
-    private readonly policy = new TeamPolicyEvaluator(),
   ) {}
 
   public async resolve(grant: RuntimeToolGrant): Promise<TeamToolContext> {
-    if (!grant.teamMemberRunId || !grant.taskId || !grant.runId)
-      throw new TeamContextError('not_allowed');
+    if (!grant.teamMemberRunId) throw new TeamContextError('not_allowed');
+    const activeTurn = grant.activeTurn;
+    if (!activeTurn) throw new TeamContextError('stale_state');
+
     const owner = {
       tenantId: grant.tenantId,
       workspaceId: grant.workspaceId,
       principalType: grant.principalType,
       principalId: grant.principalId,
     };
-    const member = await this.teams.findMemberRunById(
-      grant.teamMemberRunId,
-      owner,
-    );
-    const taskRecord = await this.tasks.findByIdForOwner(grant.taskId, owner);
-    const run = await this.runs.findByIdForOwner(grant.runId, owner);
+    const [member, taskRecord, run] = await Promise.all([
+      this.teams.findMemberRunById(grant.teamMemberRunId, owner),
+      this.tasks.findByIdForOwner(activeTurn.taskId, owner),
+      this.runs.findByIdForOwner(activeTurn.runId, owner),
+    ]);
     const task = taskRecord?.task;
     if (!member || !taskRecord || !task || !run)
       throw new TeamContextError('not_found');
+
     const teamRun = await this.teams.findTeamRunById(member.teamRunId, owner);
     const currentRun = taskRecord.latestRun;
     if (
@@ -81,17 +87,18 @@ export class TeamToolContextResolver {
       task.rootTaskId !== teamRun.rootTaskId ||
       !currentRun ||
       currentRun.runId !== run.id ||
-      currentRun.runId !== grant.runId ||
+      currentRun.runId !== activeTurn.runId ||
       currentRun.status !== run.status ||
       terminalRunStatuses.has(run.status) ||
       terminalTaskStatuses.has(task.status) ||
       member.status === 'stopped' ||
       member.status === 'failed' ||
-      grant.contextEpoch !== deriveTeamContextEpoch(task.id, run.id)
+      activeTurn.contextEpoch !== deriveTeamContextEpoch(task.id, run.id)
     )
       throw new TeamContextError('stale_state');
     if (teamRun.status !== 'active' && teamRun.status !== 'waiting')
       throw new TeamContextError('not_allowed');
+
     const attempt =
       task.teamTaskKind === 'work_attempt'
         ? (await this.teams.findAttemptsByTeamRunId(teamRun.id, owner)).find(
@@ -102,6 +109,7 @@ export class TeamToolContextResolver {
         : null;
     if (task.teamTaskKind === 'work_attempt' && !attempt)
       throw new TeamContextError('stale_state');
+
     const records = await this.tasks.findByRootTaskIdForOwner(
       teamRun.rootTaskId,
       owner,
@@ -114,7 +122,8 @@ export class TeamToolContextResolver {
         !terminalRunStatuses.has(record.latestRun.status),
     );
     if (otherActiveTask) throw new TeamContextError('conflict');
-    const context = Object.freeze({
+
+    return Object.freeze({
       owner,
       teamRun,
       member,
@@ -122,12 +131,8 @@ export class TeamToolContextResolver {
       run,
       attempt: attempt ?? null,
       grant,
-      allowedTools: grant.allowedTools,
+      domainTools: grant.allowedTools,
       contextEpoch: deriveTeamContextEpoch(task.id, run.id),
-    });
-    return Object.freeze({
-      ...context,
-      allowedTools: this.policy.evaluate(context).allowedTools,
     });
   }
 }

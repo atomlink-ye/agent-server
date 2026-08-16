@@ -1,9 +1,3 @@
-import {
-  AGENT_SERVER_COLLABORATION_TOOL_REFS,
-  collaborationToolRefsForCapabilities,
-  collaborationToolRefsForMessageTurn,
-  collaborationToolRefsForRole,
-} from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
 import type { TeamRun } from '../../domain/teams/team-run.js';
@@ -13,6 +7,7 @@ import type { TeamToolContext } from './team-tool-context.js';
 
 export type CollaborationLeadCommand =
   | 'board_create'
+  | 'board_assign'
   | 'board_accept'
   | 'board_cancel'
   | 'board_request_changes'
@@ -184,58 +179,10 @@ export function deriveAgenticLeadCommandPolicy(
 
 export type TeamPolicy = Readonly<{ allowedTools: readonly string[] }>;
 
-const SAFE_READ_REFS = collaborationToolRefsForCapabilities([
-  'board.read',
-  'mailbox.read',
-]);
-
-export function collaborationToolRefsForLeadPolicy(
-  policy: Pick<AgenticLeadCommandPolicy, 'allowedCommands'>,
-): readonly string[] {
-  const commandRefs: Record<CollaborationLeadCommand, string> = {
-    board_create: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
-    board_accept: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
-    board_cancel: AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
-    board_request_changes:
-      AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
-    collaboration_finish: AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
-  };
-  const sameTurnFinish = policy.allowedCommands.includes('board_accept')
-    ? [AGENT_SERVER_COLLABORATION_TOOL_REFS.finish]
-    : [];
-  return Object.freeze([
-    ...new Set([
-      ...collaborationToolRefsForCapabilities([
-        'board.read',
-        'mailbox.read',
-        'mailbox.send',
-        'mailbox.ack',
-      ]),
-      ...policy.allowedCommands.map((command) => commandRefs[command]),
-      ...sameTurnFinish,
-    ]),
-  ]);
-}
-
 export class TeamPolicyEvaluator {
   public evaluate(context: TeamToolContext): TeamPolicy {
-    const permitted =
-      context.task.teamTaskKind === 'direct_message'
-        ? collaborationToolRefsForMessageTurn(context.member.role)
-        : context.task.teamTaskKind === 'work_attempt' &&
-            context.attempt?.status === 'completed'
-          ? SAFE_READ_REFS
-          : context.task.teamTaskKind === 'work_attempt' &&
-              context.member.role === 'member'
-            ? collaborationToolRefsForRole('member')
-            : context.task.teamTaskKind === 'lead_turn' &&
-                context.member.role === 'lead'
-              ? collaborationToolRefsForRole('lead')
-              : [];
     return Object.freeze({
-      allowedTools: Object.freeze(
-        permitted.filter((ref) => context.grant.allowedTools.includes(ref)),
-      ),
+      allowedTools: Object.freeze([...context.grant.allowedTools]),
     });
   }
 }

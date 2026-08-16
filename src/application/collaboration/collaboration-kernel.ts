@@ -20,7 +20,12 @@ import type { TeamToolContext } from '../teams/team-tool-context.js';
 import { TeamContextError } from '../teams/team-tool-context.js';
 import { safeText } from '../teams/safe-team-text.js';
 import type { CollaborationActivationKick } from './collaboration-activation-reconciler.js';
-import { CollaborationPolicy, CollaborationPolicyError } from './collaboration-policy.js';
+import {
+  CollaborationPolicy,
+  CollaborationPolicyError,
+  type CollaborationLeadCommand,
+} from './collaboration-policy.js';
+import { deriveAgenticLeadCommandPolicy } from '../teams/team-policy-evaluator.js';
 
 /**
  * Execution-neutral collaboration semantics. It owns durable Workboard/Mailbox
@@ -38,7 +43,7 @@ export class CollaborationKernel {
   ) {}
 
   public async state(context: TeamToolContext) {
-    this.policy.require(context, 'board.read');
+    this.policy.requireForTask(context, 'board.read');
     const [work, messages, checkpoints, submissions] = await Promise.all([
       this.boardList(context),
       this.messages.listForTeamRun?.(context.teamRun.id, context.owner) ?? [],
@@ -57,7 +62,9 @@ export class CollaborationKernel {
         count: work.length,
         open: work.filter((item) => item.status === 'open').length,
         active: work.filter((item) =>
-          ['assigned', 'in_progress', 'blocked', 'submitted'].includes(item.status),
+          ['assigned', 'in_progress', 'blocked', 'submitted'].includes(
+            item.status,
+          ),
         ).length,
         accepted: work.filter((item) => item.status === 'accepted').length,
       },
@@ -75,21 +82,32 @@ export class CollaborationKernel {
   }
 
   public async boardList(context: TeamToolContext) {
-    this.policy.require(context, 'board.read');
+    this.policy.requireForTask(context, 'board.read');
     const [items, attempts, dependencies, members, checkpoints, submissions] =
       await Promise.all([
-        this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner),
-        this.executions.findAttemptsByTeamRunId(context.teamRun.id, context.owner),
+        this.executions.findWorkItemsByTeamRunId(
+          context.teamRun.id,
+          context.owner,
+        ),
+        this.executions.findAttemptsByTeamRunId(
+          context.teamRun.id,
+          context.owner,
+        ),
         this.executions.findWorkDependenciesByTeamRunId(
           context.teamRun.id,
           context.owner,
         ),
-        this.executions.findMembersByTeamRunId(context.teamRun.id, context.owner),
+        this.executions.findMembersByTeamRunId(
+          context.teamRun.id,
+          context.owner,
+        ),
         this.journal.listCheckpoints(context.teamRun.id, context.owner),
         this.journal.listSubmissions(context.teamRun.id, context.owner),
       ]);
     const ordered = orderedWorkItems(items);
-    const refById = new Map(ordered.map((item, index) => [item.id, workRef(index)]));
+    const refById = new Map(
+      ordered.map((item, index) => [item.id, workRef(index)]),
+    );
     const nameById = new Map(members.map((member) => [member.id, member.name]));
     return ordered.map((item, index) => {
       const workAttempts = attempts
@@ -107,7 +125,9 @@ export class CollaborationKernel {
         subject: safeText(item.subject) ?? '',
         description: safeText(item.description),
         status: projectBoardStatus(item, workAttempts),
-        owner: item.ownerMemberId ? nameById.get(item.ownerMemberId) ?? null : null,
+        owner: item.ownerMemberId
+          ? (nameById.get(item.ownerMemberId) ?? null)
+          : null,
         dependency_refs: dependencies
           .filter((edge) => edge.workItemId === item.id)
           .flatMap((edge) => {
@@ -120,8 +140,9 @@ export class CollaborationKernel {
             .filter((edge) => edge.workItemId === item.id)
             .every(
               (edge) =>
-                items.find((candidate) => candidate.id === edge.dependsOnWorkItemId)
-                  ?.status === 'accepted',
+                items.find(
+                  (candidate) => candidate.id === edge.dependsOnWorkItemId,
+                )?.status === 'accepted',
             ),
         latest_attempt_no: latestAttempt?.attemptNo ?? null,
         latest_checkpoint: latestCheckpoint
@@ -153,7 +174,7 @@ export class CollaborationKernel {
       dependencyRefs?: readonly string[];
     },
   ) {
-    this.policy.require(context, 'board.create');
+    await this.requireLeadCommand(context, 'board_create');
     const items = await this.executions.findWorkItemsByTeamRunId(
       context.teamRun.id,
       context.owner,
@@ -210,7 +231,7 @@ export class CollaborationKernel {
     context: TeamToolContext,
     input: { workRef: string; assignee: string },
   ) {
-    this.policy.require(context, 'board.assign');
+    this.policy.requireLeadCommand(context, 'board_assign');
     const item = await this.workByRef(context, input.workRef);
     const assignee = await this.memberByName(context, input.assignee, true);
     const result = await this.journal.assignOpenWork({
@@ -225,11 +246,16 @@ export class CollaborationKernel {
       owner: context.owner,
     });
     this.kick(context);
-    return { work_ref: input.workRef, status: 'assigned', owner: assignee.name, attempt_no: result.attempt.attemptNo };
+    return {
+      work_ref: input.workRef,
+      status: 'assigned',
+      owner: assignee.name,
+      attempt_no: result.attempt.attemptNo,
+    };
   }
 
   public async claimWork(context: TeamToolContext, input: { workRef: string }) {
-    this.policy.require(context, 'board.claim');
+    this.policy.requireForTask(context, 'board.claim');
     const item = await this.workByRef(context, input.workRef);
     const result = await this.journal.claimOpenWork({
       teamRunId: context.teamRun.id,
@@ -259,7 +285,7 @@ export class CollaborationKernel {
       evidenceRefs?: readonly string[];
     },
   ) {
-    this.policy.require(context, 'board.checkpoint');
+    this.policy.requireForTask(context, 'board.checkpoint');
     const current = await this.currentAttempt(context);
     const checkpoint = await this.journal.recordCheckpoint({
       teamRunId: context.teamRun.id,
@@ -293,7 +319,7 @@ export class CollaborationKernel {
   }
 
   public async blockWork(context: TeamToolContext, input: { summary: string }) {
-    this.policy.require(context, 'board.block');
+    this.policy.requireForTask(context, 'board.block');
     const current = await this.currentAttempt(context);
     await this.journal.blockCurrentAttempt({
       teamRunId: context.teamRun.id,
@@ -305,14 +331,22 @@ export class CollaborationKernel {
       summary: requireSafeText(input.summary),
       owner: context.owner,
     });
-    return { work_ref: current.ref, status: 'blocked', summary: safeText(input.summary) };
+    return {
+      work_ref: current.ref,
+      status: 'blocked',
+      summary: safeText(input.summary),
+    };
   }
 
   public async submitWork(
     context: TeamToolContext,
-    input: { summary: string; evidenceRefs?: readonly string[]; artifactRefs?: readonly string[] },
+    input: {
+      summary: string;
+      evidenceRefs?: readonly string[];
+      artifactRefs?: readonly string[];
+    },
   ) {
-    this.policy.require(context, 'board.submit');
+    this.policy.requireForTask(context, 'board.submit');
     const current = await this.currentAttempt(context);
     const result = await this.journal.submitCurrentAttempt({
       teamRunId: context.teamRun.id,
@@ -337,9 +371,12 @@ export class CollaborationKernel {
     };
   }
 
-  public async acceptWork(context: TeamToolContext, input: { workRef: string }) {
-    this.policy.require(context, 'board.review');
+  public async acceptWork(
+    context: TeamToolContext,
+    input: { workRef: string },
+  ) {
     const item = await this.workByRef(context, input.workRef);
+    await this.requireLeadCommand(context, 'board_accept', item.id);
     await this.executions.acceptWork({
       teamRunId: context.teamRun.id,
       workItemId: item.id,
@@ -357,8 +394,8 @@ export class CollaborationKernel {
     context: TeamToolContext,
     input: { workRef: string; assignee: string; feedback: string },
   ) {
-    this.policy.require(context, 'board.review');
     const item = await this.workByRef(context, input.workRef);
+    await this.requireLeadCommand(context, 'board_request_changes', item.id);
     const assignee = await this.memberByName(context, input.assignee, true);
     const feedback = requireSafeText(input.feedback);
     if (item.status === 'blocked') {
@@ -375,7 +412,12 @@ export class CollaborationKernel {
         owner: context.owner,
       });
       this.kick(context);
-      return { work_ref: input.workRef, status: 'in_progress', attempt_no: result.attempt.attemptNo, owner: assignee.name };
+      return {
+        work_ref: input.workRef,
+        status: 'in_progress',
+        attempt_no: result.attempt.attemptNo,
+        owner: assignee.name,
+      };
     }
     const attempt = await this.executions.requestRework({
       teamRunId: context.teamRun.id,
@@ -389,12 +431,20 @@ export class CollaborationKernel {
       owner: context.owner,
     });
     this.kick(context);
-    return { work_ref: input.workRef, status: 'in_progress', attempt_no: attempt.attemptNo, owner: assignee.name };
+    return {
+      work_ref: input.workRef,
+      status: 'in_progress',
+      attempt_no: attempt.attemptNo,
+      owner: assignee.name,
+    };
   }
 
-  public async cancelWork(context: TeamToolContext, input: { workRef: string }) {
-    this.policy.require(context, 'board.cancel');
+  public async cancelWork(
+    context: TeamToolContext,
+    input: { workRef: string },
+  ) {
     const item = await this.workByRef(context, input.workRef);
+    await this.requireLeadCommand(context, 'board_cancel', item.id);
     await this.executions.cancelWork({
       teamRunId: context.teamRun.id,
       workItemId: item.id,
@@ -408,10 +458,13 @@ export class CollaborationKernel {
   }
 
   public async inboxList(context: TeamToolContext) {
-    this.policy.require(context, 'mailbox.read');
+    this.policy.requireForTask(context, 'mailbox.read');
     const messages = await this.allMessages(context);
     const [items, members] = await Promise.all([
-      this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner),
+      this.executions.findWorkItemsByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      ),
       this.executions.findMembersByTeamRunId(context.teamRun.id, context.owner),
     ]);
     const participantNameById = new Map(
@@ -420,12 +473,14 @@ export class CollaborationKernel {
     return messages
       .filter(
         (message) =>
-          message.kind === 'direct' && message.recipientMemberRunId === context.member.id,
+          message.kind === 'direct' &&
+          message.recipientMemberRunId === context.member.id,
       )
       .map((message) => ({
         message_ref: messageRef(message.sequence),
         from: message.senderMemberRunId
-          ? participantNameById.get(message.senderMemberRunId) ?? 'participant'
+          ? (participantNameById.get(message.senderMemberRunId) ??
+            'participant')
           : 'system',
         body: safeText(message.body),
         about_work_ref: message.aboutWorkItemId
@@ -433,8 +488,9 @@ export class CollaborationKernel {
           : null,
         reply_to_ref: message.replyToMessageId
           ? messageRef(
-              messages.find((candidate) => candidate.id === message.replyToMessageId)
-                ?.sequence ?? 0,
+              messages.find(
+                (candidate) => candidate.id === message.replyToMessageId,
+              )?.sequence ?? 0,
             )
           : null,
         priority: message.priority,
@@ -456,14 +512,22 @@ export class CollaborationKernel {
       requiresAck?: boolean;
     },
   ) {
-    this.policy.require(context, 'mailbox.send');
+    this.policy.requireForTask(context, 'mailbox.send');
     const recipient = await this.memberByName(context, input.recipient, false);
-    if (recipient.id === context.member.id) throw new TeamContextError('invalid_request');
-    const items = await this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner);
-    const about = input.aboutWorkRef ? resolveWorkRef(input.aboutWorkRef, items) : null;
+    if (recipient.id === context.member.id)
+      throw new TeamContextError('invalid_request');
+    const items = await this.executions.findWorkItemsByTeamRunId(
+      context.teamRun.id,
+      context.owner,
+    );
+    const about = input.aboutWorkRef
+      ? resolveWorkRef(input.aboutWorkRef, items)
+      : null;
     if (input.aboutWorkRef && !about) throw new TeamContextError('not_found');
     const all = await this.allMessages(context);
-    const reply = input.replyToRef ? resolveMessageRef(input.replyToRef, all) : null;
+    const reply = input.replyToRef
+      ? resolveMessageRef(input.replyToRef, all)
+      : null;
     if (input.replyToRef && !reply) throw new TeamContextError('not_found');
     const body = requireSafeText(input.body);
     const message = await this.messages.sendDirect({
@@ -490,10 +554,17 @@ export class CollaborationKernel {
     };
   }
 
-  public async acknowledgeMessage(context: TeamToolContext, input: { messageRef: string }) {
-    this.policy.require(context, 'mailbox.ack');
-    if (!this.messages.acknowledgeDirect) throw new TeamContextError('not_allowed');
-    const message = resolveMessageRef(input.messageRef, await this.allMessages(context));
+  public async acknowledgeMessage(
+    context: TeamToolContext,
+    input: { messageRef: string },
+  ) {
+    this.policy.requireForTask(context, 'mailbox.ack');
+    if (!this.messages.acknowledgeDirect)
+      throw new TeamContextError('not_allowed');
+    const message = resolveMessageRef(
+      input.messageRef,
+      await this.allMessages(context),
+    );
     if (!message || message.recipientMemberRunId !== context.member.id)
       throw new TeamContextError('not_found');
     const acknowledged = await this.messages.acknowledgeDirect({
@@ -503,11 +574,14 @@ export class CollaborationKernel {
       sourceRunId: context.run.id,
       owner: context.owner,
     });
-    return { message_ref: messageRef(acknowledged.sequence), status: 'acknowledged' };
+    return {
+      message_ref: messageRef(acknowledged.sequence),
+      status: 'acknowledged',
+    };
   }
 
   public async finish(context: TeamToolContext) {
-    this.policy.require(context, 'run.finalize');
+    await this.requireLeadCommand(context, 'collaboration_finish');
     await this.executions.requestCompletion({
       teamRunId: context.teamRun.id,
       sourceRunId: context.run.id,
@@ -522,17 +596,75 @@ export class CollaborationKernel {
   private async currentAttempt(context: TeamToolContext) {
     if (!context.attempt || context.task.teamTaskKind !== 'work_attempt')
       throw new TeamContextError('invalid_transition');
-    const items = await this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner);
+    const items = await this.executions.findWorkItemsByTeamRunId(
+      context.teamRun.id,
+      context.owner,
+    );
     const ordered = orderedWorkItems(items);
-    const index = ordered.findIndex((item) => item.id === context.attempt!.workItemId);
+    const index = ordered.findIndex(
+      (item) => item.id === context.attempt!.workItemId,
+    );
     if (index < 0) throw new TeamContextError('not_found');
     return { attempt: context.attempt, ref: workRef(index) };
+  }
+
+  /**
+   * Re-read lead-turn facts at call time. The evaluator remains useful for
+   * scheduling and prompt guidance, but this preflight prevents its former
+   * dynamic tool subset from becoming an implicit authorization source.
+   */
+  private async requireLeadCommand(
+    context: TeamToolContext,
+    command: CollaborationLeadCommand,
+    workItemId?: string,
+  ): Promise<void> {
+    this.policy.requireLeadCommand(context, command);
+    if (typeof context.teamRun.status !== 'string') return;
+    const [workItems, attempts] = await Promise.all([
+      this.executions.findWorkItemsByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      ),
+      this.executions.findAttemptsByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      ),
+    ]);
+    const decision = context.teamRun.completionRequestedByRunId
+      ? await this.executions.findCompletionDecisionForRequest(
+          context.teamRun.id,
+          context.teamRun.completionRequestedByRunId,
+          context.owner,
+        )
+      : null;
+    const derived = deriveAgenticLeadCommandPolicy(
+      context.teamRun,
+      workItems,
+      attempts,
+      decision,
+    );
+    if (!derived.allowedCommands.includes(command))
+      throw new CollaborationPolicyError('not_allowed');
+    if (!workItemId) return;
+    const eligible =
+      command === 'board_accept'
+        ? derived.eligibleAcceptWorkItemIds
+        : command === 'board_request_changes'
+          ? derived.eligibleReworkWorkItemIds
+          : command === 'board_cancel'
+            ? derived.eligibleCancelWorkItemIds
+            : [];
+    if (!eligible.includes(workItemId))
+      throw new CollaborationPolicyError('not_allowed');
   }
 
   private async workByRef(context: TeamToolContext, ref: string) {
     const item = resolveWorkRef(
       ref,
-      await this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner),
+      await this.executions.findWorkItemsByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      ),
     );
     if (!item) throw new TeamContextError('not_found');
     return item;
@@ -540,26 +672,41 @@ export class CollaborationKernel {
 
   private async refForWork(context: TeamToolContext, id: string) {
     const items = orderedWorkItems(
-      await this.executions.findWorkItemsByTeamRunId(context.teamRun.id, context.owner),
+      await this.executions.findWorkItemsByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      ),
     );
     const index = items.findIndex((item) => item.id === id);
     if (index < 0) throw new TeamContextError('not_found');
     return workRef(index);
   }
 
-  private refForExistingWork(id: string, items: readonly { id: string; createdAt: string }[]) {
+  private refForExistingWork(
+    id: string,
+    items: readonly { id: string; createdAt: string }[],
+  ) {
     const ordered = [...items].sort(
-      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      (a, b) =>
+        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     );
     const index = ordered.findIndex((item) => item.id === id);
     return index < 0 ? null : workRef(index);
   }
 
-  private async memberByName(context: TeamToolContext, name: string, memberOnly: boolean) {
+  private async memberByName(
+    context: TeamToolContext,
+    name: string,
+    memberOnly: boolean,
+  ) {
     const matches = (
-      await this.executions.findMembersByTeamRunId(context.teamRun.id, context.owner)
+      await this.executions.findMembersByTeamRunId(
+        context.teamRun.id,
+        context.owner,
+      )
     ).filter(
-      (member) => member.name === name && (!memberOnly || member.role === 'member'),
+      (member) =>
+        member.name === name && (!memberOnly || member.role === 'member'),
     );
     if (matches.length !== 1) throw new TeamContextError('not_found');
     return matches[0]!;
@@ -582,7 +729,10 @@ export class CollaborationKernel {
   private async allMessages(context: TeamToolContext) {
     if (this.messages.listForTeamRun)
       return this.messages.listForTeamRun(context.teamRun.id, context.owner);
-    return this.messages.listDirectForTeamRun(context.teamRun.id, context.owner);
+    return this.messages.listDirectForTeamRun(
+      context.teamRun.id,
+      context.owner,
+    );
   }
 }
 
@@ -592,17 +742,25 @@ function requireSafeText(value: string): string {
   return text;
 }
 
-function normalizeRefs(values: readonly string[] | undefined): readonly string[] {
+function normalizeRefs(
+  values: readonly string[] | undefined,
+): readonly string[] {
   const refs = (values ?? [])
     .map((value) => safeText(value, 512))
     .filter((value): value is string => Boolean(value));
-  if (refs.length !== (values ?? []).length || new Set(refs).size !== refs.length || refs.length > 16)
+  if (
+    refs.length !== (values ?? []).length ||
+    new Set(refs).size !== refs.length ||
+    refs.length > 16
+  )
     throw new TeamContextError('invalid_request');
   return Object.freeze(refs);
 }
 
 function commandHash(name: string, input: unknown): string {
-  return createHash('sha256').update(JSON.stringify([name, input])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([name, input]))
+    .digest('hex');
 }
 
 export function collaborationErrorCode(error: unknown): string {

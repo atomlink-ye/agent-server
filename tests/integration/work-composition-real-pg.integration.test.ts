@@ -6,8 +6,11 @@ import type { Pool } from 'pg';
 import { ResolveWorkDefinition } from '../../src/application/work/resolve-work-definition.js';
 import { StartWorkRun } from '../../src/application/work/start-work-run.js';
 import { WorkIdentityApi } from '../../src/application/work/work-identity-api.js';
+import { createProductProjection } from '../../src/application/product-projection/product-projection.js';
+import { WorkProjectionFactsSource } from '../../src/application/product-projection/work-projection-facts-source.js';
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
+import { PostgresWorkProjectionFactsQuery } from '../../src/infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresWorkIdentityRepository } from '../../src/infrastructure/postgres/postgres-work-identity-repository.js';
 import {
   applyDurableKernelMigrations,
@@ -280,6 +283,182 @@ describe('Composition-first Work on real PostgreSQL', () => {
         expect.objectContaining({
           resourceKind: 'platform_capability',
           requestedRef: 'platform_mcp',
+        }),
+      ]),
+    );
+  });
+
+  it('projects a collaboration WorkRun trace with a senderless system claim wake', async () => {
+    const collaborationDefinitionId = randomUUID();
+    const collaborationVersionId = randomUUID();
+    const rootTaskId = randomUUID();
+    const teamRunId = randomUUID();
+    const actorId = randomUUID();
+    const messageId = randomUUID();
+    const repository = new PostgresWorkIdentityRepository(pool);
+    const resolved = {
+      definitionId: collaborationDefinitionId,
+      definitionVersionId: collaborationVersionId,
+      kind: 'collaboration' as const,
+      name: 'Collaboration projection',
+      description: null,
+      sourceFingerprint: 'sha256:collaboration-source',
+      resolvedFingerprint: 'sha256:collaboration-resolved',
+      participants: [],
+      environment: null,
+      memories: [],
+      platformCapabilities: ['collaboration', 'platform_mcp'] as const,
+      executionPolicy: {
+        invokable: { kind: 'team' as const, versionId: collaborationVersionId },
+        requiredRuntimeCapabilities: ['platform_mcp'] as const,
+      },
+    };
+    const identity = new WorkIdentityApi({
+      repository,
+      definitions: {
+        findTeamDefinitionById: async () => null,
+        findPublishedTeamVersionById: async () => null,
+      },
+      definitionResolution: { resolve: async () => resolved },
+      now: () => new Date(at),
+    });
+    const work = await identity.createWork({
+      owner: { tenantId, workspaceId },
+      definitionId: collaborationDefinitionId,
+      definitionVersionId: collaborationVersionId,
+      title: 'Collaboration projection',
+      accessContext: access,
+    });
+    createdWorkIds.push(work.id);
+    const pending = await identity.startWorkRun({
+      owner: { tenantId, workspaceId },
+      workId: work.id,
+      triggerKind: 'manual',
+      triggerRef: `projection-${teamRunId}`,
+      accessContext: access,
+    });
+    await pool.query(
+      `INSERT INTO tasks
+       (id,tenant_id,workspace_id,principal_type,principal_id,
+        policy_snapshot_version,root_task_id,depth,status,ingress,
+        invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,
+        created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$1,0,'completed','api','team',$7,'projection','projection',$8,$8)`,
+      [
+        rootTaskId,
+        tenantId,
+        workspaceId,
+        access.principalType,
+        principalId,
+        access.policySnapshotVersion,
+        collaborationVersionId,
+        at,
+      ],
+    );
+    createdTaskIds.push(rootTaskId);
+    await identity.bindRootTaskCas({
+      workRunId: pending.id,
+      rootTaskId,
+      owner: { tenantId, workspaceId },
+      now: at,
+    });
+    await pool.query(
+      `INSERT INTO team_runs
+       (id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,
+        team_version_id,environment_version_id,status,phase,final_text,created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'succeeded','done','done',$10,$10)`,
+      [
+        teamRunId,
+        tenantId,
+        workspaceId,
+        access.principalType,
+        principalId,
+        rootTaskId,
+        randomUUID(),
+        collaborationVersionId,
+        environmentVersionId,
+        at,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO team_member_runs
+       (id,team_run_id,name,role,agent_version_id,status,tenant_id,workspace_id,
+        principal_type,principal_id,created_at,updated_at)
+       VALUES($1,$2,'analyst','member',$3,'idle',$4,$5,$6,$7,$8,$8)`,
+      [
+        actorId,
+        teamRunId,
+        agentVersionId,
+        tenantId,
+        workspaceId,
+        access.principalType,
+        principalId,
+        at,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO team_messages
+       (id,team_run_id,tenant_id,workspace_id,principal_type,principal_id,sequence,
+        sender_member_run_id,recipient_member_run_id,kind,dedup_key,body,status,created_at)
+       VALUES($1,$2,$3,$4,$5,$6,1,NULL,$7,'wake','system-claim','claimed_work','consumed',$8)`,
+      [
+        messageId,
+        teamRunId,
+        tenantId,
+        workspaceId,
+        access.principalType,
+        principalId,
+        actorId,
+        at,
+      ],
+    );
+    const projection = createProductProjection({
+      workIdentity: repository,
+      workFacts: new WorkProjectionFactsSource({
+        getByRootTask: async ({ tenantId, workspaceId, rootTaskId }) =>
+          new PostgresWorkProjectionFactsQuery(pool).getByRootTask(
+            { tenantId, workspaceId },
+            rootTaskId,
+          ),
+      }),
+      executionFacts: {
+        listRunsByRootTask: async () => [
+          {
+            runId: randomUUID(),
+            taskId: rootTaskId,
+            rootTaskId,
+            status: 'succeeded' as const,
+            provider: null,
+            model: null,
+            resultPresent: true,
+            errorCode: null,
+            actorId: null,
+            workItemId: null,
+            startedAt: at,
+            endedAt: at,
+            createdAt: at,
+            updatedAt: at,
+          },
+        ],
+        listRunEvents: async () => [],
+      },
+    });
+
+    const trace = await projection.getRunTrace({
+      tenantId,
+      workspaceId,
+      workId: work.id,
+      workRunId: pending.id,
+    });
+    if ('error' in trace || trace.work_run === null)
+      throw new Error('expected captured collaboration trace');
+    expect(trace.messages).toEqual([]);
+    expect(trace.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'observed_message',
+          message_id: messageId,
+          sender_actor_id: null,
         }),
       ]),
     );

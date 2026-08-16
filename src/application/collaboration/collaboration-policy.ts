@@ -36,6 +36,8 @@ export class CollaborationPolicy {
   ): void {
     this.require(context, capability);
     const kind = context.task.teamTaskKind;
+    const completedWorkAttempt =
+      kind === 'work_attempt' && context.attempt?.status === 'completed';
     const allowed =
       capability === 'board.create' ||
       capability === 'board.assign' ||

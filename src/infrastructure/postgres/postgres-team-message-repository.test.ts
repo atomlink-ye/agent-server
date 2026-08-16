@@ -10,6 +10,30 @@ const owner = {
 };
 
 describe('PostgresTeamMessageRepository', () => {
+  it('keeps stale_state for a fence that returns no team row', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    const repository = new PostgresTeamMessageRepository({ query });
+
+    await expect(
+      repository.sendDirect({
+        teamRunId: 'team-1',
+        senderMemberRunId: 'lead-member',
+        recipientMemberRunId: 'member-1',
+        dedupKey: 'message-send-1',
+        body: 'wake up',
+        sourceTaskId: 'lead-task-1',
+        sourceRunId: 'lead-run-1',
+        expectedRevision: 1,
+        requiresAck: true,
+        owner,
+      }),
+    ).rejects.toMatchObject({ code: 'stale_state' });
+  });
+
   it('uses returned rows rather than an optional driver rowCount for a fenced direct send', async () => {
     const query = vi
       .fn()

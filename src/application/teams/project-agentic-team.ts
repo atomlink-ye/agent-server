@@ -3,7 +3,10 @@ import type {
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
 import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
-import type { CollaborationActivationCause } from '../../domain/collaboration/collaboration.js';
+import {
+  projectMessageStatus,
+  type CollaborationActivationCause,
+} from '../../domain/collaboration/collaboration.js';
 import { isTeamCompletionApprovalPending } from './team-policy-evaluator.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
@@ -62,7 +65,8 @@ export interface AgenticTeamProject {
     readonly senderName: string;
     readonly recipientName: string;
     readonly summary: string;
-    readonly status: 'presented' | 'acknowledged';
+    readonly requiresAck: boolean;
+    readonly status: 'pending' | 'presented' | 'acknowledged' | 'cancelled';
     readonly createdAt: string;
   }[];
   readonly sessions: readonly {
@@ -265,15 +269,14 @@ export class ProjectAgenticTeam {
         );
         const summary = safeText(message.body);
         if (!senderName || !recipientName || !summary) return [];
-        if (message.status !== 'consumed' && message.status !== 'acknowledged')
-          return [];
         return [
           {
             sequence: message.sequence,
             senderName,
             recipientName,
             summary,
-            status: message.acknowledgedAt ? 'acknowledged' : 'presented',
+            requiresAck: message.requiresAck,
+            status: projectMessageStatus(message),
             createdAt: message.createdAt,
           },
         ];

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifySmokeOutcome,
   evaluateCompletionFacts,
+  formatSmokeOutcome,
 } from './agent-team-completion-line.mjs';
 
 function successfulProjection() {
@@ -52,6 +53,7 @@ function successfulProjection() {
         sender_name: 'analyst',
         recipient_name: 'builder',
         summary: 'agent collaboration update',
+        requires_ack: true,
         status: 'acknowledged',
       },
     ],
@@ -135,11 +137,19 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('message_activation');
   });
 
-  it('rejects a collaboration with no acknowledged direct message', () => {
+  it('rejects a collaboration with no direct message', () => {
     const projection = successfulProjection();
     projection.direct_messages = [];
 
-    expect(codes(projection)).toContain('acknowledged_direct_message');
+    expect(codes(projection)).toContain('direct_message_missing');
+  });
+
+  it('rejects a direct message that does not require an acknowledgement', () => {
+    const projection = successfulProjection();
+    projection.direct_messages[0].requires_ack = false;
+    projection.direct_messages[0].status = 'presented';
+
+    expect(codes(projection)).toContain('requires_ack_direct_message');
   });
 
   it('rejects work that was not accepted', () => {
@@ -181,5 +191,29 @@ describe('agent-team smoke completion line', () => {
       taskStatus: 'active',
       failures: [],
     });
+  });
+
+  it('names distinct missing facts in its diagnostic output', () => {
+    const noAck = successfulProjection();
+    noAck.direct_messages[0].status = 'presented';
+    const noRequiresAck = successfulProjection();
+    noRequiresAck.direct_messages[0].requires_ack = false;
+    noRequiresAck.direct_messages[0].status = 'presented';
+    const noWake = successfulProjection();
+    noWake.sessions[1].turns = [];
+    const noAcceptedWork = successfulProjection();
+    noAcceptedWork.work_items[1].status = 'submitted';
+
+    const diagnostics = [noAck, noRequiresAck, noWake, noAcceptedWork].map((projection) =>
+      formatSmokeOutcome(
+        classifySmokeOutcome({ taskStatus: 'completed', projection }),
+      ),
+    );
+
+    expect(diagnostics).toHaveLength(new Set(diagnostics).size);
+    expect(diagnostics[0]).toContain('acknowledged_direct_message');
+    expect(diagnostics[1]).toContain('requires_ack_direct_message');
+    expect(diagnostics[2]).toContain('message_activation');
+    expect(diagnostics[3]).toContain('work_2_accepted');
   });
 });

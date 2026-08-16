@@ -133,20 +133,42 @@ export function evaluateCompletionFacts(value) {
     );
   }
 
-  const messages = Array.isArray(value?.direct_messages) ? value.direct_messages : [];
-  // The Team projection exposes `acknowledged` only after message_ack, which the
-  // durable mailbox permits only for a direct message with requires_ack=true.
-  const acknowledgedMessages = messages.filter(
+  const messages = Array.isArray(value?.direct_messages)
+    ? value.direct_messages
+    : [];
+  if (!messages.length) {
+    fail(
+      'collaboration',
+      'direct_message_missing',
+      'at least one direct message',
+      [],
+    );
+  }
+  const requiresAckMessages = messages.filter(
+    (message) => message.requires_ack === true,
+  );
+  if (!requiresAckMessages.length) {
+    fail(
+      'collaboration',
+      'requires_ack_direct_message',
+      'at least one direct message with requires_ack === true',
+      messages.map((message) => ({
+        sequence: message.sequence ?? null,
+        requires_ack: message.requires_ack ?? null,
+      })),
+    );
+  }
+  const acknowledgedMessages = requiresAckMessages.filter(
     (message) => message.status === 'acknowledged',
   );
-  if (!acknowledgedMessages.length) {
+  if (requiresAckMessages.length && !acknowledgedMessages.length) {
     fail(
       'collaboration',
       'acknowledged_direct_message',
       'at least one requires-ack direct message with status acknowledged',
       messages.map((message) => ({ sequence: message.sequence ?? null, status: message.status ?? null })),
     );
-  } else {
+  } else if (acknowledgedMessages.length) {
     const awakenedByMessage = acknowledgedMessages.some((message) => {
       const messageRef = `M-${message.sequence}`;
       return sessions.some((session) =>

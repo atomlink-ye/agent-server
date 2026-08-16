@@ -82,6 +82,7 @@ function projectionSummary(value) {
           sender_name: message.sender_name ?? null,
           recipient_name: message.recipient_name ?? null,
           summary: outputSummary(message.summary),
+          requires_ack: message.requires_ack ?? null,
           status: message.status ?? null,
         }))
       : [],
@@ -331,10 +332,13 @@ async function dumpRunDiagnostics() {
   });
 }
 
-outcome ??= classifySmokeOutcome({
+// If the loop ended because the deadline elapsed, reclassify the last observed
+// state as a gate timeout. `pending` is an interim polling result, never a
+// reportable conclusion.
+outcome = classifySmokeOutcome({
   taskStatus: task?.status,
   projection,
-  timedOut: true,
+  timedOut: Date.now() >= deadline,
 });
 if (outcome.kind !== 'success') {
   await dumpRunDiagnostics().catch(() => {});

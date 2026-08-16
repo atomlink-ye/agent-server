@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
@@ -9,9 +9,7 @@ import {
   ProductWorkDefinitionReferenceError,
 } from '../../../application/work/product-work-definition-api.js';
 import { validateProductWorkDefinition } from '../../../application/work/validate-product-work-definition.js';
-import type {
-  ProductWorkDefinitionVersionRecord,
-} from '../../../application/ports/work-definition-source-repository.js';
+import type { ProductWorkDefinitionVersionRecord } from '../../../application/ports/work-definition-source-repository.js';
 import type { WorkDefinitionSourceDefinition } from '../../../domain/work/work-definition-source.js';
 import {
   GetProductWorkDefinitionResponseSchema,
@@ -95,14 +93,23 @@ export function registerProductWorkDefinitionRoutes(
             participants: result.participants.map((participant) => ({
               name: participant.name,
               role: participant.role,
+              source: participant.source,
               agent_version_id: participant.agentVersionId,
               skills: participant.skills,
               tools: participant.tools,
             })),
-            environment_version_id: result.environmentVersionId,
+            environment: {
+              source: result.environment.source,
+              environment_version_id: result.environment.environmentVersionId,
+            },
             memory_version_ids: result.memoryVersionIds,
             required_runtime_capabilities: result.requiredRuntimeCapabilities,
             platform_capabilities: result.platformCapabilities,
+            materialization: {
+              inline_agents: result.materialization.inlineAgents,
+              inline_environment: result.materialization.inlineEnvironment,
+              internal_team: result.materialization.internalTeam,
+            },
           },
           diagnostics: [],
         }),
@@ -126,6 +133,9 @@ export function registerProductWorkDefinitionRoutes(
         idempotencyKey,
         accessContext: getAuthenticatedAccessContext(context),
       });
+      const resolvedFingerprint = result.version.resolvedFingerprint;
+      if (!resolvedFingerprint)
+        throw new Error('Applied Work Definition has no resolved fingerprint.');
       const version = productVersionResponse(result.version);
       return context.json(
         WorkDefinitionApplyResponseSchema.parse({
@@ -136,8 +146,7 @@ export function registerProductWorkDefinitionRoutes(
           ),
           version,
           resolved: {
-            resource_manifest_fingerprint:
-              result.version.resolvedFingerprint,
+            resource_manifest_fingerprint: resolvedFingerprint,
           },
         }),
         result.result === 'created' ? 201 : 200,
@@ -257,7 +266,8 @@ function sourceMetadata(source: Readonly<Record<string, unknown>>): {
   readonly description: string | null;
 } | null {
   const metadata = source.metadata;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+    return null;
   const description = (metadata as Record<string, unknown>).description;
   return {
     description: typeof description === 'string' ? description : null,
@@ -265,11 +275,7 @@ function sourceMetadata(source: Readonly<Record<string, unknown>>): {
 }
 
 function mapAuthoringError(
-  context: Parameters<Hono<ApiEnvironment>['post']>[1] extends (
-    context: infer C,
-  ) => unknown
-    ? C
-    : never,
+  context: Context<ApiEnvironment>,
   error: unknown,
 ): Response {
   if (error instanceof InvalidProductWorkDefinitionError)
@@ -312,10 +318,13 @@ function isCodedError(error: unknown, code: string): boolean {
 }
 
 function canonicalUuid(value: string | undefined): string {
-  if (!value || !UUID.test(value)) throw invalidRequest('A canonical UUID is required.');
+  if (!value || !UUID.test(value))
+    throw invalidRequest('A canonical UUID is required.');
   return value;
 }
 
-function invalidRequest(message = 'A valid Work Definition request is required.') {
+function invalidRequest(
+  message = 'A valid Work Definition request is required.',
+) {
   return new HttpError(400, 'invalid_request', message);
 }

@@ -151,98 +151,172 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
       plane: PASEO_EXECUTION_PLANE_ID,
       externalWorkspaceId,
     } as const;
-
+    const agentStartedAt = Date.now();
+    this.#logger.log('info', 'runtime.agent.create.started', {
+      runtime_session_id: spec.runtimeSessionId,
+      model_id: model,
+    });
+    let agent;
     try {
-      const created = await this.#gateway.createAgent({
-        workspaceId: externalWorkspaceId,
+      agent = await this.#gateway.createAgent({
         provider,
+        cwd,
+        workspaceId: externalWorkspaceId,
         model,
         systemPrompt: spec.systemPrompt,
+        runId: spec.runtimeSessionId,
         ...(spec.title ? { title: spec.title } : {}),
         ...(spec.labels ? { labels: spec.labels } : {}),
         ...(spec.extensions?.mcpServers
           ? { mcpServers: spec.extensions.mcpServers }
           : {}),
       });
-      return {
-        session: new PaseoExecutionSession(
-          created.agentId,
-          this.#runner,
-          this.#logger,
-        ),
-        workspaceBinding,
-        sessionBinding: {
-          plane: PASEO_EXECUTION_PLANE_ID,
-          externalSessionId: created.agentId,
-        },
-      };
     } catch (error) {
-      if (error instanceof ProtocolViolationError) throw error;
       throw new ExecutionPlaneUnavailableError(
         error instanceof Error
           ? `Paseo session creation failed: ${error.name}`
           : 'Paseo session creation failed.',
       );
     }
+    if (!agent.id || !agent.provider || !agent.model)
+      throw new ProtocolViolationError(
+        'Paseo created a session without its required identity metadata.',
+      );
+    this.#logger.log('info', 'runtime.agent.create.completed', {
+      runtime_session_id: spec.runtimeSessionId,
+      model_id: agent.model,
+      elapsed_ms: Date.now() - agentStartedAt,
+    });
+
+    const sessionBinding = {
+      plane: PASEO_EXECUTION_PLANE_ID,
+      externalSessionId: agent.id,
+    } as const;
+    return {
+      workspaceBinding,
+      sessionBinding,
+      session: this.#session(
+        sessionBinding,
+        workspaceBinding,
+        agent.provider,
+        agent.model,
+        cwd,
+      ),
+    };
   }
 
   public async attachSession(
     binding: ExecutionSessionBinding,
-    _spec: ExecutionSessionSpec,
+    spec: ExecutionSessionSpec,
   ): Promise<ExecutionSession> {
     await this.initialize();
-    this.#assertSessionBinding(binding);
-    const exists = await this.#gateway.agentExists(binding.externalSessionId);
-    if (!exists)
+    if (binding.plane !== PASEO_EXECUTION_PLANE_ID || !binding.externalSessionId)
       throw new ExecutionBindingUnavailableError(
-        'The Paseo Agent binding is no longer available.',
+        'The runtime session is not bound to Paseo.',
       );
-    return new PaseoExecutionSession(
-      binding.externalSessionId,
-      this.#runner,
-      this.#logger,
+    if (!spec.workspace.binding)
+      throw new ExecutionBindingUnavailableError(
+        'A reusable Paseo session requires its workspace binding.',
+      );
+    this.#assertWorkspaceBinding(spec.workspace.binding.plane);
+    const { provider, model } = this.#resolveLaunch(spec);
+    try {
+      await this.#gateway.assertSessionAvailable(binding.externalSessionId);
+    } catch (error) {
+      throw new ExecutionBindingUnavailableError(
+        error instanceof Error
+          ? `The Paseo session binding cannot be attached: ${error.name}`
+          : 'The Paseo session binding cannot be attached.',
+      );
+    }
+    return this.#session(
+      binding,
+      spec.workspace.binding,
+      provider,
+      model,
+      spec.workspace.cwd,
     );
   }
 
   public async health(): Promise<ExecutionPlaneHealth> {
-    const health = await this.#connections.health();
+    const health = this.#connections.health();
     return {
-      ready: health.ready,
+      ready: health.connected && health.workspaceReady && health.modelReady,
       plane: PASEO_EXECUTION_PLANE_ID,
-      provider: health.provider,
-      model: health.model,
-      checks: health.checks,
+      provider: this.#options.provider,
+      ...(this.#connections.model
+        ? { model: this.#connections.model.id }
+        : {}),
+      checks: [
+        {
+          name: 'paseo_websocket',
+          ready: health.connected,
+          ...(!health.connected && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+        {
+          name: 'paseo_workspace',
+          ready: health.workspaceReady,
+          ...(!health.workspaceReady && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+        {
+          name: 'opencode_model',
+          ready: health.modelReady,
+          ...(!health.modelReady && health.lastError
+            ? { detail: health.lastError }
+            : {}),
+        },
+      ],
     };
   }
 
-  public async close(): Promise<void> {
-    await this.#connections.close();
+  public close(): Promise<void> {
+    return this.#connections.close();
+  }
+
+  #resolveLaunch(spec: ExecutionSessionSpec): {
+    readonly provider: ManagedEnvironmentProvider;
+    readonly model: string;
+  } {
+    const provider = spec.provider ?? this.#options.provider;
+    if (!isManagedEnvironmentProvider(provider))
+      throw new ProtocolViolationError(
+        'The requested runtime provider is unsupported.',
+      );
+    const model = spec.model ?? this.#connections.model?.id;
+    if (!model)
+      throw new ExecutionPlaneUnavailableError(
+        'Paseo has no resolved model for session launch.',
+      );
+    return { provider, model };
   }
 
   #assertWorkspaceBinding(plane: string): void {
     if (plane !== PASEO_EXECUTION_PLANE_ID)
       throw new ExecutionBindingUnavailableError(
-        'The execution workspace binding belongs to another plane.',
+        'The runtime workspace is not bound to Paseo.',
       );
   }
 
-  #assertSessionBinding(binding: ExecutionSessionBinding): void {
-    if (binding.plane !== PASEO_EXECUTION_PLANE_ID)
-      throw new ExecutionBindingUnavailableError(
-        'The execution session binding belongs to another plane.',
-      );
-  }
-
-  #resolveLaunch(spec: ExecutionSessionSpec): {
-    provider: ManagedEnvironmentProvider;
-    model: string;
-  } {
-    const provider = spec.provider ?? this.#options.provider;
-    if (!isManagedEnvironmentProvider(provider))
-      throw new ProtocolViolationError('Unsupported Paseo provider.');
-    const model = spec.model ?? this.#options.requestedModel;
-    if (!model)
-      throw new ProtocolViolationError('A Paseo model must be resolved before launch.');
-    return { provider, model };
+  #session(
+    binding: ExecutionSessionBinding,
+    workspaceBinding: {
+      readonly plane: string;
+      readonly externalWorkspaceId: string;
+    },
+    provider: string,
+    model: string,
+    cwd: string,
+  ): PaseoExecutionSession {
+    return new PaseoExecutionSession(
+      binding,
+      workspaceBinding,
+      { provider, model, cwd },
+      this.#gateway,
+      this.#runner,
+    );
   }
 }

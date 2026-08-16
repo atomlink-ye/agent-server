@@ -51,83 +51,61 @@ export async function runCompositionSingleAgentSmoke({
     return json;
   }
 
-  async function importAndPublish(source, importPath, publishPath) {
-    const imported = await request(importPath, {
-      method: 'POST',
-      body: { source },
-      expectedStatus: 201,
-    });
-    return request(publishPath(imported.version.id), {
-      method: 'POST',
-      body: {},
-      expectedStatus: 200,
-    });
-  }
-
-  progress('composition_single_agent_importing');
-  const agent = await importAndPublish(
-    `apiVersion: agent-server/v1alpha1
-kind: ManagedAgent
-metadata:
-  name: composition-single-${scenarioId}
-spec:
-  description: Composition-first single Agent real-provider smoke
-  instructions: 'Return exactly the marker contained in the Work input. Do not call tools unless execution cannot proceed otherwise.'
-  runtime:
-    provider: paseo
-    modelPolicyRef: free-only
-    mode: isolated
-  tools:
-    - agent-server/memory-read
-  skills:
-    - agent-server/memory-api
-  input:
-    schema:
-      type: object
-      properties: {}
-      additionalProperties: false
-    prompt: "Follow the Product Work input."
-  session:
-    invocation: fresh_per_invocation
-    followUps: queued
-    binding: reusable
-  memory:
-    policy: workspace_snapshot
-    proposalLimit: 0
-  permissions:
-    network: read_only
-    filesystem: workspace_read
-  completion:
-    type: executable
-    command: "done"
-`,
-    '/api/v1/agents:import',
-    (id) => `/api/v1/agent-versions/${id}:publish`,
-  );
-  const environment = await importAndPublish(
-    `apiVersion: agent-server/v1alpha1
-kind: ManagedEnvironment
-metadata:
-  name: composition-single-environment-${scenarioId}
-spec:
-  adapter: paseo
-  provider: opencode
-  modelPolicyRef: free-only
-  runtimeCellPolicy: per_runtime_session
-`,
-    '/api/v1/environments:import',
-    (id) => `/api/v1/environment-versions/${id}:publish`,
-  );
-
+  progress('composition_product_definition_authoring');
   const publicDefinition = `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
   name: composition-single-${scenarioId}
-  description: Real-provider Product Definition -> Work -> Run smoke.
+  description: Real-provider one-file Product Definition to Work to Run smoke.
 spec:
   kind: single_agent
-  agent_version_id: ${agent.id}
-  environment_version_id: ${environment.id}
+  agent:
+    source: |
+      apiVersion: agent-server/v1alpha1
+      kind: ManagedAgent
+      metadata:
+        name: composition-agent-${scenarioId}
+      spec:
+        description: Inline Agent materialized by Work Definition apply.
+        instructions: 'Return exactly the marker contained in the Product Work input. Do not call tools unless execution cannot proceed otherwise.'
+        runtime:
+          provider: paseo
+          modelPolicyRef: free-only
+          mode: isolated
+        tools:
+          - ref: agent-server/memory-read
+        skills:
+          - ref: agent-server/memory-api
+        input:
+          schema:
+            type: object
+            properties: {}
+            additionalProperties: false
+          prompt: "Follow the Product Work input."
+        session:
+          invocation: fresh_per_invocation
+          followUps: queued
+          binding: reusable
+        memory:
+          policy: workspace_snapshot
+          proposalLimit: 0
+        permissions:
+          network: read_only
+          filesystem: workspace_read
+        completion:
+          type: executable
+          command: "done"
+  environment:
+    source: |
+      apiVersion: agent-server/v1alpha1
+      kind: ManagedEnvironment
+      metadata:
+        name: composition-environment-${scenarioId}
+      spec:
+        adapter: paseo
+        provider: opencode
+        modelPolicyRef: free-only
+        runtimeCellPolicy: per_runtime_session
   memory_version_ids: []
   input_schema:
     type: object
@@ -146,7 +124,25 @@ spec:
     expectedStatus: 200,
   });
   if (validated.valid !== true || !validated.fingerprint)
-    throw new Error(`composition Product Definition validation failed: ${JSON.stringify(validated)}`);
+    throw new Error(
+      `composition Product Definition validation failed: ${JSON.stringify(validated)}`,
+    );
+
+  const planned = await request('/api/v1/work-definitions:plan', {
+    method: 'POST',
+    body: { source: publicDefinition },
+    expectedStatus: 200,
+  });
+  if (
+    planned.resolved?.participants?.[0]?.source !== 'inline' ||
+    planned.resolved?.environment?.source !== 'inline' ||
+    planned.resolved?.materialization?.inline_agents !== 1 ||
+    planned.resolved?.materialization?.inline_environment !== true
+  )
+    throw new Error(
+      `composition Product Definition plan mismatch: ${JSON.stringify(planned)}`,
+    );
+
   const applied = await request('/api/v1/work-definitions:apply', {
     method: 'POST',
     body: { source: publicDefinition },
@@ -160,7 +156,9 @@ spec:
     applied.version?.fingerprint !== validated.fingerprint ||
     !applied.resolved?.resource_manifest_fingerprint
   )
-    throw new Error(`composition Product Definition apply invalid: ${JSON.stringify(applied)}`);
+    throw new Error(
+      `composition Product Definition apply invalid: ${JSON.stringify(applied)}`,
+    );
 
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
@@ -186,6 +184,16 @@ spec:
     if (typeof workId !== 'string')
       throw new Error('composition smoke Work id missing');
 
+    const invalid = await request(`/api/v1/works/${workId}/runs`, {
+      method: 'POST',
+      body: { trigger_kind: 'manual', input: {} },
+      expectedStatus: 422,
+    });
+    if (invalid.error?.code !== 'input_validation_failed')
+      throw new Error(
+        `composition invalid Product input was not rejected: ${JSON.stringify(invalid)}`,
+      );
+
     const started = await request(`/api/v1/works/${workId}/runs`, {
       method: 'POST',
       body: {
@@ -209,7 +217,9 @@ spec:
     );
     if (
       inputSnapshot.rows[0]?.input_snapshot?.marker !== marker ||
-      !/^sha256:[0-9a-f]{64}$/.test(inputSnapshot.rows[0]?.input_fingerprint ?? '')
+      !/^sha256:[0-9a-f]{64}$/.test(
+        inputSnapshot.rows[0]?.input_fingerprint ?? '',
+      )
     )
       throw new Error(
         `composition WorkRun input snapshot mismatch: ${JSON.stringify(inputSnapshot.rows[0])}`,
@@ -302,11 +312,8 @@ spec:
       'definition',
       (row) => row.resolved_version_id === definitionVersionId,
     );
-    requireEntry('agent', (row) => row.resolved_version_id === agent.id);
-    requireEntry(
-      'environment',
-      (row) => row.resolved_version_id === environment.id,
-    );
+    const agentEntry = requireEntry('agent', () => true);
+    const environmentEntry = requireEntry('environment', () => true);
     requireEntry(
       'skill',
       (row) => row.requested_ref === 'agent-server/memory-api',
@@ -331,8 +338,9 @@ spec:
       !runtimeSession ||
       runtimeSession.scope_kind !== 'task' ||
       runtimeSession.scope_id !== rootTaskId ||
-      runtimeSession.agent_version_id !== agent.id ||
-      runtimeSession.environment_version_id !== environment.id
+      runtimeSession.agent_version_id !== agentEntry.resolved_version_id ||
+      runtimeSession.environment_version_id !==
+        environmentEntry.resolved_version_id
     )
       throw new Error(
         `composition runtime session snapshot mismatch: ${JSON.stringify(runtimeSession)}`,
@@ -345,6 +353,7 @@ spec:
       runtime_session_id: runtimeSession.id,
       manifest_entries: rows.length,
       runtime: `${providerRun.provider}/${providerRun.model}`,
+      authoring: 'one_file_definition',
     });
     return {
       workId,

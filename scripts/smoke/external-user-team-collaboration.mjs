@@ -216,14 +216,16 @@ async function durableFacts(pool, rootTaskId) {
       [teamRun.id],
     ),
     pool.query(
-      `SELECT team_task_kind, team_activation_materializer, team_activation_causes
-         FROM tasks
-        WHERE root_task_id=$1 AND team_task_kind IS NOT NULL
-        ORDER BY created_at`,
+      `SELECT task.team_task_kind, task.team_activation_materializer, task.team_activation_causes,
+              member.name AS activated_member_name, member.role AS activated_member_role
+         FROM tasks task
+         LEFT JOIN team_member_runs member ON member.id=task.team_member_run_id
+        WHERE task.root_task_id=$1 AND task.team_task_kind IS NOT NULL
+        ORDER BY task.created_at`,
       [rootTaskId],
     ),
     pool.query(
-      `SELECT w.work_ref, w.status, assignee.name AS assignee_name,
+      `SELECT w.work_ref, w.status, assignee.name AS assignee_name, assignee.role AS assignee_role,
               a.attempt_no, a.status AS attempt_status, a.result_summary, a.feedback
          FROM team_work_items w
          LEFT JOIN team_work_item_attempts a ON a.work_item_id=w.id
@@ -245,30 +247,38 @@ function assertDurableFacts(facts) {
   if (facts.team.status !== 'succeeded' || facts.team.stop_reason === 'lead_no_progress') {
     throw new Error(`Team did not succeed: ${JSON.stringify(facts.team)}`);
   }
-  const hasMessage = (sender, recipient, body) =>
-    facts.messages.some(
-      (message) =>
-        message.sender_name === sender &&
-        message.recipient_name === recipient &&
-        message.body?.includes(body),
-    );
+  const firstMessage = facts.messages[0];
+  const peerMessages = facts.messages.filter(
+    (message) => message.sender_role === 'member' && message.recipient_role === 'member',
+  );
+  const hasAckedPeerExchange =
+    peerMessages.some((message) => message.body?.includes('RESEARCH_FINDING')) &&
+    peerMessages.some((message) => message.body?.includes('REVIEWER_ACK'));
   if (
-    !hasMessage('lead', 'researcher', 'RELEASE_BRIEF_REQUEST') ||
-    !hasMessage('researcher', 'reviewer', 'RESEARCH_FINDING') ||
-    !hasMessage('reviewer', 'researcher', 'REVIEWER_ACK') ||
-    !hasMessage('researcher', 'lead', 'RESEARCH_READY')
+    firstMessage?.sender_role !== 'lead' ||
+    !firstMessage.body?.includes('RELEASE_BRIEF_REQUEST') ||
+    !hasAckedPeerExchange
   ) {
-    throw new Error(`durable logical-name message exchange missing: ${JSON.stringify(facts.messages)}`);
+    throw new Error(
+      `durable dialogue-first peer exchange missing: ${JSON.stringify(facts.messages)}`,
+    );
   }
   const activationTypes = facts.activations.flatMap((activation) =>
     Array.isArray(activation.team_activation_causes)
       ? activation.team_activation_causes.map((cause) => cause?.type)
       : [],
   );
+  const hasMaterializedMessageWake = facts.activations.some(
+    (activation) =>
+      activation.activated_member_role === 'member' &&
+      Array.isArray(activation.team_activation_causes) &&
+      activation.team_activation_causes.some((cause) => cause?.type === 'message'),
+  );
   if (
     !facts.activations.some(
       (activation) => activation.team_activation_materializer === 'task_run_collaboration_activation_adapter',
     ) ||
+    !hasMaterializedMessageWake ||
     !['message', 'work_available', 'claim', 'final_review'].every((type) =>
       activationTypes.includes(type),
     )
@@ -279,7 +289,7 @@ function assertDurableFacts(facts) {
   if (
     attempts.length !== 2 ||
     attempts[0]?.status !== 'accepted' ||
-    attempts[0]?.assignee_name !== 'researcher' ||
+    attempts[0]?.assignee_role !== 'member' ||
     attempts[0]?.attempt_no !== 1 ||
     attempts[0]?.attempt_status !== 'completed' ||
     !attempts[0]?.result_summary?.includes('RELEASE_NOTE_DRAFT_V1') ||

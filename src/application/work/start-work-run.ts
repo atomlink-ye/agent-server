@@ -112,6 +112,11 @@ export class StartWorkRun {
     if (new Date(pending.expiresAt).getTime() <= this.now().getTime())
       throw new PendingWorkRunExpiredError();
 
+    // The immutable composition becomes a durable WorkRun fact before Task
+    // admission, so a queued provider turn can never observe registry-latest
+    // drift without a pinned manifest already existing.
+    await this.recordResolvedManifest(pending, owner, resolved);
+
     const receipt = await this.execution.admitRoot({
       invokable: resolved.executionPolicy.invokable,
       input: { text: pending.triggerRef },
@@ -127,10 +132,6 @@ export class StartWorkRun {
         owner,
         now: this.now().toISOString(),
       });
-      // The current durable repository permits a manifest only after root Task
-      // binding. The Task itself is admitted from the already-resolved immutable
-      // definition, and retries converge on this exact manifest.
-      await this.recordResolvedManifest(bound, owner, resolved);
       return {
         workRun: bound,
         executionReceipt: { reused: receipt.reused, taskId: receipt.taskId },

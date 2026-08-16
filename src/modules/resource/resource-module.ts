@@ -7,10 +7,10 @@ import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
-import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../../application/ports/environment-read-api.js';
-import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
+import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
+import { ResolveWorkDefinition } from '../../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { registerAgentRoutes } from '../../entrypoints/api/routes/agents.js';
@@ -33,6 +33,7 @@ export interface ResourceModule {
   readonly agentResolutionApi: AgentResolutionApi;
   readonly definitionReadApi: DefinitionReadApi;
   readonly environmentReadApi: EnvironmentReadApi;
+  readonly workDefinitionResolution: WorkDefinitionResolutionPort;
   installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
 
@@ -74,11 +75,18 @@ export async function createResourceModule(
   const environmentReadApi: EnvironmentReadApi = {
     findVersion: (owner, id) => environmentRegistry.findVersion(owner, id),
   };
+  const workDefinitionResolution = new ResolveWorkDefinition({
+    agents: agentRegistry,
+    agentResolution: agentResolutionApi,
+    definitions: definitionReadApi,
+    environments: environmentReadApi,
+  });
 
   return {
     agentResolutionApi,
     definitionReadApi,
     environmentReadApi,
+    workDefinitionResolution,
     installHttp(app, config) {
       registerAgentRoutes(app, { config, agentRegistry });
       registerTeamRoutes(app, {

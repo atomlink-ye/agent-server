@@ -1,0 +1,300 @@
+import { randomUUID } from 'node:crypto';
+
+import { PGlite } from '@electric-sql/pglite';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { Pool } from 'pg';
+
+import {
+  evaluateCompletionFacts,
+  formatSmokeOutcome,
+} from '../../scripts/smoke/agent-team-completion-line.mjs';
+import { createTeamModule } from '../../src/modules/team/team-module.js';
+import { createRootTask, createChildTask, transitionTask } from '../../src/domain/tasks/task.js';
+import { createRun, transitionRun } from '../../src/domain/runs/run.js';
+import { createTeamRun } from '../../src/domain/teams/team-run.js';
+import {
+  activateMemberRun,
+  createTeamMemberRun,
+} from '../../src/domain/teams/team-member-run.js';
+import {
+  AGENT_SERVER_COLLABORATION_MCP_NAMES,
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+} from '../../src/domain/collaboration/canonical-collaboration-tools.js';
+import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
+import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
+import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
+import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
+import { createCollaborationRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
+import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { createLogger } from '../../src/shared/observability/logger.js';
+import { deriveTeamContextEpoch } from '../../src/application/teams/team-tool-context.js';
+import { ProjectAgenticTeam } from '../../src/application/teams/project-agentic-team.js';
+
+const owner = {
+  tenantId: 'smoke_gate_mcp_tenant',
+  workspaceId: 'smoke_gate_mcp_workspace',
+  principalType: 'service_account',
+  principalId: 'smoke_gate_mcp_service',
+} as const;
+
+const now = () => new Date('2026-08-16T03:30:00.000Z');
+const servers: RuntimeMcpServer[] = [];
+
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((server) => server.stop()));
+});
+
+async function createMessageWakeFixture() {
+  const database = new PGlite();
+  await applyDurableKernelMigrations(database);
+  const tasks = new PostgresTaskRepository(database);
+  const runs = new PostgresRunRepository(database);
+  const admissions = new PostgresAdmissionRepository(database);
+  const events = new PostgresRunEventRepository(database);
+  // This is the service's documented debug boundary for retaining a durable
+  // wake before a test explicitly resumes reconciliation. The message itself
+  // is still created through the public runtime MCP `message_send` tool.
+  const team = createTeamModule({
+    database: database as unknown as Pool,
+    tasks,
+    runs,
+    admissions,
+    events,
+    logger: createLogger({
+      service: 'smoke-gate-mcp-test',
+      minimumLevel: 'error',
+      write: () => undefined,
+    }),
+    deferActivationKick: true,
+  });
+  const root = createRootTask({
+    ...owner,
+    policySnapshotVersion: 'smoke-gate-mcp-policy',
+    invokableKind: 'team',
+    invokableVersionId: randomUUID(),
+    inputSnapshotRef: 'inline:smoke-gate-mcp',
+    inputFingerprint: 'smoke-gate-mcp',
+    ingress: 'api',
+    originRef: null,
+    now,
+  });
+  const rootRun = transitionRun(createRun('smoke gate MCP', { now }), 'running', {}, now);
+  await tasks.save(transitionTask(root, 'active', now));
+  await runs.save(rootRun, { taskId: root.id, attempt: 1 });
+
+  const teamRun = createTeamRun({
+    ...owner,
+    rootTaskId: root.id,
+    rootRunId: rootRun.id,
+    teamVersionId: randomUUID(),
+    environmentVersionId: randomUUID(),
+    initialLeadTurn: true,
+    now,
+  });
+  const lead = activateMemberRun(
+    createTeamMemberRun({
+      ...owner,
+      teamRunId: teamRun.id,
+      name: 'lead',
+      role: 'lead',
+      agentVersionId: randomUUID(),
+      now,
+    }),
+    now,
+  );
+  const member = createTeamMemberRun({
+    ...owner,
+    teamRunId: teamRun.id,
+    name: 'member',
+    role: 'member',
+    agentVersionId: randomUUID(),
+    now,
+  });
+  const leadTask = transitionTask(
+    createChildTask({
+      ...owner,
+      rootTaskId: root.id,
+      parentTaskId: root.id,
+      parentRunId: rootRun.id,
+      invokableKind: 'agent',
+      invokableVersionId: lead.agentVersionId,
+      inputSnapshotRef: 'inline:lead',
+      inputFingerprint: 'smoke-gate-lead',
+      logicalStepKey: 'lead:turn:1',
+      nodePath: 'lead',
+      teamMemberRunId: lead.id,
+      teamSequence: 1,
+      teamTaskKind: 'lead_turn',
+      now,
+    }),
+    'active',
+    now,
+  );
+  const leadRun = transitionRun(createRun('lead', { now }), 'running', {}, now);
+  await team.executions.createTeamRun(teamRun);
+  await team.executions.createMemberRun(lead);
+  await team.executions.createMemberRun(member);
+  await tasks.save(leadTask);
+  await runs.save(leadRun, { taskId: leadTask.id, attempt: 1 });
+
+  const server = new RuntimeMcpServer(
+    new RuntimeToolRegistry([
+      createCollaborationRuntimeContributor({
+        contextResolver: team.contextResolver,
+        kernel: team.collaboration,
+      }),
+    ]),
+  );
+  servers.push(server);
+  const grant = server.grants.issue({
+    ...owner,
+    productSessionId: randomUUID(),
+    taskId: leadTask.id,
+    runId: leadRun.id,
+    teamMemberRunId: lead.id,
+    teamRunId: teamRun.id,
+    contextEpoch: deriveTeamContextEpoch(leadTask.id, leadRun.id),
+    allowedTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+    catalogTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+  });
+  const client = new Client({ name: 'smoke-gate-mcp-test', version: '1' });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(await server.start()), {
+      requestInit: { headers: { authorization: `Bearer ${grant.token}` } },
+    }) as never,
+  );
+
+  return { client, database, root, team, teamRun };
+}
+
+describe('canonical smoke direct-message wake mutation', () => {
+  it('creates a durable pending requires-ack message through MCP before wake materialization', async () => {
+    const fixture = await createMessageWakeFixture();
+    try {
+      const sent = await fixture.client.callTool({
+        name: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
+        arguments: {
+          recipient: 'member',
+          body: 'SMOKE_GATE_PENDING_WAKE',
+          requires_ack: true,
+        },
+      });
+      expect(sent.isError).not.toBe(true);
+
+      const projector = new ProjectAgenticTeam(
+        fixture.team.executions,
+        fixture.team.messages,
+        new PostgresTaskRepository(fixture.database),
+      );
+      const projection = await projector.project(fixture.teamRun.id, owner);
+      const message = projection?.directMessages.find(
+        (candidate) => candidate.summary === 'SMOKE_GATE_PENDING_WAKE',
+      );
+
+      expect(message).toMatchObject({
+        sequence: expect.any(Number),
+        requiresAck: true,
+        status: 'pending',
+      });
+      expect(
+        projection?.sessions.flatMap((session) => session.turns).some((turn) =>
+          turn.activation?.causes.some(
+            (cause) =>
+              cause.type === 'message' &&
+              cause.messageRef === `M-${message?.sequence}`,
+          ),
+        ),
+      ).toBe(false);
+
+      const failures = evaluateCompletionFacts({
+        project: { status: 'succeeded' },
+        gates: {
+          finish_ready: true,
+          all_work_accepted: true,
+          no_active_attempts: true,
+          all_members_idle: true,
+        },
+        work_items: [
+          {
+            work_ref: 'work-1',
+            status: 'accepted',
+            assignee_name: 'builder',
+            attempts: [
+              {
+                attempt_no: 1,
+                status: 'completed',
+                result_summary: 'AGENT_TEAM_SMOKE_BUILDER_OK',
+              },
+            ],
+          },
+          {
+            work_ref: 'work-2',
+            status: 'accepted',
+            assignee_name: 'analyst',
+            attempts: [
+              {
+                attempt_no: 1,
+                status: 'completed',
+                result_summary: 'AGENT_TEAM_SMOKE_ATTEMPT_1',
+              },
+              {
+                attempt_no: 2,
+                status: 'completed',
+                feedback_summary: 'AGENT_TEAM_SMOKE_REWORK_REQUIRED',
+                result_summary: 'AGENT_TEAM_SMOKE_MEMBER_OK',
+              },
+            ],
+          },
+        ],
+        direct_messages: [
+          {
+            sequence: message?.sequence,
+            requires_ack: message?.requiresAck,
+            status: message?.status,
+          },
+        ],
+        sessions: [
+          {
+            name: 'analyst',
+            role: 'member',
+            turns: [
+              {
+                kind: 'direct_message',
+                activation: {
+                  materializer: 'task_run_collaboration_activation_adapter',
+                  causes: [{ type: 'work_available', work_ref: 'W-2' }],
+                },
+              },
+            ],
+          },
+          {
+            name: 'lead',
+            role: 'lead',
+            turns: [
+              {
+                kind: 'lead_turn',
+                activation: {
+                  materializer: 'task_run_collaboration_activation_adapter',
+                  causes: [{ type: 'final_review' }],
+                },
+              },
+            ],
+          },
+        ],
+      });
+      const diagnostic = formatSmokeOutcome({
+        kind: 'collaboration_not_achieved',
+        taskStatus: 'completed',
+        failures: failures.failures,
+      });
+      expect(diagnostic).toContain('pending_message_activation');
+    } finally {
+      await fixture.client.close();
+      await fixture.database.close();
+    }
+  });
+});

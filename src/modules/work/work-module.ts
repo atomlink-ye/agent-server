@@ -16,6 +16,7 @@ import { QueryWorkProjectionFacts } from '../../application/work/query-work-proj
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
+import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/routes/product-work-definitions.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
 import { registerProductWorkMcpTools } from '../../entrypoints/mcp/product-work-mcp-tools.js';
 import {
@@ -45,6 +46,7 @@ export function installWorkHttpRoutes(
   },
 ): void {
   const { workIdentity, startWorkRun, projection } = dependencies;
+  registerProductWorkDefinitionRoutes(app, { config });
   registerProductWorkCommandRoutes(app, {
     config,
     workIdentity,

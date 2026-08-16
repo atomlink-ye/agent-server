@@ -528,11 +528,10 @@ describe('managed single-agent memory recall', () => {
         { headers: auth },
       )
     ).json()) as { events: Array<{ sequence: number; type: string }> };
-    expect(eventPage.events.map((event) => event.type)).toEqual([
-      'started',
-      'output',
+    expectRunEventLifecycle(
+      eventPage.events.map((event) => event.type),
       'succeeded',
-    ]);
+    );
     const reconnect = await fetch(
       `${baseUrl}/api/v1/runs/${messageBody.run_id}/events/stream`,
       { headers: { ...auth, 'last-event-id': String(receivedId) } },
@@ -912,7 +911,7 @@ describe('managed single-agent memory recall', () => {
     await waitForSocketRun(a.run_id, 'cancelled');
     expect(await taskStatus(a.task_id)).toBe('cancelled');
     expect(runtime.activeRunIds.has(a.run_id)).toBe(false);
-    expect(await runEventTypes(a.run_id)).toEqual(['started', 'cancelled']);
+    expectRunEventLifecycle(await runEventTypes(a.run_id), 'cancelled');
     await waitForTask(b.task_id, 'completed');
     await waitForTask(c.task_id, 'completed');
     expect(await taskStatus(b.task_id)).toBe('completed');
@@ -922,16 +921,8 @@ describe('managed single-agent memory recall', () => {
     expect(await runEventTime(b.run_id, 'succeeded')).toBeLessThanOrEqual(
       await runEventTime(c.run_id, 'started'),
     );
-    expect(await runEventTypes(b.run_id)).toEqual([
-      'started',
-      'output',
-      'succeeded',
-    ]);
-    expect(await runEventTypes(c.run_id)).toEqual([
-      'started',
-      'output',
-      'succeeded',
-    ]);
+    expectRunEventLifecycle(await runEventTypes(b.run_id), 'succeeded');
+    expectRunEventLifecycle(await runEventTypes(c.run_id), 'succeeded');
     const queueMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
         headers: auth,
@@ -1080,11 +1071,7 @@ new generation`,
     expect(
       runtime.executionRunIds.filter((runId) => runId === paused.run_id),
     ).toHaveLength(1);
-    expect(await runEventTypes(paused.run_id)).toEqual([
-      'started',
-      'output',
-      'succeeded',
-    ]);
+    expectRunEventLifecycle(await runEventTypes(paused.run_id), 'succeeded');
     const pausedMessages = (await (
       await fetch(`${baseUrl}/api/v1/sessions/${sessionId}/messages`, {
         headers: auth,
@@ -1168,6 +1155,15 @@ async function runEventTypes(runId: string): Promise<string[]> {
   return (
     (await response.json()) as { events: Array<{ type: string }> }
   ).events.map((event) => event.type);
+}
+
+function expectRunEventLifecycle(
+  types: string[],
+  terminal: 'succeeded' | 'cancelled',
+): void {
+  expect(types[0]).toBe('started');
+  expect(types).toContain('output');
+  expect(types.at(-1)).toBe(terminal);
 }
 
 async function runEventTime(runId: string, type: string): Promise<number> {

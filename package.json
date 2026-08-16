@@ -29,7 +29,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --write . && git diff --exit-code -- . ':(exclude)package.json'",
+    "format:check": "prettier --check .",
     "check": "pnpm typecheck && pnpm test:repository && pnpm web:check:types",
     "test": "pnpm test:unit && pnpm test:contract && pnpm test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",

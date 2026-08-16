@@ -245,6 +245,7 @@ describe('managed agent registry migration', () => {
       '0031_team_message_consumed_semantics',
       '0032_run_dispatch_priority',
       '0033_team_activation_provenance',
+      '0034_work_composition_resources',
     ]);
   });
 

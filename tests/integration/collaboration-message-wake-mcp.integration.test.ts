@@ -12,7 +12,7 @@ import {
 } from '../../scripts/smoke/agent-team-completion-line.mjs';
 import { createTeamModule } from '../../src/modules/team/team-module.js';
 import { createRootTask, createChildTask, transitionTask } from '../../src/domain/tasks/task.js';
-import { createRun, transitionRun } from '../../src/domain/runs/run.js';
+import { createRun } from '../../src/domain/runs/run.js';
 import { createTeamRun } from '../../src/domain/teams/team-run.js';
 import {
   activateMemberRun,
@@ -28,6 +28,7 @@ import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/po
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
+import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { createCollaborationRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
@@ -82,14 +83,21 @@ async function createMessageWakeFixture() {
     originRef: null,
     now,
   });
-  const rootRun = transitionRun(createRun('smoke gate MCP', { now }), 'running', {}, now);
+  const rootRun = createRun('smoke gate MCP', { now });
   await tasks.save(transitionTask(root, 'active', now));
   await runs.save(rootRun, { taskId: root.id, attempt: 1 });
+  const claimNext = new ClaimNextRun(runs, {
+    workerId: 'smoke-gate-mcp',
+    leaseDurationMs: 60_000,
+    now,
+  });
+  const rootClaim = await claimNext.execute();
+  if (!rootClaim) throw new Error('smoke gate MCP root run was not claimable');
 
   const teamRun = createTeamRun({
     ...owner,
     rootTaskId: root.id,
-    rootRunId: rootRun.id,
+    rootRunId: rootClaim.run.id,
     teamVersionId: randomUUID(),
     environmentVersionId: randomUUID(),
     initialLeadTurn: true,
@@ -119,7 +127,7 @@ async function createMessageWakeFixture() {
       ...owner,
       rootTaskId: root.id,
       parentTaskId: root.id,
-      parentRunId: rootRun.id,
+      parentRunId: rootClaim.run.id,
       invokableKind: 'agent',
       invokableVersionId: lead.agentVersionId,
       inputSnapshotRef: 'inline:lead',
@@ -134,12 +142,14 @@ async function createMessageWakeFixture() {
     'active',
     now,
   );
-  const leadRun = transitionRun(createRun('lead', { now }), 'running', {}, now);
+  const leadRun = createRun('lead', { now });
   await team.executions.createTeamRun(teamRun);
   await team.executions.createMemberRun(lead);
   await team.executions.createMemberRun(member);
   await tasks.save(leadTask);
   await runs.save(leadRun, { taskId: leadTask.id, attempt: 1 });
+  const leadClaim = await claimNext.execute();
+  if (!leadClaim) throw new Error('smoke gate MCP lead run was not claimable');
 
   const server = new RuntimeMcpServer(
     new RuntimeToolRegistry([
@@ -154,10 +164,10 @@ async function createMessageWakeFixture() {
     ...owner,
     productSessionId: randomUUID(),
     taskId: leadTask.id,
-    runId: leadRun.id,
+    runId: leadClaim.run.id,
     teamMemberRunId: lead.id,
     teamRunId: teamRun.id,
-    contextEpoch: deriveTeamContextEpoch(leadTask.id, leadRun.id),
+    contextEpoch: deriveTeamContextEpoch(leadTask.id, leadClaim.run.id),
     allowedTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
     catalogTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
   });

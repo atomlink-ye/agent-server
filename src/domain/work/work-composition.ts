@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { canonicalizeProjectValue } from '../projects/project-canonicalization.js';
 import type { ResolvedResourceManifestEntry } from './resolved-resource-manifest.js';
+import type { WorkInputSchema } from './work-input-schema.js';
 
 export type WorkCompositionKind = 'single_agent' | 'collaboration';
 export type WorkParticipantRole = 'primary' | 'lead' | 'member';
@@ -60,6 +61,8 @@ export interface ResolvedWorkDefinition {
   readonly description: string | null;
   readonly sourceFingerprint: string;
   readonly resolvedFingerprint: string;
+  /** Present for Product-authored Work Definitions. Legacy compatibility rows may omit it. */
+  readonly inputSchema?: WorkInputSchema;
   readonly participants: readonly ResolvedWorkParticipant[];
   readonly environment: ResolvedEnvironmentRef | null;
   readonly memories: readonly ResolvedMemoryRef[];

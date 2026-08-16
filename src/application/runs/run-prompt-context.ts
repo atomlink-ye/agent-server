@@ -1,4 +1,7 @@
-import { projectBoardStatus, workRef } from '../../domain/collaboration/collaboration.js';
+import {
+  projectBoardStatus,
+  workRef,
+} from '../../domain/collaboration/collaboration.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
@@ -153,11 +156,10 @@ export class RunPromptContext {
         team.id,
         owner,
       );
-    const attempts =
-      await this.collaborativeExecutions.findAttemptsByTeamRunId(
-        team.id,
-        owner,
-      );
+    const attempts = await this.collaborativeExecutions.findAttemptsByTeamRunId(
+      team.id,
+      owner,
+    );
     const decision = team.completionRequestedByRunId
       ? await this.collaborativeExecutions.findCompletionDecisionForRequest(
           team.id,
@@ -252,7 +254,8 @@ export class RunPromptContext {
         attempts.map(async (attempt) => {
           if (
             attempt.status !== 'failed' ||
-            latestAttemptByWorkItem.get(attempt.workItemId)?.id !== attempt.id ||
+            latestAttemptByWorkItem.get(attempt.workItemId)?.id !==
+              attempt.id ||
             !attempt.executionTaskId
           )
             return;

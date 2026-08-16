@@ -24,7 +24,8 @@ export class ExecutionRunRegistry {
     try {
       return await session.run(input, observer);
     } finally {
-      if (this.#active.get(input.runId) === session) this.#active.delete(input.runId);
+      if (this.#active.get(input.runId) === session)
+        this.#active.delete(input.runId);
     }
   }
 

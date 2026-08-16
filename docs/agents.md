@@ -15,15 +15,15 @@ Agent Server is in **Prove / MVE-first** development. Prove one representative p
 
 ## Task routing
 
-| Task type | Mandatory authority |
-| --- | --- |
-| New feature | Product, Feature ledger, relevant Components/Contracts |
-| API/event/schema change | Contracts, consumers, ADR when ownership changes |
-| Paseo/execution change | Runtime/Execution component and contract, real affected path when needed |
-| Task/Run/Team change | Domain model and orchestration component |
-| Identity/credential/security | Security/tenancy docs and Human Gate |
-| Storage/migration | Domain/data ownership, migration/recovery guidance, ADR when needed |
-| Test/eval/environment work | Quality docs, topology/fixture boundary, actual consumer |
+| Task type                    | Mandatory authority                                                      |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| New feature                  | Product, Feature ledger, relevant Components/Contracts                   |
+| API/event/schema change      | Contracts, consumers, ADR when ownership changes                         |
+| Paseo/execution change       | Runtime/Execution component and contract, real affected path when needed |
+| Task/Run/Team change         | Domain model and orchestration component                                 |
+| Identity/credential/security | Security/tenancy docs and Human Gate                                     |
+| Storage/migration            | Domain/data ownership, migration/recovery guidance, ADR when needed      |
+| Test/eval/environment work   | Quality docs, topology/fixture boundary, actual consumer                 |
 
 ## Authority order
 

@@ -215,7 +215,9 @@ export class TeamDriver {
       input.task.teamTaskKind !== 'work_attempt' &&
       input.task.teamTaskKind !== 'direct_message'
     )
-      throw new Error('Collaboration child task is missing explicit task kind.');
+      throw new Error(
+        'Collaboration child task is missing explicit task kind.',
+      );
 
     if (input.task.teamTaskKind === 'direct_message') {
       if (
@@ -252,7 +254,10 @@ export class TeamDriver {
         }
       }
       if (input.run.status === 'succeeded') {
-        const fresh = await this.executions.findTeamRunById(input.team.id, owner);
+        const fresh = await this.executions.findTeamRunById(
+          input.team.id,
+          owner,
+        );
         if (
           fresh?.status === 'active' &&
           fresh.completionRequestedByRunId === input.run.id
@@ -308,7 +313,8 @@ export class TeamDriver {
       const attempt = attempts.find(
         (candidate) => candidate.executionTaskId === input.task.id,
       );
-      if (!attempt) throw new Error('Collaboration work attempt linkage is missing.');
+      if (!attempt)
+        throw new Error('Collaboration work attempt linkage is missing.');
       if (input.run.status === 'succeeded') {
         if (attempt.status === 'running') {
           const failedTeam = await this.executions.failTeamRunAtomically({
@@ -419,23 +425,23 @@ export class TeamDriver {
       }
 
       if (fresh.completionRequestedByRunId) {
-        await this.reconciler?.reconcileForRootTask(
-          fresh.rootTaskId,
-          owner,
-          { parentTask: input.task },
-        );
+        await this.reconciler?.reconcileForRootTask(fresh.rootTaskId, owner, {
+          parentTask: input.task,
+        });
         const after = await this.executions.findAttemptsByTeamRunId(
           fresh.id,
           owner,
         );
-        if (after.some((attempt) => !['completed', 'failed'].includes(attempt.status)))
+        if (
+          after.some(
+            (attempt) => !['completed', 'failed'].includes(attempt.status),
+          )
+        )
           return;
         if (currentDecision?.decision === 'reject') {
-          await this.reconciler?.reconcileForRootTask(
-            fresh.rootTaskId,
-            owner,
-            { parentTask: input.task },
-          );
+          await this.reconciler?.reconcileForRootTask(fresh.rootTaskId, owner, {
+            parentTask: input.task,
+          });
           return;
         }
         const finalText = input.run.result?.text?.trim();
@@ -454,11 +460,9 @@ export class TeamDriver {
       }
     }
 
-    await this.reconciler?.reconcileForRootTask(
-      fresh.rootTaskId,
-      owner,
-      { parentTask: input.task },
-    );
+    await this.reconciler?.reconcileForRootTask(fresh.rootTaskId, owner, {
+      parentTask: input.task,
+    });
   }
 
   private async currentCompletionDecision(

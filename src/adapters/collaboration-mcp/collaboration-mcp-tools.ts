@@ -271,7 +271,9 @@ function success(value: unknown) {
     ? { items: value }
     : (value as Record<string, unknown>);
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
+    content: [
+      { type: 'text' as const, text: JSON.stringify(structuredContent) },
+    ],
     structuredContent,
   };
 }
@@ -279,7 +281,9 @@ function success(value: unknown) {
 function failure(error: string, isError = false) {
   const structuredContent = { error };
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
+    content: [
+      { type: 'text' as const, text: JSON.stringify(structuredContent) },
+    ],
     structuredContent,
     ...(isError ? { isError: true } : {}),
   };

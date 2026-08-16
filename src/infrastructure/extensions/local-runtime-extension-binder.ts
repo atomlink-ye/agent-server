@@ -36,7 +36,11 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<ExecutionExtensionBinding | undefined> {
     const platformCollaboration = Boolean(input.teamMemberRunId);
-    if (!input.skills.length && !input.toolRefs.length && !platformCollaboration)
+    if (
+      !input.skills.length &&
+      !input.toolRefs.length &&
+      !platformCollaboration
+    )
       return undefined;
 
     const projectCwd = resolve(input.cellCwd ?? this.#agentCwd);

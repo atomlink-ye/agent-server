@@ -500,9 +500,9 @@ describe('ExecuteRun', () => {
       }),
       expect.anything(),
     );
-    expect(vi.mocked(runtime.executeTurn).mock.calls[0]?.[0]).not.toHaveProperty(
-      'compatibilitySessionBinding',
-    );
+    expect(
+      vi.mocked(runtime.executeTurn).mock.calls[0]?.[0],
+    ).not.toHaveProperty('compatibilitySessionBinding');
   });
   it('ignores a stale Lead callback but preserves current-Lead no-progress and revision fences', async () => {
     const now = () => new Date('2026-07-23T00:00:00.000Z');

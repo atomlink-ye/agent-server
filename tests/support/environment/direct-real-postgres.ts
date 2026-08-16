@@ -36,7 +36,9 @@ export async function startDirectRealPostgresIfNeeded(
   const databaseUrl = environment.urls.postgres;
   if (!databaseUrl) {
     await environment.stop('failed');
-    throw new Error('direct real-Postgres test environment exposed no database URL');
+    throw new Error(
+      'direct real-Postgres test environment exposed no database URL',
+    );
   }
   process.env.DATABASE_URL = databaseUrl;
   process.env.POSTGRES_URL = databaseUrl;

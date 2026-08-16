@@ -6,9 +6,7 @@ import type {
 export type RuntimeSessionBindingProjection = 'unbound' | 'bound' | 'partial';
 export type RuntimeSessionActivityProjection = 'idle' | 'running';
 export type RuntimeSessionAvailabilityProjection =
-  | 'unknown'
-  | 'available'
-  | 'unavailable';
+  'unknown' | 'available' | 'unavailable';
 
 export interface RuntimeSessionProjection {
   readonly binding: RuntimeSessionBindingProjection;

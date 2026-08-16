@@ -114,7 +114,10 @@ describe('PaseoExecutionPlane', () => {
       externalSessionId: 'agent-1',
     });
 
-    const result = await created.session.run({ runId: 'run-1', prompt: 'first' });
+    const result = await created.session.run({
+      runId: 'run-1',
+      prompt: 'first',
+    });
     expect(result).toMatchObject({
       status: 'completed',
       output: { text: 'done', provider: 'opencode', model: 'free/model' },
@@ -131,7 +134,10 @@ describe('PaseoExecutionPlane', () => {
         ...sessionSpec,
         workspace: {
           cwd: '/tmp/execution-plane-test/cell-1',
-          binding: { plane: 'paseo', externalWorkspaceId: 'existing-workspace' },
+          binding: {
+            plane: 'paseo',
+            externalWorkspaceId: 'existing-workspace',
+          },
         },
       },
     );
@@ -155,7 +161,10 @@ describe('PaseoExecutionPlane', () => {
           ...sessionSpec,
           workspace: {
             cwd: '/tmp/execution-plane-test/cell-1',
-            binding: { plane: 'paseo', externalWorkspaceId: 'existing-workspace' },
+            binding: {
+              plane: 'paseo',
+              externalWorkspaceId: 'existing-workspace',
+            },
           },
         },
       ),
@@ -182,15 +191,23 @@ describe('PaseoExecutionPlane', () => {
     const plane = createPlane(client);
     const created = await plane.createSession(sessionSpec);
 
-    expect(supportsPlaneCapability(plane.capabilities(), 'streaming')).toBe(true);
+    expect(supportsPlaneCapability(plane.capabilities(), 'streaming')).toBe(
+      true,
+    );
     expect(
       supportsPlaneCapability(plane.capabilities(), 'provider_discovery'),
     ).toBe(true);
     expect(
-      supportsSessionCapability(created.session.capabilities, 'reasoning_stream'),
+      supportsSessionCapability(
+        created.session.capabilities,
+        'reasoning_stream',
+      ),
     ).toBe(true);
     expect(
-      supportsSessionCapability(created.session.capabilities, 'permission_response'),
+      supportsSessionCapability(
+        created.session.capabilities,
+        'permission_response',
+      ),
     ).toBe(false);
   });
 });

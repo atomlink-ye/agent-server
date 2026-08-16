@@ -5,9 +5,13 @@ import { createTeamCompletionDecision } from '../../domain/teams/team-completion
 import { createTeamMessage } from '../../domain/teams/team-message.js';
 import { createTeamRun } from '../../domain/teams/team-run.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
+import type { TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type {
+  OwnerScope,
+  TeamExecutionRepository,
+} from '../ports/team-execution-repository.js';
 import { CollaborationActivationReconciler } from './collaboration-activation-reconciler.js';
 
 const now = () => new Date('2026-08-08T00:00:00.000Z');
@@ -213,12 +217,12 @@ describe('CollaborationActivationReconciler', () => {
     const readyForLeadReview = (
       reconciler as unknown as {
         readyForLeadReview(
-          team: typeof team,
+          team: TeamRun,
           lead: TeamMemberRun,
           attempts: readonly TeamWorkItemAttempt[],
           workItems: readonly TeamWorkItem[],
           dependencies: readonly unknown[],
-          owner: typeof owner,
+          owner: OwnerScope,
         ): Promise<boolean>;
       }
     ).readyForLeadReview.bind(reconciler);

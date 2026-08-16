@@ -35,30 +35,23 @@ export interface WorkDefinitionSourceDefinition {
   readonly createdAt: string;
 }
 
-type WorkDefinitionSourceVersionCommon = {
+/**
+ * Published source version. Callers that know the composition kind may supply a
+ * concrete source type; repository/loader boundaries validate the source before
+ * constructing this value.
+ */
+export interface WorkDefinitionSourceVersion<
+  Source extends WorkDefinitionCompositionSource = any,
+> {
   readonly id: string;
   readonly definitionId: string;
   readonly owner: WorkDefinitionSourceDefinition['owner'];
   readonly status: 'published';
+  readonly source: Source;
   readonly fingerprint: string;
   readonly createdAt: string;
   readonly publishedAt: string;
-};
-
-/** Keep the source discriminant on the version so the compiler can narrow it. */
-export type WorkDefinitionSourceVersion =
-  | (WorkDefinitionSourceVersionCommon & {
-      readonly source: Extract<
-        WorkDefinitionCompositionSource,
-        { readonly kind: 'single_agent' }
-      >;
-    })
-  | (WorkDefinitionSourceVersionCommon & {
-      readonly source: Extract<
-        WorkDefinitionCompositionSource,
-        { readonly kind: 'collaboration' }
-      >;
-    });
+}
 
 export class InvalidWorkDefinitionSourceError extends Error {
   public readonly code = 'invalid_work_definition_source';

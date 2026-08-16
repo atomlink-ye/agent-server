@@ -1,14 +1,14 @@
 export type WorkInputProperty =
   | Readonly<{
       type: 'string';
-      min_length?: number;
-      max_length?: number;
-      enum?: readonly string[];
+      min_length?: number | undefined;
+      max_length?: number | undefined;
+      enum?: readonly string[] | undefined;
     }>
   | Readonly<{
       type: 'number' | 'integer';
-      minimum?: number;
-      maximum?: number;
+      minimum?: number | undefined;
+      maximum?: number | undefined;
     }>
   | Readonly<{ type: 'boolean' }>;
 
@@ -28,7 +28,10 @@ export type WorkInputSnapshot = Readonly<Record<string, unknown>>;
 export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchema {
   if (!value || value.type !== 'object' || !isRecord(value.properties))
     throw new Error('Work input schema must describe an object.');
-  if (!Array.isArray(value.required) || typeof value.additional_properties !== 'boolean')
+  if (
+    !Array.isArray(value.required) ||
+    typeof value.additional_properties !== 'boolean'
+  )
     throw new Error('Work input schema is invalid.');
   const properties: Record<string, WorkInputProperty> = {};
   for (const [name, property] of Object.entries(value.properties)) {
@@ -38,28 +41,38 @@ export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchem
     if (type === 'string') {
       const min = optionalFiniteInteger(property.min_length);
       const max = optionalFiniteInteger(property.max_length);
-      if (min !== undefined && min < 0) throw new Error('Work input schema string minimum is invalid.');
-      if (max !== undefined && max < 0) throw new Error('Work input schema string maximum is invalid.');
+      if (min !== undefined && min < 0)
+        throw new Error('Work input schema string minimum is invalid.');
+      if (max !== undefined && max < 0)
+        throw new Error('Work input schema string maximum is invalid.');
       if (min !== undefined && max !== undefined && min > max)
         throw new Error('Work input schema string bounds are invalid.');
       const choices = property.enum;
       if (
         choices !== undefined &&
-        (!Array.isArray(choices) || choices.length < 1 || choices.some((item) => typeof item !== 'string'))
+        (!Array.isArray(choices) ||
+          choices.length < 1 ||
+          choices.some((item) => typeof item !== 'string'))
       )
         throw new Error('Work input schema string enum is invalid.');
       properties[name] = Object.freeze({
         type,
         ...(min === undefined ? {} : { min_length: min }),
         ...(max === undefined ? {} : { max_length: max }),
-        ...(choices === undefined ? {} : { enum: Object.freeze([...choices]) }),
+        ...(choices === undefined
+          ? {}
+          : { enum: Object.freeze([...choices]) }),
       });
       continue;
     }
     if (type === 'number' || type === 'integer') {
       const minimum = optionalFiniteNumber(property.minimum);
       const maximum = optionalFiniteNumber(property.maximum);
-      if (minimum !== undefined && maximum !== undefined && minimum > maximum)
+      if (
+        minimum !== undefined &&
+        maximum !== undefined &&
+        minimum > maximum
+      )
         throw new Error('Work input schema numeric bounds are invalid.');
       properties[name] = Object.freeze({
         type,
@@ -104,7 +117,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalFiniteInteger(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isInteger(value) || !Number.isFinite(value))
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    !Number.isFinite(value)
+  )
     throw new Error('Work input schema integer bound is invalid.');
   return value;
 }

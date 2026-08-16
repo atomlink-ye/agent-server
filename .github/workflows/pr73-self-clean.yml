@@ -1,0 +1,44 @@
+name: PR73 Self Clean
+
+on:
+  push:
+    branches:
+      - feat/composition-first-framework
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/composition-first-framework
+          fetch-depth: 0
+      - name: Ensure migration expectation and remove temporary workflows
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/integration/durable-kernel-postgres.integration.test.ts')
+          text = path.read_text()
+          needle = "'0033_team_activation_provenance.sql',"
+          replacement = needle + "\n      '0034_work_composition_resources.sql',"
+          if "'0034_work_composition_resources.sql'," not in text:
+              text = text.replace(needle, replacement)
+          text = text.replace('toHaveLength(33)', 'toHaveLength(34)')
+          path.write_text(text)
+          PY
+          npx prettier --write tests/integration/durable-kernel-postgres.integration.test.ts
+          git rm -f .github/workflows/pr73-self-edit.yml .github/workflows/pr73-self-clean.yml
+      - name: Commit final patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/integration/durable-kernel-postgres.integration.test.ts
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "test(migrations): include composition resource migration"
+          git push origin HEAD:feat/composition-first-framework

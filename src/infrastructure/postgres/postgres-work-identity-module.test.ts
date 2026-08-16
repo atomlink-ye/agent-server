@@ -60,6 +60,62 @@ describe('Postgres Work identity module', () => {
     ]);
   });
 
+  it('pins the resolved manifest while the WorkRun is still pending', async () => {
+    const entry = {
+      slot: 'definition',
+      resourceKind: 'definition' as const,
+      requestedRef: 'agent:version-1',
+      resolvedVersionId: 'version-1',
+      resolvedFingerprint: 'sha256:definition',
+      resolvedAt: '2026-08-16T00:00:00.000Z',
+    };
+    const queries: string[] = [];
+    const client = {
+      release: vi.fn(),
+      query: vi.fn(async (sql: string) => {
+        queries.push(sql);
+        if (sql.startsWith('SELECT id FROM work_runs'))
+          return { rows: [{ id: 'run-1' }] };
+        if (sql.includes('FROM work_run_resource_manifest')) {
+          if (sql.includes('FOR UPDATE')) return { rows: [] };
+          return {
+            rows: [
+              {
+                work_run_id: 'run-1',
+                tenant_id: 'tenant-1',
+                workspace_id: '00000000-0000-4000-8000-000000000102',
+                slot: entry.slot,
+                resource_kind: entry.resourceKind,
+                requested_ref: entry.requestedRef,
+                resolved_version_id: entry.resolvedVersionId,
+                resolved_fingerprint: entry.resolvedFingerprint,
+                resolved_at: entry.resolvedAt,
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      }),
+    };
+    const repository = new PostgresWorkIdentityRepository({
+      query: client.query,
+      connect: async () => client,
+    });
+
+    const manifest = await repository.appendResolvedManifest({
+      workRunId: 'run-1',
+      owner: {
+        tenantId: 'tenant-1',
+        workspaceId: '00000000-0000-4000-8000-000000000102',
+      },
+      entries: [entry],
+    });
+
+    expect(manifest.entries).toEqual([entry]);
+    expect(queries.some((sql) => sql.includes('root_task_id') && sql.includes('FOR UPDATE'))).toBe(false);
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
   it.each([
     [{ code: '22P02' }],
     [{ code: '23503', constraint: 'works_workspace_id_tenant_id_fkey' }],

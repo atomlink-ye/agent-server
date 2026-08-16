@@ -96,7 +96,7 @@ export function manifestEntriesForResolvedWorkDefinition(
       resourceKind: 'definition',
       requestedRef: `${definition.kind}:${definition.definitionVersionId}`,
       resolvedVersionId: definition.definitionVersionId,
-      resolvedFingerprint: definition.sourceFingerprint,
+      resolvedFingerprint: definition.resolvedFingerprint,
       resolvedAt,
     },
   ];

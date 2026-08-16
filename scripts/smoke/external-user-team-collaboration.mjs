@@ -378,7 +378,31 @@ spec:
     },
   });
   progress('team_invoked', { task_id: invoked.task_id });
-  const { task, projection } = await pollForCompletion(invoked.task_id);
+  let task;
+  let projection;
+  try {
+    ({ task, projection } = await pollForCompletion(invoked.task_id));
+  } catch (error) {
+    try {
+      const factsBeforeFailure = await durableFacts(pool, invoked.task_id);
+      progress('durable_facts_before_failure', {
+        team: factsBeforeFailure.team,
+        messages: factsBeforeFailure.messages.map((message) => ({
+          sequence: message.sequence,
+          sender: message.sender_name,
+          recipient: message.recipient_name,
+          body: summary(message.body),
+        })),
+        activations: factsBeforeFailure.activations,
+        work: factsBeforeFailure.work,
+      });
+    } catch (factError) {
+      progress('durable_facts_before_failure_unavailable', {
+        error: factError instanceof Error ? factError.message : String(factError),
+      });
+    }
+    throw error;
+  }
   const facts = await durableFacts(pool, invoked.task_id);
   progress('durable_facts', {
     team: facts.team,

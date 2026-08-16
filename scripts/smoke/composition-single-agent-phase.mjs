@@ -333,7 +333,8 @@ spec:
     if (
       !runtimeSession ||
       runtimeSession.scope_kind !== 'task' ||
-      runtimeSession.scope_id !== rootTaskId ||
+      runtimeSession.scope_id !== null ||
+      runtimeSession.task_id !== rootTaskId ||
       runtimeSession.agent_version_id !== agent.id ||
       runtimeSession.environment_version_id !== environment.id
     )

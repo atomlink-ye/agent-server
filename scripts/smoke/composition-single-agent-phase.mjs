@@ -321,9 +321,12 @@ spec:
     );
 
     const session = await pool.query(
-      `SELECT id,scope_kind,scope_id,task_id,agent_version_id,environment_version_id
-         FROM runtime_sessions
-        WHERE task_id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4`,
+      `SELECT rs.id,rs.scope_kind,rs.scope_id,rs.task_id,
+              sls.agent_version_id,sls.environment_version_id
+         FROM runtime_sessions rs
+         JOIN session_launch_snapshots sls ON sls.id=rs.launch_snapshot_id
+        WHERE rs.task_id=$1 AND rs.tenant_id=$2
+          AND rs.principal_type=$3 AND rs.principal_id=$4`,
       [rootTaskId, owner.tenant_id, owner.principal_type, owner.principal_id],
     );
     const runtimeSession = session.rows[0];

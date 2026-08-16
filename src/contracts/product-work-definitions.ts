@@ -33,7 +33,8 @@ export const WorkDefinitionParticipantPlanSchema = z
   .object({
     name: z.string().min(1),
     role: z.enum(['primary', 'lead', 'member']),
-    agent_version_id: z.uuid(),
+    source: z.enum(['referenced', 'inline']),
+    agent_version_id: z.uuid().nullable(),
     skills: z.array(z.string()),
     tools: z.array(z.string()),
   })
@@ -48,10 +49,22 @@ export const WorkDefinitionPlanResponseSchema = z
       .object({
         kind: z.enum(['single_agent', 'collaboration']),
         participants: z.array(WorkDefinitionParticipantPlanSchema).min(1),
-        environment_version_id: z.uuid(),
+        environment: z
+          .object({
+            source: z.enum(['referenced', 'inline']),
+            environment_version_id: z.uuid().nullable(),
+          })
+          .strict(),
         memory_version_ids: z.array(z.uuid()),
         required_runtime_capabilities: z.array(z.string()),
         platform_capabilities: z.array(z.string()),
+        materialization: z
+          .object({
+            inline_agents: z.number().int().nonnegative(),
+            inline_environment: z.boolean(),
+            internal_team: z.boolean(),
+          })
+          .strict(),
       })
       .strict(),
     diagnostics: z.tuple([]),
@@ -107,7 +120,9 @@ export const WorkDefinitionApplyResponseSchema = z
     version: ProductWorkDefinitionVersionSchema,
     resolved: z
       .object({
-        resource_manifest_fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+        resource_manifest_fingerprint: z
+          .string()
+          .regex(/^sha256:[0-9a-f]{64}$/),
       })
       .strict(),
   })

@@ -11,9 +11,11 @@ import type { DefinitionReadApi } from '../../application/ports/definition-read-
 import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
-import type { ProductWorkDefinitionApi } from '../../application/work/product-work-definition-api.js';
 import { StartWorkRun } from '../../application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
+import {
+  validateProductWorkDefinition,
+} from '../../application/work/validate-product-work-definition.js';
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
@@ -23,6 +25,7 @@ import {
   PostgresWorkIdentityRepository,
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresWorkRunInputStore } from '../../infrastructure/postgres/postgres-work-run-input-store.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
@@ -68,7 +71,6 @@ export function createWorkModule(options: {
   >;
   /** Production supplies the generic Composition resolver; legacy tests may omit it. */
   readonly definitionResolution?: WorkDefinitionResolutionPort;
-  readonly productDefinitions?: Pick<ProductWorkDefinitionApi, 'getInputContract'>;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
   /** Production supplies the RuntimeModule capability authority. */
@@ -77,6 +79,9 @@ export function createWorkModule(options: {
   };
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
+  const definitionSources = new PostgresWorkDefinitionSourceRepository(
+    options.database,
+  );
   const workIdentity = new WorkIdentityApi({
     repository,
     definitions: options.definitions,
@@ -90,12 +95,31 @@ export function createWorkModule(options: {
     ...(options.runtimeCapabilities
       ? { runtimeCapabilities: options.runtimeCapabilities }
       : {}),
-    ...(options.productDefinitions
-      ? {
-          productDefinitions: options.productDefinitions,
-          workRunInputs: new PostgresWorkRunInputStore(options.database),
-        }
-      : {}),
+    productDefinitions: {
+      async getInputContract({ versionId, accessContext }) {
+        const productVersion = await definitionSources.findProductVersion(
+          versionId,
+          {
+            tenantId: accessContext.tenantId,
+            workspaceId: accessContext.workspaceId,
+            principalType: accessContext.principalType,
+            principalId: accessContext.principalId,
+          },
+        );
+        if (!productVersion) return null;
+        const parsed = validateProductWorkDefinition(
+          JSON.stringify(productVersion.authorSource),
+        );
+        if (!parsed.valid)
+          throw new Error('Persisted Product Work Definition is invalid.');
+        return {
+          name: parsed.document.metadata.name,
+          description: parsed.document.metadata.description ?? null,
+          schema: parsed.document.spec.input_schema,
+        };
+      },
+    },
+    workRunInputs: new PostgresWorkRunInputStore(options.database),
   });
   const workIdentityQuery = {
     findWorkById: (id: string, owner: WorkIdentityOwnerScope) =>

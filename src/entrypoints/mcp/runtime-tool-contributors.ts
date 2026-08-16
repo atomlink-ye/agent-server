@@ -60,25 +60,23 @@ export function createMemoryRuntimeContributor(input: {
   };
 }
 
+/** Platform-owned Collaboration toolbox for authenticated Team participants. */
 export function createCollaborationRuntimeContributor(input: {
   readonly contextResolver: TeamToolContextResolver;
   readonly kernel: CollaborationKernel;
 }): RuntimeToolContributor {
   return ({ server, grant, grants }) => {
-    if (!grant.teamMemberRunId || !grant.taskId || !grant.runId) return;
-    registerCollaborationMcpTools(
-      server,
-      grant.catalogTools,
-      (toolRef) => grants.isToolAllowed(grant.grantId, toolRef),
-      {
-        resolve: (currentGrant) => input.contextResolver.resolve(currentGrant),
-        grantId: grant.grantId,
-        currentGrant: () => grants.get(grant.grantId),
-        begin: (grantId) => grants.beginToolCall(grantId),
-        end: (grantId) => grants.endToolCall(grantId),
-        kernel: input.kernel,
+    if (!grant.teamMemberRunId) return;
+    registerCollaborationMcpTools(server, {
+      resolve: (currentGrant) => input.contextResolver.resolve(currentGrant),
+      grantId: grant.grantId,
+      currentGrant: () => grants.get(grant.grantId),
+      begin: (grantId) => {
+        grants.beginToolCall(grantId);
       },
-    );
+      end: (grantId) => grants.endToolCall(grantId),
+      kernel: input.kernel,
+    });
   };
 }
 
@@ -307,7 +305,7 @@ async function createProposal(
   create: CreateLearningProposal,
   teamTools?: { contextResolver: TeamToolContextResolver },
 ) {
-  if (!grant.taskId || !grant.runId || !grant.teamMemberRunId || !teamTools)
+  if (!grant.activeTurn || !grant.teamMemberRunId || !teamTools)
     return notFound();
   const owner = {
     tenantId: grant.tenantId,
@@ -327,8 +325,8 @@ async function createProposal(
     if (!memory) return notFound();
     const proposal = await create.execute({
       sourceTeamRunId: actor.teamRun.id,
-      sourceTaskId: grant.taskId,
-      sourceRunId: grant.runId,
+      sourceTaskId: grant.activeTurn.taskId,
+      sourceRunId: grant.activeTurn.runId,
       targetMemoryStoreId: args.memory_store_id,
       targetMemoryId: memory.id,
       targetPath: memory.path,

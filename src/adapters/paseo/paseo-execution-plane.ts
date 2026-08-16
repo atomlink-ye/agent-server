@@ -36,6 +36,7 @@ const PASEO_PLANE_CAPABILITIES: ExecutionPlaneCapabilities = {
     'permissions',
     'nested_activities',
     'provider_discovery',
+    'platform_mcp',
   ]),
 };
 
@@ -282,7 +283,9 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
   } {
     const provider = spec.provider ?? this.#options.provider;
     if (!isManagedEnvironmentProvider(provider))
-      throw new ProtocolViolationError('The requested runtime provider is unsupported.');
+      throw new ProtocolViolationError(
+        'The requested runtime provider is unsupported.',
+      );
     const model = spec.model ?? this.#connections.model?.id;
     if (!model)
       throw new ExecutionPlaneUnavailableError(

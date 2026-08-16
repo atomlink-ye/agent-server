@@ -10,7 +10,8 @@ export type ExecutionPlaneCapability =
   | 'timeline_replay'
   | 'permissions'
   | 'nested_activities'
-  | 'provider_discovery';
+  | 'provider_discovery'
+  | 'platform_mcp';
 
 export type ExecutionSessionCapability =
   | 'permission_response'

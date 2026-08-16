@@ -198,6 +198,48 @@ async function createMessageWakeFixture(options: { memberIdle?: boolean } = {}) 
 }
 
 describe('canonical smoke direct-message wake mutation', () => {
+  it('reports a direct message that does not require acknowledgement', async () => {
+    const fixture = await createMessageWakeFixture();
+    try {
+      const sent = await fixture.client.callTool({
+        name: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
+        arguments: {
+          recipient: 'member',
+          body: 'SMOKE_GATE_PENDING_WAKE',
+          requires_ack: false,
+        },
+      });
+      expect(sent.isError).not.toBe(true);
+      const projection = await new ProjectAgenticTeam(
+        fixture.team.executions,
+        fixture.team.messages,
+        new PostgresTaskRepository(fixture.database),
+      ).project(fixture.teamRun.id, owner);
+      const message = projection?.directMessages.find(
+        (candidate) => candidate.summary === 'SMOKE_GATE_PENDING_WAKE',
+      );
+      expect(message).toMatchObject({ requiresAck: false, status: 'pending' });
+
+      const diagnostic = formatSmokeOutcome({
+        kind: 'collaboration_not_achieved',
+        taskStatus: 'completed',
+        failures: evaluateCompletionFacts({
+          direct_messages: [
+            {
+              sequence: message?.sequence,
+              requires_ack: message?.requiresAck,
+              status: message?.status,
+            },
+          ],
+        }).failures,
+      });
+      expect(diagnostic).toContain('requires_ack_direct_message');
+    } finally {
+      await fixture.client.close();
+      await fixture.database.close();
+    }
+  });
+
   it('reports an unacknowledged message after the recipient is materialized', async () => {
     const fixture = await createMessageWakeFixture({ memberIdle: true });
     try {

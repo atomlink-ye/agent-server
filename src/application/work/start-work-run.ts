@@ -71,8 +71,8 @@ export class StartWorkRun {
     )
       throw new WorkDefinitionValidationError();
 
-    // Definition resolution and capability admission happen before a Task can be
-    // submitted to the execution pipeline.
+    // Resolve and check capabilities before the technical Task can reach the
+    // Execution Plane. No provider/runtime side effect is allowed on failure.
     const resolved = await this.identity.resolveCurrentDefinition({
       owner,
       accessContext: input.accessContext,
@@ -92,11 +92,8 @@ export class StartWorkRun {
     if (pending.definitionVersionId !== resolved.definitionVersionId)
       throw new WorkDefinitionValidationError();
 
-    // Freeze the exact composition on the durable WorkRun before technical root
-    // Task admission. Retries with the same trigger must observe the same bytes.
-    await this.recordResolvedManifest(pending, owner, resolved);
-
     if (pending.rootTaskId) {
+      await this.recordResolvedManifest(pending, owner, resolved);
       return {
         workRun: pending,
         executionReceipt: { reused: true, taskId: pending.rootTaskId },
@@ -121,6 +118,10 @@ export class StartWorkRun {
         owner,
         now: this.now().toISOString(),
       });
+      // The current durable repository permits a manifest only after root Task
+      // binding. The Task itself is admitted from the already-resolved immutable
+      // definition, and retries converge on this exact manifest.
+      await this.recordResolvedManifest(bound, owner, resolved);
       return {
         workRun: bound,
         executionReceipt: { reused: receipt.reused, taskId: receipt.taskId },

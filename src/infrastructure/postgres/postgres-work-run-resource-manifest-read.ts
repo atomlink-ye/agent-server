@@ -34,16 +34,29 @@ export class PostgresWorkRunResourceManifestRead
     scope: WorkRunManifestScope,
   ): Promise<WorkRunCompositionManifest | null> {
     const result = await this.db.query<Row>(
-      `SELECT wr.id AS work_run_id,wr.definition_version_id,wr.root_task_id,
+      `SELECT wr.id AS work_run_id,wr.definition_version_id,$1::uuid AS root_task_id,
               m.slot,m.resource_kind,m.requested_ref,m.resolved_version_id,
               m.resolved_fingerprint,m.resolved_at
-         FROM work_runs wr
-         JOIN tasks root ON root.id=wr.root_task_id
+         FROM tasks root
+         JOIN work_runs wr
+           ON wr.tenant_id=root.tenant_id
+          AND wr.workspace_id=root.workspace_id
+          AND (
+            wr.root_task_id=root.id
+            OR EXISTS (
+              SELECT 1 FROM admissions a
+               WHERE a.task_id=root.id
+                 AND a.tenant_id=root.tenant_id
+                 AND a.principal_type=root.principal_type
+                 AND a.principal_id=root.principal_id
+                 AND a.idempotency_key=('work-run:' || wr.id::text)
+            )
+          )
          JOIN work_run_resource_manifest m
            ON m.work_run_id=wr.id
           AND m.tenant_id=wr.tenant_id
           AND m.workspace_id=wr.workspace_id
-        WHERE wr.root_task_id=$1 AND wr.tenant_id=$2 AND wr.workspace_id=$3
+        WHERE root.id=$1 AND root.tenant_id=$2 AND root.workspace_id=$3
           AND root.principal_type=$4 AND root.principal_id=$5
         ORDER BY m.slot`,
       [

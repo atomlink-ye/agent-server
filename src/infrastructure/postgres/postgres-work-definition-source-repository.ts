@@ -10,7 +10,6 @@ import {
   type WorkDefinitionSourceVersion,
   type WorkDefinitionCompositionSource,
 } from '../../domain/work/work-definition-source.js';
-import { canonicalizeProjectValue } from '../../domain/projects/project-canonicalization.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -149,8 +148,7 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       !version ||
       version.definitionId !== input.definitionId ||
       version.fingerprint !== input.fingerprint ||
-      canonicalizeProjectValue(version.source) !==
-        canonicalizeProjectValue(source)
+      JSON.stringify(version.source) !== JSON.stringify(source)
     )
       throw new Error('Work Definition source version conflict.');
     return { definition, version };

@@ -9,6 +9,7 @@ import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import {
+  collaborationToolRefsForMessageTurn,
   collaborationToolRefsForLeadPolicy,
   deriveAgenticLeadCommandPolicy,
 } from './team-policy-evaluator.js';
@@ -105,6 +106,12 @@ function makeRejectDecision(
 }
 
 describe('deriveAgenticLeadCommandPolicy', () => {
+  it('allows a Lead to finish from a direct-message turn', () => {
+    expect(collaborationToolRefsForMessageTurn('lead')).toContain(
+      AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+    );
+  });
+
   it('exposes only the canonical finish ref when the accepted board can finish', () => {
     const team = makeTeam();
     const workItem = makeWork(team.id);

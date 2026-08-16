@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRootTask, type Task } from '../../domain/tasks/task.js';
+import { createChildTask, createRootTask, type Task } from '../../domain/tasks/task.js';
 import { createRun, type Run } from '../../domain/runs/run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamDriver } from './team-driver.js';
@@ -108,6 +108,50 @@ function settledAttempts() {
 }
 
 describe('TeamDriver completion approval', () => {
+  it('completes a no-Work Team after the Lead finishes a direct-message turn', async () => {
+    const team = teamRun({ completionRequestedByRunId: 'lead-direct-run-1' });
+    const executions = {
+      findTeamRunById: vi.fn(async () => team),
+      findCompletionDecisionForRequest: vi.fn(async () => null),
+      completeTeamRunAtomically: vi.fn(async () => team),
+    };
+    const driver = futureDriver(executions, {
+      completionApprovalRequired: false,
+    });
+    const task = createChildTask({
+      id: 'lead-direct-task-1',
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      policySnapshotVersion: 'policy-1',
+      rootTaskId: team.rootTaskId,
+      parentTaskId: team.rootTaskId,
+      parentRunId: team.rootRunId,
+      invokableKind: 'agent',
+      invokableVersionId: 'agent-version-1',
+      inputSnapshotRef: 'snapshot',
+      inputFingerprint: 'fingerprint',
+      logicalStepKey: 'lead-direct-1',
+      nodePath: 'lead-direct-1',
+      teamMemberRunId: 'lead-member-1',
+      teamSequence: 1,
+      teamTaskKind: 'direct_message',
+      now,
+    });
+    const run = {
+      ...createRun('PONG_FROM_MEMBER', { id: 'lead-direct-run-1', now }),
+      status: 'succeeded',
+      result: { text: 'Conversation complete.' },
+    } as Run;
+
+    await driver.handleTerminalRun({ team, task, run });
+
+    expect(executions.completeTeamRunAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({ leadRunId: run.id, finalText: run.result?.text }),
+    );
+  });
+
   it('activation option true passes the approval requirement snapshot to createTeamRun', async () => {
     const executions = {
       createTeamRun: vi.fn(async () => undefined),

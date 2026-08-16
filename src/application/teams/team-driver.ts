@@ -39,11 +39,9 @@ export class TeamDriver {
     private readonly tasks: TaskRepository,
     private readonly runs: RunRepository,
     private readonly admission: AdmissionRepository,
-    private readonly messages?: Partial<
-      Pick<
-        TeamMessageRepository,
-        'requeueDirectForFailedTask' | 'listDirectForTeamRun'
-      >
+    private readonly messages?: Pick<
+      TeamMessageRepository,
+      'requeueDirectForFailedTask' | 'listDirectForTeamRun'
     >,
     private readonly reconciler?: Pick<
       CollaborationActivationReconciler,

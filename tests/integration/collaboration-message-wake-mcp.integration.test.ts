@@ -222,7 +222,12 @@ describe('canonical smoke direct-message wake mutation', () => {
       ).project(fixture.teamRun.id, owner);
       expect(projection?.workItems).toHaveLength(2);
       expect(projection?.workItems.every((work) => work.status !== 'accepted')).toBe(true);
+      expect(projection?.workItems.map((work) => work.status)).toEqual(['open', 'open']);
 
+      // A root task with open Work is correctly non-terminal, so the real smoke
+      // loop keeps polling rather than emitting a terminal diagnostic. Feed the
+      // real MCP-created Work facts into the terminal completion predicate to
+      // verify the diagnostic it will emit once a terminal task is evaluated.
       const diagnostic = formatSmokeOutcome({
         kind: 'collaboration_not_achieved',
         taskStatus: 'completed',
@@ -248,6 +253,7 @@ describe('canonical smoke direct-message wake mutation', () => {
         }).failures,
       });
       expect(diagnostic).toContain('work_2_accepted');
+      expect(diagnostic).toContain('"status":"open"');
     } finally {
       await fixture.client.close();
       await fixture.database.close();

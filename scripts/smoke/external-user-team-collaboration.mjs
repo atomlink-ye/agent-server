@@ -204,7 +204,7 @@ async function durableFacts(pool, rootTaskId) {
   );
   const teamRun = team.rows[0];
   if (!teamRun) throw new Error('durable TeamRun row is missing');
-  const [messages, activations, work, leadTurns, leadEvents] = await Promise.all([
+  const [messages, activations, work, leadTurns, memberTurns, leadEvents] = await Promise.all([
     pool.query(
       `SELECT m.sequence, m.body, sender.name AS sender_name, sender.role AS sender_role,
               recipient.name AS recipient_name, recipient.role AS recipient_role
@@ -225,9 +225,14 @@ async function durableFacts(pool, rootTaskId) {
       [rootTaskId],
     ),
     pool.query(
-      `SELECT w.subject AS work_ref, w.status, assignee.name AS assignee_name, assignee.role AS assignee_role,
+      `SELECT w.subject AS work_ref, w.status,
+              owner.name AS owner_name, owner.role AS owner_role,
+              creator.name AS created_by_name, creator.role AS created_by_role,
+              assignee.name AS assignee_name, assignee.role AS assignee_role,
               a.attempt_no, a.status AS attempt_status, a.result_summary, a.feedback
          FROM team_work_items w
+         LEFT JOIN team_member_runs owner ON owner.id=w.owner_member_id
+         JOIN team_member_runs creator ON creator.id=w.created_by_member_id
          LEFT JOIN team_work_item_attempts a ON a.work_item_id=w.id
          LEFT JOIN team_member_runs assignee ON assignee.id=a.assignee_member_id
         WHERE w.team_run_id=$1
@@ -244,6 +249,21 @@ async function durableFacts(pool, rootTaskId) {
         WHERE task.root_task_id=$1
           AND task.team_task_kind='lead_turn'
           AND member.role='lead'
+        ORDER BY task.created_at, run.attempt`,
+      [rootTaskId],
+    ),
+    pool.query(
+      `SELECT member.name AS member_name, member.role AS member_role,
+              task.id AS task_id, task.team_task_kind,
+              run.id AS run_id, run.status AS run_status,
+              run.usage, run.result, run.error, runtime_session.provider_agent_id
+         FROM tasks task
+         JOIN team_member_runs member ON member.id=task.team_member_run_id
+         LEFT JOIN runs run ON run.task_id=task.id
+         LEFT JOIN runtime_session_bindings runtime_session ON runtime_session.run_id=run.id
+        WHERE task.root_task_id=$1
+          AND task.team_task_kind IS NOT NULL
+          AND member.role <> 'lead'
         ORDER BY task.created_at, run.attempt`,
       [rootTaskId],
     ),
@@ -266,6 +286,7 @@ async function durableFacts(pool, rootTaskId) {
     activations: activations.rows,
     work: work.rows,
     leadTurns: leadTurns.rows,
+    memberTurns: memberTurns.rows,
     leadEvents: leadEvents.rows,
   };
 }
@@ -425,11 +446,16 @@ spec:
         activations: factsBeforeFailure.activations,
         work: factsBeforeFailure.work,
         lead_turns: factsBeforeFailure.leadTurns,
+        member_turns: factsBeforeFailure.memberTurns,
         lead_events: factsBeforeFailure.leadEvents,
       });
     } catch (factError) {
-      progress('durable_facts_before_failure_unavailable', {
+      const databaseCode = typeof factError === 'object' && factError !== null && 'code' in factError
+        ? factError.code
+        : undefined;
+      progress(databaseCode ? 'durable_facts_before_failure_query_failed' : 'durable_facts_before_failure_unavailable', {
         error: factError instanceof Error ? factError.message : String(factError),
+        database_code: databaseCode,
       });
     }
     throw error;
@@ -446,6 +472,7 @@ spec:
     activations: facts.activations,
     work: facts.work,
     lead_turns: facts.leadTurns,
+    member_turns: facts.memberTurns,
     lead_events: facts.leadEvents,
   });
   if (task.status !== 'completed') {

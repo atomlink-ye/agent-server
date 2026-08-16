@@ -4,6 +4,7 @@ import type {
   WorkDefinitionSourceRepository,
 } from '../../application/ports/work-definition-source-repository.js';
 import {
+  fingerprintWorkDefinitionSource,
   validateWorkDefinitionCompositionSource,
   type WorkDefinitionSourceDefinition,
   type WorkDefinitionSourceVersion,
@@ -94,6 +95,9 @@ export class PostgresWorkDefinitionSourceRepository
 
   public async publish(input: PublishWorkDefinitionSourceInput) {
     const source = validateWorkDefinitionCompositionSource(input.source);
+    const expectedFingerprint = fingerprintWorkDefinitionSource(source);
+    if (input.fingerprint !== expectedFingerprint)
+      throw new Error('Work Definition source fingerprint mismatch.');
     await this.db.query(
       `INSERT INTO work_definition_source_definitions
        (id,tenant_id,workspace_id,principal_type,principal_id,name,description,created_at)
@@ -163,6 +167,9 @@ function mapDefinition(row: DefinitionRow): WorkDefinitionSourceDefinition {
 }
 
 function mapVersion(row: VersionRow): WorkDefinitionSourceVersion {
+  const source = validateWorkDefinitionCompositionSource(row.source);
+  if (row.fingerprint !== fingerprintWorkDefinitionSource(source))
+    throw new Error('Persisted Work Definition source fingerprint mismatch.');
   return {
     id: row.id,
     definitionId: row.definition_id,
@@ -173,7 +180,7 @@ function mapVersion(row: VersionRow): WorkDefinitionSourceVersion {
       principalId: row.principal_id,
     },
     status: 'published',
-    source: validateWorkDefinitionCompositionSource(row.source),
+    source,
     fingerprint: row.fingerprint,
     createdAt: toIso(row.created_at),
     publishedAt: toIso(row.published_at),

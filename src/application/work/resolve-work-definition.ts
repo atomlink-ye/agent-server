@@ -4,6 +4,8 @@ import type { AgentRegistry } from '../ports/agent-registry.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
+import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
+import type { WorkDefinitionSourceRepository } from '../ports/work-definition-source-repository.js';
 import type {
   ResolveWorkDefinitionInput,
   WorkDefinitionResolutionPort,
@@ -13,11 +15,17 @@ import { canonicalizeProjectValue } from '../../domain/projects/project-canonica
 import {
   WorkCompositionResolutionError,
   fingerprintResolvedWorkDefinition,
+  type ResolvedMemoryRef,
   type ResolvedSkillRef,
   type ResolvedWorkDefinition,
   type ResolvedWorkParticipant,
   type WorkPlatformCapability,
 } from '../../domain/work/work-composition.js';
+import type {
+  WorkDefinitionCompositionSource,
+  WorkDefinitionSourceDefinition,
+  WorkDefinitionSourceVersion,
+} from '../../domain/work/work-definition-source.js';
 
 export interface ResolveWorkDefinitionOptions {
   readonly agents: Pick<AgentRegistry, 'findDefinition' | 'findVersion'>;
@@ -27,12 +35,18 @@ export interface ResolveWorkDefinitionOptions {
     'findTeamDefinitionById' | 'findPublishedTeamVersionById'
   >;
   readonly environments: EnvironmentReadApi;
+  readonly authoredDefinitions?: Pick<
+    WorkDefinitionSourceRepository,
+    'findDefinition' | 'findPublishedVersion'
+  >;
+  readonly memories?: MemoryVersionReadApi;
 }
 
 /**
- * Deterministic and side-effect-free compiler from existing published registry
- * resources to one immutable Work composition. Agent/Team/Environment registries
- * remain storage mechanisms behind this boundary.
+ * Deterministic and side-effect-free compiler from immutable author intent to
+ * the internal execution IR. Existing Agent/Team ids remain accepted as a
+ * compatibility source while the authored Work Definition source is the
+ * composition-first path used by new product/API surfaces.
  */
 export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
   public constructor(private readonly options: ResolveWorkDefinitionOptions) {}
@@ -40,14 +54,180 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
   public async resolve(
     input: ResolveWorkDefinitionInput,
   ): Promise<ResolvedWorkDefinition> {
+    const authored = await this.resolveAuthored(input);
+    if (authored) return authored;
     const collaboration = await this.resolveCollaboration(input);
     if (collaboration) return collaboration;
-    const single = await this.resolveSingleAgent(input);
+    const single = await this.resolveSingleAgentCompatibility(input);
     if (single) return single;
     throw new WorkCompositionResolutionError(
       'The Work Definition or immutable published version does not exist in this owner scope.',
       '$.definition_version_id',
     );
+  }
+
+  private async resolveAuthored(
+    input: ResolveWorkDefinitionInput,
+  ): Promise<ResolvedWorkDefinition | null> {
+    const repository = this.options.authoredDefinitions;
+    if (!repository) return null;
+    const owner = definitionSourceOwner(input);
+    const [definition, version] = await Promise.all([
+      repository.findDefinition(input.definitionId, owner),
+      repository.findPublishedVersion(input.definitionVersionId, owner),
+    ]);
+    if (!definition && !version) return null;
+    if (!definition || !version || version.definitionId !== definition.id)
+      throw new WorkCompositionResolutionError(
+        'The authored Work Definition lineage is invalid.',
+        '$.definition_version_id',
+      );
+    return this.compileAuthored(input, definition, version);
+  }
+
+  private async compileAuthored(
+    input: ResolveWorkDefinitionInput,
+    definition: WorkDefinitionSourceDefinition,
+    version: WorkDefinitionSourceVersion,
+  ): Promise<ResolvedWorkDefinition> {
+    const memories = await this.resolveMemories(
+      input,
+      version.source.memoryVersionIds,
+    );
+    if (version.source.kind === 'single_agent') {
+      const environment = await this.resolveEnvironment(
+        input,
+        version.source.environmentVersionId,
+        '$.resources.environment',
+      );
+      const participant = await this.resolveParticipant(input, {
+        logicalName: definition.name,
+        role: 'primary',
+        agentVersionId: version.source.agentVersionId,
+        diagnosticPath: '$.participants.primary',
+      });
+      const needsPlatformMcp =
+        participant.toolRefs.length > 0 || participant.skills.length > 0;
+      const platformCapabilities = Object.freeze(
+        needsPlatformMcp
+          ? (['platform_mcp'] satisfies WorkPlatformCapability[])
+          : ([] satisfies WorkPlatformCapability[]),
+      );
+      const base = {
+        definitionId: definition.id,
+        definitionVersionId: version.id,
+        kind: 'single_agent' as const,
+        name: definition.name,
+        description: definition.description,
+        sourceFingerprint: version.fingerprint,
+        participants: Object.freeze([participant]),
+        environment,
+        memories,
+        platformCapabilities,
+        executionPolicy: Object.freeze({
+          invokable: Object.freeze({
+            kind: 'agent' as const,
+            versionId: version.source.agentVersionId,
+          }),
+          runtimeSessionPolicy: 'fresh' as const,
+          runtimeWorkspacePolicy: 'run_scoped' as const,
+          requiredRuntimeCapabilities: Object.freeze([
+            'external_workspace' as const,
+            ...(needsPlatformMcp ? (['platform_mcp'] as const) : []),
+          ]),
+        }),
+      };
+      return deepFreeze({
+        ...base,
+        resolvedFingerprint: fingerprintResolvedWorkDefinition(base),
+      });
+    }
+
+    return this.compileAuthoredCollaboration(
+      input,
+      definition,
+      version,
+      memories,
+    );
+  }
+
+  private async compileAuthoredCollaboration(
+    input: ResolveWorkDefinitionInput,
+    definition: WorkDefinitionSourceDefinition,
+    version: WorkDefinitionSourceVersion & {
+      readonly source: Extract<
+        WorkDefinitionCompositionSource,
+        { readonly kind: 'collaboration' }
+      >;
+    },
+    memories: readonly ResolvedMemoryRef[],
+  ): Promise<ResolvedWorkDefinition> {
+    const team = await this.options.definitions.findPublishedTeamVersionById(
+      version.source.teamVersionId,
+      invokableOwner(input),
+    );
+    if (!team)
+      throw new WorkCompositionResolutionError(
+        'The authored collaborative Work references an unavailable published Team version.',
+        '$.resources.team_version_id',
+      );
+    if (team.environmentVersionId !== version.source.environmentVersionId)
+      throw new WorkCompositionResolutionError(
+        'The Work Definition Environment must match the published Team Environment.',
+        '$.resources.environment',
+      );
+    const environment = await this.resolveEnvironment(
+      input,
+      version.source.environmentVersionId,
+      '$.resources.environment',
+    );
+    const participants: ResolvedWorkParticipant[] = [
+      await this.resolveParticipant(input, {
+        logicalName: team.spec.lead.name,
+        role: 'lead',
+        agentVersionId: team.spec.lead.agentVersionId,
+        diagnosticPath: '$.participants.lead',
+      }),
+    ];
+    for (const [index, member] of team.spec.roster.entries()) {
+      participants.push(
+        await this.resolveParticipant(input, {
+          logicalName: member.name,
+          role: 'member',
+          agentVersionId: member.agentVersionId,
+          diagnosticPath: `$.participants.members[${index}]`,
+        }),
+      );
+    }
+    const base = {
+      definitionId: definition.id,
+      definitionVersionId: version.id,
+      kind: 'collaboration' as const,
+      name: definition.name,
+      description: definition.description,
+      sourceFingerprint: version.fingerprint,
+      participants: Object.freeze(participants),
+      environment,
+      memories,
+      platformCapabilities: Object.freeze([
+        'collaboration',
+        'platform_mcp',
+      ] satisfies readonly WorkPlatformCapability[]),
+      executionPolicy: Object.freeze({
+        invokable: Object.freeze({ kind: 'team' as const, versionId: team.id }),
+        runtimeSessionPolicy: 'reusable' as const,
+        runtimeWorkspacePolicy: 'work_run_scoped' as const,
+        requiredRuntimeCapabilities: Object.freeze([
+          'reusable_session' as const,
+          'external_workspace' as const,
+          'platform_mcp' as const,
+        ]),
+      }),
+    };
+    return deepFreeze({
+      ...base,
+      resolvedFingerprint: fingerprintResolvedWorkDefinition(base),
+    });
   }
 
   private async resolveCollaboration(
@@ -67,7 +247,10 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
         'The collaborative Work Definition lineage is invalid.',
         '$.definition_version_id',
       );
-    if (!sameInvokableOwner(definition, ownerScope) || !sameInvokableOwner(version, ownerScope))
+    if (
+      !sameInvokableOwner(definition, ownerScope) ||
+      !sameInvokableOwner(version, ownerScope)
+    )
       throw new WorkCompositionResolutionError(
         'The collaborative Work Definition belongs to another owner scope.',
         '$.definition_id',
@@ -78,16 +261,11 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
         '$.definition_version_id',
       );
 
-    const environment = await this.options.environments.findVersion(
-      managedOwner(input),
+    const environment = await this.resolveEnvironment(
+      input,
       version.environmentVersionId,
+      '$.resources.environment',
     );
-    if (!environment || environment.status !== 'published')
-      throw new WorkCompositionResolutionError(
-        'The collaborative Work references an unavailable published Environment version.',
-        '$.resources.environment',
-      );
-
     const participants: ResolvedWorkParticipant[] = [
       await this.resolveParticipant(input, {
         logicalName: version.spec.lead.name,
@@ -107,10 +285,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       );
     }
 
-    const platformCapabilities = Object.freeze([
-      'collaboration',
-      'platform_mcp',
-    ] satisfies readonly WorkPlatformCapability[]);
     const sourceFingerprint = fingerprintSource({
       kind: 'collaboration',
       definition: {
@@ -133,21 +307,21 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       description: version.description,
       sourceFingerprint,
       participants: Object.freeze(participants),
-      environment: Object.freeze({
-        versionId: environment.id,
-        fingerprint: environment.fingerprint,
-      }),
+      environment,
       memories: Object.freeze([]),
-      platformCapabilities,
+      platformCapabilities: Object.freeze([
+        'collaboration',
+        'platform_mcp',
+      ] satisfies readonly WorkPlatformCapability[]),
       executionPolicy: Object.freeze({
         invokable: Object.freeze({ kind: 'team' as const, versionId: version.id }),
         runtimeSessionPolicy: 'reusable' as const,
         runtimeWorkspacePolicy: 'work_run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze([
-          'reusable_session',
-          'external_workspace',
-          'platform_mcp',
-        ] as const),
+          'reusable_session' as const,
+          'external_workspace' as const,
+          'platform_mcp' as const,
+        ]),
       }),
     };
     return deepFreeze({
@@ -156,7 +330,13 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
     });
   }
 
-  private async resolveSingleAgent(
+  /**
+   * Compatibility path for old Product Work rows that pointed directly at a
+   * ManagedAgent version before authored Work Definition sources existed.
+   * It intentionally has no Environment binding; new Product/API surfaces should
+   * publish a Work Definition source instead.
+   */
+  private async resolveSingleAgentCompatibility(
     input: ResolveWorkDefinitionInput,
   ): Promise<ResolvedWorkDefinition | null> {
     const owner = managedOwner(input);
@@ -184,11 +364,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
     });
     const needsPlatformMcp =
       participant.toolRefs.length > 0 || participant.skills.length > 0;
-    const platformCapabilities = Object.freeze(
-      needsPlatformMcp
-        ? (['platform_mcp'] satisfies WorkPlatformCapability[])
-        : ([] satisfies WorkPlatformCapability[]),
-    );
     const base = {
       definitionId: definition.id,
       definitionVersionId: version.id,
@@ -199,7 +374,11 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       participants: Object.freeze([participant]),
       environment: null,
       memories: Object.freeze([]),
-      platformCapabilities,
+      platformCapabilities: Object.freeze(
+        needsPlatformMcp
+          ? (['platform_mcp'] satisfies WorkPlatformCapability[])
+          : ([] satisfies WorkPlatformCapability[]),
+      ),
       executionPolicy: Object.freeze({
         invokable: Object.freeze({ kind: 'agent' as const, versionId: version.id }),
         runtimeSessionPolicy: 'fresh' as const,
@@ -213,6 +392,58 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       ...base,
       resolvedFingerprint: fingerprintResolvedWorkDefinition(base),
     });
+  }
+
+  private async resolveEnvironment(
+    input: ResolveWorkDefinitionInput,
+    versionId: string,
+    path: string,
+  ) {
+    const environment = await this.options.environments.findVersion(
+      managedOwner(input),
+      versionId,
+    );
+    if (!environment || environment.status !== 'published')
+      throw new WorkCompositionResolutionError(
+        'The Work references an unavailable published Environment version.',
+        path,
+      );
+    return Object.freeze({
+      versionId: environment.id,
+      fingerprint: environment.fingerprint,
+    });
+  }
+
+  private async resolveMemories(
+    input: ResolveWorkDefinitionInput,
+    versionIds: readonly string[],
+  ): Promise<readonly ResolvedMemoryRef[]> {
+    if (versionIds.length === 0) return Object.freeze([]);
+    if (!this.options.memories)
+      throw new WorkCompositionResolutionError(
+        'Work Memory resolution is unavailable.',
+        '$.resources.memories',
+      );
+    const memories: ResolvedMemoryRef[] = [];
+    for (const [index, versionId] of versionIds.entries()) {
+      const memory = await this.options.memories.findVersion(
+        versionId,
+        invokableOwner(input),
+      );
+      if (!memory)
+        throw new WorkCompositionResolutionError(
+          'The Work references an unavailable immutable Memory version.',
+          `$.resources.memories[${index}]`,
+        );
+      memories.push(
+        Object.freeze({
+          logicalName: memory.path,
+          versionId: memory.versionId,
+          fingerprint: `sha256:${memory.contentSha256}`,
+        }),
+      );
+    }
+    return Object.freeze(memories);
   }
 
   private async resolveParticipant(
@@ -285,6 +516,10 @@ function invokableOwner(input: ResolveWorkDefinitionInput) {
     principalType: input.accessContext.principalType,
     principalId: input.accessContext.principalId,
   };
+}
+
+function definitionSourceOwner(input: ResolveWorkDefinitionInput) {
+  return invokableOwner(input);
 }
 
 function sameInvokableOwner(

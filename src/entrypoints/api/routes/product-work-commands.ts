@@ -7,7 +7,10 @@ import {
   WorkDefinitionValidationError,
   WorkIdentityApi,
 } from '../../../application/work/work-identity-api.js';
-import { UnsupportedWorkCompositionCapabilityError } from '../../../application/work/start-work-run.js';
+import {
+  UnsupportedWorkCompositionCapabilityError,
+  WorkRunInputValidationError,
+} from '../../../application/work/start-work-run.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   WorkIdentityConflictError,
@@ -205,11 +208,7 @@ export function registerProductWorkCommandRoutes(
   app.post('/api/v1/works/:workId/runs', async (context) => {
     rejectTechnicalIdempotencyHeader(context);
     const workId = context.req.param('workId');
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        workId,
-      )
-    )
+    if (!isCanonicalUuid(workId))
       throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
     const accessContext = getAuthenticatedAccessContext(context);
     const parsed = StartWorkRunRequestSchema.safeParse(
@@ -230,6 +229,7 @@ export function registerProductWorkCommandRoutes(
         ...(parsed.data.trigger_ref !== undefined
           ? { triggerRef: parsed.data.trigger_ref }
           : {}),
+        ...(parsed.data.input !== undefined ? { input: parsed.data.input } : {}),
       });
       return context.json(
         {
@@ -241,6 +241,26 @@ export function registerProductWorkCommandRoutes(
         202,
       );
     } catch (error) {
+      if (error instanceof WorkRunInputValidationError) {
+        const first = error.diagnostics[0];
+        return context.json(
+          {
+            error: {
+              code: error.code,
+              message: error.message,
+              request_id: context.get('requestId'),
+              ...(first ? { path: first.path } : {}),
+            },
+          },
+          422,
+        );
+      }
+      if (isCodedError(error, 'work_run_input_conflict'))
+        throw new HttpError(
+          409,
+          'work_run_input_conflict',
+          'The WorkRun is already bound to another immutable input snapshot.',
+        );
       if (error instanceof WorkNotFoundError)
         throw new HttpError(404, 'work_not_found', error.message);
       if (error instanceof PendingWorkRunExpiredError)
@@ -311,6 +331,14 @@ function parseListQuery(url: string): {
       'The requested list limit is invalid.',
     );
   return { limit, cursor };
+}
+
+function isCodedError(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as Error & { code?: unknown }).code === code
+  );
 }
 
 function isCanonicalUuid(value: string | undefined): value is string {

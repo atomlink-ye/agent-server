@@ -11,7 +11,7 @@ import {
   formatSmokeOutcome,
 } from '../../scripts/smoke/agent-team-completion-line.mjs';
 import { createTeamModule } from '../../src/modules/team/team-module.js';
-import { createRootTask, createChildTask, transitionTask } from '../../src/domain/tasks/task.js';
+import { createRootTask, createChildTask } from '../../src/domain/tasks/task.js';
 import { createRun } from '../../src/domain/runs/run.js';
 import { createTeamRun } from '../../src/domain/teams/team-run.js';
 import {
@@ -84,7 +84,7 @@ async function createMessageWakeFixture() {
     now,
   });
   const rootRun = createRun('smoke gate MCP', { now });
-  await tasks.save(transitionTask(root, 'active', now));
+  await tasks.save(root);
   await runs.save(rootRun, { taskId: root.id, attempt: 1 });
   const claimNext = new ClaimNextRun(runs, {
     workerId: 'smoke-gate-mcp',
@@ -122,26 +122,22 @@ async function createMessageWakeFixture() {
     agentVersionId: randomUUID(),
     now,
   });
-  const leadTask = transitionTask(
-    createChildTask({
-      ...owner,
-      rootTaskId: root.id,
-      parentTaskId: root.id,
-      parentRunId: rootClaim.run.id,
-      invokableKind: 'agent',
-      invokableVersionId: lead.agentVersionId,
-      inputSnapshotRef: 'inline:lead',
-      inputFingerprint: 'smoke-gate-lead',
-      logicalStepKey: 'lead:turn:1',
-      nodePath: 'lead',
-      teamMemberRunId: lead.id,
-      teamSequence: 1,
-      teamTaskKind: 'lead_turn',
-      now,
-    }),
-    'active',
+  const leadTask = createChildTask({
+    ...owner,
+    rootTaskId: root.id,
+    parentTaskId: root.id,
+    parentRunId: rootClaim.run.id,
+    invokableKind: 'agent',
+    invokableVersionId: lead.agentVersionId,
+    inputSnapshotRef: 'inline:lead',
+    inputFingerprint: 'smoke-gate-lead',
+    logicalStepKey: 'lead:turn:1',
+    nodePath: 'lead',
+    teamMemberRunId: lead.id,
+    teamSequence: 1,
+    teamTaskKind: 'lead_turn',
     now,
-  );
+  });
   const leadRun = createRun('lead', { now });
   await team.executions.createTeamRun(teamRun);
   await team.executions.createMemberRun(lead);

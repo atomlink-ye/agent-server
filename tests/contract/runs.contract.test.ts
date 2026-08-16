@@ -64,14 +64,37 @@ describe('run HTTP contracts', () => {
   it('exposes execution stages while an accepted Run remains active', async () => {
     const runtime = new FakeAgentRuntime();
     const gate = runtime.armExecutionGate();
-    const app = await createTestApp(runtime);
-    const accepted = await app.request('/api/v1/runs', {
+    const app = await createTestApp(runtime, {
+      seedManagedAgent: true,
+      seedPublishedEnvironment: true,
+    });
+    const workspace = await app.request('/api/v1/workspaces', {
       method: 'POST',
       headers: authenticatedJsonHeaders,
-      body: JSON.stringify({ prompt: 'hold until event read' }),
+      body: JSON.stringify({ name: 'active-events' }),
     });
+    const workspaceId = ((await workspace.json()) as { workspace_id: string })
+      .workspace_id;
+    const session = await app.request('/api/v1/sessions', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        agent_version_id: defaultPublishedAgentVersionId,
+      }),
+    });
+    const sessionId = ((await session.json()) as { session_id: string })
+      .session_id;
+    const accepted = await app.request(
+      `/api/v1/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: authenticatedJsonHeaders,
+        body: JSON.stringify({ text: 'hold until event read' }),
+      },
+    );
     expect(accepted.status).toBe(202);
-    const runId = CreateRunResponseSchema.parse(await accepted.json()).run_id;
+    const runId = ((await accepted.json()) as { run_id: string }).run_id;
 
     await gate.entered;
     const events = await app.request(`/api/v1/runs/${runId}/events?after=0`, {

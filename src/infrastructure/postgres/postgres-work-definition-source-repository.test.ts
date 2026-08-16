@@ -9,13 +9,15 @@ const owner = {
   principalType: 'service_account',
   principalId: 'principal',
 } as const;
+const agentVersionId = '22222222-2222-4222-8222-222222222222';
+const environmentVersionId = '33333333-3333-4333-8333-333333333333';
 
 describe('PostgresWorkDefinitionSourceRepository', () => {
   it('accepts a jsonb key-order round trip when publishing a source', async () => {
     const source = {
       kind: 'single_agent' as const,
-      agentVersionId: 'agent-version',
-      environmentVersionId: 'environment-version',
+      agentVersionId,
+      environmentVersionId,
       memoryVersionIds: [],
     };
     const repository = new PostgresWorkDefinitionSourceRepository({
@@ -49,9 +51,9 @@ describe('PostgresWorkDefinitionSourceRepository', () => {
                 // PostgreSQL jsonb returns keys in storage order, not author order.
                 source: {
                   kind: 'single_agent',
-                  agentVersionId: 'agent-version',
+                  agentVersionId,
                   memoryVersionIds: [],
-                  environmentVersionId: 'environment-version',
+                  environmentVersionId,
                 },
                 fingerprint: fingerprintWorkDefinitionSource(source),
                 created_at: '2026-08-16T00:00:00.000Z',

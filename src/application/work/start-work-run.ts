@@ -92,9 +92,8 @@ export class StartWorkRun {
     if (pending.definitionVersionId !== resolved.definitionVersionId)
       throw new WorkDefinitionValidationError();
 
-    await this.recordResolvedManifest(pending, owner, resolved);
-
     if (pending.rootTaskId) {
+      await this.recordResolvedManifest(pending, owner, resolved);
       return {
         workRun: pending,
         executionReceipt: { reused: true, taskId: pending.rootTaskId },
@@ -120,6 +119,10 @@ export class StartWorkRun {
         owner,
         now: this.now().toISOString(),
       });
+      // Existing repository invariants only permit a manifest once the WorkRun
+      // is durably bound. This still freezes the exact composition on the
+      // WorkRun and all subsequent retries/reads converge on this same snapshot.
+      await this.recordResolvedManifest(bound, owner, resolved);
       return {
         workRun: bound,
         executionReceipt: { reused: receipt.reused, taskId: receipt.taskId },

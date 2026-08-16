@@ -41,22 +41,31 @@ export interface StartWorkRunResult {
 export interface StartWorkRunOptions {
   readonly identity: WorkIdentityApi;
   readonly execution: ExecutionAdmission;
-  readonly runtimeCapabilities: {
+  readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
   readonly now?: () => Date;
 }
 
+const NO_RUNTIME_CAPABILITIES = Object.freeze({
+  capabilities(): ExecutionPlaneCapabilities {
+    return { supported: new Set() };
+  },
+});
+
 export class StartWorkRun {
   private readonly identity: WorkIdentityApi;
   private readonly execution: ExecutionAdmission;
-  private readonly runtimeCapabilities: StartWorkRunOptions['runtimeCapabilities'];
+  private readonly runtimeCapabilities: NonNullable<
+    StartWorkRunOptions['runtimeCapabilities']
+  >;
   private readonly now: () => Date;
 
   public constructor(options: StartWorkRunOptions) {
     this.identity = options.identity;
     this.execution = options.execution;
-    this.runtimeCapabilities = options.runtimeCapabilities;
+    this.runtimeCapabilities =
+      options.runtimeCapabilities ?? NO_RUNTIME_CAPABILITIES;
     this.now = options.now ?? (() => new Date());
   }
 

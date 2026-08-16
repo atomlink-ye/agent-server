@@ -285,6 +285,34 @@ describe('canonical smoke direct-message wake mutation', () => {
                 ],
               )
             ).rows,
+            source_locked: (
+              await fixture.database.query(
+                `SELECT 1
+                   FROM tasks t JOIN runs r ON r.id = $2
+                  WHERE t.id = $1
+                    AND t.root_task_id = $3
+                    AND t.team_member_run_id = $4
+                    AND t.team_task_kind IN ('lead_turn', 'work_attempt', 'direct_message')
+                    AND t.status NOT IN ('completed', 'failed', 'cancelled')
+                    AND r.task_id = t.id
+                    AND r.status NOT IN ('succeeded', 'failed', 'timed_out', 'cancelled')
+                    AND t.tenant_id = $5
+                    AND t.workspace_id = $6
+                    AND t.principal_type = $7
+                    AND t.principal_id = $8
+                  FOR SHARE`,
+                [
+                  fixture.leadTask.id,
+                  fixture.leadClaim.run.id,
+                  fixture.root.id,
+                  fixture.grant.teamMemberRunId,
+                  owner.tenantId,
+                  owner.workspaceId,
+                  owner.principalType,
+                  owner.principalId,
+                ],
+              )
+            ).rows,
             members: (
               await fixture.database.query(
                 `SELECT name, status FROM team_member_runs

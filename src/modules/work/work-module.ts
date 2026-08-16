@@ -8,15 +8,17 @@ import { WorkProjectionFactsSource } from '../../application/product-projection/
 import type { ExecutionAdmission } from '../../application/ports/execution-admission.js';
 import type { ExecutionFactQuery } from '../../application/ports/execution-fact-query.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
-import type { StartWorkRun } from '../../application/work/start-work-run.js';
+import type { ExecutionPlanePort } from '../../application/ports/execution-plane.js';
+import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
+import { StartWorkRun } from '../../application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
-import type { WorkIdentityApi } from '../../application/work/work-identity-api.js';
+import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
 import { registerProductWorkMcpTools } from '../../entrypoints/mcp/product-work-mcp-tools.js';
 import {
-  createPostgresWorkIdentityModule,
+  PostgresWorkIdentityRepository,
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
@@ -61,11 +63,34 @@ export function createWorkModule(options: {
     DefinitionReadApi,
     'findTeamDefinitionById' | 'findPublishedTeamVersionById'
   >;
+  readonly definitionResolution: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
+  readonly runtimeCapabilities: Pick<ExecutionPlanePort, 'capabilities'>;
 }): WorkModule {
-  const { workIdentity, workIdentityQuery, startWorkRun } =
-    createPostgresWorkIdentityModule(options);
+  const repository = new PostgresWorkIdentityRepository(options.database);
+  const workIdentity = new WorkIdentityApi({
+    repository,
+    definitions: options.definitions,
+    definitionResolution: options.definitionResolution,
+  });
+  const startWorkRun = new StartWorkRun({
+    identity: workIdentity,
+    execution: options.execution,
+    runtimeCapabilities: options.runtimeCapabilities,
+  });
+  const workIdentityQuery = {
+    findWorkById: (id: string, owner: Parameters<typeof repository.findWorkById>[1]) =>
+      repository.findWorkById(id, owner),
+    findWorkRunById: (
+      id: string,
+      owner: Parameters<typeof repository.findWorkRunById>[1],
+    ) => repository.findWorkRunById(id, owner),
+    findLatestVisibleWorkRun: (
+      workId: string,
+      owner: Parameters<typeof repository.findLatestVisibleWorkRun>[1],
+    ) => repository.findLatestVisibleWorkRun(workId, owner),
+  };
   const projection = createProductProjection({
     workIdentity: workIdentityQuery,
     workFacts: new WorkProjectionFactsSource(

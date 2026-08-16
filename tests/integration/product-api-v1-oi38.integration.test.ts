@@ -52,362 +52,355 @@ let memoryRepository: MemoryApiRepository;
 const generatedWorkIds: string[] = [];
 const generatedTaskIds: string[] = [];
 
-describe(
-  'Product API v1 OI-38 cross-scope existence oracle',
-  () => {
-    let pool: Pool;
-    let server: ServerType;
+describe('Product API v1 OI-38 cross-scope existence oracle', () => {
+  let pool: Pool;
+  let server: ServerType;
 
-    beforeAll(async () => {
-      pool = createPostgresPool({
-        connectionString: connectionString!,
-        maxConnections: 4,
-      });
-      await applyDurableKernelMigrations(pool);
-      await seedIdentityRows(pool);
-      memoryRepository = runtimeRegistryMemoryRepository();
-
-      const serviceAccounts = [
-        {
-          serviceAccountId: 'oi38-owner-a',
-          token: tokenA,
-          tenantId,
-          workspaceId: workspaceA,
-          policyVersion: 'oi38-test',
-          disabled: false,
-        },
-        {
-          serviceAccountId: 'oi38-owner-b',
-          token: tokenB,
-          tenantId,
-          workspaceId: workspaceB,
-          policyVersion: 'oi38-test',
-          disabled: false,
-        },
-      ];
-      const config = { serviceAccounts } as unknown as AppConfig;
-      const definition = definitionFixture();
-      const version = versionFixture();
-      workModule = createWorkModule({
-        database: pool,
-        definitions: {
-          async findTeamDefinitionById(id) {
-            return id === definition.id ? definition : null;
-          },
-          async findPublishedTeamVersionById(id) {
-            return id === version.id ? version : null;
-          },
-        },
-        execution: {
-          async admitRoot(request) {
-            const id = randomUUID();
-            await pool.query(
-              `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at)
-               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,'work-e4','work-e4',now(),now())`,
-              [
-                id,
-                request.accessContext.tenantId,
-                request.accessContext.workspaceId,
-                request.accessContext.principalType,
-                request.accessContext.principalId,
-                request.accessContext.policySnapshotVersion,
-                request.invokable.kind,
-                request.invokable.versionId,
-              ],
-            );
-            generatedTaskIds.push(id);
-            return { taskId: id, reused: false };
-          },
-        },
-        executionFacts: new PostgresExecutionFactQuery(pool),
-      });
-      const app = createApp(
-        Object.assign(minimalAppDependencies(config), { workModule }) as never,
-      );
-
-      server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
-      if (!server.listening)
-        await new Promise<void>((resolve) => server.once('listening', resolve));
-      const address = server.address();
-      if (address === null || typeof address === 'string')
-        throw new Error('OI-38 server did not expose TCP address');
-      httpBaseUrl = `http://127.0.0.1:${address.port}`;
+  beforeAll(async () => {
+    pool = createPostgresPool({
+      connectionString: connectionString!,
+      maxConnections: 4,
     });
+    await applyDurableKernelMigrations(pool);
+    await seedIdentityRows(pool);
+    memoryRepository = runtimeRegistryMemoryRepository();
 
-    afterAll(async () => {
-      if (server)
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
-      if (generatedWorkIds.length) {
-        await pool.query(
-          `DELETE FROM work_run_resource_manifest
+    const serviceAccounts = [
+      {
+        serviceAccountId: 'oi38-owner-a',
+        token: tokenA,
+        tenantId,
+        workspaceId: workspaceA,
+        policyVersion: 'oi38-test',
+        disabled: false,
+      },
+      {
+        serviceAccountId: 'oi38-owner-b',
+        token: tokenB,
+        tenantId,
+        workspaceId: workspaceB,
+        policyVersion: 'oi38-test',
+        disabled: false,
+      },
+    ];
+    const config = { serviceAccounts } as unknown as AppConfig;
+    const definition = definitionFixture();
+    const version = versionFixture();
+    workModule = createWorkModule({
+      database: pool,
+      definitions: {
+        async findTeamDefinitionById(id) {
+          return id === definition.id ? definition : null;
+        },
+        async findPublishedTeamVersionById(id) {
+          return id === version.id ? version : null;
+        },
+      },
+      execution: {
+        async admitRoot(request) {
+          const id = randomUUID();
+          await pool.query(
+            `INSERT INTO tasks(id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,input_snapshot_ref,input_fingerprint,created_at,updated_at)
+               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,'work-e4','work-e4',now(),now())`,
+            [
+              id,
+              request.accessContext.tenantId,
+              request.accessContext.workspaceId,
+              request.accessContext.principalType,
+              request.accessContext.principalId,
+              request.accessContext.policySnapshotVersion,
+              request.invokable.kind,
+              request.invokable.versionId,
+            ],
+          );
+          generatedTaskIds.push(id);
+          return { taskId: id, reused: false };
+        },
+      },
+      executionFacts: new PostgresExecutionFactQuery(pool),
+    });
+    const app = createApp(
+      Object.assign(minimalAppDependencies(config), { workModule }) as never,
+    );
+
+    server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 });
+    if (!server.listening)
+      await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('OI-38 server did not expose TCP address');
+    httpBaseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterAll(async () => {
+    if (server)
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    if (generatedWorkIds.length) {
+      await pool.query(
+        `DELETE FROM work_run_resource_manifest
            WHERE work_run_id IN (
              SELECT id FROM work_runs WHERE work_id = ANY($1::uuid[])
            )`,
-          [generatedWorkIds],
-        );
-        await pool.query(
-          'DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])',
-          [generatedWorkIds],
-        );
-        await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [
-          generatedWorkIds,
-        ]);
-      }
-      if (generatedTaskIds.length)
-        await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
-          generatedTaskIds,
-        ]);
-      await pool?.end();
-    });
+        [generatedWorkIds],
+      );
+      await pool.query(
+        'DELETE FROM work_runs WHERE work_id = ANY($1::uuid[])',
+        [generatedWorkIds],
+      );
+      await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [
+        generatedWorkIds,
+      ]);
+    }
+    if (generatedTaskIds.length)
+      await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
+        generatedTaskIds,
+      ]);
+    await pool?.end();
+  });
 
-    it('requires owner positive control and makes foreign/missing Work indistinguishable', async () => {
-      const ownerRuns = await request(
-        '/api/v1/works/' + workA + '/runs',
+  it('requires owner positive control and makes foreign/missing Work indistinguishable', async () => {
+    const ownerRuns = await request('/api/v1/works/' + workA + '/runs', tokenA);
+    expect(ownerRuns.status).toBe(200);
+    const ownerBody = (await ownerRuns.json()) as { work_runs: unknown[] };
+    expect(ownerBody.work_runs.length).toBeGreaterThanOrEqual(1);
+
+    const foreignWork = await pool.query<{ id: string }>(
+      'SELECT id FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3',
+      [workA, tenantId, workspaceA],
+    );
+    expect(foreignWork.rows).toHaveLength(1);
+
+    const missingId = randomUUID();
+    const foreign = await request('/api/v1/works/' + workA + '/runs', tokenB);
+    const missing = await request(
+      '/api/v1/works/' + missingId + '/runs',
+      tokenB,
+    );
+    if (foreign.status === 403)
+      throw new Error('work_http_foreign_scope_leak:status=403');
+    expect(foreign.status).toBe(404);
+    expect(missing.status).toBe(404);
+    const foreignError = await normalizeErrorJson(foreign);
+    const missingError = await normalizeErrorJson(missing);
+    expect(foreignError).toBe(missingError);
+    expect(foreignError).toBe(
+      JSON.stringify({
+        error: {
+          code: 'work_not_found',
+          message: 'The requested Work was not found.',
+        },
+      }),
+    );
+  });
+
+  it('fails closed for mismatched Work/WorkRun detail and trace', async () => {
+    for (const suffix of ['', '/trace']) {
+      const response = await request(
+        `/api/v1/works/${workB}/runs/${runA}${suffix}`,
         tokenA,
       );
-      expect(ownerRuns.status).toBe(200);
-      const ownerBody = (await ownerRuns.json()) as { work_runs: unknown[] };
-      expect(ownerBody.work_runs.length).toBeGreaterThanOrEqual(1);
-
-      const foreignWork = await pool.query<{ id: string }>(
-        'SELECT id FROM works WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3',
-        [workA, tenantId, workspaceA],
-      );
-      expect(foreignWork.rows).toHaveLength(1);
-
-      const missingId = randomUUID();
-      const foreign = await request('/api/v1/works/' + workA + '/runs', tokenB);
-      const missing = await request(
-        '/api/v1/works/' + missingId + '/runs',
-        tokenB,
-      );
-      if (foreign.status === 403)
-        throw new Error('work_http_foreign_scope_leak:status=403');
-      expect(foreign.status).toBe(404);
-      expect(missing.status).toBe(404);
-      const foreignError = await normalizeErrorJson(foreign);
-      const missingError = await normalizeErrorJson(missing);
-      expect(foreignError).toBe(missingError);
-      expect(foreignError).toBe(
+      expect(response.status).toBe(404);
+      expect(await normalizeErrorJson(response)).toBe(
         JSON.stringify({
           error: {
-            code: 'work_not_found',
-            message: 'The requested Work was not found.',
+            code: 'work_run_not_found',
+            message: 'The WorkRun was not found for the requested workspace.',
           },
         }),
       );
-    });
+    }
+  });
 
-    it('fails closed for mismatched Work/WorkRun detail and trace', async () => {
-      for (const suffix of ['', '/trace']) {
-        const response = await request(
-          `/api/v1/works/${workB}/runs/${runA}${suffix}`,
-          tokenA,
-        );
-        expect(response.status).toBe(404);
-        expect(await normalizeErrorJson(response)).toBe(
-          JSON.stringify({
-            error: {
-              code: 'work_run_not_found',
-              message: 'The WorkRun was not found for the requested workspace.',
-            },
-          }),
-        );
-      }
+  it('runs the real HTTP create, start, and read path', async () => {
+    const created = await request('/api/v1/works', tokenA, {
+      method: 'POST',
+      body: JSON.stringify({
+        definition_id: definitionA,
+        definition_version_id: versionA,
+        title: 'E4 walking slice',
+      }),
     });
+    expect(created.status).toBe(201);
+    const workId = ((await created.json()) as any).work.id;
+    generatedWorkIds.push(workId);
+    const started = await request(`/api/v1/works/${workId}/runs`, tokenA, {
+      method: 'POST',
+      body: JSON.stringify({ trigger_kind: 'manual', trigger_ref: 'e4' }),
+    });
+    expect(started.status).toBe(202);
+    const runs = await request(`/api/v1/works/${workId}/runs`, tokenA);
+    expect(runs.status).toBe(200);
+    expect(((await runs.json()) as any).work_runs).toHaveLength(1);
+    const read = await request(`/api/v1/works/${workId}`, tokenA);
+    if (read.status === 404)
+      throw new Error(
+        'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
+      );
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as any).work.id).toBe(workId);
+  });
 
-    it('runs the real HTTP create, start, and read path', async () => {
-      const created = await request('/api/v1/works', tokenA, {
-        method: 'POST',
-        body: JSON.stringify({
+  it('creates through real MCP and reads the same Work through HTTP', async () => {
+    const mcp = new RuntimeMcpServer(
+      new RuntimeToolRegistry([workModule.contributeRuntime]),
+    );
+    const grant = mcp.grants.issue({
+      tenantId,
+      workspaceId: workspaceA,
+      principalType: 'service_account',
+      principalId: 'oi38-owner-a',
+      productSessionId: randomUUID(),
+      allowedTools: [AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF],
+    });
+    const url = await mcp.start();
+    const client = new Client({ name: 'work-e5', version: '1' });
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(url), {
+          requestInit: {
+            headers: { authorization: `Bearer ${grant.token}` },
+          },
+        }) as never,
+      );
+      const tools = await client.listTools().catch(() => {
+        throw new Error(
+          'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+        );
+      });
+      if (!tools.tools.some((tool) => tool.name === 'product_work_create'))
+        throw new Error(
+          'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
+        );
+      const result = await client.callTool({
+        name: 'product_work_create',
+        arguments: {
           definition_id: definitionA,
           definition_version_id: versionA,
-          title: 'E4 walking slice',
-        }),
+          title: 'E5 MCP walking slice',
+        },
       });
-      expect(created.status).toBe(201);
-      const workId = ((await created.json()) as any).work.id;
+      expect(result.isError).not.toBe(true);
+      const content = result.content as { type: string; text?: string }[];
+      const text = content[0]?.type === 'text' ? (content[0].text ?? '') : '';
+      const workId = JSON.parse(text).work.id;
       generatedWorkIds.push(workId);
-      const started = await request(`/api/v1/works/${workId}/runs`, tokenA, {
-        method: 'POST',
-        body: JSON.stringify({ trigger_kind: 'manual', trigger_ref: 'e4' }),
-      });
-      expect(started.status).toBe(202);
-      const runs = await request(`/api/v1/works/${workId}/runs`, tokenA);
-      expect(runs.status).toBe(200);
-      expect(((await runs.json()) as any).work_runs).toHaveLength(1);
       const read = await request(`/api/v1/works/${workId}`, tokenA);
       if (read.status === 404)
-        throw new Error(
-          'WORK_ACCEPTANCE_MISSING[work_http_projection_installer_missing]',
-        );
+        throw new Error(`work_mcp_readback_missing:work_id=${workId}`);
       expect(read.status).toBe(200);
       expect(((await read.json()) as any).work.id).toBe(workId);
-    });
+    } finally {
+      await client.close().catch(() => undefined);
+      await mcp.stop();
+    }
+  });
 
-    it('creates through real MCP and reads the same Work through HTTP', async () => {
-      const mcp = new RuntimeMcpServer(
-        new RuntimeToolRegistry([workModule.contributeRuntime]),
+  it('calls Work and Memory through the composed runtime tool registry', async () => {
+    const mcp = new RuntimeMcpServer(
+      createRuntimeToolRegistry({
+        work: workModule.contributeRuntime,
+        memory: createMemoryReadRuntimeContributor(memoryRepository),
+        legacy: () => undefined,
+      }),
+    );
+    const grant = mcp.grants.issue({
+      tenantId,
+      workspaceId: workspaceA,
+      principalType: 'service_account',
+      principalId: 'oi38-owner-a',
+      productSessionId: randomUUID(),
+      allowedTools: [
+        AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
+        AGENT_SERVER_MEMORY_READ_TOOL_REF,
+      ],
+    });
+    const url = await mcp.start();
+    const client = new Client({ name: 'registry-e6', version: '1' });
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(url), {
+          requestInit: {
+            headers: { authorization: `Bearer ${grant.token}` },
+          },
+        }) as never,
       );
-      const grant = mcp.grants.issue({
-        tenantId,
-        workspaceId: workspaceA,
-        principalType: 'service_account',
-        principalId: 'oi38-owner-a',
-        productSessionId: randomUUID(),
-        allowedTools: [AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF],
-      });
-      const url = await mcp.start();
-      const client = new Client({ name: 'work-e5', version: '1' });
-      try {
-        await client.connect(
-          new StreamableHTTPClientTransport(new URL(url), {
-            requestInit: {
-              headers: { authorization: `Bearer ${grant.token}` },
-            },
-          }) as never,
-        );
-        const tools = await client.listTools().catch(() => {
-          throw new Error(
-            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
-          );
-        });
-        if (!tools.tools.some((tool) => tool.name === 'product_work_create'))
-          throw new Error(
-            'WORK_ACCEPTANCE_MISSING[work_mcp_registration_missing:product_work_create]',
-          );
-        const result = await client.callTool({
+      const tools = await client.listTools();
+      const names = tools.tools.map((tool) => tool.name).sort();
+      const workPresent = names.includes('product_work_create');
+      const memoryPresent = names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME);
+      let workOk = false;
+      let memoryOk = false;
+      if (workPresent) {
+        const work = await client.callTool({
           name: 'product_work_create',
           arguments: {
             definition_id: definitionA,
             definition_version_id: versionA,
-            title: 'E5 MCP walking slice',
+            title: 'E6 registry Work',
           },
         });
-        expect(result.isError).not.toBe(true);
-        const content = result.content as { type: string; text?: string }[];
-        const text = content[0]?.type === 'text' ? (content[0].text ?? '') : '';
-        const workId = JSON.parse(text).work.id;
+        expect(work.isError).not.toBe(true);
+        const workText = (work.content as { type: string; text?: string }[])[0]
+          ?.text;
+        const workId = JSON.parse(workText ?? '{}').work?.id;
+        expect(workId).toEqual(expect.any(String));
         generatedWorkIds.push(workId);
-        const read = await request(`/api/v1/works/${workId}`, tokenA);
-        if (read.status === 404)
-          throw new Error(`work_mcp_readback_missing:work_id=${workId}`);
-        expect(read.status).toBe(200);
-        expect(((await read.json()) as any).work.id).toBe(workId);
-      } finally {
-        await client.close().catch(() => undefined);
-        await mcp.stop();
-      }
-    });
-
-    it('calls Work and Memory through the composed runtime tool registry', async () => {
-      const mcp = new RuntimeMcpServer(
-        createRuntimeToolRegistry({
-          work: workModule.contributeRuntime,
-          memory: createMemoryReadRuntimeContributor(memoryRepository),
-          legacy: () => undefined,
-        }),
-      );
-      const grant = mcp.grants.issue({
-        tenantId,
-        workspaceId: workspaceA,
-        principalType: 'service_account',
-        principalId: 'oi38-owner-a',
-        productSessionId: randomUUID(),
-        allowedTools: [
-          AGENT_SERVER_PRODUCT_WORK_CREATE_TOOL_REF,
-          AGENT_SERVER_MEMORY_READ_TOOL_REF,
-        ],
-      });
-      const url = await mcp.start();
-      const client = new Client({ name: 'registry-e6', version: '1' });
-      try {
-        await client.connect(
-          new StreamableHTTPClientTransport(new URL(url), {
-            requestInit: {
-              headers: { authorization: `Bearer ${grant.token}` },
-            },
-          }) as never,
+        workOk = true;
+        process.stdout.write(
+          `${JSON.stringify({
+            guard: 'runtime-tools-non-target-control',
+            control_identity: 'product_work_create',
+            work_present: workPresent,
+            product_work_create_ok: workOk,
+            work_call_raw_exit: 0,
+            work_call_observed_count: 1,
+            work_call_skip_count: 0,
+            work_call_todo_count: 0,
+          })}\n`,
         );
-        const tools = await client.listTools();
-        const names = tools.tools.map((tool) => tool.name).sort();
-        const workPresent = names.includes('product_work_create');
-        const memoryPresent = names.includes(AGENT_SERVER_MEMORY_READ_MCP_NAME);
-        let workOk = false;
-        let memoryOk = false;
-        if (workPresent) {
-          const work = await client.callTool({
-            name: 'product_work_create',
-            arguments: {
-              definition_id: definitionA,
-              definition_version_id: versionA,
-              title: 'E6 registry Work',
-            },
-          });
-          expect(work.isError).not.toBe(true);
-          const workText = (
-            work.content as { type: string; text?: string }[]
-          )[0]?.text;
-          const workId = JSON.parse(workText ?? '{}').work?.id;
-          expect(workId).toEqual(expect.any(String));
-          generatedWorkIds.push(workId);
-          workOk = true;
-          process.stdout.write(
-            `${JSON.stringify({
-              guard: 'runtime-tools-non-target-control',
-              control_identity: 'product_work_create',
-              work_present: workPresent,
-              product_work_create_ok: workOk,
-              work_call_raw_exit: 0,
-              work_call_observed_count: 1,
-              work_call_skip_count: 0,
-              work_call_todo_count: 0,
-            })}\n`,
-          );
-        }
-        if (memoryPresent) {
-          const memory = await client.callTool({
-            name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
-            arguments: {
-              memory_store_id: memoryStoreId,
-              path: 'registry/e6.txt',
-            },
-          });
-          expect(memory.isError).not.toBe(true);
-          expect(memory.structuredContent).toMatchObject({
-            memory_id: memoryId,
-            content: 'runtime-registry-e6',
-          });
-          memoryOk = true;
-          process.stdout.write(
-            `${JSON.stringify({
-              guard: 'runtime-tools-non-target-control',
-              control_identity: AGENT_SERVER_MEMORY_READ_MCP_NAME,
-              memory_read_ok: memoryOk,
-              memory_call_raw_exit: 0,
-              memory_call_observed_count: 1,
-              memory_call_skip_count: 0,
-              memory_call_todo_count: 0,
-            })}\n`,
-          );
-        }
-        if (!workPresent)
-          throw new Error(
-            `RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]:non_target_memory_ok=${memoryOk}`,
-          );
-        if (!memoryPresent)
-          throw new Error(
-            `RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]:non_target_work_ok=${workOk}`,
-          );
-      } finally {
-        await client.close().catch(() => undefined);
-        await mcp.stop();
       }
-    });
-  },
-);
+      if (memoryPresent) {
+        const memory = await client.callTool({
+          name: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+          arguments: {
+            memory_store_id: memoryStoreId,
+            path: 'registry/e6.txt',
+          },
+        });
+        expect(memory.isError).not.toBe(true);
+        expect(memory.structuredContent).toMatchObject({
+          memory_id: memoryId,
+          content: 'runtime-registry-e6',
+        });
+        memoryOk = true;
+        process.stdout.write(
+          `${JSON.stringify({
+            guard: 'runtime-tools-non-target-control',
+            control_identity: AGENT_SERVER_MEMORY_READ_MCP_NAME,
+            memory_read_ok: memoryOk,
+            memory_call_raw_exit: 0,
+            memory_call_observed_count: 1,
+            memory_call_skip_count: 0,
+            memory_call_todo_count: 0,
+          })}\n`,
+        );
+      }
+      if (!workPresent)
+        throw new Error(
+          `RUNTIME_TOOLS_MISSING[runtime_work_registration_missing]:non_target_memory_ok=${memoryOk}`,
+        );
+      if (!memoryPresent)
+        throw new Error(
+          `RUNTIME_TOOLS_MISSING[runtime_memory_registration_missing]:non_target_work_ok=${workOk}`,
+        );
+    } finally {
+      await client.close().catch(() => undefined);
+      await mcp.stop();
+    }
+  });
+});
 
 async function request(
   path: string,

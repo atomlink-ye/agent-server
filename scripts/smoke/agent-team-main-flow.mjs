@@ -238,7 +238,9 @@ const teamVersion = await request(
 progress('team_version_published', { version_id: teamVersion.id });
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl)
-  throw new Error('composition team smoke requires DATABASE_URL from local-env');
+  throw new Error(
+    'composition team smoke requires DATABASE_URL from local-env',
+  );
 const definitionId = randomUUID();
 const definitionVersionId = randomUUID();
 const compositionSource = {
@@ -254,7 +256,8 @@ try {
     [workspaceId],
   );
   const owner = workspace.rows[0];
-  if (!owner) throw new Error(`composition team workspace missing: ${workspaceId}`);
+  if (!owner)
+    throw new Error(`composition team workspace missing: ${workspaceId}`);
   await pool.query(
     `INSERT INTO work_definition_source_definitions
      (id,tenant_id,workspace_id,principal_type,principal_id,name,description,created_at)
@@ -297,7 +300,8 @@ const work = await request('/api/v1/works', {
   },
 });
 const workId = work.work?.id;
-if (typeof workId !== 'string') throw new Error('composition team Work id missing');
+if (typeof workId !== 'string')
+  throw new Error('composition team Work id missing');
 const startedWorkRun = await request(`/api/v1/works/${workId}/runs`, {
   method: 'POST',
   status: 202,

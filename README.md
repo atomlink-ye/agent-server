@@ -58,13 +58,13 @@ Development and infrastructure-backed tests share the topology definitions in `c
 
 Stable topologies are:
 
-| Topology | Services |
-| --- | --- |
-| `in-process` | Node + PGlite/fakes only |
-| `postgres` | disposable real PostgreSQL |
-| `core` | PostgreSQL + Agent Server, no execution plane |
-| `runtime` | PostgreSQL + Agent Server + Paseo |
-| `full` | runtime topology + Web |
+| Topology     | Services                                      |
+| ------------ | --------------------------------------------- |
+| `in-process` | Node + PGlite/fakes only                      |
+| `postgres`   | disposable real PostgreSQL                    |
+| `core`       | PostgreSQL + Agent Server, no execution plane |
+| `runtime`    | PostgreSQL + Agent Server + Paseo             |
+| `full`       | runtime topology + Web                        |
 
 Start an interactive environment:
 

@@ -10,17 +10,17 @@ The boundary is intentionally **thick**, while each class inside it is narrow.
 
 ## Object mapping
 
-| Agent Server | Paseo | Ownership |
-| --- | --- | --- |
-| Work | none | Agent Server |
-| Task | none | Agent Server |
-| Run | Turn/execution | Agent Server durable truth; Paseo executes |
-| RuntimeWorkspace | Workspace | Agent Server durable identity/binding |
-| RuntimeSession | Agent/session binding | Agent Server durable identity/binding |
-| RuntimeCell | cwd | Agent Server placement |
-| ExecutionObservation | projected timeline/stream activity | normalized by Agent Server boundary |
-| TeamMemberRun | separate RuntimeSession/Agent | Agent Server |
-| provider subagent | nested runtime activity | Paseo/provider; never a TeamMemberRun |
+| Agent Server         | Paseo                              | Ownership                                  |
+| -------------------- | ---------------------------------- | ------------------------------------------ |
+| Work                 | none                               | Agent Server                               |
+| Task                 | none                               | Agent Server                               |
+| Run                  | Turn/execution                     | Agent Server durable truth; Paseo executes |
+| RuntimeWorkspace     | Workspace                          | Agent Server durable identity/binding      |
+| RuntimeSession       | Agent/session binding              | Agent Server durable identity/binding      |
+| RuntimeCell          | cwd                                | Agent Server placement                     |
+| ExecutionObservation | projected timeline/stream activity | normalized by Agent Server boundary        |
+| TeamMemberRun        | separate RuntimeSession/Agent      | Agent Server                               |
+| provider subagent    | nested runtime activity            | Paseo/provider; never a TeamMemberRun      |
 
 ## Integration roles
 

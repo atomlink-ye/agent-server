@@ -286,7 +286,9 @@ describe('agentic team project route contract', () => {
         status: 'pending',
       }),
     ]);
-    expect(() => AgenticTeamProjectResponseSchema.parse(response)).not.toThrow();
+    expect(() =>
+      AgenticTeamProjectResponseSchema.parse(response),
+    ).not.toThrow();
   });
 
   it('distinguishes reported none from unavailable decision capture', () => {

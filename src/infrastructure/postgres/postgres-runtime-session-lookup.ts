@@ -28,7 +28,9 @@ export class PostgresRuntimeSessionLookup implements RuntimeSessionLookup {
   }
 
   public async findByExecutionSessionBinding(
-    binding: Parameters<RuntimeSessionLookup['findByExecutionSessionBinding']>[0],
+    binding: Parameters<
+      RuntimeSessionLookup['findByExecutionSessionBinding']
+    >[0],
   ): Promise<RuntimeSession | null> {
     if (binding.plane !== 'paseo') return null;
     const result = await this.db.query(
@@ -42,10 +44,11 @@ export class PostgresRuntimeSessionLookup implements RuntimeSessionLookup {
       [binding.externalSessionId],
     );
     if ((result.rows?.length ?? 0) > 1)
-      throw new Error('Execution session binding resolves to multiple RuntimeSessions.');
+      throw new Error(
+        'Execution session binding resolves to multiple RuntimeSessions.',
+      );
     return result.rows?.[0] ? mapRuntimeSession(result.rows[0]) : null;
   }
-
 }
 
 function mapRuntimeSession(row: any): RuntimeSession {

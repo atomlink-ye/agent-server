@@ -44,7 +44,7 @@ describe('Execution Plane architecture boundary', () => {
     const offenders: string[] = [];
     for (const path of files) {
       const source = await readFile(path, 'utf8');
-      if (source.includes("ports/agent-runtime.js")) offenders.push(path);
+      if (source.includes('ports/agent-runtime.js')) offenders.push(path);
     }
     expect(offenders).toEqual([]);
   });

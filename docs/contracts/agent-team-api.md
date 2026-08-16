@@ -58,23 +58,23 @@ by itself determine when it is usable. This is an implementation constraint,
 not a recommendation; applications that need a strict tool boundary must not
 infer it from these declarations.
 
-| Group | Canonical tool ref | MCP name |
-| --- | --- | --- |
-| Read | `agent-server/collaboration-state` | `collaboration_state` |
-| Read | `agent-server/board-list` | `board_list` |
-| Board mutation | `agent-server/board-create` | `board_create` |
-| Board mutation | `agent-server/board-assign` | `board_assign` |
-| Board mutation | `agent-server/board-claim` | `board_claim` |
-| Board mutation | `agent-server/board-checkpoint` | `board_checkpoint` |
-| Board mutation | `agent-server/board-block` | `board_block` |
-| Board mutation | `agent-server/board-submit` | `board_submit` |
-| Board mutation | `agent-server/board-accept` | `board_accept` |
+| Group          | Canonical tool ref                   | MCP name                |
+| -------------- | ------------------------------------ | ----------------------- |
+| Read           | `agent-server/collaboration-state`   | `collaboration_state`   |
+| Read           | `agent-server/board-list`            | `board_list`            |
+| Board mutation | `agent-server/board-create`          | `board_create`          |
+| Board mutation | `agent-server/board-assign`          | `board_assign`          |
+| Board mutation | `agent-server/board-claim`           | `board_claim`           |
+| Board mutation | `agent-server/board-checkpoint`      | `board_checkpoint`      |
+| Board mutation | `agent-server/board-block`           | `board_block`           |
+| Board mutation | `agent-server/board-submit`          | `board_submit`          |
+| Board mutation | `agent-server/board-accept`          | `board_accept`          |
 | Board mutation | `agent-server/board-request-changes` | `board_request_changes` |
-| Board mutation | `agent-server/board-cancel` | `board_cancel` |
-| Mailbox | `agent-server/inbox-list` | `inbox_list` |
-| Mailbox | `agent-server/message-send` | `message_send` |
-| Mailbox | `agent-server/message-ack` | `message_ack` |
-| Run | `agent-server/collaboration-finish` | `collaboration_finish` |
+| Board mutation | `agent-server/board-cancel`          | `board_cancel`          |
+| Mailbox        | `agent-server/inbox-list`            | `inbox_list`            |
+| Mailbox        | `agent-server/message-send`          | `message_send`          |
+| Mailbox        | `agent-server/message-ack`           | `message_ack`           |
+| Run            | `agent-server/collaboration-finish`  | `collaboration_finish`  |
 
 The lead role's runtime policy derives board read/create/assign/review/cancel,
 mailbox read/send/ack, and run-finalize capabilities as applicable to its

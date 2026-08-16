@@ -31,7 +31,10 @@ export class ExecutionSessionResolver {
 
   public async resolve(input: {
     readonly runtimeSession: RuntimeSession;
-    readonly spec: Omit<ExecutionSessionSpec, 'runtimeSessionId' | 'workspace'> & {
+    readonly spec: Omit<
+      ExecutionSessionSpec,
+      'runtimeSessionId' | 'workspace'
+    > & {
       readonly workspace: Omit<ExecutionSessionSpec['workspace'], 'binding'>;
     };
     readonly workspaceBinding?: ExecutionWorkspaceBinding | null;
@@ -64,7 +67,10 @@ export class ExecutionSessionResolver {
         throw new ExecutionBindingUnavailableError(
           'Reusable execution session has no workspace binding.',
         );
-      const session = await this.plane.attachSession(runtime.sessionBinding, spec);
+      const session = await this.plane.attachSession(
+        runtime.sessionBinding,
+        spec,
+      );
       return { runtimeSession: runtime, session };
     }
 

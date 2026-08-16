@@ -136,9 +136,7 @@ export const COLLABORATION_TOOL_REF_BY_CAPABILITY: Readonly<
   'mailbox.ack': Object.freeze([
     AGENT_SERVER_COLLABORATION_TOOL_REFS.messageAck,
   ]),
-  'run.finalize': Object.freeze([
-    AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
-  ]),
+  'run.finalize': Object.freeze([AGENT_SERVER_COLLABORATION_TOOL_REFS.finish]),
 });
 
 export function collaborationToolRefsForCapabilities(

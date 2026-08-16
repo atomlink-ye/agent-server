@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createChildTask, createRootTask, type Task } from '../../domain/tasks/task.js';
+import {
+  createChildTask,
+  createRootTask,
+  type Task,
+} from '../../domain/tasks/task.js';
 import { createRun, type Run } from '../../domain/runs/run.js';
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import { TeamDriver } from './team-driver.js';
@@ -148,7 +152,10 @@ describe('TeamDriver completion approval', () => {
     await driver.handleTerminalRun({ team, task, run });
 
     expect(executions.completeTeamRunAtomically).toHaveBeenCalledWith(
-      expect.objectContaining({ leadRunId: run.id, finalText: run.result?.text }),
+      expect.objectContaining({
+        leadRunId: run.id,
+        finalText: run.result?.text,
+      }),
     );
   });
 

@@ -103,8 +103,8 @@ function successfulProjection() {
 }
 
 function codes(projection) {
-  return evaluateCompletionFacts(projection).failures.map((failure) =>
-    failure.code,
+  return evaluateCompletionFacts(projection).failures.map(
+    (failure) => failure.code,
   );
 }
 
@@ -167,21 +167,30 @@ describe('agent-team smoke completion line', () => {
     const projection = successfulProjection();
     projection.sessions[2].turns = [];
 
-    const outcome = classifySmokeOutcome({ taskStatus: 'completed', projection });
+    const outcome = classifySmokeOutcome({
+      taskStatus: 'completed',
+      projection,
+    });
     expect(outcome).toMatchObject({
       kind: 'assertion_failed',
       failures: [expect.objectContaining({ code: 'final_review_activation' })],
     });
-    expect(outcome.failures.every((failure) => failure.scope === 'assertion')).toBe(true);
+    expect(
+      outcome.failures.every((failure) => failure.scope === 'assertion'),
+    ).toBe(true);
   });
 
   it('reports a completed collaboration with an unacknowledged message as collaboration failure', () => {
     const projection = successfulProjection();
     projection.direct_messages[0].status = 'presented';
 
-    expect(classifySmokeOutcome({ taskStatus: 'completed', projection })).toMatchObject({
+    expect(
+      classifySmokeOutcome({ taskStatus: 'completed', projection }),
+    ).toMatchObject({
       kind: 'collaboration_not_achieved',
-      failures: [expect.objectContaining({ code: 'acknowledged_direct_message' })],
+      failures: [
+        expect.objectContaining({ code: 'acknowledged_direct_message' }),
+      ],
     });
   });
 
@@ -259,7 +268,9 @@ describe('agent-team smoke completion line', () => {
 
     expect(diagnostics[0]).toContain('collaboration not achieved');
     expect(diagnostics[1]).toContain('completion-line assertion failed');
-    expect(diagnostics[2]).toContain('gate timeout, not evidence of product failure');
+    expect(diagnostics[2]).toContain(
+      'gate timeout, not evidence of product failure',
+    );
   });
 
   it('names distinct missing facts in its diagnostic output', () => {

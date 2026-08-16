@@ -32,7 +32,9 @@ describe('CancelTask', () => {
       );
       const order: string[] = [];
       const executions = {
-        cancelRun: vi.fn(async (_input: { readonly runId: string }) => undefined),
+        cancelRun: vi.fn(
+          async (_input: { readonly runId: string }) => undefined,
+        ),
       };
       const events = {
         append: vi.fn(async () => {
@@ -85,11 +87,9 @@ describe('CancelTask', () => {
       requestCancellation: vi.fn(),
     };
     const tasks = { findByIdForOwner: vi.fn(async () => null) };
-    const result = await new CancelTask(
-      tasks as never,
-      runs as never,
-      { cancelRun: vi.fn(async () => undefined) },
-    ).execute('missing', owner);
+    const result = await new CancelTask(tasks as never, runs as never, {
+      cancelRun: vi.fn(async () => undefined),
+    }).execute('missing', owner);
     expect(result).toBeNull();
     expect(runs.requestCancellation).not.toHaveBeenCalled();
   });

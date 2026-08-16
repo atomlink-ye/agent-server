@@ -70,21 +70,17 @@ export class CollaborationActivationPlanner {
       );
     const workAttempt =
       participantRole === 'member'
-        ? queuedAttempts.find((attempt) => {
+        ? (queuedAttempts.find((attempt) => {
             const work = workById.get(attempt.workItemId);
             if (!work || work.status !== 'pending') return false;
-            return dependenciesAccepted(
-              work.id,
-              input.dependencies,
-              workById,
-            );
-          }) ?? null
+            return dependenciesAccepted(work.id, input.dependencies, workById);
+          }) ?? null)
         : null;
     const primaryWorkMessage = workAttempt
-      ? queued.find(
+      ? (queued.find(
           (message) =>
             message.kind !== 'direct' && message.attemptId === workAttempt.id,
-        ) ?? null
+        ) ?? null)
       : null;
 
     const orderedWork = orderedWorkItems(input.workItems);
@@ -124,11 +120,15 @@ export class CollaborationActivationPlanner {
       if (ref) causes.push({ type: 'work_available', workRef: ref });
     }
 
-    const finalReview = participantRole === 'lead' && input.finalReview === true;
+    const finalReview =
+      participantRole === 'lead' && input.finalReview === true;
     if (finalReview) causes.push({ type: 'final_review' });
 
     for (const message of directMessages)
-      causes.push({ type: 'message', messageRef: messageRef(message.sequence) });
+      causes.push({
+        type: 'message',
+        messageRef: messageRef(message.sequence),
+      });
 
     if (!causes.length) return null;
     const priority = directMessages.some(

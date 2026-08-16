@@ -45,27 +45,46 @@ export function evaluateCompletionFacts(value) {
     all_members_idle: true,
   })) {
     if (value?.gates?.[key] !== expected) {
-      fail('collaboration', `gate_${key}`, `${key} === true`, value?.gates?.[key] ?? null);
+      fail(
+        'collaboration',
+        `gate_${key}`,
+        `${key} === true`,
+        value?.gates?.[key] ?? null,
+      );
     }
   }
 
   const workItems = Array.isArray(value?.work_items) ? value.work_items : [];
   if (workItems.length !== 2) {
-    fail('collaboration', 'work_item_count', 'exactly two Work items', workItems.length);
+    fail(
+      'collaboration',
+      'work_item_count',
+      'exactly two Work items',
+      workItems.length,
+    );
   }
   const builderWork = workItems.find((item) => item.work_ref === 'work-1');
   const work = workItems.find((item) => item.work_ref === 'work-2');
-  if (!builderWork || builderWork.status !== 'accepted' || builderWork.assignee_name !== 'builder') {
+  if (
+    !builderWork ||
+    builderWork.status !== 'accepted' ||
+    builderWork.assignee_name !== 'builder'
+  ) {
     fail(
       'collaboration',
       'work_1_accepted',
       'W-1 accepted by builder',
       builderWork
-        ? { status: builderWork.status ?? null, assignee_name: builderWork.assignee_name ?? null }
+        ? {
+            status: builderWork.status ?? null,
+            assignee_name: builderWork.assignee_name ?? null,
+          }
         : null,
     );
   }
-  const builderAttempt = builderWork?.attempts?.find((attempt) => attempt.attempt_no === 1);
+  const builderAttempt = builderWork?.attempts?.find(
+    (attempt) => attempt.attempt_no === 1,
+  );
   if (
     builderWork?.attempts?.length !== 1 ||
     !builderAttempt ||
@@ -84,7 +103,12 @@ export function evaluateCompletionFacts(value) {
       'collaboration',
       'work_2_accepted',
       'W-2 accepted by analyst',
-      work ? { status: work.status ?? null, assignee_name: work.assignee_name ?? null } : null,
+      work
+        ? {
+            status: work.status ?? null,
+            assignee_name: work.assignee_name ?? null,
+          }
+        : null,
     );
   }
   const attempt1 = work?.attempts?.find((attempt) => attempt.attempt_no === 1);
@@ -236,11 +260,19 @@ export function evaluateCompletionFacts(value) {
   return { ok: failures.length === 0, failures };
 }
 
-export function classifySmokeOutcome({ taskStatus, projection, timedOut = false }) {
+export function classifySmokeOutcome({
+  taskStatus,
+  projection,
+  timedOut = false,
+}) {
   const evaluation = evaluateCompletionFacts(projection);
   if (!terminalTaskStatuses.has(taskStatus)) {
     if (timedOut) {
-      return { kind: 'gate_timeout', taskStatus: taskStatus ?? null, failures: [] };
+      return {
+        kind: 'gate_timeout',
+        taskStatus: taskStatus ?? null,
+        failures: [],
+      };
     }
     return { kind: 'pending', taskStatus: taskStatus ?? null, failures: [] };
   }

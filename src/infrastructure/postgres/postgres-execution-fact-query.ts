@@ -96,11 +96,8 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
               r.created_at,r.updated_at
          FROM runs r
          JOIN tasks t ON t.id=r.task_id
-         JOIN team_runs tr ON tr.root_task_id=t.root_task_id
-                           AND tr.tenant_id=$2 AND tr.workspace_id=$3
          LEFT JOIN team_work_item_attempts attempt
                 ON attempt.execution_task_id=t.id
-               AND attempt.team_run_id=tr.id
                AND attempt.tenant_id=$2 AND attempt.workspace_id=$3
         WHERE t.root_task_id=$1 AND t.tenant_id=$2 AND t.workspace_id=$3
         ORDER BY r.created_at,r.id`,
@@ -167,11 +164,8 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
              FROM run_events e
              JOIN runs r ON r.id=e.run_id
              JOIN tasks t ON t.id=r.task_id
-             JOIN team_runs tr ON tr.root_task_id=t.root_task_id
-                               AND tr.tenant_id=$2 AND tr.workspace_id=$3
              LEFT JOIN team_work_item_attempts attempt
                     ON attempt.execution_task_id=t.id
-                   AND attempt.team_run_id=tr.id
                    AND attempt.tenant_id=$2 AND attempt.workspace_id=$3
             WHERE e.run_id=$1 AND e.sequence>$4
               AND t.tenant_id=$2 AND t.workspace_id=$3

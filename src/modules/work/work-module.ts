@@ -60,7 +60,10 @@ export function installWorkHttpRoutes(
 
 export function createWorkModule(options: {
   readonly database: WorkIdentityConnectable;
-  readonly definitions: DefinitionReadApi;
+  readonly definitions: Pick<
+    DefinitionReadApi,
+    'findTeamDefinitionById' | 'findPublishedTeamVersionById'
+  >;
   readonly definitionResolution: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;

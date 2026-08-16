@@ -47,7 +47,7 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    # Four real-provider flows now run here, and the agent-team one may use up
+    # Five real-provider flows now run here, and the agent-team ones may use up
     # to its 900s budget on a slow day. A job kill would surface as an opaque
     # cancellation rather than as a flow's own assertion, which is the failure
     # mode this workflow exists to avoid.
@@ -151,6 +151,12 @@ jobs:
         env:
           AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000'
         run: pnpm smoke:agent-team
+
+      - name: Real-provider external-user Team collaboration
+        if: steps.credentials.outputs.available == 'true'
+        env:
+          EXTERNAL_USER_TEAM_TIMEOUT_MS: '900000'
+        run: pnpm smoke:external-user-team
 
       - name: 'Product chain: registry + work identity + projection reachability (no execution assertion)'
         if: steps.credentials.outputs.available == 'true'

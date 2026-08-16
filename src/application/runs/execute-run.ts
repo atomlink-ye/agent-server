@@ -91,6 +91,12 @@ export class ExecuteRun {
       logger,
       this.now,
     );
+    const compositionReads = environments as
+      | (EnvironmentReadApi & {
+          readonly workRunManifests?: WorkRunResourceManifestRead;
+          readonly memoryVersions?: MemoryVersionReadApi;
+        })
+      | undefined;
     this.agentRunExecutor = new AgentRunExecutor(
       runtime,
       tasks,
@@ -105,8 +111,8 @@ export class ExecuteRun {
       runtimeCellRoot,
       collaborativeExecutions,
       runs,
-      workRunManifests,
-      memoryVersions,
+      workRunManifests ?? compositionReads?.workRunManifests,
+      memoryVersions ?? compositionReads?.memoryVersions,
       this.now,
     );
   }

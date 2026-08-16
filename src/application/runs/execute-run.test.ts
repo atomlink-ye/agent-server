@@ -243,6 +243,16 @@ describe('ExecuteRun', () => {
       append.mock.calls as unknown as Array<[string, string, unknown]>
     ).find(([, kind]) => kind === 'output');
     expect(outputCall?.[2]).not.toHaveProperty('detail_kind');
+    expect(
+      (append.mock.calls as unknown as Array<[string, string, Record<string, unknown>]>)
+        .filter(([, kind]) => kind === 'output')
+        .map(([, , payload]) => payload),
+    ).toEqual(
+      expect.arrayContaining([
+        { kind: 'execution_stage', stage: 'agent_executor_started' },
+        { kind: 'execution_stage', stage: 'runtime_execute_requested' },
+      ]),
+    );
   });
 
   it('passes the prior session provider Agent and persists the returned Agent id', async () => {

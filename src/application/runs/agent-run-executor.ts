@@ -65,6 +65,11 @@ export class AgentRunExecutor {
     readonly teamContext: RunTeamContext | null;
   }) {
     const { claim, ownerScope, invokableVersionId, task } = input;
+    await this.events?.append(claim.run.id, 'output', {
+      kind: 'execution_stage',
+      stage: 'agent_executor_started',
+      ...(task.teamTaskKind ? { team_task_kind: task.teamTaskKind } : {}),
+    });
     const collaborativeTeam =
       input.teamContext?.team ??
       (this.collaborativeExecutions
@@ -610,6 +615,11 @@ export class AgentRunExecutor {
     let executionFailed = false;
     let executionError: unknown;
     try {
+      await this.events?.append(claim.run.id, 'output', {
+        kind: 'execution_stage',
+        stage: 'runtime_execute_requested',
+        ...(member ? { team_role: member.role } : {}),
+      });
       execution = await this.runtime.executeTurn(
         {
           runId: claim.run.id,

@@ -198,8 +198,9 @@ describe('canonical smoke direct-message wake mutation', () => {
   it('creates a durable pending requires-ack message through MCP before wake materialization', async () => {
     const fixture = await createMessageWakeFixture();
     try {
+      let leadContext;
       try {
-        await fixture.team.contextResolver.resolve(fixture.grant);
+        leadContext = await fixture.team.contextResolver.resolve(fixture.grant);
       } catch (error) {
         const task = await fixture.tasks.findByIdForOwner(
           fixture.leadTask.id,
@@ -243,6 +244,11 @@ describe('canonical smoke direct-message wake mutation', () => {
           `MCP message_send did not produce the expected durable projection: ${JSON.stringify({
             sent,
             direct_messages: projection?.directMessages ?? [],
+            resolved_context: {
+              team_revision: leadContext.teamRun.revision,
+              task_id: leadContext.task.id,
+              run_id: leadContext.run.id,
+            },
             team: (
               await fixture.database.query(
                 `SELECT status, revision FROM team_runs WHERE id = $1`,

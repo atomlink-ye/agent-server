@@ -243,6 +243,28 @@ describe('canonical smoke direct-message wake mutation', () => {
           `MCP message_send did not produce the expected durable projection: ${JSON.stringify({
             sent,
             direct_messages: projection?.directMessages ?? [],
+            team: (
+              await fixture.database.query(
+                `SELECT status, revision FROM team_runs WHERE id = $1`,
+                [fixture.teamRun.id],
+              )
+            ).rows,
+            source: (
+              await fixture.database.query(
+                `SELECT t.status AS task_status, r.status AS run_status,
+                        t.root_task_id, t.team_member_run_id, t.team_task_kind
+                   FROM tasks t JOIN runs r ON r.id = $2
+                  WHERE t.id = $1`,
+                [fixture.leadTask.id, fixture.leadClaim.run.id],
+              )
+            ).rows,
+            members: (
+              await fixture.database.query(
+                `SELECT name, status FROM team_member_runs
+                  WHERE team_run_id = $1 ORDER BY name`,
+                [fixture.teamRun.id],
+              )
+            ).rows,
           })}`,
         );
 

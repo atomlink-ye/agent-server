@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import {
   CreateWorkResponseSchema,
   StartWorkRunResponseSchema,
@@ -7,6 +9,7 @@ import {
   ProductWorkRunResponseSchema,
 } from '../../contracts/product-projection/index.js';
 import {
+  GetProductWorkDefinitionVersionResponseSchema,
   WorkDefinitionApplyResponseSchema,
   WorkDefinitionPlanResponseSchema,
   WorkDefinitionValidateFailureSchema,
@@ -71,6 +74,12 @@ export class ProductDeveloperClient {
     );
   }
 
+  public async getDefinitionVersion(versionId: string) {
+    return GetProductWorkDefinitionVersionResponseSchema.parse(
+      await this.json(`/api/v1/work-definition-versions/${versionId}`),
+    ).version;
+  }
+
   public async createWork(input: {
     readonly definitionId: string;
     readonly definitionVersionId: string;
@@ -86,6 +95,18 @@ export class ProductDeveloperClient {
         },
       }),
     );
+  }
+
+  public async createWorkFromDefinitionVersion(input: {
+    readonly definitionVersionId: string;
+    readonly title: string;
+  }) {
+    const version = await this.getDefinitionVersion(input.definitionVersionId);
+    return this.createWork({
+      definitionId: version.definition_id,
+      definitionVersionId: version.id,
+      title: input.title,
+    });
   }
 
   public async startWorkRun(input: {
@@ -119,7 +140,7 @@ export class ProductDeveloperClient {
 
   public async runDefinition(input: RunDefinitionInput) {
     const idempotencyKey =
-      input.idempotencyKey ?? `definition-${crypto.randomUUID()}`;
+      input.idempotencyKey ?? `definition-${randomUUID()}`;
     const applied = await this.applyDefinition(input.source, idempotencyKey);
     const created = await this.createWork({
       definitionId: applied.definition.id,

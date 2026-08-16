@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRun, transitionRun } from '../../domain/runs/run.js';
 import { createChildTask } from '../../domain/tasks/task.js';
 import { createTeamMemberRun } from '../../domain/teams/team-member-run.js';
+import { createTeamMessage } from '../../domain/teams/team-message.js';
 import { createTeamRun } from '../../domain/teams/team-run.js';
 import { TeamDriver } from './team-driver.js';
 
@@ -75,7 +76,23 @@ describe('TeamDriver direct-message progress', () => {
     );
     const failTeamRunAtomically = vi.fn();
     const reconcileForRootTask = vi.fn(async () => 0);
-    const hasNonterminalRunsForTeamMemberChildTasks = vi.fn(async () => true);
+    const message = createTeamMessage({
+      id: 'message-1',
+      teamRunId: team.id,
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+      senderMemberRunId: lead.id,
+      recipientMemberRunId: member.id,
+      kind: 'direct',
+      dedupKey: 'message-send-lead-run-1',
+      body: 'PING_FROM_LEAD',
+      sourceTaskId: leadTask.id,
+      sourceRunId: leadRun.id,
+      now,
+    });
+    const listDirectForTeamRun = vi.fn(async () => [message]);
     const driver = new TeamDriver(
       {
         findTeamRunById: vi.fn(async () => team),
@@ -85,25 +102,21 @@ describe('TeamDriver direct-message progress', () => {
         failTeamRunAtomically,
       } as never,
       {} as never,
-      { hasNonterminalRunsForTeamMemberChildTasks } as never,
       {} as never,
-      undefined,
+      {} as never,
+      { listDirectForTeamRun },
       { reconcileForRootTask },
       now,
     );
 
     await driver.handleTerminalRun({ team, task: leadTask, run: leadRun });
 
-    expect(hasNonterminalRunsForTeamMemberChildTasks).toHaveBeenCalledWith(
-      team.rootTaskId,
-      [lead.id, member.id],
-      {
-        tenantId: team.tenantId,
-        workspaceId: team.workspaceId,
-        principalType: team.principalType,
-        principalId: team.principalId,
-      },
-    );
+    expect(listDirectForTeamRun).toHaveBeenCalledWith(team.id, {
+      tenantId: team.tenantId,
+      workspaceId: team.workspaceId,
+      principalType: team.principalType,
+      principalId: team.principalId,
+    });
     expect(failTeamRunAtomically).not.toHaveBeenCalled();
     expect(reconcileForRootTask).toHaveBeenCalledWith(
       team.rootTaskId,

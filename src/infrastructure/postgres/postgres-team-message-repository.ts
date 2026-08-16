@@ -170,7 +170,10 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
         `SELECT id,root_task_id FROM team_runs WHERE id=$1 AND status='active' AND revision=$2 AND ${ownerSql('',3)} FOR UPDATE`,
         [input.teamRunId,input.expectedRevision,...ownerValues(input.owner)],
       );
-      if (team.rowCount !== 1 || !team.rows?.[0]) throw new TeamExecutionError('stale_state');
+      const teamRows = team.rows ?? [];
+      const teamRow = teamRows[0];
+      if (teamRows.length !== 1 || !teamRow)
+        throw new TeamExecutionError('stale_state');
       const source = await client.query(
         `SELECT 1 FROM tasks t JOIN runs r ON r.id=$2
           WHERE t.id=$1 AND t.root_task_id=$3 AND t.team_member_run_id=$4
@@ -178,7 +181,7 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
             AND t.status NOT IN ('completed','failed','cancelled')
             AND r.task_id=t.id AND r.status NOT IN ('succeeded','failed','timed_out','cancelled')
             AND ${ownerSql('t',5)} FOR SHARE`,
-        [input.sourceTaskId,input.sourceRunId,team.rows[0].root_task_id,input.senderMemberRunId,...ownerValues(input.owner)],
+        [input.sourceTaskId,input.sourceRunId,teamRow.root_task_id,input.senderMemberRunId,...ownerValues(input.owner)],
       );
       if (!source.rows?.[0]) throw new TeamExecutionError('stale_state');
       if (input.senderMemberRunId === input.recipientMemberRunId) throw new TeamExecutionError('conflict');
@@ -186,9 +189,10 @@ export class PostgresTeamMessageRepository implements TeamMessageRepository {
         `SELECT id,status FROM team_member_runs WHERE team_run_id=$1 AND id=ANY($2::uuid[]) AND ${ownerSql('',3)} FOR SHARE`,
         [input.teamRunId,[input.senderMemberRunId,input.recipientMemberRunId],...ownerValues(input.owner)],
       );
-      if (members.rowCount !== 2) throw new TeamExecutionError('not_found');
-      const sender = members.rows!.find((member)=>member.id===input.senderMemberRunId);
-      const recipient = members.rows!.find((member)=>member.id===input.recipientMemberRunId);
+      const memberRows = members.rows ?? [];
+      if (memberRows.length !== 2) throw new TeamExecutionError('not_found');
+      const sender = memberRows.find((member)=>member.id===input.senderMemberRunId);
+      const recipient = memberRows.find((member)=>member.id===input.recipientMemberRunId);
       if (!sender || !recipient || ['stopped','failed'].includes(sender.status) || ['stopped','failed'].includes(recipient.status))
         throw new TeamExecutionError('not_allowed');
       if (input.aboutWorkItemId) {

@@ -13,13 +13,39 @@ export interface PublishWorkDefinitionSourceInput {
   readonly name: string;
   readonly description: string | null;
   readonly source: WorkDefinitionCompositionSource;
+  /** Fingerprint of the internal composition source. */
   readonly fingerprint: string;
+  /** Normalized Product author document; omitted by legacy/internal callers. */
+  readonly authorSource?: Readonly<Record<string, unknown>>;
+  /** Stable fingerprint of authorSource. */
+  readonly authorFingerprint?: string;
   readonly now: string;
 }
 
+export interface ProductWorkDefinitionVersionRecord {
+  readonly version: WorkDefinitionSourceVersion;
+  readonly authorSource: Readonly<Record<string, unknown>>;
+  readonly authorFingerprint: string;
+  readonly resolvedFingerprint: string | null;
+}
+
+export interface WorkDefinitionVersionListPage {
+  readonly items: readonly ProductWorkDefinitionVersionRecord[];
+  readonly nextCursor: string | null;
+}
+
+export interface WorkDefinitionApplyRequestRecord {
+  readonly idempotencyKey: string;
+  readonly requestFingerprint: string;
+  readonly definitionId: string;
+  readonly versionId: string;
+  readonly resolvedFingerprint: string;
+  readonly createdAt: string;
+}
+
 /**
- * Internal immutable source registry behind the Composition compiler. It is not
- * the public Developer API; that product facade can publish into this seam later.
+ * Internal immutable source registry behind the Composition compiler plus the
+ * minimal Product metadata needed by the Developer API facade.
  */
 export interface WorkDefinitionSourceRepository {
   findDefinition(
@@ -34,4 +60,39 @@ export interface WorkDefinitionSourceRepository {
     readonly definition: WorkDefinitionSourceDefinition;
     readonly version: WorkDefinitionSourceVersion;
   }>;
+
+  findProductVersion?(
+    id: string,
+    owner: WorkDefinitionSourceOwner,
+  ): Promise<ProductWorkDefinitionVersionRecord | null>;
+  findProductVersionByAuthorFingerprint?(input: {
+    readonly definitionId: string;
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly authorFingerprint: string;
+  }): Promise<ProductWorkDefinitionVersionRecord | null>;
+  listProductVersions?(input: {
+    readonly definitionId: string;
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly limit: number;
+    readonly cursor: string | null;
+  }): Promise<WorkDefinitionVersionListPage>;
+  recordResolvedFingerprint?(input: {
+    readonly versionId: string;
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly resolvedFingerprint: string;
+    readonly now: string;
+  }): Promise<string>;
+  findApplyRequest?(input: {
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly idempotencyKey: string;
+  }): Promise<WorkDefinitionApplyRequestRecord | null>;
+  recordApplyRequest?(input: {
+    readonly owner: WorkDefinitionSourceOwner;
+    readonly idempotencyKey: string;
+    readonly requestFingerprint: string;
+    readonly definitionId: string;
+    readonly versionId: string;
+    readonly resolvedFingerprint: string;
+    readonly now: string;
+  }): Promise<WorkDefinitionApplyRequestRecord>;
 }

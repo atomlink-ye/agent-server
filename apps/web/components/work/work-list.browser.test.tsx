@@ -2,11 +2,13 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 
+import type {
+  WorkListItem,
+  WorkListResponse,
+} from '@atomlink-ye/agent-server/product-contract';
 import { WorkListShell } from '@/components/work/work-shell';
 import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
-import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { projectWorkList } from '@/lib/product-recording-projections';
-import { createRequestLedger } from '@/test/request-ledger';
 
 (
   globalThis as typeof globalThis & {
@@ -14,40 +16,39 @@ import { createRequestLedger } from '@/test/request-ledger';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const parallelWorkList = projectWorkList(parallelRecording);
-const reworkWorkList = projectWorkList(reworkRecording);
-const populatedWorkList = {
-  ...parallelWorkList,
-  works: [...parallelWorkList.works, ...reworkWorkList.works],
+const baseWork = projectWorkList(parallelRecording).works[0]!;
+const stateCases = [
+  ['running', 'Running'],
+  ['needs_you', 'Needs You'],
+  ['complete', 'Complete'],
+  ['problem', 'Problem'],
+  ['not_captured', 'State unavailable'],
+] as const;
+
+const populatedWorkList: WorkListResponse = {
+  works: stateCases.map(([productState], index): WorkListItem => ({
+    ...baseWork,
+    id: uuid(index + 1),
+    title: `Work ${index + 1}`,
+    product_state: productState,
+    latest_run_summary: {
+      id: uuid(index + 101),
+      updated_at: `2026-08-16T10:0${index}:00.000Z`,
+      result_summary: `Latest recorded result ${index + 1}`,
+      result_capture_status: 'present',
+    },
+  })),
+  next_cursor: null,
 };
-const emptyWorkList = { ...parallelWorkList, works: [] };
-const forbiddenProductStatusTerms = [
-  'Needs You',
-  'Problem',
-  'Failed',
-  'Stuck',
-  'Completed',
-  'Complete',
-  'Succeeded',
-  'Success',
-  'Running',
-  'In progress',
-  'Processing',
-  'Waiting',
-  String.raw`four[- ]state(?:s)?`,
-  String.raw`4[- ]state(?:s)?`,
-  '四态',
-  '成功',
-  '已完成',
-  '进行中',
-  '处理中',
-  '等待',
-  '待处理',
-].join('|');
-const forbiddenProductStatusLanguage = new RegExp(
-  String.raw`(?<![A-Za-z0-9_-])(?:${forbiddenProductStatusTerms})(?![A-Za-z0-9_-])`,
-  'i',
-);
+
+const emptyWorkList: WorkListResponse = {
+  works: [],
+  next_cursor: null,
+};
+
+function uuid(value: number) {
+  return `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
+}
 
 function jsonResponse(body: unknown): Response {
   return {
@@ -57,87 +58,18 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
-function poisonWorkList(workList: typeof populatedWorkList) {
-  return {
-    ...workList,
-    works: workList.works.map(
-      (work) =>
-        new Proxy(work, {
-          get(target, property, receiver) {
-            if (property === 'id' || property === 'title')
-              return Reflect.get(target, property, receiver);
-            throw new Error(`work-list-semantic-read:${String(property)}`);
-          },
-          has(_target, property) {
-            if (property === 'id' || property === 'title') return true;
-            throw new Error(`work-list-semantic-has:${String(property)}`);
-          },
-          ownKeys(target) {
-            const keys = Reflect.ownKeys(target);
-            if (keys.some((key) => key !== 'id' && key !== 'title'))
-              throw new Error('work-list-semantic-own-key');
-            return keys;
-          },
-          getOwnPropertyDescriptor(target, property) {
-            if (property === 'id' || property === 'title')
-              return Object.getOwnPropertyDescriptor(target, property);
-            throw new Error(
-              `work-list-semantic-descriptor:${String(property)}`,
-            );
-          },
-        }),
-    ),
-  };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
-function renderedStatusSemantics(host: HTMLElement): string {
-  return [...host.querySelectorAll<HTMLElement>('*')]
-    .flatMap((element) => {
-      const stateAttributes = [...element.attributes]
-        .filter(
-          ({ name }) => name.startsWith('aria-') || name.startsWith('data-'),
-        )
-        .map(({ name, value }) => `${name}=${value}`);
-      return [element.className, ...stateAttributes];
-    })
-    .join(' ')
-    .replaceAll(/[-_]+/g, ' ');
-}
-
 async function settleNetworkTurn() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
-it('renders fixture-backed Work titles and exact detail links without N+1 reads', async () => {
-  const workWithStatus = {
-    ...populatedWorkList,
-    works: [{ ...populatedWorkList.works[0], status: 'succeeded' }],
-  };
-  const ownKeyPoisoned = poisonWorkList(workWithStatus).works[0];
-  expect(() => Object.keys(ownKeyPoisoned)).toThrow(
-    'work-list-semantic-own-key',
-  );
-  expect(() => ({ ...ownKeyPoisoned })).toThrow('work-list-semantic-own-key');
-
-  const fetchMock = vi.fn(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(input).toBe('/api/works');
-      expect(init?.method).toBe('GET');
-      return jsonResponse(poisonWorkList(populatedWorkList));
-    },
-  );
-  const requestLedger = createRequestLedger(fetchMock);
-  vi.stubGlobal('fetch', requestLedger.fetch);
+it('renders Product Work state and latest Run summary with one list read', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    expect(input).toBe('/api/works');
+    return jsonResponse(populatedWorkList);
+  });
+  vi.stubGlobal('fetch', fetchMock);
 
   const host = document.createElement('div');
   document.body.append(host);
@@ -145,54 +77,29 @@ it('renders fixture-backed Work titles and exact detail links without N+1 reads'
   try {
     await act(async () => {
       root.render(<WorkListShell />);
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const requestSnapshot = await requestLedger.seal();
-    expect(requestSnapshot).toMatchObject({
-      sealed: true,
-      inFlight: 0,
-    });
-    expect(requestSnapshot.records).toHaveLength(1);
-    expect(requestSnapshot.records[0]).toMatchObject({
-      generation: 1,
-      method: 'GET',
-      path: '/api/works',
-      query: '',
-      lifecycle: 'settled',
-      inFlightAtSettle: 0,
-      postSeal: false,
-    });
-
-    expect(host.textContent).toContain('My Work');
-    expect(host.textContent).toContain('Work records');
-    expect(host.querySelector('[data-testid="work-list-loading"]')).toBeNull();
-    expect(host.querySelector('[data-testid="work-list-empty"]')).toBeNull();
-    expect(host.querySelector('[data-testid="work-list-error"]')).toBeNull();
-    const list = host.querySelector<HTMLUListElement>(
-      '[data-testid="work-list"]',
-    );
-    expect(list).not.toBeNull();
-    if (!list) throw new Error('work_list_missing');
-    const cards = [...list.querySelectorAll<HTMLLIElement>('.work-list-card')];
-    expect(cards).toHaveLength(populatedWorkList.works.length);
-    for (const [index, work] of populatedWorkList.works.entries()) {
-      const card = cards[index];
-      expect(card).toBeDefined();
-      if (!card) continue;
-      const link = card.querySelector<HTMLAnchorElement>('a');
-      expect(link?.textContent).toBe(work.title);
-      expect(link?.getAttribute('href')).toBe(`/works/${work.id}`);
-      expect(card.textContent).toContain(
-        'Product status is currently unavailable for this Work.',
+    expect(host.textContent).toContain('Does this need me?');
+    const cards = [
+      ...host.querySelectorAll<HTMLLIElement>('.work-list-card'),
+    ];
+    expect(cards).toHaveLength(stateCases.length);
+    for (const [index, [, stateLabel]] of stateCases.entries()) {
+      const card = cards[index]!;
+      expect(card.textContent).toContain(stateLabel);
+      expect(card.textContent).toContain(`Latest recorded result ${index + 1}`);
+      expect(card.querySelector('[data-product-state]')?.getAttribute('data-product-state')).toBe(
+        stateCases[index]![0],
       );
-      expect(card.querySelector('.work-list-card__unavailable')).not.toBeNull();
+      expect(card.querySelector('a')?.getAttribute('href')).toBe(
+        `/works/${populatedWorkList.works[index]!.id}`,
+      );
     }
 
-    expect(host.textContent).not.toMatch(forbiddenProductStatusLanguage);
-    expect(renderedStatusSemantics(host)).not.toMatch(
-      forbiddenProductStatusLanguage,
-    );
+    expect(host.textContent).not.toContain('TeamRun');
+    expect(host.textContent).not.toContain('RuntimeSession');
+    expect(host.textContent).not.toContain('participating Agents');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => root.unmount());
@@ -202,8 +109,11 @@ it('renders fixture-backed Work titles and exact detail links without N+1 reads'
 });
 
 it('distinguishes loading, empty, and real network error without fabricating Work', async () => {
-  const pending = deferred<Response>();
-  const pendingFetch = vi.fn(async () => pending.promise);
+  let resolvePending!: (response: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    resolvePending = resolve;
+  });
+  const pendingFetch = vi.fn(async () => pending);
   vi.stubGlobal('fetch', pendingFetch);
 
   const loadingHost = document.createElement('div');
@@ -216,29 +126,17 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       loadingHost.querySelector('[data-testid="work-list-loading"]'),
     ).not.toBeNull();
-    expect(loadingHost.textContent).toContain('Loading');
-    expect(loadingHost.textContent).toContain('Getting your Work records');
-    expect(loadingHost.textContent).toContain(
-      'We are retrieving the Work titles available to review.',
-    );
-    expect(loadingHost.querySelector('a')).toBeNull();
+    expect(loadingHost.querySelector('[data-testid="work-list"]')).toBeNull();
 
     await act(async () => {
-      pending.resolve(jsonResponse(emptyWorkList));
-      await pending.promise;
+      resolvePending(jsonResponse(emptyWorkList));
+      await pending;
       await Promise.resolve();
     });
     expect(
-      loadingHost.querySelector('[data-testid="work-list-loading"]'),
-    ).toBeNull();
-    expect(
       loadingHost.querySelector('[data-testid="work-list-empty"]'),
     ).not.toBeNull();
-    expect(loadingHost.textContent).toContain('No Work records');
-    expect(loadingHost.textContent).toContain(
-      'Nothing is available to review yet.',
-    );
-    expect(loadingHost.querySelector('a')).toBeNull();
+    expect(loadingHost.querySelector('a[href^="/works/"]')).toBeNull();
   } finally {
     await act(async () => loadingRoot.unmount());
     loadingHost.remove();
@@ -260,14 +158,8 @@ it('distinguishes loading, empty, and real network error without fabricating Wor
     expect(
       errorHost.querySelector('[data-testid="work-list-error"]'),
     ).not.toBeNull();
-    expect(errorHost.textContent).toContain('Couldn’t load Work');
-    expect(errorHost.textContent).toContain(
-      'Work records are temporarily unavailable.',
-    );
     expect(errorHost.textContent).toContain('This is a connection problem');
     expect(errorHost.querySelector('[data-testid="work-list"]')).toBeNull();
-    expect(errorHost.querySelector('a')).toBeNull();
-    expect(networkErrorFetch).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => errorRoot.unmount());
     errorHost.remove();

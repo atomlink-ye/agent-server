@@ -49,7 +49,12 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
 });
 
-async function createMessageWakeFixture(options: { memberIdle?: boolean } = {}) {
+async function createMessageWakeFixture(
+  options: {
+    memberIdle?: boolean;
+    allowedTools?: readonly string[];
+  } = {},
+) {
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
   const tasks = new PostgresTaskRepository(database);
@@ -173,8 +178,8 @@ async function createMessageWakeFixture(options: { memberIdle?: boolean } = {}) 
     teamMemberRunId: lead.id,
     teamRunId: teamRun.id,
     contextEpoch: deriveTeamContextEpoch(leadTask.id, leadClaim.run.id),
-    allowedTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
-    catalogTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+    allowedTools: options.allowedTools ?? [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+    catalogTools: options.allowedTools ?? [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
   });
   const client = new Client({ name: 'smoke-gate-mcp-test', version: '1' });
   await client.connect(
@@ -198,6 +203,57 @@ async function createMessageWakeFixture(options: { memberIdle?: boolean } = {}) 
 }
 
 describe('canonical smoke direct-message wake mutation', () => {
+  it('reports Work that has not been accepted after MCP board creation', async () => {
+    const fixture = await createMessageWakeFixture({
+      allowedTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate],
+    });
+    try {
+      for (const subject of ['first smoke Work', 'second smoke Work']) {
+        const created = await fixture.client.callTool({
+          name: AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCreate,
+          arguments: { subject },
+        });
+        expect(created.isError).not.toBe(true);
+      }
+      const projection = await new ProjectAgenticTeam(
+        fixture.team.executions,
+        fixture.team.messages,
+        new PostgresTaskRepository(fixture.database),
+      ).project(fixture.teamRun.id, owner);
+      expect(projection?.workItems).toHaveLength(2);
+      expect(projection?.workItems.every((work) => work.status !== 'accepted')).toBe(true);
+
+      const diagnostic = formatSmokeOutcome({
+        kind: 'collaboration_not_achieved',
+        taskStatus: 'completed',
+        failures: evaluateCompletionFacts({
+          project: { status: 'succeeded' },
+          gates: {
+            finish_ready: true,
+            all_work_accepted: true,
+            no_active_attempts: true,
+            all_members_idle: true,
+          },
+          work_items: projection?.workItems.map((work) => ({
+            work_ref: work.workRef,
+            status: work.status,
+            assignee_name: work.assigneeName,
+            attempts: work.attempts.map((attempt) => ({
+              attempt_no: attempt.attemptNo,
+              status: attempt.status,
+              feedback_summary: attempt.feedbackSummary,
+              result_summary: attempt.resultSummary,
+            })),
+          })),
+        }).failures,
+      });
+      expect(diagnostic).toContain('work_2_accepted');
+    } finally {
+      await fixture.client.close();
+      await fixture.database.close();
+    }
+  });
+
   it('reports a direct message that does not require acknowledgement', async () => {
     const fixture = await createMessageWakeFixture();
     try {

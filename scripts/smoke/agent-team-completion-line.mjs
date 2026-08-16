@@ -1,5 +1,28 @@
 const terminalTaskStatuses = new Set(['completed', 'failed', 'cancelled']);
 
+export function acknowledgedMessagesWithoutActivation(value) {
+  const messages = Array.isArray(value?.direct_messages)
+    ? value.direct_messages
+    : [];
+  const sessions = Array.isArray(value?.sessions) ? value.sessions : [];
+  return messages.filter((message) => {
+    if (message.requires_ack !== true || message.status !== 'acknowledged')
+      return false;
+    const messageRef = `M-${message.sequence}`;
+    return !sessions.some((session) =>
+      session.turns?.some(
+        (turn) =>
+          turn.activation?.materializer ===
+            'task_run_collaboration_activation_adapter' &&
+          turn.activation.causes?.some(
+            (cause) =>
+              cause.type === 'message' && cause.message_ref === messageRef,
+          ),
+      ),
+    );
+  });
+}
+
 export function evaluateCompletionFacts(value) {
   const failures = [];
   const fail = (scope, code, expected, actual) => {
@@ -199,13 +222,13 @@ export function evaluateCompletionFacts(value) {
       );
     }
   } else if (acknowledgedMessages.length) {
-    const awakenedByMessage = acknowledgedMessages.some(isMaterializedByMessage);
-    if (!awakenedByMessage) {
+    const withoutActivation = acknowledgedMessagesWithoutActivation(value);
+    if (withoutActivation.length) {
       fail(
         'collaboration',
         'acknowledged_message_activation',
         'an acknowledged direct message M-N materializes a participant turn with message cause M-N',
-        acknowledgedMessages.map((message) => `M-${message.sequence}`),
+        withoutActivation.map((message) => `M-${message.sequence}`),
       );
     }
   }

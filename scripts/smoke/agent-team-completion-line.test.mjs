@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  acknowledgedMessagesWithoutActivation,
   classifySmokeOutcome,
   evaluateCompletionFacts,
   formatSmokeOutcome,
@@ -121,10 +122,13 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('acknowledged_direct_message');
   });
 
-  it('rejects an acknowledged message that did not wake a participant', () => {
+  it('enforces the acknowledged-message activation invariant', () => {
     const projection = successfulProjection();
     projection.sessions[1].turns = [];
 
+    expect(acknowledgedMessagesWithoutActivation(projection)).toEqual([
+      expect.objectContaining({ sequence: 3 }),
+    ]);
     expect(codes(projection)).toContain('acknowledged_message_activation');
   });
 

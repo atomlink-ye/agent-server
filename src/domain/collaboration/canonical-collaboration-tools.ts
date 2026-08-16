@@ -170,5 +170,6 @@ export function collaborationToolRefsForMessageTurn(
     'mailbox.read',
     'mailbox.send',
     'mailbox.ack',
+    ...(role === 'lead' ? (['run.finalize'] as const) : []),
   ]);
 }

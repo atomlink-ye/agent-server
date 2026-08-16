@@ -1786,10 +1786,6 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           team.rows[0].root_task_id,
           input.owner,
         );
-        const anyWork = await client.query(
-          `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)} LIMIT 1`,
-          [input.teamRunId, ...ownerValues(input.owner)],
-        );
         const unfinished = await client.query(
           `SELECT 1 FROM team_work_items WHERE team_run_id=$1 AND status NOT IN ('accepted','cancelled') AND ${ownerSql('', 2)} LIMIT 1`,
           [input.teamRunId, ...ownerValues(input.owner)],
@@ -1798,11 +1794,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
           `SELECT 1 FROM team_work_item_attempts WHERE team_run_id=$1 AND status IN ('queued','running') AND ${ownerSql('', 2)} LIMIT 1`,
           [input.teamRunId, ...ownerValues(input.owner)],
         );
-        if (
-          !anyWork.rows?.[0] ||
-          unfinished.rows?.[0] ||
-          activeAttempt.rows?.[0]
-        )
+        if (unfinished.rows?.[0] || activeAttempt.rows?.[0])
           throw new TeamExecutionError('invalid_transition');
         const nonterminalMemberChild = await client.query(
           `SELECT 1

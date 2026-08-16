@@ -227,6 +227,28 @@ export class TeamDriver {
           taskId: input.task.id,
           owner,
         });
+      if (input.run.status === 'succeeded') {
+        const fresh = await this.executions.findTeamRunById(input.team.id, owner);
+        if (
+          fresh?.status === 'active' &&
+          fresh.completionRequestedByRunId === input.run.id
+        ) {
+          const decision = await this.currentCompletionDecision(fresh, owner);
+          if (isTeamCompletionApprovalPending(fresh, decision)) return;
+          const finalText = input.run.result?.text?.trim();
+          if (!finalText || fresh.completionApprovalRequired) return;
+          await this.executions.completeTeamRunAtomically({
+            teamRunId: fresh.id,
+            rootRunId: fresh.rootRunId,
+            rootTaskId: fresh.rootTaskId,
+            finalText,
+            owner,
+            updatedAt: this.now().toISOString(),
+            leadRunId: input.run.id,
+          });
+          return;
+        }
+      }
       await this.reconciler?.reconcileForRootTask(
         input.team.rootTaskId,
         owner,

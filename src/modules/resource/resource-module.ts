@@ -9,6 +9,8 @@ import {
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../../application/ports/environment-read-api.js';
+import type { MemoryVersionReadApi } from '../../application/ports/memory-version-read-api.js';
+import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import { ResolveWorkDefinition } from '../../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
@@ -20,6 +22,8 @@ import { LocalSkillCatalog } from '../../infrastructure/filesystem/local-skill-c
 import { PostgresAgentRegistry } from '../../infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresEnvironmentRegistry } from '../../infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresInvokableRepository } from '../../infrastructure/postgres/postgres-invokable-repository.js';
+import { PostgresMemoryVersionReadApi } from '../../infrastructure/postgres/postgres-memory-version-read-api.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { registerSkill } from '../../application/extensions/skill-registry.js';
 
 export interface ResourceModuleDatabase {
@@ -33,6 +37,8 @@ export interface ResourceModule {
   readonly agentResolutionApi: AgentResolutionApi;
   readonly definitionReadApi: DefinitionReadApi;
   readonly environmentReadApi: EnvironmentReadApi;
+  readonly memoryVersionReadApi: MemoryVersionReadApi;
+  readonly workDefinitionSources: WorkDefinitionSourceRepository;
   readonly workDefinitionResolution: WorkDefinitionResolutionPort;
   installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
@@ -58,6 +64,10 @@ export async function createResourceModule(
   const agentRegistry = new PostgresAgentRegistry(options.database);
   const invokableRepository = new PostgresInvokableRepository(options.database);
   const environmentRegistry = new PostgresEnvironmentRegistry(options.database);
+  const memoryVersionReadApi = new PostgresMemoryVersionReadApi(options.database);
+  const workDefinitionSources = new PostgresWorkDefinitionSourceRepository(
+    options.database,
+  );
   const skillCatalog = new LocalSkillCatalog(options.config.skillRegistryRoot);
   const agentResolutionApi = new ResolveAgentVersion(
     agentRegistry,
@@ -80,12 +90,16 @@ export async function createResourceModule(
     agentResolution: agentResolutionApi,
     definitions: definitionReadApi,
     environments: environmentReadApi,
+    authoredDefinitions: workDefinitionSources,
+    memories: memoryVersionReadApi,
   });
 
   return {
     agentResolutionApi,
     definitionReadApi,
     environmentReadApi,
+    memoryVersionReadApi,
+    workDefinitionSources,
     workDefinitionResolution,
     installHttp(app, config) {
       registerAgentRoutes(app, { config, agentRegistry });

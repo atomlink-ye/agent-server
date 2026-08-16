@@ -1,3 +1,12 @@
+// A green result proves canonical collaboration primitives work end-to-end with
+// a real provider: work_available and final_review provenance exist, a
+// requires-ack direct message completes a round trip and materializes a
+// participant turn, and two Work items are accepted with one rework.
+//
+// It does not prove Agent autonomous, flexible collaboration. The fixture
+// instructions are still a literal script, so green means the Agent followed
+// that script and the pipeline worked. Reading this green result as proof that
+// “C capability is established” is incorrect.
 import { randomUUID } from 'node:crypto';
 import {
   classifySmokeOutcome,

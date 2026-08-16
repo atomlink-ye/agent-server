@@ -279,7 +279,7 @@ export function formatSmokeOutcome(outcome) {
     failures: outcome.failures,
   });
   if (outcome.kind === 'collaboration_not_achieved') {
-    return `agent team smoke collaboration not achieved: ${details}`;
+    return `agent team smoke collaboration not achieved (root task status: ${outcome.taskStatus ?? null}): ${details}`;
   }
   if (outcome.kind === 'assertion_failed') {
     return `agent team smoke completion-line assertion failed after collaboration reached a terminal task: ${details}`;

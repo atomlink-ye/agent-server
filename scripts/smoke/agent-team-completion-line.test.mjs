@@ -163,14 +163,16 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('work_2_accepted');
   });
 
-  it('reports a completed collaboration with missing provenance as an assertion failure', () => {
+  it('classifies an assertion-only failure without any collaboration failure', () => {
     const projection = successfulProjection();
     projection.sessions[2].turns = [];
 
-    expect(classifySmokeOutcome({ taskStatus: 'completed', projection })).toMatchObject({
+    const outcome = classifySmokeOutcome({ taskStatus: 'completed', projection });
+    expect(outcome).toMatchObject({
       kind: 'assertion_failed',
       failures: [expect.objectContaining({ code: 'final_review_activation' })],
     });
+    expect(outcome.failures.every((failure) => failure.scope === 'assertion')).toBe(true);
   });
 
   it('reports a completed collaboration with an unacknowledged message as collaboration failure', () => {
@@ -188,6 +190,36 @@ describe('agent-team smoke completion line', () => {
       classifySmokeOutcome({
         taskStatus: 'active',
         projection: successfulProjection(),
+        timedOut: true,
+      }),
+    ).toEqual({
+      kind: 'gate_timeout',
+      taskStatus: 'active',
+      failures: [],
+    });
+  });
+
+  it('keeps an empty-board nonterminal task pending until the gate budget expires', () => {
+    const stalled = {
+      project: { status: 'active' },
+      gates: {
+        finish_ready: false,
+        all_work_accepted: false,
+        no_active_attempts: true,
+        all_members_idle: false,
+      },
+      work_items: [],
+      direct_messages: [],
+      sessions: [],
+    };
+
+    expect(
+      classifySmokeOutcome({ taskStatus: 'active', projection: stalled }),
+    ).toMatchObject({ kind: 'pending', failures: [] });
+    expect(
+      classifySmokeOutcome({
+        taskStatus: 'active',
+        projection: stalled,
         timedOut: true,
       }),
     ).toEqual({

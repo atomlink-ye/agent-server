@@ -330,6 +330,24 @@ export class TeamDriver {
           policy.allowedCommands.length > 0 &&
           !policy.allowedCommands.includes('board_cancel')
         ) {
+          const members = await this.executions.findMembersByTeamRunId(
+            fresh.id,
+            owner,
+          );
+          const hasActiveParticipantTurn =
+            (await this.runs.hasNonterminalRunsForTeamMemberChildTasks?.(
+              fresh.rootTaskId,
+              members.map((member) => member.id),
+              owner,
+            )) ?? false;
+          if (hasActiveParticipantTurn) {
+            await this.reconciler?.reconcileForRootTask(
+              fresh.rootTaskId,
+              owner,
+              { parentTask: input.task },
+            );
+            return;
+          }
           try {
             await this.executions.failTeamRunAtomically({
               teamRunId: fresh.id,

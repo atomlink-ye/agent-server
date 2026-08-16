@@ -318,7 +318,8 @@ const AgenticTeamProjectResponseBaseSchema = z
           sender_name: z.string(),
           recipient_name: z.string(),
           summary: z.string(),
-          status: z.enum(['presented', 'acknowledged']),
+          requires_ack: z.boolean(),
+          status: z.enum(['pending', 'presented', 'acknowledged', 'cancelled']),
           created_at: timestamp,
         })
         .strict(),
@@ -350,7 +351,8 @@ export const TeamDirectMessageResponseSchema = z
     sender_name: z.string(),
     recipient_name: z.string(),
     summary: z.string(),
-    status: z.enum(['presented', 'acknowledged']),
+    requires_ack: z.boolean(),
+    status: z.enum(['pending', 'presented', 'acknowledged', 'cancelled']),
     created_at: timestamp,
   })
   .strict();

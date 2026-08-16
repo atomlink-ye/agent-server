@@ -6,6 +6,7 @@ export default defineConfig({
       'src/**/*.test.ts',
       'tests/unit/**/*.test.ts',
       'scripts/dev/**/*.test.mjs',
+      'scripts/smoke/**/*.test.mjs',
     ],
     environment: 'node',
     testTimeout: 30_000,

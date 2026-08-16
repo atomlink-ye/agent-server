@@ -17,6 +17,86 @@ const owner: OwnerScope = {
 };
 
 describe('ProjectAgenticTeam', () => {
+  it('projects a queued direct message through the full message reader', async () => {
+    const team = createTeamRun({
+      id: '00000000-0000-4000-8000-000000000110',
+      tenantId: owner.tenantId,
+      workspaceId: owner.workspaceId,
+      principalType: owner.principalType,
+      principalId: owner.principalId,
+      rootTaskId: '00000000-0000-4000-8000-000000000111',
+      rootRunId: '00000000-0000-4000-8000-000000000112',
+      teamVersionId: '00000000-0000-4000-8000-000000000113',
+      environmentVersionId: '00000000-0000-4000-8000-000000000114',
+    });
+    const lead = {
+      id: '00000000-0000-4000-8000-000000000115',
+      teamRunId: team.id,
+      name: 'lead',
+      role: 'lead' as const,
+      agentVersionId: '00000000-0000-4000-8000-000000000116',
+      runtimeSessionId: null,
+      status: 'active' as const,
+      currentWorkItemId: null,
+      ...owner,
+      createdAt: team.createdAt,
+      updatedAt: team.updatedAt,
+    };
+    const member = {
+      ...lead,
+      id: '00000000-0000-4000-8000-000000000117',
+      name: 'member',
+      role: 'member' as const,
+      status: 'starting' as const,
+    };
+    const executions = {
+      findTeamRunById: vi.fn(async () => team),
+      findMembersByTeamRunId: vi.fn(async () => [lead, member]),
+      findWorkItemsByTeamRunId: vi.fn(async () => []),
+      findAttemptsByTeamRunId: vi.fn(async () => []),
+      findWorkDependenciesByTeamRunId: vi.fn(async () => []),
+      findCompletionDecisionsByTeamRunId: vi.fn(async () => []),
+    } as unknown as TeamExecutionRepository;
+    const listForTeamRun = vi.fn(async () => [
+      {
+        id: '00000000-0000-4000-8000-000000000118',
+        teamRunId: team.id,
+        senderMemberRunId: lead.id,
+        recipientMemberRunId: member.id,
+        kind: 'direct' as const,
+        body: 'wake the member',
+        requiresAck: true,
+        status: 'queued' as const,
+        sequence: 1,
+        createdAt: team.createdAt,
+      },
+    ]);
+    const messages = {
+      listForTeamRun,
+      listDirectForTeamRun: vi.fn(async () => []),
+    } as unknown as TeamMessageRepository;
+    const tasks = {
+      findByRootTaskIdForOwner: vi.fn(async () => []),
+    } as unknown as TaskRepository;
+
+    const projection = await new ProjectAgenticTeam(
+      executions,
+      messages,
+      tasks,
+    ).project(team.id, owner);
+
+    expect(projection?.directMessages).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        senderName: 'lead',
+        recipientName: 'member',
+        requiresAck: true,
+        status: 'pending',
+      }),
+    ]);
+    expect(listForTeamRun).toHaveBeenCalledWith(team.id, owner);
+  });
+
   it('projects runtime provider/model, work description, revision, stop reason, and every attempt', async () => {
     const team = {
       ...createTeamRun({

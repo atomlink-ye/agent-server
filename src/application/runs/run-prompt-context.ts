@@ -1,5 +1,4 @@
 import { projectBoardStatus, workRef } from '../../domain/collaboration/collaboration.js';
-import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID } from '../../domain/tasks/compatibility-invokable-version.js';
 import type { Task } from '../../domain/tasks/task.js';
 import type { TeamMemberRun } from '../../domain/teams/team-member-run.js';
@@ -185,7 +184,6 @@ export class RunPromptContext {
     readonly member: TeamMemberRun | null;
     readonly teamMembers: readonly TeamMemberRun[];
     readonly leadState: AgenticLeadState | null;
-    readonly runtimeToolRefs: readonly string[];
     readonly task: Task;
   }): Promise<{
     readonly systemPrompt: string;
@@ -197,7 +195,6 @@ export class RunPromptContext {
             input.resolved.turnPrompt,
             input.task,
             input.leadState,
-            input.runtimeToolRefs,
             input.teamMembers,
           )
         : input.resolved.turnPrompt;
@@ -238,7 +235,6 @@ export class RunPromptContext {
     prompt: string,
     task: Task,
     leadState: AgenticLeadState | null,
-    runtimeToolRefs: readonly string[],
     members: readonly TeamMemberRun[],
   ): Promise<string> {
     const workItems = leadState?.workItems ?? [];
@@ -314,17 +310,9 @@ export class RunPromptContext {
             : null,
         };
       }),
-      capabilities: runtimeToolRefs
-        .filter((ref) => ref.startsWith('agent-server/'))
-        .filter((ref) =>
-          Object.values(AGENT_SERVER_COLLABORATION_TOOL_REFS).includes(
-            ref as (typeof AGENT_SERVER_COLLABORATION_TOOL_REFS)[keyof typeof AGENT_SERVER_COLLABORATION_TOOL_REFS],
-          ),
-        )
-        .map((ref) => ref.slice('agent-server/'.length)),
       limits: leadState?.policy.limits,
     });
-    return `${prompt}\n\nWorkboard and Mailbox are durable collaboration facts. Use collaboration_state, board_list and inbox_list for current details. A natural-language message never changes ownership or Work state: use board_create/board_assign/board_accept/board_request_changes explicitly. You may make all currently useful decisions in this turn; do not wait for running participants.\n\nCurrent bounded collaboration snapshot: ${snapshot}`;
+    return `${prompt}\n\nWorkboard and Mailbox are durable collaboration facts. Use collaboration_state, board_list and inbox_list for current details. A natural-language message never changes ownership or Work state: use board_create/board_assign/board_accept/board_request_changes explicitly. Tool availability does not imply that an operation is currently legal. If a collaboration tool returns a typed error, read collaboration_state again before deciding the next action. You may make all currently useful decisions in this turn; do not wait for running participants.\n\nCurrent bounded collaboration snapshot: ${snapshot}`;
   }
 
   private async loadPinnedMemory(task: Task): Promise<string | null> {

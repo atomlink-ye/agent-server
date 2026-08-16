@@ -261,7 +261,6 @@ export class AgentRunExecutor {
       member,
       teamMembers,
       leadState: agenticLeadState,
-      runtimeToolRefs,
       task,
     });
 

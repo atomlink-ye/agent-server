@@ -204,17 +204,7 @@ spec:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
-  tools:
-    - ref: agent-server/collaboration-state
-      kind: tool
-    - ref: agent-server/board-list
-      kind: tool
-    - ref: agent-server/board-create
-      kind: tool
-    - ref: agent-server/board-accept
-      kind: tool
-    - ref: agent-server/collaboration-finish
-      kind: tool
+  tools: []
   skills: []
   input:
     schema:
@@ -248,13 +238,7 @@ spec:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
-  tools:
-    - ref: agent-server/collaboration-state
-      kind: tool
-    - ref: agent-server/board-list
-      kind: tool
-    - ref: agent-server/board-submit
-      kind: tool
+  tools: []
   skills: []
   input:
     schema:

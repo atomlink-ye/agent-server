@@ -125,7 +125,9 @@ export class ProjectAgenticTeam {
         this.teams.findWorkItemsByTeamRunId(team.id, owner),
         this.teams.findAttemptsByTeamRunId(team.id, owner),
         this.teams.findWorkDependenciesByTeamRunId(team.id, owner),
-        this.messages.listDirectForTeamRun(team.id, owner),
+        this.messages.listForTeamRun
+          ? this.messages.listForTeamRun(team.id, owner)
+          : this.messages.listDirectForTeamRun(team.id, owner),
         this.teams.findCompletionDecisionsByTeamRunId(team.id, owner),
       ]);
     const completionDecisions = [...decisions].sort(
@@ -261,6 +263,7 @@ export class ProjectAgenticTeam {
         allMembersIdle,
       },
       directMessages: messages.flatMap((message) => {
+        if (message.kind !== 'direct') return [];
         const senderName = message.senderMemberRunId
           ? safeText(nameByMemberId.get(message.senderMemberRunId) ?? null)
           : null;

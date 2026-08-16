@@ -1,7 +1,13 @@
 import type { WorkOwnerScope } from './work.js';
 
 export type ResourceKind =
-  'definition' | 'agent' | 'environment' | 'memory' | 'skill';
+  | 'definition'
+  | 'agent'
+  | 'environment'
+  | 'memory'
+  | 'skill'
+  | 'tool'
+  | 'platform_capability';
 
 export interface ResolvedResourceManifestEntry {
   readonly slot: string;

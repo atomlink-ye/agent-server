@@ -21,6 +21,9 @@ function issue(
     productSessionId: 'member-1',
     teamMemberRunId: 'member-1',
     teamRunId: 'team-1',
+    taskId: 'task-1',
+    runId: 'run-1',
+    contextEpoch: 'epoch-1',
     ...input,
   });
 }

@@ -49,7 +49,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
 });
 
-async function createMessageWakeFixture() {
+async function createMessageWakeFixture(options: { memberIdle?: boolean } = {}) {
   const database = new PGlite();
   await applyDurableKernelMigrations(database);
   const tasks = new PostgresTaskRepository(database);
@@ -119,7 +119,7 @@ async function createMessageWakeFixture() {
     }),
     now,
   );
-  const member = createTeamMemberRun({
+  const createdMember = createTeamMemberRun({
     ...owner,
     teamRunId: teamRun.id,
     name: 'member',
@@ -127,6 +127,9 @@ async function createMessageWakeFixture() {
     agentVersionId: randomUUID(),
     now,
   });
+  const member = options.memberIdle
+    ? { ...createdMember, status: 'idle' as const }
+    : createdMember;
   const leadTask = createChildTask({
     ...owner,
     policySnapshotVersion: 'smoke-gate-mcp-policy',
@@ -195,6 +198,64 @@ async function createMessageWakeFixture() {
 }
 
 describe('canonical smoke direct-message wake mutation', () => {
+  it('reports an unacknowledged message after the recipient is materialized', async () => {
+    const fixture = await createMessageWakeFixture({ memberIdle: true });
+    try {
+      const sent = await fixture.client.callTool({
+        name: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
+        arguments: {
+          recipient: 'member',
+          body: 'SMOKE_GATE_UNACKNOWLEDGED',
+          requires_ack: true,
+        },
+      });
+      expect(sent.isError).not.toBe(true);
+      expect(
+        await fixture.team.activationReconciler.reconcileForRootTask(
+          fixture.root.id,
+          owner,
+        ),
+      ).toBeGreaterThan(0);
+
+      const projection = await new ProjectAgenticTeam(
+        fixture.team.executions,
+        fixture.team.messages,
+        new PostgresTaskRepository(fixture.database),
+      ).project(fixture.teamRun.id, owner);
+      const message = projection?.directMessages.find(
+        (candidate) => candidate.summary === 'SMOKE_GATE_UNACKNOWLEDGED',
+      );
+      expect(message).toMatchObject({ requiresAck: true, status: 'presented' });
+      expect(
+        projection?.sessions.flatMap((session) => session.turns).some((turn) =>
+          turn.activation?.causes.some(
+            (cause) =>
+              cause.type === 'message' &&
+              cause.messageRef === `M-${message?.sequence}`,
+          ),
+        ),
+      ).toBe(true);
+
+      const diagnostic = formatSmokeOutcome({
+        kind: 'collaboration_not_achieved',
+        taskStatus: 'completed',
+        failures: evaluateCompletionFacts({
+          direct_messages: [
+            {
+              sequence: message?.sequence,
+              requires_ack: message?.requiresAck,
+              status: message?.status,
+            },
+          ],
+        }).failures,
+      });
+      expect(diagnostic).toContain('acknowledged_direct_message');
+    } finally {
+      await fixture.client.close();
+      await fixture.database.close();
+    }
+  });
+
   it('creates a durable pending requires-ack message through MCP before wake materialization', async () => {
     const fixture = await createMessageWakeFixture();
     try {

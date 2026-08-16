@@ -71,7 +71,7 @@ export class StartWorkRun {
     StartWorkRunOptions['runtimeCapabilities']
   >;
   private readonly productDefinitions?: StartWorkRunOptions['productDefinitions'];
-  private readonly workRunInputs?: WorkRunInputStore;
+  private readonly workRunInputs: WorkRunInputStore | undefined;
   private readonly now: () => Date;
 
   public constructor(options: StartWorkRunOptions) {
@@ -95,8 +95,6 @@ export class StartWorkRun {
     )
       throw new WorkDefinitionValidationError();
 
-    // Resolve and check capabilities before the technical Task can reach the
-    // Execution Plane. No provider/runtime side effect is allowed on failure.
     const resolved = await this.identity.resolveCurrentDefinition({
       owner,
       accessContext: input.accessContext,
@@ -121,8 +119,6 @@ export class StartWorkRun {
     if (pending.definitionVersionId !== resolved.definitionVersionId)
       throw new WorkDefinitionValidationError();
 
-    // Product input is a durable WorkRun fact before technical Task admission.
-    // Normal Product responses intentionally omit the snapshot itself.
     if (preparedInput) {
       if (!this.workRunInputs)
         throw new Error('Product WorkRun input persistence is unavailable.');
@@ -145,9 +141,6 @@ export class StartWorkRun {
     if (new Date(pending.expiresAt).getTime() <= this.now().getTime())
       throw new PendingWorkRunExpiredError();
 
-    // The immutable composition becomes a durable WorkRun fact before Task
-    // admission, so a queued provider turn can never observe registry-latest
-    // drift without a pinned manifest already existing.
     await this.recordResolvedManifest(pending, owner, resolved);
 
     const receipt = await this.execution.admitRoot({

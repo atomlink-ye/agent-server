@@ -85,8 +85,8 @@ export function WorkListShell() {
             Nothing is available to review yet.
           </h2>
           <p>
-            When a Work becomes available here, its title will open its recorded
-            historical run details.
+            When a Work becomes available here, its title will open its
+            recorded historical run details.
           </p>
         </section>
       ) : null}
@@ -191,10 +191,7 @@ function WorkDetail({ data }: { readonly data: WorkDetailData }) {
         <p className="work-shell-kicker">Work Detail</p>
         <h1>{work.title}</h1>
       </header>
-      <section
-        aria-labelledby="work-outcome-heading"
-        data-testid="work-outcome"
-      >
+      <section aria-labelledby="work-outcome-heading" data-testid="work-outcome">
         <p className="work-shell-kicker">Work outcome</p>
         <h2 id="work-outcome-heading">
           {outcome ?? 'Final outcome unavailable'}

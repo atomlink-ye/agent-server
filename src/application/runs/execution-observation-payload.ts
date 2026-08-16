@@ -104,8 +104,7 @@ export function executionObservationPayload(
       const payload: Record<string, string | number | boolean | null> = {
         kind: 'usage',
       };
-      if (usage.inputTokens !== undefined)
-        payload.input_tokens = usage.inputTokens;
+      if (usage.inputTokens !== undefined) payload.input_tokens = usage.inputTokens;
       if (usage.cachedInputTokens !== undefined)
         payload.cached_input_tokens = usage.cachedInputTokens;
       if (usage.outputTokens !== undefined)

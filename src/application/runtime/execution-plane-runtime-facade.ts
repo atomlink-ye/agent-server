@@ -222,9 +222,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       }
     } else {
       if (!input.systemPrompt)
-        throw new RuntimeExecutionError(
-          'Fresh execution requires a system prompt.',
-        );
+        throw new RuntimeExecutionError('Fresh execution requires a system prompt.');
       const created = await this.plane.createSession({
         runtimeSessionId: `run:${input.runId}`,
         workspace: {

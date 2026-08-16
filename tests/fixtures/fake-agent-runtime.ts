@@ -85,7 +85,9 @@ export interface FakeRuntimeExecutionRecord {
   readonly finishedAt: number;
 }
 
-export class FakeAgentRuntime implements ExecutionRuntimeService {
+export class FakeAgentRuntime
+  implements ExecutionRuntimeService
+{
   public initializeCalls = 0;
   public executeCalls = 0;
   public closeCalls = 0;
@@ -207,10 +209,7 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
             prompt: input.prompt,
             systemPrompt: input.systemPrompt ?? '',
             ...(input.provider
-              ? {
-                  provider: input.provider,
-                  model: input.model ?? 'opencode/fake-free',
-                }
+              ? { provider: input.provider, model: input.model ?? 'opencode/fake-free' }
               : {}),
             ...(input.runtimeSessionId
               ? { runtimeSessionId: input.runtimeSessionId }
@@ -327,7 +326,9 @@ export class FakeAgentRuntime implements ExecutionRuntimeService {
     this.cancelledRunIds.push(input.runId);
   }
 
-  public async cancelRun(input: { readonly runId: string }): Promise<void> {
+  public async cancelRun(input: {
+    readonly runId: string;
+  }): Promise<void> {
     await this.cancel({ runId: input.runId });
   }
 

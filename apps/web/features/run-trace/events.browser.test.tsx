@@ -40,9 +40,9 @@ it('renders only recorded MCP activities with sequence and association facts', a
       await act(async () => {
         root.render(<RunTrace trace={trace} />);
       });
-      const eventsTab = [
-        ...host.querySelectorAll<HTMLButtonElement>('button'),
-      ].find((button) => button.textContent?.trim() === 'Events');
+      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Events',
+      );
       expect(eventsTab).toBeDefined();
       if (!eventsTab) continue;
       await act(async () => eventsTab.click());
@@ -76,9 +76,7 @@ it('renders only recorded MCP activities with sequence and association facts', a
           (candidate) => candidate.id === activity.source_refs.actor_id,
         );
         if (actor)
-          expect(button.textContent).toContain(
-            actor.name ?? 'Name not captured',
-          );
+          expect(button.textContent).toContain(actor.name ?? 'Name not captured');
         const item = trace.work_items.find(
           (candidate) => candidate.id === activity.source_refs.work_item_id,
         );
@@ -105,8 +103,7 @@ it('renders only recorded MCP activities with sequence and association facts', a
       if (duplicateSequence === undefined) continue;
       const duplicateRows = eventButtons.filter(
         (button) =>
-          button.querySelector('strong')?.textContent ===
-          `#${duplicateSequence}`,
+          button.querySelector('strong')?.textContent === `#${duplicateSequence}`,
       );
       expect(duplicateRows.length).toBeGreaterThan(1);
       const duplicateSelection = duplicateRows[1];

@@ -1,5 +1,9 @@
 export type LocalEnvironmentName =
-  'in-process' | 'postgres' | 'core' | 'runtime' | 'full';
+  | 'in-process'
+  | 'postgres'
+  | 'core'
+  | 'runtime'
+  | 'full';
 
 export type ComposeTransport = 'raw' | 'repository';
 

@@ -55,11 +55,9 @@ export class PaseoObservationProjector {
   #reasoningSourceText = '';
   #reasoningText = '';
   #reasoningQuarantined = false;
-  #liveAssistant: {
-    readonly epoch: string;
-    readonly seq: number;
-    readonly text: string;
-  } | null = null;
+  #liveAssistant:
+    | { readonly epoch: string; readonly seq: number; readonly text: string }
+    | null = null;
   #assistantBlocked = false;
   #assistantLastPublicText = '';
   #assistantObserved = false;
@@ -199,9 +197,7 @@ export class PaseoObservationProjector {
     }
   }
 
-  public consumeProviderSubagentUpdate(
-    update: PaseoProviderSubagentUpdate,
-  ): void {
+  public consumeProviderSubagentUpdate(update: PaseoProviderSubagentUpdate): void {
     const parentAgentId =
       update.kind === 'upsert'
         ? update.subagent.parentAgentId
@@ -221,9 +217,7 @@ export class PaseoObservationProjector {
       subagentId: update.subagentId,
       epoch: update.epoch,
       direction: 'tail',
-      rows: [
-        { item: update.item, timestamp: update.timestamp, seq: update.seq },
-      ],
+      rows: [{ item: update.item, timestamp: update.timestamp, seq: update.seq }],
       hasOlder: false,
     });
   }
@@ -350,10 +344,7 @@ export class PaseoObservationProjector {
           ? 'failed'
           : 'cancelled';
     for (const child of this.#childText.values()) {
-      if (
-        child.parentActivityId !== parentActivityId ||
-        child.status !== 'running'
-      )
+      if (child.parentActivityId !== parentActivityId || child.status !== 'running')
         continue;
       const finalText = child.quarantined
         ? child.text
@@ -384,13 +375,11 @@ export class PaseoObservationProjector {
       });
   }
 
-  public async finalize(
-    input: {
-      readonly finalTimeline?: PaseoTimelinePage;
-      readonly finalMessage?: string | null;
-      readonly usage?: RunUsage;
-    } = {},
-  ): Promise<void> {
+  public async finalize(input: {
+    readonly finalTimeline?: PaseoTimelinePage;
+    readonly finalMessage?: string | null;
+    readonly usage?: RunUsage;
+  } = {}): Promise<void> {
     if (input.finalTimeline) {
       this.#flushAssistant();
       this.consumeParentTimeline(input.finalTimeline);
@@ -608,7 +597,8 @@ export class PaseoObservationProjector {
         (call.detail?.type === 'sub_agent'
           ? call.detail.childSessionId
           : undefined);
-      if (childSessionId) this.#bindChildSession(childSessionId, activityId);
+      if (childSessionId)
+        this.#bindChildSession(childSessionId, activityId);
     }
     return activityId;
   }
@@ -617,10 +607,7 @@ export class PaseoObservationProjector {
     const previous = this.#tools.get(projection.activityId);
     if (previous && isTerminal(previous.status)) {
       if (projection.status !== previous.status) return;
-      if (
-        projection.quality <= previous.quality &&
-        !betterDetail(projection, previous)
-      )
+      if (projection.quality <= previous.quality && !betterDetail(projection, previous))
         return;
     }
     if (
@@ -697,9 +684,7 @@ export class PaseoObservationProjector {
     this.#deferredParentTerminals.clear();
   }
 
-  #consumePermission(
-    permission: NonNullable<PaseoAgentStreamEvent['permission']>,
-  ): void {
+  #consumePermission(permission: NonNullable<PaseoAgentStreamEvent['permission']>): void {
     const previous = this.#permissions.get(permission.requestId);
     if (previous?.status === 'resolved') return;
     if (
@@ -707,8 +692,7 @@ export class PaseoObservationProjector {
       previous.decision === permission.decision
     )
       return;
-    const activityId =
-      previous?.activityId ?? `permission-${this.#nextPermission++}`;
+    const activityId = previous?.activityId ?? `permission-${this.#nextPermission++}`;
     this.#permissions.set(permission.requestId, {
       activityId,
       status: permission.status,
@@ -731,8 +715,7 @@ export class PaseoObservationProjector {
     incoming: string,
   ): void {
     const previous = this.#childText.get(key);
-    if (previous && (previous.status !== 'running' || previous.quarantined))
-      return;
+    if (previous && (previous.status !== 'running' || previous.quarantined)) return;
     const sourceText = mergeText(previous?.sourceText ?? '', incoming);
     const safe = this.#sanitize(sourceText, 8000, false);
     const activityId = previous?.activityId ?? this.#allocateActivity();
@@ -852,9 +835,7 @@ function betterDetail(
 ): boolean {
   if (!next.detail) return false;
   if (!previous?.detail) return true;
-  return (
-    JSON.stringify(next.detail).length > JSON.stringify(previous.detail).length
-  );
+  return JSON.stringify(next.detail).length > JSON.stringify(previous.detail).length;
 }
 
 function isTerminal(status: ExecutionToolStatus): boolean {
@@ -865,19 +846,14 @@ function normalizeToolStatus(value: string): ExecutionToolStatus | null {
   const status = value.toLowerCase();
   if (['running', 'started', 'pending', 'in_progress'].includes(status))
     return 'running';
-  if (
-    ['completed', 'complete', 'success', 'succeeded', 'done'].includes(status)
-  )
+  if (['completed', 'complete', 'success', 'succeeded', 'done'].includes(status))
     return 'completed';
   if (['failed', 'error'].includes(status)) return 'failed';
   if (['cancelled', 'canceled', 'cancel'].includes(status)) return 'cancelled';
   return null;
 }
 
-function toolCategory(
-  name: string,
-  detailType?: string,
-): ExecutionToolCategory {
+function toolCategory(name: string, detailType?: string): ExecutionToolCategory {
   const value = `${name} ${detailType ?? ''}`.toLowerCase();
   if (/(shell|command|terminal|exec)/u.test(value)) return 'shell';
   if (/(read|cat|list|glob|file)/u.test(value)) return 'read';
@@ -957,8 +933,7 @@ function projectToolDetail(
   ])
     if (key in source)
       putText(key, (source as unknown as Record<string, unknown>)[key]);
-  if ('toolName' in source && source.toolName)
-    output.toolName = source.toolName;
+  if ('toolName' in source && source.toolName) output.toolName = source.toolName;
   if ('url' in source && source.url) {
     const safeUrl = safeHttpUrl(source.url);
     if (safeUrl) output.url = safeUrl;
@@ -992,16 +967,12 @@ function projectToolDetail(
     'bytes',
   ]) {
     const value = (source as unknown as Record<string, unknown>)[key];
-    if (typeof value === 'number' && Number.isFinite(value))
-      output[key] = value;
+    if (typeof value === 'number' && Number.isFinite(value)) output[key] = value;
   }
   if ('truncated' in source && typeof source.truncated === 'boolean')
     output.truncated = source.truncated;
   if ('mode' in source && source.mode) output.mode = source.mode;
-  if (
-    'exitCode' in source &&
-    (source.exitCode === null || Number.isSafeInteger(source.exitCode))
-  )
+  if ('exitCode' in source && (source.exitCode === null || Number.isSafeInteger(source.exitCode)))
     output.exitCode = source.exitCode;
   if ('actions' in source && Array.isArray(source.actions))
     output.actions = source.actions.slice(0, 64).map((action) => ({
@@ -1084,10 +1055,7 @@ function credentialPrefixPending(value: string): boolean {
 }
 
 function formatProjectedText(value: string, roots: readonly string[]): string {
-  let safe = value.replace(
-    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu,
-    '',
-  );
+  let safe = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
   const normalizedRoots = roots
     .map((root) => resolve(root).replaceAll('\\', '/').replace(/\/$/u, ''))
     .filter(Boolean)
@@ -1101,8 +1069,9 @@ function formatProjectedText(value: string, roots: readonly string[]): string {
       /(?<![A-Za-z0-9])(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?![A-Za-z0-9])/giu,
       '<id>',
     )
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/gu, (token) =>
-      looksLikeStandaloneSecret(token) ? '<redacted>' : token,
+    .replace(
+      /\b[A-Za-z0-9_-]{32,}\b/gu,
+      (token) => (looksLikeStandaloneSecret(token) ? '<redacted>' : token),
     );
   return safe;
 }

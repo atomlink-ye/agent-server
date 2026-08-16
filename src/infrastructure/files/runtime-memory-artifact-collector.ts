@@ -25,7 +25,9 @@ export class RuntimeMemoryArtifactError extends Error {
   }
 }
 
-export class LocalRuntimeMemoryCandidateCollector implements RuntimeMemoryCandidateCollector {
+export class LocalRuntimeMemoryCandidateCollector
+  implements RuntimeMemoryCandidateCollector
+{
   public async prepare(input: {
     readonly runId: string;
     readonly cwd: string;
@@ -83,20 +85,13 @@ async function readMemoryCandidates(
     const buffer = Buffer.alloc(MEMORY_ARTIFACT_MAX_BYTES + 1);
     let offset = 0;
     while (offset < buffer.length) {
-      const read = await handle.read(
-        buffer,
-        offset,
-        buffer.length - offset,
-        null,
-      );
+      const read = await handle.read(buffer, offset, buffer.length - offset, null);
       offset += read.bytesRead;
       if (read.bytesRead === 0) break;
     }
     if (offset > MEMORY_ARTIFACT_MAX_BYTES)
       throw new RuntimeMemoryArtifactError();
-    const parsed: unknown = JSON.parse(
-      buffer.subarray(0, offset).toString('utf8'),
-    );
+    const parsed: unknown = JSON.parse(buffer.subarray(0, offset).toString('utf8'));
     if (
       !parsed ||
       typeof parsed !== 'object' ||

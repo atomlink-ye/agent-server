@@ -164,19 +164,20 @@ describe('runtime memory PostgreSQL materialization', () => {
     const prior = await bindings.findLatestSessionBindingBySessionId(
       '00000000-0000-4000-8000-000000000902',
     );
-    const secondSession = await runtime.attachSession(prior!, {
-      runtimeSessionId: 'continuation-runtime-session',
-      workspace: {
-        cwd: '/tmp/runtime-memory-pglite',
-        binding: firstSession.workspaceBinding,
+    const secondSession = await runtime.attachSession(
+      prior!,
+      {
+        runtimeSessionId: 'continuation-runtime-session',
+        workspace: {
+          cwd: '/tmp/runtime-memory-pglite',
+          binding: firstSession.workspaceBinding,
+        },
+        systemPrompt: '',
       },
-      systemPrompt: '',
-    });
+    );
     await secondSession.run({ runId: continuationRunId, prompt: 'second' });
 
-    expect(firstSession.sessionBinding.externalSessionId).toBe(
-      'agent-session-1',
-    );
+    expect(firstSession.sessionBinding.externalSessionId).toBe('agent-session-1');
     expect(prior?.externalSessionId).toBe('agent-session-1');
     expect(creates).toBe(1);
     expect(sends).toEqual(['agent-session-1:first', 'agent-session-1:second']);

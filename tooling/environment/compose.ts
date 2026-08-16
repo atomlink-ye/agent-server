@@ -19,9 +19,7 @@ export type CommandExecutor = (
 
 export const executeCommand: CommandExecutor = async (input) =>
   new Promise((resolvePromise, reject) => {
-    const log = input.logPath
-      ? createWriteStream(input.logPath, { flags: 'a' })
-      : null;
+    const log = input.logPath ? createWriteStream(input.logPath, { flags: 'a' }) : null;
     const child = spawn(input.command, [...input.args], {
       cwd: repositoryRoot,
       env: input.environment,

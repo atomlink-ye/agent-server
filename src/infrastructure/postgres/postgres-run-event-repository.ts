@@ -21,11 +21,7 @@ export class PostgresRunEventRepository implements RunEventRepository {
   async bind(input: RuntimeSessionBinding) {
     await this.db.query(
       `INSERT INTO runtime_session_bindings(run_id,provider_agent_id,created_at) VALUES($1,$2,$3) ON CONFLICT(run_id) DO UPDATE SET provider_agent_id=COALESCE(EXCLUDED.provider_agent_id,runtime_session_bindings.provider_agent_id)`,
-      [
-        input.runId,
-        input.sessionBinding?.externalSessionId ?? null,
-        input.createdAt,
-      ],
+      [input.runId, input.sessionBinding?.externalSessionId ?? null, input.createdAt],
     );
   }
   async getBinding(runId: string) {

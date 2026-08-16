@@ -52,9 +52,9 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
         host.querySelector('[data-testid="trace-coverage-disclosure"]'),
       ).toBe(coverage);
 
-      const eventsTab = [
-        ...host.querySelectorAll<HTMLButtonElement>('button'),
-      ].find((button) => button.textContent?.trim() === 'Events');
+      const eventsTab = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'Events',
+      );
       expect(eventsTab).toBeDefined();
       await act(async () => eventsTab?.click());
       expect(

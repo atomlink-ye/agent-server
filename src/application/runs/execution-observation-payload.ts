@@ -22,20 +22,9 @@ export function executionObservationPayload(
 ): RunEventPayload | null {
   switch (observation.kind) {
     case 'turn_started':
-      return { kind: 'runtime_turn', status: 'started' };
     case 'turn_completed':
-      return {
-        kind: 'runtime_turn',
-        status: 'completed',
-        provider: observation.provider,
-        model: observation.model,
-      };
     case 'turn_failed':
-      return {
-        kind: 'runtime_turn',
-        status: 'failed',
-        failure_code: observation.failure.code,
-      };
+      return null;
     case 'assistant_updated':
       return { kind: 'assistant_text', text: observation.text };
     case 'reasoning_updated':

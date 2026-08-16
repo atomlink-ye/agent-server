@@ -115,18 +115,13 @@ describe('executionObservationPayload', () => {
     });
     expect(
       executionObservationPayload({ kind: 'turn_started', runId: 'run-1' }),
-    ).toEqual({ kind: 'runtime_turn', status: 'started' });
+    ).toBeNull();
     expect(
       executionObservationPayload({
         kind: 'turn_completed',
         provider: 'opencode',
         model: 'free/model',
       }),
-    ).toEqual({
-      kind: 'runtime_turn',
-      status: 'completed',
-      provider: 'opencode',
-      model: 'free/model',
-    });
+    ).toBeNull();
   });
 });

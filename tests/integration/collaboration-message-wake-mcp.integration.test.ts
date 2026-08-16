@@ -20,7 +20,6 @@ import {
 } from '../../src/domain/teams/team-member-run.js';
 import {
   AGENT_SERVER_COLLABORATION_MCP_NAMES,
-  AGENT_SERVER_COLLABORATION_TOOL_REFS,
 } from '../../src/domain/collaboration/canonical-collaboration-tools.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
@@ -52,7 +51,6 @@ afterEach(async () => {
 async function createMessageWakeFixture(
   options: {
     memberIdle?: boolean;
-    allowedTools?: readonly string[];
   } = {},
 ) {
   const database = new PGlite();
@@ -178,8 +176,11 @@ async function createMessageWakeFixture(
     teamMemberRunId: lead.id,
     teamRunId: teamRun.id,
     contextEpoch: deriveTeamContextEpoch(leadTask.id, leadClaim.run.id),
-    allowedTools: options.allowedTools ?? [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
-    catalogTools: options.allowedTools ?? [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+    // Collaboration MCP is a stable platform contributor. Runtime grants
+    // carry only domain/user tool refs; call-time policy authorizes these
+    // collaboration mutations independently.
+    allowedTools: [],
+    catalogTools: [],
   });
   const client = new Client({ name: 'smoke-gate-mcp-test', version: '1' });
   await client.connect(
@@ -204,9 +205,7 @@ async function createMessageWakeFixture(
 
 describe('canonical smoke direct-message wake mutation', () => {
   it('reports Work that has not been accepted after MCP board creation', async () => {
-    const fixture = await createMessageWakeFixture({
-      allowedTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate],
-    });
+    const fixture = await createMessageWakeFixture();
     try {
       for (const subject of ['first smoke Work', 'second smoke Work']) {
         const created = await fixture.client.callTool({

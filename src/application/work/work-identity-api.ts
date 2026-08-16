@@ -3,7 +3,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AccessContext } from '../../platform/access-context.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
-import { WorkCompositionResolutionError, type ResolvedWorkDefinition } from '../../domain/work/work-composition.js';
+import {
+  WorkCompositionResolutionError,
+  fingerprintResolvedWorkDefinition,
+  type ResolvedWorkDefinition,
+} from '../../domain/work/work-composition.js';
 import type { WorkDefinitionReadPort } from '../ports/work-definition-read.js';
 import type { WorkDefinitionResolutionPort } from '../ports/work-definition-resolution.js';
 import type {
@@ -43,7 +47,11 @@ export interface WorkIdentityApiOptions {
   readonly repository: WorkIdentityRepository;
   /** Compatibility read seam retained only for the existing Team-shaped HTTP wrapper. */
   readonly definitions: WorkDefinitionReadPort;
-  readonly definitionResolution: WorkDefinitionResolutionPort;
+  /**
+   * Production composition passes the generic resolver. The optional fallback
+   * preserves older Team-only construction sites while they migrate.
+   */
+  readonly definitionResolution?: WorkDefinitionResolutionPort;
   readonly now?: () => Date;
   readonly pendingTtlMs?: number;
 }
@@ -88,7 +96,8 @@ export class WorkIdentityApi {
   public constructor(options: WorkIdentityApiOptions) {
     this.repository = options.repository;
     this.definitions = options.definitions;
-    this.definitionResolution = options.definitionResolution;
+    this.definitionResolution =
+      options.definitionResolution ?? compatibilityTeamResolution(options.definitions);
     this.now = options.now ?? (() => new Date());
     this.pendingTtlMs = options.pendingTtlMs ?? 15 * 60 * 1000;
   }
@@ -316,6 +325,91 @@ export class WorkIdentityApi {
       workspaceId: accessContext.workspaceId,
     };
   }
+}
+
+function compatibilityTeamResolution(
+  definitions: WorkDefinitionReadPort,
+): WorkDefinitionResolutionPort {
+  return {
+    async resolve(input) {
+      const [definition, version] = await Promise.all([
+        definitions.findTeamDefinitionById(input.definitionId),
+        definitions.findPublishedTeamVersionById(
+          input.definitionVersionId,
+          input.accessContext,
+        ),
+      ]);
+      const access = input.accessContext;
+      if (
+        !definition ||
+        !version ||
+        version.definitionId !== input.definitionId ||
+        definition.tenantId !== access.tenantId ||
+        definition.workspaceId !== access.workspaceId ||
+        version.tenantId !== access.tenantId ||
+        version.workspaceId !== access.workspaceId ||
+        version.status !== 'published'
+      )
+        throw new WorkCompositionResolutionError();
+
+      const participants = Object.freeze([
+        Object.freeze({
+          logicalName: version.spec.lead.name,
+          role: 'lead' as const,
+          agentVersionId: version.spec.lead.agentVersionId,
+          agentFingerprint: null,
+          toolRefs: Object.freeze([] as string[]),
+          skills: Object.freeze([]),
+        }),
+        ...version.spec.roster.map((member) =>
+          Object.freeze({
+            logicalName: member.name,
+            role: 'member' as const,
+            agentVersionId: member.agentVersionId,
+            agentFingerprint: null,
+            toolRefs: Object.freeze([] as string[]),
+            skills: Object.freeze([]),
+          }),
+        ),
+      ]);
+      const sourceFingerprint = `sha256:${createHash('sha256')
+        .update(
+          JSON.stringify({
+            definitionId: definition.id,
+            versionId: version.id,
+            spec: version.spec,
+          }),
+          'utf8',
+        )
+        .digest('hex')}`;
+      const base = {
+        definitionId: definition.id,
+        definitionVersionId: version.id,
+        kind: 'collaboration' as const,
+        name: version.name,
+        description: version.description,
+        sourceFingerprint,
+        participants,
+        // The legacy adapter intentionally does not rediscover Environment
+        // metadata. Production composition uses ResolveWorkDefinition instead.
+        environment: null,
+        platformCapabilities: Object.freeze([
+          'collaboration' as const,
+          'platform_mcp' as const,
+        ]),
+        executionPolicy: Object.freeze({
+          invokable: Object.freeze({ kind: 'team' as const, versionId: version.id }),
+          runtimeSessionPolicy: 'reusable' as const,
+          runtimeWorkspacePolicy: 'work_run_scoped' as const,
+          requiredRuntimeCapabilities: Object.freeze([]),
+        }),
+      };
+      return Object.freeze({
+        ...base,
+        resolvedFingerprint: fingerprintResolvedWorkDefinition(base),
+      });
+    },
+  };
 }
 
 export class WorkDefinitionValidationError extends Error {

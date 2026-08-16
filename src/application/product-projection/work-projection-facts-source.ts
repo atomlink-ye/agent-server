@@ -53,7 +53,8 @@ export class WorkProjectionFactsSource {
 export interface ProductProjectionFactsSlice {
   readonly identity: ProductProjectionIdentity;
   readonly rootTaskId: string;
-  readonly teamRunId: string;
+  /** Null for single-Agent Work; TeamRun remains an internal collaboration fact. */
+  readonly teamRunId: string | null;
   readonly edges: readonly ProductTraceEdge[];
   readonly product: ProductProjectionDurableFacts;
 }

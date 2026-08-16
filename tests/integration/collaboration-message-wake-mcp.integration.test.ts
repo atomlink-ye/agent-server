@@ -33,6 +33,7 @@ import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js
 import { createLogger } from '../../src/shared/observability/logger.js';
 import { deriveTeamContextEpoch } from '../../src/application/teams/team-tool-context.js';
 import { ProjectAgenticTeam } from '../../src/application/teams/project-agentic-team.js';
+import { encodeRootTaskRunRequestSnapshotRef } from '../../src/application/tasks/root-task-input.js';
 
 const owner = {
   tenantId: 'smoke_gate_mcp_tenant',
@@ -76,7 +77,9 @@ async function createMessageWakeFixture() {
     policySnapshotVersion: 'smoke-gate-mcp-policy',
     invokableKind: 'team',
     invokableVersionId: randomUUID(),
-    inputSnapshotRef: 'inline:smoke-gate-mcp',
+    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({
+      prompt: 'smoke gate MCP',
+    }),
     inputFingerprint: 'smoke-gate-mcp',
     ingress: 'api',
     originRef: null,
@@ -131,7 +134,7 @@ async function createMessageWakeFixture() {
     parentRunId: rootClaim.run.id,
     invokableKind: 'agent',
     invokableVersionId: lead.agentVersionId,
-    inputSnapshotRef: 'inline:lead',
+    inputSnapshotRef: encodeRootTaskRunRequestSnapshotRef({ prompt: 'lead' }),
     inputFingerprint: 'smoke-gate-lead',
     logicalStepKey: 'lead:turn:1',
     nodePath: 'lead',

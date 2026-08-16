@@ -21,7 +21,7 @@ const work: Work = {
   definitionId,
   currentDefinitionVersionId: definitionVersionId,
   title: 'Single Agent research',
-  origin: 'api',
+  origin: 'created',
   archivedAt: null,
   createdAt: at,
   updatedAt: at,
@@ -102,6 +102,8 @@ describe('ProductProjection single-Agent Work', () => {
       workId,
       workRunId,
     });
+    if (!('projection_status' in detail) || detail.work_run === null)
+      throw new Error('expected captured single-Agent WorkRun projection');
     expect(detail.projection_status).toBe('internally_anchored');
     expect(detail.work_run.product_state).toBe('complete');
     expect(detail.work_items).toEqual([]);
@@ -114,6 +116,8 @@ describe('ProductProjection single-Agent Work', () => {
       workId,
       workRunId,
     });
+    if (!('projection_status' in trace) || trace.work_run === null)
+      throw new Error('expected captured single-Agent Run Trace projection');
     expect(trace.work_run.product_state).toBe('complete');
     expect(trace.runs).toHaveLength(1);
     expect(trace.runs[0]?.source_refs).toMatchObject({

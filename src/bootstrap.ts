@@ -320,18 +320,11 @@ export async function createService(
     resourceModule.definitionReadApi,
     resourceModule.agentResolutionApi,
   );
-  const workModule = createWorkModule({
-    database: pool,
-    definitions: resourceModule.definitionReadApi,
-    execution: new InvokeTaskExecutionAdmission(invokeTask),
-    executionFacts: new PostgresExecutionFactQuery(pool),
-  });
   const runtimeModule = createRuntimeModule({
     database: pool,
     config,
     logger,
     toolContributors: [
-      workModule.contributeRuntime,
       memoryModule.contributeRuntime,
       createCollaborationRuntimeContributor({
         contextResolver: teamToolContextResolver,
@@ -344,6 +337,15 @@ export async function createService(
     ],
     ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
   });
+  const workModule = createWorkModule({
+    database: pool,
+    definitions: resourceModule.definitionReadApi,
+    definitionResolution: resourceModule.workDefinitionResolution,
+    execution: new InvokeTaskExecutionAdmission(invokeTask),
+    executionFacts: new PostgresExecutionFactQuery(pool),
+    runtimeCapabilities: runtimeModule,
+  });
+  runtimeModule.registerToolContributor(workModule.contributeRuntime);
   const {
     executionRuntime,
     executionRuns,

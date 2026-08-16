@@ -129,6 +129,7 @@ async function createMessageWakeFixture() {
   });
   const leadTask = createChildTask({
     ...owner,
+    policySnapshotVersion: 'smoke-gate-mcp-policy',
     rootTaskId: root.id,
     parentTaskId: root.id,
     parentRunId: rootClaim.run.id,

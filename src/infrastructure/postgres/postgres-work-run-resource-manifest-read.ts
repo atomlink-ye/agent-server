@@ -37,8 +37,8 @@ export class PostgresWorkRunResourceManifestRead implements WorkRunResourceManif
               m.resolved_fingerprint,m.resolved_at
          FROM tasks root
          JOIN work_runs wr
-           ON wr.tenant_id=root.tenant_id
-          AND wr.workspace_id=root.workspace_id
+         ON wr.tenant_id=root.tenant_id
+          AND wr.workspace_id::text=root.workspace_id
           AND (
             wr.root_task_id=root.id
             OR EXISTS (

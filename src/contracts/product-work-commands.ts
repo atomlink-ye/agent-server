@@ -18,6 +18,7 @@ export const StartWorkRunRequestSchema = z
   .object({
     trigger_kind: z.literal('manual'),
     trigger_ref: z.string().min(1).max(256).optional(),
+    input: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

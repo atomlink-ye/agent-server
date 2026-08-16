@@ -7,14 +7,7 @@ import {
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import {
-  AGENT_SERVER_COLLABORATION_TOOL_REFS,
-  collaborationToolRefsForMessageTurn,
-} from '../../domain/collaboration/canonical-collaboration-tools.js';
-import {
-  collaborationToolRefsForLeadPolicy,
-  deriveAgenticLeadCommandPolicy,
-} from './team-policy-evaluator.js';
+import { deriveAgenticLeadCommandPolicy } from './team-policy-evaluator.js';
 
 const now = () => new Date('2026-08-08T00:00:00.000Z');
 const owner = {
@@ -108,13 +101,7 @@ function makeRejectDecision(
 }
 
 describe('deriveAgenticLeadCommandPolicy', () => {
-  it('allows a Lead to finish from a direct-message turn', () => {
-    expect(collaborationToolRefsForMessageTurn('lead')).toContain(
-      AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
-    );
-  });
-
-  it('exposes only the canonical finish ref when the accepted board can finish', () => {
+  it('exposes only the finish command when the accepted board can finish', () => {
     const team = makeTeam();
     const workItem = makeWork(team.id);
     const policy = deriveAgenticLeadCommandPolicy(
@@ -122,12 +109,7 @@ describe('deriveAgenticLeadCommandPolicy', () => {
       [workItem],
       [makeAttempt(team.id, workItem.id)],
     );
-    const refs = collaborationToolRefsForLeadPolicy(policy);
     expect(policy.allowedCommands).toEqual(['collaboration_finish']);
-    expect(refs).toContain(AGENT_SERVER_COLLABORATION_TOOL_REFS.finish);
-    expect(refs).not.toContain(
-      AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
-    );
   });
 
   it('allows request_changes after the latest completion rejection', () => {

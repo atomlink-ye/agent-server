@@ -11,12 +11,12 @@ import type { DefinitionReadApi } from '../../application/ports/definition-read-
 import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
+import type { ProductWorkDefinitionApi } from '../../application/work/product-work-definition-api.js';
 import { StartWorkRun } from '../../application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
-import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/routes/product-work-definitions.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
 import { registerProductWorkMcpTools } from '../../entrypoints/mcp/product-work-mcp-tools.js';
 import {
@@ -24,6 +24,7 @@ import {
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
+import { PostgresWorkRunInputStore } from '../../infrastructure/postgres/postgres-work-run-input-store.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 
@@ -46,7 +47,6 @@ export function installWorkHttpRoutes(
   },
 ): void {
   const { workIdentity, startWorkRun, projection } = dependencies;
-  registerProductWorkDefinitionRoutes(app, { config });
   registerProductWorkCommandRoutes(app, {
     config,
     workIdentity,
@@ -68,6 +68,7 @@ export function createWorkModule(options: {
   >;
   /** Production supplies the generic Composition resolver; legacy tests may omit it. */
   readonly definitionResolution?: WorkDefinitionResolutionPort;
+  readonly productDefinitions?: Pick<ProductWorkDefinitionApi, 'getInputContract'>;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
   /** Production supplies the RuntimeModule capability authority. */
@@ -88,6 +89,12 @@ export function createWorkModule(options: {
     execution: options.execution,
     ...(options.runtimeCapabilities
       ? { runtimeCapabilities: options.runtimeCapabilities }
+      : {}),
+    ...(options.productDefinitions
+      ? {
+          productDefinitions: options.productDefinitions,
+          workRunInputs: new PostgresWorkRunInputStore(options.database),
+        }
       : {}),
   });
   const workIdentityQuery = {

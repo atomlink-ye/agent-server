@@ -95,9 +95,10 @@ spec:
     modelPolicyRef: free-only
     mode: isolated
   tools:
-    - agent-server/memory-read
+    - ref: agent-server/memory-read
+      kind: tool
   skills:
-    - agent-server/memory-api
+    - ref: agent-server/memory-api
   input:
     schema:
       type: object

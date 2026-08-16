@@ -21,7 +21,7 @@ describe('PostgresWorkDefinitionSourceRepository', () => {
       memoryVersionIds: [],
     };
     const repository = new PostgresWorkDefinitionSourceRepository({
-      async query(sql: string) {
+      async query<Row = Record<string, unknown>>(sql: string) {
         if (sql.includes('FROM work_definition_source_definitions'))
           return {
             rows: [
@@ -35,7 +35,7 @@ describe('PostgresWorkDefinitionSourceRepository', () => {
                 description: null,
                 created_at: '2026-08-16T00:00:00.000Z',
               },
-            ],
+            ] as unknown as readonly Row[],
           };
         if (sql.includes('FROM work_definition_source_versions'))
           return {
@@ -59,9 +59,9 @@ describe('PostgresWorkDefinitionSourceRepository', () => {
                 created_at: '2026-08-16T00:00:00.000Z',
                 published_at: '2026-08-16T00:00:00.000Z',
               },
-            ],
+            ] as unknown as readonly Row[],
           };
-        return { rows: [] };
+        return { rows: [] as readonly Row[] };
       },
     });
 

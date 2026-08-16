@@ -135,30 +135,23 @@ export function createProductProjection(
     return { work, workRun: workRun as LoadedProductWorkRun['workRun'] };
   };
 
-  const loadFacts = async (
-    loaded: LoadedProductWorkRun,
-    owner: ProductProjectionOwnerScope,
-  ): Promise<ProductProjectionFactsSlice> => {
-    const facts = await options.workFacts.getByRootTask(
-      owner,
-      loaded.workRun.rootTaskId,
-    );
-    if (!facts) throw new ProductProjectionUnavailableError();
-    return facts;
-  };
-
   const loadFactsAndRuns = async (
     loaded: LoadedProductWorkRun,
     owner: ProductProjectionOwnerScope,
   ) => {
-    const [facts, runs] = await Promise.all([
-      loadFacts(loaded, owner),
-      options.executionFacts.listRunsByRootTask({
-        tenantId: owner.tenantId,
-        workspaceId: owner.workspaceId,
-        rootTaskId: loaded.workRun.rootTaskId,
-      }),
-    ]);
+    const runs = await options.executionFacts.listRunsByRootTask({
+      tenantId: owner.tenantId,
+      workspaceId: owner.workspaceId,
+      rootTaskId: loaded.workRun.rootTaskId,
+    });
+    if (runs.length === 0) throw new ProductProjectionUnavailableError();
+    const collaborativeFacts = await options.workFacts.getByRootTask(
+      owner,
+      loaded.workRun.rootTaskId,
+    );
+    const facts =
+      collaborativeFacts ??
+      singleAgentProjectionFacts(loaded.workRun.rootTaskId, runs);
     return { facts: applyExecutionTiming(facts, runs), runs };
   };
 
@@ -227,7 +220,7 @@ export function createProductProjection(
     async getWorkRun(input) {
       const loaded = await load(input);
       const { facts, runs } = await loadFactsAndRuns(loaded, input);
-      const capture = buildCaptureMetadata(loaded, facts);
+      const capture = buildCaptureMetadata(loaded, facts, runs);
       return ProductWorkRunResponseSchema.parse({
         work: toWorkResponse(loaded.work),
         work_run: buildWorkRunDetail(loaded, facts.product, runs),
@@ -255,7 +248,7 @@ export function createProductProjection(
         .map((event) => mapEvent(event, loaded.workRun.rootTaskId))
         .sort(compareEvents);
       const mappedEdges = [...facts.edges].sort(compareEdges);
-      const capture = buildCaptureMetadata(loaded, facts);
+      const capture = buildCaptureMetadata(loaded, facts, runs);
       return ProductRunTraceResponseSchema.parse({
         work: toWorkResponse(loaded.work),
         work_run: buildWorkRunDetail(loaded, facts.product, runs),
@@ -274,12 +267,51 @@ export function createProductProjection(
   };
 }
 
+function singleAgentProjectionFacts(
+  rootTaskId: string,
+  runs: readonly ExecutionRunFact[],
+): ProductProjectionFactsSlice {
+  const failed = runs.some(
+    (run) =>
+      run.status === 'failed' ||
+      run.status === 'timed_out' ||
+      run.status === 'cancelled',
+  );
+  const complete =
+    runs.length > 0 && runs.every((run) => run.status === 'succeeded');
+  return {
+    rootTaskId,
+    teamRunId: null,
+    identity: { work_items: [], actors: [], messages: [] },
+    edges: [],
+    product: {
+      status: failed ? 'failed' : complete ? 'succeeded' : 'active',
+      phase: failed ? 'failed' : complete ? 'done' : 'active',
+      revision: 0,
+      completionApprovalRequired: false,
+      completionRequestedByRunId: null,
+      approvalAccepted: false,
+      finalText: null,
+      finalTextPresent: false,
+    },
+  };
+}
+
 function buildCaptureMetadata(
   loaded: LoadedProductWorkRun,
   facts: ProductProjectionFactsSlice,
+  runs: readonly ExecutionRunFact[],
 ) {
   if (facts.rootTaskId !== loaded.workRun.rootTaskId)
     throw new ProductProjectionUnavailableError();
+  if (facts.teamRunId === null) {
+    if (
+      runs.length === 0 ||
+      runs.some((run) => run.rootTaskId !== loaded.workRun.rootTaskId)
+    )
+      throw new ProductProjectionUnavailableError();
+    return { projection_status: 'internally_anchored' as const };
+  }
   return {
     projection_status: deriveCaptureStatus(
       facts.identity,

@@ -5,8 +5,6 @@ import type { ResolvedResourceManifestEntry } from './resolved-resource-manifest
 
 export type WorkCompositionKind = 'single_agent' | 'collaboration';
 export type WorkParticipantRole = 'primary' | 'lead' | 'member';
-export type RuntimeSessionPolicy = 'fresh' | 'reusable';
-export type RuntimeWorkspacePolicy = 'run_scoped' | 'work_run_scoped';
 export type WorkPlatformCapability = 'collaboration' | 'platform_mcp';
 export type RequiredRuntimeCapability =
   'reusable_session' | 'external_workspace' | 'platform_mcp';
@@ -42,8 +40,6 @@ export interface ResolvedWorkExecutionPolicy {
     readonly kind: 'agent' | 'team';
     readonly versionId: string;
   };
-  readonly runtimeSessionPolicy: RuntimeSessionPolicy;
-  readonly runtimeWorkspacePolicy: RuntimeWorkspacePolicy;
   readonly requiredRuntimeCapabilities: readonly RequiredRuntimeCapability[];
 }
 

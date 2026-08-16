@@ -397,8 +397,6 @@ function compatibilityTeamResolution(
             kind: 'team' as const,
             versionId: version.id,
           }),
-          runtimeSessionPolicy: 'reusable' as const,
-          runtimeWorkspacePolicy: 'work_run_scoped' as const,
           requiredRuntimeCapabilities: Object.freeze([]),
         }),
       };

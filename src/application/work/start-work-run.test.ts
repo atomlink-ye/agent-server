@@ -57,8 +57,6 @@ function resolved(
         kind: collaboration ? 'team' : 'agent',
         versionId: definitionVersionId,
       },
-      runtimeSessionPolicy: collaboration ? 'reusable' : 'fresh',
-      runtimeWorkspacePolicy: collaboration ? 'work_run_scoped' : 'run_scoped',
       requiredRuntimeCapabilities: collaboration
         ? ['reusable_session', 'external_workspace', 'platform_mcp']
         : [],

@@ -31,15 +31,18 @@ const WORK_REF = z.string().regex(/^W-\d+$/);
 const MESSAGE_REF = z.string().regex(/^M-\d+$/);
 const LOGICAL_REF = z.string().min(1).max(512);
 
+/**
+ * Register the complete Agent Server collaboration toolbox for a Team
+ * participant. Registration is deliberately stable across roles and turns;
+ * every invocation is authorized from the current grant/context and durable
+ * Collaboration state.
+ */
 export function registerCollaborationMcpTools(
   server: McpServer,
-  catalogTools: readonly string[],
-  authorize: (toolRef: string) => boolean,
   context: CollaborationMcpContext,
 ): void {
-  const catalog = new Set(catalogTools);
   const tool = <Input extends z.ZodRawShape>(
-    ref: string,
+    _ref: string,
     name: string,
     description: string,
     schema: Input,
@@ -49,7 +52,6 @@ export function registerCollaborationMcpTools(
     ) => Promise<unknown>,
     readOnly = false,
   ) => {
-    if (!catalog.has(ref)) return;
     (server.registerTool as any)(
       name,
       {
@@ -58,14 +60,14 @@ export function registerCollaborationMcpTools(
         ...(readOnly ? { annotations: { readOnlyHint: true } } : {}),
       },
       async (args: z.infer<z.ZodObject<Input>>) => {
-        if (!authorize(ref)) return failure('unauthorized', true);
         let begun = false;
         try {
           context.begin(context.grantId);
           begun = true;
           const grant = context.currentGrant();
-          if (!grant) return failure('not_allowed', true);
-          return success(await operation(args, await context.resolve(grant)));
+          if (!grant) return failure('unauthorized', true);
+          const resolved = await context.resolve(grant);
+          return success(await operation(args, resolved));
         } catch (error) {
           return failure(collaborationErrorCode(error));
         } finally {
@@ -78,7 +80,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.state,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.state,
-    'Read current collaboration state.',
+    'Read current collaboration state, capabilities, limits, Workboard and Mailbox summary. Tool availability does not imply that every mutation is currently legal.',
     {},
     (_input, ctx) => context.kernel.state(ctx),
     true,
@@ -94,7 +96,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCreate,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCreate,
-    'Create an open or explicitly assigned Workboard item.',
+    'Create an open or explicitly assigned Workboard item when your participant capability allows it.',
     {
       subject: z.string().min(1).max(4096),
       description: z.string().max(4096).optional(),
@@ -119,7 +121,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAssign,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardAssign,
-    'Assign one open Workboard item.',
+    'Assign one open Workboard item when authorized by collaboration policy.',
     { work_ref: WORK_REF, assignee: z.string().min(1).max(256) },
     (input, ctx) =>
       context.kernel.assignWork(ctx, {
@@ -130,7 +132,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardClaim,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardClaim,
-    'Claim one open actionable Workboard item for yourself.',
+    'Claim one open actionable Workboard item for yourself when authorized.',
     { work_ref: WORK_REF },
     (input, ctx) => context.kernel.claimWork(ctx, { workRef: input.work_ref }),
   );
@@ -184,14 +186,14 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardAccept,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardAccept,
-    'Accept a submitted Workboard item.',
+    'Accept a submitted Workboard item when authorized and the transition is valid.',
     { work_ref: WORK_REF },
     (input, ctx) => context.kernel.acceptWork(ctx, { workRef: input.work_ref }),
   );
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardRequestChanges,
-    'Request semantic rework on a submitted or blocked item.',
+    'Request semantic rework on a submitted or blocked item when authorized.',
     {
       work_ref: WORK_REF,
       assignee: z.string().min(1).max(256),
@@ -207,7 +209,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.boardCancel,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCancel,
-    'Cancel a non-terminal Workboard item.',
+    'Cancel a non-terminal Workboard item when authorized.',
     { work_ref: WORK_REF },
     (input, ctx) => context.kernel.cancelWork(ctx, { workRef: input.work_ref }),
   );
@@ -258,7 +260,7 @@ export function registerCollaborationMcpTools(
   tool(
     AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
     AGENT_SERVER_COLLABORATION_MCP_NAMES.finish,
-    'Request collaboration completion after required Workboard items are accepted.',
+    'Request collaboration completion after required Workboard items are accepted and the finish transition is legal.',
     {},
     (_input, ctx) => context.kernel.finish(ctx),
   );

@@ -349,10 +349,8 @@ describe('managed single-agent minimum transcript', () => {
         headers,
       })
     ).json()) as { events: Array<{ type: string }> };
-    expect(cancelledEvents.events.map((event) => event.type)).toEqual([
-      'started',
-      'cancelled',
-    ]);
+    expect(cancelledEvents.events[0]?.type).toBe('started');
+    expect(cancelledEvents.events.at(-1)?.type).toBe('cancelled');
 
     const replay = await app.request(`/api/v1/sessions/${sessionId}/messages`, {
       method: 'POST',

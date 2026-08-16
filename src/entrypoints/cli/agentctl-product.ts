@@ -7,6 +7,16 @@ import {
   ProductDeveloperClientError,
 } from '../../adapters/http/product-developer-client.js';
 
+class ProductCliError extends Error {
+  public constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ProductCliError';
+  }
+}
+
 const args = process.argv.slice(2);
 
 try {
@@ -39,7 +49,8 @@ async function main(argv: readonly string[]): Promise<void> {
     const sourcePath = parsed.positional[0] ?? 'work.yaml';
     if (parsed.positional.length > 1) throw usage();
     const source = await readFile(resolve(sourcePath), 'utf8');
-    if (command === 'validate') return output(await client.validateDefinition(source));
+    if (command === 'validate')
+      return output(await client.validateDefinition(source));
     if (command === 'plan') return output(await client.planDefinition(source));
     const key =
       parsed.flags.get('--idempotency-key') ??
@@ -164,16 +175,24 @@ function parse(argv: readonly string[]): {
   return { positional, flags };
 }
 
-async function jsonInput(path: string | undefined): Promise<Record<string, unknown>> {
+async function jsonInput(
+  path: string | undefined,
+): Promise<Record<string, unknown>> {
   if (!path) return {};
   let value: unknown;
   try {
     value = JSON.parse(await readFile(resolve(path), 'utf8'));
   } catch {
-    throw new ProductCliError('CLI_INVALID_INPUT', 'Input must be valid JSON.');
+    throw new ProductCliError(
+      'CLI_INVALID_INPUT',
+      'Input must be valid JSON.',
+    );
   }
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new ProductCliError('CLI_INVALID_INPUT', 'Input must be a JSON object.');
+    throw new ProductCliError(
+      'CLI_INVALID_INPUT',
+      'Input must be a JSON object.',
+    );
   return value as Record<string, unknown>;
 }
 
@@ -210,14 +229,4 @@ function usage(): ProductCliError {
     'CLI_INVALID_ARGUMENTS',
     'Use: agentctl definition validate|plan|apply [work.yaml] | work create|run|watch|trace|run-definition ...',
   );
-}
-
-class ProductCliError extends Error {
-  public constructor(
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ProductCliError';
-  }
 }

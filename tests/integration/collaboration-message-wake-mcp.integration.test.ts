@@ -28,7 +28,6 @@ import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/po
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
-import { ClaimNextRun } from '../../src/application/runs/claim-next-run.js';
 import { createCollaborationRuntimeContributor } from '../../src/entrypoints/mcp/runtime-tool-contributors.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
 import { createLogger } from '../../src/shared/observability/logger.js';
@@ -86,12 +85,15 @@ async function createMessageWakeFixture() {
   const rootRun = createRun('smoke gate MCP', { now });
   await tasks.save(root);
   await runs.save(rootRun, { taskId: root.id, attempt: 1 });
-  const claimNext = new ClaimNextRun(runs, {
-    workerId: 'smoke-gate-mcp',
-    leaseDurationMs: 60_000,
-    now,
-  });
-  const rootClaim = await claimNext.execute();
+  const claim = (runId: string) =>
+    runs.claimQueuedById({
+      runId,
+      workerId: 'smoke-gate-mcp',
+      activationId: randomUUID(),
+      claimedAt: now().toISOString(),
+      leaseExpiresAt: new Date(now().getTime() + 60_000).toISOString(),
+    });
+  const rootClaim = await claim(rootRun.id);
   if (!rootClaim) throw new Error('smoke gate MCP root run was not claimable');
 
   const teamRun = createTeamRun({
@@ -144,7 +146,7 @@ async function createMessageWakeFixture() {
   await team.executions.createMemberRun(member);
   await tasks.save(leadTask);
   await runs.save(leadRun, { taskId: leadTask.id, attempt: 1 });
-  const leadClaim = await claimNext.execute();
+  const leadClaim = await claim(leadRun.id);
   if (!leadClaim) throw new Error('smoke gate MCP lead run was not claimable');
 
   const server = new RuntimeMcpServer(

@@ -187,13 +187,17 @@ export function evaluateCompletionFacts(value) {
         'pending requires-ack message M-N materializes a participant turn with message cause M-N',
         pendingWithoutWake.map((message) => `M-${message.sequence}`),
       );
+    } else {
+      fail(
+        'collaboration',
+        'acknowledged_direct_message',
+        'at least one requires-ack direct message with status acknowledged',
+        messages.map((message) => ({
+          sequence: message.sequence ?? null,
+          status: message.status ?? null,
+        })),
+      );
     }
-    fail(
-      'collaboration',
-      'acknowledged_direct_message',
-      'at least one requires-ack direct message with status acknowledged',
-      messages.map((message) => ({ sequence: message.sequence ?? null, status: message.status ?? null })),
-    );
   } else if (acknowledgedMessages.length) {
     const awakenedByMessage = acknowledgedMessages.some(isMaterializedByMessage);
     if (!awakenedByMessage) {

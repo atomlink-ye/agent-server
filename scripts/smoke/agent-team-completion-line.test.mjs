@@ -134,6 +134,7 @@ describe('agent-team smoke completion line', () => {
     projection.sessions[1].turns = [];
 
     expect(codes(projection)).toContain('pending_message_activation');
+    expect(codes(projection)).not.toContain('acknowledged_direct_message');
   });
 
   it('rejects a collaboration with no direct message', () => {
@@ -190,6 +191,39 @@ describe('agent-team smoke completion line', () => {
       taskStatus: 'active',
       failures: [],
     });
+  });
+
+  it('formats collaboration failure, assertion failure, and gate timeout distinctly', () => {
+    const collaborationProjection = successfulProjection();
+    collaborationProjection.direct_messages[0].status = 'presented';
+    const assertionProjection = successfulProjection();
+    assertionProjection.sessions[2].turns = [];
+
+    const diagnostics = [
+      formatSmokeOutcome(
+        classifySmokeOutcome({
+          taskStatus: 'completed',
+          projection: collaborationProjection,
+        }),
+      ),
+      formatSmokeOutcome(
+        classifySmokeOutcome({
+          taskStatus: 'completed',
+          projection: assertionProjection,
+        }),
+      ),
+      formatSmokeOutcome(
+        classifySmokeOutcome({
+          taskStatus: 'active',
+          projection: successfulProjection(),
+          timedOut: true,
+        }),
+      ),
+    ];
+
+    expect(diagnostics[0]).toContain('collaboration not achieved');
+    expect(diagnostics[1]).toContain('completion-line assertion failed');
+    expect(diagnostics[2]).toContain('gate timeout, not evidence of product failure');
   });
 
   it('names distinct missing facts in its diagnostic output', () => {

@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import {
+  classifySmokeOutcome,
+  formatSmokeOutcome,
+} from './agent-team-completion-line.mjs';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
@@ -98,92 +102,6 @@ function projectionSummary(value) {
         }))
       : [],
   };
-}
-
-function hasCompletionFacts(value) {
-  if (!value?.project || value.project.status !== 'succeeded') return false;
-  if (
-    value.gates?.finish_ready !== true ||
-    value.gates?.all_work_accepted !== true ||
-    value.gates?.no_active_attempts !== true ||
-    value.gates?.all_members_idle !== true
-  )
-    return false;
-  const builderWork = value.work_items?.find(
-    (item) => item.work_ref === 'work-1',
-  );
-  const work = value.work_items?.find((item) => item.work_ref === 'work-2');
-  if (
-    !Array.isArray(value.work_items) ||
-    value.work_items.length !== 2 ||
-    !builderWork ||
-    builderWork.status !== 'accepted' ||
-    builderWork.assignee_name !== 'builder' ||
-    builderWork.attempts?.length !== 1 ||
-    builderWork.attempts[0]?.attempt_no !== 1 ||
-    builderWork.attempts[0]?.status !== 'completed' ||
-    !builderWork.attempts[0]?.result_summary?.includes(
-      'AGENT_TEAM_SMOKE_BUILDER_OK',
-    ) ||
-    !work ||
-    work.status !== 'accepted' ||
-    work.assignee_name !== 'analyst'
-  )
-    return false;
-  const attempt1 = work.attempts?.find((attempt) => attempt.attempt_no === 1);
-  const attempt2 = work.attempts?.find((attempt) => attempt.attempt_no === 2);
-  if (
-    !Array.isArray(work.attempts) ||
-    work.attempts.length !== 2 ||
-    !attempt1 ||
-    !attempt2 ||
-    attempt1.status !== 'completed' ||
-    attempt2.status !== 'completed' ||
-    !attempt1.result_summary?.includes('AGENT_TEAM_SMOKE_ATTEMPT_1') ||
-    !attempt2.feedback_summary?.includes('AGENT_TEAM_SMOKE_REWORK_REQUIRED') ||
-    !attempt2.result_summary?.includes('AGENT_TEAM_SMOKE_MEMBER_OK')
-  )
-    return false;
-  const analystSession = value.sessions?.find(
-    (session) => session.name === 'analyst' && session.role === 'member',
-  );
-  const analystAvailabilityTurn = analystSession?.turns?.find(
-    (turn) =>
-      turn.kind === 'direct_message' &&
-      turn.activation?.materializer ===
-        'task_run_collaboration_activation_adapter' &&
-      turn.activation.causes?.some(
-        (cause) =>
-          cause.type === 'work_available' && cause.work_ref === 'W-2',
-      ),
-  );
-  const leadSession = value.sessions?.find(
-    (session) => session.name === 'lead' && session.role === 'lead',
-  );
-  const leadReworkReviewTurn = leadSession?.turns?.find(
-    (turn) =>
-      turn.kind === 'lead_turn' &&
-      turn.activation?.materializer ===
-        'task_run_collaboration_activation_adapter' &&
-      turn.activation.causes?.some((cause) => cause.type === 'final_review'),
-  );
-  if (!analystAvailabilityTurn || !leadReworkReviewTurn) return false;
-  const messages = value.direct_messages ?? [];
-  const analystMessage = messages.find(
-    (message) =>
-      message.sender_name === 'analyst' &&
-      message.recipient_name === 'lead' &&
-      message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
-  );
-  return (
-    messages.filter(
-      (message) =>
-        message.sender_name === 'analyst' &&
-        message.recipient_name === 'lead' &&
-        message.summary.includes('AGENT_TEAM_SMOKE_DIRECT_REQUIRES_ACK'),
-    ).length === 1 &&
-    analystMessage?.status === 'acknowledged'
-  );
 }
 
 if (!baseUrl || !token) {
@@ -325,6 +243,7 @@ let lastProjection;
 let nextProgressAt = Date.now();
 let nextRunObservationAt = Date.now();
 const observedRuns = new Map();
+let outcome;
 while (Date.now() < deadline) {
   task = await request(`/api/v1/tasks/${invoked.task_id}`);
   projection = await request(
@@ -385,8 +304,8 @@ while (Date.now() < deadline) {
     }
     nextRunObservationAt = Date.now() + progressIntervalMs;
   }
-  if (task.status === 'completed' && hasCompletionFacts(projection)) break;
-  if (['failed', 'cancelled'].includes(task.status)) break;
+  outcome = classifySmokeOutcome({ taskStatus: task.status, projection });
+  if (outcome.kind !== 'pending') break;
   await new Promise((resolve) => setTimeout(resolve, 1_000));
 }
 // Keep failure output bounded and provider-neutral while showing enough durable
@@ -412,17 +331,14 @@ async function dumpRunDiagnostics() {
   });
 }
 
-if (task?.status !== 'completed') {
-  // Diagnostics must never replace or mask the real failure.
+outcome ??= classifySmokeOutcome({
+  taskStatus: task?.status,
+  projection,
+  timedOut: true,
+});
+if (outcome.kind !== 'success') {
   await dumpRunDiagnostics().catch(() => {});
-  throw new Error(
-    `agent team smoke task did not complete: ${JSON.stringify({ task_status: task?.status ?? null, projection: projectionSummary(projection) })}`,
-  );
-}
-if (projection?.project?.status !== 'succeeded' || !hasCompletionFacts(projection)) {
-  throw new Error(
-    `agent team smoke durable Completion Line facts missing: ${JSON.stringify(projectionSummary(projection))}`,
-  );
+  throw new Error(formatSmokeOutcome(outcome));
 }
 
 const usageFields = [

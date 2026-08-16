@@ -12,12 +12,17 @@ import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-bin
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { ExecutionObservation } from '../ports/execution-plane.js';
 import type { InvokableOwnerScope } from '../ports/invokable-repository.js';
+import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import type { RunRepository, ClaimedRun } from '../ports/run-repository.js';
 import type { RuntimeSessionRepository } from '../ports/runtime-session-repository.js';
 import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type {
+  WorkRunCompositionManifest,
+  WorkRunResourceManifestRead,
+} from '../ports/work-run-resource-manifest-read.js';
 import type {
   ExecutionRuntimeService,
   ExecutionTurnOutcome,
@@ -49,6 +54,8 @@ export class AgentRunExecutor {
     private readonly runtimeCellRoot?: string,
     private readonly collaborativeExecutions?: TeamExecutionRepository,
     private readonly runs?: Pick<RunRepository, 'findByIdForOwner'>,
+    private readonly workRunManifests?: WorkRunResourceManifestRead,
+    private readonly memoryVersions?: MemoryVersionReadApi,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -89,6 +96,18 @@ export class AgentRunExecutor {
     if (task.sessionId && this.sessions && !productSession)
       throw new Error('Product Session could not be loaded.');
 
+    const workManifest = this.workRunManifests
+      ? await this.workRunManifests.findByRootTaskId(task.rootTaskId, {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        })
+      : null;
+    const compositionEnvironmentVersionId = workManifest
+      ? manifestEnvironmentVersionId(workManifest)
+      : null;
+
     const runtimeSession =
       task.sessionId && this.runtimeSessions
         ? await this.runtimeSessions.findByProductSession({
@@ -105,10 +124,17 @@ export class AgentRunExecutor {
               principalType: task.principalType,
               principalId: task.principalId,
             })
-          : null;
+          : workManifest && this.runtimeSessions
+            ? await this.runtimeSessions.findByTask({
+                taskId: task.id,
+                tenantId: task.tenantId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+              })
+            : null;
 
     if (
-      member &&
+      (member || workManifest) &&
       runtimeSession &&
       (runtimeSession.sessionBinding === null) !==
         (runtimeSession.workspaceBinding === null)
@@ -145,6 +171,7 @@ export class AgentRunExecutor {
         throw new Error('Runtime session snapshot is invalid.');
       if (
         !member &&
+        task.sessionId &&
         (commonSnapshotInvalid ||
           runtimeSession.scopeKind !== 'product_session' ||
           runtimeSession.scopeId !== task.sessionId ||
@@ -152,6 +179,17 @@ export class AgentRunExecutor {
             productSession?.environmentVersionId)
       )
         throw new Error('Product Session runtime session snapshot is invalid.');
+      if (
+        !member &&
+        !task.sessionId &&
+        workManifest &&
+        (commonSnapshotInvalid ||
+          runtimeSession.scopeKind !== 'task' ||
+          runtimeSession.scopeId !== task.id ||
+          runtimeSession.taskId !== task.id ||
+          runtimeSession.environmentVersionId !== compositionEnvironmentVersionId)
+      )
+        throw new Error('WorkRun runtime session snapshot is invalid.');
     }
 
     const priorSessionBinding = member
@@ -223,6 +261,25 @@ export class AgentRunExecutor {
           invokableVersionId,
           task,
         });
+
+    if (workManifest)
+      assertPinnedParticipantResources(
+        workManifest,
+        member?.name ?? null,
+        resolved.agentVersionId,
+        resolved.skills,
+        resolved.toolRefs,
+      );
+    const pinnedWorkMemory = workManifest
+      ? await this.loadPinnedWorkMemory(workManifest, task)
+      : null;
+    const resolvedForPrompt = pinnedWorkMemory
+      ? {
+          ...resolved,
+          turnPrompt: `${resolved.turnPrompt}\n\n${pinnedWorkMemory}`,
+        }
+      : resolved;
+
     const runtimeModelPolicy = resolveRuntimeModelPolicy(
       resolved.modelPolicyRef,
     );
@@ -255,7 +312,7 @@ export class AgentRunExecutor {
       collaborativeTeam != null && member ? domainToolRefs : resolved.toolRefs;
 
     const prompts = await this.promptContext.buildTurnPrompts({
-      resolved,
+      resolved: resolvedForPrompt,
       priorExternalSessionId,
       team: collaborativeTeam,
       member,
@@ -268,15 +325,15 @@ export class AgentRunExecutor {
       this.runtimeSessions &&
       !sessionRuntime &&
       ((task.sessionId && productSession?.environmentVersionId != null) ||
-        (member != null && collaborativeTeam != null))
+        (member != null && collaborativeTeam != null) ||
+        (!task.sessionId && !member && compositionEnvironmentVersionId != null))
     ) {
       if (!this.environments)
-        throw new Error(
-          'Product Session runtime dependencies are unavailable.',
-        );
+        throw new Error('Runtime Environment dependencies are unavailable.');
       const environmentVersionId =
         productSession?.environmentVersionId ??
-        collaborativeTeam?.environmentVersionId;
+        collaborativeTeam?.environmentVersionId ??
+        compositionEnvironmentVersionId;
       const environment = await this.environments.findVersion(
         {
           tenantId: task.tenantId,
@@ -294,7 +351,18 @@ export class AgentRunExecutor {
         spec.modelPolicyRef !== 'free-only' ||
         spec.runtimeCellPolicy !== 'per_runtime_session'
       )
-        throw new Error('Product Session environment is not supported.');
+        throw new Error('Work runtime Environment is not supported.');
+      if (workManifest) {
+        const manifestEnvironment = workManifest.entries.find(
+          (entry) => entry.resourceKind === 'environment',
+        );
+        if (
+          manifestEnvironment &&
+          (manifestEnvironment.resolvedVersionId !== environment.id ||
+            manifestEnvironment.resolvedFingerprint !== environment.fingerprint)
+        )
+          throw new Error('WorkRun Environment no longer matches its manifest.');
+      }
       sessionRuntime = task.sessionId
         ? await this.runtimeSessions.createOrGetForProductSession({
             productSessionId: task.sessionId,
@@ -320,9 +388,21 @@ export class AgentRunExecutor {
               resolvedSkills: resolved.skills,
               toolRefs: domainToolRefs,
             })
-          : null;
+          : workManifest
+            ? await this.runtimeSessions.createOrGetForTask({
+                taskId: task.id,
+                tenantId: task.tenantId,
+                principalType: task.principalType,
+                principalId: task.principalId,
+                workspaceId: task.workspaceId,
+                agentVersionId: resolved.agentVersionId,
+                environmentVersionId: environmentVersionId!,
+                resolvedSkills: resolved.skills,
+                toolRefs: runtimeToolRefs,
+              })
+            : null;
       if (!sessionRuntime)
-        throw new Error('Team member runtime session unavailable.');
+        throw new Error('Work runtime session unavailable.');
       createdRuntimeSession = true;
     }
 
@@ -341,7 +421,7 @@ export class AgentRunExecutor {
         sessionRuntime.workspaceBinding !== null
       )
         throw new Error('New Team member runtime session is already bound.');
-    } else if (createdRuntimeSession) {
+    } else if (createdRuntimeSession && task.sessionId) {
       if (
         !sessionRuntime ||
         sessionRuntime.scopeKind !== 'product_session' ||
@@ -357,6 +437,20 @@ export class AgentRunExecutor {
         throw new Error(
           'New Product Session runtime session is already bound.',
         );
+    } else if (createdRuntimeSession) {
+      if (
+        !sessionRuntime ||
+        sessionRuntime.scopeKind !== 'task' ||
+        sessionRuntime.scopeId !== task.id ||
+        sessionRuntime.taskId !== task.id ||
+        sessionRuntime.workspaceId !== task.workspaceId ||
+        sessionRuntime.agentVersionId !== task.invokableVersionId ||
+        sessionRuntime.environmentVersionId !== compositionEnvironmentVersionId ||
+        !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
+        sessionRuntime.sessionBinding !== null ||
+        sessionRuntime.workspaceBinding !== null
+      )
+        throw new Error('New WorkRun runtime session is already bound.');
     }
 
     if (member && sessionRuntime && this.collaborativeExecutions)
@@ -691,6 +785,42 @@ export class AgentRunExecutor {
     );
   }
 
+  private async loadPinnedWorkMemory(
+    manifest: WorkRunCompositionManifest,
+    task: Task,
+  ): Promise<string | null> {
+    const entries = manifest.entries.filter(
+      (entry) => entry.resourceKind === 'memory',
+    );
+    if (entries.length === 0) return null;
+    if (!this.memoryVersions)
+      throw new Error('Pinned Work Memory reader is unavailable.');
+    const sections: string[] = [];
+    let bytes = 0;
+    for (const entry of entries) {
+      const memory = await this.memoryVersions.findVersion(
+        entry.resolvedVersionId,
+        {
+          tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
+          principalType: task.principalType,
+          principalId: task.principalId,
+        },
+      );
+      if (
+        !memory ||
+        entry.resolvedFingerprint !== `sha256:${memory.contentSha256}` ||
+        entry.slot !== `memory:${memory.path}`
+      )
+        throw new Error('Pinned Work Memory no longer matches its manifest.');
+      bytes += Buffer.byteLength(memory.content, 'utf8');
+      if (bytes > 256 * 1024)
+        throw new Error('Pinned Work Memory exceeds the MVE prompt budget.');
+      sections.push(`### ${memory.path}\n${memory.content}`);
+    }
+    return `## Pinned Work Definition Memory\n\n${sections.join('\n\n')}`;
+  }
+
   private revokeGrantSafely(
     binder: RuntimeExtensionBinder,
     grantId: string,
@@ -708,6 +838,72 @@ export class AgentRunExecutor {
       }
     }
   }
+}
+
+function manifestEnvironmentVersionId(
+  manifest: WorkRunCompositionManifest,
+): string | null {
+  const entries = manifest.entries.filter(
+    (entry) => entry.resourceKind === 'environment',
+  );
+  if (entries.length > 1)
+    throw new Error('WorkRun manifest has more than one Environment.');
+  return entries[0]?.resolvedVersionId ?? null;
+}
+
+function assertPinnedParticipantResources(
+  manifest: WorkRunCompositionManifest,
+  memberName: string | null,
+  agentVersionId: string,
+  skills: readonly { readonly ref: string; readonly digest: string }[],
+  toolRefs: readonly string[],
+): void {
+  const agents = manifest.entries.filter(
+    (entry) =>
+      entry.resourceKind === 'agent' &&
+      entry.resolvedVersionId === agentVersionId &&
+      entry.slot.endsWith(':agent'),
+  );
+  const agent = memberName
+    ? agents.find((entry) => entry.slot === `participant:${memberName}:agent`)
+    : agents.length === 1
+      ? agents[0]
+      : undefined;
+  if (!agent)
+    throw new Error('Task Agent version is not authorized by the WorkRun manifest.');
+  const prefix = agent.slot.slice(0, -':agent'.length);
+  const pinnedSkills = manifest.entries
+    .filter(
+      (entry) =>
+        entry.resourceKind === 'skill' &&
+        entry.slot.startsWith(`${prefix}:skill:`),
+    )
+    .map((entry) => ({
+      ref: entry.requestedRef,
+      fingerprint: entry.resolvedFingerprint,
+    }))
+    .sort((a, b) => String(a.ref).localeCompare(String(b.ref)));
+  const currentSkills = skills
+    .map((skill) => ({
+      ref: skill.ref,
+      fingerprint: `sha256:${skill.digest}`,
+    }))
+    .sort((a, b) => a.ref.localeCompare(b.ref));
+  if (
+    JSON.stringify(pinnedSkills) !== JSON.stringify(currentSkills)
+  )
+    throw new Error('Task Skill resolution drifted from the WorkRun manifest.');
+
+  const pinnedTools = manifest.entries
+    .filter(
+      (entry) =>
+        entry.resourceKind === 'tool' &&
+        entry.slot.startsWith(`${prefix}:tool:`),
+    )
+    .map((entry) => entry.requestedRef)
+    .filter((ref): ref is string => ref !== null);
+  if (!sameToolRefs(pinnedTools, toolRefs))
+    throw new Error('Task Tool resolution drifted from the WorkRun manifest.');
 }
 
 function sameToolRefs(

@@ -1,26 +1,27 @@
 export type WorkInputProperty =
-  | Readonly<{
+  | {
       type: 'string';
       min_length?: number | undefined;
       max_length?: number | undefined;
-      enum?: readonly string[] | undefined;
-    }>
-  | Readonly<{
+      enum?: string[] | undefined;
+    }
+  | {
       type: 'number' | 'integer';
       minimum?: number | undefined;
       maximum?: number | undefined;
-    }>
-  | Readonly<{ type: 'boolean' }>;
+    }
+  | { type: 'boolean' };
 
 /**
  * Deliberately small MVE schema for Product Work input. It is JSON-Schema-like
- * but is not advertised as complete JSON Schema support.
+ * but is not advertised as complete JSON Schema support. Values returned by the
+ * normalizer are frozen at runtime; the structural type stays parser-compatible.
  */
 export interface WorkInputSchema {
-  readonly type: 'object';
-  readonly properties: Readonly<Record<string, WorkInputProperty>>;
-  readonly required: readonly string[];
-  readonly additional_properties: boolean;
+  type: 'object';
+  properties: Record<string, WorkInputProperty>;
+  required: string[];
+  additional_properties: boolean;
 }
 
 export type WorkInputSnapshot = Readonly<Record<string, unknown>>;
@@ -55,14 +56,15 @@ export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchem
           choices.some((item) => typeof item !== 'string'))
       )
         throw new Error('Work input schema string enum is invalid.');
-      properties[name] = Object.freeze({
+      properties[name] = {
         type,
         ...(min === undefined ? {} : { min_length: min }),
         ...(max === undefined ? {} : { max_length: max }),
-        ...(choices === undefined
-          ? {}
-          : { enum: Object.freeze([...choices]) }),
-      });
+        ...(choices === undefined ? {} : { enum: [...choices] }),
+      };
+      Object.freeze(properties[name]);
+      if (properties[name].type === 'string' && properties[name].enum)
+        Object.freeze(properties[name].enum);
       continue;
     }
     if (type === 'number' || type === 'integer') {
@@ -74,15 +76,17 @@ export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchem
         minimum > maximum
       )
         throw new Error('Work input schema numeric bounds are invalid.');
-      properties[name] = Object.freeze({
+      properties[name] = {
         type,
         ...(minimum === undefined ? {} : { minimum }),
         ...(maximum === undefined ? {} : { maximum }),
-      });
+      };
+      Object.freeze(properties[name]);
       continue;
     }
     if (type === 'boolean') {
-      properties[name] = Object.freeze({ type });
+      properties[name] = { type };
+      Object.freeze(properties[name]);
       continue;
     }
     throw new Error('Work input schema property type is unsupported.');
@@ -94,19 +98,25 @@ export function normalizeWorkInputSchema(value: WorkInputSchema): WorkInputSchem
   });
   if (new Set(required).size !== required.length)
     throw new Error('Work input schema required properties must be unique.');
+  Object.freeze(properties);
+  Object.freeze(required);
   return Object.freeze({
-    type: 'object',
-    properties: Object.freeze(properties),
-    required: Object.freeze(required),
+    type: 'object' as const,
+    properties,
+    required,
     additional_properties: value.additional_properties,
   });
 }
 
 export function emptyWorkInputSchema(): WorkInputSchema {
+  const properties: Record<string, WorkInputProperty> = {};
+  const required: string[] = [];
+  Object.freeze(properties);
+  Object.freeze(required);
   return Object.freeze({
     type: 'object' as const,
-    properties: Object.freeze({}),
-    required: Object.freeze([]),
+    properties,
+    required,
     additional_properties: false,
   });
 }

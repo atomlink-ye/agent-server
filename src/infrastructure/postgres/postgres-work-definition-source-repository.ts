@@ -6,6 +6,7 @@ import type {
   WorkDefinitionSourceRepository,
   WorkDefinitionVersionListPage,
 } from '../../application/ports/work-definition-source-repository.js';
+import { canonicalizeProjectValue } from '../../domain/projects/project-canonicalization.js';
 import {
   fingerprintWorkDefinitionSource,
   validateWorkDefinitionCompositionSource,
@@ -102,7 +103,10 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
     const expectedFingerprint = fingerprintWorkDefinitionSource(source);
     if (input.fingerprint !== expectedFingerprint)
       throw new Error('Work Definition source fingerprint mismatch.');
-    if ((input.authorSource === undefined) !== (input.authorFingerprint === undefined))
+    if (
+      (input.authorSource === undefined) !==
+      (input.authorFingerprint === undefined)
+    )
       throw new Error('Work Definition Product author metadata is incomplete.');
 
     await this.db.query(
@@ -121,7 +125,10 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
         input.now,
       ],
     );
-    const definition = await this.findDefinition(input.definitionId, input.owner);
+    const definition = await this.findDefinition(
+      input.definitionId,
+      input.owner,
+    );
     if (
       !definition ||
       definition.name !== input.name ||
@@ -145,17 +152,23 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
         input.owner.principalId,
         JSON.stringify(source),
         input.fingerprint,
-        input.authorSource === undefined ? null : JSON.stringify(input.authorSource),
+        input.authorSource === undefined
+          ? null
+          : JSON.stringify(input.authorSource),
         input.authorFingerprint ?? null,
         input.now,
       ],
     );
-    const version = await this.findPublishedVersion(input.versionId, input.owner);
+    const version = await this.findPublishedVersion(
+      input.versionId,
+      input.owner,
+    );
     if (
       !version ||
       version.definitionId !== input.definitionId ||
       version.fingerprint !== input.fingerprint ||
-      JSON.stringify(version.source) !== JSON.stringify(source)
+      canonicalizeProjectValue(version.source) !==
+        canonicalizeProjectValue(source)
     )
       throw new Error('Work Definition source version conflict.');
     if (input.authorFingerprint !== undefined) {
@@ -163,7 +176,8 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       if (
         !product ||
         product.authorFingerprint !== input.authorFingerprint ||
-        JSON.stringify(product.authorSource) !== JSON.stringify(input.authorSource)
+        canonicalizeProjectValue(product.authorSource) !==
+          canonicalizeProjectValue(input.authorSource)
       )
         throw new Error('Work Definition Product source version conflict.');
     }
@@ -246,7 +260,10 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       items,
       nextCursor:
         hasMore && last
-          ? encodeCursor({ createdAt: last.version.createdAt, id: last.version.id })
+          ? encodeCursor({
+              createdAt: last.version.createdAt,
+              id: last.version.id,
+            })
           : null,
     };
   }
@@ -257,7 +274,10 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
     readonly resolvedFingerprint: string;
     readonly now: string;
   }): Promise<string> {
-    const version = await this.findPublishedVersion(input.versionId, input.owner);
+    const version = await this.findPublishedVersion(
+      input.versionId,
+      input.owner,
+    );
     if (!version) throw new Error('Work Definition version not found.');
     await this.db.query(
       `INSERT INTO work_definition_version_resolutions
@@ -395,7 +415,9 @@ function mapVersion(row: VersionRow): WorkDefinitionSourceVersion {
   };
 }
 
-function mapProductVersion(row: ProductVersionRow): ProductWorkDefinitionVersionRecord {
+function mapProductVersion(
+  row: ProductVersionRow,
+): ProductWorkDefinitionVersionRecord {
   if (!row.author_source || !row.author_fingerprint)
     throw new Error('Work Definition version is not Product-authored.');
   return {
@@ -406,7 +428,9 @@ function mapProductVersion(row: ProductVersionRow): ProductWorkDefinitionVersion
   };
 }
 
-function mapApplyRequest(row: ApplyRequestRow): WorkDefinitionApplyRequestRecord {
+function mapApplyRequest(
+  row: ApplyRequestRow,
+): WorkDefinitionApplyRequestRecord {
   return {
     idempotencyKey: row.idempotency_key,
     requestFingerprint: row.request_fingerprint,
@@ -417,7 +441,10 @@ function mapApplyRequest(row: ApplyRequestRow): WorkDefinitionApplyRequestRecord
   };
 }
 
-function ownerValues(id: string, owner: WorkDefinitionSourceOwner): readonly unknown[] {
+function ownerValues(
+  id: string,
+  owner: WorkDefinitionSourceOwner,
+): readonly unknown[] {
   return [
     id,
     owner.tenantId,
@@ -427,13 +454,21 @@ function ownerValues(id: string, owner: WorkDefinitionSourceOwner): readonly unk
   ];
 }
 
-function encodeCursor(value: { readonly createdAt: string; readonly id: string }): string {
+function encodeCursor(value: {
+  readonly createdAt: string;
+  readonly id: string;
+}): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }
 
-function decodeCursor(value: string): { readonly createdAt: string; readonly id: string } {
+function decodeCursor(value: string): {
+  readonly createdAt: string;
+  readonly id: string;
+} {
   try {
-    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
+    const parsed = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    ) as {
       createdAt?: unknown;
       id?: unknown;
     };

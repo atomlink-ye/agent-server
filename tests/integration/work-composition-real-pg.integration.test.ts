@@ -400,7 +400,7 @@ describe('Composition-first Work on real PostgreSQL', () => {
       `INSERT INTO team_messages
        (id,team_run_id,tenant_id,workspace_id,principal_type,principal_id,sequence,
         sender_member_run_id,recipient_member_run_id,kind,dedup_key,body,status,created_at)
-       VALUES($1,$2,$3,$4,$5,$6,1,NULL,$7,'wake','system-claim','claimed_work','consumed',$8)`,
+       VALUES($1,$2,$3,$4,$5,$6,1,NULL,$7,'wake','system-claim','claimed_work','queued',$8)`,
       [
         messageId,
         teamRunId,

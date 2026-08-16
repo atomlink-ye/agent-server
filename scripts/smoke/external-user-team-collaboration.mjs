@@ -229,7 +229,7 @@ async function durableFacts(pool, rootTaskId) {
               a.attempt_no, a.status AS attempt_status, a.result_summary, a.feedback
          FROM team_work_items w
          LEFT JOIN team_work_item_attempts a ON a.work_item_id=w.id
-         LEFT JOIN team_member_runs assignee ON assignee.id=w.assignee_member_run_id
+         LEFT JOIN team_member_runs assignee ON assignee.id=a.assignee_member_id
         WHERE w.team_run_id=$1
         ORDER BY w.work_ref, a.attempt_no`,
       [teamRun.id],
@@ -285,9 +285,11 @@ function assertDurableFacts(facts) {
   ) {
     throw new Error(`structured activation causes missing: ${JSON.stringify(facts.activations)}`);
   }
-  const attempts = facts.work.filter((row) => row.work_ref === 'W-1');
+  const attempts = facts.work;
+  const workRefs = new Set(attempts.map((row) => row.work_ref));
   if (
     attempts.length !== 2 ||
+    workRefs.size !== 1 ||
     attempts[0]?.status !== 'accepted' ||
     attempts[0]?.assignee_role !== 'member' ||
     attempts[0]?.attempt_no !== 1 ||

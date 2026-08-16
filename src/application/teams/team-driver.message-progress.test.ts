@@ -104,7 +104,10 @@ describe('TeamDriver direct-message progress', () => {
       {} as never,
       {} as never,
       {} as never,
-      { listDirectForTeamRun },
+      {
+        listDirectForTeamRun,
+        requeueDirectForFailedTask: vi.fn(async () => []),
+      },
       { reconcileForRootTask },
       now,
     );

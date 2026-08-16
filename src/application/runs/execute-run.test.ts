@@ -676,6 +676,7 @@ describe('ExecuteRun', () => {
       {} as never,
       {
         requeueDirectForFailedTask,
+        listDirectForTeamRun: vi.fn(async () => []),
       },
       { reconcileForRootTask },
       now,

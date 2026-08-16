@@ -132,10 +132,6 @@ export class StartWorkRun {
         owner,
         now: this.now().toISOString(),
       });
-      // The current durable repository permits a manifest only after root Task
-      // binding. The Task itself is admitted from the already-resolved immutable
-      // definition, and retries converge on this exact manifest.
-      await this.recordResolvedManifest(bound, owner, resolved);
       return {
         workRun: bound,
         executionReceipt: { reused: receipt.reused, taskId: receipt.taskId },

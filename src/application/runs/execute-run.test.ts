@@ -378,13 +378,23 @@ describe('ExecuteRun', () => {
     });
     const getTeamMemberGrant = vi.fn(() => ({
       grantId: 'grant-1',
-      runId: 'prior-run-id',
+      activeTurn: null,
       allowedTools: [],
       catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const refreshForTeamMember = vi.fn(() => ({
       grantId: 'grant-1',
-      runId: claim.run.id,
+      activeTurn: {
+        taskId: task.id,
+        runId: claim.run.id,
+        contextEpoch: 'epoch-1',
+      },
+      allowedTools: [],
+      catalogTools: collaborationToolRefsForRole('lead'),
+    }));
+    const closeTeamMemberTurn = vi.fn(() => ({
+      grantId: 'grant-1',
+      activeTurn: null,
       allowedTools: [],
       catalogTools: collaborationToolRefsForRole('lead'),
     }));
@@ -428,6 +438,7 @@ describe('ExecuteRun', () => {
         bind: vi.fn(),
         getTeamMemberGrant,
         refreshForTeamMember,
+        closeTeamMemberTurn,
         activeToolCalls,
         revoke: vi.fn(),
       } as never,
@@ -1271,7 +1282,7 @@ describe('ExecuteRun', () => {
     const fixture = createLeadRuntimeFixture();
     const timeout = new (RuntimeTimedOutError as typeof RuntimeTimedOutError)();
     vi.mocked(fixture.runtime.executeTurn).mockRejectedValue(timeout);
-    fixture.binder.refreshForTeamMember.mockImplementation(() => {
+    fixture.binder.closeTeamMemberTurn.mockImplementation(() => {
       throw new Error('narrowing failed');
     });
     fixture.binder.revoke.mockImplementation(() => {
@@ -1692,7 +1703,7 @@ function createLeadRuntimeFixture() {
   });
   const grant = {
     grantId: 'grant-1',
-    runId: undefined,
+    activeTurn: null,
     allowedTools: collaborationToolRefsForRole('lead'),
     catalogTools: collaborationToolRefsForRole('lead'),
   };
@@ -1700,6 +1711,7 @@ function createLeadRuntimeFixture() {
     bind: vi.fn(async () => ({})),
     getTeamMemberGrant: vi.fn(() => grant),
     refreshForTeamMember: vi.fn(() => ({ ...grant, allowedTools: [] })),
+    closeTeamMemberTurn: vi.fn(() => ({ ...grant, activeTurn: null })),
     activeToolCalls: vi.fn(() => 0),
     revoke: vi.fn(),
   };

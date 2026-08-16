@@ -198,27 +198,7 @@ describe('canonical smoke direct-message wake mutation', () => {
   it('creates a durable pending requires-ack message through MCP before wake materialization', async () => {
     const fixture = await createMessageWakeFixture();
     try {
-      let leadContext;
-      try {
-        leadContext = await fixture.team.contextResolver.resolve(fixture.grant);
-      } catch (error) {
-        const task = await fixture.tasks.findByIdForOwner(
-          fixture.leadTask.id,
-          owner,
-        );
-        const run = await fixture.runs.findByIdForOwner(
-          fixture.leadClaim.run.id,
-          owner,
-        );
-        throw new Error(
-          `MCP fixture context is stale before message_send: ${JSON.stringify({
-            code: (error as { code?: string }).code ?? null,
-            task,
-            run,
-            grant: fixture.grant,
-          })}`,
-        );
-      }
+      await fixture.team.contextResolver.resolve(fixture.grant);
       const sent = await fixture.client.callTool({
         name: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
         arguments: {
@@ -244,88 +224,6 @@ describe('canonical smoke direct-message wake mutation', () => {
           `MCP message_send did not produce the expected durable projection: ${JSON.stringify({
             sent,
             direct_messages: projection?.directMessages ?? [],
-            resolved_context: {
-              team_revision: leadContext.teamRun.revision,
-              task_id: leadContext.task.id,
-              run_id: leadContext.run.id,
-            },
-            team: (
-              await fixture.database.query(
-                `SELECT status, revision FROM team_runs WHERE id = $1`,
-                [fixture.teamRun.id],
-              )
-            ).rows,
-            source: (
-              await fixture.database.query(
-                `SELECT t.status AS task_status, r.status AS run_status,
-                        t.root_task_id, t.team_member_run_id, t.team_task_kind
-                   FROM tasks t JOIN runs r ON r.id = $2
-                  WHERE t.id = $1`,
-                [fixture.leadTask.id, fixture.leadClaim.run.id],
-              )
-            ).rows,
-            source_precondition: (
-              await fixture.database.query(
-                `SELECT 1
-                   FROM tasks t JOIN runs r ON r.id = $2
-                  WHERE t.id = $1
-                    AND t.root_task_id = $3
-                    AND t.team_member_run_id = $4
-                    AND t.team_task_kind IN ('lead_turn', 'work_attempt', 'direct_message')
-                    AND t.status NOT IN ('completed', 'failed', 'cancelled')
-                    AND r.task_id = t.id
-                    AND r.status NOT IN ('succeeded', 'failed', 'timed_out', 'cancelled')
-                    AND t.tenant_id = $5
-                    AND t.workspace_id = $6
-                    AND t.principal_type = $7
-                    AND t.principal_id = $8`,
-                [
-                  fixture.leadTask.id,
-                  fixture.leadClaim.run.id,
-                  fixture.root.id,
-                  fixture.grant.teamMemberRunId,
-                  owner.tenantId,
-                  owner.workspaceId,
-                  owner.principalType,
-                  owner.principalId,
-                ],
-              )
-            ).rows,
-            source_locked: (
-              await fixture.database.query(
-                `SELECT 1
-                   FROM tasks t JOIN runs r ON r.id = $2
-                  WHERE t.id = $1
-                    AND t.root_task_id = $3
-                    AND t.team_member_run_id = $4
-                    AND t.team_task_kind IN ('lead_turn', 'work_attempt', 'direct_message')
-                    AND t.status NOT IN ('completed', 'failed', 'cancelled')
-                    AND r.task_id = t.id
-                    AND r.status NOT IN ('succeeded', 'failed', 'timed_out', 'cancelled')
-                    AND t.tenant_id = $5
-                    AND t.workspace_id = $6
-                    AND t.principal_type = $7
-                    AND t.principal_id = $8
-                  FOR SHARE`,
-                [
-                  fixture.leadTask.id,
-                  fixture.leadClaim.run.id,
-                  fixture.root.id,
-                  fixture.grant.teamMemberRunId,
-                  owner.tenantId,
-                  owner.workspaceId,
-                  owner.principalType,
-                  owner.principalId,
-                ],
-              )
-            ).rows,
-            members: (
-              await fixture.database.query(
-                `SELECT name, status FROM team_member_runs
-                  WHERE team_run_id = $1 ORDER BY name`,
-                [fixture.teamRun.id],
-              )
-            ).rows,
           })}`,
         );
 

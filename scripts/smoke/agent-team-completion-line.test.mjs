@@ -126,6 +126,15 @@ describe('agent-team smoke completion line', () => {
     expect(codes(projection)).toContain('message_activation');
   });
 
+  it('rejects a durable acknowledged message whose activation belongs to another message', () => {
+    const projection = successfulProjection();
+    projection.sessions[1].turns[0].activation.causes = [
+      { type: 'message', message_ref: 'M-99' },
+    ];
+
+    expect(codes(projection)).toContain('message_activation');
+  });
+
   it('rejects a collaboration with no acknowledged direct message', () => {
     const projection = successfulProjection();
     projection.direct_messages = [];

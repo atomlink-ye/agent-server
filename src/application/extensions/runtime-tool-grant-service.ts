@@ -6,13 +6,9 @@ import {
 } from 'node:crypto';
 import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
   SUPPORTED_MANAGED_AGENT_TOOL_REFS,
 } from '../agents/built-in-skills.js';
-export {
-  AGENT_SERVER_MEMORY_READ_TOOL_REF,
-  AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS,
-} from '../agents/built-in-skills.js';
+export { AGENT_SERVER_MEMORY_READ_TOOL_REF } from '../agents/built-in-skills.js';
 export const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
 
 export type RuntimeToolGrant = Readonly<{

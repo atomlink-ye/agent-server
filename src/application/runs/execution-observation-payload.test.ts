@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
+import {
+  AGENT_SERVER_COLLABORATION_MCP_NAMES,
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+} from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 
 describe('executionObservationPayload', () => {
@@ -43,20 +46,20 @@ describe('executionObservationPayload', () => {
     ).not.toHaveProperty('tool_name');
   });
 
-  it('publishes canonical Team MCP identity only when the server-authorized catalog proves it', () => {
+  it('publishes collaboration MCP identity only when the authorized catalog proves it', () => {
     const context = {
       isTeamMember: true,
-      runtimeToolRefs: [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend],
-      catalogTools: [AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.messageSend],
+      runtimeToolRefs: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
+      catalogTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
     } as const;
     const observation = {
       kind: 'tool_updated',
       activityId: 'activity-2',
       category: 'other',
       status: 'completed',
-      label: 'Team message',
+      label: 'Collaboration message',
       summary: 'Message.',
-      toolName: 'agent-server_team_message_send',
+      toolName: `agent-server_${AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend}`,
       resultObserved: true,
       provider: 'opencode',
     } as const;
@@ -65,7 +68,7 @@ describe('executionObservationPayload', () => {
       expect.objectContaining({
         kind: 'tool_status',
         activity_id: 'activity-2',
-        provenance: 'server_authorized_team_mcp_catalog',
+        provenance: 'server_authorized_collaboration_mcp_catalog',
         tool_identity_capture_status: 'present',
         response_observed: true,
       }),

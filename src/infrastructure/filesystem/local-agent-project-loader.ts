@@ -49,7 +49,7 @@ import { isSafeNativeRef } from '../../domain/projects/safe-ref.js';
 import { renderProjectTeam } from '../../application/projects/render-project-team.js';
 import { ProjectTeamRenderError } from '../../application/projects/render-project-team.js';
 import { TeamPackageValidationError } from '../../domain/teams/managed-team-package.js';
-import { canonicalTeamToolRefsForRole } from '../../domain/teams/canonical-team-role-tools.js';
+import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { AgentProjectSectionEntry } from '../../domain/projects/agent-project.js';
 
 export class LocalAgentProjectLoaderError extends Error {
@@ -870,7 +870,7 @@ function builtinToolProfile(
     kind: 'LocalToolProfile',
     metadata: { name },
     spec: {
-      tools: canonicalTeamToolRefsForRole(role).map((ref) => ({
+      tools: collaborationToolRefsForRole(role).map((ref) => ({
         ref,
         kind: 'tool',
       })),

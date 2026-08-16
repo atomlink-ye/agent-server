@@ -1,14 +1,13 @@
 import type { Pool } from 'pg';
 
+import { CollaborationActivationReconciler } from '../../application/collaboration/collaboration-activation-reconciler.js';
 import { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
 import type { AdmissionRepository } from '../../application/ports/admission-repository.js';
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { RunRepository } from '../../application/ports/run-repository.js';
 import type { TaskRepository } from '../../application/ports/task-repository.js';
-import { TeamCommandService } from '../../application/teams/team-command-service.js';
 import { TeamPolicyEvaluator } from '../../application/teams/team-policy-evaluator.js';
 import { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
-import { TeamWakeReconciler } from '../../application/teams/team-wake-reconciler.js';
 import { PostgresCollaborationRepository } from '../../infrastructure/postgres/postgres-collaboration-repository.js';
 import { PostgresTeamExecutionRepository } from '../../infrastructure/postgres/postgres-collaborative-team-repository.js';
 import { PostgresTeamMessageRepository } from '../../infrastructure/postgres/postgres-team-message-repository.js';
@@ -21,6 +20,7 @@ export function createTeamModule(options: {
   readonly admissions: AdmissionRepository;
   readonly events: RunEventRepository;
   readonly logger: Logger;
+  readonly deferActivationKick?: boolean;
 }) {
   const collaborationRepository = new PostgresCollaborationRepository(
     options.database,
@@ -28,10 +28,18 @@ export function createTeamModule(options: {
   const executions = Object.assign(
     new PostgresTeamExecutionRepository(options.database),
     {
-      listCollaborationCheckpoints: (teamRunId: string, owner: Parameters<PostgresCollaborationRepository['listCheckpoints']>[1]) =>
-        collaborationRepository.listCheckpoints(teamRunId, owner),
-      listCollaborationSubmissions: (teamRunId: string, owner: Parameters<PostgresCollaborationRepository['listSubmissions']>[1]) =>
-        collaborationRepository.listSubmissions(teamRunId, owner),
+      listCollaborationCheckpoints: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listCheckpoints']
+        >[1],
+      ) => collaborationRepository.listCheckpoints(teamRunId, owner),
+      listCollaborationSubmissions: (
+        teamRunId: string,
+        owner: Parameters<
+          PostgresCollaborationRepository['listSubmissions']
+        >[1],
+      ) => collaborationRepository.listSubmissions(teamRunId, owner),
     },
   );
   const messages = new PostgresTeamMessageRepository(options.database);
@@ -42,12 +50,11 @@ export function createTeamModule(options: {
     options.runs,
     policy,
   );
-  const wakeReconciler = new TeamWakeReconciler(
+  const activationReconciler = new CollaborationActivationReconciler(
     messages,
     executions,
     options.tasks,
     options.admissions,
-    undefined,
     options.logger,
   );
   const collaboration = new CollaborationKernel(
@@ -55,19 +62,7 @@ export function createTeamModule(options: {
     collaborationRepository,
     messages,
     options.events,
-    wakeReconciler,
-  );
-  // `bootstrap.ts` still passes the pre-refactor command surface to the MCP
-  // composition root. Carry the new kernel on that object only as a temporary
-  // cutover seam; both old aliases and new MCP names execute one kernel.
-  const commands = Object.assign(
-    new TeamCommandService(
-      executions,
-      options.events,
-      messages,
-      wakeReconciler,
-    ),
-    { collaboration },
+    options.deferActivationKick ? undefined : activationReconciler,
   );
 
   return {
@@ -76,8 +71,7 @@ export function createTeamModule(options: {
     collaborationRepository,
     policy,
     contextResolver,
-    wakeReconciler,
-    commands,
+    activationReconciler,
     collaboration,
   } as const;
 }

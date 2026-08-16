@@ -32,14 +32,83 @@ canonicalizing native packages; a wrong explicit value remains invalid.
 
 The reserved `tool-profile://team-lead` and
 `tool-profile://team-member` refs expand to the canonical tools for those
-roles. They are materialized only when an Agent explicitly includes the ref,
-so shortening a declaration never grants tools implicitly. Reserved profiles
-cannot be overridden by project tool-profile entries.
+roles in the AgentProject declaration. Reserved profiles cannot be overridden
+by project tool-profile entries. The effective Team collaboration grant has a
+separate role/turn-policy rule; see [Agent-facing collaboration tools](#agent-facing-collaboration-tools).
 
 The `toolProfiles`, `skills`, and `memoryStores` manifest sections may be
 omitted when empty; omission normalizes to `{}` and grants no tool or skill.
 Agent `completion.command`, input schema/prompt, instructions, and declared
 resource bindings remain explicit author intent.
+
+## Agent-facing collaboration tools
+
+Collaboration commands are MCP tools for the Agents in a Team, not public HTTP
+commands for a Team owner. The HTTP routes in [Reads](#reads) are projections
+for the owner to inspect; they intentionally do not include equivalents of
+`message_send`, `board_claim`, or `board_request_changes`.
+
+List the canonical refs below in `spec.tools` so an author can discover and
+declare the collaboration vocabulary. However, for a Team Run the current
+runtime derives the effective collaboration catalog and per-turn allowed tools
+from the participant role and turn policy. Canonical collaboration refs in
+`spec.tools` therefore are **not an access-control or capability boundary**:
+omitting one must not be relied on to withhold it, and declaring one does not
+by itself determine when it is usable. This is an implementation constraint,
+not a recommendation; applications that need a strict tool boundary must not
+infer it from these declarations.
+
+| Group | Canonical tool ref | MCP name |
+| --- | --- | --- |
+| Read | `agent-server/collaboration-state` | `collaboration_state` |
+| Read | `agent-server/board-list` | `board_list` |
+| Board mutation | `agent-server/board-create` | `board_create` |
+| Board mutation | `agent-server/board-assign` | `board_assign` |
+| Board mutation | `agent-server/board-claim` | `board_claim` |
+| Board mutation | `agent-server/board-checkpoint` | `board_checkpoint` |
+| Board mutation | `agent-server/board-block` | `board_block` |
+| Board mutation | `agent-server/board-submit` | `board_submit` |
+| Board mutation | `agent-server/board-accept` | `board_accept` |
+| Board mutation | `agent-server/board-request-changes` | `board_request_changes` |
+| Board mutation | `agent-server/board-cancel` | `board_cancel` |
+| Mailbox | `agent-server/inbox-list` | `inbox_list` |
+| Mailbox | `agent-server/message-send` | `message_send` |
+| Mailbox | `agent-server/message-ack` | `message_ack` |
+| Run | `agent-server/collaboration-finish` | `collaboration_finish` |
+
+The lead role's runtime policy derives board read/create/assign/review/cancel,
+mailbox read/send/ack, and run-finalize capabilities as applicable to its
+turn. The member policy derives board read/claim/checkpoint/block/submit and
+mailbox read/send/ack. In particular, a member does **not** receive
+`board.create`: only the lead can create Work. The
+`tool-profile://team-lead` and `tool-profile://team-member` profiles remain
+convenient declaration shortcuts; they do not turn the declaration into a
+runtime capability boundary.
+
+For example, a minimal Agent package can declare the collaboration vocabulary
+for a member that needs to inspect state, list Work, and send an addressed
+message. Its effective availability still follows the Team role and turn
+policy described above:
+
+```yaml
+spec:
+  tools:
+    - ref: agent-server/collaboration-state
+      kind: tool
+    - ref: agent-server/board-list
+      kind: tool
+    - ref: agent-server/message-send
+      kind: tool
+```
+
+For local integration work, `pnpm dev` starts the `core` profile and is not the
+Agent Team runtime/API process to target. Start the runtime profile with
+`pnpm dev:runtime` (or `pnpm local-env up runtime`) and inspect its connection
+metadata with `pnpm local-env info`. For an isolated command, use
+`pnpm local-env run runtime -- <command>`; that shared environment wrapper
+supplies `AGENT_SERVER_BASE_URL` and `AGENT_SERVER_SERVICE_TOKEN` to the
+command. Do not copy those connection values into an Agent package or source
+file.
 
 `agentctl` authoring failures emit an error `code`, resource-qualified `path`,
 and usable `message`. Native package and project-reference validation retain

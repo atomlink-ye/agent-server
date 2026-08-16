@@ -199,21 +199,21 @@ metadata:
   name: smoke-lead
 spec:
   description: Canonical Agent Team smoke role
-  instructions: 'Act as Team Lead using only canonical Team tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call team_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
+  instructions: 'Act as Team Lead using only canonical Team tools. Use board_list to read the board first. If no Work exists, use board_create to create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, use board_accept to accept it. When every Work is accepted and no active attempt remains, call collaboration_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
   runtime:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
   tools:
-    - ref: agent-server/team-state
+    - ref: agent-server/collaboration-state
       kind: tool
-    - ref: agent-server/team-work-list
+    - ref: agent-server/board-list
       kind: tool
-    - ref: agent-server/team-work-create
+    - ref: agent-server/board-create
       kind: tool
-    - ref: agent-server/team-work-accept-v2
+    - ref: agent-server/board-accept
       kind: tool
-    - ref: agent-server/team-finish
+    - ref: agent-server/collaboration-finish
       kind: tool
   skills: []
   input:
@@ -243,17 +243,17 @@ metadata:
   name: smoke-analyst
 spec:
   description: Canonical Agent Team smoke role
-  instructions: 'Act as the assigned Team member using canonical Team tools. Read the board, locate your active Work, and submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.'
+  instructions: 'Act as the assigned Team member using canonical Team tools. Use board_list to read the board, locate your active Work, and use board_submit to submit it exactly once with result summary AGENT_TEAM_SMOKE_MEMBER_OK. Do not create Work, accept Work, finish the Team, use provider subagents, or emit unrelated prose.'
   runtime:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
   tools:
-    - ref: agent-server/team-state
+    - ref: agent-server/collaboration-state
       kind: tool
-    - ref: agent-server/team-work-list
+    - ref: agent-server/board-list
       kind: tool
-    - ref: agent-server/team-work-submit
+    - ref: agent-server/board-submit
       kind: tool
   skills: []
   input:

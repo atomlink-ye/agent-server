@@ -3,6 +3,7 @@ import type {
   TeamExecutionRepository,
 } from '../ports/team-execution-repository.js';
 import type { TeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
+import type { CollaborationActivationCause } from '../../domain/collaboration/collaboration.js';
 import { isTeamCompletionApprovalPending } from './team-policy-evaluator.js';
 import type { TeamMessageRepository } from '../ports/team-message-repository.js';
 import type { TaskRecord, TaskRepository } from '../ports/task-repository.js';
@@ -74,6 +75,10 @@ export interface AgenticTeamProject {
       readonly runId: string;
       readonly sequence: number;
       readonly kind: 'lead_turn' | 'work_attempt' | 'direct_message';
+      readonly activation: {
+        readonly materializer: 'task_run_collaboration_activation_adapter';
+        readonly causes: readonly CollaborationActivationCause[];
+      } | null;
       readonly status: 'queued' | 'running' | 'completed' | 'failed';
       readonly context: string;
       readonly resultText: string | null;
@@ -291,6 +296,12 @@ export class ProjectAgenticTeam {
                 runId: run.runId,
                 sequence: record.task.teamSequence ?? index + 1,
                 kind: record.task.teamTaskKind!,
+                activation: record.task.teamActivation
+                  ? {
+                      materializer: record.task.teamActivation.materializer,
+                      causes: record.task.teamActivation.causes,
+                    }
+                  : null,
                 status: mapTurnStatus(run.status),
                 context: contextFor(
                   record,

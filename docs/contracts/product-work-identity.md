@@ -64,7 +64,7 @@ run_id
 
 ## 4. Decision 捕获语义
 
-本周期的裁决：**autonomous Decision 的持久捕获延后**，不修改 `team_finish` 的写入路径。
+本周期的裁决：**autonomous Decision 的持久捕获延后**，不修改 `collaboration_finish` 的写入路径。
 
 产品契约仍然必须包含下面这个类型，因为「没有捕获能力」与「捕获到了空集」是两件事：
 

@@ -209,6 +209,23 @@ export const AgenticTeamProjectTurnSchema = z
     run_id: uuid,
     sequence: z.number().int(),
     kind: z.enum(['lead_turn', 'work_attempt', 'direct_message']),
+    activation: z
+      .object({
+        materializer: z.literal('task_run_collaboration_activation_adapter'),
+        causes: z.array(
+          z.discriminatedUnion('type', [
+            z.object({ type: z.literal('assignment'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('claim'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('message'), message_ref: z.string() }).strict(),
+            z.object({ type: z.literal('feedback'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('dependency_unblocked'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('final_review') }).strict(),
+            z.object({ type: z.literal('work_available'), work_ref: z.string() }).strict(),
+          ]),
+        ),
+      })
+      .strict()
+      .nullable(),
     status: z.enum(['queued', 'running', 'completed', 'failed']),
     context: z.string(),
     result_text: z.string().nullable(),

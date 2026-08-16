@@ -27,7 +27,7 @@ import { encodeRootTaskRunRequestSnapshotRef } from '../tasks/root-task-input.js
 import { CompleteRun } from './complete-run.js';
 import { ExecuteRun } from './execute-run.js';
 import { FakeAgentRuntime } from '../../../tests/fixtures/fake-agent-runtime.js';
-import { canonicalTeamToolRefsForRole } from '../teams/team-policy-evaluator.js';
+import { collaborationToolRefsForRole } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import {
   createRuntimeExecutionReceipt,
@@ -380,13 +380,13 @@ describe('ExecuteRun', () => {
       grantId: 'grant-1',
       runId: 'prior-run-id',
       allowedTools: [],
-      catalogTools: canonicalTeamToolRefsForRole('lead'),
+      catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const refreshForTeamMember = vi.fn(() => ({
       grantId: 'grant-1',
       runId: claim.run.id,
       allowedTools: [],
-      catalogTools: canonicalTeamToolRefsForRole('lead'),
+      catalogTools: collaborationToolRefsForRole('lead'),
     }));
     const activeToolCalls = vi.fn(() => 0);
     const runtime = createRuntimeWithCandidates('agent-prior');
@@ -443,7 +443,7 @@ describe('ExecuteRun', () => {
           agentVersionId: task.invokableVersionId,
           environmentVersionId: team.environmentVersionId,
           resolvedSkills: [],
-          toolRefs: canonicalTeamToolRefsForRole('lead'),
+          toolRefs: collaborationToolRefsForRole('lead'),
           workspaceBinding: {
             plane: 'paseo',
             externalWorkspaceId: 'workspace-provider-1',
@@ -596,33 +596,6 @@ describe('ExecuteRun', () => {
     });
     expect(failTeamRunAtomically).not.toHaveBeenCalled();
 
-    await (
-      driver as unknown as {
-        scheduleLead: (
-          team: TeamRun,
-          parent: Task,
-          owner: {
-            tenantId: string;
-            workspaceId: string;
-            principalType: string;
-            principalId: string;
-          },
-          prompt: string,
-        ) => Promise<void>;
-      }
-    ).scheduleLead(
-      team,
-      leadTask(4),
-      {
-        tenantId: team.tenantId,
-        workspaceId: team.workspaceId,
-        principalType: team.principalType,
-        principalId: team.principalId,
-      },
-      'late callback scheduling',
-    );
-    expect(failTeamRunAtomically).not.toHaveBeenCalled();
-
     await driver.handleTerminalRun({
       team,
       task: leadTask(4),
@@ -693,6 +666,7 @@ describe('ExecuteRun', () => {
       {} as never,
       {
         requeueDirectForFailedTask,
+        listDirectForTeamRun: vi.fn(async () => []),
       },
       { reconcileForRootTask },
       now,
@@ -729,8 +703,18 @@ describe('ExecuteRun', () => {
     expect(advanceAgenticLead).not.toHaveBeenCalled();
     expect(lateFailTeamRunAtomically).not.toHaveBeenCalled();
     expect(requeueDirectForFailedTask).not.toHaveBeenCalled();
-    expect(reconcileForRootTask).not.toHaveBeenCalled();
+    expect(reconcileForRootTask).toHaveBeenCalledWith(
+      team.rootTaskId,
+      expect.objectContaining({
+        tenantId: team.tenantId,
+        workspaceId: team.workspaceId,
+        principalType: team.principalType,
+        principalId: team.principalId,
+      }),
+      { parentTask: lateDirectTask },
+    );
 
+    reconcileForRootTask.mockClear();
     await lateCallbackDriver.handleTerminalRun({
       team: lateCallbackTeam,
       task: lateDirectTask,
@@ -754,6 +738,7 @@ describe('ExecuteRun', () => {
         principalType: team.principalType,
         principalId: team.principalId,
       }),
+      { parentTask: lateDirectTask },
     );
   });
 
@@ -899,146 +884,6 @@ describe('ExecuteRun', () => {
         workspaceId: team.workspaceId,
       }),
     );
-  });
-
-  it('atomically admits a scheduled Lead turn through the transaction-scoped Team repository', async () => {
-    const now = () => new Date('2026-07-23T00:00:00.000Z');
-    const parent = createTask();
-    const team = {
-      ...createTeamRun({
-        id: 'team-schedule-atomic',
-        tenantId: parent.tenantId,
-        workspaceId: parent.workspaceId,
-        principalType: parent.principalType,
-        principalId: parent.principalId,
-        rootTaskId: parent.rootTaskId,
-        rootRunId: 'root-run-schedule-atomic',
-        teamVersionId: 'team-version-1',
-        environmentVersionId: 'environment-version-1',
-        initialLeadTurn: true,
-        now,
-      }),
-      controlState: 'lead_ready' as const,
-      leadTurnCount: 1,
-      revision: 3,
-    };
-    const owner = {
-      tenantId: team.tenantId,
-      workspaceId: team.workspaceId,
-      principalType: team.principalType,
-      principalId: team.principalId,
-    };
-    const lead = createTeamMemberRun({
-      id: 'lead-schedule-atomic',
-      teamRunId: team.id,
-      name: 'lead',
-      role: 'lead',
-      agentVersionId: RUN_API_COMPATIBILITY_INVOKABLE_VERSION_ID,
-      ...owner,
-      now,
-    });
-    const next = {
-      ...team,
-      controlState: 'lead_running' as const,
-      leadTurnCount: 2,
-      revision: 4,
-    };
-    let failDispatch = true;
-    let committedControlState: 'lead_ready' | 'lead_running' =
-      team.controlState;
-    const outerAdvance = vi.fn();
-    const txAdvance = vi.fn(async () => {
-      if (committedControlState === 'lead_running')
-        throw new TeamExecutionError('stale_state');
-      return next;
-    });
-    const committedLeadTasks: Task[] = [];
-    let pendingLeadTasks: Task[] = [];
-    const txTasks = {
-      save: vi.fn(async (task: Task) => {
-        pendingLeadTasks.push(task);
-      }),
-      findByRootTaskIdForOwner: vi.fn(async () =>
-        committedLeadTasks.map((task) => ({ task, latestRun: null })),
-      ),
-    };
-    const txRuns = {
-      save: vi.fn(async (_run: Run, _options: { taskId: string }) => undefined),
-    };
-    const enqueueRunDispatch = vi.fn(async () => {
-      if (failDispatch) throw new Error('dispatch insertion failed');
-    });
-    const admission = {
-      withTransaction: vi.fn(async (work: (tx: unknown) => Promise<void>) => {
-        pendingLeadTasks = [];
-        try {
-          await work({
-            teamExecutions: {
-              findMembersByTeamRunId: vi.fn(async () => [lead]),
-              advanceAgenticLead: txAdvance,
-            },
-            tasks: txTasks,
-            runs: txRuns,
-            enqueueRunDispatch,
-          });
-          committedLeadTasks.push(...pendingLeadTasks);
-          committedControlState = next.controlState;
-        } finally {
-          pendingLeadTasks = [];
-        }
-      }),
-    };
-    const driver = new TeamDriver(
-      { advanceAgenticLead: outerAdvance } as never,
-      {} as never,
-      {} as never,
-      admission as never,
-      undefined,
-      undefined,
-      now,
-    );
-    const driverWithSchedule = driver as unknown as {
-      scheduleLead: (
-        team: TeamRun,
-        parent: Task,
-        owner: {
-          tenantId: string;
-          workspaceId: string;
-          principalType: string;
-          principalId: string;
-        },
-        prompt: string,
-      ) => Promise<void>;
-    };
-
-    await expect(
-      driverWithSchedule.scheduleLead(team, parent, owner, 'review'),
-    ).rejects.toThrow('dispatch insertion failed');
-    expect(committedControlState).toBe('lead_ready');
-    expect(outerAdvance).not.toHaveBeenCalled();
-    expect(txAdvance).toHaveBeenCalledTimes(1);
-    expect(txTasks.save).toHaveBeenCalledTimes(1);
-    expect(txRuns.save).toHaveBeenCalledTimes(1);
-    expect(enqueueRunDispatch).toHaveBeenCalledTimes(1);
-
-    failDispatch = false;
-    await expect(
-      driverWithSchedule.scheduleLead(team, parent, owner, 'review'),
-    ).resolves.toBeUndefined();
-    expect(committedControlState).toBe('lead_running');
-    expect(txAdvance).toHaveBeenCalledTimes(2);
-    expect(outerAdvance).not.toHaveBeenCalled();
-    expect((txTasks.save.mock.calls[1]?.[0] as Task).logicalStepKey).toBe(
-      `lead:${team.id}:${lead.id}:turn:2`,
-    );
-
-    await expect(
-      driverWithSchedule.scheduleLead(team, parent, owner, 'review'),
-    ).resolves.toBeUndefined();
-    expect(txAdvance).toHaveBeenCalledTimes(2);
-    expect(txTasks.save).toHaveBeenCalledTimes(2);
-    expect(txRuns.save).toHaveBeenCalledTimes(2);
-    expect(enqueueRunDispatch).toHaveBeenCalledTimes(2);
   });
   it('resolves a published managed Agent with durable Task ownership and sends only its instructions', async () => {
     const claim = createClaim();
@@ -1848,8 +1693,8 @@ function createLeadRuntimeFixture() {
   const grant = {
     grantId: 'grant-1',
     runId: undefined,
-    allowedTools: canonicalTeamToolRefsForRole('lead'),
-    catalogTools: canonicalTeamToolRefsForRole('lead'),
+    allowedTools: collaborationToolRefsForRole('lead'),
+    catalogTools: collaborationToolRefsForRole('lead'),
   };
   const binder = {
     bind: vi.fn(async () => ({})),
@@ -1887,7 +1732,7 @@ function createLeadRuntimeFixture() {
       agentVersionId: task.invokableVersionId,
       environmentVersionId: team.environmentVersionId,
       resolvedSkills: [],
-      toolRefs: canonicalTeamToolRefsForRole('lead'),
+      toolRefs: collaborationToolRefsForRole('lead'),
       workspaceBinding: null,
       sessionBinding: null,
       createdAt: task.createdAt,

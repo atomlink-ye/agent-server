@@ -46,21 +46,21 @@ metadata:
   name: smoke-lead
 spec:
   description: Canonical Agent Team smoke role
-  instructions: 'Act as Team Lead using only canonical Team tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call team_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
+  instructions: 'Act as Team Lead using only canonical collaboration tools. Read the board first. If no Work exists, create exactly one Work assigned to analyst with subject "Return smoke marker" and description "Submit exactly AGENT_TEAM_SMOKE_MEMBER_OK", then stop. If the analyst Work is completed, accept it. When every Work is accepted and no active attempt remains, call collaboration_finish exactly once. Never create duplicate Work and never substitute prose for a required Team mutation.'
   runtime:
     provider: paseo
     modelPolicyRef: free-only
     mode: isolated
   tools:
-    - ref: agent-server/team-state
+    - ref: agent-server/collaboration-state
       kind: tool
-    - ref: agent-server/team-work-list
+    - ref: agent-server/board-list
       kind: tool
-    - ref: agent-server/team-work-create
+    - ref: agent-server/board-create
       kind: tool
-    - ref: agent-server/team-work-accept-v2
+    - ref: agent-server/board-accept
       kind: tool
-    - ref: agent-server/team-finish
+    - ref: agent-server/collaboration-finish
       kind: tool
   skills: []
   input:
@@ -99,11 +99,11 @@ spec:
     modelPolicyRef: free-only
     mode: isolated
   tools:
-    - ref: agent-server/team-state
+    - ref: agent-server/collaboration-state
       kind: tool
-    - ref: agent-server/team-work-list
+    - ref: agent-server/board-list
       kind: tool
-    - ref: agent-server/team-work-submit
+    - ref: agent-server/board-submit
       kind: tool
   skills: []
   input:
@@ -291,7 +291,7 @@ board, creates exactly one Team Work assigned to `analyst` with subject
 `Return smoke marker` and the instruction to submit exactly
 `AGENT_TEAM_SMOKE_MEMBER_OK`, then stops that control turn. The analyst reads
 the board and submits that marker exactly once. The lead then accepts the
-completed Work and calls `team_finish` exactly once after every Work is
+completed Work and calls `collaboration_finish` exactly once after every Work is
 accepted and no active attempt remains. These are the canonical Team tool
 mutations represented by the two packages above; the client still uses the
 public Work and WorkRun routes below to create and monitor the outer Product

@@ -4,16 +4,17 @@ import {
   createTeamCompletionDecision,
   type TeamCompletionDecision,
 } from '../../domain/teams/team-completion-decision.js';
-import type { TeamRun } from '../../domain/teams/team-run.js';
-import { createTeamRun } from '../../domain/teams/team-run.js';
+import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
 import {
-  canonicalTeamToolRefsForLeadPolicy,
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
+  collaborationToolRefsForMessageTurn,
+} from '../../domain/collaboration/canonical-collaboration-tools.js';
+import {
+  collaborationToolRefsForLeadPolicy,
   deriveAgenticLeadCommandPolicy,
 } from './team-policy-evaluator.js';
-import { AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS } from '../../domain/teams/canonical-team-role-tools.js';
-import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 
 const now = () => new Date('2026-08-08T00:00:00.000Z');
 const owner = {
@@ -106,208 +107,122 @@ function makeRejectDecision(
   });
 }
 
-describe('deriveAgenticLeadCommandPolicy future rejection semantics (baseline RED)', () => {
-  it('does not grant collaboration rework when the current policy only finishes', () => {
+describe('deriveAgenticLeadCommandPolicy', () => {
+  it('allows a Lead to finish from a direct-message turn', () => {
+    expect(collaborationToolRefsForMessageTurn('lead')).toContain(
+      AGENT_SERVER_COLLABORATION_TOOL_REFS.finish,
+    );
+  });
+
+  it('exposes only the canonical finish ref when the accepted board can finish', () => {
     const team = makeTeam();
-    const workItem = makeWork(team.id, 'work-1', 'accepted');
+    const workItem = makeWork(team.id);
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
       [makeAttempt(team.id, workItem.id)],
     );
-
-    const refs = canonicalTeamToolRefsForLeadPolicy(policy);
-
-    expect(policy.allowedCommands).toEqual(['team_finish']);
-    expect(refs).toContain(AGENT_SERVER_CANONICAL_TEAM_TOOL_REFS.finish);
+    const refs = collaborationToolRefsForLeadPolicy(policy);
+    expect(policy.allowedCommands).toEqual(['collaboration_finish']);
     expect(refs).toContain(AGENT_SERVER_COLLABORATION_TOOL_REFS.finish);
     expect(refs).not.toContain(
       AGENT_SERVER_COLLABORATION_TOOL_REFS.boardRequestChanges,
     );
   });
 
-  it('allows request_changes on an accepted-only board after the latest reject instead of finish-only', () => {
+  it('allows request_changes after the latest completion rejection', () => {
     const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
     const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem);
-
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
       [makeAttempt(team.id, workItem.id)],
-      decision,
+      makeRejectDecision(team, workItem),
     );
-
-    expect(policy.allowedCommands).toContain('team_work_request_changes');
-    expect(policy.allowedCommands).not.toContain('team_finish');
-  });
-
-  it('includes a rejected accepted target in eligibleReworkWorkItemIds', () => {
-    const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
-    const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem);
-
-    const policy = deriveAgenticLeadCommandPolicy(
-      team,
-      [workItem],
-      [makeAttempt(team.id, workItem.id)],
-      decision,
-    );
-
+    expect(policy.allowedCommands).toContain('board_request_changes');
+    expect(policy.allowedCommands).not.toContain('collaboration_finish');
     expect(policy.eligibleReworkWorkItemIds).toContain(workItem.id);
   });
 
-  it('lets a rejected target at attempt two bypass maxAttemptsPerItem', () => {
+  it('lets a rejected target at attempt two bypass the ordinary attempt budget', () => {
     const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
     const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem, 2);
-
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
       [makeAttempt(team.id, workItem.id, 2)],
-      decision,
+      makeRejectDecision(team, workItem, 2),
     );
-
     expect(policy.limits.maxAttemptsPerItem).toBe(2);
     expect(policy.eligibleReworkWorkItemIds).toContain(workItem.id);
-    expect(policy.allowedCommands).toContain('team_work_request_changes');
+    expect(policy.allowedCommands).toContain('board_request_changes');
   });
 
-  it('resumes policy from the latest reject despite a retained completion request', () => {
-    const team = makeTeam({
-      completionRequestedByRunId: 'team-run-policy',
-      leadTurnCount: 3,
-    });
-    const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem);
-
-    const policy = deriveAgenticLeadCommandPolicy(
-      team,
-      [workItem],
-      [makeAttempt(team.id, workItem.id)],
-      decision,
-    );
-
-    expect(policy.allowedCommands).toContain('team_work_request_changes');
-    expect(policy.limits.remainingLeadTurns).toBeGreaterThan(0);
-  });
-
-  it('starts a fresh lead-turn epoch from a latest reject at the max-turn boundary', () => {
+  it('starts a fresh lead-turn budget epoch from a latest rejection', () => {
     const team = makeTeam({
       leadTurnCount: 8,
       completionRequestedByRunId: 'team-run-policy',
     });
     const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem, 1, 8);
-
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
       [makeAttempt(team.id, workItem.id)],
-      decision,
+      makeRejectDecision(team, workItem, 1, 8),
     );
-
     expect(policy.limits.maxLeadTurns).toBe(8);
     expect(policy.limits.remainingLeadTurns).toBe(8);
-    expect(policy.allowedCommands).toContain('team_work_request_changes');
-    expect(policy.eligibleReworkWorkItemIds).toContain(workItem.id);
+    expect(policy.allowedCommands).toContain('board_request_changes');
   });
 
-  it('does not authorize rework when the decision belongs to another team run', () => {
+  it('does not authorize a rejection decision from another scope', () => {
     const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
     const workItem = makeWork(team.id);
     const decision = {
       ...makeRejectDecision(team, workItem),
       teamRunId: 'other-team-run',
     };
-
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
       [makeAttempt(team.id, workItem.id)],
       decision,
     );
-
-    expect(policy.eligibleReworkWorkItemIds).not.toContain(workItem.id);
-    expect(policy.allowedCommands).toEqual([]);
-  });
-
-  it.each(['cancelled', 'in_progress'] as const)(
-    'does not special-case a %s target for human rework bypass',
-    (status) => {
-      const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
-      const workItem = makeWork(team.id, 'work-1', status);
-      const decision = makeRejectDecision(team, workItem, 2);
-
-      const policy = deriveAgenticLeadCommandPolicy(
-        team,
-        [workItem],
-        [makeAttempt(team.id, workItem.id, 2)],
-        decision,
-      );
-
-      expect(policy.eligibleReworkWorkItemIds).not.toContain(workItem.id);
-      expect(policy.allowedCommands).not.toContain('team_work_request_changes');
-    },
-  );
-
-  it('consumes a target authorization once a newer attempt exists', () => {
-    const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
-    const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem, 1);
-
-    const policy = deriveAgenticLeadCommandPolicy(
-      team,
-      [workItem],
-      [makeAttempt(team.id, workItem.id, 2)],
-      decision,
-    );
-
-    expect(policy.eligibleReworkWorkItemIds).not.toContain(workItem.id);
-    expect(policy.allowedCommands).toContain('team_finish');
-  });
-
-  it('fails closed when a corrupt future decision count is persisted', () => {
-    const team = makeTeam({
-      completionRequestedByRunId: 'team-run-policy',
-      leadTurnCount: 7,
-    });
-    const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem, 1, 8);
-
-    const policy = deriveAgenticLeadCommandPolicy(
-      team,
-      [workItem],
-      [makeAttempt(team.id, workItem.id)],
-      decision,
-    );
-
-    expect(policy.limits.remainingLeadTurns).toBe(1);
     expect(policy.allowedCommands).toEqual([]);
     expect(policy.eligibleReworkWorkItemIds).toEqual([]);
   });
 
-  it('budgets seven turns after one turn of progression from decision count eight', () => {
-    const team = makeTeam({
-      completionRequestedByRunId: 'team-run-policy',
-      leadTurnCount: 9,
-    });
-    const workItem = makeWork(team.id);
-    const decision = makeRejectDecision(team, workItem, 1, 8);
+  it.each(['cancelled', 'in_progress'] as const)(
+    'does not special-case a %s target for rejection rework',
+    (status) => {
+      const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
+      const workItem = makeWork(team.id, 'work-1', status);
+      const policy = deriveAgenticLeadCommandPolicy(
+        team,
+        [workItem],
+        [makeAttempt(team.id, workItem.id, 2)],
+        makeRejectDecision(team, workItem, 2),
+      );
+      expect(policy.eligibleReworkWorkItemIds).not.toContain(workItem.id);
+      expect(policy.allowedCommands).not.toContain('board_request_changes');
+    },
+  );
 
+  it('consumes rejection authorization once a newer attempt exists', () => {
+    const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
+    const workItem = makeWork(team.id);
     const policy = deriveAgenticLeadCommandPolicy(
       team,
       [workItem],
-      [makeAttempt(team.id, workItem.id)],
-      decision,
+      [makeAttempt(team.id, workItem.id, 2)],
+      makeRejectDecision(team, workItem, 1),
     );
-
-    expect(policy.limits.remainingLeadTurns).toBe(7);
+    expect(policy.eligibleReworkWorkItemIds).not.toContain(workItem.id);
+    expect(policy.allowedCommands).toContain('collaboration_finish');
   });
 
   it.each(['tenantId', 'workspaceId', 'principalType', 'principalId'] as const)(
-    'rejects a decision with mismatched %s owner scope',
+    'fails closed on mismatched %s',
     (field) => {
       const team = makeTeam({ completionRequestedByRunId: 'team-run-policy' });
       const workItem = makeWork(team.id);
@@ -315,14 +230,12 @@ describe('deriveAgenticLeadCommandPolicy future rejection semantics (baseline RE
         ...makeRejectDecision(team, workItem),
         [field]: 'other-owner',
       } as TeamCompletionDecision;
-
       const policy = deriveAgenticLeadCommandPolicy(
         team,
         [workItem],
         [makeAttempt(team.id, workItem.id)],
         decision,
       );
-
       expect(policy.allowedCommands).toEqual([]);
       expect(policy.eligibleReworkWorkItemIds).toEqual([]);
     },

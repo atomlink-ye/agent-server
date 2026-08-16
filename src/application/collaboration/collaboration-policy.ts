@@ -1,34 +1,10 @@
 import type { CollaborationCapability } from '../../domain/collaboration/collaboration.js';
+import { collaborationCapabilitiesForRole } from '../../domain/collaboration/collaboration-policy-definition.js';
 import type { TeamToolContext } from '../teams/team-tool-context.js';
-
-const LEAD_CAPABILITIES = Object.freeze<readonly CollaborationCapability[]>([
-  'board.read',
-  'board.create',
-  'board.assign',
-  'board.review',
-  'board.cancel',
-  'mailbox.read',
-  'mailbox.send',
-  'mailbox.ack',
-  'run.finalize',
-]);
-
-const MEMBER_CAPABILITIES = Object.freeze<readonly CollaborationCapability[]>([
-  'board.read',
-  'board.claim',
-  'board.checkpoint',
-  'board.block',
-  'board.submit',
-  'mailbox.read',
-  'mailbox.send',
-  'mailbox.ack',
-]);
 
 export class CollaborationPolicy {
   public capabilities(context: Pick<TeamToolContext, 'member'>) {
-    return context.member.role === 'lead'
-      ? LEAD_CAPABILITIES
-      : MEMBER_CAPABILITIES;
+    return collaborationCapabilitiesForRole(context.member.role);
   }
 
   public require(

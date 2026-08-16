@@ -3,12 +3,12 @@ import {
   type RegisteredTool,
 } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { registerCollaborationMcpTools } from '../../adapters/collaboration-mcp/collaboration-mcp-tools.js';
+import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
+import type { CollaborationKernel } from '../../application/collaboration/collaboration-kernel.js';
+import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { MemoryApiRepository } from '../../application/ports/memory-api-repository.js';
 import type { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
-import type { TeamCommandService } from '../../application/teams/team-command-service.js';
-import { registerTeamMcpTools } from '../../adapters/team-mcp/team-mcp-tools.js';
-import { SyntheticMarketAdapter } from '../../adapters/demo-market/synthetic-market-adapter.js';
-import { CreateLearningProposal } from '../../application/learning/learning-proposals.js';
 import type { LearningProposal } from '../../domain/learning/learning-proposal.js';
 import type { AccessContext } from '../../platform/access-context.js';
 import {
@@ -60,38 +60,34 @@ export function createMemoryRuntimeContributor(input: {
   };
 }
 
-export function createLegacyRuntimeToolsContributor(input: {
-  readonly teamTools?: {
-    contextResolver: TeamToolContextResolver;
-    commands: TeamCommandService & {
-      readonly collaboration?: import('../../application/collaboration/collaboration-kernel.js').CollaborationKernel;
-    };
-  };
-  readonly market?: SyntheticMarketAdapter;
-  readonly logger?: Logger;
+export function createCollaborationRuntimeContributor(input: {
+  readonly contextResolver: TeamToolContextResolver;
+  readonly kernel: CollaborationKernel;
 }): RuntimeToolContributor {
   return ({ server, grant, grants }) => {
-    registerTools(server, grant, undefined, input, grants, 'legacy');
-    if (
-      input.teamTools?.commands &&
-      grant.teamMemberRunId &&
-      grant.taskId &&
-      grant.runId
-    )
-      registerTeamMcpTools(
-        server,
-        grant.catalogTools,
-        (toolRef) => grants.isToolAllowed(grant.grantId, toolRef),
-        {
-          resolve: (currentGrant) =>
-            input.teamTools!.contextResolver.resolve(currentGrant),
-          grantId: grant.grantId,
-          currentGrant: () => grants.get(grant.grantId),
-          begin: (grantId) => grants.beginToolCall(grantId),
-          end: (grantId) => grants.endToolCall(grantId),
-          commands: input.teamTools.commands,
-        },
-      );
+    if (!grant.teamMemberRunId || !grant.taskId || !grant.runId) return;
+    registerCollaborationMcpTools(
+      server,
+      grant.catalogTools,
+      (toolRef) => grants.isToolAllowed(grant.grantId, toolRef),
+      {
+        resolve: (currentGrant) => input.contextResolver.resolve(currentGrant),
+        grantId: grant.grantId,
+        currentGrant: () => grants.get(grant.grantId),
+        begin: (grantId) => grants.beginToolCall(grantId),
+        end: (grantId) => grants.endToolCall(grantId),
+        kernel: input.kernel,
+      },
+    );
+  };
+}
+
+export function createSyntheticRuntimeToolsContributor(input: {
+  readonly market?: SyntheticMarketAdapter;
+  readonly logger?: Logger;
+} = {}): RuntimeToolContributor {
+  return ({ server, grant, grants }) => {
+    registerTools(server, grant, undefined, input, grants, 'synthetic');
   };
 }
 
@@ -103,13 +99,12 @@ function registerTools(
     readonly createLearningProposal?: CreateLearningProposal;
     readonly teamTools?: {
       contextResolver: TeamToolContextResolver;
-      commands?: TeamCommandService;
     };
     readonly market?: SyntheticMarketAdapter;
     readonly logger?: Logger;
   },
   grants: RuntimeToolGrantService,
-  mode: 'memory' | 'legacy',
+  mode: 'memory' | 'synthetic',
 ): Map<string, RegisteredTool> {
   const register = (
     toolRef: string,

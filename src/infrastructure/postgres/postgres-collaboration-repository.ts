@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { COLLABORATION_LIMITS } from '../../domain/collaboration/collaboration-policy-definition.js';
 
 import type { CollaborationRepository } from '../../application/ports/collaboration-repository.js';
 import {
@@ -133,7 +134,7 @@ export class PostgresCollaborationRepository
         `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)}`,
         [input.teamRunId, ...ownerValues(input.owner)],
       );
-      if (Number(count.rows?.[0]?.count ?? 0) >= 4)
+      if (Number(count.rows?.[0]?.count ?? 0) >= COLLABORATION_LIMITS.maxWorkItems)
         throw new TeamExecutionError('limit_exceeded');
       const now = new Date().toISOString();
       const id = randomUUID();
@@ -162,7 +163,7 @@ export class PostgresCollaborationRepository
         input.owner,
       );
       await client.query(
-        `UPDATE team_runs SET revision=revision+1, updated_at=$2 WHERE id=$1`,
+        "UPDATE team_runs SET revision=revision+1, control_state='member_work_running', updated_at=$2 WHERE id=$1",
         [input.teamRunId, now],
       );
       await this.recordCommand(
@@ -310,7 +311,7 @@ export class PostgresCollaborationRepository
       if (!latest.rows?.[0] || latest.rows[0].status !== 'completed')
         throw new TeamExecutionError('invalid_transition');
       const attemptNo = latest.rows[0].attempt_no + 1;
-      if (attemptNo > 2) throw new TeamExecutionError('limit_exceeded');
+      if (attemptNo > COLLABORATION_LIMITS.maxAttemptsPerItem) throw new TeamExecutionError('limit_exceeded');
       const now = new Date().toISOString();
       const attemptId = randomUUID();
       const attempt = await client.query<AttemptRow>(
@@ -703,6 +704,8 @@ export class PostgresCollaborationRepository
     const unique = [...new Set(dependencyIds)];
     if (unique.length !== dependencyIds.length)
       throw new TeamExecutionError('invalid_transition');
+    if (unique.length > COLLABORATION_LIMITS.maxDependenciesPerWorkItem)
+      throw new TeamExecutionError('limit_exceeded');
     if (!unique.length) return;
     const existing = await client.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND id=ANY($2::uuid[]) AND ${ownerSql('', 3)}`,

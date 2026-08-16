@@ -64,10 +64,12 @@ export function createWorkModule(options: {
     DefinitionReadApi,
     'findTeamDefinitionById' | 'findPublishedTeamVersionById'
   >;
-  readonly definitionResolution: WorkDefinitionResolutionPort;
+  /** Production supplies the generic Composition resolver; legacy tests may omit it. */
+  readonly definitionResolution?: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
-  readonly runtimeCapabilities: {
+  /** Production supplies the RuntimeModule capability authority. */
+  readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
 }): WorkModule {
@@ -75,12 +77,16 @@ export function createWorkModule(options: {
   const workIdentity = new WorkIdentityApi({
     repository,
     definitions: options.definitions,
-    definitionResolution: options.definitionResolution,
+    ...(options.definitionResolution
+      ? { definitionResolution: options.definitionResolution }
+      : {}),
   });
   const startWorkRun = new StartWorkRun({
     identity: workIdentity,
     execution: options.execution,
-    runtimeCapabilities: options.runtimeCapabilities,
+    ...(options.runtimeCapabilities
+      ? { runtimeCapabilities: options.runtimeCapabilities }
+      : {}),
   });
   const workIdentityQuery = {
     findWorkById: (id: string, owner: WorkIdentityOwnerScope) =>

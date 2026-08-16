@@ -14,12 +14,23 @@ export type RuntimeToolContributor = (
   context: RuntimeToolContributionContext,
 ) => void;
 
+/**
+ * Process-composition registry only. Registration happens during bootstrap;
+ * this is deliberately not a user-extensible hot-plugin system.
+ */
 export class RuntimeToolRegistry {
-  public constructor(
-    private readonly contributors: readonly RuntimeToolContributor[],
-  ) {}
+  readonly #contributors: RuntimeToolContributor[];
+
+  public constructor(contributors: readonly RuntimeToolContributor[] = []) {
+    this.#contributors = [...contributors];
+  }
+
+  public register(contributor: RuntimeToolContributor): void {
+    if (this.#contributors.includes(contributor)) return;
+    this.#contributors.push(contributor);
+  }
 
   public contribute(context: RuntimeToolContributionContext): void {
-    for (const contributor of this.contributors) contributor(context);
+    for (const contributor of this.#contributors) contributor(context);
   }
 }

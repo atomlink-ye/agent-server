@@ -8,6 +8,7 @@ export const realPostgresSuites = [
   'tests/integration/lark-memory-card-doc-real-pg.integration.test.ts',
   'tests/integration/postgres-run-event-concurrency.integration.test.ts',
   'tests/integration/product-api-v1-oi38.integration.test.ts',
+  'tests/integration/work-composition-real-pg.integration.test.ts',
   'tests/integration/team-attempt-terminal-race.integration.test.ts',
   'tests/integration/managed-single-agent-faults.integration.test.ts',
 ] as const satisfies readonly string[];

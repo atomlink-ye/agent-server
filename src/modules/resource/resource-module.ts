@@ -7,10 +7,12 @@ import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
-import type { AgentRegistry } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../../application/ports/environment-read-api.js';
-import type { EnvironmentRegistry } from '../../application/ports/environment-registry.js';
+import type { MemoryVersionReadApi } from '../../application/ports/memory-version-read-api.js';
+import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
+import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
+import { ResolveWorkDefinition } from '../../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { registerAgentRoutes } from '../../entrypoints/api/routes/agents.js';
@@ -20,6 +22,9 @@ import { LocalSkillCatalog } from '../../infrastructure/filesystem/local-skill-c
 import { PostgresAgentRegistry } from '../../infrastructure/postgres/postgres-agent-registry.js';
 import { PostgresEnvironmentRegistry } from '../../infrastructure/postgres/postgres-environment-registry.js';
 import { PostgresInvokableRepository } from '../../infrastructure/postgres/postgres-invokable-repository.js';
+import { PostgresMemoryVersionReadApi } from '../../infrastructure/postgres/postgres-memory-version-read-api.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
+import { PostgresWorkRunResourceManifestRead } from '../../infrastructure/postgres/postgres-work-run-resource-manifest-read.js';
 import { registerSkill } from '../../application/extensions/skill-registry.js';
 
 export interface ResourceModuleDatabase {
@@ -33,6 +38,9 @@ export interface ResourceModule {
   readonly agentResolutionApi: AgentResolutionApi;
   readonly definitionReadApi: DefinitionReadApi;
   readonly environmentReadApi: EnvironmentReadApi;
+  readonly memoryVersionReadApi: MemoryVersionReadApi;
+  readonly workDefinitionSources: WorkDefinitionSourceRepository;
+  readonly workDefinitionResolution: WorkDefinitionResolutionPort;
   installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
 
@@ -57,6 +65,15 @@ export async function createResourceModule(
   const agentRegistry = new PostgresAgentRegistry(options.database);
   const invokableRepository = new PostgresInvokableRepository(options.database);
   const environmentRegistry = new PostgresEnvironmentRegistry(options.database);
+  const memoryVersionReadApi = new PostgresMemoryVersionReadApi(
+    options.database,
+  );
+  const workRunManifests = new PostgresWorkRunResourceManifestRead(
+    options.database,
+  );
+  const workDefinitionSources = new PostgresWorkDefinitionSourceRepository(
+    options.database,
+  );
   const skillCatalog = new LocalSkillCatalog(options.config.skillRegistryRoot);
   const agentResolutionApi = new ResolveAgentVersion(
     agentRegistry,
@@ -71,14 +88,33 @@ export async function createResourceModule(
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };
-  const environmentReadApi: EnvironmentReadApi = {
-    findVersion: (owner, id) => environmentRegistry.findVersion(owner, id),
+  // Runtime currently receives this legacy Environment read seam positionally.
+  // Attach the other composition snapshot readers to the same internal object so
+  // ExecuteRun can consume the Resource module without adding a bootstrap cycle.
+  const environmentReadApi = {
+    findVersion: (
+      owner: Parameters<EnvironmentReadApi['findVersion']>[0],
+      id: string,
+    ) => environmentRegistry.findVersion(owner, id),
+    workRunManifests,
+    memoryVersions: memoryVersionReadApi,
   };
+  const workDefinitionResolution = new ResolveWorkDefinition({
+    agents: agentRegistry,
+    agentResolution: agentResolutionApi,
+    definitions: definitionReadApi,
+    environments: environmentReadApi,
+    authoredDefinitions: workDefinitionSources,
+    memories: memoryVersionReadApi,
+  });
 
   return {
     agentResolutionApi,
     definitionReadApi,
     environmentReadApi,
+    memoryVersionReadApi,
+    workDefinitionSources,
+    workDefinitionResolution,
     installHttp(app, config) {
       registerAgentRoutes(app, { config, agentRegistry });
       registerTeamRoutes(app, {

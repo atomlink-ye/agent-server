@@ -7,6 +7,7 @@ import {
   WorkDefinitionValidationError,
   WorkIdentityApi,
 } from '../../../application/work/work-identity-api.js';
+import { UnsupportedWorkCompositionCapabilityError } from '../../../application/work/start-work-run.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   WorkIdentityConflictError,
@@ -246,6 +247,8 @@ export function registerProductWorkCommandRoutes(
         throw new HttpError(409, 'pending_expired', error.message);
       if (error instanceof WorkRunBindingConflictError)
         throw new HttpError(409, 'work_run_binding_conflict', error.message);
+      if (error instanceof UnsupportedWorkCompositionCapabilityError)
+        throw new HttpError(409, error.code, error.message);
       if (error instanceof WorkDefinitionValidationError)
         throw new HttpError(400, error.code, error.message);
       throw error;

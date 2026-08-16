@@ -53,7 +53,8 @@ export class WorkProjectionFactsSource {
 export interface ProductProjectionFactsSlice {
   readonly identity: ProductProjectionIdentity;
   readonly rootTaskId: string;
-  readonly teamRunId: string;
+  /** Null for single-Agent Work; TeamRun remains an internal collaboration fact. */
+  readonly teamRunId: string | null;
   readonly edges: readonly ProductTraceEdge[];
   readonly product: ProductProjectionDurableFacts;
 }
@@ -118,24 +119,23 @@ export function mapWorkProjectionFacts(
       name: safeText(actor.name),
       source_refs: refs(actor.sourceRefs),
     })),
-    messages: facts.messages.map((message) => ({
-      id: message.id,
-      sender_id: requireSenderId(message.id, message.senderId),
-      recipient_id: message.recipientId,
-      sender_name: safeText(message.senderName),
-      recipient_name: safeText(message.recipientName),
-      summary: null,
-      summary_capture_status:
-        message.bodyCapture === 'present' ? 'redacted' : 'not_present',
-      source_refs: refs(message.sourceRefs),
-    })),
+    // A self-claim creates a durable system wake with no human sender. The
+    // product identity contract requires a sender, while the trace edge keeps
+    // the same source event with its nullable sender separately.
+    messages: facts.messages
+      .filter((message) => message.senderId !== null)
+      .map((message) => ({
+        id: message.id,
+        sender_id: message.senderId,
+        recipient_id: message.recipientId,
+        sender_name: safeText(message.senderName),
+        recipient_name: safeText(message.recipientName),
+        summary: null,
+        summary_capture_status:
+          message.bodyCapture === 'present' ? 'redacted' : 'not_present',
+        source_refs: refs(message.sourceRefs),
+      })),
   });
-}
-
-function requireSenderId(messageId: string, senderId: string | null): string {
-  if (senderId === null)
-    throw new Error(`product_message_sender_id_missing:${messageId}`);
-  return senderId;
 }
 
 interface AttemptWithTiming {

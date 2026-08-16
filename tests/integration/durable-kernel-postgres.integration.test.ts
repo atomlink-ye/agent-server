@@ -223,6 +223,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0031_team_message_consumed_semantics' },
       { version: '0032_run_dispatch_priority' },
       { version: '0033_team_activation_provenance' },
+      { version: '0034_work_composition_resources' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -281,6 +282,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0031_team_message_consumed_semantics' },
       { version: '0032_run_dispatch_priority' },
       { version: '0033_team_activation_provenance' },
+      { version: '0034_work_composition_resources' },
     ]);
   });
 

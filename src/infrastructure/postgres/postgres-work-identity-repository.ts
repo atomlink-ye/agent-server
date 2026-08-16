@@ -399,15 +399,11 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
     let committed = false;
     try {
       await client.query('BEGIN');
-      const run = await client.query<{
-        id: string;
-        root_task_id: string | null;
-      }>(
-        `SELECT id,root_task_id FROM work_runs WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 FOR UPDATE`,
+      const run = await client.query<{ id: string }>(
+        `SELECT id FROM work_runs WHERE id=$1 AND tenant_id=$2 AND workspace_id=$3 FOR UPDATE`,
         [input.workRunId, input.owner.tenantId, input.owner.workspaceId],
       );
       if (!run.rows?.[0]) throw new WorkRunNotFoundError();
-      if (!run.rows[0].root_task_id) throw new WorkRunBindingConflictError();
       const existingRows = await client.query<ManifestRow>(
         `SELECT ${manifestColumns} FROM work_run_resource_manifest
          WHERE work_run_id=$1 AND tenant_id=$2 AND workspace_id=$3 ORDER BY slot FOR UPDATE`,

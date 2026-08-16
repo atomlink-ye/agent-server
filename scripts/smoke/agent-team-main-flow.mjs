@@ -7,7 +7,8 @@
 // instructions are still a literal script, so green means the Agent followed
 // that script and the pipeline worked. Reading this green result as proof that
 // “C capability is established” is incorrect.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import pg from 'pg';
 import {
   classifySmokeOutcome,
   formatSmokeOutcome,
@@ -23,6 +24,23 @@ const workspaceId =
 const timeoutMs = Number(process.env.AGENT_TEAM_SMOKE_TIMEOUT_MS ?? 300_000);
 const startedAt = Date.now();
 const progressIntervalMs = 5_000;
+const { Pool } = pg;
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
+      .join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function fingerprint(source) {
+  return `sha256:${createHash('sha256')
+    .update(canonicalize(source), 'utf8')
+    .digest('hex')}`;
+}
 
 function progress(stage, details = {}) {
   process.stdout.write(
@@ -133,7 +151,9 @@ async function request(path, { method = 'GET', body, status } = {}) {
       authorization: `Bearer ${token}`,
       accept: 'application/json',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      'idempotency-key': randomUUID(),
+      ...(method === 'POST' && !path.startsWith('/api/v1/works')
+        ? { 'idempotency-key': randomUUID() }
+        : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
@@ -216,16 +236,86 @@ const teamVersion = await request(
   { method: 'POST', body: {} },
 );
 progress('team_version_published', { version_id: teamVersion.id });
-const invoked = await request('/api/v1/tasks:invoke', {
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl)
+  throw new Error('composition team smoke requires DATABASE_URL from local-env');
+const definitionId = randomUUID();
+const definitionVersionId = randomUUID();
+const compositionSource = {
+  kind: 'collaboration',
+  teamVersionId: teamVersion.id,
+  environmentVersionId: environmentVersion,
+  memoryVersionIds: [],
+};
+const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+try {
+  const workspace = await pool.query(
+    `SELECT tenant_id,principal_type,principal_id FROM workspaces WHERE id=$1`,
+    [workspaceId],
+  );
+  const owner = workspace.rows[0];
+  if (!owner) throw new Error(`composition team workspace missing: ${workspaceId}`);
+  await pool.query(
+    `INSERT INTO work_definition_source_definitions
+     (id,tenant_id,workspace_id,principal_type,principal_id,name,description,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,now())`,
+    [
+      definitionId,
+      owner.tenant_id,
+      workspaceId,
+      owner.principal_type,
+      owner.principal_id,
+      'Composition team smoke',
+      'Real-provider Composition-first bounded collaboration smoke',
+    ],
+  );
+  await pool.query(
+    `INSERT INTO work_definition_source_versions
+     (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,source,fingerprint,created_at,published_at)
+     VALUES($1,$2,$3,$4,$5,$6,'published',$7::jsonb,$8,now(),now())`,
+    [
+      definitionVersionId,
+      definitionId,
+      owner.tenant_id,
+      workspaceId,
+      owner.principal_type,
+      owner.principal_id,
+      JSON.stringify(compositionSource),
+      fingerprint(compositionSource),
+    ],
+  );
+} finally {
+  await pool.end();
+}
+const work = await request('/api/v1/works', {
+  method: 'POST',
+  status: 201,
+  body: {
+    definition_id: definitionId,
+    definition_version_id: definitionVersionId,
+    title: 'Composition team smoke',
+  },
+});
+const workId = work.work?.id;
+if (typeof workId !== 'string') throw new Error('composition team Work id missing');
+const startedWorkRun = await request(`/api/v1/works/${workId}/runs`, {
   method: 'POST',
   status: 202,
   body: {
-    invokable: { kind: 'team', version_id: teamVersion.id },
-    input: { text: 'Complete the canonical multi-member Team smoke.' },
-    workspace_id: workspaceId,
+    trigger_kind: 'manual',
+    trigger_ref: 'Complete the canonical multi-member Team smoke.',
   },
 });
-progress('team_task_created', { task_id: invoked.task_id });
+const rootTaskId = startedWorkRun.execution_receipt?.source_refs?.task_id;
+const workRunId = startedWorkRun.work_run?.id;
+if (typeof rootTaskId !== 'string' || typeof workRunId !== 'string')
+  throw new Error('composition team WorkRun identities missing');
+const invoked = { task_id: rootTaskId };
+progress('composition_team_started', {
+  work_id: workId,
+  work_run_id: workRunId,
+  task_id: rootTaskId,
+});
 
 const deadline = Date.now() + timeoutMs;
 let task;
@@ -380,6 +470,37 @@ if (
     `agent team smoke did not report expected real-provider usage: ${JSON.stringify({ usage, runtime_models: [...runtimeModels] })}`,
   );
 }
+const trace = await request(`/api/v1/works/${workId}/runs/${workRunId}/trace`);
+if (!Array.isArray(trace.runs) || trace.runs.length === 0)
+  throw new Error('composition team WorkRun trace is missing execution runs');
+const manifestPool = new Pool({ connectionString: databaseUrl, max: 1 });
+let manifestRows;
+try {
+  const manifest = await manifestPool.query(
+    `SELECT resource_kind,requested_ref,resolved_version_id
+       FROM work_run_resource_manifest WHERE work_run_id=$1`,
+    [workRunId],
+  );
+  manifestRows = manifest.rows;
+} finally {
+  await manifestPool.end();
+}
+const manifestHas = (kind, value) =>
+  manifestRows.some(
+    (row) =>
+      row.resource_kind === kind &&
+      (row.requested_ref === value || row.resolved_version_id === value),
+  );
+if (
+  !manifestHas('definition', definitionVersionId) ||
+  !manifestHas('agent', leadVersion) ||
+  !manifestHas('agent', analystVersion) ||
+  !manifestHas('agent', builderVersion) ||
+  !manifestHas('environment', environmentVersion) ||
+  !manifestHas('platform_capability', 'collaboration') ||
+  !manifestHas('platform_capability', 'platform_mcp')
+)
+  throw new Error('composition team WorkRun manifest is incomplete');
 const outputs = projection.sessions.flatMap((session) =>
   session.turns
     .map((turn) => ({
@@ -390,6 +511,8 @@ const outputs = projection.sessions.flatMap((session) =>
 );
 progress('agent_outputs', { outputs });
 progress('completed', {
+  work_id: workId,
+  work_run_id: workRunId,
   task_id: invoked.task_id,
   team_status: projection.project.status,
   runtime_models: [...runtimeModels],
@@ -398,6 +521,8 @@ progress('completed', {
 process.stdout.write(
   `${JSON.stringify({
     success: true,
+    work_id: workId,
+    work_run_id: workRunId,
     task_id: invoked.task_id,
     team_status: projection.project.status,
     runtime_models: [...runtimeModels],

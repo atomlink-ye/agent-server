@@ -2,11 +2,13 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
+import { runCompositionSingleAgentSmoke } from './composition-single-agent-phase.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
 
 const baseUrl = process.env.AGENT_SERVER_BASE_URL?.trim();
 const token = process.env.AGENT_SERVER_SERVICE_TOKEN?.trim();
+const workspaceId = process.env.AGENT_SERVER_WORKSPACE_ID?.trim();
 const marker = `AGENT_SERVER_PROVIDER_SMOKE_${randomUUID()}`;
 const markerSha256 = sha256(marker);
 const startedAt = Date.now();
@@ -169,10 +171,10 @@ async function pollRun(runId) {
 }
 
 async function main() {
-  if (!baseUrl || !token) {
+  if (!baseUrl || !token || !workspaceId) {
     fail(
       'setup',
-      'AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN are required',
+      'AGENT_SERVER_BASE_URL, AGENT_SERVER_SERVICE_TOKEN and AGENT_SERVER_WORKSPACE_ID are required',
     );
     return;
   }
@@ -224,13 +226,29 @@ async function main() {
     if (!accepted) throw new Error('run_assertions_failed');
 
     progress('agent_output', { run_id: created.run_id, text: resultText });
-    progress('completed', {
+    progress('direct_runtime_completed', {
       run_id: created.run_id,
       status: completed.status,
       runtime,
       usage: usageSummary(usage),
     });
 
+    stage = 'composition_single_agent';
+    const composition = await runCompositionSingleAgentSmoke({
+      baseUrl,
+      token,
+      workspaceId,
+      expectedProvider: realProviderDefaults.PASEO_PROVIDER,
+      expectedModel: realProviderDefaults.PASEO_MODEL,
+      timeoutMs: stageTimeouts.run,
+      progress,
+    });
+
+    progress('completed', {
+      run_id: created.run_id,
+      composition_work_id: composition.workId,
+      composition_work_run_id: composition.workRunId,
+    });
     process.stdout.write(
       `${JSON.stringify({
         outcome: 'PASS',
@@ -242,6 +260,7 @@ async function main() {
           sha256: typeof resultText === 'string' ? sha256(resultText) : null,
           marker_matched: markerMatched,
         },
+        composition,
         duration_ms: Date.now() - startedAt,
       })}\n`,
     );

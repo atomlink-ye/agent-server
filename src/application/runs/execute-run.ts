@@ -8,6 +8,7 @@ import type { Logger } from '../../shared/observability/logger.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { FileStore } from '../ports/file-store.js';
+import type { MemoryVersionReadApi } from '../ports/memory-version-read-api.js';
 import type { RunEventRepository } from '../ports/run-events.js';
 import {
   RunCompletionConflictError,
@@ -19,6 +20,7 @@ import type { SessionRepository } from '../ports/session-repository.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
 import type { TeamExecutionRepository } from '../ports/team-execution-repository.js';
+import type { WorkRunResourceManifestRead } from '../ports/work-run-resource-manifest-read.js';
 import type { CreateMemoryProposal } from '../memory/create-memory-proposal.js';
 import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
 import { RuntimeTimedOutError } from '../runtime/execution-runtime-errors.js';
@@ -68,6 +70,8 @@ export class ExecuteRun {
       CollaborationActivationReconciler,
       'reconcileForRootTask'
     >,
+    workRunManifests?: WorkRunResourceManifestRead,
+    memoryVersions?: MemoryVersionReadApi,
   ) {
     this.teamCoordinator = collaborativeExecutions
       ? new RunTeamCoordinator(
@@ -87,6 +91,12 @@ export class ExecuteRun {
       logger,
       this.now,
     );
+    const compositionReads = environments as
+      | (EnvironmentReadApi & {
+          readonly workRunManifests?: WorkRunResourceManifestRead;
+          readonly memoryVersions?: MemoryVersionReadApi;
+        })
+      | undefined;
     this.agentRunExecutor = new AgentRunExecutor(
       runtime,
       tasks,
@@ -101,6 +111,8 @@ export class ExecuteRun {
       runtimeCellRoot,
       collaborativeExecutions,
       runs,
+      workRunManifests ?? compositionReads?.workRunManifests,
+      memoryVersions ?? compositionReads?.memoryVersions,
       this.now,
     );
   }
@@ -142,7 +154,9 @@ export class ExecuteRun {
     try {
       task = await this.tasks.findById(claim.taskId);
       if (!task)
-        throw new Error(`Task ${claim.taskId} could not be loaded for execution`);
+        throw new Error(
+          `Task ${claim.taskId} could not be loaded for execution`,
+        );
       if (
         ['lead_turn', 'work_attempt', 'direct_message'].includes(
           task.teamTaskKind ?? '',
@@ -273,7 +287,10 @@ export class ExecuteRun {
       {
         run_id: claim.run.id,
         ...(completed.runtime
-          ? { provider: completed.runtime.provider, model: completed.runtime.model }
+          ? {
+              provider: completed.runtime.provider,
+              model: completed.runtime.model,
+            }
           : {}),
         ...(completed.error ? { failure_code: completed.error.code } : {}),
       },

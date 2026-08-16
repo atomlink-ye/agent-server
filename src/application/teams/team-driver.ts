@@ -227,6 +227,30 @@ export class TeamDriver {
           taskId: input.task.id,
           owner,
         });
+      if (input.run.status !== 'succeeded') {
+        const members = await this.executions.findMembersByTeamRunId(
+          input.team.id,
+          owner,
+        );
+        const member = members.find(
+          (candidate) => candidate.id === input.task.teamMemberRunId,
+        );
+        if (member?.role === 'lead') {
+          await this.executions.failTeamRunAtomically({
+            teamRunId: input.team.id,
+            rootRunId: input.team.rootRunId,
+            rootTaskId: input.team.rootTaskId,
+            owner,
+            updatedAt: this.now().toISOString(),
+            stopReason: 'lead_run_failed',
+            failure: {
+              code: 'runtime_execution_failed',
+              message: 'The Team Lead could not complete its turn.',
+            },
+          });
+          return;
+        }
+      }
       if (input.run.status === 'succeeded') {
         const fresh = await this.executions.findTeamRunById(input.team.id, owner);
         if (

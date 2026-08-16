@@ -193,6 +193,7 @@ describe('RuntimeToolGrantService', () => {
     });
     expect(closed.activeTurn).toBeNull();
     expect(closed.allowedTools).toEqual([]);
+    expect(service.resolve(grant.token)?.activeTurn).toBeNull();
   });
 
   it('deletes an expired Team tombstone when its TeamRun is revoked', () => {

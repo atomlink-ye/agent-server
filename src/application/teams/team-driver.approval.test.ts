@@ -108,6 +108,48 @@ function settledAttempts() {
 }
 
 describe('TeamDriver completion approval', () => {
+  it('fails the Team when a Lead direct-message turn fails', async () => {
+    const team = teamRun();
+    const executions = {
+      failTeamRunAtomically: vi.fn(async () => team),
+      findMembersByTeamRunId: vi.fn(async () => [
+        { id: 'lead-member-1', role: 'lead' },
+      ]),
+    };
+    const driver = futureDriver(executions);
+    const task = { ...leadTask(team), teamTaskKind: 'direct_message' } as Task;
+    const run = { ...createRun('continue', { id: 'lead-direct-failed-run', now }), status: 'failed' } as Run;
+
+    await driver.handleTerminalRun({ team, task, run });
+
+    expect(executions.failTeamRunAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamRunId: team.id,
+        rootRunId: team.rootRunId,
+        rootTaskId: team.rootTaskId,
+        stopReason: 'lead_run_failed',
+      }),
+    );
+  });
+
+  it('already fails the Team when a Lead turn fails', async () => {
+    const team = teamRun();
+    const executions = {
+      failTeamRunAtomically: vi.fn(async () => team),
+    };
+    const driver = futureDriver(executions);
+    const run = { ...createRun('continue', { id: 'lead-turn-failed-run', now }), status: 'failed' } as Run;
+
+    await driver.handleTerminalRun({ team, task: leadTask(team), run });
+
+    expect(executions.failTeamRunAtomically).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamRunId: team.id,
+        stopReason: 'lead_run_failed',
+      }),
+    );
+  });
+
   it('completes a no-Work Team after the Lead finishes a direct-message turn', async () => {
     const team = teamRun({ completionRequestedByRunId: 'lead-direct-run-1' });
     const executions = {

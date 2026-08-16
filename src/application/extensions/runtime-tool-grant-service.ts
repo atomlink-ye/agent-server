@@ -11,6 +11,20 @@ import {
 export { AGENT_SERVER_MEMORY_READ_TOOL_REF } from '../agents/built-in-skills.js';
 export const AGENT_SERVER_MEMORY_READ_MCP_NAME = 'agent_server_memory_read';
 
+export type RuntimeActiveTurn = Readonly<{
+  readonly taskId: string;
+  readonly runId: string;
+  readonly contextEpoch: string;
+}>;
+
+/**
+ * Runtime bearer context.
+ *
+ * `allowedTools` / `catalogTools` are only user/domain tool refs. Agent Server
+ * platform Collaboration tools are not represented here; they are mounted for
+ * Team participants and authorized from participant + activeTurn + durable
+ * Collaboration state on every call.
+ */
 export type RuntimeToolGrant = Readonly<{
   readonly grantId: string;
   readonly tenantId: string;
@@ -18,13 +32,11 @@ export type RuntimeToolGrant = Readonly<{
   readonly principalId: string;
   readonly workspaceId: string;
   readonly productSessionId: string;
-  readonly taskId?: string;
-  readonly runId?: string;
   readonly teamMemberRunId?: string;
   readonly teamRunId?: string;
   readonly allowedTools: readonly string[];
   readonly catalogTools: readonly string[];
-  readonly contextEpoch?: string;
+  readonly activeTurn: RuntimeActiveTurn | null;
   readonly expiresAt: string;
 }>;
 
@@ -67,18 +79,12 @@ export class RuntimeToolGrantService {
       AGENT_SERVER_MEMORY_READ_TOOL_REF,
     ];
     const catalogTools = input.catalogTools ?? allowedTools;
-    if (
-      new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some(
-        (tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool),
-      ) ||
-      new Set(catalogTools).size !== catalogTools.length ||
-      catalogTools.some(
-        (tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool),
-      ) ||
-      allowedTools.some((tool) => !catalogTools.includes(tool))
-    )
-      throw new Error('Unsupported or duplicate runtime tool ref.');
+    validateTools(allowedTools);
+    validateTools(catalogTools);
+    if (allowedTools.some((tool) => !catalogTools.includes(tool)))
+      throw new Error('Runtime grant allowed tools exceed catalog.');
+
+    const activeTurn = activeTurnFromIssue(input);
     const existing = input.teamMemberRunId
       ? [...this.#grants.values()].filter(
           (candidate) =>
@@ -89,6 +95,7 @@ export class RuntimeToolGrantService {
     if (existing.some((grant) => this.activeToolCalls(grant.grantId) > 0))
       throw new Error('Runtime grant replacement fence is active.');
     for (const grant of existing) this.#grants.delete(grant.grantId);
+
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(
       Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
@@ -100,15 +107,13 @@ export class RuntimeToolGrantService {
       principalId: input.principalId,
       workspaceId: input.workspaceId,
       productSessionId: input.productSessionId,
-      ...(input.taskId ? { taskId: input.taskId } : {}),
-      ...(input.runId ? { runId: input.runId } : {}),
       ...(input.teamMemberRunId
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
       ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
       allowedTools: Object.freeze([...allowedTools]),
       catalogTools: Object.freeze([...catalogTools]),
-      ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
+      activeTurn,
       expiresAt,
       tokenHash: hashToken(token),
     };
@@ -135,8 +140,7 @@ export class RuntimeToolGrantService {
       )
         continue;
       if (Date.parse(grant.expiresAt) <= Date.now()) return null;
-      const { tokenHash: _tokenHash, ...publicGrant } = grant;
-      return publicGrant;
+      return publicGrant(grant);
     }
     return null;
   }
@@ -166,6 +170,7 @@ export class RuntimeToolGrantService {
     return this.#activeCalls.get(grantId) ?? 0;
   }
 
+  /** Authorization for user/domain tools only. */
   public isToolAllowed(grantId: string, toolRef: string): boolean {
     this.pruneExpired();
     const grant = this.#grants.get(grantId);
@@ -182,15 +187,13 @@ export class RuntimeToolGrantService {
     ttlMs = 15 * 60 * 1000,
   ): void {
     this.pruneExpired();
-    if (
-      new Set(allowedTools).size !== allowedTools.length ||
-      allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
-    )
-      throw new Error('Unsupported or duplicate runtime tool ref.');
+    validateTools(allowedTools);
     const expiresAt = new Date(Date.now() + Math.max(1, ttlMs)).toISOString();
     for (const [grantId, grant] of this.#grants) {
       if (grant.productSessionId !== productSessionId) continue;
       if (Date.parse(grant.expiresAt) <= Date.now()) continue;
+      if (allowedTools.some((tool) => !grant.catalogTools.includes(tool)))
+        throw new Error('Runtime grant allowed tools exceed catalog.');
       this.#grants.set(grantId, {
         ...grant,
         allowedTools: Object.freeze([...allowedTools]),
@@ -199,7 +202,11 @@ export class RuntimeToolGrantService {
     }
   }
 
-  /** Refresh only turn-bound fields; the bearer, grant id and member binding remain stable. */
+  /**
+   * Open/refresh a Team participant turn while preserving bearer, grant ID and
+   * participant binding. Platform Collaboration authorization is not stored in
+   * `allowedTools`.
+   */
   public refreshForTeamMember(input: {
     readonly grantId?: string;
     readonly teamMemberRunId: string;
@@ -211,19 +218,7 @@ export class RuntimeToolGrantService {
     readonly ttlMs?: number;
   }): RuntimeToolGrant {
     this.pruneExpired();
-    const matches = [...this.#grants.values()].filter(
-      (candidate) =>
-        candidate.teamMemberRunId === input.teamMemberRunId &&
-        candidate.productSessionId === input.scopeId,
-    );
-    if (matches.length === 0) throw new Error('Runtime grant scope not found.');
-    if (matches.length > 1)
-      throw new Error('Runtime grant scope is ambiguous.');
-    const grant = input.grantId
-      ? matches.find((candidate) => candidate.grantId === input.grantId)
-      : matches[0];
-    if (!grant || !grant.teamMemberRunId)
-      throw new Error('Runtime grant not found.');
+    const grant = this.findTeamMemberGrant(input);
     if (this.activeToolCalls(grant.grantId) > 0)
       throw new Error('Runtime turn refresh fence is active.');
     validateTools(input.allowedTools);
@@ -231,25 +226,50 @@ export class RuntimeToolGrantService {
       throw new Error('Runtime grant allowed tools exceed catalog.');
     const updated: StoredGrant = {
       ...grant,
-      taskId: input.taskId,
-      runId: input.runId,
       allowedTools: Object.freeze([...input.allowedTools]),
-      contextEpoch: input.contextEpoch,
+      activeTurn: Object.freeze({
+        taskId: input.taskId,
+        runId: input.runId,
+        contextEpoch: input.contextEpoch,
+      }),
       expiresAt: new Date(
         Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
       ).toISOString(),
     };
     this.#grants.set(grant.grantId, updated);
-    const { tokenHash: _tokenHash, ...publicGrant } = updated;
-    return publicGrant;
+    return publicGrant(updated);
+  }
+
+  /**
+   * Close the current Team turn explicitly. Clearing domain tools is a safety
+   * consequence; `activeTurn === null` is the lifecycle fact.
+   */
+  public closeTeamMemberTurn(input: {
+    readonly grantId: string;
+    readonly teamMemberRunId: string;
+    readonly scopeId: string;
+    readonly ttlMs?: number;
+  }): RuntimeToolGrant {
+    this.pruneExpired();
+    const grant = this.findTeamMemberGrant(input);
+    if (this.activeToolCalls(grant.grantId) > 0)
+      throw new Error('Runtime turn close fence is active.');
+    const updated: StoredGrant = {
+      ...grant,
+      allowedTools: Object.freeze([]),
+      activeTurn: null,
+      expiresAt: new Date(
+        Date.now() + Math.max(1, input.ttlMs ?? 15 * 60 * 1000),
+      ).toISOString(),
+    };
+    this.#grants.set(grant.grantId, updated);
+    return publicGrant(updated);
   }
 
   public get(grantId: string): RuntimeToolGrant | null {
     this.pruneExpired();
     const grant = this.#grants.get(grantId);
-    if (!grant) return null;
-    const { tokenHash: _tokenHash, ...publicGrant } = grant;
-    return publicGrant;
+    return grant ? publicGrant(grant) : null;
   }
 
   public getForTeamMember(input: {
@@ -264,16 +284,35 @@ export class RuntimeToolGrantService {
     );
     if (matches.length > 1)
       throw new Error('Runtime grant scope is ambiguous.');
-    if (!matches[0]) return null;
-    const { tokenHash: _tokenHash, ...publicGrant } = matches[0];
-    return publicGrant;
+    return matches[0] ? publicGrant(matches[0]) : null;
   }
 
   public revokeForTeamRun(teamRunId: string): void {
     this.pruneExpired();
-    for (const grant of this.#grants.values()) {
+    for (const grant of [...this.#grants.values()]) {
       if (grant.teamRunId === teamRunId) this.revoke(grant.grantId);
     }
+  }
+
+  private findTeamMemberGrant(input: {
+    readonly grantId?: string;
+    readonly teamMemberRunId: string;
+    readonly scopeId: string;
+  }): StoredGrant {
+    const matches = [...this.#grants.values()].filter(
+      (candidate) =>
+        candidate.teamMemberRunId === input.teamMemberRunId &&
+        candidate.productSessionId === input.scopeId,
+    );
+    if (matches.length === 0) throw new Error('Runtime grant scope not found.');
+    if (matches.length > 1)
+      throw new Error('Runtime grant scope is ambiguous.');
+    const grant = input.grantId
+      ? matches.find((candidate) => candidate.grantId === input.grantId)
+      : matches[0];
+    if (!grant || !grant.teamMemberRunId)
+      throw new Error('Runtime grant not found.');
+    return grant;
   }
 
   private pruneExpired(): void {
@@ -288,12 +327,33 @@ export class RuntimeToolGrantService {
   }
 }
 
+function activeTurnFromIssue(input: {
+  readonly teamMemberRunId?: string;
+  readonly taskId?: string;
+  readonly runId?: string;
+  readonly contextEpoch?: string;
+}): RuntimeActiveTurn | null {
+  if (!input.teamMemberRunId) return null;
+  if (!input.taskId || !input.runId || !input.contextEpoch)
+    throw new Error('Team runtime grant requires an active turn context.');
+  return Object.freeze({
+    taskId: input.taskId,
+    runId: input.runId,
+    contextEpoch: input.contextEpoch,
+  });
+}
+
 function validateTools(allowedTools: readonly string[]): void {
   if (
     new Set(allowedTools).size !== allowedTools.length ||
     allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
   )
     throw new Error('Unsupported or duplicate runtime tool ref.');
+}
+
+function publicGrant(grant: StoredGrant): RuntimeToolGrant {
+  const { tokenHash: _tokenHash, ...value } = grant;
+  return value;
 }
 
 function hashToken(token: string): Buffer {

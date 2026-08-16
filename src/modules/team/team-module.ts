@@ -6,7 +6,6 @@ import type { AdmissionRepository } from '../../application/ports/admission-repo
 import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { RunRepository } from '../../application/ports/run-repository.js';
 import type { TaskRepository } from '../../application/ports/task-repository.js';
-import { TeamPolicyEvaluator } from '../../application/teams/team-policy-evaluator.js';
 import { TeamToolContextResolver } from '../../application/teams/team-tool-context.js';
 import { PostgresCollaborationRepository } from '../../infrastructure/postgres/postgres-collaboration-repository.js';
 import { PostgresTeamExecutionRepository } from '../../infrastructure/postgres/postgres-collaborative-team-repository.js';
@@ -43,12 +42,10 @@ export function createTeamModule(options: {
     },
   );
   const messages = new PostgresTeamMessageRepository(options.database);
-  const policy = new TeamPolicyEvaluator();
   const contextResolver = new TeamToolContextResolver(
     executions,
     options.tasks,
     options.runs,
-    policy,
   );
   const activationReconciler = new CollaborationActivationReconciler(
     messages,
@@ -69,7 +66,6 @@ export function createTeamModule(options: {
     executions,
     messages,
     collaborationRepository,
-    policy,
     contextResolver,
     activationReconciler,
     collaboration,

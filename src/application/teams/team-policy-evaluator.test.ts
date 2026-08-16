@@ -7,9 +7,11 @@ import {
 import { createTeamRun, type TeamRun } from '../../domain/teams/team-run.js';
 import type { TeamWorkItem } from '../../domain/teams/team-work-item.js';
 import type { TeamWorkItemAttempt } from '../../domain/teams/team-work-item-attempt.js';
-import { AGENT_SERVER_COLLABORATION_TOOL_REFS } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import {
+  AGENT_SERVER_COLLABORATION_TOOL_REFS,
   collaborationToolRefsForMessageTurn,
+} from '../../domain/collaboration/canonical-collaboration-tools.js';
+import {
   collaborationToolRefsForLeadPolicy,
   deriveAgenticLeadCommandPolicy,
 } from './team-policy-evaluator.js';

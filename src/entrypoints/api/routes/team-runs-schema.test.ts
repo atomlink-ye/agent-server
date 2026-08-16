@@ -238,6 +238,57 @@ describe('agentic team project route contract', () => {
     expect('decisions' in response).toBe(false);
   });
 
+  it('preserves pending direct-message durability facts used to diagnose a missing wake', () => {
+    const projection = {
+      stuck: false,
+      decisionCapture: { status: 'not_captured' as const },
+      project: {
+        rootTaskId: ids.rootTask,
+        teamRunId: ids.teamRun,
+        teamVersionId: ids.teamVersion,
+        status: 'active' as const,
+        phase: 'member_work' as const,
+        finalText: null,
+        revision: 1,
+        stopReason: null,
+        completionApprovalRequired: false,
+        completionDecisions: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      workItems: [],
+      gates: {
+        finishReady: false,
+        allWorkAccepted: false,
+        noActiveAttempts: true,
+        allMembersIdle: false,
+      },
+      directMessages: [
+        {
+          sequence: 7,
+          senderName: 'lead',
+          recipientName: 'member',
+          summary: 'wake the member',
+          requiresAck: true,
+          status: 'pending' as const,
+          createdAt: timestamp,
+        },
+      ],
+      sessions: [],
+    };
+
+    const response = toAgenticTeamProjectResponse(projection as never);
+
+    expect(response.direct_messages).toEqual([
+      expect.objectContaining({
+        sequence: 7,
+        requires_ack: true,
+        status: 'pending',
+      }),
+    ]);
+    expect(() => AgenticTeamProjectResponseSchema.parse(response)).not.toThrow();
+  });
+
   it('distinguishes reported none from unavailable decision capture', () => {
     const unavailable = toAgenticTeamProjectResponse(null);
     expect(unavailable).toMatchObject({

@@ -161,7 +161,33 @@ export function evaluateCompletionFacts(value) {
   const acknowledgedMessages = requiresAckMessages.filter(
     (message) => message.status === 'acknowledged',
   );
+  const isMaterializedByMessage = (message) => {
+    const messageRef = `M-${message.sequence}`;
+    return sessions.some((session) =>
+      session.turns?.some(
+        (turn) =>
+          turn.activation?.materializer ===
+            'task_run_collaboration_activation_adapter' &&
+          turn.activation.causes?.some(
+            (cause) =>
+              cause.type === 'message' && cause.message_ref === messageRef,
+          ),
+      ),
+    );
+  };
   if (requiresAckMessages.length && !acknowledgedMessages.length) {
+    const pendingWithoutWake = requiresAckMessages.filter(
+      (message) =>
+        message.status === 'pending' && !isMaterializedByMessage(message),
+    );
+    if (pendingWithoutWake.length) {
+      fail(
+        'collaboration',
+        'pending_message_activation',
+        'pending requires-ack message M-N materializes a participant turn with message cause M-N',
+        pendingWithoutWake.map((message) => `M-${message.sequence}`),
+      );
+    }
     fail(
       'collaboration',
       'acknowledged_direct_message',
@@ -169,24 +195,11 @@ export function evaluateCompletionFacts(value) {
       messages.map((message) => ({ sequence: message.sequence ?? null, status: message.status ?? null })),
     );
   } else if (acknowledgedMessages.length) {
-    const awakenedByMessage = acknowledgedMessages.some((message) => {
-      const messageRef = `M-${message.sequence}`;
-      return sessions.some((session) =>
-        session.turns?.some(
-          (turn) =>
-            turn.activation?.materializer ===
-              'task_run_collaboration_activation_adapter' &&
-            turn.activation.causes?.some(
-              (cause) =>
-                cause.type === 'message' && cause.message_ref === messageRef,
-            ),
-        ),
-      );
-    });
+    const awakenedByMessage = acknowledgedMessages.some(isMaterializedByMessage);
     if (!awakenedByMessage) {
       fail(
         'collaboration',
-        'message_activation',
+        'acknowledged_message_activation',
         'an acknowledged direct message M-N materializes a participant turn with message cause M-N',
         acknowledgedMessages.map((message) => `M-${message.sequence}`),
       );

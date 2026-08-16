@@ -125,16 +125,15 @@ describe('agent-team smoke completion line', () => {
     const projection = successfulProjection();
     projection.sessions[1].turns = [];
 
-    expect(codes(projection)).toContain('message_activation');
+    expect(codes(projection)).toContain('acknowledged_message_activation');
   });
 
-  it('rejects a durable acknowledged message whose activation belongs to another message', () => {
+  it('rejects a durable pending message that never materialized a participant turn', () => {
     const projection = successfulProjection();
-    projection.sessions[1].turns[0].activation.causes = [
-      { type: 'message', message_ref: 'M-99' },
-    ];
+    projection.direct_messages[0].status = 'pending';
+    projection.sessions[1].turns = [];
 
-    expect(codes(projection)).toContain('message_activation');
+    expect(codes(projection)).toContain('pending_message_activation');
   });
 
   it('rejects a collaboration with no direct message', () => {
@@ -201,10 +200,19 @@ describe('agent-team smoke completion line', () => {
     noRequiresAck.direct_messages[0].status = 'presented';
     const noWake = successfulProjection();
     noWake.sessions[1].turns = [];
+    const pendingWithoutWake = successfulProjection();
+    pendingWithoutWake.direct_messages[0].status = 'pending';
+    pendingWithoutWake.sessions[1].turns = [];
     const noAcceptedWork = successfulProjection();
     noAcceptedWork.work_items[1].status = 'submitted';
 
-    const diagnostics = [noAck, noRequiresAck, noWake, noAcceptedWork].map((projection) =>
+    const diagnostics = [
+      noAck,
+      noRequiresAck,
+      noWake,
+      pendingWithoutWake,
+      noAcceptedWork,
+    ].map((projection) =>
       formatSmokeOutcome(
         classifySmokeOutcome({ taskStatus: 'completed', projection }),
       ),
@@ -213,7 +221,8 @@ describe('agent-team smoke completion line', () => {
     expect(diagnostics).toHaveLength(new Set(diagnostics).size);
     expect(diagnostics[0]).toContain('acknowledged_direct_message');
     expect(diagnostics[1]).toContain('requires_ack_direct_message');
-    expect(diagnostics[2]).toContain('message_activation');
-    expect(diagnostics[3]).toContain('work_2_accepted');
+    expect(diagnostics[2]).toContain('acknowledged_message_activation');
+    expect(diagnostics[3]).toContain('pending_message_activation');
+    expect(diagnostics[4]).toContain('work_2_accepted');
   });
 });

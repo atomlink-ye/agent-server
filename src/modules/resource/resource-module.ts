@@ -91,9 +91,6 @@ export async function createResourceModule(
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };
-  // Runtime currently receives this legacy Environment read seam positionally.
-  // Attach the other composition snapshot readers to the same internal object so
-  // ExecuteRun can consume the Resource module without adding a bootstrap cycle.
   const environmentReadApi = {
     findVersion: (
       owner: Parameters<EnvironmentReadApi['findVersion']>[0],
@@ -114,8 +111,10 @@ export async function createResourceModule(
     repository: workDefinitionSources,
     resolver: workDefinitionResolution,
     agents: agentResolutionApi,
+    agentRegistry,
     invokables: invokableRepository,
     environments: environmentRegistry,
+    environmentRegistry,
     memories: memoryVersionReadApi,
   });
 

@@ -100,7 +100,7 @@ describe('Postgres Work identity module', () => {
     const repository = new PostgresWorkIdentityRepository({
       query: client.query,
       connect: async () => client,
-    });
+    } as any);
 
     const manifest = await repository.appendResolvedManifest({
       workRunId: 'run-1',
@@ -112,7 +112,11 @@ describe('Postgres Work identity module', () => {
     });
 
     expect(manifest.entries).toEqual([entry]);
-    expect(queries.some((sql) => sql.includes('root_task_id') && sql.includes('FOR UPDATE'))).toBe(false);
+    expect(
+      queries.some(
+        (sql) => sql.includes('root_task_id') && sql.includes('FOR UPDATE'),
+      ),
+    ).toBe(false);
     expect(client.release).toHaveBeenCalledOnce();
   });
 

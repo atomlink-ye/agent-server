@@ -3,7 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AccessContext } from '../../platform/access-context.js';
 import type { TeamDefinition } from '../../domain/invokables/team-definition.js';
 import type { TeamVersion } from '../../domain/invokables/team-version.js';
+import { WorkCompositionResolutionError, type ResolvedWorkDefinition } from '../../domain/work/work-composition.js';
 import type { WorkDefinitionReadPort } from '../ports/work-definition-read.js';
+import type { WorkDefinitionResolutionPort } from '../ports/work-definition-resolution.js';
 import type {
   BindRootTaskCasInput,
   WorkIdentityRepository,
@@ -39,7 +41,9 @@ export interface StartPendingWorkRunInput {
 
 export interface WorkIdentityApiOptions {
   readonly repository: WorkIdentityRepository;
+  /** Compatibility read seam retained only for the existing Team-shaped HTTP wrapper. */
   readonly definitions: WorkDefinitionReadPort;
+  readonly definitionResolution: WorkDefinitionResolutionPort;
   readonly now?: () => Date;
   readonly pendingTtlMs?: number;
 }
@@ -66,6 +70,12 @@ export interface GetWorkDefinitionInput {
   readonly workId: string;
 }
 
+export interface ResolveCurrentWorkDefinitionInput {
+  readonly owner: WorkIdentityOwnerScope;
+  readonly accessContext: AccessContext;
+  readonly workId: string;
+}
+
 export interface WorkDefinitionBinding {
   readonly definition: TeamDefinition;
   readonly version: TeamVersion;
@@ -78,36 +88,22 @@ export class WorkIdentityApi {
   public constructor(options: WorkIdentityApiOptions) {
     this.repository = options.repository;
     this.definitions = options.definitions;
+    this.definitionResolution = options.definitionResolution;
     this.now = options.now ?? (() => new Date());
     this.pendingTtlMs = options.pendingTtlMs ?? 15 * 60 * 1000;
   }
 
   private readonly repository: WorkIdentityRepository;
   private readonly definitions: WorkDefinitionReadPort;
+  private readonly definitionResolution: WorkDefinitionResolutionPort;
 
   public async createWork(input: CreateWorkInput): Promise<Work> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
-      input.accessContext,
-    );
-    if (
-      input.owner.tenantId !== accessOwner.tenantId ||
-      input.owner.workspaceId !== accessOwner.workspaceId
-    )
-      throw new WorkDefinitionValidationError();
-    const definition = await this.definitions.findTeamDefinitionById(
+    this.assertAccessOwner(input.owner, input.accessContext);
+    await this.resolveDefinition(
       input.definitionId,
-    );
-    const version = await this.definitions.findPublishedTeamVersionById(
       input.definitionVersionId,
       input.accessContext,
     );
-    assertPublishedDefinition(
-      definition,
-      version,
-      input.definitionId,
-      input.owner,
-    );
-    if (!version) throw new WorkDefinitionValidationError();
     const now = this.now().toISOString();
     return this.repository.createWork(
       createWork({
@@ -123,28 +119,13 @@ export class WorkIdentityApi {
   }
 
   public async startWorkRun(input: StartPendingWorkRunInput): Promise<WorkRun> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
-      input.accessContext,
-    );
-    if (
-      input.owner.tenantId !== accessOwner.tenantId ||
-      input.owner.workspaceId !== accessOwner.workspaceId
-    )
-      throw new WorkDefinitionValidationError();
+    this.assertAccessOwner(input.owner, input.accessContext);
     const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
-    const definition = await this.definitions.findTeamDefinitionById(
+    await this.resolveDefinition(
       work.definitionId,
-    );
-    const version = await this.definitions.findPublishedTeamVersionById(
       work.currentDefinitionVersionId,
       input.accessContext,
-    );
-    assertPublishedDefinition(
-      definition,
-      version,
-      work.definitionId,
-      input.owner,
     );
     const triggerRef = input.triggerRef ?? randomUUID();
     validateTriggerRef(triggerRef);
@@ -171,39 +152,36 @@ export class WorkIdentityApi {
   public async updateCurrentDefinitionVersion(
     input: UpdateWorkDefinitionVersionInput,
   ): Promise<Work> {
-    const accessOwner = WorkIdentityApi.ownerFromAccessContext(
-      input.accessContext,
-    );
-    if (
-      input.owner.tenantId !== accessOwner.tenantId ||
-      input.owner.workspaceId !== accessOwner.workspaceId
-    )
-      throw new WorkDefinitionValidationError();
+    this.assertAccessOwner(input.owner, input.accessContext);
     const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
-    const definition = await this.definitions.findTeamDefinitionById(
+    const resolved = await this.resolveDefinition(
       work.definitionId,
-    );
-    const version = await this.definitions.findPublishedTeamVersionById(
       input.definitionVersionId,
       input.accessContext,
     );
-    assertPublishedDefinition(
-      definition,
-      version,
-      work.definitionId,
-      input.owner,
-    );
-    if (!version) throw new WorkDefinitionValidationError();
-    if (version.definitionId !== work.definitionId)
+    if (resolved.definitionId !== work.definitionId)
       throw new WorkDefinitionValidationError();
     return this.repository.updateCurrentDefinitionVersion({
       workId: work.id,
       owner: input.owner,
-      definitionVersionId: version.id,
+      definitionVersionId: resolved.definitionVersionId,
       title: work.title,
       updatedAt: this.now().toISOString(),
     });
+  }
+
+  public async resolveCurrentDefinition(
+    input: ResolveCurrentWorkDefinitionInput,
+  ): Promise<ResolvedWorkDefinition> {
+    this.assertAccessOwner(input.owner, input.accessContext);
+    const work = await this.repository.findWorkById(input.workId, input.owner);
+    if (!work) throw new WorkNotFoundError();
+    return this.resolveDefinition(
+      work.definitionId,
+      work.currentDefinitionVersionId,
+      input.accessContext,
+    );
   }
 
   public async getWorkRun(
@@ -254,12 +232,23 @@ export class WorkIdentityApi {
     });
   }
 
+  /**
+   * Compatibility-only Team-shaped definition read. New composition callers use
+   * resolveCurrentDefinition; the public facade is replaced in the API
+   * productization slice rather than widening this legacy shape here.
+   */
   public async getWorkDefinition(
     input: GetWorkDefinitionInput,
   ): Promise<WorkDefinitionBinding> {
     this.assertAccessOwner(input.owner, input.accessContext);
     const work = await this.repository.findWorkById(input.workId, input.owner);
     if (!work) throw new WorkNotFoundError();
+    const resolved = await this.resolveDefinition(
+      work.definitionId,
+      work.currentDefinitionVersionId,
+      input.accessContext,
+    );
+    if (resolved.kind !== 'collaboration') throw new WorkNotFoundError();
     const definition = await this.definitions.findTeamDefinitionById(
       work.definitionId,
     );
@@ -280,6 +269,32 @@ export class WorkIdentityApi {
       throw new WorkNotFoundError();
     return { definition, version };
   }
+
+  private async resolveDefinition(
+    definitionId: string,
+    definitionVersionId: string,
+    accessContext: AccessContext,
+  ): Promise<ResolvedWorkDefinition> {
+    try {
+      const resolved = await this.definitionResolution.resolve({
+        definitionId,
+        definitionVersionId,
+        accessContext,
+      });
+      if (
+        resolved.definitionId !== definitionId ||
+        resolved.definitionVersionId !== definitionVersionId
+      )
+        throw new WorkDefinitionValidationError();
+      return resolved;
+    } catch (error) {
+      if (error instanceof WorkDefinitionValidationError) throw error;
+      if (error instanceof WorkCompositionResolutionError)
+        throw new WorkDefinitionValidationError();
+      throw error;
+    }
+  }
+
   private assertAccessOwner(
     owner: WorkIdentityOwnerScope,
     accessContext: AccessContext,
@@ -300,30 +315,6 @@ export class WorkIdentityApi {
       tenantId: accessContext.tenantId,
       workspaceId: accessContext.workspaceId,
     };
-  }
-}
-
-function assertPublishedDefinition(
-  definition: Awaited<
-    ReturnType<WorkDefinitionReadPort['findTeamDefinitionById']>
-  >,
-  version: Awaited<
-    ReturnType<WorkDefinitionReadPort['findPublishedTeamVersionById']>
-  >,
-  definitionId: string,
-  owner: WorkIdentityOwnerScope,
-): asserts definition is NonNullable<typeof definition> {
-  if (
-    !definition ||
-    !version ||
-    version.definitionId !== definitionId ||
-    definition.tenantId !== owner.tenantId ||
-    definition.workspaceId !== owner.workspaceId ||
-    version.tenantId !== owner.tenantId ||
-    version.workspaceId !== owner.workspaceId ||
-    version.status !== 'published'
-  ) {
-    throw new WorkDefinitionValidationError();
   }
 }
 

@@ -60,6 +60,40 @@ describe('run HTTP contracts', () => {
     });
     expect(foreign.status).toBe(404);
   });
+
+  it('exposes execution stages while an accepted Run remains active', async () => {
+    const runtime = new FakeAgentRuntime();
+    const gate = runtime.armExecutionGate();
+    const app = await createTestApp(runtime);
+    const accepted = await app.request('/api/v1/runs', {
+      method: 'POST',
+      headers: authenticatedJsonHeaders,
+      body: JSON.stringify({ prompt: 'hold until event read' }),
+    });
+    expect(accepted.status).toBe(202);
+    const runId = CreateRunResponseSchema.parse(await accepted.json()).run_id;
+
+    await gate.entered;
+    const events = await app.request(`/api/v1/runs/${runId}/events?after=0`, {
+      headers: { authorization: `Bearer ${primaryServiceAccountToken}` },
+    });
+    expect(events.status).toBe(200);
+    expect(
+      (
+        (await events.json()) as {
+          events: Array<{ type: string; payload: Record<string, unknown> }>;
+        }
+      ).events.map((event) => event.payload),
+    ).toEqual(
+      expect.arrayContaining([
+        { kind: 'execution_stage', stage: 'agent_executor_started' },
+        { kind: 'execution_stage', stage: 'runtime_execute_requested' },
+      ]),
+    );
+
+    gate.release();
+  });
+
   it.each([
     [{}, 'missing'],
     [{ authorization: 'Basic nope' }, 'malformed'],

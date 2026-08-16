@@ -126,11 +126,26 @@ export function validateWorkDefinitionCompositionSource(
       '$.spec.input_schema',
     );
   }
-  return Object.freeze({
-    ...source,
+
+  const common = {
+    environmentVersionId: source.environmentVersionId,
     memoryVersionIds: Object.freeze([...source.memoryVersionIds]),
+    ...(source.description === undefined
+      ? {}
+      : { description: source.description }),
     ...(inputSchema ? { inputSchema } : {}),
-  });
+  };
+  return source.kind === 'single_agent'
+    ? Object.freeze({
+        kind: 'single_agent' as const,
+        agentVersionId: source.agentVersionId,
+        ...common,
+      })
+    : Object.freeze({
+        kind: 'collaboration' as const,
+        teamVersionId: source.teamVersionId,
+        ...common,
+      });
 }
 
 export function fingerprintWorkDefinitionSource(

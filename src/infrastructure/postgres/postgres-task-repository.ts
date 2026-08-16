@@ -258,7 +258,8 @@ interface TaskRow {
   readonly source_team_message_id: string | null;
   readonly input_team_message_ids: readonly string[] | null;
   readonly team_activation_materializer:
-    'task_run_collaboration_activation_adapter' | null;
+    | 'task_run_collaboration_activation_adapter'
+    | null;
   readonly team_activation_causes: readonly unknown[] | null;
   readonly created_at: string | Date;
   readonly updated_at: string | Date;

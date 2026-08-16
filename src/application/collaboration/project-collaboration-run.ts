@@ -78,7 +78,7 @@ export class ProjectCollaborationRun {
           description: safeText(item.description),
           status: projectBoardStatus(item, itemAttempts),
           owner: item.ownerMemberId
-            ? (participantNameById.get(item.ownerMemberId) ?? null)
+            ? participantNameById.get(item.ownerMemberId) ?? null
             : null,
           dependency_refs: dependencies
             .filter((edge) => edge.workItemId === item.id)
@@ -112,18 +112,17 @@ export class ProjectCollaborationRun {
         .map((message) => ({
           message_ref: messageRef(message.sequence),
           from: message.senderMemberRunId
-            ? (participantNameById.get(message.senderMemberRunId) ??
-              'participant')
+            ? participantNameById.get(message.senderMemberRunId) ?? 'participant'
             : 'system',
           to:
             participantNameById.get(message.recipientMemberRunId) ??
             'participant',
           body: safeText(message.body) ?? '',
           about_work_ref: message.aboutWorkItemId
-            ? (workRefById.get(message.aboutWorkItemId) ?? null)
+            ? workRefById.get(message.aboutWorkItemId) ?? null
             : null,
           reply_to_ref: message.replyToMessageId
-            ? (messageRefById.get(message.replyToMessageId) ?? null)
+            ? messageRefById.get(message.replyToMessageId) ?? null
             : null,
           priority: message.priority,
           requires_ack: message.requiresAck,

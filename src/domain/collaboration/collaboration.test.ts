@@ -30,9 +30,7 @@ describe('collaboration logical references', () => {
     const second = item('00000000-0000-4000-8000-000000000002');
     const ordered = orderedWorkItems([second, first]);
 
-    expect(
-      ordered.map((candidate, index) => [workRef(index), candidate.id]),
-    ).toEqual([
+    expect(ordered.map((candidate, index) => [workRef(index), candidate.id])).toEqual([
       ['W-1', first.id],
       ['W-2', second.id],
     ]);

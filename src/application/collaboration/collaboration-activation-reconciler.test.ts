@@ -116,29 +116,24 @@ const wake = {
   sequence: 2,
 };
 
-function setup(
-  latestDecision: ReturnType<typeof createTeamCompletionDecision> | null,
-) {
+function setup(latestDecision: ReturnType<typeof createTeamCompletionDecision> | null) {
   let executionTaskId: string | null = null;
-  const materializeAttempt = vi.fn(
-    async (input: { executionTaskId: string }) => {
-      executionTaskId = input.executionTaskId;
-      return { ...attempt, executionTaskId, status: 'running' as const };
-    },
-  );
+  const materializeAttempt = vi.fn(async (input: { executionTaskId: string }) => {
+    executionTaskId = input.executionTaskId;
+    return { ...attempt, executionTaskId, status: 'running' as const };
+  });
   const saveTask = vi.fn(async () => undefined);
   const saveRun = vi.fn(async () => undefined);
   const bindToTask = vi.fn(async () => [wake]);
   const enqueueRunDispatch = vi.fn(async () => undefined);
-  const withTransaction = vi.fn(
-    async (operation: (tx: any) => Promise<unknown>) =>
-      operation({
-        tasks: { save: saveTask },
-        runs: { save: saveRun },
-        teamMessages: { bindToTask },
-        teamExecutions: { materializeAttempt },
-        enqueueRunDispatch,
-      }),
+  const withTransaction = vi.fn(async (operation: (tx: any) => Promise<unknown>) =>
+    operation({
+      tasks: { save: saveTask },
+      runs: { save: saveRun },
+      teamMessages: { bindToTask },
+      teamExecutions: { materializeAttempt },
+      enqueueRunDispatch,
+    }),
   );
   const executions = {
     findTeamRunByRootTaskId: vi.fn(async () => team),
@@ -151,13 +146,10 @@ function setup(
     findCompletionDecisionForRequest: vi.fn(async () => latestDecision),
   } as unknown as TeamExecutionRepository;
   const messages = {
-    listQueuedForMember: vi.fn(
-      async (_teamId: string, participantId: string) =>
-        participantId === member.id && executionTaskId === null ? [wake] : [],
+    listQueuedForMember: vi.fn(async (_teamId: string, participantId: string) =>
+      participantId === member.id && executionTaskId === null ? [wake] : [],
     ),
-    listQueuedWakeRoots: vi.fn(async () => [
-      { rootTaskId: team.rootTaskId, owner },
-    ]),
+    listQueuedWakeRoots: vi.fn(async () => [{ rootTaskId: team.rootTaskId, owner }]),
   };
   const tasks = {
     findById: vi.fn(async () => rootTask),
@@ -171,12 +163,7 @@ function setup(
     undefined,
     now,
   );
-  return {
-    reconciler,
-    withTransaction,
-    materializeAttempt,
-    enqueueRunDispatch,
-  };
+  return { reconciler, withTransaction, materializeAttempt, enqueueRunDispatch };
 }
 
 describe('CollaborationActivationReconciler', () => {
@@ -247,9 +234,7 @@ describe('CollaborationActivationReconciler', () => {
 
   it('freezes participant activation while human completion approval is pending', async () => {
     const state = setup(null);
-    expect(
-      await state.reconciler.reconcileForRootTask(team.rootTaskId, owner),
-    ).toBe(0);
+    expect(await state.reconciler.reconcileForRootTask(team.rootTaskId, owner)).toBe(0);
     expect(state.withTransaction).not.toHaveBeenCalled();
   });
 
@@ -268,9 +253,7 @@ describe('CollaborationActivationReconciler', () => {
     });
     const state = setup(decision);
 
-    expect(
-      await state.reconciler.reconcileForRootTask(team.rootTaskId, owner),
-    ).toBe(1);
+    expect(await state.reconciler.reconcileForRootTask(team.rootTaskId, owner)).toBe(1);
     expect(state.materializeAttempt).toHaveBeenCalledTimes(1);
     expect(state.enqueueRunDispatch).toHaveBeenCalledTimes(1);
   });

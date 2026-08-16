@@ -85,10 +85,11 @@ interface SubmissionRow {
   created_at: string | Date;
 }
 
-export class PostgresCollaborationRepository implements CollaborationRepository {
+export class PostgresCollaborationRepository
+  implements CollaborationRepository
+{
   public constructor(
-    private readonly database: Queryable &
-      Partial<Pick<Connectable, 'connect'>>,
+    private readonly database: Queryable & Partial<Pick<Connectable, 'connect'>>,
   ) {}
 
   public async createOpenWork(
@@ -115,7 +116,11 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
       });
       const creator = await client.query<{ role: string; status: string }>(
         `SELECT role,status FROM team_member_runs WHERE id=$1 AND team_run_id=$2 AND ${ownerSql('', 3)} FOR SHARE`,
-        [input.createdByMemberId, input.teamRunId, ...ownerValues(input.owner)],
+        [
+          input.createdByMemberId,
+          input.teamRunId,
+          ...ownerValues(input.owner),
+        ],
       );
       if (!creator.rows?.[0] || creator.rows[0].role !== 'lead')
         throw new TeamExecutionError('not_allowed');
@@ -129,9 +134,7 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
         `SELECT count(*)::text AS count FROM team_work_items WHERE team_run_id=$1 AND ${ownerSql('', 2)}`,
         [input.teamRunId, ...ownerValues(input.owner)],
       );
-      if (
-        Number(count.rows?.[0]?.count ?? 0) >= COLLABORATION_LIMITS.maxWorkItems
-      )
+      if (Number(count.rows?.[0]?.count ?? 0) >= COLLABORATION_LIMITS.maxWorkItems)
         throw new TeamExecutionError('limit_exceeded');
       const now = new Date().toISOString();
       const id = randomUUID();
@@ -308,8 +311,7 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
       if (!latest.rows?.[0] || latest.rows[0].status !== 'completed')
         throw new TeamExecutionError('invalid_transition');
       const attemptNo = latest.rows[0].attempt_no + 1;
-      if (attemptNo > COLLABORATION_LIMITS.maxAttemptsPerItem)
-        throw new TeamExecutionError('limit_exceeded');
+      if (attemptNo > COLLABORATION_LIMITS.maxAttemptsPerItem) throw new TeamExecutionError('limit_exceeded');
       const now = new Date().toISOString();
       const attemptId = randomUUID();
       const attempt = await client.query<AttemptRow>(
@@ -577,7 +579,8 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
           AND ${ownerSql('', 3)} FOR UPDATE`,
         [input.workItemId, input.teamRunId, ...ownerValues(input.owner)],
       );
-      if (!work.rows?.[0]) throw new TeamExecutionError('invalid_transition');
+      if (!work.rows?.[0])
+        throw new TeamExecutionError('invalid_transition');
       if (input.claimant) {
         const blockedDependency = await client.query(
           `SELECT 1 FROM team_work_item_dependencies d

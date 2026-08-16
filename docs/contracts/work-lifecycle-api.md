@@ -68,7 +68,7 @@ spec:
       type: object
       properties: {}
       additionalProperties: false
-    prompt: 'Execute exactly the next legal Team transition for your role.'
+    prompt: "Execute exactly the next legal Team transition for your role."
   session:
     invocation: fresh_per_invocation
     followUps: queued
@@ -81,7 +81,7 @@ spec:
     filesystem: workspace_read
   completion:
     type: executable
-    command: 'done'
+    command: "done"
 ```
 
 Analyst package:
@@ -111,7 +111,7 @@ spec:
       type: object
       properties: {}
       additionalProperties: false
-    prompt: 'Execute exactly the next legal Team transition for your role.'
+    prompt: "Execute exactly the next legal Team transition for your role."
   session:
     invocation: fresh_per_invocation
     followUps: queued
@@ -124,7 +124,7 @@ spec:
     filesystem: workspace_read
   completion:
     type: executable
-    command: 'done'
+    command: "done"
 ```
 
 > **`spec.permissions` is accepted and stored but is not enforced at runtime.**
@@ -456,17 +456,17 @@ This table is scoped to the exact lifecycle above. Use a distinct key per
 registry operation. Idempotency is owner-scoped, and a same-key replay must
 use the same request fingerprint.
 
-| Route                                                   | Required header            | Same key + same request                   | Same key + different request | Header policy                                        |
-| ------------------------------------------------------- | -------------------------- | ----------------------------------------- | ---------------------------- | ---------------------------------------------------- |
-| `POST /api/v1/agents:import`                            | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/agent-versions/{versionId}:publish`       | `Idempotency-Key` required | Replays the published version result      | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/environments:import`                      | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/environment-versions/{versionId}:publish` | `Idempotency-Key` required | Replays the published version result      | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/teams:import`                             | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/team-versions/{versionId}:publish`        | `Idempotency-Key` required | Replays the published version result      | `409 idempotency_conflict`   | Required                                             |
-| `POST /api/v1/works`                                    | Must be absent             | No public replay semantics                | Not applicable               | Server rejects the header with `400 invalid_request` |
-| `POST /api/v1/works/{workId}/runs`                      | Must be absent             | No public replay semantics                | Not applicable               | Server rejects the header with `400 invalid_request` |
-| `POST /api/v1/runs` (optional compatibility route)      | Optional                   | Replays an accepted compatibility Run     | `409 idempotency_conflict`   | See [Run compatibility API](run-api.md)              |
+| Route | Required header | Same key + same request | Same key + different request | Header policy |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/agents:import` | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict` | Required |
+| `POST /api/v1/agent-versions/{versionId}:publish` | `Idempotency-Key` required | Replays the published version result | `409 idempotency_conflict` | Required |
+| `POST /api/v1/environments:import` | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict` | Required |
+| `POST /api/v1/environment-versions/{versionId}:publish` | `Idempotency-Key` required | Replays the published version result | `409 idempotency_conflict` | Required |
+| `POST /api/v1/teams:import` | `Idempotency-Key` required | Replays the original `201` result and IDs | `409 idempotency_conflict` | Required |
+| `POST /api/v1/team-versions/{versionId}:publish` | `Idempotency-Key` required | Replays the published version result | `409 idempotency_conflict` | Required |
+| `POST /api/v1/works` | Must be absent | No public replay semantics | Not applicable | Server rejects the header with `400 invalid_request` |
+| `POST /api/v1/works/{workId}/runs` | Must be absent | No public replay semantics | Not applicable | Server rejects the header with `400 invalid_request` |
+| `POST /api/v1/runs` (optional compatibility route) | Optional | Replays an accepted compatibility Run | `409 idempotency_conflict` | See [Run compatibility API](run-api.md) |
 
 The Work exception is deliberate. Work creation and WorkRun start do not offer
 public idempotency or replay semantics. Accepting `Idempotency-Key` on those
@@ -483,12 +483,12 @@ caller does not submit tenant, principal, workspace, or policy authority in a
 request body. The authenticated binding supplies the owner scope used for
 authorization and replay scoping.
 
-| Configuration or header     | Responsibility in this lifecycle                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Configuration or header | Responsibility in this lifecycle |
+| --- | --- |
 | `Authorization: Bearer ...` | API authentication. The bearer comes from an enabled service-account entry in `SERVICE_ACCOUNTS_JSON`. |
-| `SERVICE_ACCOUNTS_JSON`     | Server-side service-account configuration that enables the bearer and binds its owner scope.           |
-| `PASEO_PROVIDER`            | Runtime/provider injection. It is not bearer authentication and is not caller authority.               |
-| `PASEO_MODEL`               | Runtime/provider injection. It is not bearer authentication and is not caller authority.               |
+| `SERVICE_ACCOUNTS_JSON` | Server-side service-account configuration that enables the bearer and binds its owner scope. |
+| `PASEO_PROVIDER` | Runtime/provider injection. It is not bearer authentication and is not caller authority. |
+| `PASEO_MODEL` | Runtime/provider injection. It is not bearer authentication and is not caller authority. |
 
 Do not treat provider/model settings as credentials, and do not put bearer
 tokens, provider credentials, raw provider errors, or local credential paths in
@@ -506,18 +506,18 @@ reference a hypothetical Team list route: there is no truthful owner-scoped
 
 Representative safe status mappings for this lifecycle are:
 
-| Status | Code                                                                                                            | Meaning                                                                                                                                                   |
-| ------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `401`  | `unauthorized`                                                                                                  | Missing or invalid enabled service-account bearer.                                                                                                        |
-| `400`  | `invalid_request`                                                                                               | Malformed/strictly invalid body, path, query, or a supplied `Idempotency-Key` on a Work write.                                                            |
-| `400`  | `invalid_work_definition`                                                                                       | Work definition/version is not a valid published Team lineage for the authenticated owner scope.                                                          |
-| `400`  | `invalid_idempotency_key`                                                                                       | Required registry key is missing, blank, or too long.                                                                                                     |
-| `400`  | package validation code                                                                                         | Managed Agent, Environment, or Team YAML is invalid.                                                                                                      |
-| `404`  | `agent_not_found`, `environment_version_not_found`, `team_not_found`, `work_not_found`, or `work_run_not_found` | Missing or foreign owner-scoped resource, without existence disclosure.                                                                                   |
-| `409`  | `idempotency_conflict`                                                                                          | A required registry key was reused for a different request in the same owner scope.                                                                       |
-| `409`  | `work_identity_conflict`, `workspace_scope_unavailable`, `pending_expired`, or `work_run_binding_conflict`      | Implemented Work/WorkRun conflict or admission condition.                                                                                                 |
-| `503`  | `projection_unavailable`                                                                                        | The WorkRun projection is temporarily unavailable; retry the same WorkRun GET with bounded backoff until the client deadline. This is not a Work failure. |
-| `500`  | `projection_invalid`                                                                                            | The persisted WorkRun projection cannot be represented safely.                                                                                            |
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `401` | `unauthorized` | Missing or invalid enabled service-account bearer. |
+| `400` | `invalid_request` | Malformed/strictly invalid body, path, query, or a supplied `Idempotency-Key` on a Work write. |
+| `400` | `invalid_work_definition` | Work definition/version is not a valid published Team lineage for the authenticated owner scope. |
+| `400` | `invalid_idempotency_key` | Required registry key is missing, blank, or too long. |
+| `400` | package validation code | Managed Agent, Environment, or Team YAML is invalid. |
+| `404` | `agent_not_found`, `environment_version_not_found`, `team_not_found`, `work_not_found`, or `work_run_not_found` | Missing or foreign owner-scoped resource, without existence disclosure. |
+| `409` | `idempotency_conflict` | A required registry key was reused for a different request in the same owner scope. |
+| `409` | `work_identity_conflict`, `workspace_scope_unavailable`, `pending_expired`, or `work_run_binding_conflict` | Implemented Work/WorkRun conflict or admission condition. |
+| `503` | `projection_unavailable` | The WorkRun projection is temporarily unavailable; retry the same WorkRun GET with bounded backoff until the client deadline. This is not a Work failure. |
+| `500` | `projection_invalid` | The persisted WorkRun projection cannot be represented safely. |
 
 Error bodies use the common safe envelope and include a request ID:
 

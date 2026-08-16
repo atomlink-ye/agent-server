@@ -30,10 +30,14 @@ function recordedAttempts(
   );
 }
 
-function expectedGeometryFromRecording(attempts: readonly RecordedAttempt[]) {
+function expectedGeometryFromRecording(
+  attempts: readonly RecordedAttempt[],
+) {
   const captured = attempts.filter(
     ({ attempt }) =>
-      attempt.started_at && attempt.ended_at && attempt.duration_ms !== null,
+      attempt.started_at &&
+      attempt.ended_at &&
+      attempt.duration_ms !== null,
   );
   const start = Math.min(
     ...captured.map(({ attempt: candidate }) =>
@@ -41,9 +45,7 @@ function expectedGeometryFromRecording(attempts: readonly RecordedAttempt[]) {
     ),
   );
   const end = Math.max(
-    ...captured.map(({ attempt: candidate }) =>
-      Date.parse(candidate.ended_at!),
-    ),
+    ...captured.map(({ attempt: candidate }) => Date.parse(candidate.ended_at!)),
   );
   const range = end - start;
   return new Map(
@@ -251,10 +253,10 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
         );
         expect(reworkItem).toBeDefined();
         if (!reworkItem) continue;
-        expect(reworkItem.attempts.map((attempt) => attempt.id)).toHaveLength(
-          2,
+        expect(reworkItem.attempts.map((attempt) => attempt.id)).toHaveLength(2);
+        expect(reworkItem.attempts[0]?.id).not.toBe(
+          reworkItem.attempts[1]?.id,
         );
-        expect(reworkItem.attempts[0]?.id).not.toBe(reworkItem.attempts[1]?.id);
         const feedbackEdges = trace.edges.filter(
           (edge) => edge.kind === 'feedback',
         );

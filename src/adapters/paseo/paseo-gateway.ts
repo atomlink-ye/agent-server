@@ -118,7 +118,8 @@ export class PaseoGateway {
 
   public async assertSessionAvailable(agentId: string): Promise<void> {
     const timeline = this.fetchTimeline(agentId);
-    if (!timeline) throw new Error('Paseo session inspection is unavailable.');
+    if (!timeline)
+      throw new Error('Paseo session inspection is unavailable.');
     await timeline;
   }
 

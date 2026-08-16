@@ -69,12 +69,7 @@ describe('TeamDriver direct-message progress', () => {
       now,
     });
     const leadRun = transitionRun(
-      transitionRun(
-        createRun('PING_FROM_LEAD', { id: 'lead-run-1', now }),
-        'running',
-        {},
-        now,
-      ),
+      transitionRun(createRun('PING_FROM_LEAD', { id: 'lead-run-1', now }), 'running', {}, now),
       'succeeded',
       { result: { text: 'PING_FROM_LEAD sent.' } },
       now,

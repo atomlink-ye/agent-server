@@ -3,9 +3,7 @@ import { SynthesizeMemoryDocument } from './synthesize-memory-document.js';
 
 describe('SynthesizeMemoryDocument', () => {
   it('calls the runtime once with server-owned instructions and no candidates', async () => {
-    const executeTurn = vi
-      .fn()
-      .mockResolvedValue({ text: 'Synthesized memory' });
+    const executeTurn = vi.fn().mockResolvedValue({ text: 'Synthesized memory' });
     const result = await new SynthesizeMemoryDocument({ executeTurn }).execute({
       ingressId: 'ingress-1',
       category: 'policy',

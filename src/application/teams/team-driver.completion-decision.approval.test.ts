@@ -89,24 +89,22 @@ function setupDriver(initialTeam = makeTeam()) {
     leadTurnCountAtDecision: initialTeam.leadTurnCount,
     targets: [{ workItemId: 'work-decision', attemptNoAtDecision: 1 }],
   });
-  const recordRejection = vi.fn(async (input: { feedback: string }) => {
-    currentTeam = {
-      ...currentTeam,
-      revision: currentTeam.revision + 1,
-      updatedAt: now().toISOString(),
-    };
-    return {
-      recorded: true,
-      decision: { ...rejectDecision, feedback: input.feedback },
-      team: currentTeam,
-    };
-  });
+  const recordRejection = vi.fn(
+    async (input: { feedback: string }) => {
+      currentTeam = {
+        ...currentTeam,
+        revision: currentTeam.revision + 1,
+        updatedAt: now().toISOString(),
+      };
+      return {
+        recorded: true,
+        decision: { ...rejectDecision, feedback: input.feedback },
+        team: currentTeam,
+      };
+    },
+  );
   const withTransaction = vi.fn(async (work: (tx: any) => Promise<unknown>) =>
-    work({
-      teamExecutions: {
-        recordCompletionRejectionInTransaction: recordRejection,
-      },
-    }),
+    work({ teamExecutions: { recordCompletionRejectionInTransaction: recordRejection } }),
   );
   const completeTeamRunAtomically = vi.fn(async () => currentTeam);
   const findCompletionDecisionForRequest = vi.fn<
@@ -209,8 +207,7 @@ describe('TeamDriver completion decision orchestration', () => {
         id: 'decision-approve',
         ...owner,
         teamRunId: setup.currentTeam.id,
-        completionRequestedByRunId:
-          setup.currentTeam.completionRequestedByRunId!,
+        completionRequestedByRunId: setup.currentTeam.completionRequestedByRunId!,
         decision: 'approve',
         feedback: null,
         decidedBy: 'reviewer-decision',

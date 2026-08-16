@@ -4,14 +4,14 @@
 
 Choose the smallest layer that expresses the risk truthfully.
 
-| Layer          | Typical boundary                           | Infrastructure                                       |
-| -------------- | ------------------------------------------ | ---------------------------------------------------- |
-| Unit           | domain/helper/config/reducer               | none                                                 |
-| Contract       | public HTTP/schema/error behavior          | in-process/fake                                      |
-| Integration    | repositories/components/adapters           | PGlite by default; real PG when semantics require it |
-| E2E            | complete deterministic process/socket path | explicit local topology as needed                    |
-| External smoke | real Paseo/provider main flow              | explicit opt-in credentials/runtime                  |
-| Eval           | Agent/model-quality behavior               | persistent dataset/evaluator                         |
+| Layer | Typical boundary | Infrastructure |
+| --- | --- | --- |
+| Unit | domain/helper/config/reducer | none |
+| Contract | public HTTP/schema/error behavior | in-process/fake |
+| Integration | repositories/components/adapters | PGlite by default; real PG when semantics require it |
+| E2E | complete deterministic process/socket path | explicit local topology as needed |
+| External smoke | real Paseo/provider main flow | explicit opt-in credentials/runtime |
+| Eval | Agent/model-quality behavior | persistent dataset/evaluator |
 
 Tests may be few in Prove, but their category must be truthful.
 

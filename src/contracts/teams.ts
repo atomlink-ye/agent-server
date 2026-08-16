@@ -214,31 +214,13 @@ export const AgenticTeamProjectTurnSchema = z
         materializer: z.literal('task_run_collaboration_activation_adapter'),
         causes: z.array(
           z.discriminatedUnion('type', [
-            z
-              .object({ type: z.literal('assignment'), work_ref: z.string() })
-              .strict(),
-            z
-              .object({ type: z.literal('claim'), work_ref: z.string() })
-              .strict(),
-            z
-              .object({ type: z.literal('message'), message_ref: z.string() })
-              .strict(),
-            z
-              .object({ type: z.literal('feedback'), work_ref: z.string() })
-              .strict(),
-            z
-              .object({
-                type: z.literal('dependency_unblocked'),
-                work_ref: z.string(),
-              })
-              .strict(),
+            z.object({ type: z.literal('assignment'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('claim'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('message'), message_ref: z.string() }).strict(),
+            z.object({ type: z.literal('feedback'), work_ref: z.string() }).strict(),
+            z.object({ type: z.literal('dependency_unblocked'), work_ref: z.string() }).strict(),
             z.object({ type: z.literal('final_review') }).strict(),
-            z
-              .object({
-                type: z.literal('work_available'),
-                work_ref: z.string(),
-              })
-              .strict(),
+            z.object({ type: z.literal('work_available'), work_ref: z.string() }).strict(),
           ]),
         ),
       })

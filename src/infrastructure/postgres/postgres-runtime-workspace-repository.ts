@@ -12,7 +12,9 @@ const PASEO_PLANE = 'paseo';
  * workspace id on runtime_sessions; this repository exposes the concept as a
  * workspace-owned neutral binding without a DB migration.
  */
-export class PostgresRuntimeWorkspaceRepository implements RuntimeWorkspaceRepository {
+export class PostgresRuntimeWorkspaceRepository
+  implements RuntimeWorkspaceRepository
+{
   public constructor(
     private readonly db: {
       query(
@@ -101,7 +103,8 @@ export class PostgresRuntimeWorkspaceRepository implements RuntimeWorkspaceRepos
     rows: readonly any[],
   ): RuntimeWorkspace {
     const ids = rows.map((row) => row.paseo_workspace_id as string);
-    if (ids.length > 1) throw new Error('Runtime workspace binding conflict.');
+    if (ids.length > 1)
+      throw new Error('Runtime workspace binding conflict.');
     return {
       id: runtimeWorkspaceIdentity(scope),
       scope,

@@ -127,7 +127,9 @@ it('renders fixture-backed Work titles and exact detail links without N+1 reads'
   expect(() => Object.keys(ownKeyPoisoned)).toThrow(
     'work-list-semantic-own-key',
   );
-  expect(() => ({ ...ownKeyPoisoned })).toThrow('work-list-semantic-own-key');
+  expect(() => ({ ...ownKeyPoisoned })).toThrow(
+    'work-list-semantic-own-key',
+  );
 
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -169,9 +171,7 @@ it('renders fixture-backed Work titles and exact detail links without N+1 reads'
     expect(host.querySelector('[data-testid="work-list-loading"]')).toBeNull();
     expect(host.querySelector('[data-testid="work-list-empty"]')).toBeNull();
     expect(host.querySelector('[data-testid="work-list-error"]')).toBeNull();
-    const list = host.querySelector<HTMLUListElement>(
-      '[data-testid="work-list"]',
-    );
+    const list = host.querySelector<HTMLUListElement>('[data-testid="work-list"]');
     expect(list).not.toBeNull();
     if (!list) throw new Error('work_list_missing');
     const cards = [...list.querySelectorAll<HTMLLIElement>('.work-list-card')];

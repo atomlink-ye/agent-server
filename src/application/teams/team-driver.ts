@@ -41,7 +41,7 @@ export class TeamDriver {
     private readonly admission: AdmissionRepository,
     private readonly messages?: Pick<
       TeamMessageRepository,
-      'requeueDirectForFailedTask'
+      'requeueDirectForFailedTask' | 'listDirectForTeamRun'
     >,
     private readonly reconciler?: Pick<
       CollaborationActivationReconciler,
@@ -330,17 +330,15 @@ export class TeamDriver {
           policy.allowedCommands.length > 0 &&
           !policy.allowedCommands.includes('board_cancel')
         ) {
-          const members = await this.executions.findMembersByTeamRunId(
-            fresh.id,
-            owner,
+          const hasDurableDirectMessage = (
+            (await this.messages?.listDirectForTeamRun(fresh.id, owner)) ?? []
+          ).some(
+            (message) =>
+              message.kind === 'direct' &&
+              message.sourceTaskId === input.task.id &&
+              message.sourceRunId === input.run.id,
           );
-          const hasActiveParticipantTurn =
-            (await this.runs.hasNonterminalRunsForTeamMemberChildTasks?.(
-              fresh.rootTaskId,
-              members.map((member) => member.id),
-              owner,
-            )) ?? false;
-          if (hasActiveParticipantTurn) {
+          if (hasDurableDirectMessage) {
             await this.reconciler?.reconcileForRootTask(
               fresh.rootTaskId,
               owner,

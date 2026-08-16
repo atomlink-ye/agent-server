@@ -44,6 +44,8 @@ export interface RuntimeModule {
   readonly readiness: ReadinessProbe;
   readonly runtimeCellRoot?: string;
   readonly mcpHost: RuntimeMcpHostLifecycle;
+  /** Composition-root only; not a runtime/user plugin API. */
+  registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
 export function createRuntimeModule(options: {
@@ -94,8 +96,9 @@ export function createRuntimeModule(options: {
     options.config.paseo.agentCwd,
   );
   const executionRuntime = options.debugRuntime ?? productionExecutionRuntime;
+  const toolRegistry = new RuntimeToolRegistry(options.toolContributors);
   const mcpHost = new RuntimeMcpServer(
-    new RuntimeToolRegistry(options.toolContributors),
+    toolRegistry,
     undefined,
     options.config.runtimeMcp?.listenHost,
     options.config.runtimeMcp?.advertisedHost,
@@ -127,5 +130,8 @@ export function createRuntimeModule(options: {
       ? { runtimeCellRoot: options.config.paseo.runtimeCellRoot }
       : {}),
     mcpHost,
+    registerToolContributor(contributor) {
+      toolRegistry.register(contributor);
+    },
   };
 }

@@ -180,13 +180,44 @@ async function createMessageWakeFixture() {
     }) as never,
   );
 
-  return { client, database, root, team, teamRun };
+  return {
+    client,
+    database,
+    root,
+    team,
+    teamRun,
+    tasks,
+    runs,
+    grant: server.grants.resolve(grant.token)!,
+    leadTask,
+    leadClaim,
+  };
 }
 
 describe('canonical smoke direct-message wake mutation', () => {
   it('creates a durable pending requires-ack message through MCP before wake materialization', async () => {
     const fixture = await createMessageWakeFixture();
     try {
+      try {
+        await fixture.team.contextResolver.resolve(fixture.grant);
+      } catch (error) {
+        const task = await fixture.tasks.findByIdForOwner(
+          fixture.leadTask.id,
+          owner,
+        );
+        const run = await fixture.runs.findByIdForOwner(
+          fixture.leadClaim.run.id,
+          owner,
+        );
+        throw new Error(
+          `MCP fixture context is stale before message_send: ${JSON.stringify({
+            code: (error as { code?: string }).code ?? null,
+            task,
+            run,
+            grant: fixture.grant,
+          })}`,
+        );
+      }
       const sent = await fixture.client.callTool({
         name: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
         arguments: {

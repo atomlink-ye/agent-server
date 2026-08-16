@@ -128,8 +128,6 @@ function createApi(repository: MemoryDefinitionRepository) {
           platformCapabilities: [],
           executionPolicy: {
             invokable: { kind: 'agent', versionId: agentVersionId },
-            runtimeSessionPolicy: 'fresh',
-            runtimeWorkspacePolicy: 'run_scoped',
             requiredRuntimeCapabilities: [],
           },
         };
@@ -273,7 +271,11 @@ class MemoryDefinitionRepository implements WorkDefinitionSourceRepository {
     readonly owner: WorkDefinitionSourceOwner;
     readonly idempotencyKey: string;
   }) {
-    return this.applyRequests.get(`${ownerKey(input.owner)}:${input.idempotencyKey}`) ?? null;
+    return (
+      this.applyRequests.get(
+        `${ownerKey(input.owner)}:${input.idempotencyKey}`,
+      ) ?? null
+    );
   }
 
   public async recordApplyRequest(input: {
@@ -312,5 +314,10 @@ function sameOwner(
 }
 
 function ownerKey(owner: WorkDefinitionSourceOwner): string {
-  return [owner.tenantId, owner.workspaceId, owner.principalType, owner.principalId].join(':');
+  return [
+    owner.tenantId,
+    owner.workspaceId,
+    owner.principalType,
+    owner.principalId,
+  ].join(':');
 }

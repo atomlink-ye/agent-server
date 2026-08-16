@@ -24,8 +24,8 @@ if (!connectionString)
 const tenantId = 'composition_real_pg_tenant';
 const workspaceId = 'a1111111-1111-4111-8111-111111111111';
 const principalId = 'composition-real-pg';
-const definitionId = 'a2222222-2222-4222-8222-222222222222';
-const definitionVersionId = 'a3333333-3333-4333-8333-333333333333';
+const definitionId = randomUUID();
+const definitionVersionId = randomUUID();
 const agentVersionId = 'a4444444-4444-4444-8444-444444444444';
 const environmentVersionId = 'a5555555-5555-4555-8555-555555555555';
 const memoryVersionId = 'a6666666-6666-4666-8666-666666666666';
@@ -91,15 +91,6 @@ describe('Composition-first Work on real PostgreSQL', () => {
       await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
         createdTaskIds,
       ]);
-    await pool
-      .query(
-        'DELETE FROM work_definition_source_versions WHERE definition_id=$1',
-        [definitionId],
-      )
-      .catch(() => undefined);
-    // Published versions are immutable by trigger; remove the definition only
-    // when the test database is ephemeral. The global real-PG test environment
-    // is recreated for every CI run, so leaving immutable rows is intentional.
     await pool?.end();
   });
 

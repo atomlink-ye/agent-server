@@ -138,5 +138,6 @@ describe('ResolveWorkDefinition authored source', () => {
       'external_workspace',
       'platform_mcp',
     ]);
+    expect(resolved.resolvedFingerprint).not.toBe(resolved.sourceFingerprint);
   });
 });

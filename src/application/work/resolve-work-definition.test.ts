@@ -79,8 +79,6 @@ describe('ResolveWorkDefinition', () => {
       kind: 'agent',
       versionId: version.id,
     });
-    expect(first.executionPolicy.runtimeSessionPolicy).toBe('fresh');
-    expect(first.executionPolicy.runtimeWorkspacePolicy).toBe('run_scoped');
     expect(first.platformCapabilities).toEqual([]);
     expect(first.resolvedFingerprint).toBe(second.resolvedFingerprint);
     expect(Object.isFrozen(first)).toBe(true);
@@ -99,6 +97,9 @@ describe('ResolveWorkDefinition', () => {
       resolved,
       '2026-08-16T00:00:00.000Z',
     );
+    expect(
+      manifest.find((entry) => entry.resourceKind === 'definition'),
+    ).toMatchObject({ resolvedFingerprint: resolved.resolvedFingerprint });
 
     expect(resolved.platformCapabilities).toEqual(['platform_mcp']);
     expect(manifest).toEqual(
@@ -200,10 +201,6 @@ describe('ResolveWorkDefinition', () => {
       'collaboration',
       'platform_mcp',
     ]);
-    expect(resolved.executionPolicy.runtimeSessionPolicy).toBe('reusable');
-    expect(resolved.executionPolicy.runtimeWorkspacePolicy).toBe(
-      'work_run_scoped',
-    );
     expect(resolved.executionPolicy.requiredRuntimeCapabilities).toEqual([
       'reusable_session',
       'external_workspace',

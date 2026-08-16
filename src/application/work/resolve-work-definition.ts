@@ -129,8 +129,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
             kind: 'agent' as const,
             versionId: version.source.agentVersionId,
           }),
-          runtimeSessionPolicy: 'fresh' as const,
-          runtimeWorkspacePolicy: 'run_scoped' as const,
           requiredRuntimeCapabilities: Object.freeze([
             'external_workspace' as const,
             ...(needsPlatformMcp ? (['platform_mcp'] as const) : []),
@@ -215,8 +213,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
       ] satisfies readonly WorkPlatformCapability[]),
       executionPolicy: Object.freeze({
         invokable: Object.freeze({ kind: 'team' as const, versionId: team.id }),
-        runtimeSessionPolicy: 'reusable' as const,
-        runtimeWorkspacePolicy: 'work_run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze([
           'reusable_session' as const,
           'external_workspace' as const,
@@ -318,8 +314,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
           kind: 'team' as const,
           versionId: version.id,
         }),
-        runtimeSessionPolicy: 'reusable' as const,
-        runtimeWorkspacePolicy: 'work_run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze([
           'reusable_session' as const,
           'external_workspace' as const,
@@ -387,8 +381,6 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
           kind: 'agent' as const,
           versionId: version.id,
         }),
-        runtimeSessionPolicy: 'fresh' as const,
-        runtimeWorkspacePolicy: 'run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze(
           needsPlatformMcp ? (['platform_mcp'] as const) : ([] as const),
         ),

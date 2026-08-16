@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRootTask } from '../../domain/tasks/task.js';
+import { createChildTask, createRootTask } from '../../domain/tasks/task.js';
 import { createTeamCompletionDecision } from '../../domain/teams/team-completion-decision.js';
 import { createTeamMessage } from '../../domain/teams/team-message.js';
 import { createTeamRun } from '../../domain/teams/team-run.js';
@@ -163,6 +163,71 @@ function setup(latestDecision: ReturnType<typeof createTeamCompletionDecision> |
 }
 
 describe('CollaborationActivationReconciler', () => {
+  it('does not schedule final review while a direct-message turn is active on an empty board', async () => {
+    const directTask = {
+      ...createChildTask({
+        id: 'direct-message-active',
+        ...owner,
+        policySnapshotVersion: 'policy-approval',
+        rootTaskId: team.rootTaskId,
+        parentTaskId: team.rootTaskId,
+        parentRunId: team.rootRunId,
+        invokableKind: 'agent',
+        invokableVersionId: member.agentVersionId,
+        inputSnapshotRef: 'snapshot:direct-message',
+        inputFingerprint: 'fingerprint:direct-message',
+        logicalStepKey: 'message:active',
+        nodePath: 'message:active',
+        teamMemberRunId: member.id,
+        teamSequence: 1,
+        teamTaskKind: 'direct_message',
+        now,
+      }),
+      status: 'running' as const,
+    };
+    const tasks = {
+      findByRootTaskIdForOwner: vi.fn(async () => [
+        {
+          task: directTask,
+          latestRun: {
+            runId: 'direct-message-run',
+            attempt: 1,
+            status: 'running' as const,
+            runtime: null,
+            result: null,
+            error: null,
+            createdAt: now().toISOString(),
+            updatedAt: now().toISOString(),
+          },
+        },
+      ]),
+    };
+    const reconciler = new CollaborationActivationReconciler(
+      {} as never,
+      {} as never,
+      tasks as never,
+      {} as never,
+      undefined,
+      now,
+    );
+    const readyForLeadReview = (
+      reconciler as unknown as {
+        readyForLeadReview(
+          team: typeof team,
+          lead: TeamMemberRun,
+          attempts: readonly TeamWorkItemAttempt[],
+          workItems: readonly TeamWorkItem[],
+          dependencies: readonly unknown[],
+          owner: typeof owner,
+        ): Promise<boolean>;
+      }
+    ).readyForLeadReview.bind(reconciler);
+
+    await expect(
+      readyForLeadReview(team, lead, [], [], [], owner),
+    ).resolves.toBe(false);
+  });
+
   it('freezes participant activation while human completion approval is pending', async () => {
     const state = setup(null);
     expect(await state.reconciler.reconcileForRootTask(team.rootTaskId, owner)).toBe(0);

@@ -207,6 +207,14 @@ describe('canonical smoke direct-message wake mutation', () => {
         (candidate) => candidate.summary === 'SMOKE_GATE_PENDING_WAKE',
       );
 
+      if (!message)
+        throw new Error(
+          `MCP message_send did not produce the expected durable projection: ${JSON.stringify({
+            sent,
+            direct_messages: projection?.directMessages ?? [],
+          })}`,
+        );
+
       expect(message).toMatchObject({
         sequence: expect.any(Number),
         requiresAck: true,

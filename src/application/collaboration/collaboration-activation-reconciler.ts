@@ -364,30 +364,28 @@ export class CollaborationActivationReconciler
         !allResolved)
     )
       return false;
-    if (allResolved) {
-      const directTasks = taskRecords.filter(
+    const directTasks = taskRecords.filter(
+      (record) =>
+        record.task.teamTaskKind === 'direct_message' &&
+        typeof record.task.teamMemberRunId === 'string',
+    );
+    if (
+      directTasks.some(
         (record) =>
-          record.task.teamTaskKind === 'direct_message' &&
-          typeof record.task.teamMemberRunId === 'string',
-      );
-      if (
-        directTasks.some(
-          (record) =>
-            !['completed', 'failed', 'cancelled'].includes(record.task.status),
-        )
+          !['completed', 'failed', 'cancelled'].includes(record.task.status),
       )
-        return false;
-      if (
-        directTasks.some(
-          (record) =>
-            record.latestRun !== null &&
-            !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
-              record.latestRun.status,
-            ),
-        )
+    )
+      return false;
+    if (
+      directTasks.some(
+        (record) =>
+          record.latestRun !== null &&
+          !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
+            record.latestRun.status,
+          ),
       )
-        return false;
-    }
+    )
+      return false;
     return true;
   }
 }

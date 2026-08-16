@@ -25,7 +25,9 @@ export function acknowledgedMessagesWithoutActivation(
   value: unknown,
 ): readonly unknown[];
 
-export function evaluateCompletionFacts(value: unknown): SmokeCompletionEvaluation;
+export function evaluateCompletionFacts(
+  value: unknown,
+): SmokeCompletionEvaluation;
 
 export function classifySmokeOutcome(input: {
   readonly taskStatus: string | null | undefined;

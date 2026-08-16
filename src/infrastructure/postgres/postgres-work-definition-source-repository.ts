@@ -48,9 +48,7 @@ const definitionColumns =
 const versionColumns =
   'id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,source,fingerprint,created_at,published_at';
 
-export class PostgresWorkDefinitionSourceRepository
-  implements WorkDefinitionSourceRepository
-{
+export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSourceRepository {
   public constructor(private readonly db: Queryable) {}
 
   public async findDefinition(
@@ -114,7 +112,10 @@ export class PostgresWorkDefinitionSourceRepository
         input.now,
       ],
     );
-    const definition = await this.findDefinition(input.definitionId, input.owner);
+    const definition = await this.findDefinition(
+      input.definitionId,
+      input.owner,
+    );
     if (
       !definition ||
       definition.name !== input.name ||
@@ -139,7 +140,10 @@ export class PostgresWorkDefinitionSourceRepository
         input.now,
       ],
     );
-    const version = await this.findPublishedVersion(input.versionId, input.owner);
+    const version = await this.findPublishedVersion(
+      input.versionId,
+      input.owner,
+    );
     if (
       !version ||
       version.definitionId !== input.definitionId ||
@@ -188,5 +192,7 @@ function mapVersion(row: VersionRow): WorkDefinitionSourceVersion {
 }
 
 function toIso(value: string | Date): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }

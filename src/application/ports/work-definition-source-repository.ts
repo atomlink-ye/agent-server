@@ -30,9 +30,7 @@ export interface WorkDefinitionSourceRepository {
     id: string,
     owner: WorkDefinitionSourceOwner,
   ): Promise<WorkDefinitionSourceVersion | null>;
-  publish(
-    input: PublishWorkDefinitionSourceInput,
-  ): Promise<{
+  publish(input: PublishWorkDefinitionSourceInput): Promise<{
     readonly definition: WorkDefinitionSourceDefinition;
     readonly version: WorkDefinitionSourceVersion;
   }>;

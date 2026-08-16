@@ -11,16 +11,17 @@ import {
   formatSmokeOutcome,
 } from '../../scripts/smoke/agent-team-completion-line.mjs';
 import { createTeamModule } from '../../src/modules/team/team-module.js';
-import { createRootTask, createChildTask } from '../../src/domain/tasks/task.js';
+import {
+  createRootTask,
+  createChildTask,
+} from '../../src/domain/tasks/task.js';
 import { createRun } from '../../src/domain/runs/run.js';
 import { createTeamRun } from '../../src/domain/teams/team-run.js';
 import {
   activateMemberRun,
   createTeamMemberRun,
 } from '../../src/domain/teams/team-member-run.js';
-import {
-  AGENT_SERVER_COLLABORATION_MCP_NAMES,
-} from '../../src/domain/collaboration/canonical-collaboration-tools.js';
+import { AGENT_SERVER_COLLABORATION_MCP_NAMES } from '../../src/domain/collaboration/canonical-collaboration-tools.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
@@ -220,8 +221,13 @@ describe('canonical smoke direct-message wake mutation', () => {
         new PostgresTaskRepository(fixture.database),
       ).project(fixture.teamRun.id, owner);
       expect(projection?.workItems).toHaveLength(2);
-      expect(projection?.workItems.every((work) => work.status !== 'accepted')).toBe(true);
-      expect(projection?.workItems.map((work) => work.status)).toEqual(['open', 'open']);
+      expect(
+        projection?.workItems.every((work) => work.status !== 'accepted'),
+      ).toBe(true);
+      expect(projection?.workItems.map((work) => work.status)).toEqual([
+        'open',
+        'open',
+      ]);
 
       // A root task with open Work is correctly non-terminal, so the real smoke
       // loop keeps polling rather than emitting a terminal diagnostic. Feed the
@@ -330,13 +336,15 @@ describe('canonical smoke direct-message wake mutation', () => {
       );
       expect(message).toMatchObject({ requiresAck: true, status: 'presented' });
       expect(
-        projection?.sessions.flatMap((session) => session.turns).some((turn) =>
-          turn.activation?.causes.some(
-            (cause) =>
-              cause.type === 'message' &&
-              cause.messageRef === `M-${message?.sequence}`,
+        projection?.sessions
+          .flatMap((session) => session.turns)
+          .some((turn) =>
+            turn.activation?.causes.some(
+              (cause) =>
+                cause.type === 'message' &&
+                cause.messageRef === `M-${message?.sequence}`,
+            ),
           ),
-        ),
       ).toBe(true);
 
       const diagnostic = formatSmokeOutcome({
@@ -385,10 +393,12 @@ describe('canonical smoke direct-message wake mutation', () => {
 
       if (!message)
         throw new Error(
-          `MCP message_send did not produce the expected durable projection: ${JSON.stringify({
-            sent,
-            direct_messages: projection?.directMessages ?? [],
-          })}`,
+          `MCP message_send did not produce the expected durable projection: ${JSON.stringify(
+            {
+              sent,
+              direct_messages: projection?.directMessages ?? [],
+            },
+          )}`,
         );
 
       expect(message).toMatchObject({
@@ -397,13 +407,15 @@ describe('canonical smoke direct-message wake mutation', () => {
         status: 'pending',
       });
       expect(
-        projection?.sessions.flatMap((session) => session.turns).some((turn) =>
-          turn.activation?.causes.some(
-            (cause) =>
-              cause.type === 'message' &&
-              cause.messageRef === `M-${message?.sequence}`,
+        projection?.sessions
+          .flatMap((session) => session.turns)
+          .some((turn) =>
+            turn.activation?.causes.some(
+              (cause) =>
+                cause.type === 'message' &&
+                cause.messageRef === `M-${message?.sequence}`,
+            ),
           ),
-        ),
       ).toBe(false);
 
       const failures = evaluateCompletionFacts({

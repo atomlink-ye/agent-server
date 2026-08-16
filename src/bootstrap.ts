@@ -353,7 +353,9 @@ export async function createService(
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
-  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(executionRuntime);
+  const synthesizeMemoryDocument = new SynthesizeMemoryDocument(
+    executionRuntime,
+  );
   const acceptMemoryFromDocument = new AcceptMemoryFromBoundDocument(
     executionRuntime,
     events,

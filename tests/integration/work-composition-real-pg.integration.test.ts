@@ -91,10 +91,12 @@ describe('Composition-first Work on real PostgreSQL', () => {
       await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
         createdTaskIds,
       ]);
-    await pool.query(
-      'DELETE FROM work_definition_source_versions WHERE definition_id=$1',
-      [definitionId],
-    ).catch(() => undefined);
+    await pool
+      .query(
+        'DELETE FROM work_definition_source_versions WHERE definition_id=$1',
+        [definitionId],
+      )
+      .catch(() => undefined);
     // Published versions are immutable by trigger; remove the definition only
     // when the test database is ephemeral. The global real-PG test environment
     // is recreated for every CI run, so leaving immutable rows is intentional.

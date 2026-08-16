@@ -210,7 +210,10 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
     spec: ExecutionSessionSpec,
   ): Promise<ExecutionSession> {
     await this.initialize();
-    if (binding.plane !== PASEO_EXECUTION_PLANE_ID || !binding.externalSessionId)
+    if (
+      binding.plane !== PASEO_EXECUTION_PLANE_ID ||
+      !binding.externalSessionId
+    )
       throw new ExecutionBindingUnavailableError(
         'The runtime session is not bound to Paseo.',
       );
@@ -244,9 +247,7 @@ export class PaseoExecutionPlane implements ExecutionPlanePort {
       ready: health.connected && health.workspaceReady && health.modelReady,
       plane: PASEO_EXECUTION_PLANE_ID,
       provider: this.#options.provider,
-      ...(this.#connections.model
-        ? { model: this.#connections.model.id }
-        : {}),
+      ...(this.#connections.model ? { model: this.#connections.model.id } : {}),
       checks: [
         {
           name: 'paseo_websocket',

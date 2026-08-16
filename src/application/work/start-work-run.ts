@@ -144,7 +144,8 @@ export class StartWorkRun {
 
   private assertRuntimeCapabilities(definition: ResolvedWorkDefinition): void {
     const supported = this.runtimeCapabilities.capabilities().supported;
-    for (const required of definition.executionPolicy.requiredRuntimeCapabilities) {
+    for (const required of definition.executionPolicy
+      .requiredRuntimeCapabilities) {
       if (!supported.has(asExecutionPlaneCapability(required)))
         throw new UnsupportedWorkCompositionCapabilityError(required);
     }

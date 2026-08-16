@@ -393,7 +393,10 @@ function compatibilityTeamResolution(
           'platform_mcp' as const,
         ]),
         executionPolicy: Object.freeze({
-          invokable: Object.freeze({ kind: 'team' as const, versionId: version.id }),
+          invokable: Object.freeze({
+            kind: 'team' as const,
+            versionId: version.id,
+          }),
           runtimeSessionPolicy: 'reusable' as const,
           runtimeWorkspacePolicy: 'work_run_scoped' as const,
           requiredRuntimeCapabilities: Object.freeze([]),

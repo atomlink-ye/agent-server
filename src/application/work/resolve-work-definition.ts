@@ -314,7 +314,10 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
         'platform_mcp',
       ] satisfies readonly WorkPlatformCapability[]),
       executionPolicy: Object.freeze({
-        invokable: Object.freeze({ kind: 'team' as const, versionId: version.id }),
+        invokable: Object.freeze({
+          kind: 'team' as const,
+          versionId: version.id,
+        }),
         runtimeSessionPolicy: 'reusable' as const,
         runtimeWorkspacePolicy: 'work_run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze([
@@ -380,7 +383,10 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
           : ([] satisfies WorkPlatformCapability[]),
       ),
       executionPolicy: Object.freeze({
-        invokable: Object.freeze({ kind: 'agent' as const, versionId: version.id }),
+        invokable: Object.freeze({
+          kind: 'agent' as const,
+          versionId: version.id,
+        }),
         runtimeSessionPolicy: 'fresh' as const,
         runtimeWorkspacePolicy: 'run_scoped' as const,
         requiredRuntimeCapabilities: Object.freeze(

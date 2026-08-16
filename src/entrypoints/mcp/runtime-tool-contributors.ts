@@ -80,10 +80,12 @@ export function createCollaborationRuntimeContributor(input: {
   };
 }
 
-export function createSyntheticRuntimeToolsContributor(input: {
-  readonly market?: SyntheticMarketAdapter;
-  readonly logger?: Logger;
-} = {}): RuntimeToolContributor {
+export function createSyntheticRuntimeToolsContributor(
+  input: {
+    readonly market?: SyntheticMarketAdapter;
+    readonly logger?: Logger;
+  } = {},
+): RuntimeToolContributor {
   return ({ server, grant, grants }) => {
     registerTools(server, grant, undefined, input, grants, 'synthetic');
   };

@@ -103,7 +103,10 @@ describe('ResolveWorkDefinition', () => {
     expect(resolved.platformCapabilities).toEqual(['platform_mcp']);
     expect(manifest).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ resourceKind: 'tool', requestedRef: 'memory://read' }),
+        expect.objectContaining({
+          resourceKind: 'tool',
+          requestedRef: 'memory://read',
+        }),
         expect.objectContaining({
           resourceKind: 'platform_capability',
           requestedRef: 'platform_mcp',
@@ -186,7 +189,9 @@ describe('ResolveWorkDefinition', () => {
     });
 
     expect(resolved.kind).toBe('collaboration');
-    expect(resolved.participants.map((item) => [item.role, item.logicalName])).toEqual([
+    expect(
+      resolved.participants.map((item) => [item.role, item.logicalName]),
+    ).toEqual([
       ['lead', 'lead'],
       ['member', 'analyst'],
     ]);

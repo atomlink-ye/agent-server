@@ -1,9 +1,7 @@
 export type RuntimeSessionPolicy = 'fresh' | 'sticky';
 
 export type RuntimeSessionPolicyScope =
-  | 'product_session'
-  | 'team_member'
-  | 'task';
+  'product_session' | 'team_member' | 'task';
 
 /**
  * Compatibility policy for the behavior-preserving Execution Plane refactor.

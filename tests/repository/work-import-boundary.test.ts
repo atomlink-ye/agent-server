@@ -28,7 +28,8 @@ describe('Work module concrete import boundary', () => {
       if (path.startsWith('src/modules/work/')) continue;
       if (protectedNames.some((name) => path.includes(name))) continue;
       const source = readFileSync(resolve(root, path), 'utf8');
-      if (protectedNames.some((name) => source.includes(name))) violations.push(path);
+      if (protectedNames.some((name) => source.includes(name)))
+        violations.push(path);
     }
     expect(violations).toEqual([]);
   });

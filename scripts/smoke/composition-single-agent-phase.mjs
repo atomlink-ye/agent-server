@@ -47,7 +47,9 @@ export async function runCompositionSingleAgentSmoke({
         accept: 'application/json',
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(method === 'POST' && !path.startsWith('/api/v1/works')
-          ? { 'idempotency-key': `composition-smoke-${scenarioId}-${randomUUID()}` }
+          ? {
+              'idempotency-key': `composition-smoke-${scenarioId}-${randomUUID()}`,
+            }
           : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -55,7 +57,11 @@ export async function runCompositionSingleAgentSmoke({
     });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
-    if (expectedStatus === undefined ? !response.ok : response.status !== expectedStatus)
+    if (
+      expectedStatus === undefined
+        ? !response.ok
+        : response.status !== expectedStatus
+    )
       throw new Error(
         `${method} ${path} -> ${response.status} ${JSON.stringify(json)}`,
       );
@@ -203,7 +209,10 @@ spec:
     const rootTaskId = started.execution_receipt?.source_refs?.task_id;
     if (typeof workRunId !== 'string' || typeof rootTaskId !== 'string')
       throw new Error('composition smoke WorkRun identities missing');
-    progress('composition_single_agent_started', { work_id: workId, work_run_id: workRunId });
+    progress('composition_single_agent_started', {
+      work_id: workId,
+      work_run_id: workRunId,
+    });
 
     const deadline = Date.now() + timeoutMs;
     let projection;
@@ -211,7 +220,10 @@ spec:
       const response = await fetch(
         new URL(`/api/v1/works/${workId}/runs/${workRunId}`, baseUrl),
         {
-          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: 'application/json',
+          },
           signal: AbortSignal.timeout(10_000),
         },
       );
@@ -280,15 +292,32 @@ spec:
         (row) => row.resource_kind === kind && predicate(row),
       );
       if (!entry)
-        throw new Error(`composition manifest missing ${kind}: ${JSON.stringify(rows)}`);
+        throw new Error(
+          `composition manifest missing ${kind}: ${JSON.stringify(rows)}`,
+        );
       return entry;
     };
-    requireEntry('definition', (row) => row.resolved_version_id === definitionVersionId);
+    requireEntry(
+      'definition',
+      (row) => row.resolved_version_id === definitionVersionId,
+    );
     requireEntry('agent', (row) => row.resolved_version_id === agent.id);
-    requireEntry('environment', (row) => row.resolved_version_id === environment.id);
-    requireEntry('skill', (row) => row.requested_ref === 'agent-server/memory-api');
-    requireEntry('tool', (row) => row.requested_ref === 'agent-server/memory-read');
-    requireEntry('platform_capability', (row) => row.requested_ref === 'platform_mcp');
+    requireEntry(
+      'environment',
+      (row) => row.resolved_version_id === environment.id,
+    );
+    requireEntry(
+      'skill',
+      (row) => row.requested_ref === 'agent-server/memory-api',
+    );
+    requireEntry(
+      'tool',
+      (row) => row.requested_ref === 'agent-server/memory-read',
+    );
+    requireEntry(
+      'platform_capability',
+      (row) => row.requested_ref === 'platform_mcp',
+    );
 
     const session = await pool.query(
       `SELECT id,scope_kind,scope_id,task_id,agent_version_id,environment_version_id
@@ -316,7 +345,12 @@ spec:
       manifest_entries: rows.length,
       runtime: `${providerRun.provider}/${providerRun.model}`,
     });
-    return { workId, workRunId, rootTaskId, runtimeSessionId: runtimeSession.id };
+    return {
+      workId,
+      workRunId,
+      rootTaskId,
+      runtimeSessionId: runtimeSession.id,
+    };
   } finally {
     await pool.end();
   }

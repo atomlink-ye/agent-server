@@ -187,7 +187,8 @@ export class AgentRunExecutor {
           runtimeSession.scopeKind !== 'task' ||
           runtimeSession.scopeId !== task.id ||
           runtimeSession.taskId !== task.id ||
-          runtimeSession.environmentVersionId !== compositionEnvironmentVersionId)
+          runtimeSession.environmentVersionId !==
+            compositionEnvironmentVersionId)
       )
         throw new Error('WorkRun runtime session snapshot is invalid.');
     }
@@ -199,12 +200,20 @@ export class AgentRunExecutor {
         (!this.runtimeSessions &&
         task.sessionId &&
         this.events?.findLatestSessionBindingBySessionId
-          ? await this.events.findLatestSessionBindingBySessionId(task.sessionId)
+          ? await this.events.findLatestSessionBindingBySessionId(
+              task.sessionId,
+            )
           : null));
-    const priorExternalSessionId = priorSessionBinding?.externalSessionId ?? null;
+    const priorExternalSessionId =
+      priorSessionBinding?.externalSessionId ?? null;
 
-    if (priorExternalSessionId && member?.role === 'lead' && collaborativeTeam) {
-      const fenceBinder = this.runtimeExtensionBinder as RuntimeExtensionBinder & {
+    if (
+      priorExternalSessionId &&
+      member?.role === 'lead' &&
+      collaborativeTeam
+    ) {
+      const fenceBinder = this
+        .runtimeExtensionBinder as RuntimeExtensionBinder & {
         getTeamMemberGrant?: RuntimeExtensionBinder['getTeamMemberGrant'];
         activeToolCalls?: (grantId: string) => number;
       };
@@ -361,7 +370,9 @@ export class AgentRunExecutor {
           (manifestEnvironment.resolvedVersionId !== environment.id ||
             manifestEnvironment.resolvedFingerprint !== environment.fingerprint)
         )
-          throw new Error('WorkRun Environment no longer matches its manifest.');
+          throw new Error(
+            'WorkRun Environment no longer matches its manifest.',
+          );
       }
       sessionRuntime = task.sessionId
         ? await this.runtimeSessions.createOrGetForProductSession({
@@ -401,8 +412,7 @@ export class AgentRunExecutor {
                 toolRefs: runtimeToolRefs,
               })
             : null;
-      if (!sessionRuntime)
-        throw new Error('Work runtime session unavailable.');
+      if (!sessionRuntime) throw new Error('Work runtime session unavailable.');
       createdRuntimeSession = true;
     }
 
@@ -445,7 +455,8 @@ export class AgentRunExecutor {
         sessionRuntime.taskId !== task.id ||
         sessionRuntime.workspaceId !== task.workspaceId ||
         sessionRuntime.agentVersionId !== task.invokableVersionId ||
-        sessionRuntime.environmentVersionId !== compositionEnvironmentVersionId ||
+        sessionRuntime.environmentVersionId !==
+          compositionEnvironmentVersionId ||
         !sameToolRefs(sessionRuntime.toolRefs, runtimeToolRefs) ||
         sessionRuntime.sessionBinding !== null ||
         sessionRuntime.workspaceBinding !== null
@@ -517,9 +528,7 @@ export class AgentRunExecutor {
         skills: resolved.skills,
         toolRefs: runtimeToolRefs,
         catalogTools:
-          collaborativeTeam && member
-            ? domainToolRefs
-            : runtimeToolRefs,
+          collaborativeTeam && member ? domainToolRefs : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
     }
@@ -682,7 +691,9 @@ export class AgentRunExecutor {
             ? {
                 systemPrompt: prompts.systemPrompt,
                 ...(collaborativeTeam
-                  ? { workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}` }
+                  ? {
+                      workspaceTitle: `Team ${collaborativeTeam.id.slice(0, 8)}`,
+                    }
                   : {}),
                 ...(member
                   ? {
@@ -870,7 +881,9 @@ function assertPinnedParticipantResources(
       ? agents[0]
       : undefined;
   if (!agent)
-    throw new Error('Task Agent version is not authorized by the WorkRun manifest.');
+    throw new Error(
+      'Task Agent version is not authorized by the WorkRun manifest.',
+    );
   const prefix = agent.slot.slice(0, -':agent'.length);
   const pinnedSkills = manifest.entries
     .filter(
@@ -889,9 +902,7 @@ function assertPinnedParticipantResources(
       fingerprint: `sha256:${skill.digest}`,
     }))
     .sort((a, b) => a.ref.localeCompare(b.ref));
-  if (
-    JSON.stringify(pinnedSkills) !== JSON.stringify(currentSkills)
-  )
+  if (JSON.stringify(pinnedSkills) !== JSON.stringify(currentSkills))
     throw new Error('Task Skill resolution drifted from the WorkRun manifest.');
 
   const pinnedTools = manifest.entries

@@ -93,10 +93,8 @@ export function createWorkModule(options: {
       repository.findWorkById(id, owner),
     findWorkRunById: (id: string, owner: WorkIdentityOwnerScope) =>
       repository.findWorkRunById(id, owner),
-    findLatestVisibleWorkRun: (
-      workId: string,
-      owner: WorkIdentityOwnerScope,
-    ) => repository.findLatestVisibleWorkRun(workId, owner),
+    findLatestVisibleWorkRun: (workId: string, owner: WorkIdentityOwnerScope) =>
+      repository.findLatestVisibleWorkRun(workId, owner),
   };
   const projection = createProductProjection({
     workIdentity: workIdentityQuery,

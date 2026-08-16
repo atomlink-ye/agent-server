@@ -9,9 +9,7 @@ export type RuntimeSessionPolicy = 'fresh' | 'reusable';
 export type RuntimeWorkspacePolicy = 'run_scoped' | 'work_run_scoped';
 export type WorkPlatformCapability = 'collaboration' | 'platform_mcp';
 export type RequiredRuntimeCapability =
-  | 'reusable_session'
-  | 'external_workspace'
-  | 'platform_mcp';
+  'reusable_session' | 'external_workspace' | 'platform_mcp';
 
 export interface ResolvedSkillRef {
   readonly ref: string;

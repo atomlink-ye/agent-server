@@ -132,7 +132,6 @@ the Project and selected Agent Session on refresh. This is local/single-operator
 only; production or multi-user deployment requires a new authentication Human
 Gate. ProductSession Chat remains a separate unchanged path.
 
-
 ## Execution Plane boundary
 
 Paseo is the primary Execution Plane. RuntimeWorkspace owns ProductSession/TeamRun workspace binding, RuntimeSession owns sticky ProductSession/TeamMember session binding, and Run remains durable execution truth. See [Paseo Execution Plane](./components/paseo-execution-plane.md) and [Runtime Contract](./contracts/runtime-contract.md).

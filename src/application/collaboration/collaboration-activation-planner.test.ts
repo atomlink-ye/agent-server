@@ -71,7 +71,9 @@ function work(
   };
 }
 
-function attempt(input: Partial<TeamWorkItemAttempt> = {}): TeamWorkItemAttempt {
+function attempt(
+  input: Partial<TeamWorkItemAttempt> = {},
+): TeamWorkItemAttempt {
   return {
     id: 'attempt-1',
     workItemId: 'work-1',
@@ -154,9 +156,7 @@ describe('CollaborationActivationPlanner', () => {
       messages: [],
       workItems: [work('work-1', 'in_progress'), work('work-2', 'pending')],
       attempts: [attempt({ id: 'attempt-2', workItemId: 'work-2' })],
-      dependencies: [
-        { workItemId: 'work-2', dependsOnWorkItemId: 'work-1' },
-      ],
+      dependencies: [{ workItemId: 'work-2', dependsOnWorkItemId: 'work-1' }],
     });
     expect(blocked).toBeNull();
 
@@ -166,9 +166,7 @@ describe('CollaborationActivationPlanner', () => {
       messages: [],
       workItems: [work('work-1', 'accepted'), work('work-2', 'pending')],
       attempts: [attempt({ id: 'attempt-2', workItemId: 'work-2' })],
-      dependencies: [
-        { workItemId: 'work-2', dependsOnWorkItemId: 'work-1' },
-      ],
+      dependencies: [{ workItemId: 'work-2', dependsOnWorkItemId: 'work-1' }],
     });
     expect(ready?.activation.causes).toEqual([
       { type: 'dependency_unblocked', workRef: 'W-2' },

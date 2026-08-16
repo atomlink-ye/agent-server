@@ -154,7 +154,9 @@ export class ExecuteRun {
     try {
       task = await this.tasks.findById(claim.taskId);
       if (!task)
-        throw new Error(`Task ${claim.taskId} could not be loaded for execution`);
+        throw new Error(
+          `Task ${claim.taskId} could not be loaded for execution`,
+        );
       if (
         ['lead_turn', 'work_attempt', 'direct_message'].includes(
           task.teamTaskKind ?? '',
@@ -285,7 +287,10 @@ export class ExecuteRun {
       {
         run_id: claim.run.id,
         ...(completed.runtime
-          ? { provider: completed.runtime.provider, model: completed.runtime.model }
+          ? {
+              provider: completed.runtime.provider,
+              model: completed.runtime.model,
+            }
           : {}),
         ...(completed.error ? { failure_code: completed.error.code } : {}),
       },

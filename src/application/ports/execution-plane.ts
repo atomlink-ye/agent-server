@@ -102,10 +102,7 @@ export type ExecutionToolCategory =
   | 'other';
 
 export type ExecutionToolStatus =
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'running' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Safe, execution-oriented tool detail. Implementations must strip raw provider
@@ -298,14 +295,18 @@ export class ExecutionBindingUnavailableError extends Error {
 }
 
 export class UnsupportedCapabilityError extends Error {
-  public constructor(message = 'The required execution capability is unavailable.') {
+  public constructor(
+    message = 'The required execution capability is unavailable.',
+  ) {
     super(message);
     this.name = 'UnsupportedCapabilityError';
   }
 }
 
 export class ProtocolViolationError extends Error {
-  public constructor(message = 'The execution plane returned an invalid protocol projection.') {
+  public constructor(
+    message = 'The execution plane returned an invalid protocol projection.',
+  ) {
     super(message);
     this.name = 'ProtocolViolationError';
   }

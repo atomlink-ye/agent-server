@@ -65,7 +65,9 @@ export async function createResourceModule(
   const agentRegistry = new PostgresAgentRegistry(options.database);
   const invokableRepository = new PostgresInvokableRepository(options.database);
   const environmentRegistry = new PostgresEnvironmentRegistry(options.database);
-  const memoryVersionReadApi = new PostgresMemoryVersionReadApi(options.database);
+  const memoryVersionReadApi = new PostgresMemoryVersionReadApi(
+    options.database,
+  );
   const workRunManifests = new PostgresWorkRunResourceManifestRead(
     options.database,
   );
@@ -90,8 +92,10 @@ export async function createResourceModule(
   // Attach the other composition snapshot readers to the same internal object so
   // ExecuteRun can consume the Resource module without adding a bootstrap cycle.
   const environmentReadApi = {
-    findVersion: (owner: Parameters<EnvironmentReadApi['findVersion']>[0], id: string) =>
-      environmentRegistry.findVersion(owner, id),
+    findVersion: (
+      owner: Parameters<EnvironmentReadApi['findVersion']>[0],
+      id: string,
+    ) => environmentRegistry.findVersion(owner, id),
     workRunManifests,
     memoryVersions: memoryVersionReadApi,
   };

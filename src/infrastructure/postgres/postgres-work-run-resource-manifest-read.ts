@@ -24,9 +24,7 @@ type Row = {
   resolved_at: string | Date;
 };
 
-export class PostgresWorkRunResourceManifestRead
-  implements WorkRunResourceManifestRead
-{
+export class PostgresWorkRunResourceManifestRead implements WorkRunResourceManifestRead {
   public constructor(private readonly db: Queryable) {}
 
   public async findByRootTaskId(

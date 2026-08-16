@@ -13,9 +13,9 @@ import {
   AGENT_SERVER_EXECUTION_MCP_SERVER_NAME,
   type ExecutionExtensionBinding,
 } from '../../application/ports/execution-plane.js';
+import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 import { materializeOpenCodeSkill } from '../filesystem/opencode-skill-materializer.js';
 import { RuntimeMcpServer } from './runtime-mcp-server.js';
-import type { RuntimeToolGrantService } from '../../application/extensions/runtime-tool-grant-service.js';
 
 export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   readonly #agentCwd: string;
@@ -35,7 +35,10 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
   public async bind(
     input: Parameters<RuntimeExtensionBinder['bind']>[0],
   ): Promise<ExecutionExtensionBinding | undefined> {
-    if (!input.skills.length && !input.toolRefs.length) return undefined;
+    const platformCollaboration = Boolean(input.teamMemberRunId);
+    if (!input.skills.length && !input.toolRefs.length && !platformCollaboration)
+      return undefined;
+
     const projectCwd = resolve(input.cellCwd ?? this.#agentCwd);
     const runtimeRoot = input.cellCwd
       ? projectCwd
@@ -47,7 +50,11 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         registryRoot: this.#registryRoot,
         skill,
       });
-    if (!input.toolRefs.length) return {};
+
+    // Skills without tools do not require MCP unless this RuntimeSession is a
+    // Team participant. Collaboration MCP is platform-owned and auto-mounted.
+    if (!input.toolRefs.length && !platformCollaboration) return {};
+
     const grantScopeId = input.productSessionId ?? input.scopeId;
     if (!grantScopeId)
       throw new Error('Runtime extension scope is unavailable.');
@@ -64,6 +71,8 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         : {}),
       ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
+      // These are intentionally user/domain tools only. Collaboration tool
+      // visibility is supplied by the platform contributor, not by the grant.
       allowedTools: input.toolRefs,
       catalogTools: input.catalogTools ?? input.toolRefs,
     });
@@ -138,6 +147,12 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     input: Parameters<RuntimeToolGrantService['refreshForTeamMember']>[0],
   ) {
     return this.#mcp.grants.refreshForTeamMember(input);
+  }
+
+  public closeTeamMemberTurn(
+    input: Parameters<RuntimeToolGrantService['closeTeamMemberTurn']>[0],
+  ) {
+    return this.#mcp.grants.closeTeamMemberTurn(input);
   }
 
   public getTeamMemberGrant(input: {

@@ -32,6 +32,10 @@ const ParticipantNameSchema = z
     'must use a stable human-readable participant name',
   );
 
+const InlineSourceSchema = z
+  .object({ source: z.string().min(1).max(64 * 1024) })
+  .strict();
+
 const InputPropertyNameSchema = z
   .string()
   .min(1)
@@ -119,8 +123,15 @@ const ProductWorkInputSchemaSchema = z
     });
   });
 
-const CommonSpecShape = {
-  environment_version_id: CanonicalUuidSchema,
+const AgentBindingFields = {
+  agent_version_id: CanonicalUuidSchema.optional(),
+  agent: InlineSourceSchema.optional(),
+};
+const EnvironmentBindingFields = {
+  environment_version_id: CanonicalUuidSchema.optional(),
+  environment: InlineSourceSchema.optional(),
+};
+const CommonSpecFields = {
   memory_version_ids: z.array(CanonicalUuidSchema).max(8).default([]),
   input_schema: ProductWorkInputSchemaSchema.default({
     type: 'object',
@@ -129,6 +140,76 @@ const CommonSpecShape = {
     additional_properties: false,
   }),
 };
+
+const ParticipantSchema = z
+  .object({
+    name: ParticipantNameSchema,
+    ...AgentBindingFields,
+  })
+  .strict()
+  .superRefine((value, context) =>
+    exactlyOne(
+      value.agent_version_id,
+      value.agent,
+      context,
+      'agent_version_id',
+      'agent',
+    ),
+  );
+
+const SingleAgentSpecSchema = z
+  .object({
+    kind: z.literal('single_agent'),
+    ...AgentBindingFields,
+    ...EnvironmentBindingFields,
+    ...CommonSpecFields,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    exactlyOne(
+      value.agent_version_id,
+      value.agent,
+      context,
+      'agent_version_id',
+      'agent',
+    );
+    exactlyOne(
+      value.environment_version_id,
+      value.environment,
+      context,
+      'environment_version_id',
+      'environment',
+    );
+  });
+
+const CollaborationSpecSchema = z
+  .object({
+    kind: z.literal('collaboration'),
+    lead: ParticipantSchema,
+    members: z.array(ParticipantSchema).min(1).max(16),
+    ...EnvironmentBindingFields,
+    ...CommonSpecFields,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    exactlyOne(
+      value.environment_version_id,
+      value.environment,
+      context,
+      'environment_version_id',
+      'environment',
+    );
+    const seen = new Set([value.lead.name]);
+    value.members.forEach((member, index) => {
+      if (seen.has(member.name))
+        context.addIssue({
+          code: 'custom',
+          path: ['members', index, 'name'],
+          message: 'participant names must be unique',
+        });
+      seen.add(member.name);
+    });
+  });
 
 const ProductWorkDefinitionDocumentSchema = z
   .object({
@@ -140,50 +221,7 @@ const ProductWorkDefinitionDocumentSchema = z
         description: z.string().trim().max(2_000).optional(),
       })
       .strict(),
-    spec: z.discriminatedUnion('kind', [
-      z
-        .object({
-          kind: z.literal('single_agent'),
-          agent_version_id: CanonicalUuidSchema,
-          ...CommonSpecShape,
-        })
-        .strict(),
-      z
-        .object({
-          kind: z.literal('collaboration'),
-          lead: z
-            .object({
-              name: ParticipantNameSchema,
-              agent_version_id: CanonicalUuidSchema,
-            })
-            .strict(),
-          members: z
-            .array(
-              z
-                .object({
-                  name: ParticipantNameSchema,
-                  agent_version_id: CanonicalUuidSchema,
-                })
-                .strict(),
-            )
-            .min(1)
-            .max(16),
-          ...CommonSpecShape,
-        })
-        .strict()
-        .superRefine((value, context) => {
-          const seen = new Set([value.lead.name]);
-          value.members.forEach((member, index) => {
-            if (seen.has(member.name))
-              context.addIssue({
-                code: 'custom',
-                path: ['members', index, 'name'],
-                message: 'participant names must be unique',
-              });
-            seen.add(member.name);
-          });
-        }),
-    ]),
+    spec: z.union([SingleAgentSpecSchema, CollaborationSpecSchema]),
   })
   .strict();
 
@@ -192,6 +230,7 @@ export type ProductWorkDefinitionDocument = z.infer<
 >;
 export type ProductWorkInputSchema = z.infer<typeof ProductWorkInputSchemaSchema>;
 export type ProductWorkInput = Readonly<Record<string, unknown>>;
+export type ProductWorkParticipantBinding = z.infer<typeof ParticipantSchema>;
 
 export interface WorkDefinitionDiagnostic {
   readonly path: string;
@@ -207,7 +246,6 @@ export type ProductWorkDefinitionValidationResult =
       readonly metadata: {
         readonly normalizedName: string;
       };
-      /** Normalized parsed author document. Never returned directly by validate HTTP. */
       readonly document: ProductWorkDefinitionDocument;
       readonly diagnostics: readonly [];
     }
@@ -228,10 +266,6 @@ export type ProductWorkInputValidationResult =
       readonly diagnostics: readonly WorkDefinitionDiagnostic[];
     };
 
-/**
- * Side-effect-free Product authoring boundary. Resource existence/resolution is
- * intentionally deferred to apply so validate remains deterministic and cheap.
- */
 export function validateProductWorkDefinition(
   source: string,
 ): ProductWorkDefinitionValidationResult {
@@ -279,7 +313,6 @@ export function validateProductWorkDefinition(
   };
 }
 
-/** Validate one bounded Product Run input against the immutable Definition schema. */
 export function validateProductWorkRunInput(
   schema: ProductWorkInputSchema,
   value: unknown,
@@ -335,6 +368,22 @@ export function emptyProductWorkInputSchema(): ProductWorkInputSchema {
     required: [],
     additional_properties: false,
   }) as ProductWorkInputSchema;
+}
+
+function exactlyOne(
+  left: unknown,
+  right: unknown,
+  context: z.RefinementCtx,
+  leftKey: string,
+  rightKey: string,
+): void {
+  const count = Number(left !== undefined) + Number(right !== undefined);
+  if (count === 1) return;
+  context.addIssue({
+    code: 'custom',
+    path: [leftKey],
+    message: `exactly one of ${leftKey} or ${rightKey} is required`,
+  });
 }
 
 function validateInputProperty(

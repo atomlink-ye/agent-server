@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
 
+import { importAgent } from '../agents/import-agent.js';
+import { publishAgentVersion } from '../agents/publish-agent-version.js';
+import { parseForImport } from '../agents/validate-agent-package.js';
+import {
+  importEnvironment,
+  publishEnvironmentVersion,
+  validateEnvironmentPackage,
+} from '../environments/environment-use-cases.js';
+import type { AgentRegistry } from '../ports/agent-registry.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
 import type { InvokableRepository } from '../ports/invokable-repository.js';
@@ -27,10 +36,13 @@ import type { AccessContext } from '../../platform/access-context.js';
 import {
   validateProductWorkDefinition,
   type ProductWorkDefinitionDocument,
+  type ProductWorkParticipantBinding,
   type WorkDefinitionDiagnostic,
 } from './validate-product-work-definition.js';
 
 const MAX_IDEMPOTENCY_KEY_BYTES = 256;
+
+type PlanResourceSource = 'referenced' | 'inline';
 
 export interface ProductWorkDefinitionApplyResult {
   readonly result: 'created' | 'converged' | 'replayed';
@@ -45,20 +57,31 @@ export interface ProductWorkDefinitionPlan {
   readonly participants: readonly {
     readonly name: string;
     readonly role: 'primary' | 'lead' | 'member';
-    readonly agentVersionId: string;
+    readonly source: PlanResourceSource;
+    readonly agentVersionId: string | null;
     readonly skills: readonly string[];
     readonly tools: readonly string[];
   }[];
-  readonly environmentVersionId: string;
+  readonly environment: {
+    readonly source: PlanResourceSource;
+    readonly environmentVersionId: string | null;
+  };
   readonly memoryVersionIds: readonly string[];
   readonly requiredRuntimeCapabilities: readonly string[];
   readonly platformCapabilities: readonly string[];
+  readonly materialization: {
+    readonly inlineAgents: number;
+    readonly inlineEnvironment: boolean;
+    readonly internalTeam: boolean;
+  };
 }
 
 export interface ProductWorkDefinitionApiOptions {
   readonly repository: WorkDefinitionSourceRepository;
   readonly resolver: WorkDefinitionResolutionPort;
   readonly agents: AgentResolutionApi;
+  /** Required only when a Product Definition embeds inline Agent packages. */
+  readonly agentRegistry?: AgentRegistry;
   readonly invokables: Pick<
     InvokableRepository,
     | 'saveTeamDefinition'
@@ -69,6 +92,8 @@ export interface ProductWorkDefinitionApiOptions {
     | 'publishTeamVersionAtomically'
   >;
   readonly environments: Pick<EnvironmentRegistry, 'findVersion'>;
+  /** Required only when a Product Definition embeds an inline Environment. */
+  readonly environmentRegistry?: EnvironmentRegistry;
   readonly memories?: MemoryVersionReadApi;
   readonly now?: () => Date;
 }
@@ -87,35 +112,37 @@ export class ProductWorkDefinitionApi {
     const parsed = validateProductWorkDefinition(input.source);
     if (!parsed.valid) throw new InvalidProductWorkDefinitionError(parsed.diagnostics);
     const owner = ownerFromAccessContext(input.accessContext);
-    const participants = await this.inspectReferences(parsed.document, owner);
+    const inspection = await this.inspectReferences(parsed.document, owner);
+    const needsPlatformMcp = inspection.participants.some(
+      (participant) => participant.skills.length > 0 || participant.tools.length > 0,
+    );
     return {
       fingerprint: parsed.fingerprint,
       normalizedName: parsed.metadata.normalizedName,
       kind: parsed.document.spec.kind,
-      participants,
-      environmentVersionId: parsed.document.spec.environment_version_id,
+      participants: inspection.participants,
+      environment: inspection.environment,
       memoryVersionIds: parsed.document.spec.memory_version_ids,
       requiredRuntimeCapabilities:
         parsed.document.spec.kind === 'collaboration'
           ? ['reusable_session', 'external_workspace', 'platform_mcp']
           : [
               'external_workspace',
-              ...(participants.some(
-                (participant) =>
-                  participant.skills.length > 0 || participant.tools.length > 0,
-              )
-                ? ['platform_mcp']
-                : []),
+              ...(needsPlatformMcp ? ['platform_mcp'] : []),
             ],
       platformCapabilities:
         parsed.document.spec.kind === 'collaboration'
           ? ['collaboration', 'platform_mcp']
-          : participants.some(
-                (participant) =>
-                  participant.skills.length > 0 || participant.tools.length > 0,
-              )
+          : needsPlatformMcp
             ? ['platform_mcp']
             : [],
+      materialization: {
+        inlineAgents: inspection.participants.filter(
+          (participant) => participant.source === 'inline',
+        ).length,
+        inlineEnvironment: inspection.environment.source === 'inline',
+        internalTeam: parsed.document.spec.kind === 'collaboration',
+      },
     };
   }
 
@@ -153,17 +180,27 @@ export class ProductWorkDefinitionApi {
       `work-definition-version\0${definitionId}\0${parsed.fingerprint}`,
     );
 
-    const converged = await this.options.repository.findProductVersionByAuthorFingerprint!({
-      definitionId,
-      owner,
-      authorFingerprint: parsed.fingerprint,
-    });
+    const converged =
+      await this.options.repository.findProductVersionByAuthorFingerprint!({
+        definitionId,
+        owner,
+        authorFingerprint: parsed.fingerprint,
+      });
     if (converged) {
-      const definition = await this.options.repository.findDefinition(definitionId, owner);
-      if (!definition) throw new Error('Product Work Definition identity is unavailable.');
+      const definition = await this.options.repository.findDefinition(
+        definitionId,
+        owner,
+      );
+      if (!definition)
+        throw new Error('Product Work Definition identity is unavailable.');
       const resolvedFingerprint =
         converged.resolvedFingerprint ??
-        (await this.resolveAndRecord(definitionId, converged.version.id, owner, input.accessContext));
+        (await this.resolveAndRecord(
+          definitionId,
+          converged.version.id,
+          owner,
+          input.accessContext,
+        ));
       await this.options.repository.recordApplyRequest!({
         owner,
         idempotencyKey: input.idempotencyKey,
@@ -177,14 +214,17 @@ export class ProductWorkDefinitionApi {
         converged.version.id,
         owner,
       );
-      if (!version) throw new Error('Product Work Definition version is unavailable.');
+      if (!version)
+        throw new Error('Product Work Definition version is unavailable.');
       return { result: 'converged', definition, version };
     }
 
+    // Validate all referenced and inline packages before any materialization.
     await this.inspectReferences(parsed.document, owner);
     const composition = await this.materializeComposition({
       document: parsed.document,
       owner,
+      accessContext: input.accessContext,
       definitionId,
       versionId,
       authorFingerprint: parsed.fingerprint,
@@ -199,7 +239,8 @@ export class ProductWorkDefinitionApi {
       description: parsed.document.metadata.description ?? null,
       source: composition,
       fingerprint: internalFingerprint,
-      authorSource: parsed.document as unknown as Readonly<Record<string, unknown>>,
+      authorSource:
+        parsed.document as unknown as Readonly<Record<string, unknown>>,
       authorFingerprint: parsed.fingerprint,
       now,
     });
@@ -222,7 +263,8 @@ export class ProductWorkDefinitionApi {
       published.version.id,
       owner,
     );
-    if (!version) throw new Error('Product Work Definition version is unavailable.');
+    if (!version)
+      throw new Error('Product Work Definition version is unavailable.');
     return { result: 'created', definition: published.definition, version };
   }
 
@@ -235,7 +277,10 @@ export class ProductWorkDefinitionApi {
   }> {
     this.assertRepositorySupportsProductLifecycle();
     const owner = ownerFromAccessContext(input.accessContext);
-    const definition = await this.options.repository.findDefinition(input.definitionId, owner);
+    const definition = await this.options.repository.findDefinition(
+      input.definitionId,
+      owner,
+    );
     if (!definition) throw new ProductWorkDefinitionNotFoundError();
     const page = await this.options.repository.listProductVersions!({
       definitionId: definition.id,
@@ -254,7 +299,10 @@ export class ProductWorkDefinitionApi {
   }) {
     this.assertRepositorySupportsProductLifecycle();
     const owner = ownerFromAccessContext(input.accessContext);
-    const definition = await this.options.repository.findDefinition(input.definitionId, owner);
+    const definition = await this.options.repository.findDefinition(
+      input.definitionId,
+      owner,
+    );
     if (!definition) throw new ProductWorkDefinitionNotFoundError();
     return this.options.repository.listProductVersions!({
       definitionId: input.definitionId,
@@ -270,7 +318,10 @@ export class ProductWorkDefinitionApi {
   }): Promise<ProductWorkDefinitionVersionRecord> {
     this.assertRepositorySupportsProductLifecycle();
     const owner = ownerFromAccessContext(input.accessContext);
-    const version = await this.options.repository.findProductVersion!(input.versionId, owner);
+    const version = await this.options.repository.findProductVersion!(
+      input.versionId,
+      owner,
+    );
     if (!version) throw new ProductWorkDefinitionNotFoundError();
     return version;
   }
@@ -285,10 +336,16 @@ export class ProductWorkDefinitionApi {
   } | null> {
     if (!this.options.repository.findProductVersion) return null;
     const owner = ownerFromAccessContext(input.accessContext);
-    const version = await this.options.repository.findProductVersion(input.versionId, owner);
+    const version = await this.options.repository.findProductVersion(
+      input.versionId,
+      owner,
+    );
     if (!version) return null;
-    const parsed = validateProductWorkDefinition(JSON.stringify(version.authorSource));
-    if (!parsed.valid) throw new Error('Persisted Product Work Definition is invalid.');
+    const parsed = validateProductWorkDefinition(
+      JSON.stringify(version.authorSource),
+    );
+    if (!parsed.valid)
+      throw new Error('Persisted Product Work Definition is invalid.');
     return {
       name: parsed.document.metadata.name,
       description: parsed.document.metadata.description ?? null,
@@ -299,59 +356,135 @@ export class ProductWorkDefinitionApi {
   private async inspectReferences(
     document: ProductWorkDefinitionDocument,
     owner: WorkDefinitionSourceOwner,
-  ): Promise<ProductWorkDefinitionPlan['participants']> {
-    const participants =
+  ): Promise<{
+    readonly participants: ProductWorkDefinitionPlan['participants'];
+    readonly environment: ProductWorkDefinitionPlan['environment'];
+  }> {
+    const bindings: readonly {
+      readonly name: string;
+      readonly role: 'primary' | 'lead' | 'member';
+      readonly binding: ProductWorkParticipantBinding | SingleAgentBinding;
+      readonly path: string;
+    }[] =
       document.spec.kind === 'single_agent'
         ? [
             {
               name: document.metadata.name,
-              role: 'primary' as const,
-              agentVersionId: document.spec.agent_version_id,
+              role: 'primary',
+              binding: document.spec,
+              path: '$.spec',
             },
           ]
         : [
             {
               name: document.spec.lead.name,
-              role: 'lead' as const,
-              agentVersionId: document.spec.lead.agent_version_id,
+              role: 'lead',
+              binding: document.spec.lead,
+              path: '$.spec.lead',
             },
-            ...document.spec.members.map((member) => ({
+            ...document.spec.members.map((member, index) => ({
               name: member.name,
               role: 'member' as const,
-              agentVersionId: member.agent_version_id,
+              binding: member,
+              path: `$.spec.members[${index}]`,
             })),
           ];
-    const resolvedParticipants = [];
-    for (const participant of participants) {
-      const agent = await this.options.agents.resolvePublished(
-        participant.agentVersionId,
-        owner,
-        { resolveExtensions: true },
-      );
-      if (!agent)
-        throw new ProductWorkDefinitionReferenceError(
-          participant.role === 'primary'
-            ? '$.spec.agent_version_id'
-            : participant.role === 'lead'
-              ? '$.spec.lead.agent_version_id'
-              : `$.spec.members.${resolvedParticipants.length - 1}.agent_version_id`,
-          'Referenced Agent version was not found or is not published in this owner scope.',
+
+    const participants: Array<
+      ProductWorkDefinitionPlan['participants'][number]
+    > = [];
+    for (const item of bindings) {
+      if (item.binding.agent_version_id) {
+        const agent = await this.options.agents.resolvePublished(
+          item.binding.agent_version_id,
+          owner,
+          { resolveExtensions: true },
         );
-      resolvedParticipants.push({
-        ...participant,
-        skills: agent.skills.map((skill) => skill.ref),
-        tools: [...agent.toolRefs],
+        if (!agent)
+          throw new ProductWorkDefinitionReferenceError(
+            `${item.path}.agent_version_id`,
+            'Referenced Agent version was not found or is not published in this owner scope.',
+          );
+        participants.push(
+          Object.freeze({
+            name: item.name,
+            role: item.role,
+            source: 'referenced' as const,
+            agentVersionId: item.binding.agent_version_id,
+            skills: Object.freeze(agent.skills.map((skill) => skill.ref)),
+            tools: Object.freeze([...agent.toolRefs]),
+          }),
+        );
+        continue;
+      }
+
+      const inline = item.binding.agent?.source;
+      if (!inline)
+        throw new ProductWorkDefinitionReferenceError(
+          `${item.path}.agent`,
+          'An inline Agent source is required.',
+        );
+      try {
+        const parsed = parseForImport(inline);
+        participants.push(
+          Object.freeze({
+            name: item.name,
+            role: item.role,
+            source: 'inline' as const,
+            agentVersionId: null,
+            skills: Object.freeze(
+              parsed.package.spec.skills.map((skill) => skill.ref),
+            ),
+            tools: Object.freeze(
+              parsed.package.spec.tools.map((tool) => tool.ref),
+            ),
+          }),
+        );
+      } catch {
+        throw new ProductWorkDefinitionReferenceError(
+          `${item.path}.agent.source`,
+          'Inline Agent source is invalid.',
+        );
+      }
+    }
+
+    const environmentBinding = document.spec;
+    let environment: ProductWorkDefinitionPlan['environment'];
+    if (environmentBinding.environment_version_id) {
+      const version = await this.options.environments.findVersion(
+        owner,
+        environmentBinding.environment_version_id,
+      );
+      if (!version || version.status !== 'published')
+        throw new ProductWorkDefinitionReferenceError(
+          '$.spec.environment_version_id',
+          'Referenced Environment version was not found or is not published in this owner scope.',
+        );
+      environment = Object.freeze({
+        source: 'referenced' as const,
+        environmentVersionId: environmentBinding.environment_version_id,
+      });
+    } else {
+      const source = environmentBinding.environment?.source;
+      if (!source)
+        throw new ProductWorkDefinitionReferenceError(
+          '$.spec.environment',
+          'An inline Environment source is required.',
+        );
+      try {
+        validateEnvironmentPackage(source);
+      } catch {
+        throw new ProductWorkDefinitionReferenceError(
+          '$.spec.environment.source',
+          'Inline Environment source is invalid.',
+        );
+      }
+      environment = Object.freeze({
+        source: 'inline' as const,
+        environmentVersionId: null,
       });
     }
-    const environment = await this.options.environments.findVersion(
-      owner,
-      document.spec.environment_version_id,
-    );
-    if (!environment || environment.status !== 'published')
-      throw new ProductWorkDefinitionReferenceError(
-        '$.spec.environment_version_id',
-        'Referenced Environment version was not found or is not published in this owner scope.',
-      );
+
     if (document.spec.memory_version_ids.length > 0) {
       if (!this.options.memories)
         throw new ProductWorkDefinitionReferenceError(
@@ -367,30 +500,76 @@ export class ProductWorkDefinitionApi {
           );
       }
     }
-    return Object.freeze(resolvedParticipants.map((participant) => Object.freeze(participant)));
+
+    return {
+      participants: Object.freeze(participants),
+      environment,
+    };
   }
 
   private async materializeComposition(input: {
     readonly document: ProductWorkDefinitionDocument;
     readonly owner: WorkDefinitionSourceOwner;
+    readonly accessContext: AccessContext;
     readonly definitionId: string;
     readonly versionId: string;
     readonly authorFingerprint: string;
   }): Promise<WorkDefinitionCompositionSource> {
+    const environmentVersionId = await this.materializeEnvironment(
+      input.document.spec,
+      input.accessContext,
+    );
     const common = {
-      environmentVersionId: input.document.spec.environment_version_id,
-      memoryVersionIds: Object.freeze([...input.document.spec.memory_version_ids]),
+      environmentVersionId,
+      memoryVersionIds: Object.freeze([
+        ...input.document.spec.memory_version_ids,
+      ]),
       description: input.document.metadata.description ?? null,
       inputSchema: input.document.spec.input_schema,
     };
-    if (input.document.spec.kind === 'single_agent')
+
+    if (input.document.spec.kind === 'single_agent') {
+      const agentVersionId = await this.materializeAgent(
+        input.document.spec,
+        input.accessContext,
+      );
       return Object.freeze({
         kind: 'single_agent' as const,
-        agentVersionId: input.document.spec.agent_version_id,
+        agentVersionId,
         ...common,
       });
+    }
 
-    const teamVersionId = await this.materializeInternalTeam(input);
+    const leadVersionId = await this.materializeAgent(
+      input.document.spec.lead,
+      input.accessContext,
+    );
+    const members: TeamSpec['roster'][number][] = [];
+    for (const member of input.document.spec.members) {
+      members.push({
+        name: member.name,
+        agentVersionId: await this.materializeAgent(
+          member,
+          input.accessContext,
+        ),
+      });
+    }
+    const teamVersionId = await this.materializeInternalTeam({
+      owner: input.owner,
+      definitionId: input.definitionId,
+      versionId: input.versionId,
+      authorFingerprint: input.authorFingerprint,
+      name: input.document.metadata.name,
+      description: input.document.metadata.description ?? null,
+      spec: {
+        lead: {
+          name: input.document.spec.lead.name,
+          agentVersionId: leadVersionId,
+        },
+        roster: members,
+        environmentVersionId,
+      },
+    });
     return Object.freeze({
       kind: 'collaboration' as const,
       teamVersionId,
@@ -398,31 +577,86 @@ export class ProductWorkDefinitionApi {
     });
   }
 
+  private async materializeAgent(
+    binding: ProductWorkParticipantBinding | SingleAgentBinding,
+    accessContext: AccessContext,
+  ): Promise<string> {
+    if (binding.agent_version_id) return binding.agent_version_id;
+    const source = binding.agent?.source;
+    if (!source || !this.options.agentRegistry)
+      throw new ProductWorkDefinitionReferenceError(
+        '$.spec.agent',
+        'Inline Agent materialization is unavailable.',
+      );
+    const digest = sha256Hex(source);
+    const imported = await importAgent(this.options.agentRegistry, {
+      accessContext,
+      idempotencyKey: `work-inline-agent-import:${digest}`,
+      source,
+    });
+    if (imported.version.status === 'published') return imported.version.id;
+    const published = await publishAgentVersion(this.options.agentRegistry, {
+      accessContext,
+      idempotencyKey: `work-inline-agent-publish:${digest}`,
+      versionId: imported.version.id,
+    });
+    return published.id;
+  }
+
+  private async materializeEnvironment(
+    binding: EnvironmentBinding,
+    accessContext: AccessContext,
+  ): Promise<string> {
+    if (binding.environment_version_id) return binding.environment_version_id;
+    const source = binding.environment?.source;
+    if (!source || !this.options.environmentRegistry)
+      throw new ProductWorkDefinitionReferenceError(
+        '$.spec.environment',
+        'Inline Environment materialization is unavailable.',
+      );
+    const digest = sha256Hex(source);
+    const imported = await importEnvironment(this.options.environmentRegistry, {
+      accessContext,
+      idempotencyKey: `work-inline-environment-import:${digest}`,
+      source,
+    });
+    if (imported.version.status === 'published') return imported.version.id;
+    const published = await publishEnvironmentVersion(
+      this.options.environmentRegistry,
+      {
+        accessContext,
+        idempotencyKey: `work-inline-environment-publish:${digest}`,
+        versionId: imported.version.id,
+      },
+    );
+    return published.id;
+  }
+
   private async materializeInternalTeam(input: {
-    readonly document: Extract<ProductWorkDefinitionDocument, { spec: { kind: 'collaboration' } }> | ProductWorkDefinitionDocument;
     readonly owner: WorkDefinitionSourceOwner;
     readonly definitionId: string;
     readonly versionId: string;
     readonly authorFingerprint: string;
+    readonly name: string;
+    readonly description: string | null;
+    readonly spec: TeamSpec;
   }): Promise<string> {
-    if (input.document.spec.kind !== 'collaboration')
-      throw new Error('Internal Team materialization requires collaboration source.');
-    const teamDefinitionId = stableUuid(`work-definition-team\0${input.definitionId}`);
-    const teamVersionId = stableUuid(`work-definition-team-version\0${input.versionId}`);
-    const existing = await this.options.invokables.findTeamVersionById(teamVersionId);
-    const spec: TeamSpec = {
-      lead: {
-        name: input.document.spec.lead.name,
-        agentVersionId: input.document.spec.lead.agent_version_id,
-      },
-      roster: input.document.spec.members.map((member) => ({
-        name: member.name,
-        agentVersionId: member.agent_version_id,
-      })),
-      environmentVersionId: input.document.spec.environment_version_id,
-    };
+    const teamDefinitionId = stableUuid(
+      `work-definition-team\0${input.definitionId}`,
+    );
+    const teamVersionId = stableUuid(
+      `work-definition-team-version\0${input.versionId}`,
+    );
+    const existing = await this.options.invokables.findTeamVersionById(
+      teamVersionId,
+    );
     if (existing) {
-      assertInternalTeam(existing, input.owner, teamDefinitionId, spec);
+      assertInternalTeam(
+        existing,
+        input.owner,
+        teamDefinitionId,
+        input.spec,
+      );
       if (existing.status === 'published') return existing.id;
     }
 
@@ -430,7 +664,7 @@ export class ProductWorkDefinitionApi {
     const definition = createTeamDefinition({
       ...input.owner,
       id: teamDefinitionId,
-      name: `work-${input.document.metadata.name}`,
+      name: `work-${input.name}`,
       description: 'Internal execution binding for Product Work Definition.',
       now: clock,
     });
@@ -438,17 +672,16 @@ export class ProductWorkDefinitionApi {
       ...input.owner,
       id: teamVersionId,
       definitionId: teamDefinitionId,
-      name: input.document.metadata.name,
-      description: input.document.metadata.description ?? null,
-      spec,
+      name: input.name,
+      description: input.description,
+      spec: input.spec,
       now: clock,
     });
-    const importKey = `product-work-team-import:${input.definitionId}:${input.authorFingerprint}`;
     const imported = this.options.invokables.importTeamVersionAtomically
       ? await this.options.invokables.importTeamVersionAtomically({
           definition,
           version: draft,
-          idempotencyKey: importKey,
+          idempotencyKey: `product-work-team-import:${input.definitionId}:${input.authorFingerprint}`,
           requestFingerprint: input.authorFingerprint,
         })
       : (await this.options.invokables.saveTeamDefinition(definition),
@@ -501,7 +734,9 @@ export class ProductWorkDefinitionApi {
 
 export class InvalidProductWorkDefinitionError extends Error {
   public readonly code = 'invalid_definition';
-  public constructor(public readonly diagnostics: readonly WorkDefinitionDiagnostic[]) {
+  public constructor(
+    public readonly diagnostics: readonly WorkDefinitionDiagnostic[],
+  ) {
     super('The Work Definition is invalid.');
     this.name = 'InvalidProductWorkDefinitionError';
   }
@@ -521,7 +756,9 @@ export class ProductWorkDefinitionReferenceError extends Error {
 export class ProductWorkDefinitionIdempotencyConflictError extends Error {
   public readonly code = 'idempotency_conflict';
   public constructor() {
-    super('The Idempotency-Key cannot be reused with a different Work Definition source.');
+    super(
+      'The Idempotency-Key cannot be reused with a different Work Definition source.',
+    );
     this.name = 'ProductWorkDefinitionIdempotencyConflictError';
   }
 }
@@ -534,7 +771,18 @@ export class ProductWorkDefinitionNotFoundError extends Error {
   }
 }
 
-function ownerFromAccessContext(access: AccessContext): WorkDefinitionSourceOwner {
+type SingleAgentBinding = Extract<
+  ProductWorkDefinitionDocument['spec'],
+  { readonly kind: 'single_agent' }
+>;
+type EnvironmentBinding = Pick<
+  ProductWorkDefinitionDocument['spec'],
+  'environment_version_id' | 'environment'
+>;
+
+function ownerFromAccessContext(
+  access: AccessContext,
+): WorkDefinitionSourceOwner {
   return {
     tenantId: access.tenantId,
     workspaceId: access.workspaceId,
@@ -562,11 +810,19 @@ function ownerKey(owner: WorkDefinitionSourceOwner): string {
 }
 
 function stableUuid(seed: string): string {
-  const hex = createHash('sha256').update(seed, 'utf8').digest('hex').slice(0, 32).split('');
+  const hex = createHash('sha256')
+    .update(seed, 'utf8')
+    .digest('hex')
+    .slice(0, 32)
+    .split('');
   hex[12] = '5';
   hex[16] = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
   const value = hex.join('');
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 function assertInternalTeam(

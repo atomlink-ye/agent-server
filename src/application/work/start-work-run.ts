@@ -4,6 +4,7 @@ import type {
   ExecutionPlaneCapabilities,
   ExecutionPlaneCapability,
 } from '../ports/execution-plane.js';
+import type { WorkRunInputStore } from '../ports/work-run-input-store.js';
 import type { WorkRun } from '../../domain/work/work-run.js';
 import {
   PendingWorkRunExpiredError,
@@ -14,6 +15,12 @@ import {
   type ResolvedWorkDefinition,
   type RequiredRuntimeCapability,
 } from '../../domain/work/work-composition.js';
+import { canonicalizeProjectValue } from '../../domain/projects/project-canonicalization.js';
+import type { ProductWorkDefinitionApi } from './product-work-definition-api.js';
+import {
+  validateProductWorkRunInput,
+  type WorkDefinitionDiagnostic,
+} from './validate-product-work-definition.js';
 import {
   WorkIdentityApi,
   WorkDefinitionValidationError,
@@ -27,6 +34,8 @@ export interface StartWorkRunRequest {
   readonly workId: string;
   readonly triggerKind: 'manual';
   readonly triggerRef?: string;
+  /** Product-authored Work Definitions may declare a bounded object input contract. */
+  readonly input?: Readonly<Record<string, unknown>>;
 }
 
 export interface StartWorkRunResult {
@@ -44,6 +53,8 @@ export interface StartWorkRunOptions {
   readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
+  readonly productDefinitions?: Pick<ProductWorkDefinitionApi, 'getInputContract'>;
+  readonly workRunInputs?: WorkRunInputStore;
   readonly now?: () => Date;
 }
 
@@ -59,6 +70,8 @@ export class StartWorkRun {
   private readonly runtimeCapabilities: NonNullable<
     StartWorkRunOptions['runtimeCapabilities']
   >;
+  private readonly productDefinitions?: StartWorkRunOptions['productDefinitions'];
+  private readonly workRunInputs?: WorkRunInputStore;
   private readonly now: () => Date;
 
   public constructor(options: StartWorkRunOptions) {
@@ -66,6 +79,8 @@ export class StartWorkRun {
     this.execution = options.execution;
     this.runtimeCapabilities =
       options.runtimeCapabilities ?? NO_RUNTIME_CAPABILITIES;
+    this.productDefinitions = options.productDefinitions;
+    this.workRunInputs = options.workRunInputs;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -88,6 +103,11 @@ export class StartWorkRun {
       workId: input.workId,
     });
     this.assertRuntimeCapabilities(resolved);
+    const preparedInput = await this.prepareProductInput(
+      resolved,
+      input.input,
+      input.accessContext,
+    );
 
     const pending = await this.identity.startWorkRun({
       owner,
@@ -100,6 +120,19 @@ export class StartWorkRun {
     } satisfies StartPendingWorkRunInput);
     if (pending.definitionVersionId !== resolved.definitionVersionId)
       throw new WorkDefinitionValidationError();
+
+    // Product input is a durable WorkRun fact before technical Task admission.
+    // Normal Product responses intentionally omit the snapshot itself.
+    if (preparedInput) {
+      if (!this.workRunInputs)
+        throw new Error('Product WorkRun input persistence is unavailable.');
+      await this.workRunInputs.record({
+        workRunId: pending.id,
+        owner,
+        snapshot: preparedInput.snapshot,
+        fingerprint: preparedInput.fingerprint,
+      });
+    }
 
     if (pending.rootTaskId) {
       await this.recordResolvedManifest(pending, owner, resolved);
@@ -119,7 +152,9 @@ export class StartWorkRun {
 
     const receipt = await this.execution.admitRoot({
       invokable: resolved.executionPolicy.invokable,
-      input: { text: pending.triggerRef },
+      input: {
+        text: preparedInput?.executionText ?? pending.triggerRef,
+      },
       workspaceId: owner.workspaceId,
       idempotencyKey: `work-run:${pending.id}`,
       accessContext: input.accessContext,
@@ -140,6 +175,48 @@ export class StartWorkRun {
       if (error instanceof WorkRunBindingConflictError) throw error;
       throw error;
     }
+  }
+
+  private async prepareProductInput(
+    definition: ResolvedWorkDefinition,
+    input: Readonly<Record<string, unknown>> | undefined,
+    accessContext: AccessContext,
+  ): Promise<{
+    readonly snapshot: Readonly<Record<string, unknown>>;
+    readonly fingerprint: string;
+    readonly executionText: string;
+  } | null> {
+    const contract = this.productDefinitions
+      ? await this.productDefinitions.getInputContract({
+          versionId: definition.definitionVersionId,
+          accessContext,
+        })
+      : null;
+    if (!contract) {
+      if (input !== undefined)
+        throw new WorkRunInputValidationError([
+          {
+            path: '$.input',
+            code: 'input_validation_failed',
+            message:
+              'Typed input is only available for Product-authored Work Definitions.',
+            severity: 'error',
+          },
+        ]);
+      return null;
+    }
+    const validated = validateProductWorkRunInput(contract.schema, input ?? {});
+    if (!validated.valid)
+      throw new WorkRunInputValidationError(validated.diagnostics);
+    return {
+      snapshot: validated.input,
+      fingerprint: validated.fingerprint,
+      executionText: renderExecutionInput({
+        name: contract.name,
+        description: contract.description,
+        input: validated.input,
+      }),
+    };
   }
 
   private assertRuntimeCapabilities(definition: ResolvedWorkDefinition): void {
@@ -175,6 +252,16 @@ export class StartWorkRun {
   }
 }
 
+export class WorkRunInputValidationError extends Error {
+  public readonly code = 'input_validation_failed';
+  public constructor(
+    public readonly diagnostics: readonly WorkDefinitionDiagnostic[],
+  ) {
+    super('The WorkRun input does not match the Work Definition input schema.');
+    this.name = 'WorkRunInputValidationError';
+  }
+}
+
 export class UnsupportedWorkCompositionCapabilityError extends Error {
   public readonly code = 'unsupported_runtime_capability';
 
@@ -182,6 +269,19 @@ export class UnsupportedWorkCompositionCapabilityError extends Error {
     super(`The Work requires unsupported runtime capability: ${capability}.`);
     this.name = 'UnsupportedWorkCompositionCapabilityError';
   }
+}
+
+function renderExecutionInput(input: {
+  readonly name: string;
+  readonly description: string | null;
+  readonly input: Readonly<Record<string, unknown>>;
+}): string {
+  return [
+    `Work: ${input.name}`,
+    ...(input.description ? [`Objective: ${input.description}`] : []),
+    'Input:',
+    canonicalizeProjectValue(input.input),
+  ].join('\n');
 }
 
 function asExecutionPlaneCapability(

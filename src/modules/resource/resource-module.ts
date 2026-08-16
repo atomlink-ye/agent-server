@@ -66,7 +66,10 @@ export async function createResourceModule(
     invokableRepository,
     skillCatalog,
   );
-  const definitionReadApi: DefinitionReadApi = {
+  const environmentReadApi: EnvironmentReadApi = {
+    findVersion: (owner, id) => environmentRegistry.findVersion(owner, id),
+  };
+  const baseDefinitionReadApi: DefinitionReadApi = {
     findPublishedAgentVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedAgentVersionById(id, ownerScope),
     findTeamDefinitionById: (id) =>
@@ -74,14 +77,15 @@ export async function createResourceModule(
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };
-  const environmentReadApi: EnvironmentReadApi = {
-    findVersion: (owner, id) => environmentRegistry.findVersion(owner, id),
-  };
   const workDefinitionResolution = new ResolveWorkDefinition({
     agents: agentRegistry,
     agentResolution: agentResolutionApi,
-    definitions: definitionReadApi,
+    definitions: baseDefinitionReadApi,
     environments: environmentReadApi,
+  });
+  const definitionReadApi: DefinitionReadApi = Object.freeze({
+    ...baseDefinitionReadApi,
+    workDefinitionResolution,
   });
 
   return {

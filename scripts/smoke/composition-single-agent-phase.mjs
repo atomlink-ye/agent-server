@@ -1,24 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 
 const { Pool } = pg;
-
-function canonicalize(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function fingerprint(source) {
-  return `sha256:${createHash('sha256')
-    .update(canonicalize(source), 'utf8')
-    .digest('hex')}`;
-}
 
 function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,7 +72,7 @@ metadata:
   name: composition-single-${scenarioId}
 spec:
   description: Composition-first single Agent real-provider smoke
-  instructions: 'Return exactly ${marker}. Do not call tools unless execution cannot proceed otherwise.'
+  instructions: 'Return exactly the marker contained in the Work input. Do not call tools unless execution cannot proceed otherwise.'
   runtime:
     provider: paseo
     modelPolicyRef: free-only
@@ -104,7 +87,7 @@ spec:
       type: object
       properties: {}
       additionalProperties: false
-    prompt: "Return the required marker."
+    prompt: "Follow the Product Work input."
   session:
     invocation: fresh_per_invocation
     followUps: queued
@@ -137,14 +120,49 @@ spec:
     (id) => `/api/v1/environment-versions/${id}:publish`,
   );
 
-  const definitionId = randomUUID();
-  const definitionVersionId = randomUUID();
-  const source = {
-    kind: 'single_agent',
-    agentVersionId: agent.id,
-    environmentVersionId: environment.id,
-    memoryVersionIds: [],
-  };
+  const publicDefinition = `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: composition-single-${scenarioId}
+  description: Real-provider Product Definition -> Work -> Run smoke.
+spec:
+  kind: single_agent
+  agent_version_id: ${agent.id}
+  environment_version_id: ${environment.id}
+  memory_version_ids: []
+  input_schema:
+    type: object
+    properties:
+      marker:
+        type: string
+        min_length: 1
+        max_length: 256
+    required: [marker]
+    additional_properties: false
+`;
+
+  const validated = await request('/api/v1/work-definitions:validate', {
+    method: 'POST',
+    body: { source: publicDefinition },
+    expectedStatus: 200,
+  });
+  if (validated.valid !== true || !validated.fingerprint)
+    throw new Error(`composition Product Definition validation failed: ${JSON.stringify(validated)}`);
+  const applied = await request('/api/v1/work-definitions:apply', {
+    method: 'POST',
+    body: { source: publicDefinition },
+    expectedStatus: 201,
+  });
+  const definitionId = applied.definition?.id;
+  const definitionVersionId = applied.version?.id;
+  if (
+    typeof definitionId !== 'string' ||
+    typeof definitionVersionId !== 'string' ||
+    applied.version?.fingerprint !== validated.fingerprint ||
+    !applied.resolved?.resource_manifest_fingerprint
+  )
+    throw new Error(`composition Product Definition apply invalid: ${JSON.stringify(applied)}`);
+
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     const workspace = await pool.query(
@@ -155,35 +173,6 @@ spec:
     const owner = workspace.rows[0];
     if (!owner)
       throw new Error(`composition smoke workspace missing: ${workspaceId}`);
-    await pool.query(
-      `INSERT INTO work_definition_source_definitions
-       (id,tenant_id,workspace_id,principal_type,principal_id,name,description,created_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,now())`,
-      [
-        definitionId,
-        owner.tenant_id,
-        workspaceId,
-        owner.principal_type,
-        owner.principal_id,
-        `Composition single ${scenarioId}`,
-        'Real-provider Composition-first smoke Definition',
-      ],
-    );
-    await pool.query(
-      `INSERT INTO work_definition_source_versions
-       (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,source,fingerprint,created_at,published_at)
-       VALUES($1,$2,$3,$4,$5,$6,'published',$7::jsonb,$8,now(),now())`,
-      [
-        definitionVersionId,
-        definitionId,
-        owner.tenant_id,
-        workspaceId,
-        owner.principal_type,
-        owner.principal_id,
-        JSON.stringify(source),
-        fingerprint(source),
-      ],
-    );
 
     const created = await request('/api/v1/works', {
       method: 'POST',
@@ -202,7 +191,7 @@ spec:
       method: 'POST',
       body: {
         trigger_kind: 'manual',
-        trigger_ref: `Return exactly ${marker}`,
+        input: { marker },
       },
       expectedStatus: 202,
     });
@@ -214,6 +203,18 @@ spec:
       work_id: workId,
       work_run_id: workRunId,
     });
+
+    const inputSnapshot = await pool.query(
+      `SELECT input_snapshot,input_fingerprint FROM work_runs WHERE id=$1`,
+      [workRunId],
+    );
+    if (
+      inputSnapshot.rows[0]?.input_snapshot?.marker !== marker ||
+      !/^sha256:[0-9a-f]{64}$/.test(inputSnapshot.rows[0]?.input_fingerprint ?? '')
+    )
+      throw new Error(
+        `composition WorkRun input snapshot mismatch: ${JSON.stringify(inputSnapshot.rows[0])}`,
+      );
 
     const deadline = Date.now() + timeoutMs;
     let projection;

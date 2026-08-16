@@ -1620,13 +1620,11 @@ describe('ExecuteRun', () => {
         events as never,
       );
       await executeRun.execute(claim);
-      const emittedTypes = (
-        events.append.mock.calls as unknown as Array<Array<unknown>>
-      ).map((call) => call[1]);
-      expect(emittedTypes).toContain('started');
-      expect(emittedTypes).not.toContain('succeeded');
-      expect(emittedTypes).not.toContain('failed');
-      expect(emittedTypes).not.toContain('cancelled');
+      expect(
+        (events.append.mock.calls as unknown as Array<Array<unknown>>).map(
+          (call) => call[1],
+        ),
+      ).toEqual(['started']);
     },
   );
 });

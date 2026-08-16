@@ -115,4 +115,15 @@ describe('CollaborationPolicy', () => {
       ),
     ).not.toThrow();
   });
+
+  it('keeps completed work attempts read-only for mailbox mutations', () => {
+    const completed = taskContext('member', 'work_attempt', 'completed');
+    expect(() => policy.requireForTask(completed, 'mailbox.read')).not.toThrow();
+    expect(() => policy.requireForTask(completed, 'mailbox.send')).toThrow(
+      CollaborationPolicyError,
+    );
+    expect(() => policy.requireForTask(completed, 'mailbox.ack')).toThrow(
+      CollaborationPolicyError,
+    );
+  });
 });

@@ -23,11 +23,6 @@ import type {
   ExecutionTurnOutcome,
 } from '../runtime/execution-plane-runtime-facade.js';
 import { deriveTeamContextEpoch } from '../teams/team-tool-context.js';
-import { collaborationToolRefsForLeadPolicy } from '../teams/team-policy-evaluator.js';
-import {
-  collaborationToolRefsForMessageTurn,
-  collaborationToolRefsForRole,
-} from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 import type { RunTeamContext } from './run-team-coordinator.js';
 import { RunPromptContext } from './run-prompt-context.js';
@@ -180,23 +175,15 @@ export class AgentRunExecutor {
         scopeId: turnGrantScopeId,
       });
       if (
-        !previous?.runId ||
-        previous.runId === claim.run.id ||
-        previous.allowedTools.length !== 0 ||
+        !previous ||
+        (previous.activeTurn !== null &&
+          previous.activeTurn.runId === claim.run.id) ||
+        previous.activeTurn !== null ||
         !this.tasks.findByRootTaskIdForOwner ||
-        !this.runs ||
         (runtimeSession &&
           !sameToolRefs(previous.catalogTools, runtimeSession.toolRefs))
       )
         throw new Error('Previous Team turn cannot be verified.');
-      const previousRun = await this.runs.findByIdForOwner(previous.runId, {
-        tenantId: task.tenantId,
-        workspaceId: task.workspaceId,
-        principalType: task.principalType,
-        principalId: task.principalId,
-      });
-      if (!previousRun || !terminalRunStatuses.has(previousRun.status))
-        throw new Error('Previous Team run is still active.');
       const records = await this.tasks.findByRootTaskIdForOwner(
         collaborativeTeam.rootTaskId,
         {
@@ -264,35 +251,8 @@ export class AgentRunExecutor {
     const domainToolRefs = (
       sessionRuntime?.toolRefs ?? resolved.toolRefs
     ).filter((ref) => !collaborationRefs.has(ref));
-    const leadCatalogToolRefs = [
-      ...domainToolRefs,
-      ...collaborationToolRefsForRole('lead'),
-    ];
-    const memberCatalogToolRefs = [
-      ...domainToolRefs,
-      ...collaborationToolRefsForRole('member'),
-    ];
-    if (member?.role === 'lead' && sessionRuntime) {
-      const persistedCanonical = sessionRuntime.toolRefs.filter((ref) =>
-        collaborationRefs.has(ref),
-      );
-      const expectedCanonical = collaborationToolRefsForRole('lead');
-      if (!sameToolRefs(persistedCanonical, expectedCanonical))
-        throw new Error('Lead runtime session catalog is invalid.');
-    }
     const runtimeToolRefs =
-      collaborativeTeam != null && task.teamTaskKind === 'direct_message'
-        ? collaborationToolRefsForMessageTurn(member?.role ?? 'member')
-        : collaborativeTeam != null && task.teamTaskKind === 'work_attempt'
-          ? memberCatalogToolRefs
-          : collaborativeTeam != null && member?.role === 'lead'
-            ? [
-                ...domainToolRefs,
-                ...collaborationToolRefsForLeadPolicy(
-                  agenticLeadState?.policy ?? { allowedCommands: [] },
-                ),
-              ]
-            : resolved.toolRefs;
+      collaborativeTeam != null && member ? domainToolRefs : resolved.toolRefs;
 
     const prompts = await this.promptContext.buildTurnPrompts({
       resolved,
@@ -359,10 +319,7 @@ export class AgentRunExecutor {
               agentVersionId: resolved.agentVersionId,
               environmentVersionId: environmentVersionId!,
               resolvedSkills: resolved.skills,
-              toolRefs:
-                member.role === 'lead'
-                  ? leadCatalogToolRefs
-                  : memberCatalogToolRefs,
+              toolRefs: domainToolRefs,
             })
           : null;
       if (!sessionRuntime)
@@ -380,10 +337,7 @@ export class AgentRunExecutor {
         sessionRuntime.agentVersionId !== task.invokableVersionId ||
         sessionRuntime.environmentVersionId !==
           collaborativeTeam?.environmentVersionId ||
-        !sameToolRefs(
-          sessionRuntime.toolRefs,
-          member.role === 'lead' ? leadCatalogToolRefs : memberCatalogToolRefs,
-        ) ||
+        !sameToolRefs(sessionRuntime.toolRefs, domainToolRefs) ||
         sessionRuntime.sessionBinding !== null ||
         sessionRuntime.workspaceBinding !== null
       )
@@ -435,6 +389,7 @@ export class AgentRunExecutor {
         !capabilityBinder?.bind ||
         !capabilityBinder.getTeamMemberGrant ||
         !capabilityBinder.refreshForTeamMember ||
+        !capabilityBinder.closeTeamMemberTurn ||
         !capabilityBinder.activeToolCalls ||
         !capabilityBinder.revoke
       )
@@ -444,7 +399,9 @@ export class AgentRunExecutor {
     let extensions;
     if (
       !priorExternalSessionId &&
-      (resolved.skills.length > 0 || runtimeToolRefs.length > 0)
+      (resolved.skills.length > 0 ||
+        runtimeToolRefs.length > 0 ||
+        (collaborativeTeam != null && member != null))
     ) {
       if (!this.runtimeExtensionBinder)
         throw new Error('Runtime extension binding is unavailable.');
@@ -468,9 +425,7 @@ export class AgentRunExecutor {
         toolRefs: runtimeToolRefs,
         catalogTools:
           collaborativeTeam && member
-            ? member.role === 'lead'
-              ? leadCatalogToolRefs
-              : memberCatalogToolRefs
+            ? domainToolRefs
             : runtimeToolRefs,
         ...(cellCwd ? { cellCwd } : {}),
       });
@@ -511,7 +466,6 @@ export class AgentRunExecutor {
     ) {
       if (
         !this.tasks.findByRootTaskIdForOwner ||
-        !this.runs ||
         !refreshableBinder?.getTeamMemberGrant ||
         !refreshableBinder.refreshForTeamMember
       )
@@ -521,23 +475,16 @@ export class AgentRunExecutor {
         scopeId: turnGrantScopeId,
       });
       if (
-        !oldGrant?.runId ||
-        oldGrant.runId === claim.run.id ||
-        oldGrant.allowedTools.length !== 0 ||
+        !oldGrant ||
+        (oldGrant.activeTurn !== null &&
+          oldGrant.activeTurn.runId === claim.run.id) ||
+        oldGrant.activeTurn !== null ||
         !refreshableBinder.activeToolCalls ||
         refreshableBinder.activeToolCalls(oldGrant.grantId) !== 0 ||
         (sessionRuntime &&
           !sameToolRefs(oldGrant.catalogTools, sessionRuntime.toolRefs))
       )
         throw new Error('Previous Team turn cannot be verified.');
-      const oldRun = await this.runs.findByIdForOwner(oldGrant.runId, {
-        tenantId: task.tenantId,
-        workspaceId: task.workspaceId,
-        principalType: task.principalType,
-        principalId: task.principalId,
-      });
-      if (!oldRun || !terminalRunStatuses.has(oldRun.status))
-        throw new Error('Previous Team run is still active.');
       const records = await this.tasks.findByRootTaskIdForOwner(
         collaborativeTeam.rootTaskId,
         {
@@ -593,12 +540,7 @@ export class AgentRunExecutor {
             const payload = executionObservationPayload(observation, {
               isTeamMember: member != null,
               runtimeToolRefs,
-              catalogTools:
-                member?.role === 'lead'
-                  ? leadCatalogToolRefs
-                  : member
-                    ? memberCatalogToolRefs
-                    : runtimeToolRefs,
+              catalogTools: member ? domainToolRefs : runtimeToolRefs,
             });
             if (payload)
               await this.events!.append(claim.run.id, 'output', payload);
@@ -676,20 +618,16 @@ export class AgentRunExecutor {
     let narrowingError: unknown;
     try {
       if (member?.role === 'lead') {
-        if (!exactLeadGrantId || !refreshableBinder?.refreshForTeamMember)
+        if (!exactLeadGrantId || !refreshableBinder?.closeTeamMemberTurn)
           throw new Error('Lead runtime grant could not be narrowed.');
         try {
-          const narrowed = refreshableBinder.refreshForTeamMember({
+          const narrowed = refreshableBinder.closeTeamMemberTurn({
             grantId: exactLeadGrantId,
             teamMemberRunId: member.id,
             scopeId: turnGrantScopeId,
-            taskId: task.id,
-            runId: claim.run.id,
-            allowedTools: [],
-            contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
           });
-          if (narrowed.allowedTools.length !== 0)
-            throw new Error('Lead runtime grant did not narrow to zero.');
+          if (narrowed.activeTurn !== null)
+            throw new Error('Lead runtime grant did not close.');
         } catch (error) {
           this.revokeGrantSafely(refreshableBinder, exactLeadGrantId);
           throw error;
@@ -697,7 +635,7 @@ export class AgentRunExecutor {
       } else if (
         member &&
         refreshableBinder?.getTeamMemberGrant &&
-        refreshableBinder.refreshForTeamMember
+        refreshableBinder.closeTeamMemberTurn
       ) {
         const grant = refreshableBinder.getTeamMemberGrant({
           teamMemberRunId: member.id,
@@ -705,14 +643,10 @@ export class AgentRunExecutor {
         });
         if (grant) {
           try {
-            refreshableBinder.refreshForTeamMember({
+            refreshableBinder.closeTeamMemberTurn({
               grantId: grant.grantId,
               teamMemberRunId: member.id,
               scopeId: turnGrantScopeId,
-              taskId: task.id,
-              runId: claim.run.id,
-              allowedTools: [],
-              contextEpoch: deriveTeamContextEpoch(task.id, claim.run.id),
             });
           } catch (error) {
             this.revokeGrantSafely(refreshableBinder, grant.grantId);

@@ -1,0 +1,29 @@
+apps/web/app/api/works/route.ts
+  7d670b323f58603d 1,9-13
+apps/web/lib/product-api-client.ts
+  7d670b323f58603d 21
+apps/web/lib/product-api-bff.ts
+  7d670b323f58603d 60-122
+apps/web/app/api/works/[work_id]/runs/route.ts
+  7d670b323f58603d 4,24-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "7e2052da202454b4b035583705c2731e9afcb09b",
+  "prompts": {
+    "7d670b323f58603d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4871663-5d4e-41fb-8dc9-69e43d70f103",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 76,
+      "total_deletions": 5,
+      "accepted_lines": 76,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -2,10 +2,10 @@ apps/web/lib/product-api-bff.ts
   7d670b323f58603d 60-122
 apps/web/app/api/works/route.ts
   7d670b323f58603d 1,9-13
-apps/web/lib/product-api-client.ts
-  7d670b323f58603d 21
 apps/web/app/api/works/[work_id]/runs/route.ts
   7d670b323f58603d 4,24-27
+apps/web/lib/product-api-client.ts
+  7d670b323f58603d 21
 ---
 {
   "schema_version": "authorship/3.0.0",

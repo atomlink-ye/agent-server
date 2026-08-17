@@ -60,7 +60,7 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
           <p className="run-trace__eyebrow">Run Trace</p>
           <h2 id="run-trace-heading">{trace.work.title}</h2>
         </div>
-        <span className="run-trace__historical">Historical</span>
+        <span className="run-trace__historical">Historical Run Trace</span>
       </header>
       <p className="run-trace__subhead">
         Captured MCP dispatch and confirmation activity
@@ -96,7 +96,7 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
               <div className="run-trace__lanes">
                 {actorRows.map((actor) => (
                   <div
-                    className={`run-trace__actor ${actorTone(actor.key)}`}
+                    className={`run-trace__lane run-trace__actor ${actorTone(actor.key)}`}
                     key={actor.key}
                   >
                     <div className="run-trace__lane-name">{actor.name}</div>

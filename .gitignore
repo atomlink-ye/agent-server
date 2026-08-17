@@ -25,4 +25,4 @@ node_modules
 apps/web/node_modules
 
 apps/web/.vitest-attachments/
-apps/web/features/run-trace/__screenshots__/
+apps/web/**/__screenshots__/

@@ -39,3 +39,37 @@ export async function getProductApi(path: string): Promise<Response> {
     throw new ProductApiClientError('unavailable');
   }
 }
+
+const productWritePath = new RegExp(
+  `^/api/v1/works/(?:${uuidPath})/runs$`,
+  'iu',
+);
+
+/** Server-only transport for the Product run start route. */
+export async function postProductApi(
+  path: string,
+  body: unknown,
+): Promise<Response> {
+  if (!productWritePath.test(path))
+    throw new ProductApiClientError('invalid_path');
+
+  const baseUrl = process.env.AGENT_SERVER_BASE_URL;
+  const serviceToken = process.env.AGENT_SERVER_SERVICE_TOKEN;
+  if (!baseUrl || !serviceToken)
+    throw new ProductApiClientError('configuration_missing');
+
+  try {
+    return await fetch(`${baseUrl.replace(/\/$/u, '')}${path}`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${serviceToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ProductApiClientError('unavailable');
+  }
+}

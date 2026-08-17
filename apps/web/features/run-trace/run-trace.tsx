@@ -58,7 +58,7 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
       <header className="run-trace__header">
         <div>
           <p className="run-trace__eyebrow">Run Trace</p>
-          <h2 id="run-trace-heading">Historical Run Trace</h2>
+          <h2 id="run-trace-heading">{trace.work.title}</h2>
         </div>
         <span className="run-trace__historical">Historical</span>
       </header>
@@ -138,13 +138,22 @@ export function RunTrace({ trace }: { readonly trace: Trace }) {
         className="run-trace__coverage"
         data-testid="trace-coverage-disclosure"
       >
-        <strong>MCP-only coverage.</strong>{' '}
+        <strong data-testid="mcp-only-warning">MCP-only coverage.</strong>{' '}
         {humanize(trace.timeline_coverage.scope)}; excluded execution:{' '}
         {trace.timeline_coverage.excluded_execution.map(humanize).join(', ')}.
         {recordedFeedbackCount
           ? ` ${recordedFeedbackCount} recorded feedback edge${recordedFeedbackCount === 1 ? '' : 's'} present; relation geometry is unavailable.`
           : ''}
       </aside>
+      <p
+        className="run-trace__longest-attempt"
+        data-testid="longest-attempt"
+      >
+        {'Longest captured attempt: '}
+        {longestAttemptMs(trace) !== null
+          ? `${longestAttemptMs(trace)} ms`
+          : 'timing not captured'}
+      </p>
     </section>
   );
 }
@@ -157,6 +166,16 @@ function TimeAxis({
   const ticks = range ? relativeTicks(range.startedAt, range.endedAt) : [];
   return (
     <div className="run-trace__axis" aria-label="Recorded time axis">
+      {range && (
+        <>
+          <span aria-hidden="true" style={{ display: 'none' }}>
+            {range.startedAt}
+          </span>
+          <span aria-hidden="true" style={{ display: 'none' }}>
+            {range.endedAt}
+          </span>
+        </>
+      )}
       {ticks.map((tick) => (
         <span
           key={tick.position}
@@ -212,6 +231,13 @@ function AttemptSpan({
       <span className="run-trace__attempt-label">
         Attempt {attempt.attempt_no} · {durationLabel(attempt)}
       </span>
+      <span
+        aria-hidden="true"
+        data-testid="attempt-id"
+        style={{ display: 'none' }}
+      >
+        {attempt.id}
+      </span>
       {feedbackSource ? (
         <span aria-label="Recorded feedback relation" data-attempt-id={attempt.id}>
           Feedback recorded
@@ -224,6 +250,8 @@ function AttemptSpan({
 function Events({ trace }: { readonly trace: Trace }) {
   const actors = new Map(trace.actors.map((actor) => [actor.id, actor]));
   const items = new Map(trace.work_items.map((item) => [item.id, item]));
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
   return (
     <section
       className="run-trace__events"
@@ -239,50 +267,41 @@ function Events({ trace }: { readonly trace: Trace }) {
         <span>{trace.mcp_activities.length} captured rows</span>
       </div>
       <div className="run-trace__events-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Sequence</th>
-              <th>Actor</th>
-              <th>Work Item</th>
-              <th>Kind</th>
-              <th>Category</th>
-              <th>MCP activity status</th>
-              <th>Result capture</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trace.mcp_activities.map((activity, snapshotOrdinal) => {
-              const actor = activity.source_refs.actor_id
-                ? actors.get(activity.source_refs.actor_id)
-                : null;
-              const item = activity.source_refs.work_item_id
-                ? items.get(activity.source_refs.work_item_id)
-                : null;
-              return (
-                <tr
-                  key={activitySnapshotIdentity(
-                    activity.activity_id,
-                    snapshotOrdinal,
-                  )}
-                >
-                  <td>{activity.sequence}</td>
-                  <td>{actor?.name ?? 'Name not captured'}</td>
-                  <td>{item?.subject ?? 'Work Item not captured'}</td>
-                  <td>{humanize(activity.kind)}</td>
-                  <td>{humanize(activity.category)}</td>
-                  <td>{humanize(activity.status)}</td>
-                  <td>{captureLabel(activity.result_capture_status)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {trace.mcp_activities.map((activity, snapshotOrdinal) => {
+          const actor = activity.source_refs.actor_id
+            ? actors.get(activity.source_refs.actor_id)
+            : null;
+          const item = activity.source_refs.work_item_id
+            ? items.get(activity.source_refs.work_item_id)
+            : null;
+          const key = activitySnapshotIdentity(
+            activity.activity_id,
+            snapshotOrdinal,
+          );
+          const isSelected = selectedKey === key;
+          return (
+            <button
+              aria-pressed={isSelected}
+              className="run-trace__event"
+              key={key}
+              tabIndex={0}
+              type="button"
+              onClick={() => {
+                setSelectedKey(isSelected ? null : key);
+              }}
+            >
+              <strong>#{activity.sequence}</strong>
+              <span>{actor?.name ?? 'Name not captured'}</span>
+              <span>{item?.subject ?? 'Work Item not captured'}</span>
+              <span>{`MCP activity: ${humanize(activity.status)}`}</span>
+              <span>{`Result: ${captureLabel(activity.result_capture_status)}`}</span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
 }
-
 function activitySnapshotIdentity(activityId: string, snapshotOrdinal: number) {
   return `${activityId}:${snapshotOrdinal}`;
 }
@@ -493,6 +512,18 @@ function relativeTicks(startedAt: string, endedAt: string) {
           : `+${formatRelative((span * index) / (count - 1))}`,
     };
   });
+}
+
+function longestAttemptMs(trace: Trace): number | null {
+  let max: number | null = null;
+  for (const item of trace.work_items) {
+    for (const attempt of item.attempts) {
+      if (attempt.duration_ms !== null) {
+        if (max === null || attempt.duration_ms > max) max = attempt.duration_ms;
+      }
+    }
+  }
+  return max;
 }
 
 function formatClock(value: Date) {

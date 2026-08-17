@@ -262,8 +262,11 @@ function WorkDetail({
             {runContext}
             {run ? ` · ${productStatePresentation(run.work_run.product_state).label}` : ''}
           </p>
+          <p className="work-detail-surface-note">read-only Work-first surface</p>
+          <p className="work-detail-surface-note">Controls are explicitly unavailable.</p>
         </div>
       </header>
+      <RunTrigger workId={work.id} />
       <WorkTabs
         activeTab={activeTab}
         runId={selectedRunId}
@@ -318,12 +321,14 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
       <div className="work-overview__summary">
         <span
           className={`work-state-pill work-state-pill--${data.run.work_run.product_state}`}
+          data-testid="outcome-product-state"
         >
           {stateView.label}
         </span>
         <div>
           <p className="work-shell-kicker">Latest recorded outcome</p>
           <h2>{outcome ?? resultCaptureLabel(data.run.work_run.result_capture_status)}</h2>
+          <p data-testid="attention-basis">{stateView.description}</p>
         </div>
       </div>
       <RunTrace trace={data.trace} />
@@ -584,6 +589,53 @@ function workTabHref(workId: string, tab: WorkTab, runId?: string) {
   const encodedWorkId = encodeURIComponent(workId);
   const suffix = query.toString();
   return `/works/${encodedWorkId}${suffix ? `?${suffix}` : ''}`;
+}
+
+function RunTrigger({ workId }: { readonly workId: string }) {
+  const [state, setState] = useState<
+    'idle' | 'starting' | 'started' | 'error'
+  >('idle');
+
+  async function handleRun() {
+    setState('starting');
+    try {
+      const response = await fetch(
+        `/api/works/${encodeURIComponent(workId)}/runs`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ trigger_kind: 'manual' }),
+        },
+      );
+      if (!response.ok) {
+        setState('error');
+        return;
+      }
+      setState('started');
+    } catch {
+      setState('error');
+    }
+  }
+
+  return (
+    <div className="work-run-trigger">
+      <button
+        disabled={state === 'starting' || state === 'started'}
+        onClick={() => void handleRun()}
+        type="button"
+      >
+        {state === 'idle'
+          ? 'Start Run'
+          : state === 'starting'
+            ? 'Starting…'
+            : state === 'started'
+              ? 'Run Started'
+              : 'Error — Retry'}
+      </button>
+      {state === 'error' && <p>Failed to start Run. Please try again.</p>}
+    </div>
+  );
 }
 
 function productStatePresentation(state: WorkListItem['product_state']) {

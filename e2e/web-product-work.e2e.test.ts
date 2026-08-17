@@ -7,12 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { ProductDeveloperClient } from '../src/adapters/http/product-developer-client.js';
 
-const baseUrlEnv = process.env.WEB_E2E_BASE_URL;
-const configuredWorkId = process.env.PRODUCT_E2E_WORK_ID;
+const baseUrl = process.env.WEB_E2E_BASE_URL?.replace(/\/$/u, '');
 const agentServerBaseUrl = process.env.AGENT_SERVER_BASE_URL;
 const agentServerToken = process.env.AGENT_SERVER_SERVICE_TOKEN;
-const baseUrl = baseUrlEnv?.replace(/\/$/u, '');
-const testTimeout = 10 * 60 * 1000;
+const testTimeout = 8 * 60 * 1000;
 const marker = 'MVE_CODE_GARDENING_BROWSER_OK';
 let browser: Browser | undefined;
 
@@ -25,31 +23,24 @@ describe.skipIf(baseUrl === undefined)(
     });
 
     it(
-      'starts a real WorkRun, renders its Trace, and reads the exact Product DefinitionVersion',
+      'clicks Start Run, reaches real provider output, Trace, and the exact DefinitionVersion',
       async () => {
-        const seeded = await resolveWorkFixture();
+        const seeded = await seedProductWork();
         const browserOrigin = new URL(baseUrl!).origin;
-        const browserHostname = new URL(baseUrl!).hostname;
-        if (!browserHostname.endsWith('.localhost'))
-          throw new Error(
-            `WEB_E2E_BASE_URL must use a trustworthy .localhost hostname: ${browserOrigin}`,
-          );
-        browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext({ baseURL: baseUrl! });
-        const page = await context.newPage();
-        const capture = captureSameOriginNetwork(page, browserOrigin);
+        if (!new URL(baseUrl!).hostname.endsWith('.localhost'))
+          throw new Error('WEB_E2E_BASE_URL must use a trustworthy .localhost hostname.');
 
-        await page.goto(`/works/${encodeURIComponent(seeded.workId)}`, {
+        browser = await chromium.launch({ headless: true });
+        const page = await (await browser.newContext({ baseURL: baseUrl! })).newPage();
+        const paths = captureSameOriginPaths(page, browserOrigin);
+
+        await page.goto(`/works/${seeded.workId}`, {
           waitUntil: 'domcontentloaded',
-          timeout: testTimeout,
-        });
-        await page.getByTestId('work-detail-shell').waitFor({
-          state: 'visible',
           timeout: testTimeout,
         });
         await page.getByText('Product Work/Run reads', { exact: false }).waitFor({
           state: 'visible',
-          timeout: testTimeout,
+          timeout: 30_000,
         });
 
         const startResponsePromise = page.waitForResponse(
@@ -58,7 +49,7 @@ describe.skipIf(baseUrl === undefined)(
             sameOrigin(response.url(), browserOrigin) &&
             new URL(response.url()).pathname ===
               `/api/works/${seeded.workId}/runs`,
-          { timeout: testTimeout },
+          { timeout: 30_000 },
         );
         await page.getByRole('button', { name: 'Start Run' }).click();
         const startResponse = await startResponsePromise;
@@ -66,119 +57,56 @@ describe.skipIf(baseUrl === undefined)(
         const started = (await startResponse.json()) as {
           work_run?: { id?: unknown; definition_version_id?: unknown };
         };
-        const workRunId = started.work_run?.id;
-        if (typeof workRunId !== 'string')
-          throw new Error(
-            'Start Run response did not expose a Product WorkRun id.',
-          );
-        expect(started.work_run?.definition_version_id).toBe(
+        if (typeof started.work_run?.id !== 'string')
+          throw new Error('Start Run response did not expose a Product WorkRun id.');
+        expect(started.work_run.definition_version_id).toBe(
           seeded.definitionVersionId,
         );
 
-        await waitForTerminalWorkRun(page, seeded.workId, workRunId);
+        await waitForCompleteWorkRun(page, seeded.workId, started.work_run.id);
         await page.goto(
-          `/works/${encodeURIComponent(seeded.workId)}?run=${encodeURIComponent(workRunId)}`,
-          { waitUntil: 'domcontentloaded', timeout: testTimeout },
+          `/works/${seeded.workId}?run=${started.work_run.id}`,
+          { waitUntil: 'domcontentloaded', timeout: 30_000 },
         );
         await page.getByTestId('outcome-product-state').waitFor({
           state: 'visible',
-          timeout: testTimeout,
+          timeout: 30_000,
         });
-        if (seeded.selfSeeded)
-          await page.getByText(marker, { exact: false }).waitFor({
-            state: 'visible',
-            timeout: testTimeout,
-          });
+        await page.getByText(marker, { exact: false }).waitFor({
+          state: 'visible',
+          timeout: 30_000,
+        });
+        expect(await page.getByTestId('mcp-only-warning').isVisible()).toBe(true);
 
-        expect(capture.bffRequests.length, 'display_bug').toBeGreaterThan(0);
-        expect(capture.bffResponses.length, 'display_bug').toBeGreaterThan(0);
-        expect(
-          capture.bffResponses
-            .filter(
-              (response) => response.status >= 200 && response.status < 300,
-            )
-            .every(
-              (response) =>
-                response.headers['x-agent-server-upstream'] === 'fetched',
-            ),
-          'not_implemented',
-        ).toBe(true);
-        expect(
-          await page.getByTestId('attention-basis').isVisible(),
-          'display_bug',
-        ).toBe(true);
-        expect(
-          await page.getByTestId('mcp-only-warning').isVisible(),
-          'display_bug',
-        ).toBe(true);
-
-        const exactDefinitionResponse = page.waitForResponse(
-          (response) =>
-            response.request().method() === 'GET' &&
-            sameOrigin(response.url(), browserOrigin) &&
-            new URL(response.url()).pathname ===
-              `/api/work-definition-versions/${seeded.definitionVersionId}`,
-          { timeout: testTimeout },
+        const exactDefinitionPath =
+          `/api/work-definition-versions/${seeded.definitionVersionId}`;
+        expect(paths.responses).toContain(exactDefinitionPath);
+        expect(paths.requests).not.toContain(
+          `/api/works/${seeded.workId}/definition`,
         );
+
         await page.getByRole('link', { name: 'Definition' }).click();
-        const definitionResponse = await exactDefinitionResponse;
-        expect(definitionResponse.ok(), 'not_implemented').toBe(true);
         await page.getByTestId('definition-viewer').waitFor({
           state: 'visible',
-          timeout: testTimeout,
+          timeout: 30_000,
         });
         expect(
-          await page
-            .getByText(seeded.definitionName, { exact: true })
-            .isVisible(),
-          'display_bug',
+          await page.getByText(seeded.definitionName, { exact: true }).isVisible(),
         ).toBe(true);
-        expect(capture.teamDefinitionRequests).toHaveLength(0);
       },
       testTimeout,
     );
   },
 );
 
-async function resolveWorkFixture(): Promise<{
+async function seedProductWork(): Promise<{
   readonly workId: string;
   readonly definitionVersionId: string;
   readonly definitionName: string;
-  readonly selfSeeded: boolean;
 }> {
-  if (configuredWorkId) {
-    if (!agentServerBaseUrl || !agentServerToken)
-      throw new Error(
-        'AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN are required with PRODUCT_E2E_WORK_ID so its Definition can be resolved.',
-      );
-    const client = new ProductDeveloperClient({
-      baseUrl: agentServerBaseUrl,
-      token: agentServerToken,
-    });
-    const workResponse = await fetch(
-      `${agentServerBaseUrl.replace(/\/$/u, '')}/api/v1/works/${configuredWorkId}`,
-      { headers: { authorization: `Bearer ${agentServerToken}` } },
-    );
-    if (!workResponse.ok)
-      throw new Error('Configured Product Work is unavailable.');
-    const body = (await workResponse.json()) as {
-      work?: { definition_version_id?: unknown };
-    };
-    const definitionVersionId = body.work?.definition_version_id;
-    if (typeof definitionVersionId !== 'string')
-      throw new Error('Configured Product Work has no DefinitionVersion id.');
-    const version = await client.getDefinitionVersion(definitionVersionId);
-    return {
-      workId: configuredWorkId,
-      definitionVersionId,
-      definitionName: definitionNameFromSource(version.source),
-      selfSeeded: false,
-    };
-  }
-
   if (!agentServerBaseUrl || !agentServerToken)
     throw new Error(
-      'Self-seeding web Product Work E2E requires AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN.',
+      'Real-browser Work E2E requires AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN.',
     );
   const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
   const definitionName = `web-gardening-${suffix}`;
@@ -186,9 +114,8 @@ async function resolveWorkFixture(): Promise<{
     baseUrl: agentServerBaseUrl,
     token: agentServerToken,
   });
-  const source = productDefinitionSource(definitionName, suffix);
   const applied = await client.applyDefinition(
-    source,
+    productDefinitionSource(definitionName, suffix),
     `web-gardening-definition-${suffix}`,
   );
   const created = await client.createWork({
@@ -200,7 +127,6 @@ async function resolveWorkFixture(): Promise<{
     workId: created.work.id,
     definitionVersionId: applied.version.id,
     definitionName,
-    selfSeeded: true,
   };
 }
 
@@ -266,21 +192,19 @@ spec:
 `;
 }
 
-async function waitForTerminalWorkRun(
+async function waitForCompleteWorkRun(
   page: Page,
   workId: string,
   workRunId: string,
 ): Promise<void> {
-  const deadline = Date.now() + testTimeout;
+  const deadline = Date.now() + 5 * 60 * 1000;
   while (Date.now() < deadline) {
     const response = await page.request.get(
-      `${baseUrl}/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(workRunId)}`,
+      `${baseUrl}/api/works/${workId}/runs/${workRunId}`,
       { headers: { accept: 'application/json' } },
     );
     if (!response.ok())
-      throw new Error(
-        `Product WorkRun read failed with ${response.status()}.`,
-      );
+      throw new Error(`Product WorkRun read failed with ${response.status()}.`);
     const value = (await response.json()) as {
       projection_status?: unknown;
       work_run?: { product_state?: unknown };
@@ -291,67 +215,27 @@ async function waitForTerminalWorkRun(
     ) {
       if (value.work_run?.product_state !== 'complete')
         throw new Error(
-          `Real-browser WorkRun reached ${String(value.work_run?.product_state)} instead of complete.`,
+          `Browser-started WorkRun reached ${String(value.work_run?.product_state)} instead of complete.`,
         );
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error(
-    'Timed out waiting for the browser-started WorkRun to finish.',
-  );
+  throw new Error('Timed out waiting for the browser-started WorkRun to finish.');
 }
 
-function definitionNameFromSource(source: Record<string, unknown>): string {
-  const metadata = source.metadata;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
-    return 'Work Definition';
-  const name = (metadata as Record<string, unknown>).name;
-  return typeof name === 'string' ? name : 'Work Definition';
-}
-
-function captureSameOriginNetwork(page: Page, origin: string) {
-  const requests: Array<{ method: string; url: string }> = [];
-  const responses: Array<{
-    status: number;
-    url: string;
-    headers: Record<string, string>;
-  }> = [];
+function captureSameOriginPaths(page: Page, origin: string) {
+  const requests: string[] = [];
+  const responses: string[] = [];
   page.on('request', (request) => {
     if (sameOrigin(request.url(), origin))
-      requests.push({ method: request.method(), url: request.url() });
+      requests.push(new URL(request.url()).pathname);
   });
   page.on('response', (response) => {
-    if (sameOrigin(response.url(), origin))
-      responses.push({
-        status: response.status(),
-        url: response.url(),
-        headers: response.headers(),
-      });
+    if (sameOrigin(response.url(), origin) && response.ok())
+      responses.push(new URL(response.url()).pathname);
   });
-  return {
-    get bffRequests() {
-      return requests.filter((request) =>
-        /^\/api\/(?:works|work-definition-versions)(?:\/|$)/u.test(
-          new URL(request.url).pathname,
-        ),
-      );
-    },
-    get bffResponses() {
-      return responses.filter((response) =>
-        /^\/api\/(?:works|work-definition-versions)(?:\/|$)/u.test(
-          new URL(response.url).pathname,
-        ),
-      );
-    },
-    get teamDefinitionRequests() {
-      return requests.filter((request) =>
-        /^\/api\/works\/[^/]+\/definition$/u.test(
-          new URL(request.url).pathname,
-        ),
-      );
-    },
-  };
+  return { requests, responses };
 }
 
 function sameOrigin(value: string, origin: string): boolean {

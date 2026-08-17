@@ -26,6 +26,7 @@ export const ListWorksRequestSchema = z
   .object({
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().min(1).nullable().optional(),
+    order: z.literal('updated_desc').optional(),
   })
   .strict();
 
@@ -36,6 +37,7 @@ export const ListWorkRunsRequestSchema = z
     work_id: z.uuid(),
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().min(1).nullable().optional(),
+    order: z.literal('created_desc').optional(),
   })
   .strict();
 
@@ -144,6 +146,11 @@ export type WorkListResponse = z.infer<typeof WorkListResponseSchema>;
 export type WorkRunListResponse = z.infer<typeof WorkRunListResponseSchema>;
 export type GetWorkResponse = z.infer<typeof GetWorkResponseSchema>;
 
+/**
+ * Compatibility-only Team-shaped Definition response retained for the original
+ * Work read route. Canonical Product consumers use product-work-definitions.ts
+ * and exact WorkDefinitionVersion identity instead.
+ */
 export const WorkDefinitionResponseSchema = z
   .object({
     definition: TeamDefinitionResponseSchema,

@@ -1,0 +1,25 @@
+.gitignore
+  7d670b323f58603d 26-28
+apps/web/features/run-trace/run-trace.tsx
+  7d670b323f58603d 233-240,253-254,270-300,517-526,528
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "5fba40fc50cc23c81fae748a25a833369b586909",
+  "prompts": {
+    "7d670b323f58603d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4871663-5d4e-41fb-8dc9-69e43d70f103",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}

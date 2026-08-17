@@ -1,0 +1,9 @@
+apps/web/features/run-trace/run-trace.tsx
+  7d670b323f58603d 214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "a73559c20b18e38ea8e00be2ff6ec922020da9a9",
+  "prompts": {}
+}

@@ -31,6 +31,9 @@ const selectedRun = runs.work_runs[0]!;
 const run = ProductWorkRunSuccessSchema.parse({
   work: trace.work,
   work_run: trace.work_run,
+  work_items: trace.work_items,
+  actors: trace.actors,
+  messages: trace.messages,
   projection_status: trace.projection_status,
 });
 const environmentVersionId = '00000000-0000-4000-8000-000000000701';

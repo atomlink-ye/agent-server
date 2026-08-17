@@ -14,7 +14,7 @@ name: Real Runtime
 #   - a draft pull request is skipped, since that is where churn lives; a branch
 #     is a draft precisely while its intermediate revisions are still obsolete
 #     before a provider could finish checking them
-#   - a change touching none of the runtime-relevant paths is skipped
+#   - a change touching none of the runtime/product-Web relevant paths is skipped
 # Either way the job reports success in seconds and says in the summary why it
 # did not run.
 #
@@ -47,10 +47,10 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    # Four real-provider flows now run here, and the agent-team one may use up
-    # to its 900s budget on a slow day. A job kill would surface as an opaque
-    # cancellation rather than as a flow's own assertion, which is the failure
-    # mode this workflow exists to avoid.
+    # The existing real-provider flows plus one bounded Work-first browser flow
+    # run here. The Agent Team one may use up to its 900s budget on a slow day;
+    # the browser flow is one single-Agent WorkRun and stays inside the same
+    # overall provider-proof envelope.
     timeout-minutes: 45
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
@@ -90,10 +90,10 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|apps/web/|e2e/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."
+            skip "No runtime- or Product Web-relevant paths changed, so a real provider cannot observe this diff."
           fi
 
       - uses: actions/setup-node@v4
@@ -143,9 +143,7 @@ jobs:
       # state, so every failure reports "did not complete" regardless of cause
       # — a lead that legitimately needs more turns and a lead that never
       # converges are indistinguishable. A larger budget lets a genuine
-      # non-convergence surface as a maxLeadTurns violation instead. The job
-      # timeout-minutes is 30 and the whole job currently runs in ~7 minutes,
-      # so this stays well inside the existing envelope.
+      # non-convergence surface as a maxLeadTurns violation instead.
       - name: Real-provider agent-team main flow
         if: steps.credentials.outputs.available == 'true'
         env:
@@ -162,12 +160,23 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
 
+      - name: Install real-browser Chromium
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Real-browser Work-first Product golden path
+        if: steps.credentials.outputs.available == 'true'
+        run: >-
+          pnpm local-env run full -- bash -lc
+          'export WEB_E2E_BASE_URL="${WEB_E2E_BASE_URL/127.0.0.1/agent-server-web.localhost}";
+          pnpm vitest run --config vitest.e2e.config.ts e2e/web-product-work.e2e.test.ts'
+
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
         run: |
           {
             echo "## Real runtime — executed"
             echo
-            echo "All external main flows ran against the real provider and asserted"
-            echo "positive provider-side usage."
+            echo "Runtime, bounded collaboration, Product Work, and the Work-first browser"
+            echo "golden path all ran against the real provider and asserted positive execution."
           } >> "$GITHUB_STEP_SUMMARY"

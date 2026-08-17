@@ -51,7 +51,8 @@ export interface ProductWorkCommandDependencies {
     WorkIdentityApi,
     'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
   >;
-  readonly productLists: ProductWorkListQuery;
+  /** Production supplies latest-first Product list reads; compatibility tests may omit them. */
+  readonly productLists?: ProductWorkListQuery;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
   readonly workExists?: ProductProjectionApi['getWork'];
   readonly workListProjection: ProductProjectionApi['getWorkListItem'];
@@ -74,7 +75,7 @@ export function registerProductWorkCommandRoutes(
     try {
       const page =
         order === 'updated_desc'
-          ? await dependencies.productLists.listWorksLatestFirst(owner, {
+          ? await requireProductLists(dependencies).listWorksLatestFirst(owner, {
               limit,
               cursor,
             })
@@ -170,7 +171,7 @@ export function registerProductWorkCommandRoutes(
       }
       const page =
         order === 'created_desc'
-          ? await dependencies.productLists.listWorkRunsLatestFirst(
+          ? await requireProductLists(dependencies).listWorkRunsLatestFirst(
               owner,
               workId,
               { limit, cursor },
@@ -304,6 +305,14 @@ export function registerProductWorkCommandRoutes(
       throw error;
     }
   });
+}
+
+function requireProductLists(
+  dependencies: ProductWorkCommandDependencies,
+): ProductWorkListQuery {
+  if (!dependencies.productLists)
+    throw new Error('Product latest-first list queries are unavailable.');
+  return dependencies.productLists;
 }
 
 function rejectTechnicalIdempotencyHeader(context: {

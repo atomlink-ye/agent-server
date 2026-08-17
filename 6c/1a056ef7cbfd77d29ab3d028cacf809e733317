@@ -1,0 +1,23 @@
+scripts/smoke/composition-single-agent-phase.mjs
+  7d670b323f58603d 594-606,608
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "6c1a056ef7cbfd77d29ab3d028cacf809e733317",
+  "prompts": {
+    "7d670b323f58603d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4871663-5d4e-41fb-8dc9-69e43d70f103",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 1,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    }
+  }
+}

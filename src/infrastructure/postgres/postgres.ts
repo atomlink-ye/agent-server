@@ -29,7 +29,8 @@ interface PostgresMigrationClient extends PostgresMigrationExecutor {
   release(): void;
 }
 
-const durableKernelMigrationFileNames = [
+/** Single ordered source of truth for durable kernel migration registration. */
+export const durableKernelMigrationFileNames = [
   '0001_durable_kernel_a.sql',
   '0002_phase_2a_authenticated_admission.sql',
   '0003_sequential_team_mvp.sql',
@@ -207,18 +208,13 @@ async function applyDurableKernelMigrationsOnExecutor(
       [version],
     );
 
-    if ((existing.rows?.length ?? 0) > 0) {
-      continue;
-    }
+    if ((existing.rows?.length ?? 0) > 0) continue;
 
     const sql = await readDurableKernelMigration(filePath);
 
     try {
-      if (executor.exec) {
-        await executor.exec(sql);
-      } else {
-        await executor.query(sql);
-      }
+      if (executor.exec) await executor.exec(sql);
+      else await executor.query(sql);
     } catch (error) {
       try {
         await executor.query('ROLLBACK');

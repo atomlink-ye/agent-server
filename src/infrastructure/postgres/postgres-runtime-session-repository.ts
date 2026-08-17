@@ -87,7 +87,6 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
     return result.rows?.[0] ? map(result.rows[0]) : null;
   }
 
-
   public async createOrGetForProductSession(
     input: Parameters<
       RuntimeSessionRepository['createOrGetForProductSession']
@@ -246,7 +245,6 @@ export class PostgresRuntimeSessionRepository implements RuntimeSessionRepositor
       providerAgentId: input.sessionBinding.externalSessionId,
     });
   }
-
 
   async #bind(input: {
     readonly id: string;

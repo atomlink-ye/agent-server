@@ -2,6 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { canonicalizeProjectValue } from '../projects/project-canonicalization.js';
 import type { WorkOwnerScope } from './work.js';
+import {
+  normalizeWorkInputSchema,
+  type WorkInputSchema,
+} from './work-input-schema.js';
 
 export const MAX_WORK_DEFINITION_MEMORY_REFS = 8;
 
@@ -9,20 +13,24 @@ export interface WorkDefinitionMemorySourceRef {
   readonly versionId: string;
 }
 
+type WorkDefinitionSourceCommon = {
+  readonly environmentVersionId: string;
+  readonly memoryVersionIds: readonly string[];
+  /** Version-scoped author metadata. Older internal authored rows may omit it. */
+  readonly description?: string | null;
+  /** Product-authored definitions pin the run input contract here. */
+  readonly inputSchema?: WorkInputSchema;
+};
+
 export type WorkDefinitionCompositionSource =
-  | {
+  | (WorkDefinitionSourceCommon & {
       readonly kind: 'single_agent';
       readonly agentVersionId: string;
-      readonly environmentVersionId: string;
-      readonly memoryVersionIds: readonly string[];
-    }
-  | {
+    })
+  | (WorkDefinitionSourceCommon & {
       readonly kind: 'collaboration';
       readonly teamVersionId: string;
-      /** Must equal the Environment pinned by the published Team version. */
-      readonly environmentVersionId: string;
-      readonly memoryVersionIds: readonly string[];
-    };
+    });
 
 export interface WorkDefinitionSourceDefinition {
   readonly id: string;
@@ -48,6 +56,7 @@ export interface WorkDefinitionSourceVersion<
   readonly owner: WorkDefinitionSourceDefinition['owner'];
   readonly status: 'published';
   readonly source: Source;
+  /** Fingerprint of the internal immutable composition source. */
   readonly fingerprint: string;
   readonly createdAt: string;
   readonly publishedAt: string;
@@ -97,10 +106,46 @@ export function validateWorkDefinitionCompositionSource(
       );
     seen.add(id);
   });
-  return Object.freeze({
-    ...source,
+  if (
+    source.description !== undefined &&
+    source.description !== null &&
+    (typeof source.description !== 'string' || source.description.length > 2_000)
+  )
+    throw new InvalidWorkDefinitionSourceError(
+      'The Work Definition description is invalid.',
+      '$.metadata.description',
+    );
+  let inputSchema: WorkInputSchema | undefined;
+  try {
+    inputSchema = source.inputSchema
+      ? normalizeWorkInputSchema(source.inputSchema)
+      : undefined;
+  } catch {
+    throw new InvalidWorkDefinitionSourceError(
+      'The Work Definition input schema is invalid.',
+      '$.spec.input_schema',
+    );
+  }
+
+  const common = {
+    environmentVersionId: source.environmentVersionId,
     memoryVersionIds: Object.freeze([...source.memoryVersionIds]),
-  });
+    ...(source.description === undefined
+      ? {}
+      : { description: source.description }),
+    ...(inputSchema ? { inputSchema } : {}),
+  };
+  return source.kind === 'single_agent'
+    ? Object.freeze({
+        kind: 'single_agent' as const,
+        agentVersionId: source.agentVersionId,
+        ...common,
+      })
+    : Object.freeze({
+        kind: 'collaboration' as const,
+        teamVersionId: source.teamVersionId,
+        ...common,
+      });
 }
 
 export function fingerprintWorkDefinitionSource(

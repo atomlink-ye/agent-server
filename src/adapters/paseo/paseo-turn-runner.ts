@@ -5,7 +5,10 @@ import type {
 } from '../../application/ports/execution-plane.js';
 import { ExecutionPlaneUnavailableError } from '../../application/ports/execution-plane.js';
 import type { Logger } from '../../shared/observability/logger.js';
-import { hasPositiveModelUsage, mapPaseoFinishStatus } from './status-mapper.js';
+import {
+  hasPositiveModelUsage,
+  mapPaseoFinishStatus,
+} from './status-mapper.js';
 import { PaseoGateway } from './paseo-gateway.js';
 import { PaseoObservationProjector } from './paseo-observation-projector.js';
 

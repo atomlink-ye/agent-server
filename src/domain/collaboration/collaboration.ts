@@ -41,10 +41,7 @@ export interface CollaborationBoardItem {
 }
 
 export type CollaborationMessageStatus =
-  | 'pending'
-  | 'presented'
-  | 'acknowledged'
-  | 'cancelled';
+  'pending' | 'presented' | 'acknowledged' | 'cancelled';
 
 export type CollaborationActivationPriority = 'normal' | 'urgent';
 
@@ -157,7 +154,8 @@ export function projectBoardStatus(
   const latest = attempts
     .filter((attempt) => attempt.workItemId === item.id)
     .sort((left, right) => right.attemptNo - left.attemptNo)[0];
-  if (latest?.status === 'completed' && latest.resultSummary) return 'submitted';
+  if (latest?.status === 'completed' && latest.resultSummary)
+    return 'submitted';
   if (item.status === 'in_progress') return 'in_progress';
   if (item.ownerMemberId) return 'assigned';
   return 'open';

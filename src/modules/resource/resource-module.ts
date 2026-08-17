@@ -12,11 +12,13 @@ import type { EnvironmentReadApi } from '../../application/ports/environment-rea
 import type { MemoryVersionReadApi } from '../../application/ports/memory-version-read-api.js';
 import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
+import { ProductWorkDefinitionApi } from '../../application/work/product-work-definition-api.js';
 import { ResolveWorkDefinition } from '../../application/work/resolve-work-definition.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
 import type { AppConfig } from '../../shared/config.js';
 import { registerAgentRoutes } from '../../entrypoints/api/routes/agents.js';
 import { registerEnvironmentRoutes } from '../../entrypoints/api/routes/environments.js';
+import { registerProductWorkDefinitionRoutes } from '../../entrypoints/api/routes/product-work-definitions.js';
 import { registerTeamRoutes } from '../../entrypoints/api/routes/teams.js';
 import { LocalSkillCatalog } from '../../infrastructure/filesystem/local-skill-catalog.js';
 import { PostgresAgentRegistry } from '../../infrastructure/postgres/postgres-agent-registry.js';
@@ -41,6 +43,7 @@ export interface ResourceModule {
   readonly memoryVersionReadApi: MemoryVersionReadApi;
   readonly workDefinitionSources: WorkDefinitionSourceRepository;
   readonly workDefinitionResolution: WorkDefinitionResolutionPort;
+  readonly productWorkDefinitions: ProductWorkDefinitionApi;
   installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
 }
 
@@ -88,9 +91,6 @@ export async function createResourceModule(
     findPublishedTeamVersionById: (id, ownerScope) =>
       invokableRepository.findPublishedTeamVersionById(id, ownerScope),
   };
-  // Runtime currently receives this legacy Environment read seam positionally.
-  // Attach the other composition snapshot readers to the same internal object so
-  // ExecuteRun can consume the Resource module without adding a bootstrap cycle.
   const environmentReadApi = {
     findVersion: (
       owner: Parameters<EnvironmentReadApi['findVersion']>[0],
@@ -107,6 +107,16 @@ export async function createResourceModule(
     authoredDefinitions: workDefinitionSources,
     memories: memoryVersionReadApi,
   });
+  const productWorkDefinitions = new ProductWorkDefinitionApi({
+    repository: workDefinitionSources,
+    resolver: workDefinitionResolution,
+    agents: agentResolutionApi,
+    agentRegistry,
+    invokables: invokableRepository,
+    environments: environmentRegistry,
+    environmentRegistry,
+    memories: memoryVersionReadApi,
+  });
 
   return {
     agentResolutionApi,
@@ -115,7 +125,12 @@ export async function createResourceModule(
     memoryVersionReadApi,
     workDefinitionSources,
     workDefinitionResolution,
+    productWorkDefinitions,
     installHttp(app, config) {
+      registerProductWorkDefinitionRoutes(app, {
+        config,
+        definitions: productWorkDefinitions,
+      });
       registerAgentRoutes(app, { config, agentRegistry });
       registerTeamRoutes(app, {
         config,

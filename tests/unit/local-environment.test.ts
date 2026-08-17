@@ -10,7 +10,9 @@ import { resolveLocalEnvironment } from '../../tooling/environment/profiles.js';
 describe('local environment profiles', () => {
   it('keeps topology names stable and task-neutral', async () => {
     const core = await resolveLocalEnvironment('core', { environment: {} });
-    const runtime = await resolveLocalEnvironment('runtime', { environment: {} });
+    const runtime = await resolveLocalEnvironment('runtime', {
+      environment: {},
+    });
     expect(core.services).toEqual(['postgres', 'agent-server']);
     expect(core.runtime).toMatchObject({ enabled: false, adapter: 'none' });
     expect(runtime.services).toContain('paseo-runtime');

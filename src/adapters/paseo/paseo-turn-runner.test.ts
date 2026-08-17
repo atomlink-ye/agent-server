@@ -7,7 +7,9 @@ import { PaseoTurnRunner } from './paseo-turn-runner.js';
 
 const logger = { log: () => undefined };
 
-function createClient(options: { finalStatus?: string; finalMessage?: string } = {}) {
+function createClient(
+  options: { finalStatus?: string; finalMessage?: string } = {},
+) {
   let timelineReads = 0;
   const client = {
     async fetchAgentTimeline() {

@@ -77,7 +77,9 @@ describe('CollaborationPolicy', () => {
   });
 
   it('does not let mailbox authority imply assignment or review authority', () => {
-    expect(() => policy.require(context('member'), 'mailbox.send')).not.toThrow();
+    expect(() =>
+      policy.require(context('member'), 'mailbox.send'),
+    ).not.toThrow();
     expect(() => policy.require(context('member'), 'board.assign')).toThrow(
       CollaborationPolicyError,
     );
@@ -94,13 +96,22 @@ describe('CollaborationPolicy', () => {
       ),
     ).not.toThrow();
     expect(() =>
-      policy.requireLeadCommand(taskContext('lead', 'direct_message'), 'board_accept'),
+      policy.requireLeadCommand(
+        taskContext('lead', 'direct_message'),
+        'board_accept',
+      ),
     ).toThrow(CollaborationPolicyError);
     expect(() =>
-      policy.requireLeadCommand(taskContext('lead', 'lead_turn'), 'board_accept'),
+      policy.requireLeadCommand(
+        taskContext('lead', 'lead_turn'),
+        'board_accept',
+      ),
     ).not.toThrow();
     expect(() =>
-      policy.requireForTask(taskContext('member', 'direct_message'), 'board.submit'),
+      policy.requireForTask(
+        taskContext('member', 'direct_message'),
+        'board.submit',
+      ),
     ).toThrow(CollaborationPolicyError);
     expect(() =>
       policy.requireForTask(
@@ -118,7 +129,9 @@ describe('CollaborationPolicy', () => {
 
   it('keeps completed work attempts read-only for mailbox mutations', () => {
     const completed = taskContext('member', 'work_attempt', 'completed');
-    expect(() => policy.requireForTask(completed, 'mailbox.read')).not.toThrow();
+    expect(() =>
+      policy.requireForTask(completed, 'mailbox.read'),
+    ).not.toThrow();
     expect(() => policy.requireForTask(completed, 'mailbox.send')).toThrow(
       CollaborationPolicyError,
     );

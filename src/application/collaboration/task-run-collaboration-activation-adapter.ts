@@ -15,7 +15,10 @@ import {
   fingerprintRootTaskRunRequest,
 } from '../tasks/root-task-input.js';
 import type { PlannedCollaborationActivation } from './collaboration-activation-planner.js';
-import { orderedWorkItems, workRef } from '../../domain/collaboration/collaboration.js';
+import {
+  orderedWorkItems,
+  workRef,
+} from '../../domain/collaboration/collaboration.js';
 
 /**
  * Mechanical adapter from provider-neutral ParticipantActivation to the
@@ -325,7 +328,8 @@ export class TaskRunCollaborationActivationAdapter {
       'Messages:',
       ...input.plan.directMessages.map((message) => {
         const sender = message.senderMemberRunId
-          ? (input.senderNameById.get(message.senderMemberRunId) ?? 'participant')
+          ? (input.senderNameById.get(message.senderMemberRunId) ??
+            'participant')
           : 'system';
         return `- M-${message.sequence} from ${safe(sender)}: ${safe(message.body)}`;
       }),

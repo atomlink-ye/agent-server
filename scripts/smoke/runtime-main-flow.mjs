@@ -2,7 +2,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { loadRealProviderDefaults } from '../dev/real-provider-defaults.mjs';
-import { runCompositionSingleAgentSmoke } from './composition-single-agent-phase.mjs';
+import { runCompositionSingleAgentSmoke, runCompositionSingleAgentInlineSmoke } from './composition-single-agent-phase.mjs';
 
 const realProviderDefaults = loadRealProviderDefaults();
 
@@ -244,10 +244,23 @@ async function main() {
       progress,
     });
 
+    stage = 'composition_inline';
+    const compositionInline = await runCompositionSingleAgentInlineSmoke({
+      baseUrl,
+      token,
+      workspaceId,
+      expectedProvider: realProviderDefaults.PASEO_PROVIDER,
+      expectedModel: realProviderDefaults.PASEO_MODEL,
+      timeoutMs: stageTimeouts.run,
+      progress,
+    });
+
     progress('completed', {
       run_id: created.run_id,
       composition_work_id: composition.workId,
       composition_work_run_id: composition.workRunId,
+      composition_inline_work_id: compositionInline.workId,
+      composition_inline_work_run_id: compositionInline.workRunId,
     });
     process.stdout.write(
       `${JSON.stringify({
@@ -261,6 +274,7 @@ async function main() {
           marker_matched: markerMatched,
         },
         composition,
+        composition_inline: compositionInline,
         duration_ms: Date.now() - startedAt,
       })}\n`,
     );

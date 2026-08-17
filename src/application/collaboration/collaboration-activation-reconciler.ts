@@ -27,9 +27,7 @@ export interface CollaborationActivationKick {
  * Delivery is provider-neutral and restart-safe: a failed best-effort kick does
  * not change mutation success, and later reconciliation recomputes from facts.
  */
-export class CollaborationActivationReconciler
-  implements CollaborationActivationKick
-{
+export class CollaborationActivationReconciler implements CollaborationActivationKick {
   readonly #planner = new CollaborationActivationPlanner();
   readonly #adapter: TaskRunCollaborationActivationAdapter;
 
@@ -114,7 +112,10 @@ export class CollaborationActivationReconciler
     owner: OwnerScope,
     parentTask?: Task,
   ): Promise<boolean> {
-    const team = await this.executions.findTeamRunByRootTaskId(rootTaskId, owner);
+    const team = await this.executions.findTeamRunByRootTaskId(
+      rootTaskId,
+      owner,
+    );
     if (!team || team.status !== 'active') return false;
     const decision = team.completionRequestedByRunId
       ? await this.executions.findCompletionDecisionForRequest(
@@ -212,12 +213,13 @@ export class CollaborationActivationReconciler
       )
       .sort(
         (left, right) =>
-          left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+          left.name.localeCompare(right.name) ||
+          left.id.localeCompare(right.id),
       );
     const discoveryMember = openActionable
-      ? memberCandidates.find(
+      ? (memberCandidates.find(
           (member) => !hasUnresolvedOwnedWork(member.id, workItems, attempts),
-        ) ?? null
+        ) ?? null)
       : null;
 
     for (const member of memberCandidates) {

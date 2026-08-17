@@ -64,16 +64,17 @@ export const CollaborationRunResponseSchema = z
           from: z.string(),
           to: z.string(),
           body: z.string(),
-          about_work_ref: z.string().regex(/^W-\d+$/).nullable(),
-          reply_to_ref: z.string().regex(/^M-\d+$/).nullable(),
+          about_work_ref: z
+            .string()
+            .regex(/^W-\d+$/)
+            .nullable(),
+          reply_to_ref: z
+            .string()
+            .regex(/^M-\d+$/)
+            .nullable(),
           priority: z.enum(['normal', 'urgent']),
           requires_ack: z.boolean(),
-          status: z.enum([
-            'pending',
-            'presented',
-            'acknowledged',
-            'cancelled',
-          ]),
+          status: z.enum(['pending', 'presented', 'acknowledged', 'cancelled']),
           created_at: z.string(),
           acknowledged_at: z.string().nullable(),
         })
@@ -83,7 +84,10 @@ export const CollaborationRunResponseSchema = z
       z
         .object({
           checkpoint_id: z.uuid(),
-          work_ref: z.string().regex(/^W-\d+$/).nullable(),
+          work_ref: z
+            .string()
+            .regex(/^W-\d+$/)
+            .nullable(),
           participant: z.string(),
           summary: z.string(),
           next_step: z.string().nullable(),
@@ -97,7 +101,10 @@ export const CollaborationRunResponseSchema = z
       z
         .object({
           submission_id: z.uuid(),
-          work_ref: z.string().regex(/^W-\d+$/).nullable(),
+          work_ref: z
+            .string()
+            .regex(/^W-\d+$/)
+            .nullable(),
           attempt_no: z.number().int().positive(),
           participant: z.string(),
           summary: z.string(),

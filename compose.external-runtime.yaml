@@ -83,6 +83,7 @@ services:
       PASEO_WS_URL: ws://paseo-runtime:16767/ws
       PASEO_PROVIDER: ${PASEO_PROVIDER:?docker-compose wrapper must load real-provider defaults}
       PASEO_MODEL: ${PASEO_MODEL:?docker-compose wrapper must load real-provider defaults}
+      PASEO_EXECUTION_TIMEOUT_MS: ${PASEO_EXECUTION_TIMEOUT_MS:?docker-compose wrapper must load real-provider defaults}
     volumes: !override
       - .:/workspace
       - type: volume

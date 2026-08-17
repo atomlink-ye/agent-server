@@ -46,9 +46,7 @@ describe('LocalRuntimeMemoryCandidateCollector', () => {
       proposalLimit: 1,
     });
     const decorated = session.decoratePrompt('task');
-    expect(decorated).toContain(
-      'scratchpad/runs/run-1/memory-proposals.json',
-    );
+    expect(decorated).toContain('scratchpad/runs/run-1/memory-proposals.json');
     expect(decorated).toContain('Allowed category values');
     expect(decorated).not.toContain(root);
     await expect(access(artifact)).rejects.toThrow();
@@ -56,9 +54,7 @@ describe('LocalRuntimeMemoryCandidateCollector', () => {
     await writeFile(
       artifact,
       JSON.stringify({
-        proposals: [
-          { category: 'project_constraint', content: 'keep logs' },
-        ],
+        proposals: [{ category: 'project_constraint', content: 'keep logs' }],
       }),
     );
     await expect(session.collect()).resolves.toEqual([

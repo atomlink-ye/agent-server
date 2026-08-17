@@ -9,13 +9,12 @@ import type { ExecutionAdmission } from '../../application/ports/execution-admis
 import type { ExecutionFactQuery } from '../../application/ports/execution-fact-query.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
+import type { ProductWorkListQuery } from '../../application/ports/product-work-list-query.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
 import { StartWorkRun } from '../../application/work/start-work-run.js';
 import { QueryWorkProjectionFacts } from '../../application/work/query-work-projection-facts.js';
-import {
-  validateProductWorkDefinition,
-} from '../../application/work/validate-product-work-definition.js';
+import { validateProductWorkDefinition } from '../../application/work/validate-product-work-definition.js';
 import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
@@ -26,6 +25,7 @@ import {
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
+import { PostgresProductWorkListQuery } from '../../infrastructure/postgres/postgres-product-work-list-query.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
 import { PostgresWorkRunInputStore } from '../../infrastructure/postgres/postgres-work-run-input-store.js';
 import type { ApiEnvironment } from '../../platform/http-types.js';
@@ -45,14 +45,16 @@ export function installWorkHttpRoutes(
       WorkIdentityApi,
       'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
     >;
+    readonly productLists: ProductWorkListQuery;
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
     readonly projection: ProductProjectionApi;
   },
 ): void {
-  const { workIdentity, startWorkRun, projection } = dependencies;
+  const { workIdentity, productLists, startWorkRun, projection } = dependencies;
   registerProductWorkCommandRoutes(app, {
     config,
     workIdentity,
+    productLists,
     startWorkRun,
     workListProjection: projection.getWorkListItem,
     workExists: projection.getWork,
@@ -79,6 +81,7 @@ export function createWorkModule(options: {
   };
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
+  const productLists = new PostgresProductWorkListQuery(options.database);
   const definitionSources = new PostgresWorkDefinitionSourceRepository(
     options.database,
   );
@@ -144,6 +147,7 @@ export function createWorkModule(options: {
     installHttp(app, config) {
       installWorkHttpRoutes(app, config, {
         workIdentity,
+        productLists,
         startWorkRun,
         projection,
       });

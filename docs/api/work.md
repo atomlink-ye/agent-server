@@ -32,10 +32,21 @@ The Definition version must be resolvable inside the authenticated owner/workspa
 
 ```text
 GET /api/v1/works
+GET /api/v1/works?order=updated_desc&limit=100
 GET /api/v1/works/{work_id}
-GET /api/v1/works/{work_id}/definition
 GET /api/v1/works/{work_id}/runs
+GET /api/v1/works/{work_id}/runs?order=created_desc&limit=100
 ```
+
+Omitting `order` preserves the original compatibility ordering. Work-first consumers should request `updated_desc` for Work and `created_desc` for WorkRun so the first page is latest-first without scanning the entire history. Pagination remains cursor/seek based; pass `next_cursor` back as `cursor` with the same ordering.
+
+To read the exact Definition used by a current or historical WorkRun, use its `definition_version_id` with:
+
+```text
+GET /api/v1/work-definition-versions/{definition_version_id}
+```
+
+`GET /api/v1/works/{work_id}/definition` is retained as a compatibility-only Team-shaped read and is not the canonical Product Definition contract.
 
 The Product projection remains the recommended read model for Web clients and SDK helpers.
 

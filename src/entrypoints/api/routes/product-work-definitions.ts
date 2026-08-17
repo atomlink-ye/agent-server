@@ -17,6 +17,7 @@ import {
   ListProductWorkDefinitionVersionsResponseSchema,
   ProductWorkDefinitionSchema,
   ProductWorkDefinitionVersionSchema,
+  ProductWorkDefinitionVersionSummarySchema,
   WorkDefinitionApplyResponseSchema,
   WorkDefinitionPlanResponseSchema,
   WorkDefinitionSourceRequestSchema,
@@ -194,7 +195,7 @@ export function registerProductWorkDefinitionRoutes(
       });
       return context.json(
         ListProductWorkDefinitionVersionsResponseSchema.parse({
-          versions: page.items.map(productVersionResponse),
+          versions: page.items.map(productVersionSummaryResponse),
           next_cursor: page.nextCursor,
         }),
         200,
@@ -250,6 +251,24 @@ function productVersionResponse(record: ProductWorkDefinitionVersionRecord) {
     status: 'published',
     fingerprint: record.authorFingerprint,
     source: record.authorSource,
+    resolved: {
+      resource_manifest_fingerprint: record.resolvedFingerprint,
+    },
+    created_at: record.version.createdAt,
+    published_at: record.version.publishedAt,
+    links: {
+      self: `/api/v1/work-definition-versions/${record.version.id}`,
+      definition: `/api/v1/work-definitions/${record.version.definitionId}`,
+    },
+  });
+}
+
+function productVersionSummaryResponse(record: ProductWorkDefinitionVersionRecord) {
+  return ProductWorkDefinitionVersionSummarySchema.parse({
+    id: record.version.id,
+    definition_id: record.version.definitionId,
+    status: 'published',
+    fingerprint: record.authorFingerprint,
     resolved: {
       resource_manifest_fingerprint: record.resolvedFingerprint,
     },

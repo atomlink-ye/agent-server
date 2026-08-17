@@ -135,9 +135,16 @@ export const GetProductWorkDefinitionResponseSchema = z
   })
   .strict();
 
+// List responses omit the full source payload; single-version reads include it.
+export const ProductWorkDefinitionVersionSummarySchema =
+  ProductWorkDefinitionVersionSchema.omit({ source: true });
+export type ProductWorkDefinitionVersionSummaryResponse = z.infer<
+  typeof ProductWorkDefinitionVersionSummarySchema
+>;
+
 export const ListProductWorkDefinitionVersionsResponseSchema = z
   .object({
-    versions: z.array(ProductWorkDefinitionVersionSchema),
+    versions: z.array(ProductWorkDefinitionVersionSummarySchema),
     next_cursor: z.string().nullable(),
   })
   .strict();
@@ -152,3 +159,4 @@ export type ProductWorkDefinitionResponse = z.infer<
 export type ProductWorkDefinitionVersionResponse = z.infer<
   typeof ProductWorkDefinitionVersionSchema
 >;
+

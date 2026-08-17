@@ -14,8 +14,6 @@ import {
   type WorkDefinitionSourceVersion,
   type WorkDefinitionCompositionSource,
 } from '../../domain/work/work-definition-source.js';
-import { canonicalizeProjectValue } from '../../domain/projects/project-canonicalization.js';
-
 interface Queryable {
   query<Row = Record<string, unknown>>(
     sql: string,

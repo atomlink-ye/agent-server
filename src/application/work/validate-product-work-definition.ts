@@ -132,7 +132,18 @@ const EnvironmentBindingFields = {
   environment: InlineSourceSchema.optional(),
 };
 const CommonSpecFields = {
-  memory_version_ids: z.array(CanonicalUuidSchema).max(8).default([]),
+  memory_version_ids: z
+    .array(CanonicalUuidSchema)
+    .max(8)
+    .default([])
+    .superRefine((ids, ctx) => {
+      const seen = new Set<string>();
+      ids.forEach((id, i) => {
+        if (seen.has(id))
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i], message: 'memory_version_ids must not contain duplicates' });
+        seen.add(id);
+      });
+    }),
   input_schema: ProductWorkInputSchemaSchema.default({
     type: 'object',
     properties: {},

@@ -1,7 +1,7 @@
 import {
   invalidProductRequest,
   productSchemaFor,
-  readProduct,
+  readAllProductListPages,
 } from '@/lib/product-api-bff';
 import { ListWorkRunsRequestSchema } from '@atomlink-ye/agent-server/product-contract';
 
@@ -21,5 +21,9 @@ export async function GET(
   const { work_id: workId } = await params;
   if (!ListWorkRunsRequestSchema.safeParse({ work_id: workId }).success)
     return invalidProductRequest();
-  return readProduct(`/api/v1/works/${workId}/runs`, productSchemaFor('runs'));
+  return readAllProductListPages(
+    `/api/v1/works/${workId}/runs`,
+    'work_runs',
+    productSchemaFor('runs'),
+  );
 }

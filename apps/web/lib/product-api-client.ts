@@ -18,7 +18,7 @@ export class ProductApiClientError extends Error {
 
 /** Server-only transport for the five accepted Product read routes. */
 export async function getProductApi(path: string): Promise<Response> {
-  if (!productReadPath.test(path))
+  if (!productReadPath.test(path.split('?')[0] ?? ''))
     throw new ProductApiClientError('invalid_path');
 
   const baseUrl = process.env.AGENT_SERVER_BASE_URL;

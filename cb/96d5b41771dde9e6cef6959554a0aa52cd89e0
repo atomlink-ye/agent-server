@@ -1,0 +1,33 @@
+tests/integration/durable-kernel-postgres.integration.test.ts
+  7d670b323f58603d 227,287
+src/contracts/product-work-definitions.ts
+  7d670b323f58603d 138-144,147,162
+src/infrastructure/postgres/postgres.ts
+  7d670b323f58603d 68
+src/entrypoints/api/routes/product-work-definitions.ts
+  7d670b323f58603d 20,198,259-271
+docs/api/errors.md
+  7d670b323f58603d 5-33,36,75
+src/application/work/validate-product-work-definition.ts
+  7d670b323f58603d 135-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "cb96d5b41771dde9e6cef6959554a0aa52cd89e0",
+  "prompts": {
+    "7d670b323f58603d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4871663-5d4e-41fb-8dc9-69e43d70f103",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 84,
+      "total_deletions": 16,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}

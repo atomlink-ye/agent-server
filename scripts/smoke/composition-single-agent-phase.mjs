@@ -424,7 +424,7 @@ spec:
         name: composition-inline-agent-${scenarioId}
       spec:
         description: Inline smoke Agent
-        instructions: 'Return exactly the marker contained in the Work input. Do not add commentary.'
+        instructions: 'Return exactly the marker contained in the Work input. Do not call tools unless execution cannot proceed otherwise.'
         runtime:
           provider: paseo
           modelPolicyRef: free-only
@@ -591,18 +591,30 @@ spec:
         continue;
       }
       if (state === 'complete') break;
-      // Fetch trace before throwing so the failure is diagnosable in CI.
+      // Fetch trace + run events before throwing so the failure is diagnosable in CI.
       let failTrace = null;
+      let failRunEvents = null;
       try {
         const traceResp = await fetch(new URL(`/api/v1/works/${workId}/runs/${workRunId}/trace`, baseUrl), {
           headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
           signal: AbortSignal.timeout(10_000),
         });
-        if (traceResp.ok) failTrace = await traceResp.json();
+        if (traceResp.ok) {
+          failTrace = await traceResp.json();
+          const technicalRunId = failTrace?.runs?.[0]?.source_refs?.run_id;
+          if (technicalRunId) {
+            const eventsResp = await fetch(new URL(`/api/v1/runs/${encodeURIComponent(technicalRunId)}/events`, baseUrl), {
+              headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+              signal: AbortSignal.timeout(10_000),
+            });
+            if (eventsResp.ok) failRunEvents = await eventsResp.json();
+          }
+        }
       } catch { /* best-effort */ }
       progress('composition_inline_failed_trace', {
         work_run: projection.work_run,
         trace: failTrace,
+        run_events: failRunEvents,
       });
       throw new Error(
         `inline WorkRun terminal state ${JSON.stringify(projection.work_run)} trace=${JSON.stringify(failTrace)}`,

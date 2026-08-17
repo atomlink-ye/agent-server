@@ -591,8 +591,21 @@ spec:
         continue;
       }
       if (state === 'complete') break;
+      // Fetch trace before throwing so the failure is diagnosable in CI.
+      let failTrace = null;
+      try {
+        const traceResp = await fetch(new URL(`/api/v1/works/${workId}/runs/${workRunId}/trace`, baseUrl), {
+          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (traceResp.ok) failTrace = await traceResp.json();
+      } catch { /* best-effort */ }
+      progress('composition_inline_failed_trace', {
+        work_run: projection.work_run,
+        trace: failTrace,
+      });
       throw new Error(
-        `inline WorkRun terminal state ${JSON.stringify(projection.work_run)}`,
+        `inline WorkRun terminal state ${JSON.stringify(projection.work_run)} trace=${JSON.stringify(failTrace)}`,
       );
     }
     if (projection?.work_run?.product_state !== 'complete')

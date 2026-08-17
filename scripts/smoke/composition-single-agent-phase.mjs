@@ -492,15 +492,15 @@ spec:
     body: { source: inlineDefinition },
     expectedStatus: 200,
   });
+  const planMat = planned.resolved?.materialization;
   if (
-    !(
-      Array.isArray(planned.materialization?.inline_agents) &&
-      planned.materialization.inline_agents.length >= 1
-    ) ||
-    planned.materialization?.inline_environment !== true
+    !planMat ||
+    typeof planMat.inline_agents !== 'number' ||
+    planMat.inline_agents < 1 ||
+    planMat.inline_environment !== true
   )
     throw new Error(
-      `inline plan materialization unexpected: ${JSON.stringify(planned.materialization)}`,
+      `inline plan materialization unexpected: ${JSON.stringify(planMat)}`,
     );
 
   const applied = await request('/api/v1/work-definitions:apply', {
@@ -697,8 +697,8 @@ spec:
       manifest_entries: rows.length,
       runtime: `${providerRun.provider}/${providerRun.model}`,
       materialization: {
-        inline_agents: planned.materialization.inline_agents.length,
-        inline_environment: planned.materialization.inline_environment,
+        inline_agents: planMat.inline_agents,
+        inline_environment: planMat.inline_environment,
       },
     });
     return {

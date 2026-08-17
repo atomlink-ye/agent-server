@@ -47,10 +47,10 @@ describe.skipIf(baseUrl === undefined)(
           state: 'visible',
           timeout: testTimeout,
         });
-        expect(
-          await page.getByText('Product Work/Run reads', { exact: false }).isVisible(),
-          'display_bug',
-        ).toBe(true);
+        await page.getByText('Product Work/Run reads', { exact: false }).waitFor({
+          state: 'visible',
+          timeout: testTimeout,
+        });
 
         const startResponsePromise = page.waitForResponse(
           (response) =>
@@ -68,7 +68,9 @@ describe.skipIf(baseUrl === undefined)(
         };
         const workRunId = started.work_run?.id;
         if (typeof workRunId !== 'string')
-          throw new Error('Start Run response did not expose a Product WorkRun id.');
+          throw new Error(
+            'Start Run response did not expose a Product WorkRun id.',
+          );
         expect(started.work_run?.definition_version_id).toBe(
           seeded.definitionVersionId,
         );
@@ -92,7 +94,9 @@ describe.skipIf(baseUrl === undefined)(
         expect(capture.bffResponses.length, 'display_bug').toBeGreaterThan(0);
         expect(
           capture.bffResponses
-            .filter((response) => response.status >= 200 && response.status < 300)
+            .filter(
+              (response) => response.status >= 200 && response.status < 300,
+            )
             .every(
               (response) =>
                 response.headers['x-agent-server-upstream'] === 'fetched',
@@ -124,7 +128,9 @@ describe.skipIf(baseUrl === undefined)(
           timeout: testTimeout,
         });
         expect(
-          await page.getByText(seeded.definitionName, { exact: true }).isVisible(),
+          await page
+            .getByText(seeded.definitionName, { exact: true })
+            .isVisible(),
           'display_bug',
         ).toBe(true);
         expect(capture.teamDefinitionRequests).toHaveLength(0);
@@ -153,7 +159,8 @@ async function resolveWorkFixture(): Promise<{
       `${agentServerBaseUrl.replace(/\/$/u, '')}/api/v1/works/${configuredWorkId}`,
       { headers: { authorization: `Bearer ${agentServerToken}` } },
     );
-    if (!workResponse.ok) throw new Error('Configured Product Work is unavailable.');
+    if (!workResponse.ok)
+      throw new Error('Configured Product Work is unavailable.');
     const body = (await workResponse.json()) as {
       work?: { definition_version_id?: unknown };
     };
@@ -271,7 +278,9 @@ async function waitForTerminalWorkRun(
       { headers: { accept: 'application/json' } },
     );
     if (!response.ok())
-      throw new Error(`Product WorkRun read failed with ${response.status()}.`);
+      throw new Error(
+        `Product WorkRun read failed with ${response.status()}.`,
+      );
     const value = (await response.json()) as {
       projection_status?: unknown;
       work_run?: { product_state?: unknown };
@@ -288,7 +297,9 @@ async function waitForTerminalWorkRun(
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error('Timed out waiting for the browser-started WorkRun to finish.');
+  throw new Error(
+    'Timed out waiting for the browser-started WorkRun to finish.',
+  );
 }
 
 function definitionNameFromSource(source: Record<string, unknown>): string {

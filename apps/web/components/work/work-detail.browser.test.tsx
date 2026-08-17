@@ -32,9 +32,6 @@ const run = ProductWorkRunSuccessSchema.parse({
   work: trace.work,
   work_run: trace.work_run,
   projection_status: trace.projection_status,
-  work_items: trace.work_items,
-  actors: trace.actors,
-  messages: trace.messages,
 });
 const environmentVersionId = '00000000-0000-4000-8000-000000000701';
 const leadVersionId = '00000000-0000-4000-8000-000000000702';

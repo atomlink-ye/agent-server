@@ -83,6 +83,8 @@ docs/                       durable product/engineering authority
 
 The repository is in **Prove / MVE-first product implementation** until the user explicitly changes the stage. The goal is fast learning through the smallest real vertical slice, not production hardening or comprehensive test growth.
 
+Bounded code gardening is allowed when it removes a proven transitional seam or lowers the modification radius for the next MVE probe. It does **not** change the stage, justify broad hardening, or create a standing refactor phase.
+
 For each slice:
 
 1. Bound one observable outcome and explicit non-goals.

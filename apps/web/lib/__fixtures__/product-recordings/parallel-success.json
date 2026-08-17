@@ -1339,8 +1339,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=1",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 2
+              "sequence": 2,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1366,8 +1368,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=2",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 3
+              "sequence": 3,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1393,8 +1397,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=3",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 4
+              "sequence": 4,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1420,8 +1426,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=5",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 6
+              "sequence": 6,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1447,8 +1455,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=6",
             "target": {
               "activity_id": "activity-4",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 7
+              "sequence": 7,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1474,8 +1484,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=8",
             "target": {
               "activity_id": "activity-5",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 9
+              "sequence": 9,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1501,8 +1513,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=9",
             "target": {
               "activity_id": "activity-5",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 10
+              "sequence": 10,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1528,8 +1542,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=12",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 13
+              "sequence": 13,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1555,8 +1571,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=13",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 14
+              "sequence": 14,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1582,8 +1600,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=14",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 15
+              "sequence": 15,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1609,8 +1629,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=16",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 17
+              "sequence": 17,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1636,8 +1658,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=17",
             "target": {
               "activity_id": "activity-4",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 18
+              "sequence": 18,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1663,8 +1687,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=18",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 19
+              "sequence": 19,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1690,8 +1716,10 @@
             "path": "/api/v1/runs/1befd1e6-fb08-4a3c-b0db-40337e825705/events?after=20",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705",
-              "sequence": 21
+              "sequence": 21,
+              "source_refs": {
+                "run_id": "1befd1e6-fb08-4a3c-b0db-40337e825705"
+              }
             }
           },
           "kind": "tool_status",
@@ -1717,8 +1745,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=1",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 2
+              "sequence": 2,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1745,8 +1775,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=2",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 3
+              "sequence": 3,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1773,8 +1805,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=3",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 4
+              "sequence": 4,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1801,8 +1835,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=4",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 5
+              "sequence": 5,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1829,8 +1865,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=12",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 13
+              "sequence": 13,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1857,8 +1895,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=14",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 15
+              "sequence": 15,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1885,8 +1925,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=16",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 17
+              "sequence": 17,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1913,8 +1955,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=17",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 18
+              "sequence": 18,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1941,8 +1985,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=18",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 19
+              "sequence": 19,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1969,8 +2015,10 @@
             "path": "/api/v1/runs/4aca29eb-cfdb-423a-baab-a638b7deb96b/events?after=19",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b",
-              "sequence": 20
+              "sequence": 20,
+              "source_refs": {
+                "run_id": "4aca29eb-cfdb-423a-baab-a638b7deb96b"
+              }
             }
           },
           "kind": "tool_status",
@@ -1997,8 +2045,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=1",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 2
+              "sequence": 2,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2025,8 +2075,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=2",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 3
+              "sequence": 3,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2053,8 +2105,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=3",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 4
+              "sequence": 4,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2081,8 +2135,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=11",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 12
+              "sequence": 12,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2109,8 +2165,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=13",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 14
+              "sequence": 14,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2137,8 +2195,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=15",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 16
+              "sequence": 16,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2165,8 +2225,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=16",
             "target": {
               "activity_id": "activity-7",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 17
+              "sequence": 17,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2193,8 +2255,10 @@
             "path": "/api/v1/runs/814d61ed-e15f-4992-8a94-fd13bd540f03/events?after=17",
             "target": {
               "activity_id": "activity-8",
-              "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03",
-              "sequence": 18
+              "sequence": 18,
+              "source_refs": {
+                "run_id": "814d61ed-e15f-4992-8a94-fd13bd540f03"
+              }
             }
           },
           "kind": "tool_status",
@@ -2221,8 +2285,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=4",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 5
+              "sequence": 5,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2248,8 +2314,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=5",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 6
+              "sequence": 6,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2275,8 +2343,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=6",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 7
+              "sequence": 7,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2302,8 +2372,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=7",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 8
+              "sequence": 8,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2329,8 +2401,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=8",
             "target": {
               "activity_id": "activity-4",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 9
+              "sequence": 9,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2356,8 +2430,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=9",
             "target": {
               "activity_id": "activity-4",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 10
+              "sequence": 10,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2383,8 +2459,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=10",
             "target": {
               "activity_id": "activity-3",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 11
+              "sequence": 11,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2410,8 +2488,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=11",
             "target": {
               "activity_id": "activity-5",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 12
+              "sequence": 12,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2437,8 +2517,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=12",
             "target": {
               "activity_id": "activity-6",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 13
+              "sequence": 13,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2464,8 +2546,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=14",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 15
+              "sequence": 15,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2491,8 +2575,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=15",
             "target": {
               "activity_id": "activity-5",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 16
+              "sequence": 16,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2518,8 +2604,10 @@
             "path": "/api/v1/runs/8e808dc0-1aca-4178-94f1-cb3a2621b348/events?after=16",
             "target": {
               "activity_id": "activity-6",
-              "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348",
-              "sequence": 17
+              "sequence": 17,
+              "source_refs": {
+                "run_id": "8e808dc0-1aca-4178-94f1-cb3a2621b348"
+              }
             }
           },
           "kind": "tool_status",
@@ -2545,8 +2633,10 @@
             "path": "/api/v1/runs/ba9041de-1ce7-4e30-b53f-377c510111d3/events?after=1",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3",
-              "sequence": 2
+              "sequence": 2,
+              "source_refs": {
+                "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3"
+              }
             }
           },
           "kind": "tool_status",
@@ -2572,8 +2662,10 @@
             "path": "/api/v1/runs/ba9041de-1ce7-4e30-b53f-377c510111d3/events?after=2",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3",
-              "sequence": 3
+              "sequence": 3,
+              "source_refs": {
+                "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3"
+              }
             }
           },
           "kind": "tool_status",
@@ -2599,8 +2691,10 @@
             "path": "/api/v1/runs/ba9041de-1ce7-4e30-b53f-377c510111d3/events?after=4",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3",
-              "sequence": 5
+              "sequence": 5,
+              "source_refs": {
+                "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3"
+              }
             }
           },
           "kind": "tool_status",
@@ -2626,8 +2720,10 @@
             "path": "/api/v1/runs/ba9041de-1ce7-4e30-b53f-377c510111d3/events?after=6",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3",
-              "sequence": 7
+              "sequence": 7,
+              "source_refs": {
+                "run_id": "ba9041de-1ce7-4e30-b53f-377c510111d3"
+              }
             }
           },
           "kind": "tool_status",
@@ -2653,8 +2749,10 @@
             "path": "/api/v1/runs/e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf/events?after=3",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf",
-              "sequence": 4
+              "sequence": 4,
+              "source_refs": {
+                "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf"
+              }
             }
           },
           "kind": "tool_status",
@@ -2680,8 +2778,10 @@
             "path": "/api/v1/runs/e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf/events?after=4",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf",
-              "sequence": 5
+              "sequence": 5,
+              "source_refs": {
+                "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf"
+              }
             }
           },
           "kind": "tool_status",
@@ -2707,8 +2807,10 @@
             "path": "/api/v1/runs/e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf/events?after=5",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf",
-              "sequence": 6
+              "sequence": 6,
+              "source_refs": {
+                "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf"
+              }
             }
           },
           "kind": "tool_status",
@@ -2734,8 +2836,10 @@
             "path": "/api/v1/runs/e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf/events?after=7",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf",
-              "sequence": 8
+              "sequence": 8,
+              "source_refs": {
+                "run_id": "e97c600b-eaa3-4fbe-bbff-de87ba5c5eaf"
+              }
             }
           },
           "kind": "tool_status",
@@ -2761,8 +2865,10 @@
             "path": "/api/v1/runs/fdee7704-0432-473c-9030-d648dd5a361f/events?after=1",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "fdee7704-0432-473c-9030-d648dd5a361f",
-              "sequence": 2
+              "sequence": 2,
+              "source_refs": {
+                "run_id": "fdee7704-0432-473c-9030-d648dd5a361f"
+              }
             }
           },
           "kind": "tool_status",
@@ -2788,8 +2894,10 @@
             "path": "/api/v1/runs/fdee7704-0432-473c-9030-d648dd5a361f/events?after=2",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "fdee7704-0432-473c-9030-d648dd5a361f",
-              "sequence": 3
+              "sequence": 3,
+              "source_refs": {
+                "run_id": "fdee7704-0432-473c-9030-d648dd5a361f"
+              }
             }
           },
           "kind": "tool_status",
@@ -2815,8 +2923,10 @@
             "path": "/api/v1/runs/fdee7704-0432-473c-9030-d648dd5a361f/events?after=3",
             "target": {
               "activity_id": "activity-2",
-              "run_id": "fdee7704-0432-473c-9030-d648dd5a361f",
-              "sequence": 4
+              "sequence": 4,
+              "source_refs": {
+                "run_id": "fdee7704-0432-473c-9030-d648dd5a361f"
+              }
             }
           },
           "kind": "tool_status",
@@ -2842,8 +2952,10 @@
             "path": "/api/v1/runs/fdee7704-0432-473c-9030-d648dd5a361f/events?after=5",
             "target": {
               "activity_id": "activity-1",
-              "run_id": "fdee7704-0432-473c-9030-d648dd5a361f",
-              "sequence": 6
+              "sequence": 6,
+              "source_refs": {
+                "run_id": "fdee7704-0432-473c-9030-d648dd5a361f"
+              }
             }
           },
           "kind": "tool_status",

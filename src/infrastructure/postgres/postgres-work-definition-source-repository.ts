@@ -194,7 +194,9 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       ),
       ownerValues(id, owner),
     );
-    return result.rows?.[0] ? mapProductVersion(result.rows[0]) : null;
+    const row = result.rows?.[0];
+    if (!row || !row.author_source || !row.author_fingerprint) return null;
+    return mapProductVersion(row);
   }
 
   public async findProductVersionByAuthorFingerprint(input: {

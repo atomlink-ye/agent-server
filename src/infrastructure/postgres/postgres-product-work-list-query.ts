@@ -1,8 +1,9 @@
-import type {
-  ProductListQuery,
-  ProductWorkListPage,
-  ProductWorkListQuery,
-  ProductWorkRunListPage,
+import {
+  InvalidProductWorkListCursorError,
+  type ProductListQuery,
+  type ProductWorkListPage,
+  type ProductWorkListQuery,
+  type ProductWorkRunListPage,
 } from '../../application/ports/product-work-list-query.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
 import type { Work } from '../../domain/work/work.js';
@@ -231,14 +232,6 @@ function decodeCursor(
     return payload as unknown as CursorPayload;
   } catch {
     throw new InvalidProductWorkListCursorError();
-  }
-}
-
-export class InvalidProductWorkListCursorError extends Error {
-  public readonly code = 'invalid_cursor';
-  public constructor() {
-    super('The requested Product Work list cursor is invalid.');
-    this.name = 'InvalidProductWorkListCursorError';
   }
 }
 

@@ -5,6 +5,7 @@ import { HttpError } from '../../../contracts/http.js';
 import { WorkWorkspaceScopeUnavailableError } from '../../../domain/work/work.js';
 import type { WorkIdentityApi } from '../../../application/work/work-identity-api.js';
 import {
+  UpdateWorkDefinitionVersionResponseSchema,
   WorkDefinitionResponseSchema,
   WorkListResponseSchema,
 } from '../../../contracts/product-work-commands.js';
@@ -31,10 +32,7 @@ const config = {
 describe('product Work command route', () => {
   it('returns list product state and only the minimum latest run summary', async () => {
     const app = createApp(vi.fn(), {
-      listWorks: vi.fn().mockResolvedValue({
-        items: [work],
-        nextCursor: null,
-      }),
+      listWorks: vi.fn().mockResolvedValue({ items: [work], nextCursor: null }),
       workListProjection: vi.fn().mockResolvedValue({
         ...workResponse,
         product_state: 'complete',
@@ -67,19 +65,14 @@ describe('product Work command route', () => {
       next_cursor: null,
     });
 
-    const mutated = structuredClone(body) as {
-      works: { product_state?: string }[];
-    };
+    const mutated = structuredClone(body) as { works: { product_state?: string }[] };
     delete mutated.works[0]!.product_state;
     expect(WorkListResponseSchema.safeParse(mutated).success).toBe(false);
   });
 
   it('routes updated_desc through the dedicated Product ordering seam', async () => {
     const compatibilityList = vi.fn();
-    const latestList = vi.fn().mockResolvedValue({
-      items: [work],
-      nextCursor: 'next-page',
-    });
+    const latestList = vi.fn().mockResolvedValue({ items: [work], nextCursor: 'next-page' });
     const app = createApp(vi.fn(), {
       listWorks: compatibilityList,
       productLists: {
@@ -93,10 +86,7 @@ describe('product Work command route', () => {
       }),
     });
 
-    const response = await app.request(
-      '/api/v1/works?limit=1&order=updated_desc',
-      { headers },
-    );
+    const response = await app.request('/api/v1/works?limit=1&order=updated_desc', { headers });
     expect(response.status).toBe(200);
     expect(compatibilityList).not.toHaveBeenCalled();
     expect(latestList).toHaveBeenCalledWith(
@@ -111,9 +101,7 @@ describe('product Work command route', () => {
       getWorkDefinition: vi.fn().mockResolvedValue(definitionBinding),
     });
 
-    const response = await app.request(`/api/v1/works/${work.id}/definition`, {
-      headers,
-    });
+    const response = await app.request(`/api/v1/works/${work.id}/definition`, { headers });
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(WorkDefinitionResponseSchema.safeParse(body).success).toBe(true);
@@ -131,12 +119,40 @@ describe('product Work command route', () => {
     expect(WorkDefinitionResponseSchema.safeParse(mutated).success).toBe(false);
   });
 
+  it('pins a same-lineage immutable DefinitionVersion on the Work', async () => {
+    const nextVersionId = '00000000-0000-4000-8000-000000000306';
+    const updateCurrentDefinitionVersion = vi.fn().mockResolvedValue({
+      ...work,
+      currentDefinitionVersionId: nextVersionId,
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+    const app = createApp(vi.fn(), { updateCurrentDefinitionVersion });
+
+    const response = await app.request(
+      `/api/v1/works/${work.id}/definition-version`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ definition_version_id: nextVersionId }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(UpdateWorkDefinitionVersionResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.work.definition_version_id).toBe(nextVersionId);
+    expect(updateCurrentDefinitionVersion).toHaveBeenCalledWith({
+      owner: { tenantId: 'tenant-1', workspaceId: 'workspace_main' },
+      accessContext: expect.objectContaining({ tenantId: 'tenant-1', workspaceId: 'workspace_main' }),
+      workId: work.id,
+      definitionVersionId: nextVersionId,
+    });
+  });
+
   it('maps an unavailable authenticated workspace scope to an informative conflict', async () => {
     const createWork = vi
       .fn()
-      .mockRejectedValue(
-        new WorkWorkspaceScopeUnavailableError(),
-      ) as unknown as WorkIdentityApi['createWork'];
+      .mockRejectedValue(new WorkWorkspaceScopeUnavailableError()) as unknown as WorkIdentityApi['createWork'];
     const app = createApp(createWork);
     const response = await app.request('/api/v1/works', {
       method: 'POST',
@@ -156,9 +172,7 @@ describe('product Work command route', () => {
   it('preserves unrelated persistence failures as internal errors', async () => {
     const createWork = vi
       .fn()
-      .mockRejectedValue(
-        new Error('db unavailable'),
-      ) as unknown as WorkIdentityApi['createWork'];
+      .mockRejectedValue(new Error('db unavailable')) as unknown as WorkIdentityApi['createWork'];
     const app = createApp(createWork);
     const response = await app.request('/api/v1/works', {
       method: 'POST',
@@ -181,6 +195,7 @@ function createApp(
   overrides: Partial<{
     listWorks: ProductWorkCommandDependencies['workIdentity']['listWorks'];
     getWorkDefinition: ProductWorkCommandDependencies['workIdentity']['getWorkDefinition'];
+    updateCurrentDefinitionVersion: ProductWorkCommandDependencies['workIdentity']['updateCurrentDefinitionVersion'];
     workListProjection: ProductWorkCommandDependencies['workListProjection'];
     productLists: NonNullable<ProductWorkCommandDependencies['productLists']>;
   }> = {},
@@ -193,6 +208,7 @@ function createApp(
       listWorks: overrides.listWorks ?? vi.fn(),
       listWorkRuns: vi.fn(),
       getWorkDefinition: overrides.getWorkDefinition ?? vi.fn(),
+      updateCurrentDefinitionVersion: overrides.updateCurrentDefinitionVersion ?? vi.fn(),
     },
     ...(overrides.productLists ? { productLists: overrides.productLists } : {}),
     startWorkRun: { execute: vi.fn() },

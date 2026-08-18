@@ -527,7 +527,7 @@ function isApply(value: unknown): value is {
   return typeof definition?.id === 'string' && typeof version?.id === 'string';
 }
 
-function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
+export function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
   const record = asRecord(value);
   if (!Array.isArray(record?.diagnostics)) return [];
   return record.diagnostics.flatMap((item) => {

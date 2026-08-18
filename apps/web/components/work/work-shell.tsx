@@ -88,7 +88,7 @@ export function WorkListShell() {
       {showNewWork ? <NewWork /> : null}
       {state === 'loading' ? <WorkListLoading /> : null}
       {state === 'error' ? <WorkListError /> : null}
-      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={!showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
+      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
       {state === 'available' && works.length > 0 ? (
         <section aria-labelledby="work-list-heading" className="work-list-region">
           <div className="work-list-region__heading">
@@ -798,27 +798,25 @@ function WorkListEmpty({ showNewWork, onNewWork }: {
   readonly showNewWork: boolean;
   readonly onNewWork: () => void;
 }) {
-  if (!showNewWork) {
-    return (
-      <section
-        aria-labelledby="work-list-empty-heading"
-        className="work-list-state work-list-state--empty"
-        data-testid="work-list-empty"
+  if (showNewWork) return null;
+  return (
+    <section
+      aria-labelledby="work-list-empty-heading"
+      className="work-list-state work-list-state--empty"
+      data-testid="work-list-empty"
+    >
+      <p className="work-list-state__eyebrow">No Work records</p>
+      <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
+      <p>When Work is created, it will appear here as the durable entry.</p>
+      <button
+        onClick={onNewWork}
+        type="button"
+        className="work-list-state__cta"
       >
-        <p className="work-list-state__eyebrow">No Work records</p>
-        <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
-        <p>When Work is created, it will appear here as the durable entry.</p>
-        <button
-          onClick={onNewWork}
-          type="button"
-          className="work-list-state__cta"
-        >
-          Create your first Work
-        </button>
-      </section>
-    );
-  }
-  return null;
+        Create your first Work
+      </button>
+    </section>
+  );
 }
 
 async function readJson<T>(path: string): Promise<T> {

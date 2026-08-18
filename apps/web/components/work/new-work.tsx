@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { diagnosticsFrom } from '@/components/work/definition-panel';
 import { workTabHref } from '@/components/work/work-presentation';
 
 type Diagnostic = {
@@ -20,6 +21,14 @@ type AuthoringState =
   | 'applying'
   | 'applied'
   | 'error';
+
+function extractErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!record.error || typeof record.error !== 'object' || Array.isArray(record.error)) return null;
+  const error = record.error as Record<string, unknown>;
+  return typeof error.message === 'string' ? error.message : null;
+}
 
 export function NewWork() {
   const [source, setSource] = useState('');
@@ -42,13 +51,20 @@ export function NewWork() {
       body: JSON.stringify({ source }),
     }).catch(() => null);
 
+    const validationBody = validation ? await validation.json().catch(() => undefined) : undefined;
+
     if (!validation?.ok) {
+      const nextDiagnostics = diagnosticsFrom(validationBody);
+      setDiagnostics(nextDiagnostics);
       setState('error');
-      setStatusMessage('The Definition could not be validated.');
+      setStatusMessage(
+        nextDiagnostics.length
+          ? 'Fix the reported Definition diagnostics before applying.'
+          : 'The Definition could not be validated.',
+      );
       return null;
     }
 
-    const validationBody = await validation.json().catch(() => undefined);
     if (!validationBody?.fingerprint) {
       setStatusMessage('The Definition could not be validated.');
       setState('error');
@@ -97,13 +113,22 @@ export function NewWork() {
       body: JSON.stringify({ source }),
     }).catch(() => null);
 
-    if (!response?.ok) {
+    if (!response) {
       setState('error');
       setStatusMessage('The Definition apply request could not reach Agent Server.');
       return;
     }
 
     const body = await response.json().catch(() => undefined);
+
+    if (!response.ok) {
+      setDiagnostics(diagnosticsFrom(body));
+      setState('error');
+      const errorMessage = extractErrorMessage(body);
+      setStatusMessage(errorMessage || 'The Definition was not applied.');
+      return;
+    }
+
     if (!body?.definition?.id || !body?.version?.id) {
       setState('error');
       setStatusMessage('The Definition was not applied.');
@@ -128,8 +153,10 @@ export function NewWork() {
     }).catch(() => null);
 
     if (!response?.ok) {
+      const body = response ? await response.json().catch(() => undefined) : undefined;
       setState('error');
-      setStatusMessage('The Work could not be created.');
+      const errorMessage = extractErrorMessage(body);
+      setStatusMessage(errorMessage || 'The Work could not be created.');
       return;
     }
 

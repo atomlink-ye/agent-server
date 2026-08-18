@@ -24,7 +24,7 @@ sleep 3
 docker exec "$PSO" bash -lc 'wc -l /runtime-state/live-stream.ndjson 2>&1; cat /runtime-state/live-stream.err 2>&1 | head -20'
 
 say "step 2: baseline paseo ls before the run (public CLI)"
-docker exec "$PSO" bash -lc 'paseo ls --json -g -a' 2>&1 | tee "$OUT/02-paseo-ls-before.json" | head -c 2000
+docker exec "$PSO" bash -lc 'paseo ls --json -g -a --host 127.0.0.1:16767' 2>&1 | tee "$OUT/02-paseo-ls-before.json" | head -c 2000
 
 say "step 3: the real Agent Team run (three roles: lead / builder / analyst)"
 docker exec \
@@ -38,15 +38,39 @@ echo "SMOKE_RC=$?" | tee "$OUT/03-smoke-rc.txt"
 tail -40 "$OUT/03-smoke.log"
 
 say "step 4: paseo ls after the run (public CLI) — role labels are the mapping"
-docker exec "$PSO" bash -lc 'paseo ls --json -g -a' > "$OUT/04-paseo-ls-after.json" 2>&1
+docker exec "$PSO" bash -lc 'paseo ls --json -g -a --host 127.0.0.1:16767' > "$OUT/04-paseo-ls-after.json" 2>&1
 head -c 3000 "$OUT/04-paseo-ls-after.json"
 
 say "step 5: role -> agent id via label filter alone (public CLI)"
 for ROLE in lead builder analyst; do
   echo "--- member_name=$ROLE ---"
-  docker exec "$PSO" bash -lc "paseo ls --json -g -a --label member_name=$ROLE" \
+  docker exec "$PSO" bash -lc "paseo ls --json -g -a --host 127.0.0.1:16767 --label member_name=$ROLE" \
     > "$OUT/05-paseo-ls-$ROLE.json" 2>&1
   head -c 1200 "$OUT/05-paseo-ls-$ROLE.json"; echo
+  ID=$(node -e '
+    const fs=require("fs");
+    let raw=fs.readFileSync(process.argv[1],"utf8");
+    let v; try { v=JSON.parse(raw); } catch { process.exit(0); }
+    const list=Array.isArray(v)?v:(v.agents??v.items??[]);
+    if(list[0]&&list[0].id) process.stdout.write(String(list[0].id));
+  ' "$OUT/05-paseo-ls-$ROLE.json" 2>/dev/null)
+  echo "RESOLVED_AGENT_ID[$ROLE]=$ID" | tee -a "$OUT/05-role-agent-ids.txt"
+  [ -n "$ID" ] || { echo "  (no agent id resolved for $ROLE)"; continue; }
+
+  echo "--- paseo logs $ROLE (public CLI) ---"
+  docker exec "$PSO" bash -lc "paseo logs --host 127.0.0.1:16767 --tail 200 $ID" \
+    > "$OUT/05-paseo-logs-$ROLE.txt" 2>&1
+  wc -l "$OUT/05-paseo-logs-$ROLE.txt"; head -c 1500 "$OUT/05-paseo-logs-$ROLE.txt"; echo
+
+  echo "--- paseo inspect $ROLE (public CLI) ---"
+  docker exec "$PSO" bash -lc "paseo inspect --host 127.0.0.1:16767 --json $ID" \
+    > "$OUT/05-paseo-inspect-$ROLE.json" 2>&1
+  head -c 1200 "$OUT/05-paseo-inspect-$ROLE.json"; echo
+
+  echo "--- fetchAgentTimeline $ROLE (SDK public API) ---"
+  docker exec "$PSO" bash -lc "PASEO_WS_URL=ws://127.0.0.1:16767/ws node /workspace/scripts/probe/paseo-fetch-timeline.mjs $ID" \
+    > "$OUT/05-sdk-timeline-$ROLE.ndjson" 2>&1
+  wc -c "$OUT/05-sdk-timeline-$ROLE.ndjson"; head -c 1500 "$OUT/05-sdk-timeline-$ROLE.ndjson"; echo
 done
 
 say "step 6: stop the live probe and keep its raw capture"

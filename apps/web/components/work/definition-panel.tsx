@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
 
 import { humanize, workTabHref } from '@/components/work/work-presentation';
@@ -58,7 +59,7 @@ export function DefinitionPanel({
   readonly editable: boolean;
 }) {
   const normalizedSource = useMemo(
-    () => (version ? JSON.stringify(version.source, null, 2) : ''),
+    () => (version ? stringify(version.source) : ''),
     [version],
   );
   const [source, setSource] = useState(normalizedSource);
@@ -230,9 +231,8 @@ export function DefinitionPanel({
               <div>
                 <h3>YAML source</h3>
                 <p>
-                  The API currently returns normalized source. It is seeded here as
-                  JSON-compatible YAML, so original comments and formatting are not
-                  round-tripped.
+                  The API currently returns normalized source. It is re-serialized as YAML here,
+                  so original comments and formatting are not round-tripped.
                 </p>
               </div>
               <span>{source.length.toLocaleString()} chars</span>

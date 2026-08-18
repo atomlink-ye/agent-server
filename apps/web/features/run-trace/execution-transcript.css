@@ -182,3 +182,12 @@
     overflow-x: auto;
   }
 }
+
+/* Session transcript summary block */
+.execution-transcript__summary { border: 1px solid #e4e1db; border-radius: 6px; margin: 12px 0; padding: 12px; }
+.execution-transcript__summary dl { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin: 0; }
+.execution-transcript__summary dt { color: #706c74; font-size: 9px; }
+.execution-transcript__summary dd { font-size: 13px; font-weight: 600; margin: 2px 0 0; }
+.execution-transcript__last-meaningful { border-top: 1px solid #e4e1db; font-size: 11px; margin-top: 8px; padding-top: 8px; }
+.execution-transcript__last-meaningful strong { color: #9e7b4a; display: block; font-size: 9px; font-weight: 650; margin-bottom: 4px; }
+.execution-transcript__last-meaningful p { margin: 2px 0; }

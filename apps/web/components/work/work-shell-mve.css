@@ -210,3 +210,8 @@
   .work-tabs { gap: 18px; overflow-x: auto; }
   .work-definition__heading { display: grid; gap: 10px; }
 }
+
+/* P6: Clickable review facts */
+.work-review__fact--clickable { cursor: pointer; transition: background 0.15s; }
+.work-review__fact--clickable:hover { background: #f5f3ee; }
+.work-review__fact--clickable dt::after { content: ' ↗'; font-size: 8px; }

@@ -189,8 +189,8 @@ function TranscriptStream({ entries }: { readonly entries: readonly SessionEntry
   const stream = buildVisibleStream(projected);
   return <div className="transcript__stream" data-testid="transcript-stream">
     {stream.map((item, index) => (
-      <div className={`transcript__item transcript__item--${item.kind}`} key={item.key} style={{ marginTop: index ? `${gapAfter(stream[index - 1]!, item)}px` : undefined }}>
-        {item.kind === 'assistant' ? <div className="transcript__prose"><AssistantMarkdown text={assistantText(item.entry)} /></div> : null}
+      <div className={`transcript__item transcript__item--${item.kind}`} data-source-ordinals={item.sourceOrdinals.join(',')} key={item.key} style={{ marginTop: index ? `${gapAfter(stream[index - 1]!, item)}px` : undefined }}>
+        {item.kind === 'assistant' ? <div className="transcript__prose" data-testid="transcript-prose"><AssistantMarkdown text={assistantText(item.entry)} /></div> : null}
         {item.kind === 'activity' ? <ActivityRow entry={item.entry} /> : null}
         {item.kind === 'lifecycle' ? <LifecycleRow entry={item.entry} /> : null}
         {item.kind === 'footer' ? <div className="transcript__footer">{item.text}</div> : null}
@@ -200,10 +200,10 @@ function TranscriptStream({ entries }: { readonly entries: readonly SessionEntry
 }
 
 type StreamItem =
-  | { readonly kind: 'assistant'; readonly key: string; readonly entry: ProjectedTranscriptEntry }
-  | { readonly kind: 'activity'; readonly key: string; readonly entry: ProjectedTranscriptEntry }
-  | { readonly kind: 'lifecycle'; readonly key: string; readonly entry: ProjectedTranscriptEntry }
-  | { readonly kind: 'footer'; readonly key: string; readonly text: string };
+  | { readonly kind: 'assistant'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'activity'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'lifecycle'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'footer'; readonly key: string; readonly text: string; readonly sourceOrdinals: readonly number[] };
 
 function buildVisibleStream(entries: readonly ProjectedTranscriptEntry[]): readonly StreamItem[] {
   const stream: StreamItem[] = [];
@@ -212,7 +212,7 @@ function buildVisibleStream(entries: readonly ProjectedTranscriptEntry[]): reado
   const flushFooter = () => {
     if (!lastAssistant) return;
     const parts = pendingUsage.flatMap((usage) => usage.event.kind === 'usage' ? usageParts(usage.event) : []);
-    stream.push({ kind: 'footer', key: `footer:${lastAssistant.sourceOrdinals.join(':')}`, text: parts.length ? parts.join(' · ') : formatTimestamp(lastAssistant.event.created_at) });
+    stream.push({ kind: 'footer', key: `footer:${lastAssistant.sourceOrdinals.join(':')}`, text: parts.length ? parts.join(' · ') : formatTimestamp(lastAssistant.event.created_at), sourceOrdinals: [...lastAssistant.sourceOrdinals, ...pendingUsage.flatMap((usage) => usage.sourceOrdinals)] });
     lastAssistant = null;
     pendingUsage = [];
   };
@@ -221,12 +221,12 @@ function buildVisibleStream(entries: readonly ProjectedTranscriptEntry[]): reado
     if (entry.event.kind !== 'assistant_text') flushFooter();
     if (entry.event.kind === 'assistant_text') {
       flushFooter();
-      stream.push({ kind: 'assistant', key: entry.sourceOrdinals.join(':'), entry });
+      stream.push({ kind: 'assistant', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
       lastAssistant = entry;
     } else if (entry.event.kind === 'lifecycle') {
-      stream.push({ kind: 'lifecycle', key: entry.sourceOrdinals.join(':'), entry });
+      stream.push({ kind: 'lifecycle', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
     } else {
-      stream.push({ kind: 'activity', key: entry.sourceOrdinals.join(':'), entry });
+      stream.push({ kind: 'activity', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
     }
   }
   flushFooter();

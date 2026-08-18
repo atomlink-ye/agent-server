@@ -10,9 +10,9 @@ export function ActivityRow({ entry, nested = false }: { readonly entry: Project
     </div>
   ) : null;
   if (!presentation.expandable && !children)
-    return <div className={`transcript__row transcript__row--static ${nested ? 'transcript__row--nested' : ''}`} data-testid="transcript-activity-row">{content}</div>;
+    return <div className={`transcript__row transcript__row--static ${nested ? 'transcript__row--nested' : ''}`} data-source-ordinals={entry.sourceOrdinals.join(',')} data-testid="transcript-activity-row">{content}</div>;
   return (
-    <details className={`transcript__row ${nested ? 'transcript__row--nested' : ''} ${presentation.tone === 'running' ? 'is-running' : ''}`} data-testid="transcript-activity-row">
+    <details className={`transcript__row ${nested ? 'transcript__row--nested' : ''} ${presentation.tone === 'running' ? 'is-running' : ''}`} data-source-ordinals={entry.sourceOrdinals.join(',')} data-testid="transcript-activity-row">
       <summary>{content}</summary>
       <div className="transcript__detail">
         {presentation.detailText ? <pre>{presentation.detailText}</pre> : null}

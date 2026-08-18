@@ -22,8 +22,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const idempotencyKey = request.headers.get('idempotency-key')?.trim() ?? '';
-  if (idempotencyKey) return invalidProductRequest();
   const parsed = CreateWorkRequestSchema.safeParse(
     await request.json().catch(() => undefined),
   );

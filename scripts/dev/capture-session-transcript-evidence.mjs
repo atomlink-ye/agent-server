@@ -25,6 +25,20 @@ const metrics = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
   const prose = document.querySelector('[data-testid="transcript-prose"]');
   const streamItems = [...document.querySelectorAll('.transcript__item')];
+  const activityRows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
+  const thinkingRows = activityRows.filter((row) => row.querySelector('.transcript__row-copy strong')?.textContent?.trim() === 'Thinking');
+  const maxConsecutiveThinking = streamItems.reduce((state, item) => {
+    const thinking = item.classList.contains('transcript__item--activity')
+      && item.querySelector('.transcript__row-copy strong')?.textContent?.trim() === 'Thinking';
+    const current = thinking ? state.current + 1 : 0;
+    return { current, max: Math.max(state.max, current) };
+  }, { current: 0, max: 0 }).max;
+  const normalize = (value) => value.trim().replace(/[.。]+$/u, '').replace(/\s+/gu, ' ').toLocaleLowerCase();
+  const duplicatedLabelLines = activityRows.filter((row) => {
+    const label = row.querySelector('.transcript__row-copy strong')?.textContent;
+    const summary = row.querySelector('.transcript__row-copy small')?.textContent;
+    return Boolean(label && summary && normalize(label) === normalize(summary));
+  }).length;
   const ordinals = new Set(streamItems.flatMap((item) => (item.dataset.sourceOrdinals ?? '').split(',').filter(Boolean).map(Number)));
   const activityItems = [...document.querySelectorAll('.transcript__item--activity')];
   const gaps = activityItems.flatMap((item, index) => {
@@ -38,7 +52,12 @@ const metrics = await page.evaluate(() => {
   const proseStyle = prose ? getComputedStyle(prose) : null;
   const navStrong = document.querySelector('[data-testid="session-role-nav"] strong')?.textContent?.trim() ?? '';
   return {
+    // Final rendered DOM units, not raw entries and not an intermediate projection.
     session: 'lead', raw_entries: 337, rendered_units: streamItems.length,
+    rendered_unit_breakdown: Object.fromEntries(['assistant', 'activity', 'lifecycle', 'footer'].map((kind) => [kind, document.querySelectorAll(`.transcript__item--${kind}`).length])),
+    thinking_rows: thinkingRows.length,
+    max_consecutive_thinking: maxConsecutiveThinking,
+    duplicated_label_lines: duplicatedLabelLines,
     rows_above_fold_1440x900: streamItems.filter((item) => item.getBoundingClientRect().top < 900).length,
     collapsed_rows_with_transparent_border: rows.filter((row) => !row.hasAttribute('open') && getComputedStyle(row).borderTopColor === 'rgba(0, 0, 0, 0)').length,
     max_gap_px_between_consecutive_activity_rows: Math.max(0, ...gaps),

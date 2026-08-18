@@ -1,0 +1,104 @@
+// Show one team member's Paseo session transcript, addressed by roster role name.
+//
+//   pnpm paseo-session-transcript -- --team-run <uuid>
+//   pnpm paseo-session-transcript -- --team-run <uuid> --member analyst
+//   pnpm paseo-session-transcript -- --team-run <uuid> --member lead --json
+//
+// With no --member it prints one derived overview per roster member. Read-only:
+// one SELECT and one Paseo timeline fetch per member, no writes anywhere.
+import { Pool } from 'pg';
+import { DaemonClient } from '@getpaseo/client';
+
+import { PostgresSessionAgentBindingLookup } from '../../src/infrastructure/postgres/postgres-session-agent-binding-lookup.js';
+import { SessionTranscriptReader } from '../../src/adapters/paseo/session-transcript-reader.js';
+
+function flag(name: string): string | undefined {
+  const index = process.argv.indexOf(`--${name}`);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
+const teamRunId = flag('team-run');
+const memberName = flag('member');
+const asJson = process.argv.includes('--json');
+if (!teamRunId) {
+  process.stderr.write(
+    'usage: pnpm paseo-session-transcript -- --team-run <uuid> [--member <name>] [--json]\n',
+  );
+  process.exit(2);
+}
+
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) throw new Error('DATABASE_URL is required');
+const wsUrl = process.env.PASEO_WS_URL?.trim() ?? 'ws://127.0.0.1:16767/ws';
+
+const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+const client = new DaemonClient({
+  url: wsUrl,
+  clientId: `session-transcript-${process.pid}`,
+  clientType: 'cli',
+  appVersion: 'agent-server-session-transcript/0.1.0',
+  connectTimeoutMs: 30_000,
+  reconnect: { enabled: false },
+});
+
+try {
+  await client.connect();
+  const reader = new SessionTranscriptReader(
+    new PostgresSessionAgentBindingLookup(pool),
+    client,
+  );
+
+  if (!memberName) {
+    const transcripts = await reader.readAll(teamRunId);
+    if (asJson)
+      process.stdout.write(
+        `${JSON.stringify(
+          transcripts.map((transcript) => transcript.overview),
+          null,
+          2,
+        )}\n`,
+      );
+    else if (transcripts.length === 0)
+      process.stdout.write(
+        `no member of team run ${teamRunId} has a Paseo agent yet\n`,
+      );
+    else
+      for (const { overview } of transcripts)
+        process.stdout.write(
+          `${overview.memberName}\t(${overview.role}, ${overview.status})\t` +
+            `${overview.providerAgentId}\t` +
+            `${overview.entryCount} entries\thistorical turns unavailable\t` +
+            `last ${overview.lastTimestamp ?? '-'}\tolder ${overview.hasOlder ? 'yes' : 'no'}\t` +
+            `work ${overview.workRefs.length ? overview.workRefs.join(',') : '-'}\t` +
+            `last ${overview.lastMeaningful?.derivedSummary ?? '-'}${
+              overview.lastMeaningful?.kind === 'tool'
+                ? `\taction ${overview.lastMeaningful.action ?? '-'}\tresult ${overview.lastMeaningful.result ?? '-'}`
+                : ''
+            }\n`,
+        );
+  } else {
+    const transcript = await reader.read({ teamRunId, memberName });
+    if (asJson) {
+      process.stdout.write(`${JSON.stringify(transcript, null, 2)}\n`);
+    } else {
+      process.stdout.write(
+        `# ${transcript.memberName} (${transcript.role}, ${transcript.status})\n` +
+          `# agent ${transcript.providerAgentId}  epoch ${transcript.epoch}  ${transcript.entries.length} entries\n\n`,
+      );
+      if (transcript.hasOlder) {
+        process.stdout.write(
+          `WARNING: this is a truncated tail; older transcript entries exist (cursor: ${JSON.stringify(transcript.cursor)}).\n\n`,
+        );
+      }
+      for (const entry of transcript.entries) {
+        const seq = entry.seqStart === null ? '-' : String(entry.seqStart);
+        process.stdout.write(
+          `[${seq.padStart(4)}] ${entry.kind.padEnd(10)} ${entry.derivedSummary}\n`,
+        );
+      }
+    }
+  }
+} finally {
+  await client.close().catch(() => undefined);
+  await pool.end().catch(() => undefined);
+}

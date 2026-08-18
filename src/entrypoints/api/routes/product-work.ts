@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import type { GetProductExecutionDetail } from '../../../application/product-projection/get-product-execution-detail.js';
+import type { GetProductSessionTranscripts } from '../../../application/product-projection/get-product-session-transcripts.js';
 import {
   ProductProjectionNotFoundError,
   type ProductProjectionApi,
@@ -9,6 +10,7 @@ import {
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   ProductExecutionDetailResponseSchema,
+  ProductSessionTranscriptsResponseSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
 } from '../../../contracts/product-projection/index.js';
@@ -25,6 +27,7 @@ interface ProductWorkRouteDependencies {
   readonly config: AppConfig;
   readonly productProjection: ProductProjectionApi;
   readonly executionDetail?: Pick<GetProductExecutionDetail, 'execute'>;
+  readonly sessionTranscripts?: Pick<GetProductSessionTranscripts, 'execute'>;
 }
 
 export function registerProductWorkRoutes(
@@ -143,7 +146,47 @@ export function registerProductWorkRoutes(
           workRunId: input.workRunId,
           attemptId,
         });
-        return context.json(ProductExecutionDetailResponseSchema.parse(response), 200);
+        return context.json(
+          ProductExecutionDetailResponseSchema.parse(response),
+          200,
+        );
+      } catch (error) {
+        return mapProjectionError(context, error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/v1/works/:workId/runs/:workRunId/session-transcripts',
+    async (context) => {
+      const input = parsePath(
+        context.req.param('workId'),
+        context.req.param('workRunId'),
+      );
+      if (!input) return invalidPath(context);
+      if (!dependencies.sessionTranscripts)
+        return context.json(
+          ErrorResponseSchema.parse({
+            error: {
+              code: 'projection_unavailable',
+              message: 'Session transcripts are temporarily unavailable.',
+              request_id: requestId(context),
+            },
+          }),
+          503,
+        );
+      try {
+        const access = getAuthenticatedAccessContext(context);
+        const response = await dependencies.sessionTranscripts.execute({
+          tenantId: access.tenantId,
+          workspaceId: access.workspaceId,
+          workId: input.workId,
+          workRunId: input.workRunId,
+        });
+        return context.json(
+          ProductSessionTranscriptsResponseSchema.parse(response),
+          200,
+        );
       } catch (error) {
         return mapProjectionError(context, error);
       }

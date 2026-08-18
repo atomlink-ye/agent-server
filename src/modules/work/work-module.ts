@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 
 import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
+import { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
 import {
   createProductProjection,
   type ProductProjectionApi,
@@ -26,6 +27,7 @@ import {
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
 import { PostgresRunEventRepository } from '../../infrastructure/postgres/postgres-run-event-repository.js';
+import { PostgresSessionTranscriptFactsQuery } from '../../infrastructure/postgres/postgres-session-transcript-facts-query.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { PostgresProductWorkListQuery } from '../../infrastructure/postgres/postgres-product-work-list-query.js';
 import { PostgresWorkProjectionFactsQuery } from '../../infrastructure/postgres/postgres-work-projection-facts-query.js';
@@ -55,6 +57,7 @@ export function installWorkHttpRoutes(
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
     readonly projection: ProductProjectionApi;
     readonly executionDetail: Pick<GetProductExecutionDetail, 'execute'>;
+    readonly sessionTranscripts: Pick<GetProductSessionTranscripts, 'execute'>;
   },
 ): void {
   const {
@@ -63,6 +66,7 @@ export function installWorkHttpRoutes(
     startWorkRun,
     projection,
     executionDetail,
+    sessionTranscripts,
   } = dependencies;
   registerProductWorkCommandRoutes(app, {
     config,
@@ -76,6 +80,7 @@ export function installWorkHttpRoutes(
     config,
     productProjection: projection,
     executionDetail,
+    sessionTranscripts,
   });
 }
 
@@ -162,6 +167,11 @@ export function createWorkModule(options: {
     options.executionFacts,
     new PostgresRunEventRepository(options.database),
   );
+  const sessionTranscripts = new GetProductSessionTranscripts(
+    workIdentityQuery,
+    new PostgresSessionTranscriptFactsQuery(options.database),
+    new PostgresRunEventRepository(options.database),
+  );
 
   return {
     projection,
@@ -172,6 +182,7 @@ export function createWorkModule(options: {
         startWorkRun,
         projection,
         executionDetail,
+        sessionTranscripts,
       });
     },
     contributeRuntime(context) {

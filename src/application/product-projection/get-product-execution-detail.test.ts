@@ -167,6 +167,7 @@ describe('GetProductExecutionDetail', () => {
       attempt_id: attemptId,
       actor_id: actorId,
       capture_scope: 'safe_run_events',
+      truncated: false,
       events: [
         {
           kind: 'lifecycle',
@@ -195,6 +196,13 @@ describe('GetProductExecutionDetail', () => {
           detail_text: 'bounded detail',
           exit_code: null,
           parent_activity_id: null,
+        },
+        {
+          kind: 'lifecycle',
+          status: 'output',
+          raw_type: 'provider_private_blob',
+          sequence: 4,
+          created_at: '2026-08-18T01:00:03.000Z',
         },
       ],
     });

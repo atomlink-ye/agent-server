@@ -32,6 +32,10 @@ const access: AccessContext = {
   principalId,
   policySnapshotVersion: 'product-definition-real-pg-v1',
 };
+const foreignAccess: AccessContext = {
+  ...access,
+  principalId: 'product-definition-real-pg-foreign',
+};
 
 const SOURCE = `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
@@ -70,17 +74,26 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
          principal_type=EXCLUDED.principal_type,
          principal_id=EXCLUDED.principal_id,
          updated_at=EXCLUDED.updated_at`,
-      [workspaceId, tenantId, access.principalType, principalId, 'Product Definition PG', at],
+      [
+        workspaceId,
+        tenantId,
+        access.principalType,
+        principalId,
+        'Product Definition PG',
+        at,
+      ],
     );
   });
 
   afterAll(async () => {
     if (createdWorkIds.length)
-      await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [createdWorkIds]);
+      await pool.query('DELETE FROM works WHERE id = ANY($1::uuid[])', [
+        createdWorkIds,
+      ]);
     await pool?.end();
   });
 
-  it('applies, replays/converges, creates a new version on change, then creates Work from the version', async () => {
+  it('applies, owner-isolates exact reads, converges versions, then creates Work', async () => {
     const sources = new PostgresWorkDefinitionSourceRepository(pool);
     const agentResolution = {
       async resolvePublished(id: string) {
@@ -153,7 +166,10 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
       accessContext: access,
     });
     const changed = await product.apply({
-      source: SOURCE.replace('Research an earnings event', 'Research the next earnings event'),
+      source: SOURCE.replace(
+        'Research an earnings event',
+        'Research the next earnings event',
+      ),
       idempotencyKey: 'real-pg-apply-3',
       accessContext: access,
     });
@@ -167,7 +183,21 @@ describe('Product Work Definition API persistence on real PostgreSQL', () => {
     expect(created.version.authorSource).toMatchObject({
       spec: { kind: 'single_agent', agent_version_id: agentVersionId },
     });
-    expect(created.version.resolvedFingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(created.version.resolvedFingerprint).toMatch(
+      /^sha256:[0-9a-f]{64}$/,
+    );
+
+    const exact = await product.getVersion({
+      versionId: created.version.version.id,
+      accessContext: access,
+    });
+    expect(exact.authorFingerprint).toBe(created.version.authorFingerprint);
+    await expect(
+      product.getVersion({
+        versionId: created.version.version.id,
+        accessContext: foreignAccess,
+      }),
+    ).rejects.toMatchObject({ code: 'work_definition_not_found' });
 
     const identity = new WorkIdentityApi({
       repository: new PostgresWorkIdentityRepository(pool),

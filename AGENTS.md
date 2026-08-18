@@ -4,7 +4,7 @@ This file is the mandatory entrypoint for every coding agent. Read it before cha
 
 ## Repository purpose
 
-Agent Server is an enterprise control plane around external Agent execution. Paseo is the current first-class execution plane. This repository owns product Task/Run semantics, policy, durable orchestration, channels, memory governance, and the adapters that keep execution-plane details out of the core.
+Agent Server is an enterprise control plane around external Agent execution. Paseo is the current first-class execution plane. This repository owns Product Work/WorkRun semantics, technical Task/Run execution semantics, policy, durable orchestration, channels, memory governance, and the adapters that keep execution-plane details out of the core.
 
 Repository documentation must remain usable without private Drive access. Current explicit user decisions and accepted architecture decisions override older repository prose when they conflict.
 
@@ -20,7 +20,7 @@ Never infer that a documented target is implemented. Current code and observed b
 
 ## Non-negotiable architecture boundaries
 
-- Product `Task` is the canonical invocation; `Run` is an attempt.
+- Product-facing execution is `Work Definition -> Work -> WorkRun`; inside that Product boundary, `Task` is the canonical execution-node invocation and technical `Run` is one Task attempt.
 - Domain and application code cannot import Paseo packages. Execution-plane details stay behind the runtime/execution boundary.
 - Team coordination, joins, approvals, retry, budget, and durable state belong to the control plane, not to a runtime prompt.
 - HTTP callers cannot choose arbitrary paid models. Automatic selection must never silently select a paid model.
@@ -82,6 +82,8 @@ docs/                       durable product/engineering authority
 ## Current stage and cadence
 
 The repository is in **Prove / MVE-first product implementation** until the user explicitly changes the stage. The goal is fast learning through the smallest real vertical slice, not production hardening or comprehensive test growth.
+
+Bounded code gardening is allowed when it removes a proven transitional seam or lowers the modification radius for the next MVE probe. It does **not** change the stage, justify broad hardening, or create a standing refactor phase.
 
 For each slice:
 

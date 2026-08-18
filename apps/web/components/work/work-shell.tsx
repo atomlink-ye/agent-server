@@ -4,8 +4,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
   ProductRunTrace,
+  ProductWorkDefinitionVersionResponse,
   ProductWorkRun,
-  WorkDefinitionResponse,
   WorkListItem,
   WorkListResponse,
   WorkResponse,
@@ -13,12 +13,22 @@ import type {
   WorkRunSummary,
 } from '@atomlink-ye/agent-server/product-contract';
 
+import { DefinitionPanel } from '@/components/work/definition-panel';
+import {
+  WORK_TABS,
+  formatTimestamp,
+  latestRunSummary,
+  normalizeWorkTab,
+  productStatePresentation,
+  resultCaptureLabel,
+  workTabHref,
+  type WorkTab,
+} from '@/components/work/work-presentation';
 import { RunTrace } from '@/features/run-trace/run-trace';
 import './work-shell.css';
 import './work-shell-mve.css';
 
 type LoadState = 'loading' | 'available' | 'error';
-type WorkTab = 'overview' | 'runs' | 'artifacts' | 'definition';
 type AnchoredRun = Extract<
   ProductWorkRun,
   { projection_status: 'internally_anchored' }
@@ -27,13 +37,6 @@ type AnchoredTrace = Extract<
   ProductRunTrace,
   { projection_status: 'internally_anchored' }
 >;
-
-const WORK_TABS: readonly { readonly id: WorkTab; readonly label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'runs', label: 'Runs' },
-  { id: 'artifacts', label: 'Artifacts' },
-  { id: 'definition', label: 'Definition' },
-];
 
 export function WorkListShell() {
   const [state, setState] = useState<LoadState>('loading');
@@ -260,10 +263,13 @@ function WorkDetail({
           <h1>{work.title}</h1>
           <p className="work-detail-header__summary">
             {runContext}
-            {run ? ` · ${productStatePresentation(run.work_run.product_state).label}` : ''}
+            {run
+              ? ` · ${productStatePresentation(run.work_run.product_state).label}`
+              : ''}
           </p>
-          <p className="work-detail-surface-note">read-only Work-first surface</p>
-          <p className="work-detail-surface-note">Controls are explicitly unavailable.</p>
+          <p className="work-detail-surface-note">
+            Product Work/Run reads with an explicit Start Run control.
+          </p>
         </div>
       </header>
       <RunTrigger workId={work.id} />
@@ -275,7 +281,12 @@ function WorkDetail({
       {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
-      {activeTab === 'definition' ? <DefinitionPanel data={data} /> : null}
+      {activeTab === 'definition' ? (
+        <DefinitionPanel
+          selectedVersionId={data.selectedDefinitionVersionId}
+          version={data.definitionVersion}
+        />
+      ) : null}
     </>
   );
 }
@@ -327,7 +338,10 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         </span>
         <div>
           <p className="work-shell-kicker">Latest recorded outcome</p>
-          <h2>{outcome ?? resultCaptureLabel(data.run.work_run.result_capture_status)}</h2>
+          <h2>
+            {outcome ??
+              resultCaptureLabel(data.run.work_run.result_capture_status)}
+          </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
         </div>
       </div>
@@ -359,14 +373,16 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
         {data.runs.map((run, index) => {
           const selected = data.run?.work_run.id === run.id;
           const exactDefinition =
-            data.definition?.version.id === run.definition_version_id
-              ? data.definition.version.name
+            data.definitionVersion?.id === run.definition_version_id
+              ? definitionName(data.definitionVersion)
               : null;
           return (
             <li data-selected={selected ? 'true' : undefined} key={run.id}>
               <div className="work-run-list__identity">
                 <strong>{index === 0 ? 'Latest Run' : 'Historical Run'}</strong>
-                <time dateTime={run.created_at}>{formatTimestamp(run.created_at)}</time>
+                <time dateTime={run.created_at}>
+                  {formatTimestamp(run.created_at)}
+                </time>
               </div>
               <div className="work-run-list__definition">
                 <span>Definition</span>
@@ -383,7 +399,9 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
                   {productStatePresentation(data.run.work_run.product_state).label}
                 </span>
               ) : (
-                <span className="work-run-list__quiet">Outcome loads on open</span>
+                <span className="work-run-list__quiet">
+                  Outcome loads on open
+                </span>
               )}
               <a href={workTabHref(data.work.id, 'overview', run.id)}>
                 {selected ? 'View Overview' : 'Open Run'}
@@ -398,7 +416,10 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
 
 function ArtifactsUnavailable() {
   return (
-    <section className="work-capability-unavailable" data-testid="artifacts-unavailable">
+    <section
+      className="work-capability-unavailable"
+      data-testid="artifacts-unavailable"
+    >
       <p className="work-shell-kicker">Artifacts</p>
       <h2>Artifact delivery is not available in the current Product API.</h2>
       <p>
@@ -409,108 +430,13 @@ function ArtifactsUnavailable() {
   );
 }
 
-function DefinitionPanel({ data }: { readonly data: WorkDetailData }) {
-  const selectedVersionId =
-    data.run?.work_run.definition_version_id ?? data.work.definition_version_id;
-  if (!data.definition)
-    return (
-      <section className="work-capability-unavailable" data-testid="definition-unavailable">
-        <p className="work-shell-kicker">Definition</p>
-        <h2>The Definition body could not be loaded.</h2>
-        <p>The selected Product version reference is:</p>
-        <code className="work-definition-ref">{selectedVersionId}</code>
-      </section>
-    );
-
-  const exactVersion = data.definition.version.id === selectedVersionId;
-  if (!exactVersion)
-    return (
-      <section className="work-definition" data-testid="definition-historical-unavailable">
-        <div className="work-section-heading">
-          <p className="work-shell-kicker">Definition</p>
-          <h2>Historical Definition body unavailable</h2>
-          <p>
-            The selected Run used a Definition version that is no longer the
-            Work’s current Definition. The accepted Product API currently
-            exposes the current Definition body only, so this UI does not fall
-            back to internal collaboration APIs.
-          </p>
-        </div>
-        <dl className="work-definition__facts">
-          <Fact label="Selected Run version" value={selectedVersionId} code />
-          <Fact
-            label="Current Definition"
-            value={data.definition.version.name}
-          />
-        </dl>
-      </section>
-    );
-
-  const version = data.definition.version;
-  return (
-    <section className="work-definition" data-testid="definition-viewer">
-      <div className="work-section-heading">
-        <p className="work-shell-kicker">Definition</p>
-        <h2>{version.name}</h2>
-        <p>Read-only Product projection used by the selected Run.</p>
-      </div>
-      <dl className="work-definition__facts">
-        <Fact label="Status" value={humanize(version.status)} />
-        <Fact label="Version reference" value={version.id} code />
-        <Fact
-          label="Description"
-          value={version.description ?? 'No description captured'}
-        />
-        <Fact label="Lead Agent" value={version.spec.lead.name} />
-        <Fact
-          label="Lead Agent version"
-          value={version.spec.lead.agentVersionId}
-          code
-        />
-        <Fact
-          label="Environment version"
-          value={version.environment_version_id}
-          code
-        />
-      </dl>
-      <div className="work-definition__agents">
-        <h3>Agents</h3>
-        <ul>
-          {version.spec.roster.map((agent) => (
-            <li key={agent.name}>
-              <strong>{agent.name}</strong>
-              <code>{agent.agentVersionId}</code>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function Fact({
-  label,
-  value,
-  code = false,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly code?: boolean;
-}) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{code ? <code>{value}</code> : value}</dd>
-    </div>
-  );
-}
-
 type WorkDetailData = {
   readonly work: WorkResponse;
   readonly runs: readonly WorkRunSummary[];
   readonly run: AnchoredRun | null;
   readonly trace: AnchoredTrace | null;
-  readonly definition: WorkDefinitionResponse | null;
+  readonly selectedDefinitionVersionId: string;
+  readonly definitionVersion: ProductWorkDefinitionVersionResponse | null;
 };
 
 async function loadWorkDetail(
@@ -522,15 +448,20 @@ async function loadWorkDetail(
     readJson<{ work: WorkResponse }>(`/api/works/${encodedId}`),
     readJson<WorkRunListResponse>(`/api/works/${encodedId}/runs`),
   ]);
-  const runs = [...runsResponse.work_runs].sort(compareWorkRunsNewestFirst);
+  const runs = runsResponse.work_runs;
   const selectedSummary = selectedRunId
     ? runs.find((run) => run.id === selectedRunId)
     : runs[0];
   if (selectedRunId && !selectedSummary)
     throw new Error('The selected Product WorkRun is not available.');
 
-  const definitionPromise = readOptionalJson<WorkDefinitionResponse>(
-    `/api/works/${encodedId}/definition`,
+  const selectedDefinitionVersionId =
+    selectedSummary?.definition_version_id ??
+    workResponse.work.definition_version_id;
+  const definitionPromise = readOptionalJson<{
+    version: ProductWorkDefinitionVersionResponse;
+  }>(
+    `/api/work-definition-versions/${encodeURIComponent(selectedDefinitionVersionId)}`,
   );
   if (!selectedSummary)
     return {
@@ -538,28 +469,36 @@ async function loadWorkDetail(
       runs,
       run: null,
       trace: null,
-      definition: await definitionPromise,
+      selectedDefinitionVersionId,
+      definitionVersion: (await definitionPromise)?.version ?? null,
     };
 
   const runPath = `/api/works/${encodedId}/runs/${encodeURIComponent(selectedSummary.id)}`;
-  const [run, trace, definition] = await Promise.all([
+  const [run, trace, definitionResponse] = await Promise.all([
     readJson<ProductWorkRun>(runPath),
     readJson<ProductRunTrace>(`${runPath}/trace`),
     definitionPromise,
   ]);
   if (!isAnchoredRun(run) || !isAnchoredTrace(trace))
     throw new Error('The Product WorkRun projection was not captured.');
-  return { work: workResponse.work, runs, run, trace, definition };
+  return {
+    work: workResponse.work,
+    runs,
+    run,
+    trace,
+    selectedDefinitionVersionId,
+    definitionVersion: definitionResponse?.version ?? null,
+  };
 }
 
-function compareWorkRunsNewestFirst(
-  left: WorkRunSummary,
-  right: WorkRunSummary,
-): number {
-  return (
-    right.created_at.localeCompare(left.created_at) ||
-    right.id.localeCompare(left.id)
-  );
+function definitionName(
+  version: ProductWorkDefinitionVersionResponse,
+): string | null {
+  const metadata = version.source.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+    return null;
+  const name = (metadata as Record<string, unknown>).name;
+  return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
 function isAnchoredRun(value: ProductWorkRun): value is AnchoredRun {
@@ -574,21 +513,6 @@ function isAnchoredTrace(value: ProductRunTrace): value is AnchoredTrace {
     'projection_status' in value &&
     value.projection_status === 'internally_anchored'
   );
-}
-
-function normalizeWorkTab(value: string | undefined): WorkTab {
-  return WORK_TABS.some((tab) => tab.id === value)
-    ? (value as WorkTab)
-    : 'overview';
-}
-
-function workTabHref(workId: string, tab: WorkTab, runId?: string) {
-  const query = new URLSearchParams();
-  if (tab !== 'overview') query.set('tab', tab);
-  if (runId) query.set('run', runId);
-  const encodedWorkId = encodeURIComponent(workId);
-  const suffix = query.toString();
-  return `/works/${encodedWorkId}${suffix ? `?${suffix}` : ''}`;
 }
 
 function RunTrigger({ workId }: { readonly workId: string }) {
@@ -636,61 +560,6 @@ function RunTrigger({ workId }: { readonly workId: string }) {
       {state === 'error' && <p>Failed to start Run. Please try again.</p>}
     </div>
   );
-}
-
-function productStatePresentation(state: WorkListItem['product_state']) {
-  switch (state) {
-    case 'running':
-      return { label: 'Running', description: 'The latest Run is active.' };
-    case 'needs_you':
-      return {
-        label: 'Needs You',
-        description: 'Your action is required before Work can safely progress.',
-      };
-    case 'complete':
-      return {
-        label: 'Complete',
-        description: 'The latest Run reached a completed product state.',
-      };
-    case 'problem':
-      return {
-        label: 'Problem',
-        description: 'The latest Run needs review before Work can progress.',
-      };
-    case 'not_captured':
-      return {
-        label: 'State unavailable',
-        description: 'Product state was not captured.',
-      };
-  }
-}
-
-function latestRunSummary(work: WorkListItem) {
-  const latest = work.latest_run_summary;
-  if (!latest) return 'No Run has been recorded yet.';
-  if (latest.result_summary !== null) return latest.result_summary;
-  return resultCaptureLabel(latest.result_capture_status);
-}
-
-function resultCaptureLabel(status: string) {
-  switch (status) {
-    case 'redacted':
-      return 'Result was captured but is redacted.';
-    case 'not_present':
-      return 'No result summary is present.';
-    case 'not_captured':
-      return 'Result capture is unavailable.';
-    default:
-      return 'Result summary captured.';
-  }
-}
-
-function formatTimestamp(value: string) {
-  return `${value.replace('T', ' ').slice(0, 16)} UTC`;
-}
-
-function humanize(value: string) {
-  return value.replaceAll('_', ' ');
 }
 
 async function readJson<T>(path: string): Promise<T> {

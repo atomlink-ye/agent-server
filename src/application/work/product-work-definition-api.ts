@@ -1,13 +1,3 @@
-import { createHash } from 'node:crypto';
-
-import { importAgent } from '../agents/import-agent.js';
-import { publishAgentVersion } from '../agents/publish-agent-version.js';
-import { parseForImport } from '../agents/validate-agent-package.js';
-import {
-  importEnvironment,
-  publishEnvironmentVersion,
-  validateEnvironmentPackage,
-} from '../environments/environment-use-cases.js';
 import type { AgentRegistry } from '../ports/agent-registry.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { EnvironmentRegistry } from '../ports/environment-registry.js';
@@ -19,24 +9,22 @@ import type {
   WorkDefinitionSourceRepository,
 } from '../ports/work-definition-source-repository.js';
 import type { WorkDefinitionResolutionPort } from '../ports/work-definition-resolution.js';
-import { createTeamDefinition } from '../../domain/invokables/team-definition.js';
-import {
-  createDraftTeamVersion,
-  publishTeamVersion,
-  type TeamSpec,
-  type TeamVersion,
-} from '../../domain/invokables/team-version.js';
 import {
   fingerprintWorkDefinitionSource,
-  type WorkDefinitionCompositionSource,
   type WorkDefinitionSourceDefinition,
 } from '../../domain/work/work-definition-source.js';
-import type { WorkInputSchema } from '../../domain/work/work-input-schema.js';
 import type { AccessContext } from '../../platform/access-context.js';
 import {
+  ProductWorkDefinitionInspector,
+  ProductWorkDefinitionMaterializer,
+  stableProductUuid,
+} from './product-work-definition-composition.js';
+import {
+  ProductWorkDefinitionQuery,
+  ownerFromAccessContext,
+} from './product-work-definition-query.js';
+import {
   validateProductWorkDefinition,
-  type ProductWorkDefinitionDocument,
-  type ProductWorkParticipantBinding,
   type WorkDefinitionDiagnostic,
 } from './validate-product-work-definition.js';
 
@@ -98,11 +86,33 @@ export interface ProductWorkDefinitionApiOptions {
   readonly now?: () => Date;
 }
 
+/**
+ * Product facade over small planning/materialization/query services. It keeps the
+ * HTTP-facing lifecycle stable while each composition concern can evolve during
+ * subsequent MVE probes without growing another all-purpose coordinator.
+ */
 export class ProductWorkDefinitionApi {
   private readonly now: () => Date;
+  private readonly inspector: ProductWorkDefinitionInspector;
+  private readonly materializer: ProductWorkDefinitionMaterializer;
+  private readonly query: ProductWorkDefinitionQuery;
 
   public constructor(private readonly options: ProductWorkDefinitionApiOptions) {
     this.now = options.now ?? (() => new Date());
+    this.inspector = new ProductWorkDefinitionInspector({
+      agents: options.agents,
+      environments: options.environments,
+      ...(options.memories ? { memories: options.memories } : {}),
+    });
+    this.materializer = new ProductWorkDefinitionMaterializer({
+      invokables: options.invokables,
+      ...(options.agentRegistry ? { agentRegistry: options.agentRegistry } : {}),
+      ...(options.environmentRegistry
+        ? { environmentRegistry: options.environmentRegistry }
+        : {}),
+      now: this.now,
+    });
+    this.query = new ProductWorkDefinitionQuery(options.repository);
   }
 
   public async plan(input: {
@@ -110,11 +120,13 @@ export class ProductWorkDefinitionApi {
     readonly accessContext: AccessContext;
   }): Promise<ProductWorkDefinitionPlan> {
     const parsed = validateProductWorkDefinition(input.source);
-    if (!parsed.valid) throw new InvalidProductWorkDefinitionError(parsed.diagnostics);
+    if (!parsed.valid)
+      throw new InvalidProductWorkDefinitionError(parsed.diagnostics);
     const owner = ownerFromAccessContext(input.accessContext);
-    const inspection = await this.inspectReferences(parsed.document, owner);
+    const inspection = await this.inspector.inspect(parsed.document, owner);
     const needsPlatformMcp = inspection.participants.some(
-      (participant) => participant.skills.length > 0 || participant.tools.length > 0,
+      (participant) =>
+        participant.skills.length > 0 || participant.tools.length > 0,
     );
     return {
       fingerprint: parsed.fingerprint,
@@ -153,7 +165,8 @@ export class ProductWorkDefinitionApi {
   }): Promise<ProductWorkDefinitionApplyResult> {
     assertIdempotencyKey(input.idempotencyKey);
     const parsed = validateProductWorkDefinition(input.source);
-    if (!parsed.valid) throw new InvalidProductWorkDefinitionError(parsed.diagnostics);
+    if (!parsed.valid)
+      throw new InvalidProductWorkDefinitionError(parsed.diagnostics);
     const owner = ownerFromAccessContext(input.accessContext);
     this.assertRepositorySupportsProductLifecycle();
 
@@ -173,10 +186,10 @@ export class ProductWorkDefinitionApi {
       return { result: 'replayed', definition, version };
     }
 
-    const definitionId = stableUuid(
+    const definitionId = stableProductUuid(
       `work-definition\0${ownerKey(owner)}\0${parsed.metadata.normalizedName}`,
     );
-    const versionId = stableUuid(
+    const versionId = stableProductUuid(
       `work-definition-version\0${definitionId}\0${parsed.fingerprint}`,
     );
 
@@ -219,9 +232,10 @@ export class ProductWorkDefinitionApi {
       return { result: 'converged', definition, version };
     }
 
-    // Validate all referenced and inline packages before any materialization.
-    await this.inspectReferences(parsed.document, owner);
-    const composition = await this.materializeComposition({
+    // Keep validation/reference inspection side-effect free before materializing
+    // any inline Agent, Environment, or internal collaboration binding.
+    await this.inspector.inspect(parsed.document, owner);
+    const composition = await this.materializer.materialize({
       document: parsed.document,
       owner,
       accessContext: input.accessContext,
@@ -268,436 +282,26 @@ export class ProductWorkDefinitionApi {
     return { result: 'created', definition: published.definition, version };
   }
 
-  public async getDefinition(input: {
-    readonly definitionId: string;
-    readonly accessContext: AccessContext;
-  }): Promise<{
-    readonly definition: WorkDefinitionSourceDefinition;
-    readonly latestVersion: ProductWorkDefinitionVersionRecord | null;
-  }> {
-    this.assertRepositorySupportsProductLifecycle();
-    const owner = ownerFromAccessContext(input.accessContext);
-    const definition = await this.options.repository.findDefinition(
-      input.definitionId,
-      owner,
-    );
-    if (!definition) throw new ProductWorkDefinitionNotFoundError();
-    const page = await this.options.repository.listProductVersions!({
-      definitionId: definition.id,
-      owner,
-      limit: 1,
-      cursor: null,
-    });
-    return { definition, latestVersion: page.items[0] ?? null };
+  public getDefinition(
+    input: Parameters<ProductWorkDefinitionQuery['getDefinition']>[0],
+  ) {
+    return this.query.getDefinition(input);
   }
 
-  public async listVersions(input: {
-    readonly definitionId: string;
-    readonly accessContext: AccessContext;
-    readonly limit: number;
-    readonly cursor: string | null;
-  }) {
-    this.assertRepositorySupportsProductLifecycle();
-    const owner = ownerFromAccessContext(input.accessContext);
-    const definition = await this.options.repository.findDefinition(
-      input.definitionId,
-      owner,
-    );
-    if (!definition) throw new ProductWorkDefinitionNotFoundError();
-    return this.options.repository.listProductVersions!({
-      definitionId: input.definitionId,
-      owner,
-      limit: input.limit,
-      cursor: input.cursor,
-    });
+  public listVersions(
+    input: Parameters<ProductWorkDefinitionQuery['listVersions']>[0],
+  ) {
+    return this.query.listVersions(input);
   }
 
-  public async getVersion(input: {
-    readonly versionId: string;
-    readonly accessContext: AccessContext;
-  }): Promise<ProductWorkDefinitionVersionRecord> {
-    this.assertRepositorySupportsProductLifecycle();
-    const owner = ownerFromAccessContext(input.accessContext);
-    const version = await this.options.repository.findProductVersion!(
-      input.versionId,
-      owner,
-    );
-    if (!version) throw new ProductWorkDefinitionNotFoundError();
-    return version;
+  public getVersion(input: Parameters<ProductWorkDefinitionQuery['getVersion']>[0]) {
+    return this.query.getVersion(input);
   }
 
-  public async getInputContract(input: {
-    readonly versionId: string;
-    readonly accessContext: AccessContext;
-  }): Promise<{
-    readonly name: string;
-    readonly description: string | null;
-    readonly schema: WorkInputSchema;
-  } | null> {
-    if (!this.options.repository.findProductVersion) return null;
-    const owner = ownerFromAccessContext(input.accessContext);
-    const version = await this.options.repository.findProductVersion(
-      input.versionId,
-      owner,
-    );
-    if (!version) return null;
-    const parsed = validateProductWorkDefinition(
-      JSON.stringify(version.authorSource),
-    );
-    if (!parsed.valid)
-      throw new Error('Persisted Product Work Definition is invalid.');
-    return {
-      name: parsed.document.metadata.name,
-      description: parsed.document.metadata.description ?? null,
-      schema: parsed.document.spec.input_schema,
-    };
-  }
-
-  private async inspectReferences(
-    document: ProductWorkDefinitionDocument,
-    owner: WorkDefinitionSourceOwner,
-  ): Promise<{
-    readonly participants: ProductWorkDefinitionPlan['participants'];
-    readonly environment: ProductWorkDefinitionPlan['environment'];
-  }> {
-    const bindings: readonly {
-      readonly name: string;
-      readonly role: 'primary' | 'lead' | 'member';
-      readonly binding: ProductWorkParticipantBinding | SingleAgentBinding;
-      readonly path: string;
-    }[] =
-      document.spec.kind === 'single_agent'
-        ? [
-            {
-              name: document.metadata.name,
-              role: 'primary',
-              binding: document.spec,
-              path: '$.spec',
-            },
-          ]
-        : [
-            {
-              name: document.spec.lead.name,
-              role: 'lead',
-              binding: document.spec.lead,
-              path: '$.spec.lead',
-            },
-            ...document.spec.members.map((member, index) => ({
-              name: member.name,
-              role: 'member' as const,
-              binding: member,
-              path: `$.spec.members[${index}]`,
-            })),
-          ];
-
-    const participants: Array<
-      ProductWorkDefinitionPlan['participants'][number]
-    > = [];
-    for (const item of bindings) {
-      if (item.binding.agent_version_id) {
-        const agent = await this.options.agents.resolvePublished(
-          item.binding.agent_version_id,
-          owner,
-          { resolveExtensions: true },
-        );
-        if (!agent)
-          throw new ProductWorkDefinitionReferenceError(
-            `${item.path}.agent_version_id`,
-            'Referenced Agent version was not found or is not published in this owner scope.',
-          );
-        participants.push(
-          Object.freeze({
-            name: item.name,
-            role: item.role,
-            source: 'referenced' as const,
-            agentVersionId: item.binding.agent_version_id,
-            skills: Object.freeze(agent.skills.map((skill) => skill.ref)),
-            tools: Object.freeze([...agent.toolRefs]),
-          }),
-        );
-        continue;
-      }
-
-      const inline = item.binding.agent?.source;
-      if (!inline)
-        throw new ProductWorkDefinitionReferenceError(
-          `${item.path}.agent`,
-          'An inline Agent source is required.',
-        );
-      try {
-        const parsed = parseForImport(inline);
-        participants.push(
-          Object.freeze({
-            name: item.name,
-            role: item.role,
-            source: 'inline' as const,
-            agentVersionId: null,
-            skills: Object.freeze(
-              parsed.package.spec.skills.map((skill) => skill.ref),
-            ),
-            tools: Object.freeze(
-              parsed.package.spec.tools.map((tool) => tool.ref),
-            ),
-          }),
-        );
-      } catch {
-        throw new ProductWorkDefinitionReferenceError(
-          `${item.path}.agent.source`,
-          'Inline Agent source is invalid.',
-        );
-      }
-    }
-
-    const environmentBinding = document.spec;
-    let environment: ProductWorkDefinitionPlan['environment'];
-    if (environmentBinding.environment_version_id) {
-      const version = await this.options.environments.findVersion(
-        owner,
-        environmentBinding.environment_version_id,
-      );
-      if (!version || version.status !== 'published')
-        throw new ProductWorkDefinitionReferenceError(
-          '$.spec.environment_version_id',
-          'Referenced Environment version was not found or is not published in this owner scope.',
-        );
-      environment = Object.freeze({
-        source: 'referenced' as const,
-        environmentVersionId: environmentBinding.environment_version_id,
-      });
-    } else {
-      const source = environmentBinding.environment?.source;
-      if (!source)
-        throw new ProductWorkDefinitionReferenceError(
-          '$.spec.environment',
-          'An inline Environment source is required.',
-        );
-      try {
-        validateEnvironmentPackage(source);
-      } catch {
-        throw new ProductWorkDefinitionReferenceError(
-          '$.spec.environment.source',
-          'Inline Environment source is invalid.',
-        );
-      }
-      environment = Object.freeze({
-        source: 'inline' as const,
-        environmentVersionId: null,
-      });
-    }
-
-    if (document.spec.memory_version_ids.length > 0) {
-      if (!this.options.memories)
-        throw new ProductWorkDefinitionReferenceError(
-          '$.spec.memory_version_ids',
-          'Memory version resolution is unavailable.',
-        );
-      for (const [index, versionId] of document.spec.memory_version_ids.entries()) {
-        const memory = await this.options.memories.findVersion(versionId, owner);
-        if (!memory)
-          throw new ProductWorkDefinitionReferenceError(
-            `$.spec.memory_version_ids[${index}]`,
-            'Referenced Memory version was not found in this owner scope.',
-          );
-      }
-    }
-
-    return {
-      participants: Object.freeze(participants),
-      environment,
-    };
-  }
-
-  private async materializeComposition(input: {
-    readonly document: ProductWorkDefinitionDocument;
-    readonly owner: WorkDefinitionSourceOwner;
-    readonly accessContext: AccessContext;
-    readonly definitionId: string;
-    readonly versionId: string;
-    readonly authorFingerprint: string;
-  }): Promise<WorkDefinitionCompositionSource> {
-    const environmentVersionId = await this.materializeEnvironment(
-      input.document.spec,
-      input.accessContext,
-    );
-    const common = {
-      environmentVersionId,
-      memoryVersionIds: Object.freeze([
-        ...input.document.spec.memory_version_ids,
-      ]),
-      description: input.document.metadata.description ?? null,
-      inputSchema: input.document.spec.input_schema,
-    };
-
-    if (input.document.spec.kind === 'single_agent') {
-      const agentVersionId = await this.materializeAgent(
-        input.document.spec,
-        input.accessContext,
-      );
-      return Object.freeze({
-        kind: 'single_agent' as const,
-        agentVersionId,
-        ...common,
-      });
-    }
-
-    const leadVersionId = await this.materializeAgent(
-      input.document.spec.lead,
-      input.accessContext,
-    );
-    const members: TeamSpec['roster'][number][] = [];
-    for (const member of input.document.spec.members) {
-      members.push({
-        name: member.name,
-        agentVersionId: await this.materializeAgent(
-          member,
-          input.accessContext,
-        ),
-      });
-    }
-    const teamVersionId = await this.materializeInternalTeam({
-      owner: input.owner,
-      definitionId: input.definitionId,
-      versionId: input.versionId,
-      authorFingerprint: input.authorFingerprint,
-      name: input.document.metadata.name,
-      description: input.document.metadata.description ?? null,
-      spec: {
-        lead: {
-          name: input.document.spec.lead.name,
-          agentVersionId: leadVersionId,
-        },
-        roster: members,
-        environmentVersionId,
-      },
-    });
-    return Object.freeze({
-      kind: 'collaboration' as const,
-      teamVersionId,
-      ...common,
-    });
-  }
-
-  private async materializeAgent(
-    binding: ProductWorkParticipantBinding | SingleAgentBinding,
-    accessContext: AccessContext,
-  ): Promise<string> {
-    if (binding.agent_version_id) return binding.agent_version_id;
-    const source = binding.agent?.source;
-    if (!source || !this.options.agentRegistry)
-      throw new ProductWorkDefinitionReferenceError(
-        '$.spec.agent',
-        'Inline Agent materialization is unavailable.',
-      );
-    const digest = sha256Hex(source);
-    const imported = await importAgent(this.options.agentRegistry, {
-      accessContext,
-      idempotencyKey: `work-inline-agent-import:${digest}`,
-      source,
-    });
-    if (imported.version.status === 'published') return imported.version.id;
-    const published = await publishAgentVersion(this.options.agentRegistry, {
-      accessContext,
-      idempotencyKey: `work-inline-agent-publish:${digest}`,
-      versionId: imported.version.id,
-    });
-    return published.id;
-  }
-
-  private async materializeEnvironment(
-    binding: EnvironmentBinding,
-    accessContext: AccessContext,
-  ): Promise<string> {
-    if (binding.environment_version_id) return binding.environment_version_id;
-    const source = binding.environment?.source;
-    if (!source || !this.options.environmentRegistry)
-      throw new ProductWorkDefinitionReferenceError(
-        '$.spec.environment',
-        'Inline Environment materialization is unavailable.',
-      );
-    const digest = sha256Hex(source);
-    const imported = await importEnvironment(this.options.environmentRegistry, {
-      accessContext,
-      idempotencyKey: `work-inline-environment-import:${digest}`,
-      source,
-    });
-    if (imported.version.status === 'published') return imported.version.id;
-    const published = await publishEnvironmentVersion(
-      this.options.environmentRegistry,
-      {
-        accessContext,
-        idempotencyKey: `work-inline-environment-publish:${digest}`,
-        versionId: imported.version.id,
-      },
-    );
-    return published.id;
-  }
-
-  private async materializeInternalTeam(input: {
-    readonly owner: WorkDefinitionSourceOwner;
-    readonly definitionId: string;
-    readonly versionId: string;
-    readonly authorFingerprint: string;
-    readonly name: string;
-    readonly description: string | null;
-    readonly spec: TeamSpec;
-  }): Promise<string> {
-    const teamDefinitionId = stableUuid(
-      `work-definition-team\0${input.definitionId}`,
-    );
-    const teamVersionId = stableUuid(
-      `work-definition-team-version\0${input.versionId}`,
-    );
-    const existing = await this.options.invokables.findTeamVersionById(
-      teamVersionId,
-    );
-    if (existing) {
-      assertInternalTeam(
-        existing,
-        input.owner,
-        teamDefinitionId,
-        input.spec,
-      );
-      if (existing.status === 'published') return existing.id;
-    }
-
-    const clock = () => this.now();
-    const definition = createTeamDefinition({
-      ...input.owner,
-      id: teamDefinitionId,
-      name: `work-${input.name}`,
-      description: 'Internal execution binding for Product Work Definition.',
-      now: clock,
-    });
-    const draft = createDraftTeamVersion({
-      ...input.owner,
-      id: teamVersionId,
-      definitionId: teamDefinitionId,
-      name: input.name,
-      description: input.description,
-      spec: input.spec,
-      now: clock,
-    });
-    const imported = this.options.invokables.importTeamVersionAtomically
-      ? await this.options.invokables.importTeamVersionAtomically({
-          definition,
-          version: draft,
-          idempotencyKey: `product-work-team-import:${input.definitionId}:${input.authorFingerprint}`,
-          requestFingerprint: input.authorFingerprint,
-        })
-      : (await this.options.invokables.saveTeamDefinition(definition),
-        await this.options.invokables.saveTeamVersion(draft),
-        { kind: 'created' as const, definition, version: draft });
-    if (imported.version.status === 'published') return imported.version.id;
-
-    const published = publishTeamVersion(imported.version, clock);
-    if (this.options.invokables.publishTeamVersionAtomically)
-      await this.options.invokables.publishTeamVersionAtomically({
-        version: published,
-        idempotencyKey: `product-work-team-publish:${input.definitionId}:${input.authorFingerprint}`,
-        requestFingerprint: input.authorFingerprint,
-      });
-    else await this.options.invokables.saveTeamVersion(published);
-    return published.id;
+  public getInputContract(
+    input: Parameters<ProductWorkDefinitionQuery['getInputContract']>[0],
+  ) {
+    return this.query.getInputContract(input);
   }
 
   private async resolveAndRecord(
@@ -742,17 +346,6 @@ export class InvalidProductWorkDefinitionError extends Error {
   }
 }
 
-export class ProductWorkDefinitionReferenceError extends Error {
-  public readonly code = 'invalid_reference';
-  public constructor(
-    public readonly path: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ProductWorkDefinitionReferenceError';
-  }
-}
-
 export class ProductWorkDefinitionIdempotencyConflictError extends Error {
   public readonly code = 'idempotency_conflict';
   public constructor() {
@@ -763,33 +356,12 @@ export class ProductWorkDefinitionIdempotencyConflictError extends Error {
   }
 }
 
-export class ProductWorkDefinitionNotFoundError extends Error {
-  public readonly code = 'work_definition_not_found';
-  public constructor() {
-    super('The requested Work Definition was not found.');
-    this.name = 'ProductWorkDefinitionNotFoundError';
-  }
-}
-
-type SingleAgentBinding = Extract<
-  ProductWorkDefinitionDocument['spec'],
-  { readonly kind: 'single_agent' }
->;
-type EnvironmentBinding = Pick<
-  ProductWorkDefinitionDocument['spec'],
-  'environment_version_id' | 'environment'
->;
-
-function ownerFromAccessContext(
-  access: AccessContext,
-): WorkDefinitionSourceOwner {
-  return {
-    tenantId: access.tenantId,
-    workspaceId: access.workspaceId,
-    principalType: access.principalType,
-    principalId: access.principalId,
-  };
-}
+export {
+  ProductWorkDefinitionReferenceError,
+} from './product-work-definition-composition.js';
+export {
+  ProductWorkDefinitionNotFoundError,
+} from './product-work-definition-query.js';
 
 function assertIdempotencyKey(value: string): void {
   if (
@@ -807,37 +379,4 @@ function ownerKey(owner: WorkDefinitionSourceOwner): string {
     owner.principalType,
     owner.principalId,
   ].join('\0');
-}
-
-function stableUuid(seed: string): string {
-  const hex = createHash('sha256')
-    .update(seed, 'utf8')
-    .digest('hex')
-    .slice(0, 32)
-    .split('');
-  hex[12] = '5';
-  hex[16] = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  const value = hex.join('');
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
-}
-
-function sha256Hex(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
-function assertInternalTeam(
-  version: TeamVersion,
-  owner: WorkDefinitionSourceOwner,
-  definitionId: string,
-  spec: TeamSpec,
-): void {
-  if (
-    version.definitionId !== definitionId ||
-    version.tenantId !== owner.tenantId ||
-    version.workspaceId !== owner.workspaceId ||
-    version.principalType !== owner.principalType ||
-    version.principalId !== owner.principalId ||
-    JSON.stringify(version.spec) !== JSON.stringify(spec)
-  )
-    throw new Error('Internal Product Work Team binding conflict.');
 }

@@ -162,6 +162,7 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
 
+
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
         run: |

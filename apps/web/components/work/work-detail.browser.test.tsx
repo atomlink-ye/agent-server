@@ -5,9 +5,8 @@ import { expect, it, vi } from 'vitest';
 import {
   GetWorkResponseSchema,
   ProductRunTraceSuccessSchema,
+  ProductWorkDefinitionVersionSchema,
   ProductWorkRunSuccessSchema,
-  WorkDefinitionResponseSchema,
-  WorkResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 import { WorkDetailShell } from '@/components/work/work-shell';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
@@ -26,53 +25,66 @@ const trace = ProductRunTraceSuccessSchema.parse(
   reworkRecording.recording_documents[0],
 );
 const projectedWorks = projectWorkList(reworkRecording);
-const work = GetWorkResponseSchema.parse({
-  work: trace.work,
-});
+const work = GetWorkResponseSchema.parse({ work: trace.work });
 const runs = projectWorkRunList(reworkRecording, work.work.id);
 const selectedRun = runs.work_runs[0]!;
 const run = ProductWorkRunSuccessSchema.parse({
   work: trace.work,
   work_run: trace.work_run,
-  projection_status: trace.projection_status,
   work_items: trace.work_items,
   actors: trace.actors,
   messages: trace.messages,
+  projection_status: trace.projection_status,
 });
 const environmentVersionId = '00000000-0000-4000-8000-000000000701';
-const definition = WorkDefinitionResponseSchema.parse({
-  definition: {
-    id: work.work.definition_id,
-    name: 'Supplier risk review',
-    description: 'Review supplier risk using the current Work Definition.',
-    created_at: work.work.created_at,
-    updated_at: work.work.updated_at,
-  },
-  version: {
-    id: selectedRun.definition_version_id,
+const leadVersionId = '00000000-0000-4000-8000-000000000702';
+const researcherVersionId = '00000000-0000-4000-8000-000000000703';
+
+const definitionVersion = productDefinitionVersion(
+  selectedRun.definition_version_id,
+  'supplier-risk-review',
+);
+
+function productDefinitionVersion(versionId: string, name: string) {
+  return ProductWorkDefinitionVersionSchema.parse({
+    id: versionId,
     definition_id: work.work.definition_id,
     status: 'published',
-    name: 'Definition v7',
-    description: 'Read-only selected Definition.',
-    environment_version_id: environmentVersionId,
-    spec: {
-      lead: {
-        name: 'Lead',
-        agentVersionId: '00000000-0000-4000-8000-000000000702',
+    fingerprint: `sha256:${'a'.repeat(64)}`,
+    source: {
+      apiVersion: 'agentserver.dev/v1alpha1',
+      kind: 'WorkDefinition',
+      metadata: {
+        name,
+        description: 'Review supplier risk using the selected Definition.',
       },
-      roster: [
-        {
-          name: 'Researcher',
-          agentVersionId: '00000000-0000-4000-8000-000000000703',
+      spec: {
+        kind: 'collaboration',
+        lead: { name: 'Lead', agent_version_id: leadVersionId },
+        members: [
+          { name: 'Researcher', agent_version_id: researcherVersionId },
+        ],
+        environment_version_id: environmentVersionId,
+        memory_version_ids: [],
+        input_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additional_properties: false,
         },
-      ],
-      environmentVersionId,
+      },
+    },
+    resolved: {
+      resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
     },
     created_at: work.work.created_at,
-    updated_at: work.work.updated_at,
     published_at: work.work.updated_at,
-  },
-});
+    links: {
+      self: `/api/v1/work-definition-versions/${versionId}`,
+      definition: `/api/v1/work-definitions/${work.work.definition_id}`,
+    },
+  });
+}
 
 function jsonResponse(body: unknown): Response {
   return {
@@ -82,13 +94,24 @@ function jsonResponse(body: unknown): Response {
   } as Response;
 }
 
-function mockProductReads(definitionBody: unknown = definition) {
+function mockProductReads(input: {
+  readonly runList?: typeof runs;
+  readonly selectedRunId?: string;
+  readonly runBody?: unknown;
+  readonly definition?: ReturnType<typeof productDefinitionVersion>;
+} = {}) {
+  const runList = input.runList ?? runs;
+  const runId = input.selectedRunId ?? selectedRun.id;
+  const definition = input.definition ?? definitionVersion;
   const responses = new Map<string, unknown>([
     [`/api/works/${work.work.id}`, work],
-    [`/api/works/${work.work.id}/runs`, runs],
-    [`/api/works/${work.work.id}/definition`, definitionBody],
-    [`/api/works/${work.work.id}/runs/${selectedRun.id}`, run],
-    [`/api/works/${work.work.id}/runs/${selectedRun.id}/trace`, trace],
+    [`/api/works/${work.work.id}/runs`, runList],
+    [
+      `/api/work-definition-versions/${definition.id}`,
+      { version: definition },
+    ],
+    [`/api/works/${work.work.id}/runs/${runId}`, input.runBody ?? run],
+    [`/api/works/${work.work.id}/runs/${runId}/trace`, trace],
   ]);
   const fetchMock = vi.fn().mockImplementation(async (path: string) => {
     const body = responses.get(path);
@@ -129,25 +152,13 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
         excluded.replaceAll('_', ' '),
       );
 
-    const firstItem = trace.work_items.find((item) => item.attempts.length > 0)!;
-    const firstAttempt = firstItem.attempts[0]!;
-    expect(host.textContent).toContain(
-      `${firstAttempt.attempt_no} / ${firstItem.attempts.length}`,
-    );
-    expect(host.querySelector('[data-testid="chat-detail-link"]')).toBeNull();
-    expect(
-      host.querySelector('[data-testid="trace-coverage-disclosure"]'),
-    ).not.toBeNull();
-
     const paths = fetchMock.mock.calls.map(([path]) => path as string);
     expect(paths).toContain(`/api/works/${work.work.id}`);
     expect(paths).toContain(`/api/works/${work.work.id}/runs`);
-    expect(paths).toContain(`/api/works/${work.work.id}/definition`);
-    expect(paths).toContain(`/api/works/${work.work.id}/runs/${selectedRun.id}`);
     expect(paths).toContain(
-      `/api/works/${work.work.id}/runs/${selectedRun.id}/trace`,
+      `/api/work-definition-versions/${selectedRun.definition_version_id}`,
     );
-    expect(paths.some((path) => path.includes('/tasks'))).toBe(false);
+    expect(paths.some((path) => path.endsWith('/definition'))).toBe(false);
     expect(paths.some((path) => path.includes('/team-runs'))).toBe(false);
   } finally {
     await act(async () => root.unmount());
@@ -156,7 +167,7 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
   }
 });
 
-it('preserves the selected Product WorkRun in Work tab URLs and renders exact Definition data', async () => {
+it('renders the exact Product DefinitionVersion used by the selected Run', async () => {
   mockProductReads();
   const { host, root } = await renderDetail({
     workId: work.work.id,
@@ -165,8 +176,9 @@ it('preserves the selected Product WorkRun in Work tab URLs and renders exact De
   });
   try {
     expect(host.querySelector('[data-testid="definition-viewer"]')).not.toBeNull();
-    expect(host.textContent).toContain('Definition v7');
-    expect(host.textContent).toContain('Lead Agent');
+    expect(host.textContent).toContain('supplier-risk-review');
+    expect(host.textContent).toContain('collaboration');
+    expect(host.textContent).toContain('Lead');
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
     for (const link of host.querySelectorAll<HTMLAnchorElement>('.work-tabs a'))
@@ -178,29 +190,52 @@ it('preserves the selected Product WorkRun in Work tab URLs and renders exact De
   }
 });
 
-it('does not fabricate a historical Definition body when only the current version is available', async () => {
-  const currentDefinition = {
-    ...definition,
-    version: {
-      ...definition.version,
-      id: '00000000-0000-4000-8000-000000000799',
-      name: 'Definition v8',
+it('reads an exact historical DefinitionVersion instead of falling back to Team-shaped Work Definition', async () => {
+  const historicalRunId = '00000000-0000-4000-8000-000000000791';
+  const historicalDefinitionId = '00000000-0000-4000-8000-000000000792';
+  const historicalSummary = {
+    ...selectedRun,
+    id: historicalRunId,
+    definition_version_id: historicalDefinitionId,
+    created_at: '2026-08-15T00:00:00.000Z',
+  };
+  const runList = {
+    ...runs,
+    work_runs: [selectedRun, historicalSummary],
+  };
+  const historicalRun = {
+    ...run,
+    work_run: {
+      ...run.work_run,
+      id: historicalRunId,
+      definition_version_id: historicalDefinitionId,
     },
   };
-  mockProductReads(currentDefinition);
+  const historicalDefinition = productDefinitionVersion(
+    historicalDefinitionId,
+    'supplier-risk-review-v6',
+  );
+  const fetchMock = mockProductReads({
+    runList,
+    selectedRunId: historicalRunId,
+    runBody: historicalRun,
+    definition: historicalDefinition,
+  });
+
   const { host, root } = await renderDetail({
     workId: work.work.id,
     tab: 'definition',
-    selectedRunId: selectedRun.id,
+    selectedRunId: historicalRunId,
   });
   try {
-    expect(
-      host.querySelector('[data-testid="definition-historical-unavailable"]'),
-    ).not.toBeNull();
-    expect(host.textContent).toContain('Historical Definition body unavailable');
-    expect(host.textContent).toContain(selectedRun.definition_version_id);
-    expect(host.textContent).toContain('does not fall back to internal collaboration APIs');
-    expect(host.textContent).not.toContain('Researcher');
+    expect(host.querySelector('[data-testid="definition-viewer"]')).not.toBeNull();
+    expect(host.textContent).toContain('supplier-risk-review-v6');
+    expect(host.textContent).toContain(historicalDefinitionId);
+    const paths = fetchMock.mock.calls.map(([path]) => path as string);
+    expect(paths).toContain(
+      `/api/work-definition-versions/${historicalDefinitionId}`,
+    );
+    expect(paths.some((path) => path.endsWith('/definition'))).toBe(false);
   } finally {
     await act(async () => root.unmount());
     host.remove();

@@ -38,6 +38,7 @@
     "test:real-pg": "vitest run --config vitest.real-pg.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:web": "vitest run --config vitest.web.config.ts",
+    "test:web:canonical": "vitest run --config vitest.web.canonical.config.ts",
     "test:e2e:web": "vitest run --config vitest.e2e.config.ts e2e/web-product-session.e2e.test.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "smoke:runtime": "pnpm local-env run runtime -- node scripts/smoke/runtime-main-flow.mjs",

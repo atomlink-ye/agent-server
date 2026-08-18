@@ -1,7 +1,10 @@
 import type { Hono } from 'hono';
 import type { ProductProjectionApi } from '../../../application/product-projection/product-projection.js';
 import { ProductProjectionNotFoundError } from '../../../application/product-projection/product-projection.js';
-
+import {
+  InvalidProductWorkListCursorError,
+  type ProductWorkListQuery,
+} from '../../../application/ports/product-work-list-query.js';
 import {
   InvalidWorkListCursorError,
   WorkDefinitionValidationError,
@@ -48,6 +51,8 @@ export interface ProductWorkCommandDependencies {
     WorkIdentityApi,
     'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
   >;
+  /** Production supplies latest-first Product list reads; compatibility tests may omit them. */
+  readonly productLists?: ProductWorkListQuery;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
   readonly workExists?: ProductProjectionApi['getWork'];
   readonly workListProjection: ProductProjectionApi['getWorkListItem'];
@@ -64,15 +69,22 @@ export function registerProductWorkCommandRoutes(
   app.use('/api/v1/works/*', requireServiceAccountAccess(authenticator));
 
   app.get('/api/v1/works', async (context) => {
-    const { limit, cursor } = parseListQuery(context.req.url);
+    const { limit, cursor, order } = parseListQuery(context.req.url, 'works');
     const accessContext = getAuthenticatedAccessContext(context);
+    const owner = WorkIdentityApi.ownerFromAccessContext(accessContext);
     try {
-      const page = await dependencies.workIdentity.listWorks({
-        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
-        accessContext,
-        limit,
-        cursor,
-      });
+      const page =
+        order === 'updated_desc'
+          ? await requireProductLists(dependencies).listWorksLatestFirst(owner, {
+              limit,
+              cursor,
+            })
+          : await dependencies.workIdentity.listWorks({
+              owner,
+              accessContext,
+              limit,
+              cursor,
+            });
       const works = await Promise.all(
         page.items.map((work) =>
           dependencies.workListProjection({
@@ -90,7 +102,10 @@ export function registerProductWorkCommandRoutes(
         200,
       );
     } catch (error) {
-      if (error instanceof InvalidWorkListCursorError)
+      if (
+        error instanceof InvalidWorkListCursorError ||
+        error instanceof InvalidProductWorkListCursorError
+      )
         throw new HttpError(400, error.code, error.message);
       if (error instanceof WorkDefinitionValidationError)
         throw new HttpError(400, error.code, error.message);
@@ -98,6 +113,8 @@ export function registerProductWorkCommandRoutes(
     }
   });
 
+  // Compatibility-only Team-shaped read retained for existing consumers. New
+  // Product callers should use /api/v1/work-definition-versions/:versionId.
   app.get('/api/v1/works/:workId/definition', async (context) => {
     const workId = context.req.param('workId');
     if (!isCanonicalUuid(workId))
@@ -128,8 +145,12 @@ export function registerProductWorkCommandRoutes(
     const workId = context.req.param('workId');
     if (!isCanonicalUuid(workId))
       throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
-    const { limit, cursor } = parseListQuery(context.req.url);
+    const { limit, cursor, order } = parseListQuery(
+      context.req.url,
+      'work_runs',
+    );
     const accessContext = getAuthenticatedAccessContext(context);
+    const owner = WorkIdentityApi.ownerFromAccessContext(accessContext);
     try {
       if (dependencies.workExists) {
         try {
@@ -148,13 +169,20 @@ export function registerProductWorkCommandRoutes(
           throw error;
         }
       }
-      const page = await dependencies.workIdentity.listWorkRuns({
-        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
-        accessContext,
-        workId,
-        limit,
-        cursor,
-      });
+      const page =
+        order === 'created_desc'
+          ? await requireProductLists(dependencies).listWorkRunsLatestFirst(
+              owner,
+              workId,
+              { limit, cursor },
+            )
+          : await dependencies.workIdentity.listWorkRuns({
+              owner,
+              accessContext,
+              workId,
+              limit,
+              cursor,
+            });
       return context.json(
         WorkRunListResponseSchema.parse({
           work_runs: page.items.map(toWorkRunResponse),
@@ -163,7 +191,10 @@ export function registerProductWorkCommandRoutes(
         200,
       );
     } catch (error) {
-      if (error instanceof InvalidWorkListCursorError)
+      if (
+        error instanceof InvalidWorkListCursorError ||
+        error instanceof InvalidProductWorkListCursorError
+      )
         throw new HttpError(400, error.code, error.message);
       if (error instanceof WorkDefinitionValidationError)
         throw new HttpError(400, error.code, error.message);
@@ -276,6 +307,14 @@ export function registerProductWorkCommandRoutes(
   });
 }
 
+function requireProductLists(
+  dependencies: ProductWorkCommandDependencies,
+): ProductWorkListQuery {
+  if (!dependencies.productLists)
+    throw new Error('Product latest-first list queries are unavailable.');
+  return dependencies.productLists;
+}
+
 function rejectTechnicalIdempotencyHeader(context: {
   req: { header(name: string): string | undefined };
 }) {
@@ -287,13 +326,20 @@ function rejectTechnicalIdempotencyHeader(context: {
     );
 }
 
-function parseListQuery(url: string): {
+type ProductListKind = 'works' | 'work_runs';
+type ProductListOrder = 'updated_desc' | 'created_desc' | null;
+
+function parseListQuery(
+  url: string,
+  kind: ProductListKind,
+): {
   readonly limit: number;
   readonly cursor: string | null;
+  readonly order: ProductListOrder;
 } {
   const params = new URL(url).searchParams;
   for (const key of params.keys()) {
-    if (key !== 'limit' && key !== 'cursor')
+    if (key !== 'limit' && key !== 'cursor' && key !== 'order')
       throw new HttpError(
         400,
         'invalid_request',
@@ -302,7 +348,12 @@ function parseListQuery(url: string): {
   }
   const limitValues = params.getAll('limit');
   const cursorValues = params.getAll('cursor');
-  if (limitValues.length > 1 || cursorValues.length > 1)
+  const orderValues = params.getAll('order');
+  if (
+    limitValues.length > 1 ||
+    cursorValues.length > 1 ||
+    orderValues.length > 1
+  )
     throw new HttpError(
       400,
       'invalid_request',
@@ -315,8 +366,10 @@ function parseListQuery(url: string): {
       'invalid_cursor',
       'The requested list cursor is invalid.',
     );
+  const rawOrder = orderValues[0] ?? null;
+  const order = normalizeOrder(kind, rawOrder);
   const rawLimit = limitValues[0];
-  if (rawLimit === undefined) return { limit: 20, cursor };
+  if (rawLimit === undefined) return { limit: 20, cursor, order };
   if (!/^(?:0|[1-9][0-9]*)$/.test(rawLimit))
     throw new HttpError(
       400,
@@ -330,7 +383,21 @@ function parseListQuery(url: string): {
       'invalid_limit',
       'The requested list limit is invalid.',
     );
-  return { limit, cursor };
+  return { limit, cursor, order };
+}
+
+function normalizeOrder(
+  kind: ProductListKind,
+  value: string | null,
+): ProductListOrder {
+  if (value === null) return null;
+  if (kind === 'works' && value === 'updated_desc') return value;
+  if (kind === 'work_runs' && value === 'created_desc') return value;
+  throw new HttpError(
+    400,
+    'invalid_request',
+    'The requested list order is invalid.',
+  );
 }
 
 function isCodedError(error: unknown, code: string): boolean {

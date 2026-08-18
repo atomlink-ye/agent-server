@@ -74,6 +74,38 @@ describe('product Work command route', () => {
     expect(WorkListResponseSchema.safeParse(mutated).success).toBe(false);
   });
 
+  it('routes updated_desc through the dedicated Product ordering seam', async () => {
+    const compatibilityList = vi.fn();
+    const latestList = vi.fn().mockResolvedValue({
+      items: [work],
+      nextCursor: 'next-page',
+    });
+    const app = createApp(vi.fn(), {
+      listWorks: compatibilityList,
+      productLists: {
+        listWorksLatestFirst: latestList,
+        listWorkRunsLatestFirst: vi.fn(),
+      },
+      workListProjection: vi.fn().mockResolvedValue({
+        ...workResponse,
+        product_state: 'complete',
+        latest_run_summary: null,
+      }),
+    });
+
+    const response = await app.request(
+      '/api/v1/works?limit=1&order=updated_desc',
+      { headers },
+    );
+    expect(response.status).toBe(200);
+    expect(compatibilityList).not.toHaveBeenCalled();
+    expect(latestList).toHaveBeenCalledWith(
+      { tenantId: 'tenant-1', workspaceId: 'workspace_main' },
+      { limit: 1, cursor: null },
+    );
+    expect(await response.json()).toMatchObject({ next_cursor: 'next-page' });
+  });
+
   it('returns the owner-scoped current definition and version wrapper', async () => {
     const app = createApp(vi.fn(), {
       getWorkDefinition: vi.fn().mockResolvedValue(definitionBinding),
@@ -150,6 +182,7 @@ function createApp(
     listWorks: ProductWorkCommandDependencies['workIdentity']['listWorks'];
     getWorkDefinition: ProductWorkCommandDependencies['workIdentity']['getWorkDefinition'];
     workListProjection: ProductWorkCommandDependencies['workListProjection'];
+    productLists: NonNullable<ProductWorkCommandDependencies['productLists']>;
   }> = {},
 ) {
   const app = new Hono<ApiEnvironment>();
@@ -161,6 +194,7 @@ function createApp(
       listWorkRuns: vi.fn(),
       getWorkDefinition: overrides.getWorkDefinition ?? vi.fn(),
     },
+    ...(overrides.productLists ? { productLists: overrides.productLists } : {}),
     startWorkRun: { execute: vi.fn() },
     workListProjection: overrides.workListProjection ?? vi.fn(),
   });

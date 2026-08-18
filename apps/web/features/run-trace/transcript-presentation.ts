@@ -28,12 +28,15 @@ export function buildEntryPresentation(event: TranscriptEntry): EntryPresentatio
         tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
         detailText: null, detailKind: null, exitCode: null, expandable: true,
       };
+    const hasToolIdentity = event.label !== null || event.tool_name !== null;
     const label = event.label ?? humanize(event.tool_name ?? event.category);
     return {
       icon: iconForTool(event.category), label, summary: meaningfulSummary(label, event.summary), origin: null, platformToolName: null,
       tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
-      detailText: event.detail_text, detailKind: event.detail_kind, exitCode: event.exit_code,
-      expandable: Boolean(event.detail_text) || event.exit_code !== null,
+      detailText: hasToolIdentity ? event.detail_text : null,
+      detailKind: hasToolIdentity ? event.detail_kind : null,
+      exitCode: hasToolIdentity ? event.exit_code : null,
+      expandable: hasToolIdentity && (Boolean(event.detail_text) || event.exit_code !== null),
     };
   }
   if (event.kind === 'child_timeline_item')
@@ -51,8 +54,8 @@ export function buildEntryPresentation(event: TranscriptEntry): EntryPresentatio
   return { icon: 'wrench', label: humanize(event.kind), summary: null, origin: null, platformToolName: null, tone: 'normal', detailText: null, detailKind: null, exitCode: null, expandable: false };
 }
 
-export function humanize(value: string): string {
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+export function humanize(value: string | null | undefined): string {
+  return value?.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? '';
 }
 
 function iconForTool(category: string): string {

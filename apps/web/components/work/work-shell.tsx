@@ -31,7 +31,7 @@ import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import './work-shell.css';
 import './work-shell-mve.css';
 
-type LoadState = 'loading' | 'available' | 'error';
+type LoadState = 'loading' | 'available' | 'error' | 'starting';
 type AnchoredRun = Extract<
   ProductWorkRun,
   { projection_status: 'internally_anchored' }
@@ -160,10 +160,16 @@ export function WorkDetailShell({
         firstLoad = false;
         if (loaded.run?.work_run.product_state === 'running')
           timer = setTimeout(() => void refresh(), 2_000);
-      } catch {
+      } catch (error) {
         if (!active) return;
-        if (firstLoad) setState('error');
-        else timer = setTimeout(() => void refresh(), 2_000);
+        const isProjectionUnavailable = error instanceof ProductReadError && error.status === 503;
+        if (isProjectionUnavailable) {
+          setState('starting');
+          timer = setTimeout(() => void refresh(), 2_000);
+        } else {
+          if (firstLoad) setState('error');
+          else timer = setTimeout(() => void refresh(), 2_000);
+        }
       }
     };
 
@@ -181,9 +187,14 @@ export function WorkDetailShell({
           Loading Work…
         </p>
       ) : null}
+      {state === 'starting' ? (
+        <p className="work-detail-loading" aria-live="polite">
+          Run is starting…
+        </p>
+      ) : null}
       {state === 'error' ? (
         <section className="work-list-state work-list-state--error" role="alert">
-          <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+          <p className="work-list-state__eyebrow">Couldn't load Work</p>
           <h2>The selected Work or Run is unavailable.</h2>
           <p>Return to My Work and choose an available Product Work record.</p>
         </section>
@@ -712,9 +723,11 @@ function isAnchoredTrace(value: ProductRunTrace): value is AnchoredTrace {
 
 function RunTrigger({ workId }: { readonly workId: string }) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   async function handleRun() {
     setState('starting');
+    setErrorDetail(null);
     const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
       method: 'POST',
       cache: 'no-store',
@@ -726,6 +739,8 @@ function RunTrigger({ workId }: { readonly workId: string }) {
       : undefined;
     const runId = runIdFromStart(body);
     if (!response?.ok || !runId) {
+      const errorMsg = formatStartRunError(body);
+      setErrorDetail(errorMsg);
       setState('error');
       return;
     }
@@ -745,9 +760,36 @@ function RunTrigger({ workId }: { readonly workId: string }) {
             ? 'Error — Retry'
             : 'Start Run'}
       </button>
-      {state === 'error' ? <p>Failed to start Run. Please try again.</p> : null}
+      {state === 'error' ? (
+        <p>
+          Failed to start Run{errorDetail ? `: ${errorDetail}` : '. Please try again.'}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function formatStartRunError(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Please try again.';
+  }
+  const record = body as Record<string, unknown>;
+  const error = record.error;
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return 'Please try again.';
+  }
+  const errorRecord = error as Record<string, unknown>;
+  const path = errorRecord.path;
+  const message = errorRecord.message;
+  const code = errorRecord.code;
+
+  if (typeof path === 'string' && path.length > 0) {
+    return `${path} — ${message}`;
+  }
+  if (typeof code === 'string' && code.length > 0) {
+    return `${code}: ${message}`;
+  }
+  return typeof message === 'string' ? message : 'Please try again.';
 }
 
 function runIdFromStart(value: unknown): string | null {
@@ -784,7 +826,7 @@ function WorkListError() {
       data-testid="work-list-error"
       role="alert"
     >
-      <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+      <p className="work-list-state__eyebrow">Couldn't load Work</p>
       <h2>Work records are temporarily unavailable.</h2>
       <p>
         This is a connection problem, not a statement about the status of any
@@ -819,13 +861,19 @@ function WorkListEmpty({ showNewWork, onNewWork }: {
   );
 }
 
+class ProductReadError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function readJson<T>(path: string): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',
     cache: 'no-store',
     headers: { accept: 'application/json' },
   });
-  if (!response.ok) throw new Error('Product read failed.');
+  if (!response.ok) throw new ProductReadError('Product read failed.', response.status);
   return (await response.json()) as T;
 }
 

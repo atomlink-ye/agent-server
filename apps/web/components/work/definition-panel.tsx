@@ -199,7 +199,8 @@ export function DefinitionPanel({
     const runId = runIdFromStart(body);
     if (!response?.ok || !runId) {
       setState('error');
-      setStatusMessage('The current Definition version could not be started.');
+      const errorDetail = formatStartRunError(body);
+      setStatusMessage(`The current Definition version could not be started: ${errorDetail}`);
       return;
     }
     window.location.assign(workTabHref(workId, 'overview', runId));
@@ -544,6 +545,29 @@ export function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
         ]
       : [];
   });
+}
+
+function formatStartRunError(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Please try again.';
+  }
+  const record = body as Record<string, unknown>;
+  const error = record.error;
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return 'Please try again.';
+  }
+  const errorRecord = error as Record<string, unknown>;
+  const path = errorRecord.path;
+  const message = errorRecord.message;
+  const code = errorRecord.code;
+
+  if (typeof path === 'string' && path.length > 0) {
+    return `${path} — ${message}`;
+  }
+  if (typeof code === 'string' && code.length > 0) {
+    return `${code}: ${message}`;
+  }
+  return typeof message === 'string' ? message : 'Please try again.';
 }
 
 function runIdFromStart(value: unknown): string | null {

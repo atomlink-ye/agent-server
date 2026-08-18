@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export const GetProductExecutionDetailRequestSchema = z
+  .object({
+    work_id: z.uuid(),
+    work_run_id: z.uuid(),
+    attempt_id: z.uuid(),
+  })
+  .strict();
+
 const DetailEventBaseSchema = z
   .object({
     sequence: z.number().int().positive(),
@@ -106,6 +114,9 @@ export const ProductExecutionDetailResponseSchema = z
   })
   .strict();
 
+export type GetProductExecutionDetailRequest = z.infer<
+  typeof GetProductExecutionDetailRequestSchema
+>;
 export type ProductExecutionDetailEvent = z.infer<
   typeof ProductExecutionDetailEventSchema
 >;

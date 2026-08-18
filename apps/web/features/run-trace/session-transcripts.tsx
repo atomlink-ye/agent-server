@@ -56,6 +56,9 @@ export function SessionTranscripts({ live, trace }: { readonly live?: boolean; r
   // the response, which is the only identifier the contract guarantees.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
+  // Extract sessions array for use in effects and render
+  const sessions = state.status === 'ready' ? state.data.sessions : [];
+
   useEffect(() => {
     let active = true;
     // Only set loading on initial fetch, not on polling updates
@@ -83,6 +86,13 @@ export function SessionTranscripts({ live, trace }: { readonly live?: boolean; r
       });
     return () => { active = false; };
   }, [trace.work.id, trace.work_run.id]);
+
+  // Auto-select first session when it becomes available
+  useEffect(() => {
+    if (selectedIndex === null && sessions.length > 0) {
+      setSelectedIndex(0);
+    }
+  }, [sessions, selectedIndex]);
 
   // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
   useEffect(() => {
@@ -152,7 +162,11 @@ export function SessionTranscripts({ live, trace }: { readonly live?: boolean; r
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
             <h2>No sessions were captured for this Run.</h2>
-            <p>The Run completed but no per-role session data was recorded.</p>
+            <p>
+              {live
+                ? 'Session data has not started streaming for this Run yet.'
+                : 'The Run completed but no per-role session data was recorded.'}
+            </p>
           </div>
         </div>
       </section>

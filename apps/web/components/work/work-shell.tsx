@@ -163,8 +163,10 @@ export function WorkDetailShell({
       } catch (error) {
         if (!active) return;
         const isProjectionUnavailable = error instanceof ProductReadError && error.status === 503;
-        if (isProjectionUnavailable) {
+        if (isProjectionUnavailable && firstLoad) {
           setState('starting');
+          timer = setTimeout(() => void refresh(), 2_000);
+        } else if (isProjectionUnavailable) {
           timer = setTimeout(() => void refresh(), 2_000);
         } else {
           if (firstLoad) setState('error');
@@ -784,7 +786,8 @@ function formatStartRunError(body: unknown): string {
   const code = errorRecord.code;
 
   if (typeof path === 'string' && path.length > 0) {
-    return `${path} — ${message}`;
+    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
+    return `${codePart}${path} — ${message}`;
   }
   if (typeof code === 'string' && code.length > 0) {
     return `${code}: ${message}`;

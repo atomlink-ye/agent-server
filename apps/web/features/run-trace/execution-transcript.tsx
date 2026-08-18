@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ProductExecutionDetailResponse,
   ProductRunTrace,
@@ -32,6 +32,7 @@ export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; 
   const attempts = useMemo(() => attemptEntries(trace), [trace]);
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: 'idle' });
+  const lastAttemptIdRef = useRef<string | null>(null);
   const selected =
     attempts.find((attempt) => attempt.attemptId === selectedAttemptId) ?? null;
 
@@ -48,8 +49,10 @@ export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; 
       return;
     }
     let active = true;
-    // Only set loading on initial fetch, not on polling updates
-    if (detailState.status === 'idle') {
+    // Only set loading on initial fetch for this attemptId, not on polling updates
+    const isNewAttempt = lastAttemptIdRef.current !== selectedAttemptId;
+    if (isNewAttempt) {
+      lastAttemptIdRef.current = selectedAttemptId;
       setDetailState({ status: 'loading' });
     }
     void fetch(
@@ -71,7 +74,7 @@ export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; 
     return () => {
       active = false;
     };
-  }, [selectedAttemptId, trace.work.id, trace.work_run.id, detailState.status]);
+  }, [selectedAttemptId, trace.work.id, trace.work_run.id]);
 
   // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
   useEffect(() => {

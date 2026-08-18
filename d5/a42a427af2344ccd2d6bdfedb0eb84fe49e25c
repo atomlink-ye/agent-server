@@ -1,0 +1,23 @@
+.github/workflows/real-runtime.yml
+  9733c7e701aea2b6 17,50-53,96,146-148,172-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "d5a42a427af2344ccd2d6bdfedb0eb84fe49e25c",
+  "prompts": {
+    "9733c7e701aea2b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "39e7ec34-7d18-4ac8-8fac-bb632ef1adf8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 6,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    }
+  }
+}

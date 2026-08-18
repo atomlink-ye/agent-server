@@ -39,6 +39,9 @@ export function RunTrace({
       } else if (edge.work_item_id) {
         const item = trace.work_items.find((wi) => wi.id === edge.work_item_id);
         if (item?.attempts.length === 1) setSelectedAttemptKey(item.attempts[0]!.id);
+      } else if (!selectedAttemptKey && attempts.length) {
+        // No association — select the first attempt so Inspector renders
+        setSelectedAttemptKey(attempts[0]!.attempt.id);
       }
       setInspectorMode('conversation');
       setSelectedMessageId(messageId);
@@ -58,6 +61,7 @@ export function RunTrace({
 
   function selectAttempt(attemptId: string) {
     setSelectedAttemptKey(attemptId);
+    setSelectedMessageId(null);
   }
 
   return (
@@ -121,6 +125,7 @@ export function RunTrace({
         <Inspector
           mode={inspectorMode}
           selectedAttempt={selectedAttempt}
+          selectedMessageId={selectedMessageId}
           trace={trace}
           onMode={setInspectorMode}
         />
@@ -524,11 +529,13 @@ function Events({
 function Inspector({
   mode,
   selectedAttempt,
+  selectedMessageId,
   trace,
   onMode,
 }: {
   readonly mode: InspectorMode;
   readonly selectedAttempt: Entry | null;
+  readonly selectedMessageId: string | null;
   readonly trace: Trace;
   readonly onMode: (mode: InspectorMode) => void;
 }) {
@@ -556,7 +563,7 @@ function Inspector({
             ))}
           </div>
           {mode === 'overview' ? <InspectorOverview actorName={actor?.name ?? 'Name not captured'} selectedAttempt={selectedAttempt} /> : null}
-          {mode === 'conversation' ? <ConversationDetail selectedAttempt={selectedAttempt} trace={trace} /> : null}
+          {mode === 'conversation' ? <ConversationDetail selectedAttempt={selectedAttempt} selectedMessageId={selectedMessageId} trace={trace} /> : null}
           {mode === 'activity' ? <ActivityDetail selectedAttempt={selectedAttempt} trace={trace} /> : null}
         </>
       ) : <p className="run-trace__unavailable">Select an Attempt to inspect recorded facts.</p>}
@@ -592,10 +599,10 @@ function InspectorOverview({
   );
 }
 
-function ConversationDetail({ selectedAttempt, trace }: { readonly selectedAttempt: Entry; readonly trace: Trace }) {
+function ConversationDetail({ selectedAttempt, selectedMessageId, trace }: { readonly selectedAttempt: Entry; readonly selectedMessageId: string | null; readonly trace: Trace }) {
   const relevantEdges = trace.edges.filter(
     (edge) => edge.kind === 'observed_message' &&
-      (edge.attempt_id === selectedAttempt.attempt.id || edge.work_item_id === selectedAttempt.workItem.id),
+      (edge.attempt_id === selectedAttempt.attempt.id || edge.work_item_id === selectedAttempt.workItem.id || edge.message_id === selectedMessageId),
   );
   const messages = new Map(trace.messages.map((message) => [message.id, message]));
   return (
@@ -607,7 +614,12 @@ function ConversationDetail({ selectedAttempt, trace }: { readonly selectedAttem
         if (edge.kind !== 'observed_message') return null;
         const message = messages.get(edge.message_id);
         return (
-          <article key={edge.message_id} data-message-id={edge.message_id}>
+          <article
+            className={selectedMessageId === edge.message_id ? 'run-trace__message--targeted' : undefined}
+            data-message-id={edge.message_id}
+            key={edge.message_id}
+            ref={selectedMessageId === edge.message_id ? (el) => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } : undefined}
+          >
             <header>
               <strong>{message?.sender_name ?? 'Agent'}</strong>
               <span>→ {message?.recipient_name ?? 'Agent'}</span>

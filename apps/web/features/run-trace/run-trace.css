@@ -476,3 +476,10 @@
   position: absolute;
   width: 2px;
 }
+
+/* P10: Targeted message highlight in ConversationDetail */
+.run-trace__message--targeted {
+  background: #f0f7ff;
+  border-left: 3px solid #6a8fa8;
+  padding-left: 8px;
+}

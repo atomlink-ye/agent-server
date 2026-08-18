@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 
+import parallelRecording from '@/lib/__fixtures__/product-recordings/parallel-success.json';
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
 import { RunTrace, attemptsFrom } from './run-trace';
 import { parseRecordedTrace } from './recording-test-helpers';
@@ -109,6 +110,44 @@ it('exposes Agent message summaries and MCP activity through Inspector detail le
     await act(async () => activityTab.click());
     expect(host.querySelector('[data-testid="attempt-activity"]')).not.toBeNull();
     expect(host.textContent).toContain('Direct shell');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+it('clicking a timeline message marker locates and highlights the message in ConversationDetail', async () => {
+  const trace = parseRecordedTrace(parallelRecording);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(<RunTrace trace={trace} />);
+    });
+
+    // Switch to Timeline view (default, but be explicit)
+    const timelineTab = [...host.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find(
+      (button) => button.textContent?.trim() === 'Timeline',
+    );
+    if (timelineTab) await act(async () => timelineTab.click());
+
+    // Find a message marker
+    const marker = host.querySelector<HTMLButtonElement>('[data-testid="timeline-message-marker"]');
+    expect(marker).not.toBeNull();
+    if (!marker) return;
+
+    // Click the marker
+    await act(async () => marker.click());
+
+    // Inspector should now be in conversation mode with a targeted message
+    const conversation = host.querySelector('[data-testid="attempt-conversation"]');
+    expect(conversation).not.toBeNull();
+
+    // The targeted message should have the highlight class
+    const targeted = host.querySelector('.run-trace__message--targeted');
+    expect(targeted).not.toBeNull();
+    expect(targeted?.getAttribute('data-message-id')).toBeTruthy();
   } finally {
     await act(async () => root.unmount());
     host.remove();

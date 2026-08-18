@@ -123,6 +123,7 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
   const transcriptStream = [...document.querySelectorAll('[data-testid="transcript-stream"]')]
     .find((element) => element.getClientRects().length > 0);
   if (!transcriptStream) throw new Error('No visible transcript stream was rendered');
+  const transcriptStreams = [...document.querySelectorAll('[data-testid="transcript-stream"]')];
   const rows = [...transcriptStream.querySelectorAll('[data-testid="transcript-activity-row"]')];
   const prose = transcriptStream.querySelector('[data-testid="transcript-prose"]');
   const streamItems = [...transcriptStream.querySelectorAll('.transcript__item')];
@@ -166,6 +167,14 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
   return {
     // Final rendered DOM units, not raw entries and not an intermediate projection.
     session: 'lead', raw_entries: rawEntryCount, rendered_units: streamItems.length,
+    transcript_stream_count: transcriptStreams.length,
+    visible_transcript_stream_count: transcriptStreams.filter((element) => element.getClientRects().length > 0).length,
+    transcript_streams: transcriptStreams.map((element) => ({
+      visible: element.getClientRects().length > 0,
+      parent_class: element.parentElement?.className ?? null,
+      first_source_ordinals: element.querySelector('.transcript__item')?.getAttribute('data-source-ordinals') ?? null,
+      text_prefix: element.textContent?.trim().slice(0, 80) ?? '',
+    })),
     rendered_unit_breakdown: Object.fromEntries(['assistant', 'activity', 'lifecycle', 'footer'].map((kind) => [kind, document.querySelectorAll(`.transcript__item--${kind}`).length])),
     thinking_rows: thinkingRows.length,
     max_consecutive_thinking: maxConsecutiveThinking,

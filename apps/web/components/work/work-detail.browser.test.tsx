@@ -181,8 +181,12 @@ it('renders the exact Product DefinitionVersion used by the selected Run', async
     expect(host.textContent).toContain('Lead');
     expect(host.textContent).toContain('Researcher');
     expect(host.textContent).toContain(selectedRun.definition_version_id);
-    for (const link of host.querySelectorAll<HTMLAnchorElement>('.work-tabs a'))
-      expect(link.getAttribute('href')).toContain(`run=${selectedRun.id}`);
+    // Definition tab link should not contain run= parameter (goes to current editable version)
+    const definitionLink = host.querySelector<HTMLAnchorElement>('.work-tabs a[href*="tab=definition"]');
+    expect(definitionLink?.getAttribute('href')).not.toContain(`run=`);
+    // Other tabs should contain run= parameter (stay on the selected Run)
+    const overviewLink = host.querySelector<HTMLAnchorElement>('.work-tabs a:not([href*="tab="])');
+    expect(overviewLink?.getAttribute('href')).toContain(`run=${selectedRun.id}`);
   } finally {
     await act(async () => root.unmount());
     host.remove();

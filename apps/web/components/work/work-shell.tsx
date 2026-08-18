@@ -272,7 +272,7 @@ function WorkDetail({
 
   return (
     <>
-      <p className="work-shell-breadcrumb">My Work / {work.title}</p>
+      <p className="work-shell-breadcrumb"><a href="/">My Work</a> / {work.title}</p>
       <header className="work-detail-header work-detail-header--stacked">
         <div>
           <p className="work-shell-kicker">Work</p>
@@ -291,7 +291,7 @@ function WorkDetail({
       <RunTrigger workId={work.id} />
       <WorkTabs
         activeTab={activeTab}
-        definitionRunId={selectedRunId}
+        definitionRunId={undefined}
         runId={runId}
         workId={work.id}
       />

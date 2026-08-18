@@ -13,6 +13,10 @@ const agentServerToken = process.env.AGENT_SERVER_SERVICE_TOKEN;
 const testTimeout = 8 * 60 * 1000;
 const marker = 'MVE_CODE_GARDENING_BROWSER_OK';
 let browser: Browser | undefined;
+let t0 = 0;
+function progress(stage: string, extra?: Record<string, unknown>): void {
+  console.log(JSON.stringify({ stage, elapsed_ms: Date.now() - t0, ...extra }));
+}
 
 describe.skipIf(baseUrl === undefined)(
   'web Product Work same-origin E2E shell',
@@ -25,6 +29,8 @@ describe.skipIf(baseUrl === undefined)(
     it(
       'clicks Start Run, reaches real provider output, Trace, and the exact DefinitionVersion',
       async () => {
+        t0 = Date.now();
+        progress('test_start');
         const seeded = await seedProductWork();
         const browserOrigin = new URL(baseUrl!).origin;
         if (!new URL(baseUrl!).hostname.endsWith('.localhost'))
@@ -34,10 +40,12 @@ describe.skipIf(baseUrl === undefined)(
         const page = await (await browser.newContext({ baseURL: baseUrl! })).newPage();
         const paths = captureSameOriginPaths(page, browserOrigin);
 
+        progress('goto_start', { workId: seeded.workId });
         await page.goto(`/works/${seeded.workId}`, {
           waitUntil: 'domcontentloaded',
-          timeout: testTimeout,
+          timeout: 60_000,
         });
+        progress('goto_done');
         await page.getByText('Product Work/Run reads', { exact: false }).waitFor({
           state: 'visible',
           timeout: 30_000,
@@ -63,7 +71,9 @@ describe.skipIf(baseUrl === undefined)(
           seeded.definitionVersionId,
         );
 
+        progress('wait_run_start', { workRunId: started.work_run.id });
         await waitForCompleteWorkRun(page, seeded.workId, started.work_run.id);
+        progress('wait_run_done');
         await page.goto(
           `/works/${seeded.workId}?run=${started.work_run.id}`,
           { waitUntil: 'domcontentloaded', timeout: 30_000 },
@@ -108,21 +118,31 @@ async function seedProductWork(): Promise<{
     throw new Error(
       'Real-browser Work E2E requires AGENT_SERVER_BASE_URL and AGENT_SERVER_SERVICE_TOKEN.',
     );
+  progress('seed_start');
   const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
   const definitionName = `web-gardening-${suffix}`;
+  const fetchWithTimeout = (
+    url: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
   const client = new ProductDeveloperClient({
     baseUrl: agentServerBaseUrl,
     token: agentServerToken,
+    fetch: fetchWithTimeout,
   });
+  progress('seed_apply_start');
   const applied = await client.applyDefinition(
     productDefinitionSource(definitionName, suffix),
     `web-gardening-definition-${suffix}`,
   );
+  progress('seed_apply_done');
+  progress('seed_create_start');
   const created = await client.createWork({
     definitionId: applied.definition.id,
     definitionVersionId: applied.version.id,
     title: `Web gardening ${suffix}`,
   });
+  progress('seed_create_done');
   return {
     workId: created.work.id,
     definitionVersionId: applied.version.id,

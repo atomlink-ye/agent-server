@@ -166,10 +166,31 @@ jobs:
 
       - name: Real-browser Work-first Product golden path
         if: steps.credentials.outputs.available == 'true'
+        env:
+          TEST_KEEP_FAILED: '1'
         run: >-
           pnpm local-env run full -- bash -lc
           'export WEB_E2E_BASE_URL="${WEB_E2E_BASE_URL/127.0.0.1/agent-server-web.localhost}";
           pnpm vitest run --config vitest.e2e.config.ts e2e/web-product-work.e2e.test.ts'
+
+      - name: Dump browser test run logs (on failure)
+        if: failure()
+        run: |
+          echo "=== .local/test-runs contents ==="
+          ls .local/test-runs/ 2>/dev/null || echo "(no test-runs directory)"
+          for dir in .local/test-runs/*/; do
+            [ -d "$dir" ] || continue
+            echo ""
+            echo "=== Run dir: $dir ==="
+            if [ -f "${dir}compose.log" ]; then
+              echo "--- compose.log (last 100 lines) ---"
+              tail -100 "${dir}compose.log"
+            fi
+            if [ -f "${dir}command.log" ]; then
+              echo "--- command.log ---"
+              cat "${dir}command.log"
+            fi
+          done
 
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'

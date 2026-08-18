@@ -1,0 +1,23 @@
+apps/web/features/run-trace/session-transcripts.tsx
+  9733c7e701aea2b6 6,162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "d3cbadfd908d214256f6244a227506124b23b3f4",
+  "prompts": {
+    "9733c7e701aea2b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "39e7ec34-7d18-4ac8-8fac-bb632ef1adf8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 90,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -7,6 +7,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import './execution-transcript.css';
 
 type Trace = Extract<
   ProductRunTrace,

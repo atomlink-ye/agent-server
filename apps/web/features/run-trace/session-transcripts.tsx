@@ -49,12 +49,12 @@ type FetchState =
   | { readonly status: 'ready'; readonly data: SessionTranscriptsResponse }
   | { readonly status: 'unavailable'; readonly statusCode?: number };
 
-export function SessionTranscripts({ live, trace }: { readonly live?: boolean; readonly trace: Trace }) {
+export function SessionTranscripts({ live, trace, initialSelectedIndex }: { readonly live?: boolean; readonly trace: Trace; readonly initialSelectedIndex?: number }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
   // Roles are NOT unique inside a Run: a team can run several 'member'
   // sessions. Selection therefore addresses the session by its position in
   // the response, which is the only identifier the contract guarantees.
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(initialSelectedIndex ?? null);
 
   // Extract sessions array for use in effects and render
   const sessions = state.status === 'ready' ? state.data.sessions : [];

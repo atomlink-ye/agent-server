@@ -129,10 +129,12 @@ export function WorkDetailShell({
   workId,
   tab,
   selectedRunId,
+  selectedSessionIndex,
 }: {
   readonly workId: string;
   readonly tab?: string;
   readonly selectedRunId?: string;
+  readonly selectedSessionIndex?: string;
 }) {
   const [state, setState] = useState<LoadState>('loading');
   const [detail, setDetail] = useState<WorkDetailData | null>(null);
@@ -206,6 +208,7 @@ export function WorkDetailShell({
           activeTab={activeTab}
           data={detail}
           selectedRunId={selectedRunId}
+          selectedSessionIndex={selectedSessionIndex}
         />
       ) : null}
     </WorkShellFrame>
@@ -256,10 +259,12 @@ function WorkDetail({
   activeTab,
   data,
   selectedRunId,
+  selectedSessionIndex,
 }: {
   readonly activeTab: WorkTab;
   readonly data: WorkDetailData;
   readonly selectedRunId?: string;
+  readonly selectedSessionIndex?: string;
 }) {
   const { work, run } = data;
   const runId = run?.work_run.id;
@@ -297,7 +302,12 @@ function WorkDetail({
       />
       {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
-      {activeTab === 'transcript' ? <TranscriptPanel data={data} /> : null}
+      {activeTab === 'transcript' ? (
+        <TranscriptPanel
+          data={data}
+          selectedSessionIndex={selectedSessionIndex ? Number(selectedSessionIndex) : undefined}
+        />
+      ) : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
       {activeTab === 'definition' ? (
         <DefinitionPanel
@@ -345,6 +355,63 @@ function WorkTabs({
   );
 }
 
+type RoleSummary = {
+  readonly label: { readonly name: string; readonly role: string; readonly status: string };
+  readonly summary: {
+    readonly entry_count: number;
+    readonly last_meaningful: { readonly action: string | null } | null;
+  };
+};
+
+function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string }) {
+  const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!active) return;
+        setSessions(body?.sessions ?? []);
+      })
+      .catch(() => {
+        if (active) setSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workId, runId]);
+
+  if (!sessions || sessions.length === 0) return null;
+
+  return (
+    <div className="work-role-cards" data-testid="run-role-cards">
+      {sessions.map((session, index) => {
+        const action = session.summary.last_meaningful?.action;
+        const title = action ? action : 'No meaningful action captured';
+        return (
+          <button
+            className="work-role-card"
+            key={`${session.label.name}-${index}`}
+            onClick={() => {
+              window.location.assign(`${workTabHref(workId, 'transcript', runId)}&session=${index}`);
+            }}
+            title={title}
+            type="button"
+          >
+            <strong>{session.label.name}</strong>
+            <span>{session.label.role}</span>
+            <span>{session.summary.entry_count} entries</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
   if (!data.run || !data.trace)
     return (
@@ -383,12 +450,13 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         </div>
       </div>
       <RunTrace live={live} trace={trace} />
+      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
       <RunReview run={run} trace={trace} />
     </section>
   );
 }
 
-function TranscriptPanel({ data }: { readonly data: WorkDetailData }) {
+function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDetailData; readonly selectedSessionIndex?: number }) {
   const [view, setView] = useState<'sessions' | 'execution'>('sessions');
   if (!data.run || !data.trace)
     return (
@@ -416,7 +484,7 @@ function TranscriptPanel({ data }: { readonly data: WorkDetailData }) {
         ))}
       </div>
       {view === 'sessions' ? (
-        <SessionTranscripts live={live} trace={data.trace} />
+        <SessionTranscripts live={live} trace={data.trace} initialSelectedIndex={selectedSessionIndex} />
       ) : (
         <ExecutionTranscript live={live} trace={data.trace} />
       )}

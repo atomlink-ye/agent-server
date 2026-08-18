@@ -12,6 +12,12 @@ type Geometry = { readonly left: number; readonly width: number };
 type TraceView = 'timeline' | 'map' | 'events';
 type InspectorMode = 'overview' | 'conversation' | 'activity';
 
+const TAB_LABELS: Record<TraceView, string> = {
+  timeline: 'Timeline',
+  map: 'Map',
+  events: 'MCP Activity',
+};
+
 export function RunTrace({
   trace,
   live = false,
@@ -91,7 +97,7 @@ export function RunTrace({
             role="tab"
             type="button"
           >
-            {item[0]!.toUpperCase() + item.slice(1)}
+            {TAB_LABELS[item]}
           </button>
         ))}
       </div>
@@ -483,44 +489,50 @@ function Events({
   return (
     <section className="run-trace__events" aria-label="Recorded MCP activities" data-testid="trace-events">
       <p className="run-trace__events-caption">
-        Recorded MCP activities. Sequence values are shown as captured; no additional ordering or timing is inferred.
+        Recorded MCP activities. Sequence values are shown as captured; no additional ordering or timing is inferred. This panel counts only calls to server-authorized team collaboration MCP tools (message_send, board_submit, and similar); other tool or agent activity in this Run is not included here and is shown in Agent Execution and Session Transcripts instead.
       </p>
       <div className="run-trace__events-toolbar">
-        <strong>Recorded events</strong><span>{trace.mcp_activities.length} captured rows</span>
+        <strong>Recorded MCP activities</strong><span>{trace.mcp_activities.length} captured rows</span>
       </div>
       <div className="run-trace__events-scroll">
-        {trace.mcp_activities.map((activity, snapshotOrdinal) => {
-          const actor = activity.source_refs.actor_id ? actors.get(activity.source_refs.actor_id) : null;
-          const item = activity.source_refs.work_item_id ? items.get(activity.source_refs.work_item_id) : null;
-          const key = activitySnapshotIdentity(activity.activity_id, snapshotOrdinal);
-          const isSelected = selectedKey === key;
-          return (
-            <button
-              aria-pressed={isSelected}
-              className="run-trace__event"
-              key={key}
-              tabIndex={0}
-              type="button"
-              onClick={() => {
-                setSelectedKey(isSelected ? null : key);
-                // Only select an Attempt when attribution is unambiguous (exactly one Attempt).
-                // MCP activity source_refs do not capture attempt_id; selecting the "last"
-                // Attempt would fabricate causality for reworked Work Items (§1.2, §6.2).
-                if (item?.attempts.length === 1) onSelectAttempt(item.attempts[0]!.id);
-              }}
-            >
-              <strong>#{activity.sequence}</strong>
-              <span>{actor?.name ?? 'Name not captured'}</span>
-              <span>{item?.subject ?? 'Work Item not captured'}</span>
-              <span>{`MCP activity: ${humanize(activity.status)}`}</span>
-              <span>{activity.tool_name}</span>
-              <span>{`Result: ${captureLabel(activity.result_capture_status)}`}</span>
-              {item && item.attempts.length > 1 ? (
-                <span className="run-trace__event-uncaptured" data-testid="attempt-not-captured">Attempt attribution not captured</span>
-              ) : null}
-            </button>
-          );
-        })}
+        {trace.mcp_activities.length === 0 ? (
+          <p style={{ padding: '1rem', color: '#666' }}>
+            No collaboration MCP tool calls were captured for this Run. This is often correct — it means this Run's members did not call any of the collaboration MCP tools listed above, not that data is missing.
+          </p>
+        ) : (
+          trace.mcp_activities.map((activity, snapshotOrdinal) => {
+            const actor = activity.source_refs.actor_id ? actors.get(activity.source_refs.actor_id) : null;
+            const item = activity.source_refs.work_item_id ? items.get(activity.source_refs.work_item_id) : null;
+            const key = activitySnapshotIdentity(activity.activity_id, snapshotOrdinal);
+            const isSelected = selectedKey === key;
+            return (
+              <button
+                aria-pressed={isSelected}
+                className="run-trace__event"
+                key={key}
+                tabIndex={0}
+                type="button"
+                onClick={() => {
+                  setSelectedKey(isSelected ? null : key);
+                  // Only select an Attempt when attribution is unambiguous (exactly one Attempt).
+                  // MCP activity source_refs do not capture attempt_id; selecting the "last"
+                  // Attempt would fabricate causality for reworked Work Items (§1.2, §6.2).
+                  if (item?.attempts.length === 1) onSelectAttempt(item.attempts[0]!.id);
+                }}
+              >
+                <strong>#{activity.sequence}</strong>
+                <span>{actor?.name ?? 'Name not captured'}</span>
+                <span>{item?.subject ?? 'Work Item not captured'}</span>
+                <span>{`MCP activity: ${humanize(activity.status)}`}</span>
+                <span>{activity.tool_name}</span>
+                <span>{`Result: ${captureLabel(activity.result_capture_status)}`}</span>
+                {item && item.attempts.length > 1 ? (
+                  <span className="run-trace__event-uncaptured" data-testid="attempt-not-captured">Attempt attribution not captured</span>
+                ) : null}
+              </button>
+            );
+          })
+        )}
       </div>
     </section>
   );

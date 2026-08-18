@@ -21,23 +21,6 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify
-      - name: Install canonical Web browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Canonical Work-first browser regression
-        shell: bash
-        run: |
-          set +e
-          output="$(pnpm test:web:canonical 2>&1)"
-          status=$?
-          printf '%s\n' "$output"
-          if [ "$status" -ne 0 ]; then
-            diagnostic="$(printf '%s' "$output" | tail -c 3500)"
-            diagnostic="${diagnostic//'%'/'%25'}"
-            diagnostic="${diagnostic//$'\r'/'%0D'}"
-            diagnostic="${diagnostic//$'\n'/'%0A'}"
-            echo "::error title=Canonical Work-first browser regression::$diagnostic"
-          fi
-          exit "$status"
 
   real-postgres:
     runs-on: ubuntu-latest

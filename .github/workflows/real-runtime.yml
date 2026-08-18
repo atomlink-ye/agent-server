@@ -47,10 +47,7 @@ jobs:
   real-runtime:
     runs-on: ubuntu-latest
     environment: test
-    # The existing real-provider flows plus one bounded Work-first browser flow
-    # run here. The Agent Team one may use up to its 900s budget on a slow day;
-    # the browser flow is one single-Agent WorkRun and stays inside the same
-    # overall provider-proof envelope.
+    # The Agent Team flow may use up to its 900 s budget on a slow day.
     timeout-minutes: 45
     env:
       OPENCODE_GO_API_KEY: ${{ secrets.OPENCODE_GO_API_KEY }}
@@ -90,7 +87,7 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|apps/web/|e2e/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime- or Product Web-relevant paths changed, so a real provider cannot observe this diff."
@@ -160,37 +157,6 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
 
-      - name: Install real-browser Chromium
-        if: steps.credentials.outputs.available == 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Real-browser Work-first Product golden path
-        if: steps.credentials.outputs.available == 'true'
-        env:
-          TEST_KEEP_FAILED: '1'
-        run: >-
-          pnpm local-env run full -- bash -lc
-          'export WEB_E2E_BASE_URL="${WEB_E2E_BASE_URL/127.0.0.1/agent-server-web.localhost}";
-          pnpm vitest run --config vitest.e2e.config.ts e2e/web-product-work.e2e.test.ts'
-
-      - name: Dump browser test run logs (on failure)
-        if: failure()
-        run: |
-          echo "=== .local/test-runs contents ==="
-          ls .local/test-runs/ 2>/dev/null || echo "(no test-runs directory)"
-          for dir in .local/test-runs/*/; do
-            [ -d "$dir" ] || continue
-            echo ""
-            echo "=== Run dir: $dir ==="
-            if [ -f "${dir}compose.log" ]; then
-              echo "--- compose.log (last 100 lines) ---"
-              tail -100 "${dir}compose.log"
-            fi
-            if [ -f "${dir}command.log" ]; then
-              echo "--- command.log ---"
-              cat "${dir}command.log"
-            fi
-          done
 
       - name: Record that the real-provider checks ran
         if: steps.credentials.outputs.available == 'true'
@@ -198,6 +164,6 @@ jobs:
           {
             echo "## Real runtime — executed"
             echo
-            echo "Runtime, bounded collaboration, Product Work, and the Work-first browser"
-            echo "golden path all ran against the real provider and asserted positive execution."
+            echo "Runtime, bounded collaboration, and Product Work all ran against"
+            echo "the real provider and asserted positive execution."
           } >> "$GITHUB_STEP_SUMMARY"

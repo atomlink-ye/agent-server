@@ -16,7 +16,24 @@
  * Pure: no I/O, no clock, no daemon handle.
  */
 
-/** Coarse bucket a reader can switch on without knowing Paseo's vocabulary. */
+/**
+ * Coarse bucket a reader can switch on without knowing Paseo's vocabulary.
+ *
+ * `permission` and `usage` are declared but are only ever produced from the
+ * live stream: Paseo's stored timeline does not carry them, so a transcript
+ * read back after a run has finished legitimately contains neither. That is a
+ * property of the source, not a gap in this projection.
+ *
+ * We do separately persist both - execution-observation-payload.ts appends
+ * permission and usage observations to run_events - so the missing data could
+ * be joined in. v1 deliberately does not: reconciling Paseo's sequence space
+ * with run_events' would be real complexity for metadata, while the value
+ * here is assistant / reasoning / tool_call. The slots stay in the union so
+ * adding that source later is additive rather than a contract change.
+ *
+ * Whatever fills them, do not backfill from run_events and present the result
+ * as though Paseo returned it.
+ */
 export type RoleTranscriptEntryKind =
   | 'assistant'
   | 'user'
@@ -42,8 +59,14 @@ export interface RoleTranscriptEntry {
   readonly seqEnd: number | null;
   /** Whether this entry came from stored history or from the live subscription. */
   readonly source: 'timeline' | 'stream';
-  /** One line, already trimmed and length-capped. Feeds the overview layer. */
-  readonly summary: string;
+  /**
+   * One line, trimmed and length-capped, for the overview layer.
+   *
+   * Named for what it is: Paseo publishes no summary or preview field, so this
+   * is computed here from `body`. Do not treat it as provider data, do not
+   * round-trip it back to Paseo, and do not persist it as though it were.
+   */
+  readonly derivedSummary: string;
   /** The provider item verbatim. Feeds the chat layer. */
   readonly body: unknown;
 }
@@ -164,7 +187,7 @@ export function projectTimelineEntry(entry: unknown): RoleTranscriptEntry | null
     seqStart: numberField(entry, 'seqStart'),
     seqEnd: numberField(entry, 'seqEnd'),
     source: 'timeline',
-    summary: summarizeItem(kind, itemType, item),
+    derivedSummary: summarizeItem(kind, itemType, item),
     body: item,
   };
 }
@@ -194,7 +217,7 @@ export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | nu
       seqStart: seq,
       seqEnd: seq,
       source: 'stream',
-      summary: summarizeItem(kind, itemType, item),
+      derivedSummary: summarizeItem(kind, itemType, item),
       body: item,
     };
   }
@@ -205,7 +228,7 @@ export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | nu
       : eventType.startsWith('permission')
         ? 'permission'
         : 'lifecycle';
-  const summary =
+  const derivedSummary =
     kind === 'usage' && isRecord(event.usage)
       ? summarizeUsage(event.usage)
       : eventType;
@@ -216,7 +239,7 @@ export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | nu
     seqStart: seq,
     seqEnd: seq,
     source: 'stream',
-    summary,
+    derivedSummary,
     body: event,
   };
 }

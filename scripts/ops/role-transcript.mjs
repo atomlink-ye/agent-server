@@ -70,7 +70,7 @@ try {
       for (const entry of transcript.entries) {
         const seq = entry.seqStart === null ? '-' : String(entry.seqStart);
         process.stdout.write(
-          `[${seq.padStart(4)}] ${entry.kind.padEnd(10)} ${entry.summary}\n`,
+          `[${seq.padStart(4)}] ${entry.kind.padEnd(10)} ${entry.derivedSummary}\n`,
         );
       }
     }

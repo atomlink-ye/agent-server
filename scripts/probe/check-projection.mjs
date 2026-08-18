@@ -49,11 +49,11 @@ for (const line of lines(timelinePath)) {
     `${role}: dropped ${page.page.entries.length - entries.length} entries`,
   );
   require(
-    entries.every((entry) => entry.summary.trim().length > 0),
+    entries.every((entry) => entry.derivedSummary.trim().length > 0),
     `${role}: some entry produced an empty summary`,
   );
   require(
-    entries.every((entry) => entry.summary.length <= 161),
+    entries.every((entry) => entry.derivedSummary.length <= 161),
     `${role}: some summary exceeded the cap`,
   );
   let previous = -Infinity;
@@ -64,9 +64,9 @@ for (const line of lines(timelinePath)) {
     }
   }
   for (const entry of entries.filter((candidate) => candidate.kind === 'assistant').slice(0, 2))
-    process.stdout.write(`    assistant | ${entry.summary}\n`);
+    process.stdout.write(`    assistant | ${entry.derivedSummary}\n`);
   for (const entry of entries.filter((candidate) => candidate.kind === 'tool').slice(0, 2))
-    process.stdout.write(`    tool      | ${entry.summary}\n`);
+    process.stdout.write(`    tool      | ${entry.derivedSummary}\n`);
 }
 
 process.stdout.write('\n=== live stream -> entries ===\n');
@@ -82,7 +82,7 @@ for (const line of lines(streamPath)) {
   perRole[role][entry.kind] = (perRole[role][entry.kind] ?? 0) + 1;
   if (entry.kind === 'usage' && !perRole[role].__usageShown) {
     perRole[role].__usageShown = true;
-    process.stdout.write(`    ${role} usage | ${entry.summary}\n`);
+    process.stdout.write(`    ${role} usage | ${entry.derivedSummary}\n`);
   }
 }
 for (const [role, kinds] of Object.entries(perRole)) {

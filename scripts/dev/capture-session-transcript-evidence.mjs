@@ -6,7 +6,8 @@ const run = 'd1fca21d-e75f-48b1-9be5-4ca8532b402d';
 const pageUrl = `http://127.0.0.1:3001/works/${work}?tab=overview&run=${run}`;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-await page.goto(pageUrl, { waitUntil: 'networkidle' });
+await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+await page.getByTestId('session-transcripts').waitFor({ timeout: 15_000 });
 await page.getByTestId('session-transcripts').scrollIntoViewIfNeeded();
 
 for (const name of ['analyst', 'builder', 'lead']) {

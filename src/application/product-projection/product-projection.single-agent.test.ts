@@ -44,82 +44,60 @@ const workRun: WorkRun = {
   updatedAt: at,
 };
 
-function projectionFor(provenance: string | null) {
-  return createProductProjection({
-    workIdentity: {
-      findWorkById: async () => work,
-      findWorkRunById: async () => workRun,
-      findLatestVisibleWorkRun: async () => workRun,
-    },
-    workFacts: { getByRootTask: async () => null },
-    executionFacts: {
-      listRunsByRootTask: async () => [
-        {
-          runId,
-          taskId: rootTaskId,
-          rootTaskId,
-          status: 'succeeded' as const,
-          provider: 'opencode',
-          model: 'free-model',
-          resultPresent: true,
-          errorCode: null,
-          actorId: null,
-          workItemId: null,
-          startedAt: at,
-          endedAt: '2026-08-16T00:00:01.000Z',
-          createdAt: at,
-          updatedAt: '2026-08-16T00:00:01.000Z',
-        },
-      ],
-      listRunEvents: async () => [
-        {
-          id: '88888888-8888-4888-8888-888888888888',
-          runId,
-          sequence: 1,
-          type: 'succeeded' as const,
-          payloadPresent: false,
-          taskId: rootTaskId,
-          rootTaskId,
-          actorId: null,
-          workItemId: null,
-          activityId: null,
-          activityKind: null,
-          activityCategory: null,
-          activityStatus: null,
-          toolName: null,
-          provenance: null,
-          toolIdentityCaptureStatus: null,
-          responseObserved: null,
-          createdAt: '2026-08-16T00:00:01.000Z',
-        },
-        {
-          id: '99999999-9999-4999-8999-999999999999',
-          runId,
-          sequence: 2,
-          type: 'output' as const,
-          payloadPresent: true,
-          taskId: rootTaskId,
-          rootTaskId,
-          actorId: null,
-          workItemId: null,
-          activityId: 'activity-1',
-          activityKind: 'tool_status' as const,
-          activityCategory: 'other',
-          activityStatus: 'completed',
-          toolName: 'board_create',
-          provenance,
-          toolIdentityCaptureStatus: 'present',
-          responseObserved: false,
-          createdAt: '2026-08-16T00:00:02.000Z',
-        },
-      ],
-    },
-  });
-}
-
 describe('ProductProjection single-Agent Work', () => {
-  it('projects authorized MCP activity from execution facts without a TeamRun', async () => {
-    const projection = projectionFor(SERVER_AUTHORIZED_TEAM_MCP_CATALOG);
+  it('projects WorkRun and Run Trace from execution facts without a TeamRun', async () => {
+    let mcpProvenance: string | null = null;
+    const projection = createProductProjection({
+      workIdentity: {
+        findWorkById: async () => work,
+        findWorkRunById: async () => workRun,
+        findLatestVisibleWorkRun: async () => workRun,
+      },
+      workFacts: { getByRootTask: async () => null },
+      executionFacts: {
+        listRunsByRootTask: async () => [
+          {
+            runId,
+            taskId: rootTaskId,
+            rootTaskId,
+            status: 'succeeded',
+            provider: 'opencode',
+            model: 'free-model',
+            resultPresent: true,
+            errorCode: null,
+            actorId: null,
+            workItemId: null,
+            startedAt: at,
+            endedAt: '2026-08-16T00:00:01.000Z',
+            createdAt: at,
+            updatedAt: '2026-08-16T00:00:01.000Z',
+          },
+        ],
+        listRunEvents: async () => [
+          {
+            id: '88888888-8888-4888-8888-888888888888',
+            runId,
+            sequence: 1,
+            type: 'succeeded',
+            payloadPresent: false,
+            taskId: rootTaskId,
+            rootTaskId,
+            actorId: null,
+            workItemId: null,
+            activityId: null,
+            activityKind: null,
+            activityCategory: null,
+            activityStatus: null,
+            toolName: null,
+            provenance: null,
+            toolIdentityCaptureStatus: null,
+            responseObserved: null,
+            createdAt: '2026-08-16T00:00:01.000Z',
+          },
+          ...(mcpProvenance ? [{ id: '99999999-9999-4999-8999-999999999999', runId, sequence: 2, type: 'output' as const, payloadPresent: true, taskId: rootTaskId, rootTaskId, actorId: null, workItemId: null, activityId: 'activity-1', activityKind: 'tool_status' as const, activityCategory: 'other', activityStatus: 'completed', toolName: 'board_create', provenance: mcpProvenance, toolIdentityCaptureStatus: 'present' as const, responseObserved: false, createdAt: '2026-08-16T00:00:02.000Z' }] : []),
+        ],
+      },
+    });
 
     const detail = await projection.getWorkRun({
       tenantId,
@@ -150,21 +128,21 @@ describe('ProductProjection single-Agent Work', () => {
       task_id: rootTaskId,
       run_id: runId,
     });
-    expect(trace.events).toHaveLength(2);
+    expect(trace.events).toHaveLength(1);
     expect(trace.edges).toEqual([]);
-    expect(trace.mcp_activities).toHaveLength(1);
-    expect(trace.mcp_activities[0]).toMatchObject({
-      tool_name: 'board_create',
-      provenance: SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
-    });
-  });
-
-  it('does not project an MCP activity when the shared provenance is wrong', async () => {
-    const trace = await projectionFor(
-      `${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}x`,
-    ).getRunTrace({ tenantId, workspaceId, workId, workRunId });
-    if (!('projection_status' in trace) || trace.work_run === null)
-      throw new Error('expected captured single-Agent Run Trace projection');
     expect(trace.mcp_activities).toEqual([]);
+
+    mcpProvenance = SERVER_AUTHORIZED_TEAM_MCP_CATALOG;
+    const authorized = await projection.getRunTrace({ tenantId, workspaceId, workId, workRunId });
+    if (!('projection_status' in authorized) || authorized.work_run === null)
+      throw new Error('expected captured single-Agent Run Trace projection');
+    expect(authorized.mcp_activities).toHaveLength(1);
+    expect(authorized.mcp_activities[0]?.provenance).toBe(SERVER_AUTHORIZED_TEAM_MCP_CATALOG);
+
+    mcpProvenance = `${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}x`;
+    const rejected = await projection.getRunTrace({ tenantId, workspaceId, workId, workRunId });
+    if (!('projection_status' in rejected) || rejected.work_run === null)
+      throw new Error('expected captured single-Agent Run Trace projection');
+    expect(rejected.mcp_activities).toEqual([]);
   });
 });

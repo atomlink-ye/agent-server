@@ -1,5 +1,5 @@
 /**
- * Reads one team member's transcript back out of Paseo, addressed by the name
+ * Reads one team member's session transcript back out of Paseo, addressed by the name
  * the roster uses rather than by any Paseo identifier.
  *
  * The caller says "the analyst on this team run"; resolving that to a provider
@@ -12,31 +12,31 @@
  */
 
 import {
-  deriveRoleTranscriptOverview,
+  deriveSessionTranscriptOverview,
   orderEntries,
   projectTimelineEntry,
-  type RoleTranscriptOverview,
-  type RoleTranscriptEntry,
-} from './role-transcript.js';
+  type SessionTranscriptOverview,
+  type SessionTranscriptEntry,
+} from './session-transcript.js';
 
 /** The Paseo-side identity of one roster member, resolved from our own tables. */
-export interface RoleAgentBinding {
+export interface SessionAgentBinding {
   readonly memberName: string;
   readonly role: string;
   readonly status: string;
   readonly providerAgentId: string;
 }
 
-export interface RoleAgentBindingLookup {
+export interface SessionAgentBindingLookup {
   /** Every member of a team run that has reached the point of owning an agent. */
-  findBindings(teamRunId: string): Promise<readonly RoleAgentBinding[]>;
+  findBindings(teamRunId: string): Promise<readonly SessionAgentBinding[]>;
 }
 
 /**
  * The single Paseo call this module makes. Narrower than the full client on
  * purpose: a transcript reader has no business creating or messaging agents.
  */
-export interface RoleTimelineSource {
+export interface SessionTimelineSource {
   fetchAgentTimeline(
     agentId: string,
     options: {
@@ -54,7 +54,7 @@ export interface RoleTimelineSource {
   }>;
 }
 
-export interface RoleTranscript {
+export interface SessionTranscript {
   readonly teamRunId: string;
   readonly memberName: string;
   readonly role: string;
@@ -65,44 +65,52 @@ export interface RoleTranscript {
   readonly hasOlder: boolean;
   /** Paseo's opaque cursor for older entries; pagination is intentionally not implemented here. */
   readonly cursor: unknown | null;
-  readonly overview: RoleTranscriptOverview;
-  readonly entries: readonly RoleTranscriptEntry[];
+  readonly overview: SessionTranscriptOverview;
+  readonly entries: readonly SessionTranscriptEntry[];
 }
 
-export class RoleTranscriptUnknownMemberError extends Error {
-  public constructor(teamRunId: string, memberName: string, known: readonly string[]) {
+export class SessionTranscriptUnknownMemberError extends Error {
+  public constructor(
+    teamRunId: string,
+    memberName: string,
+    known: readonly string[],
+  ) {
     // Name the members that do exist: the overwhelmingly common cause is a
     // typo or a member that has not started yet, and both are obvious from the list.
     super(
       `no member named "${memberName}" with a Paseo agent on team run ${teamRunId}` +
-        (known.length ? `; members with agents: ${known.join(', ')}` : '; no member has an agent yet'),
+        (known.length
+          ? `; members with agents: ${known.join(', ')}`
+          : '; no member has an agent yet'),
     );
-    this.name = 'RoleTranscriptUnknownMemberError';
+    this.name = 'SessionTranscriptUnknownMemberError';
   }
 }
 
 const DEFAULT_LIMIT = 200;
 
-export class RoleTranscriptReader {
+export class SessionTranscriptReader {
   public constructor(
-    private readonly bindings: RoleAgentBindingLookup,
-    private readonly timelines: RoleTimelineSource,
+    private readonly bindings: SessionAgentBindingLookup,
+    private readonly timelines: SessionTimelineSource,
     private readonly limit: number = DEFAULT_LIMIT,
   ) {}
 
-  /** Which roles can be asked for - drives a picker without fetching any transcript. */
-  public async listRoles(teamRunId: string): Promise<readonly RoleAgentBinding[]> {
+  /** Which roster members can be addressed - drives a picker without fetching any transcript. */
+  public async listMembers(
+    teamRunId: string,
+  ): Promise<readonly SessionAgentBinding[]> {
     return this.bindings.findBindings(teamRunId);
   }
 
   public async read(input: {
     readonly teamRunId: string;
     readonly memberName: string;
-  }): Promise<RoleTranscript> {
+  }): Promise<SessionTranscript> {
     const all = await this.bindings.findBindings(input.teamRunId);
     const binding = all.find((entry) => entry.memberName === input.memberName);
     if (!binding) {
-      throw new RoleTranscriptUnknownMemberError(
+      throw new SessionTranscriptUnknownMemberError(
         input.teamRunId,
         input.memberName,
         all.map((entry) => entry.memberName),
@@ -111,10 +119,14 @@ export class RoleTranscriptReader {
     return this.readBinding(input.teamRunId, binding);
   }
 
-  /** Every role in one call, for the overview layer. */
-  public async readAll(teamRunId: string): Promise<readonly RoleTranscript[]> {
+  /** Every roster member in one call, for the overview layer. */
+  public async readAll(
+    teamRunId: string,
+  ): Promise<readonly SessionTranscript[]> {
     const all = await this.bindings.findBindings(teamRunId);
-    return Promise.all(all.map((binding) => this.readBinding(teamRunId, binding)));
+    return Promise.all(
+      all.map((binding) => this.readBinding(teamRunId, binding)),
+    );
   }
 
   async #fetch(providerAgentId: string) {
@@ -127,14 +139,14 @@ export class RoleTranscriptReader {
 
   private async readBinding(
     teamRunId: string,
-    binding: RoleAgentBinding,
-  ): Promise<RoleTranscript> {
+    binding: SessionAgentBinding,
+  ): Promise<SessionTranscript> {
     const page = await this.#fetch(binding.providerAgentId);
     const raw = Array.isArray(page.entries) ? page.entries : [];
     const entries = orderEntries(
       raw
         .map((entry) => projectTimelineEntry(entry))
-        .filter((entry): entry is RoleTranscriptEntry => entry !== null),
+        .filter((entry): entry is SessionTranscriptEntry => entry !== null),
     );
     return {
       teamRunId,
@@ -146,7 +158,7 @@ export class RoleTranscriptReader {
       hasOlder: page.hasOlder === true,
       cursor: page.startCursor ?? null,
       entries,
-      overview: deriveRoleTranscriptOverview({
+      overview: deriveSessionTranscriptOverview({
         memberName: binding.memberName,
         role: binding.role,
         status: binding.status,

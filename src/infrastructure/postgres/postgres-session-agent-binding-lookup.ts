@@ -5,15 +5,15 @@
  * uuid into our own `runtime_sessions`, and the Paseo agent id is that row's
  * `provider_agent_id`. Members whose session has not yet been created, or whose
  * session has no provider agent, are omitted rather than returned with a null
- * id - a caller asking for a transcript cannot do anything with such a row.
+ * id - a caller asking for a session transcript cannot do anything with such a row.
  *
  * Read-only: one SELECT, no writes.
  */
 
 import type {
-  RoleAgentBinding,
-  RoleAgentBindingLookup,
-} from '../../adapters/paseo/role-transcript-reader.js';
+  SessionAgentBinding,
+  SessionAgentBindingLookup,
+} from '../../adapters/paseo/session-transcript-reader.js';
 
 interface Row {
   readonly name: string;
@@ -22,7 +22,7 @@ interface Row {
   readonly provider_agent_id: string;
 }
 
-export class PostgresRoleAgentBindingLookup implements RoleAgentBindingLookup {
+export class PostgresSessionAgentBindingLookup implements SessionAgentBindingLookup {
   public constructor(
     private readonly db: {
       query(
@@ -34,7 +34,7 @@ export class PostgresRoleAgentBindingLookup implements RoleAgentBindingLookup {
 
   public async findBindings(
     teamRunId: string,
-  ): Promise<readonly RoleAgentBinding[]> {
+  ): Promise<readonly SessionAgentBinding[]> {
     const result = await this.db.query(
       `SELECT m.name, m.role, m.status, s.provider_agent_id
          FROM team_member_runs m

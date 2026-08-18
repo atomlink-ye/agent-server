@@ -1,6 +1,6 @@
 /**
  * Projection from raw Paseo timeline items and stream events onto a single
- * transcript entry shape.
+ * Paseo session-transcript entry shape.
  *
  * Two consumers with different appetites read the same entry: an overview that
  * wants one line per entry, and a chat view that wants the whole thing. Paseo
@@ -20,7 +20,7 @@
  * Coarse bucket a reader can switch on without knowing Paseo's vocabulary.
  *
  * `permission` and `usage` are declared but are only ever produced from the
- * live stream: Paseo's stored timeline does not carry them, so a transcript
+ * live stream: Paseo's stored timeline does not carry them, so a session transcript
  * read back after a run has finished legitimately contains neither. That is a
  * property of the source, not a gap in this projection.
  *
@@ -34,7 +34,7 @@
  * Whatever fills them, do not backfill from run_events and present the result
  * as though Paseo returned it.
  */
-export type RoleTranscriptEntryKind =
+export type SessionTranscriptEntryKind =
   | 'assistant'
   | 'user'
   | 'reasoning'
@@ -46,8 +46,8 @@ export type RoleTranscriptEntryKind =
   | 'permission'
   | 'lifecycle';
 
-export interface RoleTranscriptEntry {
-  readonly kind: RoleTranscriptEntryKind;
+export interface SessionTranscriptEntry {
+  readonly kind: SessionTranscriptEntryKind;
   /** Paseo's own `type` discriminator, unmodified. */
   readonly rawType: string;
   readonly timestamp: string;
@@ -71,9 +71,9 @@ export interface RoleTranscriptEntry {
   readonly body: unknown;
 }
 
-export interface RoleTranscriptMeaningfulEntry {
+export interface SessionTranscriptMeaningfulEntry {
   readonly kind: Extract<
-    RoleTranscriptEntryKind,
+    SessionTranscriptEntryKind,
     'assistant' | 'tool' | 'error'
   >;
   readonly rawType: string;
@@ -88,7 +88,7 @@ export interface RoleTranscriptMeaningfulEntry {
  * null historical turn count is deliberate: the timeline does not expose
  * turn boundaries, and this read model does not join run_events to invent one.
  */
-export interface RoleTranscriptOverview {
+export interface SessionTranscriptOverview {
   readonly memberName: string;
   readonly role: string;
   readonly status: string;
@@ -99,7 +99,7 @@ export interface RoleTranscriptOverview {
   readonly lastTimestamp: string | null;
   readonly hasOlder: boolean;
   readonly workRefs: readonly string[];
-  readonly lastMeaningful: RoleTranscriptMeaningfulEntry | null;
+  readonly lastMeaningful: SessionTranscriptMeaningfulEntry | null;
 }
 
 const SUMMARY_MAX_LENGTH = 160;
@@ -108,12 +108,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function stringField(source: Record<string, unknown>, key: string): string | null {
+function stringField(
+  source: Record<string, unknown>,
+  key: string,
+): string | null {
   const value = source[key];
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function numberField(source: Record<string, unknown>, key: string): number | null {
+function numberField(
+  source: Record<string, unknown>,
+  key: string,
+): number | null {
   const value = source[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -125,17 +131,18 @@ export function condense(text: string, maxLength = SUMMARY_MAX_LENGTH): string {
   return `${flattened.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-const KIND_BY_ITEM_TYPE: Readonly<Record<string, RoleTranscriptEntryKind>> = {
-  assistant_message: 'assistant',
-  user_message: 'user',
-  reasoning: 'reasoning',
-  tool_call: 'tool',
-  todo: 'todo',
-  error: 'error',
-  compaction: 'compaction',
-};
+const KIND_BY_ITEM_TYPE: Readonly<Record<string, SessionTranscriptEntryKind>> =
+  {
+    assistant_message: 'assistant',
+    user_message: 'user',
+    reasoning: 'reasoning',
+    tool_call: 'tool',
+    todo: 'todo',
+    error: 'error',
+    compaction: 'compaction',
+  };
 
-export function classifyItemType(itemType: string): RoleTranscriptEntryKind {
+export function classifyItemType(itemType: string): SessionTranscriptEntryKind {
   return KIND_BY_ITEM_TYPE[itemType] ?? 'lifecycle';
 }
 
@@ -236,7 +243,7 @@ function summarizeUsage(usage: Record<string, unknown>): string {
 
 /** Build the one-line form for an item whose kind has already been decided. */
 export function summarizeItem(
-  kind: RoleTranscriptEntryKind,
+  kind: SessionTranscriptEntryKind,
   itemType: string,
   item: Record<string, unknown>,
 ): string {
@@ -246,7 +253,9 @@ export function summarizeItem(
   }
   if (kind === 'reasoning') {
     const text = stringField(item, 'text');
-    return text ? `thought: ${condense(text, SUMMARY_MAX_LENGTH - 9)}` : 'thought';
+    return text
+      ? `thought: ${condense(text, SUMMARY_MAX_LENGTH - 9)}`
+      : 'thought';
   }
   if (kind === 'tool') return summarizeToolCall(item);
   if (kind === 'todo') {
@@ -258,7 +267,9 @@ export function summarizeItem(
   }
   if (kind === 'error') {
     const message = stringField(item, 'message');
-    return message ? `error: ${condense(message, SUMMARY_MAX_LENGTH - 7)}` : 'error';
+    return message
+      ? `error: ${condense(message, SUMMARY_MAX_LENGTH - 7)}`
+      : 'error';
   }
   if (kind === 'compaction') {
     const status = stringField(item, 'status');
@@ -272,7 +283,9 @@ export function summarizeItem(
  * unusable - a missing or non-string item type - because an entry with no
  * discriminator cannot be ordered against or rendered.
  */
-export function projectTimelineEntry(entry: unknown): RoleTranscriptEntry | null {
+export function projectTimelineEntry(
+  entry: unknown,
+): SessionTranscriptEntry | null {
   if (!isRecord(entry) || !isRecord(entry.item)) return null;
   const item = entry.item;
   const itemType = stringField(item, 'type');
@@ -295,7 +308,9 @@ export function projectTimelineEntry(entry: unknown): RoleTranscriptEntry | null
  * are treated exactly as stored entries are; `turn_completed` becomes a usage
  * entry, which is the only place usage is published at all.
  */
-export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | null {
+export function projectStreamPayload(
+  payload: unknown,
+): SessionTranscriptEntry | null {
   if (!isRecord(payload) || !isRecord(payload.event)) return null;
   const event = payload.event;
   const eventType = stringField(event, 'type');
@@ -320,7 +335,7 @@ export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | nu
     };
   }
 
-  const kind: RoleTranscriptEntryKind =
+  const kind: SessionTranscriptEntryKind =
     eventType === 'turn_completed'
       ? 'usage'
       : eventType.startsWith('permission')
@@ -348,8 +363,8 @@ export function projectStreamPayload(payload: unknown): RoleTranscriptEntry | nu
  * way twice.
  */
 export function orderEntries(
-  entries: readonly RoleTranscriptEntry[],
-): readonly RoleTranscriptEntry[] {
+  entries: readonly SessionTranscriptEntry[],
+): readonly SessionTranscriptEntry[] {
   return [...entries]
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
@@ -394,7 +409,7 @@ function collectWorkRefs(
 }
 
 function workRefsFromEntries(
-  entries: readonly RoleTranscriptEntry[],
+  entries: readonly SessionTranscriptEntry[],
 ): readonly string[] {
   const refs = new Set<string>();
   const seen = new WeakSet<object>();
@@ -407,10 +422,10 @@ function workRefsFromEntries(
 }
 
 function isMeaningful(
-  entry: RoleTranscriptEntry,
-): entry is RoleTranscriptEntry & {
+  entry: SessionTranscriptEntry,
+): entry is SessionTranscriptEntry & {
   readonly kind: Extract<
-    RoleTranscriptEntryKind,
+    SessionTranscriptEntryKind,
     'assistant' | 'tool' | 'error'
   >;
 } {
@@ -426,7 +441,9 @@ function isMeaningful(
   );
 }
 
-function lastTimestamp(entries: readonly RoleTranscriptEntry[]): string | null {
+function lastTimestamp(
+  entries: readonly SessionTranscriptEntry[],
+): string | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const timestamp = entries[index]?.timestamp.trim();
     if (timestamp) return timestamp;
@@ -434,15 +451,15 @@ function lastTimestamp(entries: readonly RoleTranscriptEntry[]): string | null {
   return null;
 }
 
-/** Derive a compact role-level read model without adding another data source. */
-export function deriveRoleTranscriptOverview(input: {
+/** Derive a compact member overview without adding another data source. */
+export function deriveSessionTranscriptOverview(input: {
   readonly memberName: string;
   readonly role: string;
   readonly status: string;
   readonly providerAgentId: string;
-  readonly entries: readonly RoleTranscriptEntry[];
+  readonly entries: readonly SessionTranscriptEntry[];
   readonly hasOlder: boolean;
-}): RoleTranscriptOverview {
+}): SessionTranscriptOverview {
   const meaningful = [...input.entries].reverse().find(isMeaningful);
   return {
     memberName: input.memberName,

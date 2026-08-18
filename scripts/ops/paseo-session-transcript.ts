@@ -1,16 +1,16 @@
-// Show one team member's Paseo transcript, addressed by role name.
+// Show one team member's Paseo session transcript, addressed by roster role name.
 //
-//   pnpm role-transcript -- --team-run <uuid>
-//   pnpm role-transcript -- --team-run <uuid> --member analyst
-//   pnpm role-transcript -- --team-run <uuid> --member lead --json
+//   pnpm paseo-session-transcript -- --team-run <uuid>
+//   pnpm paseo-session-transcript -- --team-run <uuid> --member analyst
+//   pnpm paseo-session-transcript -- --team-run <uuid> --member lead --json
 //
-// With no --member it prints one derived overview per role. Read-only: one
-// SELECT and one Paseo timeline fetch per role, no writes anywhere.
+// With no --member it prints one derived overview per roster member. Read-only:
+// one SELECT and one Paseo timeline fetch per member, no writes anywhere.
 import { Pool } from 'pg';
 import { DaemonClient } from '@getpaseo/client';
 
-import { PostgresRoleAgentBindingLookup } from '../../src/infrastructure/postgres/postgres-role-agent-binding-lookup.js';
-import { RoleTranscriptReader } from '../../src/adapters/paseo/role-transcript-reader.js';
+import { PostgresSessionAgentBindingLookup } from '../../src/infrastructure/postgres/postgres-session-agent-binding-lookup.js';
+import { SessionTranscriptReader } from '../../src/adapters/paseo/session-transcript-reader.js';
 
 function flag(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -22,7 +22,7 @@ const memberName = flag('member');
 const asJson = process.argv.includes('--json');
 if (!teamRunId) {
   process.stderr.write(
-    'usage: pnpm role-transcript -- --team-run <uuid> [--member <name>] [--json]\n',
+    'usage: pnpm paseo-session-transcript -- --team-run <uuid> [--member <name>] [--json]\n',
   );
   process.exit(2);
 }
@@ -34,17 +34,17 @@ const wsUrl = process.env.PASEO_WS_URL?.trim() ?? 'ws://127.0.0.1:16767/ws';
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const client = new DaemonClient({
   url: wsUrl,
-  clientId: `role-transcript-${process.pid}`,
+  clientId: `session-transcript-${process.pid}`,
   clientType: 'cli',
-  appVersion: 'agent-server-role-transcript/0.1.0',
+  appVersion: 'agent-server-session-transcript/0.1.0',
   connectTimeoutMs: 30_000,
   reconnect: { enabled: false },
 });
 
 try {
   await client.connect();
-  const reader = new RoleTranscriptReader(
-    new PostgresRoleAgentBindingLookup(pool),
+  const reader = new SessionTranscriptReader(
+    new PostgresSessionAgentBindingLookup(pool),
     client,
   );
 

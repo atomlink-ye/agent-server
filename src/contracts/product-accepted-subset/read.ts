@@ -17,6 +17,8 @@ import {
 import {
   GetProductExecutionDetailRequestSchema,
   ProductExecutionDetailResponseSchema,
+  GetProductSessionTranscriptsRequestSchema,
+  ProductSessionTranscriptsResponseSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
 } from '../product-projection/index.js';
@@ -187,6 +189,21 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_ENDPOINTS = [
     ],
     capabilities: ['attempt_execution_detail', 'safe_provider_output'],
   }),
+  read({
+    id: 'get_session_transcripts',
+    method: 'GET',
+    path: '/api/v1/works/{work_id}/runs/{work_run_id}/session-transcripts',
+    request_schema: 'GetProductSessionTranscriptsRequestSchema',
+    response_schema: 'ProductSessionTranscriptsResponseSchema',
+    responseSchema: ProductSessionTranscriptsResponseSchema,
+    success: [{ status: 200, variant: 'safe_run_events' }],
+    errors: [
+      { status: 400, code: 'invalid_request' },
+      { status: 404, code: 'work_run_not_found' },
+      { status: 503, code: 'projection_unavailable' },
+    ],
+    capabilities: ['member_session_transcripts', 'safe_provider_output'],
+  }),
 ] as const;
 
 // The checker needs the request schemas to be exported from this module so it can
@@ -200,6 +217,7 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_SCHEMAS = {
   GetWorkRunRequestSchema,
   GetRunTraceRequestSchema,
   GetProductExecutionDetailRequestSchema,
+  GetProductSessionTranscriptsRequestSchema,
   WorkListResponseSchema,
   GetWorkResponseSchema,
   WorkDefinitionResponseSchema,
@@ -209,4 +227,5 @@ export const PRODUCT_ACCEPTED_SUBSET_READ_SCHEMAS = {
   ProductWorkRunResponseSchema,
   ProductRunTraceResponseSchema,
   ProductExecutionDetailResponseSchema,
+  ProductSessionTranscriptsResponseSchema,
 } as const;

@@ -17,7 +17,9 @@ const DetailEventBaseSchema = z
 
 export const ProductExecutionLifecycleEventSchema = DetailEventBaseSchema.extend({
   kind: z.literal('lifecycle'),
-  status: z.enum(['started', 'succeeded', 'failed', 'cancelled']),
+  status: z.string().min(1).max(64),
+  /** Provider/run-event discriminator retained for unknown lifecycle kinds. */
+  raw_type: z.string().min(1).max(128).optional(),
 }).strict();
 
 export const ProductExecutionAssistantTextEventSchema = DetailEventBaseSchema.extend({
@@ -110,6 +112,7 @@ export const ProductExecutionDetailResponseSchema = z
     attempt_id: z.uuid(),
     actor_id: z.uuid().nullable(),
     capture_scope: z.literal('safe_run_events'),
+    truncated: z.boolean(),
     events: z.array(ProductExecutionDetailEventSchema).max(2_000),
   })
   .strict();

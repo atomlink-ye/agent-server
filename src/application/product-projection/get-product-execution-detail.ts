@@ -71,18 +71,27 @@ export class GetProductExecutionDetail {
     if (matchingRuns.length === 0) throw new ProductProjectionUnavailableError();
 
     const events: ProductExecutionDetailEvent[] = [];
-    for (const run of matchingRuns) {
+    let truncated = false;
+    for (const [runIndex, run] of matchingRuns.entries()) {
       let after = 0;
       while (events.length < MAX_DETAIL_EVENTS) {
         const page = await this.runEvents.list(run.runId, after, PAGE_SIZE);
-        for (const event of page.events) {
+        for (const [eventIndex, event] of page.events.entries()) {
           const projected = projectRunEvent(event);
-          if (projected) events.push(projected);
-          if (events.length >= MAX_DETAIL_EVENTS) break;
+          events.push(projected);
+          if (events.length >= MAX_DETAIL_EVENTS) {
+            truncated =
+              eventIndex < page.events.length - 1 ||
+              (await hasMoreRunEvents(this.runEvents, run.runId, event.sequence)) ||
+              (await hasMoreRuns(this.runEvents, matchingRuns.slice(runIndex + 1)));
+            break;
+          }
         }
+        if (events.length >= MAX_DETAIL_EVENTS) break;
         if (page.nextCursor === null || page.nextCursor <= after) break;
         after = page.nextCursor;
       }
+      if (events.length >= MAX_DETAIL_EVENTS) break;
     }
 
     events.sort(
@@ -97,16 +106,30 @@ export class GetProductExecutionDetail {
       attempt_id: located.attempt.id,
       actor_id: located.workItem.actor_id,
       capture_scope: 'safe_run_events',
+      truncated,
       events,
     });
   }
 }
 
-function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent | null {
-  if (event.type !== 'output')
+export function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent {
+  const eventType = typeof event.type === 'string' ? event.type : 'unknown';
+  if (
+    !['started', 'output', 'succeeded', 'failed', 'cancelled'].includes(
+      eventType,
+    )
+  )
     return {
       kind: 'lifecycle',
-      status: event.type,
+      status: 'unknown',
+      raw_type: clippedString(eventType, 128) ?? 'unknown',
+      sequence: event.sequence,
+      created_at: event.createdAt,
+    };
+  if (eventType !== 'output')
+    return {
+      kind: 'lifecycle',
+      status: eventType,
       sequence: event.sequence,
       created_at: event.createdAt,
     };
@@ -116,7 +139,7 @@ function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent | null {
   if (kind === 'assistant_text') {
     const text = clippedString(payload.text, 32_000);
     return text === null
-      ? null
+      ? lifecycleEvent(event, kind)
       : {
           kind,
           text,
@@ -126,7 +149,8 @@ function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent | null {
   }
   if (kind === 'reasoning_progress') {
     const status = payload.status;
-    if (status !== 'started' && status !== 'completed') return null;
+    if (status !== 'started' && status !== 'completed')
+      return lifecycleEvent(event, kind);
     return {
       kind,
       status,
@@ -135,9 +159,12 @@ function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent | null {
       created_at: event.createdAt,
     };
   }
-  if (kind === 'tool_status') return projectTool(event, payload);
-  if (kind === 'child_timeline_item') return projectChild(event, payload);
-  if (kind === 'permission') return projectPermission(event, payload);
+  if (kind === 'tool_status')
+    return projectTool(event, payload) ?? lifecycleEvent(event, kind);
+  if (kind === 'child_timeline_item')
+    return projectChild(event, payload) ?? lifecycleEvent(event, kind);
+  if (kind === 'permission')
+    return projectPermission(event, payload) ?? lifecycleEvent(event, kind);
   if (kind === 'usage')
     return {
       kind,
@@ -150,7 +177,39 @@ function projectRunEvent(event: RunEvent): ProductExecutionDetailEvent | null {
       context_window_max_tokens: finiteNumber(payload.context_window_max_tokens),
       context_window_used_tokens: finiteNumber(payload.context_window_used_tokens),
     };
-  return null;
+  return lifecycleEvent(event, kind ?? 'output');
+}
+
+async function hasMoreRunEvents(
+  runEvents: Pick<RunEventRepository, 'list'>,
+  runId: string,
+  after: number,
+): Promise<boolean> {
+  const page = await runEvents.list(runId, after, 1);
+  return page.events.length > 0;
+}
+
+async function hasMoreRuns(
+  runEvents: Pick<RunEventRepository, 'list'>,
+  runs: readonly { readonly runId: string }[],
+): Promise<boolean> {
+  for (const run of runs) {
+    if (await hasMoreRunEvents(runEvents, run.runId, 0)) return true;
+  }
+  return false;
+}
+
+function lifecycleEvent(
+  event: RunEvent,
+  rawType: string,
+): ProductExecutionDetailEvent {
+  return {
+    kind: 'lifecycle',
+    status: 'output',
+    raw_type: clippedString(rawType, 128) ?? 'output',
+    sequence: event.sequence,
+    created_at: event.createdAt,
+  };
 }
 
 function projectTool(

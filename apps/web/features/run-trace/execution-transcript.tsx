@@ -1,0 +1,302 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import type {
+  ProductExecutionDetailResponse,
+  ProductRunTrace,
+} from '@atomlink-ye/agent-server/product-contract';
+
+import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import './execution-transcript.css';
+
+type Trace = Extract<
+  ProductRunTrace,
+  { projection_status: 'internally_anchored' }
+>;
+type AttemptEntry = {
+  readonly actorName: string;
+  readonly workItemId: string;
+  readonly workItemSubject: string;
+  readonly attemptId: string;
+  readonly attemptNo: number;
+};
+
+type DetailState =
+  | { readonly status: 'idle' | 'loading' }
+  | { readonly status: 'ready'; readonly detail: ProductExecutionDetailResponse }
+  | { readonly status: 'unavailable' };
+
+export function ExecutionTranscript({ trace }: { readonly trace: Trace }) {
+  const attempts = useMemo(() => attemptEntries(trace), [trace]);
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
+    attempts[0]?.attemptId ?? null,
+  );
+  const [detailState, setDetailState] = useState<DetailState>({ status: 'idle' });
+  const selected =
+    attempts.find((attempt) => attempt.attemptId === selectedAttemptId) ?? null;
+
+  useEffect(() => {
+    if (!selectedAttemptId) {
+      setDetailState({ status: 'idle' });
+      return;
+    }
+    let active = true;
+    setDetailState({ status: 'loading' });
+    void fetch(
+      `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
+      { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
+    )
+      .then(async (response) => {
+        const body = await response.json().catch(() => undefined);
+        if (!active) return;
+        if (!response.ok || !isExecutionDetail(body)) {
+          setDetailState({ status: 'unavailable' });
+          return;
+        }
+        setDetailState({ status: 'ready', detail: body });
+      })
+      .catch(() => {
+        if (active) setDetailState({ status: 'unavailable' });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedAttemptId, trace.work.id, trace.work_run.id]);
+
+  if (!attempts.length)
+    return (
+      <section className="execution-transcript execution-transcript--empty">
+        <p className="work-shell-kicker">Agent execution</p>
+        <h2>No participant Attempt is available for transcript detail.</h2>
+        <p>Single-Agent or uncaptured collaboration identity may not expose Work Item Attempts yet.</p>
+      </section>
+    );
+
+  return (
+    <section className="execution-transcript" data-testid="execution-transcript">
+      <div className="execution-transcript__heading">
+        <div>
+          <p className="work-shell-kicker">Agent execution</p>
+          <h2>Open a role and inspect what actually happened</h2>
+          <p>
+            Full provider output is read through a Product-scoped Attempt detail endpoint. Technical Run,
+            TeamRun and RuntimeSession identities stay behind the server boundary.
+          </p>
+        </div>
+        <span>Safe run-event detail</span>
+      </div>
+      <div className="execution-transcript__body">
+        <nav className="execution-transcript__attempts" aria-label="Agent Attempts">
+          {attempts.map((attempt) => (
+            <button
+              aria-pressed={attempt.attemptId === selectedAttemptId}
+              key={attempt.attemptId}
+              onClick={() => setSelectedAttemptId(attempt.attemptId)}
+              type="button"
+            >
+              <span>{attempt.actorName}</span>
+              <strong>{attempt.workItemSubject}</strong>
+              <small>Attempt {attempt.attemptNo}</small>
+            </button>
+          ))}
+        </nav>
+        <div className="execution-transcript__detail" aria-live="polite">
+          {selected ? (
+            <header>
+              <div>
+                <strong>{selected.actorName}</strong>
+                <span>{selected.workItemSubject} · Attempt {selected.attemptNo}</span>
+              </div>
+              <span>{detailState.status === 'ready' ? `${detailState.detail.events.length} events` : ''}</span>
+            </header>
+          ) : null}
+          {detailState.status === 'loading' || detailState.status === 'idle' ? (
+            <p className="execution-transcript__notice">Loading captured execution detail…</p>
+          ) : null}
+          {detailState.status === 'unavailable' ? (
+            <p className="execution-transcript__notice">
+              Safe execution detail is unavailable for this Attempt. The Run Trace summaries remain the durable fallback.
+            </p>
+          ) : null}
+          {detailState.status === 'ready' ? (
+            <ExecutionEvents detail={detailState.detail} trace={trace} selected={selected} />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ExecutionEvents({
+  detail,
+  trace,
+  selected,
+}: {
+  readonly detail: ProductExecutionDetailResponse;
+  readonly trace: Trace;
+  readonly selected: AttemptEntry | null;
+}) {
+  const messages = selected
+    ? collaborationMessages(trace, selected.workItemId)
+    : [];
+  const assistantEvents = detail.events.filter(
+    (event) => event.kind === 'assistant_text',
+  );
+  return (
+    <div className="execution-transcript__events">
+      {messages.length ? (
+        <section className="execution-transcript__messages">
+          <h3>Agent-to-Agent messages</h3>
+          {messages.map((message) => (
+            <article key={message.id}>
+              <div>
+                <strong>{message.sender}</strong>
+                <span>→ {message.recipient}</span>
+              </div>
+              <p>{message.summary}</p>
+              <time dateTime={message.createdAt}>{formatTimestamp(message.createdAt)}</time>
+            </article>
+          ))}
+        </section>
+      ) : null}
+      {assistantEvents.length ? (
+        <section className="execution-transcript__answer">
+          <h3>Agent output</h3>
+          {assistantEvents.map((event, index) =>
+            event.kind === 'assistant_text' ? (
+              <article key={`${event.sequence}:${index}`}>
+                <AssistantMarkdown text={event.text} />
+                <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+              </article>
+            ) : null,
+          )}
+        </section>
+      ) : null}
+      <section className="execution-transcript__timeline">
+        <h3>Execution activity</h3>
+        {detail.events.map((event, index) => (
+          <ExecutionEvent key={`${event.sequence}:${event.kind}:${index}`} event={event} />
+        ))}
+      </section>
+      {!detail.events.length ? (
+        <p className="execution-transcript__notice">No safe run events were captured for this Attempt.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ExecutionEvent({
+  event,
+}: {
+  readonly event: ProductExecutionDetailResponse['events'][number];
+}) {
+  if (event.kind === 'assistant_text') return null;
+  if (event.kind === 'reasoning_progress')
+    return (
+      <details className="execution-transcript__event">
+        <summary>
+          <span>Reasoning</span>
+          <strong>{event.status}</strong>
+          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+        </summary>
+        {event.text ? <p>{event.text}</p> : <p>Reasoning text was not captured.</p>}
+      </details>
+    );
+  if (event.kind === 'tool_status')
+    return (
+      <details className="execution-transcript__event">
+        <summary>
+          <span>{event.tool_name ?? event.label ?? humanize(event.category)}</span>
+          <strong>{humanize(event.status)}</strong>
+          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+        </summary>
+        {event.summary ? <p>{event.summary}</p> : null}
+        {event.detail_text ? <pre>{event.detail_text}</pre> : null}
+      </details>
+    );
+  if (event.kind === 'child_timeline_item')
+    return (
+      <details className="execution-transcript__event">
+        <summary>
+          <span>{event.label}</span>
+          <strong>{humanize(event.status)}</strong>
+          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+        </summary>
+        <p>{event.summary}</p>
+        {event.detail_text ? <pre>{event.detail_text}</pre> : null}
+      </details>
+    );
+  if (event.kind === 'permission')
+    return (
+      <div className="execution-transcript__event execution-transcript__event--row">
+        <span>Permission · {humanize(event.category)}</span>
+        <strong>{event.decision ?? humanize(event.status)}</strong>
+        <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+        <p>{event.summary}</p>
+      </div>
+    );
+  if (event.kind === 'usage')
+    return (
+      <div className="execution-transcript__event execution-transcript__event--row">
+        <span>Usage</span>
+        <strong>{usageLabel(event)}</strong>
+        <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+      </div>
+    );
+  return (
+    <div className="execution-transcript__event execution-transcript__event--row">
+      <span>Execution</span>
+      <strong>{humanize(event.status)}</strong>
+      <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
+    </div>
+  );
+}
+
+function attemptEntries(trace: Trace): readonly AttemptEntry[] {
+  const actors = new Map(trace.actors.map((actor) => [actor.id, actor.name ?? 'Name not captured']));
+  return trace.work_items.flatMap((workItem) =>
+    workItem.attempts.map((attempt) => ({
+      actorName: workItem.actor_id
+        ? actors.get(workItem.actor_id) ?? 'Name not captured'
+        : 'Unassigned',
+      workItemId: workItem.id,
+      workItemSubject: workItem.subject,
+      attemptId: attempt.id,
+      attemptNo: attempt.attempt_no,
+    })),
+  );
+}
+
+function collaborationMessages(trace: Trace, workItemId: string) {
+  const messages = new Map(trace.messages.map((message) => [message.id, message]));
+  return trace.edges.flatMap((edge) => {
+    if (edge.kind !== 'observed_message' || edge.work_item_id !== workItemId) return [];
+    const message = messages.get(edge.message_id);
+    return [
+      {
+        id: edge.message_id,
+        sender: message?.sender_name ?? 'Agent',
+        recipient: message?.recipient_name ?? 'Agent',
+        summary: message?.summary ?? 'Message content was not captured.',
+        createdAt: edge.source_created_at,
+      },
+    ];
+  });
+}
+
+function isExecutionDetail(value: unknown): value is ProductExecutionDetailResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.capture_scope === 'safe_run_events' && Array.isArray(record.events);
+}
+
+function usageLabel(event: Extract<ProductExecutionDetailResponse['events'][number], { kind: 'usage' }>) {
+  const parts = [
+    event.input_tokens === null ? null : `${event.input_tokens.toLocaleString()} input`,
+    event.output_tokens === null ? null : `${event.output_tokens.toLocaleString()} output`,
+    event.total_cost_usd === null ? null : `$${event.total_cost_usd.toFixed(4)}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Usage reported';
+}
+function humanize(value: string) { return value.replaceAll('_', ' '); }
+function formatTimestamp(value: string) { return `${value.replace('T', ' ').slice(0, 19)} UTC`; }

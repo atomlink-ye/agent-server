@@ -163,11 +163,14 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
       for (const actor of trace.actors) {
         const lane = laneNodes.find(
           (candidate) =>
-            candidate.querySelector('.run-trace__lane-name')?.textContent ===
+            candidate.querySelector('.run-trace__lane-name span')?.textContent ===
             (actor.name ?? 'Name not captured'),
         );
         expect(lane).toBeDefined();
         if (!lane) continue;
+        expect(
+          lane.querySelector('.run-trace__lane-name small')?.textContent,
+        ).toContain('active');
         for (const entry of entries.filter(
           ({ workItem }) => workItem.actor_id === actor.id,
         )) {
@@ -186,11 +189,10 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
         expect(laneNodes).toHaveLength(3);
         expect(
           laneNodes.map(
-            (lane) => lane.querySelector('.run-trace__lane-name')?.textContent,
+            (lane) =>
+              lane.querySelector('.run-trace__lane-name span')?.textContent,
           ),
-        ).toEqual(
-          trace.actors.map((actor) => actor.name ?? 'Name not captured'),
-        );
+        ).toEqual(trace.actors.map((actor) => actor.name ?? 'Name not captured'));
       }
       expect(
         attemptButtons.every(
@@ -251,9 +253,7 @@ it('renders recorder-backed proportional normal and rework geometry', async () =
         );
         expect(reworkItem).toBeDefined();
         if (!reworkItem) continue;
-        expect(reworkItem.attempts.map((attempt) => attempt.id)).toHaveLength(
-          2,
-        );
+        expect(reworkItem.attempts.map((attempt) => attempt.id)).toHaveLength(2);
         expect(reworkItem.attempts[0]?.id).not.toBe(reworkItem.attempts[1]?.id);
         const feedbackEdges = trace.edges.filter(
           (edge) => edge.kind === 'feedback',

@@ -24,6 +24,7 @@ import {
   workTabHref,
   type WorkTab,
 } from '@/components/work/work-presentation';
+import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
 import { RunTrace } from '@/features/run-trace/run-trace';
 import './work-shell.css';
 import './work-shell-mve.css';
@@ -71,47 +72,9 @@ export function WorkListShell() {
           this view does not infer them from messages or tool output.
         </p>
       </header>
-      {state === 'loading' ? (
-        <section
-          aria-live="polite"
-          className="work-list-state work-list-state--loading"
-          data-testid="work-list-loading"
-        >
-          <p className="work-list-state__eyebrow">Loading</p>
-          <h2>Getting your Work records</h2>
-          <p>We are retrieving the current Product Work projection.</p>
-          <div aria-hidden="true" className="work-list-skeleton">
-            <span />
-            <span />
-            <span />
-          </div>
-        </section>
-      ) : null}
-      {state === 'error' ? (
-        <section
-          className="work-list-state work-list-state--error"
-          data-testid="work-list-error"
-          role="alert"
-        >
-          <p className="work-list-state__eyebrow">Couldn’t load Work</p>
-          <h2>Work records are temporarily unavailable.</h2>
-          <p>
-            This is a connection problem, not a statement about the status of
-            any Work. Refresh the page to try again.
-          </p>
-        </section>
-      ) : null}
-      {state === 'available' && works.length === 0 ? (
-        <section
-          aria-labelledby="work-list-empty-heading"
-          className="work-list-state work-list-state--empty"
-          data-testid="work-list-empty"
-        >
-          <p className="work-list-state__eyebrow">No Work records</p>
-          <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
-          <p>When Work is created, it will appear here as the durable entry.</p>
-        </section>
-      ) : null}
+      {state === 'loading' ? <WorkListLoading /> : null}
+      {state === 'error' ? <WorkListError /> : null}
+      {state === 'available' && works.length === 0 ? <WorkListEmpty /> : null}
       {state === 'available' && works.length > 0 ? (
         <section aria-labelledby="work-list-heading" className="work-list-region">
           <div className="work-list-region__heading">
@@ -163,21 +126,39 @@ export function WorkDetailShell({
 
   useEffect(() => {
     let active = true;
-    setState('loading');
-    setDetail(null);
-    void loadWorkDetail(workId, selectedRunId)
-      .then((loaded) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let firstLoad = true;
+
+    const refresh = async () => {
+      if (firstLoad) {
+        setState('loading');
+        setDetail(null);
+      }
+      try {
+        const loaded = await loadWorkDetail(
+          workId,
+          selectedRunId,
+          activeTab === 'definition' && !selectedRunId,
+        );
         if (!active) return;
         setDetail(loaded);
         setState('available');
-      })
-      .catch(() => {
-        if (active) setState('error');
-      });
+        firstLoad = false;
+        if (loaded.run?.work_run.product_state === 'running')
+          timer = setTimeout(() => void refresh(), 2_000);
+      } catch {
+        if (!active) return;
+        if (firstLoad) setState('error');
+        else timer = setTimeout(() => void refresh(), 2_000);
+      }
+    };
+
+    void refresh();
     return () => {
       active = false;
+      if (timer) clearTimeout(timer);
     };
-  }, [workId, selectedRunId]);
+  }, [workId, selectedRunId, activeTab]);
 
   return (
     <WorkShellFrame testId="work-detail-shell">
@@ -193,7 +174,13 @@ export function WorkDetailShell({
           <p>Return to My Work and choose an available Product Work record.</p>
         </section>
       ) : null}
-      {detail ? <WorkDetail activeTab={activeTab} data={detail} /> : null}
+      {detail ? (
+        <WorkDetail
+          activeTab={activeTab}
+          data={detail}
+          selectedRunId={selectedRunId}
+        />
+      ) : null}
     </WorkShellFrame>
   );
 }
@@ -241,12 +228,14 @@ function WorkShellFrame({
 function WorkDetail({
   activeTab,
   data,
+  selectedRunId,
 }: {
   readonly activeTab: WorkTab;
   readonly data: WorkDetailData;
+  readonly selectedRunId?: string;
 }) {
   const { work, run } = data;
-  const selectedRunId = run?.work_run.id;
+  const runId = run?.work_run.id;
   const latestRunId = data.runs[0]?.id;
   const runContext = !run
     ? 'No Run recorded'
@@ -268,14 +257,15 @@ function WorkDetail({
               : ''}
           </p>
           <p className="work-detail-surface-note">
-            Product Work/Run reads with an explicit Start Run control.
+            Define, run, inspect collaboration, and review through Product facts.
           </p>
         </div>
       </header>
       <RunTrigger workId={work.id} />
       <WorkTabs
         activeTab={activeTab}
-        runId={selectedRunId}
+        definitionRunId={selectedRunId}
+        runId={runId}
         workId={work.id}
       />
       {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
@@ -283,8 +273,15 @@ function WorkDetail({
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
       {activeTab === 'definition' ? (
         <DefinitionPanel
+          currentWorkVersionId={work.definition_version_id}
+          editable={
+            !selectedRunId &&
+            data.selectedDefinitionVersionId === work.definition_version_id
+          }
           selectedVersionId={data.selectedDefinitionVersionId}
           version={data.definitionVersion}
+          workDefinitionId={work.definition_id}
+          workId={work.id}
         />
       ) : null}
     </>
@@ -293,24 +290,29 @@ function WorkDetail({
 
 function WorkTabs({
   activeTab,
+  definitionRunId,
   runId,
   workId,
 }: {
   readonly activeTab: WorkTab;
+  readonly definitionRunId: string | undefined;
   readonly runId: string | undefined;
   readonly workId: string;
 }) {
   return (
     <nav className="work-tabs" aria-label="Work detail sections">
-      {WORK_TABS.map((tab) => (
-        <a
-          aria-current={activeTab === tab.id ? 'page' : undefined}
-          href={workTabHref(workId, tab.id, runId)}
-          key={tab.id}
-        >
-          {tab.label}
-        </a>
-      ))}
+      {WORK_TABS.map((tab) => {
+        const targetRunId = tab.id === 'definition' ? definitionRunId : runId;
+        return (
+          <a
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            href={workTabHref(workId, tab.id, targetRunId)}
+            key={tab.id}
+          >
+            {tab.label}
+          </a>
+        );
+      })}
     </nav>
   );
 }
@@ -325,13 +327,16 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
       </section>
     );
 
-  const outcome = data.run.work_run.result_summary;
-  const stateView = productStatePresentation(data.run.work_run.product_state);
+  const run = data.run;
+  const trace = data.trace;
+  const outcome = run.work_run.result_summary;
+  const stateView = productStatePresentation(run.work_run.product_state);
+  const live = run.work_run.product_state === 'running';
   return (
     <section className="work-overview" data-testid="work-overview">
       <div className="work-overview__summary">
         <span
-          className={`work-state-pill work-state-pill--${data.run.work_run.product_state}`}
+          className={`work-state-pill work-state-pill--${run.work_run.product_state}`}
           data-testid="outcome-product-state"
         >
           {stateView.label}
@@ -339,14 +344,83 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         <div>
           <p className="work-shell-kicker">Latest recorded outcome</p>
           <h2>
-            {outcome ??
-              resultCaptureLabel(data.run.work_run.result_capture_status)}
+            {outcome ?? resultCaptureLabel(run.work_run.result_capture_status)}
           </h2>
           <p data-testid="attention-basis">{stateView.description}</p>
+          {live ? (
+            <p className="work-live-note">
+              Refreshing captured Product facts while this Run is active.
+            </p>
+          ) : null}
         </div>
       </div>
-      <RunTrace trace={data.trace} />
+      <RunTrace live={live} trace={trace} />
+      <ExecutionTranscript trace={trace} />
+      <RunReview run={run} trace={trace} />
     </section>
+  );
+}
+
+function RunReview({
+  run,
+  trace,
+}: {
+  readonly run: AnchoredRun;
+  readonly trace: AnchoredTrace;
+}) {
+  const attemptCount = trace.work_items.reduce(
+    (sum, item) => sum + item.attempts.length,
+    0,
+  );
+  const feedbackCount = trace.edges.filter(
+    (edge) => edge.kind === 'feedback',
+  ).length;
+  const messageCount = trace.edges.filter(
+    (edge) => edge.kind === 'observed_message',
+  ).length;
+  return (
+    <section className="work-review" data-testid="run-review">
+      <div className="work-section-heading">
+        <p className="work-shell-kicker">Review</p>
+        <h2>Run result and collaboration summary</h2>
+        <p>
+          This review uses captured Product facts only. No assistant text or file
+          is promoted to an Artifact.
+        </p>
+      </div>
+      <div className="work-review__grid">
+        <article className="work-review__result">
+          <span>Final result</span>
+          <p>
+            {run.work_run.result_summary ??
+              resultCaptureLabel(run.work_run.result_capture_status)}
+          </p>
+        </article>
+        <dl className="work-review__facts">
+          <ReviewFact label="Agents" value={trace.actors.length} />
+          <ReviewFact label="Work Items" value={trace.work_items.length} />
+          <ReviewFact label="Attempts" value={attemptCount} />
+          <ReviewFact label="Rework" value={feedbackCount} />
+          <ReviewFact label="Agent messages" value={messageCount} />
+          <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+function ReviewFact({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: number;
+}) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   );
 }
 
@@ -365,8 +439,8 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
         <p className="work-shell-kicker">Runs</p>
         <h2 id="work-runs-heading">Historical execution records</h2>
         <p>
-          Each row is a Product WorkRun. Open one to inspect the same Run in
-          Overview without falling back to technical execution APIs.
+          Each Run remains pinned to the exact immutable Definition version it
+          used.
         </p>
       </div>
       <ol className="work-run-list">
@@ -380,9 +454,7 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
             <li data-selected={selected ? 'true' : undefined} key={run.id}>
               <div className="work-run-list__identity">
                 <strong>{index === 0 ? 'Latest Run' : 'Historical Run'}</strong>
-                <time dateTime={run.created_at}>
-                  {formatTimestamp(run.created_at)}
-                </time>
+                <time dateTime={run.created_at}>{formatTimestamp(run.created_at)}</time>
               </div>
               <div className="work-run-list__definition">
                 <span>Definition</span>
@@ -399,12 +471,13 @@ function RunsPanel({ data }: { readonly data: WorkDetailData }) {
                   {productStatePresentation(data.run.work_run.product_state).label}
                 </span>
               ) : (
-                <span className="work-run-list__quiet">
-                  Outcome loads on open
-                </span>
+                <span className="work-run-list__quiet">Outcome loads on open</span>
               )}
               <a href={workTabHref(data.work.id, 'overview', run.id)}>
                 {selected ? 'View Overview' : 'Open Run'}
+              </a>
+              <a href={workTabHref(data.work.id, 'definition', run.id)}>
+                Definition used
               </a>
             </li>
           );
@@ -441,7 +514,8 @@ type WorkDetailData = {
 
 async function loadWorkDetail(
   workId: string,
-  selectedRunId?: string,
+  selectedRunId: string | undefined,
+  preferCurrentDefinition: boolean,
 ): Promise<WorkDetailData> {
   const encodedId = encodeURIComponent(workId);
   const [workResponse, runsResponse] = await Promise.all([
@@ -455,9 +529,10 @@ async function loadWorkDetail(
   if (selectedRunId && !selectedSummary)
     throw new Error('The selected Product WorkRun is not available.');
 
-  const selectedDefinitionVersionId =
-    selectedSummary?.definition_version_id ??
-    workResponse.work.definition_version_id;
+  const selectedDefinitionVersionId = preferCurrentDefinition
+    ? workResponse.work.definition_version_id
+    : (selectedSummary?.definition_version_id ??
+      workResponse.work.definition_version_id);
   const definitionPromise = readOptionalJson<{
     version: ProductWorkDefinitionVersionResponse;
   }>(
@@ -516,49 +591,100 @@ function isAnchoredTrace(value: ProductRunTrace): value is AnchoredTrace {
 }
 
 function RunTrigger({ workId }: { readonly workId: string }) {
-  const [state, setState] = useState<
-    'idle' | 'starting' | 'started' | 'error'
-  >('idle');
+  const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
 
   async function handleRun() {
     setState('starting');
-    try {
-      const response = await fetch(
-        `/api/works/${encodeURIComponent(workId)}/runs`,
-        {
-          method: 'POST',
-          cache: 'no-store',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ trigger_kind: 'manual' }),
-        },
-      );
-      if (!response.ok) {
-        setState('error');
-        return;
-      }
-      setState('started');
-    } catch {
+    const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ trigger_kind: 'manual' }),
+    }).catch(() => null);
+    const body = response
+      ? await response.json().catch(() => undefined)
+      : undefined;
+    const runId = runIdFromStart(body);
+    if (!response?.ok || !runId) {
       setState('error');
+      return;
     }
+    window.location.assign(workTabHref(workId, 'overview', runId));
   }
 
   return (
     <div className="work-run-trigger">
       <button
-        disabled={state === 'starting' || state === 'started'}
+        disabled={state === 'starting'}
         onClick={() => void handleRun()}
         type="button"
       >
-        {state === 'idle'
-          ? 'Start Run'
-          : state === 'starting'
-            ? 'Starting…'
-            : state === 'started'
-              ? 'Run Started'
-              : 'Error — Retry'}
+        {state === 'starting'
+          ? 'Starting…'
+          : state === 'error'
+            ? 'Error — Retry'
+            : 'Start Run'}
       </button>
-      {state === 'error' && <p>Failed to start Run. Please try again.</p>}
+      {state === 'error' ? <p>Failed to start Run. Please try again.</p> : null}
     </div>
+  );
+}
+
+function runIdFromStart(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const run = (value as Record<string, unknown>).work_run;
+  if (!run || typeof run !== 'object' || Array.isArray(run)) return null;
+  const id = (run as Record<string, unknown>).id;
+  return typeof id === 'string' ? id : null;
+}
+
+function WorkListLoading() {
+  return (
+    <section
+      aria-live="polite"
+      className="work-list-state work-list-state--loading"
+      data-testid="work-list-loading"
+    >
+      <p className="work-list-state__eyebrow">Loading</p>
+      <h2>Getting your Work records</h2>
+      <p>We are retrieving the current Product Work projection.</p>
+      <div aria-hidden="true" className="work-list-skeleton">
+        <span />
+        <span />
+        <span />
+      </div>
+    </section>
+  );
+}
+
+function WorkListError() {
+  return (
+    <section
+      className="work-list-state work-list-state--error"
+      data-testid="work-list-error"
+      role="alert"
+    >
+      <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+      <h2>Work records are temporarily unavailable.</h2>
+      <p>
+        This is a connection problem, not a statement about the status of any
+        Work. Refresh the page to try again.
+      </p>
+    </section>
+  );
+}
+
+function WorkListEmpty() {
+  return (
+    <section
+      aria-labelledby="work-list-empty-heading"
+      className="work-list-state work-list-state--empty"
+      data-testid="work-list-empty"
+    >
+      <p className="work-list-state__eyebrow">No Work records</p>
+      <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
+      <p>When Work is created, it will appear here as the durable entry.</p>
+    </section>
   );
 }
 

@@ -1,12 +1,14 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
+import type { GetProductExecutionDetail } from '../../../application/product-projection/get-product-execution-detail.js';
 import {
   ProductProjectionNotFoundError,
   type ProductProjectionApi,
 } from '../../../application/product-projection/product-projection.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
+  ProductExecutionDetailResponseSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
 } from '../../../contracts/product-projection/index.js';
@@ -22,6 +24,7 @@ import type { AppConfig } from '../../../shared/config.js';
 interface ProductWorkRouteDependencies {
   readonly config: AppConfig;
   readonly productProjection: ProductProjectionApi;
+  readonly executionDetail?: Pick<GetProductExecutionDetail, 'execute'>;
 }
 
 export function registerProductWorkRoutes(
@@ -66,7 +69,7 @@ export function registerProductWorkRoutes(
           }),
           404,
         );
-      return mapProjectionError(context, error, ProductWorkRunResponseSchema);
+      return mapProjectionError(context, error);
     }
   });
 
@@ -75,7 +78,7 @@ export function registerProductWorkRoutes(
       context.req.param('workId'),
       context.req.param('workRunId'),
     );
-    if (!input) return invalidPath(context, ProductWorkRunResponseSchema);
+    if (!input) return invalidPath(context);
     try {
       const access = getAuthenticatedAccessContext(context);
       const response = await dependencies.productProjection.getWorkRun({
@@ -86,7 +89,7 @@ export function registerProductWorkRoutes(
       });
       return context.json(ProductWorkRunResponseSchema.parse(response), 200);
     } catch (error) {
-      return mapProjectionError(context, error, ProductWorkRunResponseSchema);
+      return mapProjectionError(context, error);
     }
   });
 
@@ -95,7 +98,7 @@ export function registerProductWorkRoutes(
       context.req.param('workId'),
       context.req.param('workRunId'),
     );
-    if (!input) return invalidPath(context, ProductRunTraceResponseSchema);
+    if (!input) return invalidPath(context);
     try {
       const access = getAuthenticatedAccessContext(context);
       const response = await dependencies.productProjection.getRunTrace({
@@ -106,9 +109,46 @@ export function registerProductWorkRoutes(
       });
       return context.json(ProductRunTraceResponseSchema.parse(response), 200);
     } catch (error) {
-      return mapProjectionError(context, error, ProductRunTraceResponseSchema);
+      return mapProjectionError(context, error);
     }
   });
+
+  app.get(
+    '/api/v1/works/:workId/runs/:workRunId/execution-detail',
+    async (context) => {
+      const input = parsePath(
+        context.req.param('workId'),
+        context.req.param('workRunId'),
+      );
+      const attemptId = context.req.query('attempt_id');
+      if (!input || !attemptId || !z.uuid().safeParse(attemptId).success)
+        return invalidPath(context);
+      if (!dependencies.executionDetail)
+        return context.json(
+          ErrorResponseSchema.parse({
+            error: {
+              code: 'projection_unavailable',
+              message: 'Execution detail is temporarily unavailable.',
+              request_id: requestId(context),
+            },
+          }),
+          503,
+        );
+      try {
+        const access = getAuthenticatedAccessContext(context);
+        const response = await dependencies.executionDetail.execute({
+          tenantId: access.tenantId,
+          workspaceId: access.workspaceId,
+          workId: input.workId,
+          workRunId: input.workRunId,
+          attemptId,
+        });
+        return context.json(ProductExecutionDetailResponseSchema.parse(response), 200);
+      } catch (error) {
+        return mapProjectionError(context, error);
+      }
+    },
+  );
 }
 
 function parsePath(workId: string, workRunId: string) {
@@ -120,16 +160,12 @@ function parsePath(workId: string, workRunId: string) {
   return { workId, workRunId };
 }
 
-function invalidPath(
-  context: Context<ApiEnvironment>,
-  schema:
-    typeof ProductWorkRunResponseSchema | typeof ProductRunTraceResponseSchema,
-) {
+function invalidPath(context: Context<ApiEnvironment>) {
   return context.json(
     ErrorResponseSchema.parse({
       error: {
         code: 'invalid_request',
-        message: 'The Work or WorkRun identifier is invalid.',
+        message: 'The Work, WorkRun, or Attempt identifier is invalid.',
         request_id: requestId(context),
       },
     }),
@@ -137,12 +173,7 @@ function invalidPath(
   );
 }
 
-function mapProjectionError(
-  context: Context<ApiEnvironment>,
-  error: unknown,
-  schema:
-    typeof ProductWorkRunResponseSchema | typeof ProductRunTraceResponseSchema,
-) {
+function mapProjectionError(context: Context<ApiEnvironment>, error: unknown) {
   if (
     error &&
     typeof error === 'object' &&

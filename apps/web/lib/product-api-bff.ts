@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { type ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 
 import { getProductApi, postProductApi } from '@/lib/product-api-client';
 import { ProductApiClientError } from '@/lib/product-api-client';
@@ -13,9 +13,11 @@ import {
   GetWorkResponseSchema,
   ProductRunTraceResponseSchema,
   ProductWorkRunResponseSchema,
+  StartWorkRunResponseSchema,
+  UpdateWorkDefinitionVersionResponseSchema,
+  WorkDefinitionValidateFailureSchema,
   WorkListResponseSchema,
   WorkRunListResponseSchema,
-  StartWorkRunResponseSchema,
 } from '@atomlink-ye/agent-server/product-contract';
 
 export const productResponseHeaders = {
@@ -23,6 +25,11 @@ export const productResponseHeaders = {
 } as const;
 
 const upstreamFetchedHeader = 'x-agent-server-upstream';
+
+export const workDefinitionAuthoringErrorSchema = z.union([
+  WorkDefinitionValidateFailureSchema,
+  ErrorResponseSchema,
+]);
 
 export async function readProduct(
   path: string,
@@ -63,10 +70,18 @@ export async function writeProduct(
   path: string,
   requestBody: unknown,
   schema: ZodType<unknown>,
+  options: {
+    readonly idempotencyKey?: string;
+    readonly errorSchema?: ZodType<unknown>;
+  } = {},
 ): Promise<NextResponse> {
   let upstream: Response;
   try {
-    upstream = await postProductApi(path, requestBody);
+    upstream = await postProductApi(path, requestBody, {
+      ...(options.idempotencyKey
+        ? { idempotencyKey: options.idempotencyKey }
+        : {}),
+    });
   } catch (error) {
     return safeFailure(
       error instanceof ProductApiClientError ? error : undefined,
@@ -87,7 +102,10 @@ export async function writeProduct(
     });
   }
 
-  const decodedError = decodeProductResponse(body, ErrorResponseSchema);
+  const decodedError = decodeProductResponse(
+    body,
+    options.errorSchema ?? ErrorResponseSchema,
+  );
   if (!decodedError.success) return safeFailure(undefined, 502);
   return NextResponse.json(decodedError.data, {
     status: safeUpstreamStatus(upstream.status),
@@ -100,7 +118,14 @@ export function invalidProductRequest(): NextResponse {
 }
 
 export function productSchemaFor(
-  route: 'works' | 'work' | 'runs' | 'run' | 'trace' | 'start-run',
+  route:
+    | 'works'
+    | 'work'
+    | 'runs'
+    | 'run'
+    | 'trace'
+    | 'start-run'
+    | 'pin-definition',
 ): ZodType<unknown> {
   switch (route) {
     case 'works':
@@ -115,6 +140,8 @@ export function productSchemaFor(
       return ProductRunTraceResponseSchema;
     case 'start-run':
       return StartWorkRunResponseSchema;
+    case 'pin-definition':
+      return UpdateWorkDefinitionVersionResponseSchema;
   }
 }
 

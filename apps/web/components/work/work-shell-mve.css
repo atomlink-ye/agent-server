@@ -176,6 +176,22 @@
 .work-review__facts div:nth-child(odd) { border-right: 1px solid #e4e1db; }
 .work-review__facts dt { color: #706c74; font-size: 9px; }
 .work-review__facts dd { font-size: 18px; font-weight: 650; margin: 4px 0 0; }
+/* P1: Review mini-map, problems, key outputs */
+.work-review__map { margin-top: 18px; }
+.work-review__map h3 { color: #706c74; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 8px; text-transform: uppercase; }
+.work-review__map .run-trace__map { max-height: 200px; overflow-y: auto; }
+.work-review__map .run-trace__map-board { gap: 6px; }
+.work-review__map .run-trace__map-node { font-size: 9px; padding: 6px 8px; }
+.work-review__problems { margin-top: 18px; }
+.work-review__problems h3 { color: #706c74; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 8px; text-transform: uppercase; }
+.work-review__problems ul { font-size: 12px; line-height: 1.55; list-style: disc; margin: 0; padding-left: 18px; }
+.work-review__problems li { margin-bottom: 4px; }
+.work-review__problems strong { font-weight: 650; }
+.work-review__outputs { margin-top: 18px; }
+.work-review__outputs h3 { color: #706c74; font-size: 10px; font-weight: 650; letter-spacing: 0.04em; margin: 0 0 8px; text-transform: uppercase; }
+.work-review__outputs article { background: #fcfbf8; border: 1px solid #e4e1db; border-radius: 6px; margin-bottom: 8px; padding: 10px 12px; }
+.work-review__outputs article strong { display: block; font-size: 11px; font-weight: 650; margin-bottom: 4px; }
+.work-review__outputs article p { color: #504d53; font-size: 11px; line-height: 1.4; margin: 2px 0; }
 .work-detail-loading { color: #706c74; }
 
 @media (max-width: 980px) {

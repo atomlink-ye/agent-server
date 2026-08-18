@@ -25,6 +25,25 @@ export function RunTrace({
     attempts[0]?.attempt.id ?? null,
   );
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>('overview');
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+
+  function selectMessage(messageId: string) {
+    // Find the edge to get work_item_id/attempt_id for inspector routing
+    const edge = trace.edges.find(
+      (e) => e.kind === 'observed_message' && e.message_id === messageId,
+    );
+    if (edge && edge.kind === 'observed_message') {
+      // Attempt to select the associated attempt if unambiguous
+      if (edge.attempt_id) {
+        setSelectedAttemptKey(edge.attempt_id);
+      } else if (edge.work_item_id) {
+        const item = trace.work_items.find((wi) => wi.id === edge.work_item_id);
+        if (item?.attempts.length === 1) setSelectedAttemptKey(item.attempts[0]!.id);
+      }
+      setInspectorMode('conversation');
+      setSelectedMessageId(messageId);
+    }
+  }
   const selectedAttempt =
     attempts.find((entry) => entry.attempt.id === selectedAttemptKey) ?? null;
   const geometry = useMemo(() => timelineGeometry(attempts), [attempts]);
@@ -84,6 +103,7 @@ export function RunTrace({
               selectedAttemptKey={selectedAttemptKey}
               trace={trace}
               onSelect={selectAttempt}
+              onSelectMessage={selectMessage}
             />
           ) : null}
           {view === 'map' ? (
@@ -91,6 +111,7 @@ export function RunTrace({
               selectedAttemptKey={selectedAttemptKey}
               trace={trace}
               onSelect={selectAttempt}
+              onSelectMessage={selectMessage}
             />
           ) : null}
           {view === 'events' ? (
@@ -132,6 +153,7 @@ function Timeline({
   selectedAttemptKey,
   trace,
   onSelect,
+  onSelectMessage,
 }: {
   readonly actorRows: ReturnType<typeof actorRowsFrom>;
   readonly feedbackAttemptIds: ReadonlySet<string>;
@@ -141,6 +163,7 @@ function Timeline({
   readonly selectedAttemptKey: string | null;
   readonly trace: Trace;
   readonly onSelect: (id: string) => void;
+  readonly onSelectMessage: (messageId: string) => void;
 }) {
   return (
     <div className="run-trace__timeline" data-testid="trace-timeline">
@@ -173,6 +196,7 @@ function Timeline({
                     <div className="run-trace__track">
                       {workItem.attempts.map((attempt) => (
                         <AttemptSpan
+                          activityCount={trace.mcp_activities.filter((a) => a.source_refs.work_item_id === workItem.id).length}
                           attempt={attempt}
                           feedbackSource={feedbackAttemptIds.has(attempt.id)}
                           geometry={geometry.get(attempt.id)}
@@ -191,6 +215,61 @@ function Timeline({
           </div>
         ))}
       </div>
+      <TimelineMessages range={range} trace={trace} onSelectMessage={onSelectMessage} />
+    </div>
+  );
+}
+
+function TimelineMessages({
+  range,
+  trace,
+  onSelectMessage,
+}: {
+  readonly range: ReturnType<typeof capturedTimelineRange>;
+  readonly trace: Trace;
+  readonly onSelectMessage: (messageId: string) => void;
+}) {
+  if (!range) return null;
+  const start = Date.parse(range.startedAt);
+  const end = Date.parse(range.endedAt);
+  const span = end - start;
+  if (!span) return null;
+
+  const actorNames = new Map(trace.actors.map((a) => [a.id, a.name ?? 'Name not captured']));
+  const messages = new Map(trace.messages.map((m) => [m.id, m]));
+  const messageEdges = trace.edges.filter(
+    (edge) => edge.kind === 'observed_message' && edge.source_created_at,
+  );
+
+  if (!messageEdges.length) return null;
+
+  return (
+    <div className="run-trace__timeline-messages" aria-label="Message markers" data-testid="timeline-messages">
+      {messageEdges.map((edge) => {
+        if (edge.kind !== 'observed_message') return null;
+        const ts = Date.parse(edge.source_created_at);
+        const position = ((ts - start) / span) * 100;
+        if (position < 0 || position > 100) return null;
+        const senderName = edge.sender_actor_id ? actorNames.get(edge.sender_actor_id) : null;
+        const recipientName = actorNames.get(edge.recipient_actor_id);
+        const message = messages.get(edge.message_id);
+        const canDrawLine = edge.sender_actor_id !== null && edge.recipient_actor_id !== null;
+        return (
+          <button
+            className={`run-trace__message-marker${canDrawLine ? '' : ' run-trace__message-marker--partial'}`}
+            data-testid="timeline-message-marker"
+            key={edge.message_id}
+            onClick={() => onSelectMessage(edge.message_id)}
+            style={{ '--marker-position': `${position}%` } as CSSProperties}
+            title={message?.summary ?? 'Message summary not captured'}
+            type="button"
+          >
+            <span className="run-trace__message-marker-label">
+              {senderName ?? '?'} → {recipientName ?? '?'}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -215,6 +294,7 @@ function TimeAxis({ range }: { readonly range: ReturnType<typeof capturedTimelin
 }
 
 function AttemptSpan({
+  activityCount,
   attempt,
   feedbackSource,
   geometry,
@@ -223,6 +303,7 @@ function AttemptSpan({
   onSelect,
   subject,
 }: {
+  readonly activityCount: number;
   readonly attempt: Attempt;
   readonly feedbackSource: boolean;
   readonly geometry: Geometry | undefined;
@@ -264,18 +345,31 @@ function AttemptSpan({
       {feedbackSource ? (
         <span aria-label="Recorded feedback relation" data-attempt-id={attempt.id}>Feedback recorded</span>
       ) : null}
+      {activityCount > 0 ? (
+        <span className="run-trace__activity-ticks" aria-label={`${activityCount} MCP activities`} data-testid="activity-ticks">
+          {Array.from({ length: Math.min(activityCount, 12) }, (_, i) => (
+            <span
+              className="run-trace__activity-tick"
+              key={i}
+              style={{ '--tick-offset': `${((i + 1) / (Math.min(activityCount, 12) + 1)) * 100}%` } as CSSProperties}
+            />
+          ))}
+        </span>
+      ) : null}
     </button>
   );
 }
 
-function MapView({
+export function MapView({
   selectedAttemptKey,
   trace,
   onSelect,
+  onSelectMessage,
 }: {
   readonly selectedAttemptKey: string | null;
   readonly trace: Trace;
   readonly onSelect: (id: string) => void;
+  readonly onSelectMessage?: (messageId: string) => void;
 }) {
   const entries = attemptsFrom(trace);
   const levels = workItemLevels(trace.work_items);
@@ -313,12 +407,12 @@ function MapView({
           );
         })}
       </div>
-      <MapRelations trace={trace} />
+      <MapRelations trace={trace} onSelectMessage={onSelectMessage} />
     </section>
   );
 }
 
-function MapRelations({ trace }: { readonly trace: Trace }) {
+function MapRelations({ trace, onSelectMessage }: { readonly trace: Trace; readonly onSelectMessage?: (messageId: string) => void }) {
   const itemNames = new Map(trace.work_items.map((item) => [item.id, item.subject]));
   const actorNames = new Map(trace.actors.map((actor) => [actor.id, actor.name ?? 'Name not captured']));
   const attempts = new Map(attemptsFrom(trace).map((entry) => [entry.attempt.id, entry]));
@@ -354,11 +448,18 @@ function MapRelations({ trace }: { readonly trace: Trace }) {
   return (
     <div className="run-trace__map-relations" aria-label="Captured causal relations">
       <h4>Captured relations</h4>
-      {rows.length ? rows.map((row) => (
-        <div className="run-trace__map-relation" key={row.key}>
-          <span>{row.kind}</span><p>{row.text}</p>
-        </div>
-      )) : <p>No relation rows were captured.</p>}
+      {rows.length ? rows.map((row) => {
+        const messageId = row.key.startsWith('message:') ? row.key.slice(8) : null;
+        return messageId && onSelectMessage ? (
+          <button className="run-trace__map-relation run-trace__map-relation--clickable" key={row.key} onClick={() => onSelectMessage(messageId)} type="button">
+            <span>{row.kind}</span><p>{row.text}</p>
+          </button>
+        ) : (
+          <div className="run-trace__map-relation" key={row.key}>
+            <span>{row.kind}</span><p>{row.text}</p>
+          </div>
+        );
+      }) : <p>No relation rows were captured.</p>}
     </div>
   );
 }
@@ -397,7 +498,10 @@ function Events({
               type="button"
               onClick={() => {
                 setSelectedKey(isSelected ? null : key);
-                if (item?.attempts.length) onSelectAttempt(item.attempts.at(-1)!.id);
+                // Only select an Attempt when attribution is unambiguous (exactly one Attempt).
+                // MCP activity source_refs do not capture attempt_id; selecting the "last"
+                // Attempt would fabricate causality for reworked Work Items (§1.2, §6.2).
+                if (item?.attempts.length === 1) onSelectAttempt(item.attempts[0]!.id);
               }}
             >
               <strong>#{activity.sequence}</strong>
@@ -406,6 +510,9 @@ function Events({
               <span>{`MCP activity: ${humanize(activity.status)}`}</span>
               <span>{activity.tool_name}</span>
               <span>{`Result: ${captureLabel(activity.result_capture_status)}`}</span>
+              {item && item.attempts.length > 1 ? (
+                <span className="run-trace__event-uncaptured" data-testid="attempt-not-captured">Attempt attribution not captured</span>
+              ) : null}
             </button>
           );
         })}
@@ -500,7 +607,7 @@ function ConversationDetail({ selectedAttempt, trace }: { readonly selectedAttem
         if (edge.kind !== 'observed_message') return null;
         const message = messages.get(edge.message_id);
         return (
-          <article key={edge.message_id}>
+          <article key={edge.message_id} data-message-id={edge.message_id}>
             <header>
               <strong>{message?.sender_name ?? 'Agent'}</strong>
               <span>→ {message?.recipient_name ?? 'Agent'}</span>

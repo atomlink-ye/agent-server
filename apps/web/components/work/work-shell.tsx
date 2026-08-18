@@ -25,7 +25,7 @@ import {
   type WorkTab,
 } from '@/components/work/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
-import { RunTrace } from '@/features/run-trace/run-trace';
+import { MapView, RunTrace } from '@/features/run-trace/run-trace';
 import './work-shell.css';
 import './work-shell-mve.css';
 
@@ -378,6 +378,31 @@ function RunReview({
   const messageCount = trace.edges.filter(
     (edge) => edge.kind === 'observed_message',
   ).length;
+  const reworkItems = trace.work_items.filter(
+    (item) => item.attempts.length > 1,
+  );
+  const mcpOnlyItems = trace.work_items.filter(
+    (item) =>
+      trace.mcp_activities.some(
+        (a) => a.source_refs.work_item_id === item.id,
+      ) &&
+      !trace.edges.some(
+        (e) => e.kind === 'observed_message' && e.work_item_id === item.id,
+      ),
+  );
+  const keyOutputs = trace.work_items
+    .flatMap((item) =>
+      item.attempts
+        .filter((a) => a.result_summary || a.feedback_summary)
+        .map((a) => ({
+          subject: item.subject,
+          attemptNo: a.attempt_no,
+          result: a.result_summary,
+          feedback: a.feedback_summary,
+        })),
+    )
+    .slice(0, 5);
+
   return (
     <section className="work-review" data-testid="run-review">
       <div className="work-section-heading">
@@ -405,6 +430,49 @@ function RunReview({
           <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
         </dl>
       </div>
+      <div className="work-review__map" data-testid="review-mini-map">
+        <h3>Run Map</h3>
+        <MapView selectedAttemptKey={null} trace={trace} onSelect={() => {}} />
+      </div>
+      <div className="work-review__problems" data-testid="review-problems">
+        <h3>Problems & capture gaps</h3>
+        <ul>
+          {reworkItems.length ? (
+            <li>
+              <strong>Rework:</strong>{' '}
+              {reworkItems.map((item) => item.subject).join(', ')} ({reworkItems.length} item{reworkItems.length > 1 ? 's' : ''} required multiple Attempts)
+            </li>
+          ) : null}
+          {mcpOnlyItems.length ? (
+            <li>
+              <strong>MCP-only coverage:</strong>{' '}
+              {mcpOnlyItems.length} Work Item{mcpOnlyItems.length > 1 ? 's have' : ' has'} MCP activity but no observed Agent messages
+            </li>
+          ) : null}
+          <li>
+            <strong>Timeline scope:</strong>{' '}
+            {trace.timeline_coverage.scope.replaceAll('_', ' ')}
+            {trace.timeline_coverage.excluded_execution.length ? (
+              <> — excluded: {trace.timeline_coverage.excluded_execution.map((e) => e.replaceAll('_', ' ')).join(', ')}</>
+            ) : null}
+          </li>
+          {!reworkItems.length && !mcpOnlyItems.length ? (
+            <li>No problems or capture gaps detected in this Run.</li>
+          ) : null}
+        </ul>
+      </div>
+      {keyOutputs.length ? (
+        <div className="work-review__outputs" data-testid="review-key-outputs">
+          <h3>Key Agent outputs</h3>
+          {keyOutputs.map((output, index) => (
+            <article key={index}>
+              <strong>{output.subject} (Attempt {output.attemptNo})</strong>
+              {output.result ? <p>Result: {output.result}</p> : null}
+              {output.feedback ? <p>Feedback: {output.feedback}</p> : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

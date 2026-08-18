@@ -384,3 +384,95 @@
   .run-trace__body { grid-template-columns: 1fr; }
   .run-trace__inspector { border-left: 0; border-top: 1px solid var(--trace-line); }
 }
+
+/* P0: Event attempt-not-captured disclosure */
+.run-trace__event-uncaptured {
+  color: #9e7b4a;
+  font-size: 9px;
+  font-style: italic;
+}
+
+/* P2: Timeline message markers */
+.run-trace__timeline-messages {
+  border-top: 1px dashed var(--trace-line);
+  min-height: 24px;
+  padding: 4px 0;
+  position: relative;
+}
+.run-trace__message-marker {
+  background: none;
+  border: none;
+  cursor: pointer;
+  left: var(--marker-position);
+  padding: 2px 4px;
+  position: absolute;
+  transform: translateX(-50%);
+  top: 2px;
+}
+.run-trace__message-marker::before {
+  background: #6a8fa8;
+  border-radius: 50%;
+  content: '';
+  display: block;
+  height: 8px;
+  margin: 0 auto 2px;
+  width: 8px;
+}
+.run-trace__message-marker--partial::before { background: #b0b0b0; }
+.run-trace__message-marker:hover { z-index: 1; }
+.run-trace__message-marker:hover .run-trace__message-marker-label {
+  clip: auto;
+  clip-path: none;
+  height: auto;
+  overflow: visible;
+  position: absolute;
+  width: max-content;
+  background: var(--trace-ink);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 9px;
+  left: 50%;
+  padding: 3px 6px;
+  top: 100%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.run-trace__message-marker-label {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* P2: Clickable map relation rows */
+.run-trace__map-relation--clickable {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+.run-trace__map-relation--clickable:hover { background: #f5f5f5; }
+
+/* P3: MCP activity ticks inside AttemptSpan */
+.run-trace__activity-ticks {
+  bottom: 0;
+  display: flex;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.run-trace__activity-tick {
+  background: rgba(100, 140, 120, 0.35);
+  height: 100%;
+  left: var(--tick-offset);
+  position: absolute;
+  width: 2px;
+}

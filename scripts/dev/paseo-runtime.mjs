@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,6 +44,7 @@ const runtimeRoot = resolve(
 const defaults = loadRealProviderDefaults();
 const port = Number.parseInt(process.env.PASEO_PORT ?? '16767', 10);
 const listenHost = process.env.PASEO_LISTEN_HOST ?? '0.0.0.0';
+const gatewayBaseUrl = 'https://opencode.ai/zen/go';
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PASEO_PORT must be a valid TCP port');
@@ -56,12 +57,61 @@ if (
 }
 
 await mkdir(runtimeRoot, { recursive: true });
+const model = deriveOpenCodeGoModelId(defaults.PASEO_MODEL);
+const providerConfigurations = [
+  {
+    provider: 'claude',
+    path: join(runtimeRoot, 'home', '.claude', 'settings.json'),
+    format: 'json',
+    content: ({ model: configuredModel }) => JSON.stringify({ env: { ANTHROPIC_MODEL: configuredModel } }),
+  },
+  {
+    provider: 'codex',
+    path: join(runtimeRoot, 'home', '.codex', 'config.toml'),
+    format: 'toml',
+    content: () => [
+      'model_provider = "opencode-go"',
+      '',
+      '[model_providers.opencode-go]',
+      'name = "OpenCode Go"',
+      `base_url = "${gatewayBaseUrl}/v1"`,
+      'env_key = "OPENCODE_GO_API_KEY"',
+      'wire_api = "responses"',
+      '',
+    ].join('\n'),
+  },
+  {
+    provider: 'opencode',
+    path: join(runtimeRoot, 'xdg-config', 'opencode', 'opencode.json'),
+    format: 'json',
+    content: ({ model: configuredModel }) => createOpenCodeConfigContent({ model: `opencode-go/${configuredModel}` }),
+  },
+];
+
+for (const configuration of providerConfigurations) {
+  try {
+    await access(configuration.path);
+    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`);
+    continue;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  await mkdir(dirname(configuration.path), { recursive: true, mode: 0o700 });
+  try {
+    await writeFile(configuration.path, configuration.content({ gatewayBaseUrl, model }), { mode: 0o600, flag: 'wx' });
+    await chmod(configuration.path, 0o600);
+    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'created' })}\n`);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    process.stdout.write(`${JSON.stringify({ provider: configuration.provider, path: configuration.path, action: 'exists' })}\n`);
+  }
+}
+
 if (process.env.OPENCODE_GO_API_KEY?.trim()) {
-  const model = deriveOpenCodeGoModelId(defaults.PASEO_MODEL);
   process.env.OPENCODE_CONFIG_CONTENT ||= createOpenCodeConfigContent({
     model: defaults.PASEO_MODEL,
   });
-  process.env.ANTHROPIC_BASE_URL ||= 'https://opencode.ai/zen/go';
+  process.env.ANTHROPIC_BASE_URL ||= gatewayBaseUrl;
   process.env.ANTHROPIC_API_KEY ||= process.env.OPENCODE_GO_API_KEY;
   for (const name of [
     'ANTHROPIC_MODEL',
@@ -73,22 +123,6 @@ if (process.env.OPENCODE_GO_API_KEY?.trim()) {
   ]) {
     process.env[name] ||= model;
   }
-  const codexHome = join(runtimeRoot, 'home', '.codex');
-  await mkdir(codexHome, { recursive: true, mode: 0o700 });
-  await writeFile(
-    join(codexHome, 'config.toml'),
-    [
-      'model_provider = "opencode-go"',
-      '',
-      '[model_providers.opencode-go]',
-      'name = "OpenCode Go"',
-      'base_url = "https://opencode.ai/zen/go/v1"',
-      'env_key = "OPENCODE_GO_API_KEY"',
-      'wire_api = "responses"',
-      '',
-    ].join('\n'),
-    { mode: 0o600 },
-  );
 }
 
 const paseo = await startPaseo({

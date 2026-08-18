@@ -28,8 +28,16 @@ export function projectTranscript(
   const rows: MutableRow[] = [];
   const openReasoning: MutableRow[] = [];
   const toolsByActivity = new Map<string, MutableRow>();
+  let runSegment = 0;
+  let previousSequence: number | null = null;
 
   for (const entry of entries) {
+    // Session transcripts concatenate multiple runs but do not carry run_id.
+    // sequence restarts for each run, so a rollback is the available boundary
+    // that keeps repeated provider-local activity ids from being coalesced.
+    if (previousSequence !== null && entry.sequence < previousSequence) runSegment += 1;
+    previousSequence = entry.sequence;
+
     if (entry.kind === 'reasoning_progress') {
       const previousOpen = openReasoning.at(-1);
       if (
@@ -58,21 +66,22 @@ export function projectTranscript(
           continue;
         }
       }
-      const row = makeRow(entry);
+      const row = makeRow(entry, runSegment);
       rows.push(row);
       if (entry.status === 'started') openReasoning.push(row);
       continue;
     }
 
     if (entry.kind === 'tool_status') {
-      const existing = toolsByActivity.get(entry.activity_id);
+      const activityKey = scopedActivityKey(runSegment, entry.activity_id);
+      const existing = toolsByActivity.get(activityKey);
       if (existing) {
         existing.event = mergeToolEvent(existing.event as ToolEntry, entry);
         existing.sourceOrdinals.push(entry.ordinal);
       } else {
-        const row = makeRow(entry);
+        const row = makeRow(entry, runSegment);
         rows.push(row);
-        toolsByActivity.set(entry.activity_id, row);
+        toolsByActivity.set(activityKey, row);
       }
       continue;
     }
@@ -89,12 +98,12 @@ export function projectTranscript(
         previous.event = entry;
         previous.sourceOrdinals.push(entry.ordinal);
       } else {
-        rows.push(makeRow(entry));
+        rows.push(makeRow(entry, runSegment));
       }
       continue;
     }
 
-    rows.push(makeRow(entry));
+    rows.push(makeRow(entry, runSegment));
   }
 
   const mergedReasoning = mergeAdjacentReasoning(rows);
@@ -104,13 +113,18 @@ export function projectTranscript(
 type MutableRow = {
   event: TranscriptEntry;
   sourceOrdinals: number[];
+  runSegment: number;
   children?: MutableRow[];
 };
 type ReasoningEntry = Extract<TranscriptEntry, { readonly kind: 'reasoning_progress' }>;
 type ToolEntry = Extract<TranscriptEntry, { readonly kind: 'tool_status' }>;
 
-function makeRow(event: TranscriptEntry): MutableRow {
-  return { event, sourceOrdinals: [event.ordinal] };
+function makeRow(event: TranscriptEntry, runSegment: number): MutableRow {
+  return { event, sourceOrdinals: [event.ordinal], runSegment };
+}
+
+function scopedActivityKey(runSegment: number, activityId: string): string {
+  return `${runSegment}:${activityId}`;
 }
 
 function mergeToolEvent(
@@ -174,7 +188,7 @@ function mergeReasoningText(previous: string | null, next: string | null): strin
 function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscriptEntry[] {
   const parents = new Map(
     rows.flatMap((row) =>
-      row.event.kind === 'tool_status' ? [[row.event.activity_id, row] as const] : [],
+      row.event.kind === 'tool_status' ? [[scopedActivityKey(row.runSegment, row.event.activity_id), row] as const] : [],
     ),
   );
   const visible: MutableRow[] = [];
@@ -183,7 +197,7 @@ function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscript
       visible.push(row);
       continue;
     }
-    const parent = parents.get(row.event.parent_activity_id);
+    const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
     if (!parent) {
       visible.push(row);
       continue;

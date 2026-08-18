@@ -30,3 +30,16 @@ it('does not swallow a later run after a lifecycle terminal event', () => {
   const output = projectTranscript(input);
   expect(output.flatMap((entry) => entry.sourceOrdinals)).toEqual(expect.arrayContaining([4, 5]));
 });
+
+it('does not merge the same provider activity id across sequence-reset runs', () => {
+  const input = [
+    at(1, { kind: 'lifecycle', status: 'started', sequence: 1, created_at: timestamp }),
+    at(2, { kind: 'tool_status', activity_id: 'activity-3', category: 'read', status: 'completed', label: 'Read', summary: 'first.ts', provider: null, tool_name: null, detail_kind: 'read', detail_text: 'first detail', exit_code: 0, parent_activity_id: null, sequence: 3, created_at: timestamp }),
+    at(3, { kind: 'lifecycle', status: 'succeeded', sequence: 4, created_at: timestamp }),
+    at(4, { kind: 'lifecycle', status: 'started', sequence: 1, created_at: timestamp }),
+    at(5, { kind: 'tool_status', activity_id: 'activity-3', category: 'shell', status: 'completed', label: 'Shell', summary: 'second command', provider: null, tool_name: null, detail_kind: 'shell', detail_text: 'second detail', exit_code: 0, parent_activity_id: null, sequence: 3, created_at: timestamp }),
+  ];
+  const tools = projectTranscript(input).filter((entry) => entry.event.kind === 'tool_status');
+  expect(tools).toHaveLength(2);
+  expect(tools.map((entry) => entry.sourceOrdinals)).toEqual([[2], [5]]);
+});

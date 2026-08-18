@@ -196,7 +196,7 @@ function mapProjectionError(context: Context<ApiEnvironment>, error: unknown) {
           ? 'The WorkRun projection cannot be represented correctly.'
           : unavailable
             ? 'The WorkRun projection is temporarily unavailable.'
-            : 'The WorkRun or requested execution detail was not found for the requested workspace.',
+            : 'The WorkRun was not found for the requested workspace.',
         request_id: requestId(context),
       },
     });

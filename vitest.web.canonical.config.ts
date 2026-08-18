@@ -27,6 +27,8 @@ export default defineConfig({
       'components/work/work-list.browser.test.tsx',
       'components/work/work-detail.browser.test.tsx',
       'features/run-trace/run-trace.browser.test.tsx',
+      'features/run-trace/events.browser.test.tsx',
+      'features/run-trace/map.browser.test.tsx',
     ],
     browser: {
       enabled: true,

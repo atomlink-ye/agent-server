@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 import { ProductSourceRefsSchema } from '../product-source-refs.js';
 
+export const SERVER_AUTHORIZED_TEAM_MCP_CATALOG =
+  'server_authorized_team_mcp_catalog' as const;
+
 const RequiredMessageRefsSchema = ProductSourceRefsSchema.pick({
   team_run_id: true,
   team_message_id: true,
@@ -234,7 +237,7 @@ const McpActivityBaseSchema = z
   .object({
     activity_id: z.string().min(1),
     sequence: z.number().int().positive(),
-    provenance: z.literal('server_authorized_team_mcp_catalog'),
+    provenance: z.literal(SERVER_AUTHORIZED_TEAM_MCP_CATALOG),
     tool_identity_capture_status: z.literal('present'),
     operation_capture_status: z.enum(['present', 'not_present']),
     result_capture_status: z.enum(['not_present', 'redacted']),

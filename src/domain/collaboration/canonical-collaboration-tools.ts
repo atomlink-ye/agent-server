@@ -75,16 +75,31 @@ const COLLABORATION_MCP_REF_BY_NAME = Object.freeze({
 const COLLABORATION_MCP_NAME_SET: ReadonlySet<string> = new Set(
   Object.values(AGENT_SERVER_COLLABORATION_MCP_NAMES),
 );
-const RUNTIME_MCP_PREFIX = 'agent-server_';
+const RUNTIME_MCP_SERVER_NAME = 'agent-server';
+
+export function canonicalCollaborationMcpName(
+  value: string | null | undefined,
+): string | null {
+  return typeof value === 'string' && COLLABORATION_MCP_NAME_SET.has(value)
+    ? value
+    : null;
+}
 
 export function collaborationMcpName(
   value: string | null | undefined,
 ): string | null {
   if (typeof value !== 'string') return null;
-  if (COLLABORATION_MCP_NAME_SET.has(value)) return value;
-  if (!value.startsWith(RUNTIME_MCP_PREFIX)) return null;
-  const publicName = value.slice(RUNTIME_MCP_PREFIX.length);
-  return COLLABORATION_MCP_NAME_SET.has(publicName) ? publicName : null;
+  const normalized = canonicalCollaborationMcpName(value);
+  if (normalized) return normalized;
+  for (const prefix of [
+    `mcp__${RUNTIME_MCP_SERVER_NAME}__`,
+    `${RUNTIME_MCP_SERVER_NAME}.`,
+    `${RUNTIME_MCP_SERVER_NAME}_`,
+  ]) {
+    if (!value.startsWith(prefix)) continue;
+    return canonicalCollaborationMcpName(value.slice(prefix.length));
+  }
+  return null;
 }
 
 export function collaborationMcpRefForName(name: string): string | null {

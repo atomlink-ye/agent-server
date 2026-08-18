@@ -161,9 +161,16 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
                 </div>
                 <span>{selected.summary.entry_count} entries</span>
               </header>
-              <SessionSummaryBlock summary={selected.summary} />
+              <SessionSummaryBlock
+                summary={selected.summary}
+                platformToolCount={selected.entries.filter(
+                  (entry) =>
+                    entry.kind === 'tool_status' && entry.tool_name !== null,
+                ).length}
+              />
               <section className="execution-transcript__events transcript__events" data-testid="session-entries">
                 <h3>Session conversation</h3>
+                <p className="execution-transcript__notice">Platform tool calls are shown with their real names; their arguments and results are not captured.</p>
                 {selected.entries.length ? <TranscriptStream entries={selected.entries} /> : (
                   <p className="execution-transcript__notice">No entries were captured for this session.</p>
                 )}
@@ -261,7 +268,7 @@ function assistantText(entry: ProjectedTranscriptEntry): string {
   return entry.event.kind === 'assistant_text' ? entry.event.text : '';
 }
 
-function SessionSummaryBlock({ summary }: { readonly summary: SessionSummary }) {
+function SessionSummaryBlock({ summary, platformToolCount }: { readonly summary: SessionSummary; readonly platformToolCount: number }) {
   return (
     <div className="execution-transcript__summary" data-testid="session-summary">
       <dl>
@@ -273,6 +280,9 @@ function SessionSummaryBlock({ summary }: { readonly summary: SessionSummary }) 
         </div>
         {summary.work_refs.length ? (
           <div><dt>Work refs</dt><dd>{summary.work_refs.join(', ')}</dd></div>
+        ) : null}
+        {platformToolCount ? (
+          <div data-testid="session-platform-tool-count"><dt>Platform tools</dt><dd>{platformToolCount}</dd></div>
         ) : null}
       </dl>
       {summary.last_meaningful ? (

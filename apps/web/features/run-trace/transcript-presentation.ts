@@ -4,6 +4,8 @@ export type EntryPresentation = {
   readonly icon: string;
   readonly label: string;
   readonly summary: string | null;
+  readonly origin: string | null;
+  readonly platformToolName: string | null;
   readonly tone: 'normal' | 'failed' | 'running';
   readonly detailText: string | null;
   readonly detailKind: string | null;
@@ -14,14 +16,21 @@ export type EntryPresentation = {
 export function buildEntryPresentation(event: TranscriptEntry): EntryPresentation {
   if (event.kind === 'reasoning_progress')
     return {
-      icon: 'brain', label: 'Thinking', summary: null,
+      icon: 'brain', label: 'Thinking', summary: null, origin: null, platformToolName: null,
       tone: event.status === 'started' ? 'running' : 'normal',
       detailText: event.text, detailKind: null, exitCode: null, expandable: Boolean(event.text),
     };
   if (event.kind === 'tool_status') {
+    if (event.tool_name !== null)
+      return {
+        icon: 'platform', label: humanize(event.tool_name), summary: null,
+        origin: 'Agent Server', platformToolName: event.tool_name,
+        tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
+        detailText: null, detailKind: null, exitCode: null, expandable: true,
+      };
     const label = event.label ?? humanize(event.tool_name ?? event.category);
     return {
-      icon: iconForTool(event.category), label, summary: meaningfulSummary(label, event.summary),
+      icon: iconForTool(event.category), label, summary: meaningfulSummary(label, event.summary), origin: null, platformToolName: null,
       tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
       detailText: event.detail_text, detailKind: event.detail_kind, exitCode: event.exit_code,
       expandable: Boolean(event.detail_text) || event.exit_code !== null,
@@ -30,16 +39,16 @@ export function buildEntryPresentation(event: TranscriptEntry): EntryPresentatio
   if (event.kind === 'child_timeline_item')
     return {
       icon: iconForTool(event.item_kind === 'reasoning' ? 'other' : event.item_kind === 'tool' ? 'other' : 'subagent'),
-      label: event.label, summary: meaningfulSummary(event.label, event.summary),
+      label: event.label, summary: meaningfulSummary(event.label, event.summary), origin: null, platformToolName: null,
       tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
       detailText: event.detail_text, detailKind: event.detail_kind, exitCode: event.exit_code,
       expandable: Boolean(event.detail_text) || event.exit_code !== null,
     };
   if (event.kind === 'permission') {
     const decision = event.decision ? humanize(event.decision) : event.status === 'resolved' ? 'Resolved' : 'Not captured / not triggered';
-    return { icon: 'lock', label: 'Permission check', summary: `${decision}${event.summary ? ` · ${event.summary}` : ''}`, tone: 'normal', detailText: null, detailKind: null, exitCode: null, expandable: false };
+    return { icon: 'lock', label: 'Permission check', summary: `${decision}${event.summary ? ` · ${event.summary}` : ''}`, origin: null, platformToolName: null, tone: 'normal', detailText: null, detailKind: null, exitCode: null, expandable: false };
   }
-  return { icon: 'wrench', label: humanize(event.kind), summary: null, tone: 'normal', detailText: null, detailKind: null, exitCode: null, expandable: false };
+  return { icon: 'wrench', label: humanize(event.kind), summary: null, origin: null, platformToolName: null, tone: 'normal', detailText: null, detailKind: null, exitCode: null, expandable: false };
 }
 
 export function humanize(value: string): string {

@@ -88,9 +88,8 @@ export function projectTranscript(
 
     if (entry.kind === 'assistant_text') {
       const previous = rows.at(-1);
-      // Real lead data is cumulative snapshots. Keep the latest snapshot only
-      // when it immediately follows the prior one, while retaining both source
-      // ordinals for the zero-loss invariant.
+      // Keep the latest only when the observed text proves this is a cumulative
+      // snapshot; real provider text may also arrive as independent chunks.
       if (
         previous?.event.kind === 'assistant_text' &&
         entry.text.startsWith(previous.event.text)

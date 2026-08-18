@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 
+import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
 import {
   createProductProjection,
   type ProductProjectionApi,
@@ -10,6 +11,7 @@ import type { ExecutionFactQuery } from '../../application/ports/execution-fact-
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
 import type { ProductWorkListQuery } from '../../application/ports/product-work-list-query.js';
+import type { RunEventRepository } from '../../application/ports/run-events.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
 import { StartWorkRun } from '../../application/work/start-work-run.js';
@@ -52,9 +54,16 @@ export function installWorkHttpRoutes(
     readonly productLists: ProductWorkListQuery;
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
     readonly projection: ProductProjectionApi;
+    readonly executionDetail?: Pick<GetProductExecutionDetail, 'execute'>;
   },
 ): void {
-  const { workIdentity, productLists, startWorkRun, projection } = dependencies;
+  const {
+    workIdentity,
+    productLists,
+    startWorkRun,
+    projection,
+    executionDetail,
+  } = dependencies;
   registerProductWorkCommandRoutes(app, {
     config,
     workIdentity,
@@ -66,6 +75,7 @@ export function installWorkHttpRoutes(
   registerProductWorkRoutes(app, {
     config,
     productProjection: projection,
+    ...(executionDetail ? { executionDetail } : {}),
   });
 }
 
@@ -79,6 +89,8 @@ export function createWorkModule(options: {
   readonly definitionResolution?: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
+  /** Production supplies durable Run events for Product-scoped execution detail. */
+  readonly runEvents?: Pick<RunEventRepository, 'list'>;
   /** Production supplies the RuntimeModule capability authority. */
   readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
@@ -136,15 +148,24 @@ export function createWorkModule(options: {
     findLatestVisibleWorkRun: (workId: string, owner: WorkIdentityOwnerScope) =>
       repository.findLatestVisibleWorkRun(workId, owner),
   };
+  const workFacts = new WorkProjectionFactsSource(
+    new QueryWorkProjectionFacts(
+      new PostgresWorkProjectionFactsQuery(options.database),
+    ),
+  );
   const projection = createProductProjection({
     workIdentity: workIdentityQuery,
-    workFacts: new WorkProjectionFactsSource(
-      new QueryWorkProjectionFacts(
-        new PostgresWorkProjectionFactsQuery(options.database),
-      ),
-    ),
+    workFacts,
     executionFacts: options.executionFacts,
   });
+  const executionDetail = options.runEvents
+    ? new GetProductExecutionDetail(
+        workIdentityQuery,
+        workFacts,
+        options.executionFacts,
+        options.runEvents,
+      )
+    : undefined;
 
   return {
     projection,
@@ -154,6 +175,7 @@ export function createWorkModule(options: {
         productLists,
         startWorkRun,
         projection,
+        ...(executionDetail ? { executionDetail } : {}),
       });
     },
     contributeRuntime(context) {

@@ -3,16 +3,28 @@ import type { ProjectedTranscriptEntry, TranscriptEntry } from './transcript-pro
 
 export function ActivityRow({ entry, nested = false }: { readonly entry: ProjectedTranscriptEntry; readonly nested?: boolean }) {
   const presentation = buildEntryPresentation(entry.event);
-  const content = <RowContent event={entry.event} />;
   const children = entry.children?.length ? (
     <div className="transcript__children">
       {entry.children.map((child) => <ActivityRow entry={child} key={child.sourceOrdinals.join(':')} nested />)}
     </div>
   ) : null;
-  if (!presentation.expandable && !children)
-    return <div className={`transcript__row transcript__row--static ${nested ? 'transcript__row--nested' : ''}`} data-source-ordinals={entry.sourceOrdinals.join(',')} data-testid="transcript-activity-row">{content}</div>;
+  const expandable = presentation.expandable || Boolean(children);
+  const rowKind = entry.event.kind === 'reasoning_progress'
+    ? 'reasoning'
+    : entry.event.kind === 'tool_status'
+      ? 'tool'
+      : 'other';
+  const attributes = {
+    'data-source-ordinals': entry.sourceOrdinals.join(','),
+    'data-testid': 'transcript-activity-row',
+    'data-transcript-row-kind': rowKind,
+    'data-transcript-row-mode': expandable ? 'expandable' : 'static',
+  } as const;
+  const content = <RowContent event={entry.event} expandable={expandable} />;
+  if (!expandable)
+    return <div className={`transcript__row transcript__row--static ${nested ? 'transcript__row--nested' : ''}`} {...attributes}>{content}</div>;
   return (
-    <details className={`transcript__row ${nested ? 'transcript__row--nested' : ''} ${presentation.tone === 'running' ? 'is-running' : ''}`} data-source-ordinals={entry.sourceOrdinals.join(',')} data-testid="transcript-activity-row">
+    <details className={`transcript__row ${nested ? 'transcript__row--nested' : ''} ${presentation.tone === 'running' ? 'is-running' : ''}`} {...attributes}>
       <summary>{content}</summary>
       <div className="transcript__detail">
         {presentation.detailText ? <pre>{presentation.detailText}</pre> : null}
@@ -23,10 +35,13 @@ export function ActivityRow({ entry, nested = false }: { readonly entry: Project
   );
 }
 
-function RowContent({ event }: { readonly event: TranscriptEntry }) {
+function RowContent({ event, expandable }: { readonly event: TranscriptEntry; readonly expandable: boolean }) {
   const presentation = buildEntryPresentation(event);
   return <>
-    <ActivityIcon icon={presentation.tone === 'failed' ? 'error' : presentation.icon} />
+    <span className="transcript__icon-slot">
+      <ActivityIcon icon={presentation.tone === 'failed' ? 'error' : presentation.icon} />
+      {expandable ? <span className="transcript__chevron" aria-hidden="true">⌄</span> : null}
+    </span>
     <span className="transcript__row-copy"><strong>{presentation.label}</strong>{presentation.summary ? <small>{presentation.summary}</small> : null}</span>
   </>;
 }

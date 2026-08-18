@@ -21,6 +21,41 @@ const stream = page.getByTestId('transcript-stream');
 await stream.scrollIntoViewIfNeeded();
 await page.screenshot({ path: '/workspace/transcript-lead-body.png' });
 
+async function exerciseExpandableRow(kind) {
+  const row = stream.locator(`[data-transcript-row-kind="${kind}"][data-transcript-row-mode="expandable"]`).first();
+  if (!await row.count()) throw new Error(`No expandable ${kind} row was rendered for the lead session`);
+  await row.scrollIntoViewIfNeeded();
+  const beforeOpen = await row.evaluate((element) => element instanceof HTMLDetailsElement && element.open);
+  const beforeBox = await row.boundingBox();
+  if (beforeOpen || !beforeBox) throw new Error(`${kind} row was not initially collapsed`);
+  await row.locator('summary').click();
+  await page.waitForTimeout(50);
+  const afterOpen = await row.evaluate((element) => element instanceof HTMLDetailsElement && element.open);
+  const afterBox = await row.boundingBox();
+  const detailTextLength = await row.locator('.transcript__detail').textContent().then((text) => text?.trim().length ?? 0);
+  if (!afterOpen || !afterBox || afterBox.height <= beforeBox.height || !detailTextLength)
+    throw new Error(`${kind} row did not expand into visible detail`);
+  return { before_open: beforeOpen, after_open: afterOpen, before_height: beforeBox.height, after_height: afterBox.height, detail_text_length: detailTextLength };
+}
+
+async function exerciseStaticRow() {
+  const row = stream.locator('[data-transcript-row-mode="static"]').first();
+  if (!await row.count()) throw new Error('No static activity row was rendered for the lead session');
+  await row.scrollIntoViewIfNeeded();
+  const beforeBox = await row.boundingBox();
+  if (!beforeBox) throw new Error('Static activity row has no bounding box');
+  await row.click();
+  await page.waitForTimeout(50);
+  const afterBox = await row.boundingBox();
+  if (!afterBox || Math.abs(afterBox.height - beforeBox.height) > 0.5)
+    throw new Error('Static activity row changed height after click');
+  return { before_height: beforeBox.height, after_height: afterBox.height };
+}
+
+const reasoningExpand = await exerciseExpandableRow('reasoning');
+const toolExpand = await exerciseExpandableRow('tool');
+const staticClick = await exerciseStaticRow();
+
 const metrics = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
   const prose = document.querySelector('[data-testid="transcript-prose"]');
@@ -59,7 +94,8 @@ const metrics = await page.evaluate(() => {
     max_consecutive_thinking: maxConsecutiveThinking,
     duplicated_label_lines: duplicatedLabelLines,
     rows_above_fold_1440x900: streamItems.filter((item) => item.getBoundingClientRect().top < 900).length,
-    collapsed_rows_with_transparent_border: rows.filter((row) => !row.hasAttribute('open') && getComputedStyle(row).borderTopColor === 'rgba(0, 0, 0, 0)').length,
+    expandable_rows: rows.filter((row) => row.dataset.transcriptRowMode === 'expandable').length,
+    static_rows: rows.filter((row) => row.dataset.transcriptRowMode === 'static').length,
     max_gap_px_between_consecutive_activity_rows: Math.max(0, ...gaps),
     prose_font_size_px: proseStyle ? Number.parseFloat(proseStyle.fontSize) : 0,
     activity_row_font_size_px: rowStyle ? Number.parseFloat(rowStyle.fontSize) : 0,
@@ -71,6 +107,11 @@ const metrics = await page.evaluate(() => {
     source_ordinal_coverage: ordinals.size,
   };
 });
+metrics.expandability_checks = {
+  reasoning: reasoningExpand,
+  tool: toolExpand,
+  static: staticClick,
+};
 await writeFile('/workspace/transcript-metrics.json', `${JSON.stringify(metrics, null, 2)}\n`);
 console.log(JSON.stringify(metrics));
 await browser.close();

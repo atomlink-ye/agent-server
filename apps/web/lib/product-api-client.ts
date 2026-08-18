@@ -37,7 +37,7 @@ export async function getProductApi(path: string): Promise<Response> {
 }
 
 const productWritePath = new RegExp(
-  `^(?:/api/v1/works/(?:${uuidPath})/(?:runs|definition-version)|/api/v1/work-definitions:(?:validate|plan|apply))$`,
+  `^(?:/api/v1/works(?:/(?:${uuidPath})/(?:runs|definition-version))?|/api/v1/work-definitions:(?:validate|plan|apply))$`,
   'iu',
 );
 
@@ -49,8 +49,11 @@ export async function postProductApi(
 ): Promise<Response> {
   if (!productWritePath.test(path))
     throw new ProductApiClientError('invalid_path');
-  const applyingDefinition = path === '/api/v1/work-definitions:apply';
-  if (applyingDefinition !== Boolean(options.idempotencyKey))
+  const requiresIdempotencyKey = path === '/api/v1/work-definitions:apply';
+  const hasIdempotencyKey = Boolean(options.idempotencyKey);
+  if (requiresIdempotencyKey && !hasIdempotencyKey)
+    throw new ProductApiClientError('invalid_path');
+  if (!requiresIdempotencyKey && hasIdempotencyKey)
     throw new ProductApiClientError('invalid_path');
 
   const { baseUrl, serviceToken } = productConnection();

@@ -14,6 +14,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { DefinitionPanel } from '@/components/work/definition-panel';
+import { NewWork } from '@/components/work/new-work';
 import {
   WORK_TABS,
   formatTimestamp,
@@ -43,6 +44,7 @@ type AnchoredTrace = Extract<
 export function WorkListShell() {
   const [state, setState] = useState<LoadState>('loading');
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
+  const [showNewWork, setShowNewWork] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,19 +65,30 @@ export function WorkListShell() {
   return (
     <WorkShellFrame testId="work-list-shell">
       <header className="work-list-header">
-        <p className="work-shell-kicker">My Work</p>
-        <h1>My Work</h1>
-        <p className="work-list-header__summary">
-          Does this need me? What happened in the latest Run?
-        </p>
-        <p className="work-list-header__coverage">
-          Delivered Artifacts are not shown until the Product API exposes them;
-          this view does not infer them from messages or tool output.
-        </p>
+        <div>
+          <p className="work-shell-kicker">My Work</p>
+          <h1>My Work</h1>
+          <p className="work-list-header__summary">
+            Does this need me? What happened in the latest Run?
+          </p>
+          <p className="work-list-header__coverage">
+            Delivered Artifacts are not shown until the Product API exposes them;
+            this view does not infer them from messages or tool output.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowNewWork(!showNewWork)}
+          type="button"
+          data-testid="new-work-cta"
+          className="work-list-header__cta"
+        >
+          {showNewWork ? 'Hide' : 'New Work'}
+        </button>
       </header>
+      {showNewWork ? <NewWork /> : null}
       {state === 'loading' ? <WorkListLoading /> : null}
       {state === 'error' ? <WorkListError /> : null}
-      {state === 'available' && works.length === 0 ? <WorkListEmpty /> : null}
+      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={!showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
       {state === 'available' && works.length > 0 ? (
         <section aria-labelledby="work-list-heading" className="work-list-region">
           <div className="work-list-region__heading">
@@ -781,18 +794,31 @@ function WorkListError() {
   );
 }
 
-function WorkListEmpty() {
-  return (
-    <section
-      aria-labelledby="work-list-empty-heading"
-      className="work-list-state work-list-state--empty"
-      data-testid="work-list-empty"
-    >
-      <p className="work-list-state__eyebrow">No Work records</p>
-      <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
-      <p>When Work is created, it will appear here as the durable entry.</p>
-    </section>
-  );
+function WorkListEmpty({ showNewWork, onNewWork }: {
+  readonly showNewWork: boolean;
+  readonly onNewWork: () => void;
+}) {
+  if (!showNewWork) {
+    return (
+      <section
+        aria-labelledby="work-list-empty-heading"
+        className="work-list-state work-list-state--empty"
+        data-testid="work-list-empty"
+      >
+        <p className="work-list-state__eyebrow">No Work records</p>
+        <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
+        <p>When Work is created, it will appear here as the durable entry.</p>
+        <button
+          onClick={onNewWork}
+          type="button"
+          className="work-list-state__cta"
+        >
+          Create your first Work
+        </button>
+      </section>
+    );
+  }
+  return null;
 }
 
 async function readJson<T>(path: string): Promise<T> {

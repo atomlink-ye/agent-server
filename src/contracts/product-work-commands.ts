@@ -14,6 +14,10 @@ export const CreateWorkRequestSchema = z
   })
   .strict();
 
+export const UpdateWorkDefinitionVersionRequestSchema = z
+  .object({ definition_version_id: z.uuid() })
+  .strict();
+
 export const StartWorkRunRequestSchema = z
   .object({
     trigger_kind: z.literal('manual'),
@@ -99,6 +103,8 @@ export const CreateWorkResponseSchema = z
   .object({ work: WorkResponseSchema })
   .strict();
 
+export const UpdateWorkDefinitionVersionResponseSchema = CreateWorkResponseSchema;
+
 export const StartWorkRunResponseSchema = z
   .object({
     work_run: WorkRunSummarySchema,
@@ -136,6 +142,12 @@ export const GetWorkResponseSchema = z
 export const WorkRunResponseSchema = WorkRunSummarySchema;
 
 export type CreateWorkRequest = z.infer<typeof CreateWorkRequestSchema>;
+export type UpdateWorkDefinitionVersionRequest = z.infer<
+  typeof UpdateWorkDefinitionVersionRequestSchema
+>;
+export type UpdateWorkDefinitionVersionResponse = z.infer<
+  typeof UpdateWorkDefinitionVersionResponseSchema
+>;
 export type StartWorkRunRequest = z.infer<typeof StartWorkRunRequestSchema>;
 export type WorkResponse = z.infer<typeof WorkResponseSchema>;
 export type WorkListItem = z.infer<typeof WorkListItemSchema>;

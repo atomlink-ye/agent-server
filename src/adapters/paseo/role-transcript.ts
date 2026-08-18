@@ -71,6 +71,37 @@ export interface RoleTranscriptEntry {
   readonly body: unknown;
 }
 
+export interface RoleTranscriptMeaningfulEntry {
+  readonly kind: Extract<
+    RoleTranscriptEntryKind,
+    'assistant' | 'tool' | 'error'
+  >;
+  readonly rawType: string;
+  readonly timestamp: string;
+  readonly derivedSummary: string;
+  readonly action?: string;
+  readonly result?: string;
+}
+
+/**
+ * Facts derived only from the role roster and the fetched timeline tail. A
+ * null historical turn count is deliberate: the timeline does not expose
+ * turn boundaries, and this read model does not join run_events to invent one.
+ */
+export interface RoleTranscriptOverview {
+  readonly memberName: string;
+  readonly role: string;
+  readonly status: string;
+  readonly providerAgentId: string;
+  /** Number of entries in the fetched page, not an invented whole-history total. */
+  readonly entryCount: number;
+  readonly historicalTurnCount: number | null;
+  readonly lastTimestamp: string | null;
+  readonly hasOlder: boolean;
+  readonly workRefs: readonly string[];
+  readonly lastMeaningful: RoleTranscriptMeaningfulEntry | null;
+}
+
 const SUMMARY_MAX_LENGTH = 160;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -123,6 +154,73 @@ function summarizeToolCall(item: Record<string, unknown>): string {
     : null;
   const head = status ? `${name} (${status})` : name;
   return condense(headline ? `${head}: ${headline}` : head);
+}
+
+const TOOL_STRUCTURAL_KEYS = ['toolName', 'type', 'operation', 'mode'] as const;
+const TOOL_RESULT_KEYS = [
+  'status',
+  'work_ref',
+  'workRef',
+  'owner',
+  'ok',
+  'success',
+] as const;
+const TOOL_RESULT_CONTAINERS = [
+  'detail',
+  'metadata',
+  'output',
+  'result',
+  'data',
+] as const;
+
+function safeScalar(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() ? condense(value) : null;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  return null;
+}
+
+function findStructuralToolValue(
+  value: unknown,
+  keys: readonly string[],
+): string | null {
+  if (!isRecord(value)) return null;
+  for (const key of keys) {
+    const result = safeScalar(value[key]);
+    if (result) return result;
+  }
+  return null;
+}
+
+function findToolResultMetadata(value: unknown, depth = 0): string | null {
+  if (!isRecord(value) || depth > 2) return null;
+  for (const key of TOOL_RESULT_KEYS) {
+    const result = safeScalar(value[key]);
+    if (result) return result;
+  }
+  for (const key of TOOL_RESULT_CONTAINERS) {
+    const result = findToolResultMetadata(value[key], depth + 1);
+    if (result) return result;
+  }
+  return null;
+}
+
+/** Extract only bounded, allowlisted tool metadata for an overview. */
+function deriveToolActionResult(item: Record<string, unknown>): {
+  readonly action?: string;
+  readonly result?: string;
+} {
+  const detail = isRecord(item.detail) ? item.detail : null;
+  const name = stringField(item, 'name');
+  const action =
+    name ??
+    findStructuralToolValue(detail, TOOL_STRUCTURAL_KEYS) ??
+    findStructuralToolValue(item, TOOL_STRUCTURAL_KEYS);
+  const result = findToolResultMetadata(item);
+  return {
+    ...(action ? { action: condense(action) } : {}),
+    ...(result ? { result: condense(result) } : {}),
+  };
 }
 
 function summarizeUsage(usage: Record<string, unknown>): string {
@@ -264,4 +362,108 @@ export function orderEntries(
       return left.index - right.index;
     })
     .map(({ entry }) => entry);
+}
+
+const WORK_REF_PATTERN = /(?:^|[^A-Za-z0-9_])(W-[1-9]\d*)(?![A-Za-z0-9_])/gu;
+const MAX_WORK_REF_SCAN_DEPTH = 8;
+const MAX_WORK_REFS = 256;
+
+function collectWorkRefs(
+  value: unknown,
+  refs: Set<string>,
+  seen: WeakSet<object>,
+  depth = 0,
+): void {
+  if (refs.size >= MAX_WORK_REFS || depth > MAX_WORK_REF_SCAN_DEPTH) return;
+  if (typeof value === 'string') {
+    for (const match of value.matchAll(WORK_REF_PATTERN)) {
+      const ref = match[1];
+      if (ref) refs.add(ref);
+      if (refs.size >= MAX_WORK_REFS) return;
+    }
+    return;
+  }
+  if (typeof value !== 'object' || value === null || seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const entry of value) collectWorkRefs(entry, refs, seen, depth + 1);
+    return;
+  }
+  for (const entry of Object.values(value))
+    collectWorkRefs(entry, refs, seen, depth + 1);
+}
+
+function workRefsFromEntries(
+  entries: readonly RoleTranscriptEntry[],
+): readonly string[] {
+  const refs = new Set<string>();
+  const seen = new WeakSet<object>();
+  for (const entry of entries) {
+    collectWorkRefs(entry.body, refs, seen);
+    collectWorkRefs(entry.derivedSummary, refs, seen);
+    if (refs.size >= MAX_WORK_REFS) break;
+  }
+  return [...refs];
+}
+
+function isMeaningful(
+  entry: RoleTranscriptEntry,
+): entry is RoleTranscriptEntry & {
+  readonly kind: Extract<
+    RoleTranscriptEntryKind,
+    'assistant' | 'tool' | 'error'
+  >;
+} {
+  if (
+    entry.kind !== 'assistant' &&
+    entry.kind !== 'tool' &&
+    entry.kind !== 'error'
+  )
+    return false;
+  if (!entry.derivedSummary.trim()) return false;
+  return !(
+    entry.kind === 'assistant' && entry.derivedSummary.startsWith('(empty ')
+  );
+}
+
+function lastTimestamp(entries: readonly RoleTranscriptEntry[]): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const timestamp = entries[index]?.timestamp.trim();
+    if (timestamp) return timestamp;
+  }
+  return null;
+}
+
+/** Derive a compact role-level read model without adding another data source. */
+export function deriveRoleTranscriptOverview(input: {
+  readonly memberName: string;
+  readonly role: string;
+  readonly status: string;
+  readonly providerAgentId: string;
+  readonly entries: readonly RoleTranscriptEntry[];
+  readonly hasOlder: boolean;
+}): RoleTranscriptOverview {
+  const meaningful = [...input.entries].reverse().find(isMeaningful);
+  return {
+    memberName: input.memberName,
+    role: input.role,
+    status: input.status,
+    providerAgentId: input.providerAgentId,
+    entryCount: input.entries.length,
+    historicalTurnCount: null,
+    lastTimestamp: lastTimestamp(input.entries),
+    hasOlder: input.hasOlder,
+    workRefs: workRefsFromEntries(input.entries),
+    lastMeaningful: meaningful
+      ? {
+          kind: meaningful.kind,
+          rawType: meaningful.rawType,
+          timestamp: meaningful.timestamp,
+          derivedSummary: meaningful.derivedSummary,
+          ...(meaningful.kind === 'tool'
+            ? deriveToolActionResult(meaningful.body as Record<string, unknown>)
+            : {}),
+        }
+      : null,
+  };
 }

@@ -4,7 +4,7 @@
 //   pnpm role-transcript -- --team-run <uuid> --member analyst
 //   pnpm role-transcript -- --team-run <uuid> --member lead --json
 //
-// With no --member it lists the roles that have a transcript. Read-only: one
+// With no --member it prints one derived overview per role. Read-only: one
 // SELECT and one Paseo timeline fetch per role, no writes anywhere.
 import { Pool } from 'pg';
 import { DaemonClient } from '@getpaseo/client';
@@ -49,16 +49,32 @@ try {
   );
 
   if (!memberName) {
-    const roles = await reader.listRoles(teamRunId);
-    if (asJson) process.stdout.write(`${JSON.stringify(roles, null, 2)}\n`);
-    else if (roles.length === 0)
+    const transcripts = await reader.readAll(teamRunId);
+    if (asJson)
+      process.stdout.write(
+        `${JSON.stringify(
+          transcripts.map((transcript) => transcript.overview),
+          null,
+          2,
+        )}\n`,
+      );
+    else if (transcripts.length === 0)
       process.stdout.write(
         `no member of team run ${teamRunId} has a Paseo agent yet\n`,
       );
     else
-      for (const role of roles)
+      for (const { overview } of transcripts)
         process.stdout.write(
-          `${role.memberName}\t(${role.role}, ${role.status})\t${role.providerAgentId}\n`,
+          `${overview.memberName}\t(${overview.role}, ${overview.status})\t` +
+            `${overview.providerAgentId}\t` +
+            `${overview.entryCount} entries\thistorical turns unavailable\t` +
+            `last ${overview.lastTimestamp ?? '-'}\tolder ${overview.hasOlder ? 'yes' : 'no'}\t` +
+            `work ${overview.workRefs.length ? overview.workRefs.join(',') : '-'}\t` +
+            `last ${overview.lastMeaningful?.derivedSummary ?? '-'}${
+              overview.lastMeaningful?.kind === 'tool'
+                ? `\taction ${overview.lastMeaningful.action ?? '-'}\tresult ${overview.lastMeaningful.result ?? '-'}`
+                : ''
+            }\n`,
         );
   } else {
     const transcript = await reader.read({ teamRunId, memberName });

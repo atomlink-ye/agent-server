@@ -12,8 +12,10 @@
  */
 
 import {
+  deriveRoleTranscriptOverview,
   orderEntries,
   projectTimelineEntry,
+  type RoleTranscriptOverview,
   type RoleTranscriptEntry,
 } from './role-transcript.js';
 
@@ -63,6 +65,7 @@ export interface RoleTranscript {
   readonly hasOlder: boolean;
   /** Paseo's opaque cursor for older entries; pagination is intentionally not implemented here. */
   readonly cursor: unknown | null;
+  readonly overview: RoleTranscriptOverview;
   readonly entries: readonly RoleTranscriptEntry[];
 }
 
@@ -143,6 +146,14 @@ export class RoleTranscriptReader {
       hasOlder: page.hasOlder === true,
       cursor: page.startCursor ?? null,
       entries,
+      overview: deriveRoleTranscriptOverview({
+        memberName: binding.memberName,
+        role: binding.role,
+        status: binding.status,
+        providerAgentId: binding.providerAgentId,
+        entries,
+        hasOlder: page.hasOlder === true,
+      }),
     };
   }
 }

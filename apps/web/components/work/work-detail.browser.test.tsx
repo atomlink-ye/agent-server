@@ -144,7 +144,7 @@ it('renders the four-tab Work shell and fixture-backed Overview through Product 
       [...host.querySelectorAll<HTMLAnchorElement>('.work-tabs a')].map((item) =>
         item.textContent?.trim(),
       ),
-    ).toEqual(['Overview', 'Runs', 'Artifacts', 'Definition']);
+    ).toEqual(['Overview', 'Runs', 'Transcript', 'Artifacts', 'Definition']);
     expect(host.textContent).toContain('Historical Run Trace');
     expect(host.textContent).toContain('MCP-only');
     for (const excluded of trace.timeline_coverage.excluded_execution)

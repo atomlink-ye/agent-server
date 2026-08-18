@@ -297,6 +297,7 @@ function WorkDetail({
       />
       {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
+      {activeTab === 'transcript' ? <TranscriptPanel data={data} /> : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
       {activeTab === 'definition' ? (
         <DefinitionPanel
@@ -382,9 +383,43 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         </div>
       </div>
       <RunTrace live={live} trace={trace} />
-      <ExecutionTranscript live={live} trace={trace} />
-      <SessionTranscripts live={live} trace={trace} />
       <RunReview run={run} trace={trace} />
+    </section>
+  );
+}
+
+function TranscriptPanel({ data }: { readonly data: WorkDetailData }) {
+  const [view, setView] = useState<'sessions' | 'execution'>('sessions');
+  if (!data.run || !data.trace)
+    return (
+      <section className="work-detail-state" data-testid="work-no-runs">
+        <p className="work-shell-kicker">Transcript</p>
+        <h2>No Run has been recorded yet.</h2>
+        <p>The Work exists, but there is no execution history to project.</p>
+      </section>
+    );
+  const live = data.run.work_run.product_state === 'running';
+  return (
+    <section className="work-transcript-panel" data-testid="work-transcript-panel">
+      <div className="work-transcript-panel__tabs" role="tablist" aria-label="Transcript views">
+        {(['sessions', 'execution'] as const).map((item) => (
+          <button
+            aria-selected={view === item}
+            className="work-transcript-panel__tab"
+            key={item}
+            onClick={() => setView(item)}
+            role="tab"
+            type="button"
+          >
+            {item === 'sessions' ? 'Session Transcripts' : 'Execution Transcript'}
+          </button>
+        ))}
+      </div>
+      {view === 'sessions' ? (
+        <SessionTranscripts live={live} trace={data.trace} />
+      ) : (
+        <ExecutionTranscript live={live} trace={data.trace} />
+      )}
     </section>
   );
 }

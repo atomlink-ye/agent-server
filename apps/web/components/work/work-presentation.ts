@@ -1,6 +1,6 @@
 import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
 
-export type WorkTab = 'overview' | 'runs' | 'artifacts' | 'definition';
+export type WorkTab = 'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
 export const WORK_TABS: readonly {
   readonly id: WorkTab;
@@ -8,6 +8,7 @@ export const WORK_TABS: readonly {
 }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'runs', label: 'Runs' },
+  { id: 'transcript', label: 'Transcript' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'definition', label: 'Definition' },
 ];

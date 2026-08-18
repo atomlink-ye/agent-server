@@ -369,8 +369,8 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         </div>
       </div>
       <RunTrace live={live} trace={trace} />
-      <ExecutionTranscript trace={trace} />
-      <SessionTranscripts trace={trace} />
+      <ExecutionTranscript live={live} trace={trace} />
+      <SessionTranscripts live={live} trace={trace} />
       <RunReview run={run} trace={trace} />
     </section>
   );

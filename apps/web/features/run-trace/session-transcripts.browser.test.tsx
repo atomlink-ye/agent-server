@@ -65,7 +65,7 @@ const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
         truncated: false,
       },
       entries: [
-        { ordinal: 1, kind: 'permission', sequence: 1, created_at: '2026-08-17T09:57:00.000Z', activity_id: 'a3', category: 'tool', status: '' , decision: null, summary: '' },
+        { ordinal: 1, kind: 'permission', sequence: 1, created_at: '2026-08-17T09:57:00.000Z', activity_id: 'a3', category: 'tool', status: 'requested', decision: null, summary: '' },
       ],
     },
   ],
@@ -161,10 +161,11 @@ it('renders per-session transcripts with switching between sessions that share a
     // preserving that entry still leaves the total rendered unit count intact.
     const withPlatformCount = host.querySelectorAll('.transcript__item').length;
     const withoutPlatform = structuredClone(MOCK_RESPONSE);
-    withoutPlatform.sessions[0]!.entries[1] = {
-      ...withoutPlatform.sessions[0]!.entries[1]!,
-      tool_name: null,
-    };
+    const toolEntry = withoutPlatform.sessions[0]!.entries.find(
+      (entry) => entry.kind === 'tool_status',
+    );
+    if (!toolEntry) throw new Error('Fixture must contain a tool_status entry.');
+    toolEntry.tool_name = null;
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => withoutPlatform });
     await act(async () => {
       root.render(<SessionTranscripts key="without-platform-provenance" trace={trace} />);

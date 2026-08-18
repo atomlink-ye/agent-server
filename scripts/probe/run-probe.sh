@@ -79,13 +79,34 @@ docker exec "$PSO" bash -lc 'cat /runtime-state/live-stream.ndjson' > "$OUT/06-l
 wc -l "$OUT/06-live-stream.ndjson"
 
 say "step 7: what the database says the role -> paseo agent id chain is"
+# provider_agent_id lives in two places (runtime_sessions and runtime_session_bindings);
+# dump both rather than assume which one a team member populates.
 docker exec "$API" bash -lc 'cd /workspace && node -e "
 const pg=require(\"pg\");
-(async()=>{const p=new pg.Pool({connectionString:process.env.DATABASE_URL,max:1});
-const q=await p.query(\`SELECT m.name,m.role,m.status,m.runtime_session_id,s.provider_agent_id,s.paseo_workspace_id FROM team_member_runs m LEFT JOIN runtime_sessions s ON s.id=m.runtime_session_id ORDER BY m.created_at\`);
-console.log(JSON.stringify(q.rows,null,2));await p.end();})().catch(e=>{console.error(String(e));process.exit(1)});
+(async()=>{
+  const p=new pg.Pool({connectionString:process.env.DATABASE_URL,max:1});
+  const out={};
+  const q=async(k,sql)=>{ try{ out[k]=(await p.query(sql)).rows; }catch(e){ out[k]={error:String(e)}; } };
+  await q(\"members\",\`SELECT team_run_id,name,role,status,runtime_session_id,created_at FROM team_member_runs ORDER BY created_at\`);
+  await q(\"runtime_sessions\",\`SELECT id,scope_kind,scope_id,task_id,provider_agent_id,paseo_workspace_id,created_at FROM runtime_sessions ORDER BY created_at\`);
+  await q(\"joined\",\`SELECT m.name,m.role,m.status,m.runtime_session_id,s.provider_agent_id,s.paseo_workspace_id FROM team_member_runs m LEFT JOIN runtime_sessions s ON s.id=m.runtime_session_id ORDER BY m.created_at\`);
+  await q(\"bindings\",\`SELECT run_id,provider_agent_id,created_at FROM runtime_session_bindings ORDER BY created_at\`);
+  console.log(JSON.stringify(out,null,2));
+  await p.end();
+})().catch(e=>{console.error(String(e));process.exit(1)});
 "' > "$OUT/07-db-role-chain.json" 2>&1
-cat "$OUT/07-db-role-chain.json"
+head -c 6000 "$OUT/07-db-role-chain.json"
+
+say "step 8: does a FINISHED agent still return a timeline? (SDK, after the run ended)"
+IDS=$(sed -n 's/^RESOLVED_AGENT_ID\[[a-z]*\]=//p' "$OUT/05-role-agent-ids.txt" 2>/dev/null | tr '\n' ' ')
+echo "IDS=$IDS"
+if [ -n "${IDS// /}" ]; then
+  docker exec "$PSO" bash -lc "PASEO_WS_URL=ws://127.0.0.1:16767/ws node /workspace/scripts/probe/paseo-fetch-timeline.mjs $IDS" \
+    > "$OUT/08-sdk-timeline-after-run.ndjson" 2>&1
+  wc -c "$OUT/08-sdk-timeline-after-run.ndjson"; head -c 2000 "$OUT/08-sdk-timeline-after-run.ndjson"
+else
+  echo "PROBE_NOTE: no agent ids resolved, step 8 is MISSING not FAIL"
+fi
 
 say "done; artifacts in $OUT"
 ls -la "$OUT"

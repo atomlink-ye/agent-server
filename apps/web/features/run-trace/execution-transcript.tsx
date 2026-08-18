@@ -7,6 +7,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import { ExecutionEventRenderer } from './execution-event-renderer';
 import './execution-transcript.css';
 
 type Trace = Extract<
@@ -175,79 +176,12 @@ function ExecutionEvents({
       <section className="execution-transcript__timeline">
         <h3>Execution activity</h3>
         {detail.events.map((event, index) => (
-          <ExecutionEvent key={`${event.sequence}:${event.kind}:${index}`} event={event} />
+          <ExecutionEventRenderer key={`${event.sequence}:${event.kind}:${index}`} event={event} />
         ))}
       </section>
       {!detail.events.length ? (
         <p className="execution-transcript__notice">No safe run events were captured for this Attempt.</p>
       ) : null}
-    </div>
-  );
-}
-
-function ExecutionEvent({
-  event,
-}: {
-  readonly event: ProductExecutionDetailResponse['events'][number];
-}) {
-  if (event.kind === 'assistant_text') return null;
-  if (event.kind === 'reasoning_progress')
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>Reasoning</span>
-          <strong>{event.status}</strong>
-          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
-        </summary>
-        {event.text ? <p>{event.text}</p> : <p>Reasoning text was not captured.</p>}
-      </details>
-    );
-  if (event.kind === 'tool_status')
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>{event.tool_name ?? event.label ?? humanize(event.category)}</span>
-          <strong>{humanize(event.status)}</strong>
-          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
-        </summary>
-        {event.summary ? <p>{event.summary}</p> : null}
-        {event.detail_text ? <pre>{event.detail_text}</pre> : null}
-      </details>
-    );
-  if (event.kind === 'child_timeline_item')
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>{event.label}</span>
-          <strong>{humanize(event.status)}</strong>
-          <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
-        </summary>
-        <p>{event.summary}</p>
-        {event.detail_text ? <pre>{event.detail_text}</pre> : null}
-      </details>
-    );
-  if (event.kind === 'permission')
-    return (
-      <div className="execution-transcript__event execution-transcript__event--row">
-        <span>Permission · {humanize(event.category)}</span>
-        <strong>{event.decision ?? humanize(event.status)}</strong>
-        <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
-        <p>{event.summary}</p>
-      </div>
-    );
-  if (event.kind === 'usage')
-    return (
-      <div className="execution-transcript__event execution-transcript__event--row">
-        <span>Usage</span>
-        <strong>{usageLabel(event)}</strong>
-        <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
-      </div>
-    );
-  return (
-    <div className="execution-transcript__event execution-transcript__event--row">
-      <span>Execution</span>
-      <strong>{humanize(event.status)}</strong>
-      <time dateTime={event.created_at}>{formatTimestamp(event.created_at)}</time>
     </div>
   );
 }
@@ -290,13 +224,5 @@ function isExecutionDetail(value: unknown): value is ProductExecutionDetailRespo
   return record.capture_scope === 'safe_run_events' && Array.isArray(record.events);
 }
 
-function usageLabel(event: Extract<ProductExecutionDetailResponse['events'][number], { kind: 'usage' }>) {
-  const parts = [
-    event.input_tokens === null ? null : `${event.input_tokens.toLocaleString()} input`,
-    event.output_tokens === null ? null : `${event.output_tokens.toLocaleString()} output`,
-    event.total_cost_usd === null ? null : `$${event.total_cost_usd.toFixed(4)}`,
-  ].filter(Boolean);
-  return parts.length ? parts.join(' · ') : 'Usage reported';
-}
 function humanize(value: string) { return value.replaceAll('_', ' '); }
 function formatTimestamp(value: string) { return `${value.replace('T', ' ').slice(0, 19)} UTC`; }

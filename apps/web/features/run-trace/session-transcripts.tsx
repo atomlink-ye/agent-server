@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 
+import { ExecutionEventRenderer } from './execution-event-renderer';
 import './execution-transcript.css';
 
 type Trace = Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>;
@@ -158,7 +159,7 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
               <section className="execution-transcript__events" data-testid="session-entries">
                 <h3>Session execution activity</h3>
                 {selected.entries.length ? selected.entries.map((entry) => (
-                  <SessionEntryBlock key={`${entry.ordinal}:${entry.kind}`} entry={entry} />
+                  <ExecutionEventRenderer key={`${entry.ordinal}:${entry.kind}`} event={entry} />
                 )) : (
                   <p className="execution-transcript__notice">No entries were captured for this session.</p>
                 )}
@@ -201,95 +202,6 @@ function SessionSummaryBlock({ summary }: { readonly summary: SessionSummary }) 
           {summary.last_meaningful.result ? <p>Result: {summary.last_meaningful.result}</p> : null}
         </aside>
       ) : null}
-    </div>
-  );
-}
-
-function SessionEntryBlock({ entry }: { readonly entry: SessionEntry }) {
-  if (entry.kind === 'assistant_text') return null;
-  if (entry.kind === 'reasoning_progress') {
-    const text = (entry as { text?: string | null }).text;
-    const status = (entry as { status?: string }).status ?? '';
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>Reasoning</span>
-          <strong>{status}</strong>
-          <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-        </summary>
-        {text ? <p>{text}</p> : <p>Reasoning text was not captured.</p>}
-      </details>
-    );
-  }
-  if (entry.kind === 'tool_status') {
-    const e = entry as { tool_name?: string | null; label?: string | null; category?: string; status?: string; summary?: string | null; detail_text?: string | null };
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>{e.tool_name ?? e.label ?? humanize(e.category ?? 'tool')}</span>
-          <strong>{humanize(e.status ?? 'unknown')}</strong>
-          <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-        </summary>
-        {e.summary ? <p>{e.summary}</p> : null}
-        {e.detail_text ? <pre>{e.detail_text}</pre> : null}
-      </details>
-    );
-  }
-  if (entry.kind === 'child_timeline_item') {
-    const e = entry as { label?: string; status?: string; summary?: string; detail_text?: string | null };
-    return (
-      <details className="execution-transcript__event">
-        <summary>
-          <span>{e.label ?? 'Activity'}</span>
-          <strong>{humanize(e.status ?? 'unknown')}</strong>
-          <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-        </summary>
-        {e.summary ? <p>{e.summary}</p> : null}
-        {e.detail_text ? <pre>{e.detail_text}</pre> : null}
-      </details>
-    );
-  }
-  if (entry.kind === 'permission') {
-    const e = entry as { category?: string; status?: string; decision?: string | null; summary?: string };
-    return (
-      <div className="execution-transcript__event execution-transcript__event--row">
-        <span>Permission · {humanize(e.category ?? 'other')}</span>
-        <strong>{e.decision ? humanize(e.decision) : e.status ? humanize(e.status) : 'Not captured / not triggered'}</strong>
-        <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-        {e.summary ? <p>{e.summary}</p> : null}
-      </div>
-    );
-  }
-  if (entry.kind === 'usage') {
-    const e = entry as { input_tokens?: number | null; output_tokens?: number | null; total_cost_usd?: number | null };
-    const parts = [
-      e.input_tokens == null ? null : `${e.input_tokens.toLocaleString()} input`,
-      e.output_tokens == null ? null : `${e.output_tokens.toLocaleString()} output`,
-      e.total_cost_usd == null ? null : `$${e.total_cost_usd.toFixed(4)}`,
-    ].filter(Boolean);
-    return (
-      <div className="execution-transcript__event execution-transcript__event--row">
-        <span>Usage</span>
-        <strong>{parts.length ? parts.join(' · ') : 'Not captured'}</strong>
-        <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-      </div>
-    );
-  }
-  if (entry.kind === 'lifecycle') {
-    const e = entry as { status?: string };
-    return (
-      <div className="execution-transcript__event execution-transcript__event--row">
-        <span>Lifecycle</span>
-        <strong>{humanize(e.status ?? 'unknown')}</strong>
-        <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
-      </div>
-    );
-  }
-  return (
-    <div className="execution-transcript__event execution-transcript__event--row">
-      <span>{humanize(entry.kind)}</span>
-      <strong>—</strong>
-      <time dateTime={entry.created_at}>{formatTimestamp(entry.created_at)}</time>
     </div>
   );
 }

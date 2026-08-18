@@ -54,7 +54,7 @@ it('keeps MCP-only coverage disclosure present across views and selection', asyn
 
       const eventsTab = [
         ...host.querySelectorAll<HTMLButtonElement>('button'),
-      ].find((button) => button.textContent?.trim() === 'Events');
+      ].find((button) => button.textContent?.trim() === 'MCP Activity');
       expect(eventsTab).toBeDefined();
       await act(async () => eventsTab?.click());
       expect(

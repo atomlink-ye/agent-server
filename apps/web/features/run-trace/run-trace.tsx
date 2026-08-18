@@ -497,7 +497,7 @@ function Events({
       <div className="run-trace__events-scroll">
         {trace.mcp_activities.length === 0 ? (
           <p style={{ padding: '1rem', color: '#666' }}>
-            No collaboration MCP tool calls were captured for this Run. This is often correct — it means this Run's members did not call any of the collaboration MCP tools listed above, not that data is missing.
+            No collaboration MCP tool calls were captured for this Run. This may mean this Run's members did not call any of the collaboration MCP tools listed above, or that identity/provenance details for such calls were not fully captured.
           </p>
         ) : (
           trace.mcp_activities.map((activity, snapshotOrdinal) => {

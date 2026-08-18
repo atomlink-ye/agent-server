@@ -42,8 +42,13 @@ type SessionTranscriptsResponse = {
   readonly sessions: readonly Session[];
 };
 
+// One member per status literal. Collapsing 'idle' | 'loading' into a single
+// member breaks discriminated-union narrowing: the negative branch of
+// `status === 'idle' || status === 'loading'` still keeps that member, so
+// `state` never narrows to the 'ready' member and `state.data` does not exist.
 type FetchState =
-  | { readonly status: 'idle' | 'loading' }
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly data: SessionTranscriptsResponse }
   | { readonly status: 'unavailable' };
 

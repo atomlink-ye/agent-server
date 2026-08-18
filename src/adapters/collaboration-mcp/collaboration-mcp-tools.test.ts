@@ -10,6 +10,7 @@ import type { RuntimeToolGrant } from '../../application/extensions/runtime-tool
 import {
   AGENT_SERVER_COLLABORATION_MCP_NAMES,
   AGENT_SERVER_COLLABORATION_TOOL_REFS,
+  collaborationMcpName,
 } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import { registerCollaborationMcpTools } from './collaboration-mcp-tools.js';
 
@@ -78,6 +79,16 @@ function register(
 const registeredNames = Object.values(AGENT_SERVER_COLLABORATION_MCP_NAMES);
 
 describe('Collaboration MCP wrapper', () => {
+  it('normalizes bare and all Paseo MCP server-name shapes without a provider branch', () => {
+    const name = AGENT_SERVER_COLLABORATION_MCP_NAMES.boardCreate;
+    expect([
+      name,
+      `mcp__agent-server__${name}`,
+      `agent-server.${name}`,
+      `agent-server_${name}`,
+    ].map(collaborationMcpName)).toEqual([name, name, name, name]);
+  });
+
   it('registers the same complete Collaboration surface for Lead and Member', () => {
     const lead = register({}, grant('lead-1'));
     const member = register({}, grant('member-1'));

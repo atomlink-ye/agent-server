@@ -34,7 +34,7 @@ const MOCK_RESPONSE = {
       },
       entries: [
         { ordinal: 1, kind: 'lifecycle', sequence: 1, created_at: '2026-08-17T09:58:00.000Z', status: 'started' },
-        { ordinal: 2, kind: 'tool_status', sequence: 2, created_at: '2026-08-17T09:59:00.000Z', activity_id: 'a1', category: 'read', status: 'completed', label: 'read_file', summary: 'Read config.ts', tool_name: 'read_file', provider: null, detail_kind: 'read', detail_text: null, exit_code: null, parent_activity_id: null },
+        { ordinal: 2, kind: 'tool_status', sequence: 2, created_at: '2026-08-17T09:59:00.000Z', activity_id: 'a1', category: 'read', status: 'completed', label: 'read_file', summary: 'Read config.ts', tool_name: 'zzz_future_tool_v9', provider: null, detail_kind: 'read', detail_text: null, exit_code: null, parent_activity_id: null },
         { ordinal: 3, kind: 'permission', sequence: 3, created_at: '2026-08-17T10:00:00.000Z', activity_id: 'a2', category: 'tool', status: 'resolved', decision: 'allowed', summary: 'Allowed file write' },
       ],
     },
@@ -129,6 +129,7 @@ it('renders per-session transcripts with switching between sessions that share a
     expect(
       host.querySelector('.execution-transcript__detail header')!.textContent,
     ).toContain('Risk Agent');
+    expect(host.querySelector('[data-testid="session-platform-tool-count"]')).toBeNull();
 
     // 3. Permission with null decision and non-resolved status shows "Not captured / not triggered"
     const riskEntries = host.querySelector('[data-testid="session-entries"]');
@@ -144,6 +145,36 @@ it('renders per-session transcripts with switching between sessions that share a
     const summaryBlock = host.querySelector('[data-testid="session-summary"]');
     expect(summaryBlock).not.toBeNull();
     expect(summaryBlock!.textContent).toContain('not provider text');
+    expect(summaryBlock!.querySelector('[data-testid="session-platform-tool-count"]')?.textContent).toContain('1');
+
+    // The renderer is namespace/provenance-driven: a future server tool name
+    // stays visibly platform-owned rather than falling through a frontend list.
+    const platformRow = host.querySelector('[data-platform-tool="true"]');
+    expect(platformRow?.tagName).toBe('DETAILS');
+    expect(platformRow?.getAttribute('data-tool-name')).toBe('zzz_future_tool_v9');
+    expect(platformRow?.textContent).toContain('Zzz Future Tool V9');
+    expect(platformRow?.querySelector('.transcript__detail')?.textContent).toMatch(/not captured/i);
+    expect(platformRow?.querySelector('.transcript__detail pre')).toBeNull();
+
+    // Null provenance is intentionally not an interactive platform row, but
+    // preserving that entry still leaves the total rendered unit count intact.
+    const withPlatformCount = host.querySelectorAll('.transcript__item').length;
+    const withoutPlatform = structuredClone(MOCK_RESPONSE);
+    withoutPlatform.sessions[0]!.entries[1] = {
+      ...withoutPlatform.sessions[0]!.entries[1]!,
+      tool_name: null,
+    };
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => withoutPlatform });
+    await act(async () => {
+      root.render(<SessionTranscripts key="without-platform-provenance" trace={trace} />);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const staticTool = host.querySelector('[data-transcript-row-kind="tool"]');
+    expect(staticTool?.tagName).toBe('DIV');
+    expect(staticTool?.classList.contains('transcript__row--static')).toBe(true);
+    expect(host.querySelector('[data-platform-tool="true"]')).toBeNull();
+    expect(host.querySelector('[data-testid="session-platform-tool-count"]')).toBeNull();
+    expect(host.querySelectorAll('.transcript__item')).toHaveLength(withPlatformCount);
 
   } finally {
     await act(async () => root.unmount());

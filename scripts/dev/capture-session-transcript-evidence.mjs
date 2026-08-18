@@ -1,8 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
-const work = 'eaaf207a-a655-4968-ade3-92909cbb83c5';
-const run = 'd1fca21d-e75f-48b1-9be5-4ca8532b402d';
+const work = process.argv[2] ?? 'eaaf207a-a655-4968-ade3-92909cbb83c5';
+const run = process.argv[3] ?? 'd1fca21d-e75f-48b1-9be5-4ca8532b402d';
 const pageUrl = `http://127.0.0.1:3001/works/${work}?tab=overview&run=${run}`;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -114,7 +114,8 @@ const hoverChevron = await reasoningRow.evaluate((element) => {
 if (hoverChevron.icon_display !== 'none' || hoverChevron.chevron_display === 'none')
   throw new Error('Expandable row hover did not replace its icon with a chevron');
 
-const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetailCount }) => {
+const sourcePlatformEntries = leadEntries.filter((entry) => entry.kind === 'tool_status' && entry.tool_name !== null).length;
+const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetailCount, rawEntryCount, sourcePlatformEntries }) => {
   const rows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
   const prose = document.querySelector('[data-testid="transcript-prose"]');
   const streamItems = [...document.querySelectorAll('.transcript__item')];
@@ -141,12 +142,19 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     const after = item.querySelector('[data-testid="transcript-activity-row"]')?.getBoundingClientRect();
     return before && after ? [after.top - before.bottom] : [];
   });
-  const rowStyle = rows[0] ? getComputedStyle(rows[0]) : null;
+  const platformRows = rows.filter((row) => row.dataset.platformTool === 'true');
+  const platformDetails = platformRows.filter((row) => row.tagName === 'DETAILS');
+  const platformDetailText = platformRows.map((row) => row.querySelector('.transcript__detail')?.textContent ?? '');
+  const staticToolRows = rows.filter((row) => row.dataset.transcriptRowKind === 'tool' && row.dataset.transcriptRowMode === 'static');
+  const rowStyle = staticToolRows[0] ? getComputedStyle(staticToolRows[0]) : null;
   const proseStyle = prose ? getComputedStyle(prose) : null;
+  const platformSummary = platformRows[0]?.querySelector('summary') ?? null;
+  const platformStyle = platformSummary ? getComputedStyle(platformSummary) : null;
+  const summaryPlatformCount = document.querySelector('[data-testid="session-platform-tool-count"]')?.textContent?.trim() ?? null;
   const navStrong = document.querySelector('[data-testid="session-role-nav"] strong')?.textContent?.trim() ?? '';
   return {
     // Final rendered DOM units, not raw entries and not an intermediate projection.
-    session: 'lead', raw_entries: 337, rendered_units: streamItems.length,
+    session: 'lead', raw_entries: rawEntryCount, rendered_units: streamItems.length,
     rendered_unit_breakdown: Object.fromEntries(['assistant', 'activity', 'lifecycle', 'footer'].map((kind) => [kind, document.querySelectorAll(`.transcript__item--${kind}`).length])),
     thinking_rows: thinkingRows.length,
     max_consecutive_thinking: maxConsecutiveThinking,
@@ -167,8 +175,22 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     tool_activity_id_reuses: reusedToolActivityIds,
     tool_rows_with_detail: toolRowsWithDetailCount,
     tool_detail_available_in_dataset: toolRowsWithDetailCount > 0,
+    // F1/F4/F5/F6/F8 MCP projection checks. The current fixture may have no
+    // platform rows; then the fields remain explicit rather than claiming pass.
+    platform_rows: platformRows.length,
+    source_platform_entries: sourcePlatformEntries,
+    platform_row_count_matches_source: platformRows.length === sourcePlatformEntries,
+    platform_rows_are_details: platformRows.length === platformDetails.length,
+    platform_detail_panels: platformDetailText.length,
+    platform_detail_pre_count: platformRows.reduce((count, row) => count + row.querySelectorAll('pre').length, 0),
+    platform_detail_not_captured: platformDetailText.every((text) => /not captured/i.test(text)),
+    static_tool_rows_are_divs: staticToolRows.every((row) => row.tagName === 'DIV'),
+    platform_font_size_px: platformStyle ? Number.parseFloat(platformStyle.fontSize) : null,
+    activity_padding_top_px: rowStyle ? Number.parseFloat(rowStyle.paddingTop) : null,
+    platform_padding_top_px: platformStyle ? Number.parseFloat(platformStyle.paddingTop) : null,
+    session_platform_tool_count_text: summaryPlatformCount,
   };
-}, { reusedToolActivityIds, toolRowsWithDetailCount: toolRowsWithDetail.length });
+}, { reusedToolActivityIds, toolRowsWithDetailCount: toolRowsWithDetail.length, rawEntryCount: leadEntries.length, sourcePlatformEntries });
 metrics.expandability_checks = {
   reasoning: reasoningExpand,
   tool: toolDetailCheck,

@@ -1,6 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
+import { projectTranscript } from '../../apps/web/features/run-trace/transcript-projection.ts';
+
 const work = process.argv[2] ?? 'eaaf207a-a655-4968-ade3-92909cbb83c5';
 const run = process.argv[3] ?? 'd1fca21d-e75f-48b1-9be5-4ca8532b402d';
 const pageUrl = `http://127.0.0.1:3001/works/${work}?tab=overview&run=${run}`;
@@ -17,7 +19,7 @@ for (const name of ['analyst', 'builder', 'lead']) {
 }
 
 await page.getByTestId('session-role-nav').getByRole('button', { name: /lead/i }).click();
-const stream = page.getByTestId('transcript-stream');
+const stream = page.locator('[data-testid="transcript-stream"]:visible');
 await stream.scrollIntoViewIfNeeded();
 await page.screenshot({ path: '/workspace/transcript-lead-body.png' });
 
@@ -46,15 +48,9 @@ function toolActivityIdReusesAcrossSequenceRuns(entries) {
 }
 
 const reusedToolActivityIds = toolActivityIdReusesAcrossSequenceRuns(leadEntries);
-const entriesByOrdinal = new Map(leadEntries.map((entry) => [entry.ordinal, entry]));
 const toolRowsWithDetail = leadEntries.filter((entry) => entry.kind === 'tool_status' && (entry.detail_text || entry.exit_code !== null));
-
-function mergeReasoningText(previous, next) {
-  if (!previous) return next;
-  if (!next || next.startsWith(previous)) return next ?? previous;
-  if (previous.startsWith(next)) return previous;
-  return `${previous}\n${next}`;
-}
+const projectedEntries = projectTranscript(leadEntries);
+const projectedRows = (rows) => rows.flatMap((row) => [row, ...projectedRows(row.children ?? [])]);
 
 async function exerciseExpandableRow(kind, expectedDetailText = null) {
   const row = stream.locator(`[data-transcript-row-kind="${kind}"][data-transcript-row-mode="expandable"]`).first();
@@ -71,8 +67,11 @@ async function exerciseExpandableRow(kind, expectedDetailText = null) {
   const detailTextLength = detailText?.length ?? 0;
   if (!afterOpen || !afterBox || afterBox.height <= beforeBox.height || !detailTextLength)
     throw new Error(`${kind} row did not expand into visible detail`);
-  if (expectedDetailText !== null && detailText !== expectedDetailText)
-    throw new Error(`${kind} detail did not contain the full merged text`);
+  if (expectedDetailText !== null && detailText !== expectedDetailText) {
+    const mismatchAt = [...expectedDetailText].findIndex((character, index) => character !== detailText?.[index]);
+    const sourceOrdinals = await row.getAttribute('data-detail-source-ordinals');
+    throw new Error(`${kind} detail did not contain the full merged text (expected=${expectedDetailText.length}, actual=${detailTextLength}, mismatch_at=${mismatchAt}, source_ordinals=${sourceOrdinals})`);
+  }
   return { before_open: beforeOpen, after_open: afterOpen, before_height: beforeBox.height, after_height: afterBox.height, detail_text_length: detailTextLength };
 }
 
@@ -94,17 +93,22 @@ async function exerciseStaticToolRow() {
 }
 
 const reasoningRow = stream.locator('[data-transcript-row-kind="reasoning"][data-transcript-row-mode="expandable"]').first();
-const reasoningSourceOrdinals = await reasoningRow.getAttribute('data-source-ordinals');
-const expectedReasoningText = (reasoningSourceOrdinals ?? '').split(',').filter(Boolean)
-  .map(Number)
-  .map((ordinal) => entriesByOrdinal.get(ordinal))
-  .filter((entry) => entry?.kind === 'reasoning_progress')
-  .reduce((text, entry) => mergeReasoningText(text, entry.text), null);
+// A parent activity also carries descendant ordinals for A3 coverage. Detail
+// correctness must instead use the ordinals that produced the row itself.
+const reasoningSourceOrdinals = await reasoningRow.getAttribute('data-detail-source-ordinals');
+const expectedReasoningText = projectedRows(projectedEntries).find((entry) => (
+  entry.event.kind === 'reasoning_progress'
+  && entry.detailSourceOrdinals.join(',') === reasoningSourceOrdinals
+))?.event.text ?? null;
+if (expectedReasoningText === null)
+  throw new Error(`Could not find the projected reasoning row for source ordinals ${reasoningSourceOrdinals}`);
 const reasoningExpand = await exerciseExpandableRow('reasoning', expectedReasoningText);
 const toolDetailCheck = toolRowsWithDetail.length
   ? { status: 'PASS', ...(await exerciseExpandableRow('tool')) }
   : { status: 'MISSING', reason: 'No tool_status event in the dataset contains detail_text or exit_code.' };
-const staticToolClick = await exerciseStaticToolRow();
+const staticToolClick = await stream.locator('[data-transcript-row-kind="tool"][data-transcript-row-mode="static"]').count()
+  ? { status: 'PASS', ...(await exerciseStaticToolRow()) }
+  : { status: 'MISSING', reason: 'No ordinary tool_status row is static in this dataset; all tool rows are platform activities.' };
 await reasoningRow.hover();
 const hoverChevron = await reasoningRow.evaluate((element) => {
   const icon = element.querySelector('.transcript__icon');
@@ -116,10 +120,13 @@ if (hoverChevron.icon_display !== 'none' || hoverChevron.chevron_display === 'no
 
 const sourcePlatformEntries = leadEntries.filter((entry) => entry.kind === 'tool_status' && entry.tool_name !== null).length;
 const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetailCount, rawEntryCount, sourcePlatformEntries }) => {
-  const rows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
-  const prose = document.querySelector('[data-testid="transcript-prose"]');
-  const streamItems = [...document.querySelectorAll('.transcript__item')];
-  const activityRows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
+  const transcriptStream = [...document.querySelectorAll('[data-testid="transcript-stream"]')]
+    .find((element) => element.getClientRects().length > 0);
+  if (!transcriptStream) throw new Error('No visible transcript stream was rendered');
+  const rows = [...transcriptStream.querySelectorAll('[data-testid="transcript-activity-row"]')];
+  const prose = transcriptStream.querySelector('[data-testid="transcript-prose"]');
+  const streamItems = [...transcriptStream.querySelectorAll('.transcript__item')];
+  const activityRows = rows;
   const thinkingRows = activityRows.filter((row) => row.querySelector('.transcript__row-copy strong')?.textContent?.trim() === 'Thinking');
   const maxConsecutiveThinking = streamItems.reduce((state, item) => {
     const thinking = item.classList.contains('transcript__item--activity')
@@ -134,7 +141,7 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     return Boolean(label && summary && normalize(label) === normalize(summary));
   }).length;
   const ordinals = new Set(streamItems.flatMap((item) => (item.dataset.sourceOrdinals ?? '').split(',').filter(Boolean).map(Number)));
-  const activityItems = [...document.querySelectorAll('.transcript__item--activity')];
+  const activityItems = [...transcriptStream.querySelectorAll('.transcript__item--activity')];
   const gaps = activityItems.flatMap((item, index) => {
     const previous = activityItems[index - 1];
     if (!previous || previous.nextElementSibling !== item) return [];
@@ -143,10 +150,14 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     return before && after ? [after.top - before.bottom] : [];
   });
   const platformRows = rows.filter((row) => row.dataset.platformTool === 'true');
+  const platformSourceOrdinals = new Set(platformRows.flatMap((row) => (
+    (row.dataset.sourceOrdinals ?? '').split(',').filter(Boolean).map(Number)
+  )));
   const platformDetails = platformRows.filter((row) => row.tagName === 'DETAILS');
   const platformDetailText = platformRows.map((row) => row.querySelector('.transcript__detail')?.textContent ?? '');
   const staticToolRows = rows.filter((row) => row.dataset.transcriptRowKind === 'tool' && row.dataset.transcriptRowMode === 'static');
-  const rowStyle = staticToolRows[0] ? getComputedStyle(staticToolRows[0]) : null;
+  const activitySummary = activityRows[0]?.querySelector('summary') ?? activityRows[0];
+  const rowStyle = activitySummary ? getComputedStyle(activitySummary) : null;
   const proseStyle = prose ? getComputedStyle(prose) : null;
   const platformSummary = platformRows[0]?.querySelector('summary') ?? null;
   const platformStyle = platformSummary ? getComputedStyle(platformSummary) : null;
@@ -162,12 +173,13 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     rows_above_fold_1440x900: streamItems.filter((item) => item.getBoundingClientRect().top < 900).length,
     expandable_rows: rows.filter((row) => row.dataset.transcriptRowMode === 'expandable').length,
     static_rows: rows.filter((row) => row.dataset.transcriptRowMode === 'static').length,
+    static_tool_rows: staticToolRows.length,
     max_gap_px_between_consecutive_activity_rows: Math.max(0, ...gaps),
     prose_font_size_px: proseStyle ? Number.parseFloat(proseStyle.fontSize) : 0,
     activity_row_font_size_px: rowStyle ? Number.parseFloat(rowStyle.fontSize) : 0,
     prose_border_left_width: proseStyle?.borderLeftWidth ?? '',
-    matches_reasoning_started_or_completed: /Reasoning\s+(started|completed)/i.test(document.querySelector('[data-testid="transcript-stream"]')?.textContent ?? ''),
-    matches_activity_running: /activity running/i.test(document.querySelector('[data-testid="transcript-stream"]')?.textContent ?? ''),
+    matches_reasoning_started_or_completed: /Reasoning\s+(started|completed)/i.test(transcriptStream.textContent ?? ''),
+    matches_activity_running: /activity running/i.test(transcriptStream.textContent ?? ''),
     left_nav_first_strong_text: navStrong,
     page_contains_addressed_by_role_name: document.body.textContent?.includes('addressed by role name') ?? false,
     source_ordinal_coverage: ordinals.size,
@@ -179,12 +191,13 @@ const metrics = await page.evaluate(({ reusedToolActivityIds, toolRowsWithDetail
     // platform rows; then the fields remain explicit rather than claiming pass.
     platform_rows: platformRows.length,
     source_platform_entries: sourcePlatformEntries,
-    platform_row_count_matches_source: platformRows.length === sourcePlatformEntries,
+    platform_source_ordinal_coverage: platformSourceOrdinals.size,
+    platform_source_ordinal_coverage_matches_entries: platformSourceOrdinals.size === sourcePlatformEntries,
     platform_rows_are_details: platformRows.length === platformDetails.length,
     platform_detail_panels: platformDetailText.length,
     platform_detail_pre_count: platformRows.reduce((count, row) => count + row.querySelectorAll('pre').length, 0),
     platform_detail_not_captured: platformDetailText.every((text) => /not captured/i.test(text)),
-    static_tool_rows_are_divs: staticToolRows.every((row) => row.tagName === 'DIV'),
+    static_tool_rows_are_divs: staticToolRows.length ? staticToolRows.every((row) => row.tagName === 'DIV') : null,
     platform_font_size_px: platformStyle ? Number.parseFloat(platformStyle.fontSize) : null,
     activity_padding_top_px: rowStyle ? Number.parseFloat(rowStyle.paddingTop) : null,
     platform_padding_top_px: platformStyle ? Number.parseFloat(platformStyle.paddingTop) : null,

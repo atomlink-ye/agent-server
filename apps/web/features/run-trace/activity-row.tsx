@@ -15,6 +15,7 @@ export function ActivityRow({ entry, nested = false }: { readonly entry: Project
       ? 'tool'
       : 'other';
   const attributes = {
+    'data-detail-source-ordinals': entry.detailSourceOrdinals.join(','),
     'data-source-ordinals': entry.sourceOrdinals.join(','),
     'data-testid': 'transcript-activity-row',
     'data-transcript-row-kind': rowKind,

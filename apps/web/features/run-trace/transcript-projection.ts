@@ -6,6 +6,8 @@ export type TranscriptEntry = ProductExecutionDetailEvent & {
 
 export type ProjectedTranscriptEntry = {
   readonly event: TranscriptEntry;
+  /** Ordinals that produced this row's own visible event, excluding nested children. */
+  readonly detailSourceOrdinals: readonly number[];
   readonly sourceOrdinals: readonly number[];
   readonly children?: readonly ProjectedTranscriptEntry[];
 };
@@ -111,6 +113,7 @@ export function projectTranscript(
 
 type MutableRow = {
   event: TranscriptEntry;
+  detailSourceOrdinals?: number[];
   sourceOrdinals: number[];
   runSegment: number;
   children?: MutableRow[];
@@ -201,6 +204,7 @@ function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscript
       visible.push(row);
       continue;
     }
+    parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];
     (parent.children ??= []).push(row);
     parent.sourceOrdinals.push(...row.sourceOrdinals);
   }
@@ -210,6 +214,7 @@ function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscript
 function freezeRow(row: MutableRow): ProjectedTranscriptEntry {
   return {
     event: row.event,
+    detailSourceOrdinals: row.detailSourceOrdinals ?? row.sourceOrdinals,
     sourceOrdinals: row.sourceOrdinals,
     ...(row.children?.length ? { children: row.children.map(freezeRow) } : {}),
   };

@@ -12,11 +12,14 @@ const logger = createLogger({
 });
 const { app, runtime, close } = await createService(config, logger);
 
-void runtime.ensureReady().then((ready) => {
-  if (!ready)
+void runtime.ensureReady().then(async (ready) => {
+  if (!ready) {
+    const health = await runtime.planeHealth();
     logger.log('warn', 'runtime.initialization_failed', {
       error_name: 'RuntimeUnavailable',
+      checks: health.checks,
     });
+  }
 });
 
 const server = serve(

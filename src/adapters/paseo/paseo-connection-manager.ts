@@ -71,7 +71,7 @@ export class PaseoConnectionManager {
       await attempt;
     } catch (error) {
       if (this.#initialization === attempt)
-        this.#lastError = 'Runtime initialization failed.';
+        this.#lastError = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
       if (this.#initialization === attempt) this.#initialization = null;

@@ -21,7 +21,7 @@ export function buildEntryPresentation(event: TranscriptEntry): EntryPresentatio
   if (event.kind === 'tool_status') {
     const label = event.label ?? humanize(event.tool_name ?? event.category);
     return {
-      icon: iconForTool(event.category), label, summary: event.summary,
+      icon: iconForTool(event.category), label, summary: meaningfulSummary(label, event.summary),
       tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
       detailText: event.detail_text, detailKind: event.detail_kind, exitCode: event.exit_code,
       expandable: Boolean(event.detail_text) || event.exit_code !== null,
@@ -30,7 +30,7 @@ export function buildEntryPresentation(event: TranscriptEntry): EntryPresentatio
   if (event.kind === 'child_timeline_item')
     return {
       icon: iconForTool(event.item_kind === 'reasoning' ? 'other' : event.item_kind === 'tool' ? 'other' : 'subagent'),
-      label: event.label, summary: event.summary,
+      label: event.label, summary: meaningfulSummary(event.label, event.summary),
       tone: event.status === 'failed' || event.status === 'cancelled' ? 'failed' : event.status === 'running' ? 'running' : 'normal',
       detailText: event.detail_text, detailKind: event.detail_kind, exitCode: event.exit_code,
       expandable: Boolean(event.detail_text) || event.exit_code !== null,
@@ -55,4 +55,13 @@ function iconForTool(category: string): string {
     case 'subagent': return 'bot';
     default: return 'wrench';
   }
+}
+
+function meaningfulSummary(label: string, summary: string | null): string | null {
+  if (!summary || normalize(summary) === normalize(label)) return null;
+  return summary;
+}
+
+function normalize(value: string): string {
+  return value.trim().replace(/[.。]+$/u, '').replace(/\s+/gu, ' ').toLocaleLowerCase();
 }

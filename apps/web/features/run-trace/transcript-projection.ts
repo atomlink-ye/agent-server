@@ -31,6 +31,20 @@ export function projectTranscript(
 
   for (const entry of entries) {
     if (entry.kind === 'reasoning_progress') {
+      const previousOpen = openReasoning.at(-1);
+      if (
+        entry.status === 'started' &&
+        previousOpen &&
+        previousOpen.sourceOrdinals.at(-1) === entry.ordinal - 1
+      ) {
+        const previousEvent = previousOpen.event as ReasoningEntry;
+        previousOpen.event = {
+          ...previousEvent,
+          text: mergeReasoningText(previousEvent.text, entry.text),
+        };
+        previousOpen.sourceOrdinals.push(entry.ordinal);
+        continue;
+      }
       if (entry.status === 'completed') {
         const started = openReasoning.pop();
         if (started) {
@@ -38,7 +52,7 @@ export function projectTranscript(
           started.event = {
             ...startedEvent,
             status: 'completed',
-            text: entry.text ?? startedEvent.text,
+            text: mergeReasoningText(startedEvent.text, entry.text),
           };
           started.sourceOrdinals.push(entry.ordinal);
           continue;
@@ -134,7 +148,7 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
       previous.event = {
         ...previousEvent,
         status: rowEvent.status,
-        text: [previousEvent.text, rowEvent.text].filter(Boolean).join('\n'),
+        text: mergeReasoningText(previousEvent.text, rowEvent.text),
       };
       previous.sourceOrdinals.push(...row.sourceOrdinals);
     } else {
@@ -142,6 +156,13 @@ function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
     }
   }
   return merged;
+}
+
+function mergeReasoningText(previous: string | null, next: string | null): string | null {
+  if (!previous) return next;
+  if (!next || next.startsWith(previous)) return next ?? previous;
+  if (previous.startsWith(next)) return previous;
+  return `${previous}\n${next}`;
 }
 
 function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscriptEntry[] {

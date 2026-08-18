@@ -44,10 +44,10 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
           activity_id: 'activity-1',
           category: 'read',
           status: 'completed',
-          label: 'Read source',
+          label: 'read_source',
           summary: 'Read finished',
           provider: 'opencode',
-          tool_name: 'read_source',
+          tool_name: null,
           detail_kind: 'read',
           detail_text: 'bounded detail',
           exit_code: null,
@@ -74,7 +74,7 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
     expect(host.textContent).toContain(
       'Actual provider answer visible in Product execution detail.',
     );
-    expect(host.textContent).toContain('Read source');
+    expect(host.textContent).toContain('read_source');
     expect(host.textContent).toContain('bounded detail');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(

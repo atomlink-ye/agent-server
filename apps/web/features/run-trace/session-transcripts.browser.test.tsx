@@ -162,7 +162,7 @@ it('renders per-session transcripts with switching between sessions that share a
     const withoutPlatform = structuredClone(MOCK_RESPONSE);
     withoutPlatform.sessions[0]!.entries[1] = {
       ...withoutPlatform.sessions[0]!.entries[1]!,
-      tool_name: null,
+      tool_name: undefined,
     };
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => withoutPlatform });
     await act(async () => {

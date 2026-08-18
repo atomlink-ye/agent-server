@@ -1,0 +1,29 @@
+apps/web/features/run-trace/run-trace.tsx
+  9733c7e701aea2b6 28-46,106,114,156,166,199,218-272,297,306,348-358,363,367,372,410,415,451-462,501-504,513-515,610
+apps/web/components/work/work-shell-mve.css
+  9733c7e701aea2b6 179-194
+apps/web/components/work/work-shell.tsx
+  9733c7e701aea2b6 28,381-405,433-475
+apps/web/features/run-trace/run-trace.css
+  9733c7e701aea2b6 387-478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.10+672fbf0",
+  "base_commit_sha": "f1b5f65c51bbcd94455fddffbe8de655ca199f16",
+  "prompts": {
+    "9733c7e701aea2b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "39e7ec34-7d18-4ac8-8fac-bb632ef1adf8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "link.ye",
+      "messages": [],
+      "total_additions": 294,
+      "total_deletions": 11,
+      "accepted_lines": 294,
+      "overriden_lines": 0
+    }
+  }
+}

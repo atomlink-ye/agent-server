@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { ProductSessionTranscriptsResponse } from '@atomlink-ye/agent-server/product-contract';
 import { expect, it, vi } from 'vitest';
 
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
@@ -12,7 +13,7 @@ import { parseRecordedTrace } from './recording-test-helpers';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const MOCK_RESPONSE = {
+const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
   work_id: '00000000-0000-0000-0000-000000000001',
   work_run_id: '00000000-0000-0000-0000-000000000002',
   capture_scope: 'safe_run_events',

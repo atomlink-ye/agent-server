@@ -54,7 +54,10 @@ type FetchState =
 
 export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  // Roles are NOT unique inside a Run: a team can run several 'member'
+  // sessions. Selection therefore addresses the session by its position in
+  // the response, which is the only identifier the contract guarantees.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -71,8 +74,8 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
           return;
         }
         setState({ status: 'ready', data: body });
-        if (body.sessions.length && !selectedRole) {
-          setSelectedRole(body.sessions[0]!.label.role);
+        if (body.sessions.length) {
+          setSelectedIndex(0);
         }
       })
       .catch(() => {
@@ -107,7 +110,8 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
     );
 
   const { data } = state;
-  const selected = data.sessions.find((s) => s.label.role === selectedRole) ?? null;
+  const selected =
+    selectedIndex === null ? null : (data.sessions[selectedIndex] ?? null);
 
   if (!data.sessions.length)
     return (
@@ -137,11 +141,11 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
       </div>
       <div className="execution-transcript__body">
         <nav className="execution-transcript__attempts" aria-label="Session roles" data-testid="session-role-nav">
-          {data.sessions.map((session) => (
+          {data.sessions.map((session, index) => (
             <button
-              aria-pressed={session.label.role === selectedRole}
-              key={session.label.role}
-              onClick={() => setSelectedRole(session.label.role)}
+              aria-pressed={index === selectedIndex}
+              key={`${index}:${session.label.name}`}
+              onClick={() => setSelectedIndex(index)}
               type="button"
             >
               <span>{session.label.name}</span>
@@ -164,7 +168,7 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
               <section className="execution-transcript__events" data-testid="session-entries">
                 <h3>Session execution activity</h3>
                 {selected.entries.length ? selected.entries.map((entry) => (
-                  <ExecutionEventRenderer key={`${entry.ordinal}:${entry.kind}`} event={entry} />
+                  <ExecutionEventRenderer key={`${entry.ordinal}:${entry.kind}`} event={entry} renderAssistantText />
                 )) : (
                   <p className="execution-transcript__notice">No entries were captured for this session.</p>
                 )}

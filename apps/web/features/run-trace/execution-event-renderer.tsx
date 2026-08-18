@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 
+import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+
 /**
  * Shared entry renderer for both per-Attempt execution detail and per-role
  * session transcript entries. Both share the same ProductExecutionDetailEvent
@@ -19,10 +21,28 @@ export type ExecutionEventEntry = {
 
 export function ExecutionEventRenderer({
   event,
+  renderAssistantText = false,
 }: {
   readonly event: ExecutionEventEntry;
+  /**
+   * Per-Attempt detail lifts assistant output into its own "Agent output"
+   * section, so it must not be rendered twice there. A session transcript has
+   * no such section — it reads chronologically, so it opts in.
+   */
+  readonly renderAssistantText?: boolean;
 }): ReactNode {
-  if (event.kind === 'assistant_text') return null;
+  if (event.kind === 'assistant_text') {
+    if (!renderAssistantText) return null;
+    const e = event as { text?: string | null };
+    return (
+      <article className="execution-transcript__event execution-transcript__answer">
+        <AssistantMarkdown text={e.text ?? ''} />
+        <time dateTime={event.created_at}>
+          {formatTimestamp(event.created_at)}
+        </time>
+      </article>
+    );
+  }
   if (event.kind === 'reasoning_progress') {
     const e = event as { status?: string; text?: string | null };
     return (

@@ -3,7 +3,7 @@ import { ProductSessionTranscriptsResponseSchema } from '@atomlink-ye/agent-serv
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const fetchCache = 'no-store';
+export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
 
 const UUID =

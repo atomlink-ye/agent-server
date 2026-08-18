@@ -39,7 +39,7 @@ const MOCK_RESPONSE = {
       ],
     },
     {
-      label: { name: 'Worker Agent', role: 'worker', status: 'completed' },
+      label: { name: 'Worker Agent', role: 'member', status: 'completed' },
       summary: {
         status: 'completed',
         entry_count: 2,
@@ -54,7 +54,7 @@ const MOCK_RESPONSE = {
       ],
     },
     {
-      label: { name: 'Risk Agent', role: 'risk', status: 'idle' },
+      label: { name: 'Risk Agent', role: 'member', status: 'idle' },
       summary: {
         status: 'idle',
         entry_count: 1,
@@ -70,7 +70,7 @@ const MOCK_RESPONSE = {
   ],
 };
 
-it('renders per-role session transcripts with role switching, truncation warning, permission honesty, and derived summary labeling', async () => {
+it('renders per-session transcripts with switching between sessions that share a role, truncation warning, permission honesty, and derived summary labeling', async () => {
   const trace = parseRecordedTrace(reworkRecording);
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
@@ -96,9 +96,11 @@ it('renders per-role session transcripts with role switching, truncation warning
     expect(roleNav).not.toBeNull();
     const roleButtons = [...roleNav!.querySelectorAll<HTMLButtonElement>('button')];
     expect(roleButtons).toHaveLength(3);
-    expect(roleButtons[0]!.textContent).toContain('lead');
-    expect(roleButtons[1]!.textContent).toContain('worker');
-    expect(roleButtons[2]!.textContent).toContain('risk');
+    // Two sessions deliberately share the role 'member' — that is what a real
+    // team Run produces. Sessions must stay individually addressable anyway.
+    expect(roleButtons[0]!.textContent).toContain('Lead Agent');
+    expect(roleButtons[1]!.textContent).toContain('Worker Agent');
+    expect(roleButtons[2]!.textContent).toContain('Risk Agent');
 
     // First role is selected by default — entries are visible
     const entries = host.querySelector('[data-testid="session-entries"]');
@@ -107,20 +109,26 @@ it('renders per-role session transcripts with role switching, truncation warning
     const eventElements = entries!.querySelectorAll('.execution-transcript__event, .execution-transcript__event--row');
     expect(eventElements.length).toBeGreaterThanOrEqual(2); // lifecycle + tool_status (+ maybe permission)
 
-    // Switch to worker role
+    // Switch to the second session (same role as the third one)
     await act(async () => {
       roleButtons[1]!.click();
     });
+    expect(
+      host.querySelector('.execution-transcript__detail header')!.textContent,
+    ).toContain('Worker Agent');
 
     // 2. Truncated=true shows warning
     const truncatedWarning = host.querySelector('[data-testid="session-truncated-warning"]');
     expect(truncatedWarning).not.toBeNull();
     expect(truncatedWarning!.textContent).toContain('truncated');
 
-    // Switch to risk role
+    // Switch to the third session — same role as the second, must not collide
     await act(async () => {
       roleButtons[2]!.click();
     });
+    expect(
+      host.querySelector('.execution-transcript__detail header')!.textContent,
+    ).toContain('Risk Agent');
 
     // 3. Permission with null decision and non-resolved status shows "Not captured / not triggered"
     const riskEntries = host.querySelector('[data-testid="session-entries"]');

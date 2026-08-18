@@ -135,25 +135,31 @@ function mergeToolEvent(
 
 function mergeAdjacentReasoning(rows: readonly MutableRow[]): MutableRow[] {
   const merged: MutableRow[] = [];
+  let previousVisibleReasoning: MutableRow | null = null;
   for (const row of rows) {
-    const previous = merged.at(-1);
-    const adjacent =
-      previous &&
-      previous.event.kind === 'reasoning_progress' &&
-      row.event.kind === 'reasoning_progress' &&
-      previous.sourceOrdinals.at(-1)! + 1 === row.sourceOrdinals[0];
-    if (adjacent) {
-      const previousEvent = previous.event as ReasoningEntry;
+    if (
+      previousVisibleReasoning &&
+      row.event.kind === 'reasoning_progress'
+    ) {
+      const previousEvent = previousVisibleReasoning.event as ReasoningEntry;
       const rowEvent = row.event as ReasoningEntry;
-      previous.event = {
+      previousVisibleReasoning.event = {
         ...previousEvent,
         status: rowEvent.status,
         text: mergeReasoningText(previousEvent.text, rowEvent.text),
       };
-      previous.sourceOrdinals.push(...row.sourceOrdinals);
-    } else {
-      merged.push(row);
+      previousVisibleReasoning.sourceOrdinals.push(...row.sourceOrdinals);
+      continue;
     }
+
+    merged.push(row);
+    // Usage is rendered into a footer rather than the primary stream, so it
+    // does not visually separate two reasoning blocks. Every other row does.
+    previousVisibleReasoning = row.event.kind === 'reasoning_progress'
+      ? row
+      : row.event.kind === 'usage'
+        ? previousVisibleReasoning
+        : null;
   }
   return merged;
 }

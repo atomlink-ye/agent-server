@@ -43,7 +43,11 @@ export function installWorkHttpRoutes(
   dependencies: {
     readonly workIdentity: Pick<
       WorkIdentityApi,
-      'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
+      | 'createWork'
+      | 'listWorks'
+      | 'listWorkRuns'
+      | 'getWorkDefinition'
+      | 'updateCurrentDefinitionVersion'
     >;
     readonly productLists: ProductWorkListQuery;
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;

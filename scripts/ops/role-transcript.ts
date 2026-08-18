@@ -1,18 +1,18 @@
 // Show one team member's Paseo transcript, addressed by role name.
 //
-//   node scripts/ops/role-transcript.mjs --team-run <uuid>
-//   node scripts/ops/role-transcript.mjs --team-run <uuid> --member analyst
-//   node scripts/ops/role-transcript.mjs --team-run <uuid> --member lead --json
+//   pnpm role-transcript -- --team-run <uuid>
+//   pnpm role-transcript -- --team-run <uuid> --member analyst
+//   pnpm role-transcript -- --team-run <uuid> --member lead --json
 //
 // With no --member it lists the roles that have a transcript. Read-only: one
 // SELECT and one Paseo timeline fetch per role, no writes anywhere.
-import pg from 'pg';
+import { Pool } from 'pg';
 import { DaemonClient } from '@getpaseo/client';
 
 import { PostgresRoleAgentBindingLookup } from '../../src/infrastructure/postgres/postgres-role-agent-binding-lookup.js';
 import { RoleTranscriptReader } from '../../src/adapters/paseo/role-transcript-reader.js';
 
-function flag(name) {
+function flag(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
   return index === -1 ? undefined : process.argv[index + 1];
 }
@@ -22,7 +22,7 @@ const memberName = flag('member');
 const asJson = process.argv.includes('--json');
 if (!teamRunId) {
   process.stderr.write(
-    'usage: role-transcript.mjs --team-run <uuid> [--member <name>] [--json]\n',
+    'usage: pnpm role-transcript -- --team-run <uuid> [--member <name>] [--json]\n',
   );
   process.exit(2);
 }
@@ -31,7 +31,7 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
 const wsUrl = process.env.PASEO_WS_URL?.trim() ?? 'ws://127.0.0.1:16767/ws';
 
-const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const client = new DaemonClient({
   url: wsUrl,
   clientId: `role-transcript-${process.pid}`,
@@ -52,7 +52,9 @@ try {
     const roles = await reader.listRoles(teamRunId);
     if (asJson) process.stdout.write(`${JSON.stringify(roles, null, 2)}\n`);
     else if (roles.length === 0)
-      process.stdout.write(`no member of team run ${teamRunId} has a Paseo agent yet\n`);
+      process.stdout.write(
+        `no member of team run ${teamRunId} has a Paseo agent yet\n`,
+      );
     else
       for (const role of roles)
         process.stdout.write(

@@ -22,6 +22,7 @@
     "start:lark": "node dist/entrypoints/lark/worker.js",
     "skill:register": "node --import tsx src/entrypoints/cli/skill-register.ts",
     "agentctl": "node --import tsx src/entrypoints/cli/agentctl-router.ts",
+    "role-transcript": "node --import tsx scripts/ops/role-transcript.ts",
     "web:dev": "pnpm --filter @atomlink-ye/agent-server-web dev",
     "web:build": "pnpm --filter @atomlink-ye/agent-server-web build",
     "web:check:types": "pnpm --filter @atomlink-ye/agent-server-web check:types",

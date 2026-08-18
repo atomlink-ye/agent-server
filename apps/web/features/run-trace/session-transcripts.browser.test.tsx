@@ -1,0 +1,145 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { expect, it, vi } from 'vitest';
+
+import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
+import { SessionTranscripts } from './session-transcripts';
+import { parseRecordedTrace } from './recording-test-helpers';
+
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+const MOCK_RESPONSE = {
+  work_id: '00000000-0000-0000-0000-000000000001',
+  work_run_id: '00000000-0000-0000-0000-000000000002',
+  capture_scope: 'safe_run_events',
+  sessions: [
+    {
+      label: { name: 'Lead Agent', role: 'lead', status: 'completed' },
+      summary: {
+        status: 'completed',
+        entry_count: 3,
+        last_timestamp: '2026-08-17T10:00:00.000Z',
+        last_meaningful: {
+          kind: 'tool_status',
+          timestamp: '2026-08-17T10:00:00.000Z',
+          action: 'Reviewed final output',
+          result: 'All checks passed',
+        },
+        work_refs: ['W-1', 'W-2'],
+        truncated: false,
+      },
+      entries: [
+        { ordinal: 1, kind: 'lifecycle', sequence: 1, created_at: '2026-08-17T09:58:00.000Z', status: 'started' },
+        { ordinal: 2, kind: 'tool_status', sequence: 2, created_at: '2026-08-17T09:59:00.000Z', activity_id: 'a1', category: 'read', status: 'completed', label: 'read_file', summary: 'Read config.ts', tool_name: 'read_file', provider: null, detail_kind: 'read', detail_text: null, exit_code: null, parent_activity_id: null },
+        { ordinal: 3, kind: 'permission', sequence: 3, created_at: '2026-08-17T10:00:00.000Z', activity_id: 'a2', category: 'tool', status: 'resolved', decision: 'allowed', summary: 'Allowed file write' },
+      ],
+    },
+    {
+      label: { name: 'Worker Agent', role: 'worker', status: 'completed' },
+      summary: {
+        status: 'completed',
+        entry_count: 2,
+        last_timestamp: '2026-08-17T10:01:00.000Z',
+        last_meaningful: null,
+        work_refs: ['W-1'],
+        truncated: true,
+      },
+      entries: [
+        { ordinal: 1, kind: 'assistant_text', sequence: 1, created_at: '2026-08-17T10:00:30.000Z', text: 'Working on it...' },
+        { ordinal: 2, kind: 'usage', sequence: 2, created_at: '2026-08-17T10:01:00.000Z', input_tokens: 1500, cached_input_tokens: null, output_tokens: 200, total_cost_usd: 0.0045, context_window_max_tokens: null, context_window_used_tokens: null },
+      ],
+    },
+    {
+      label: { name: 'Risk Agent', role: 'risk', status: 'idle' },
+      summary: {
+        status: 'idle',
+        entry_count: 1,
+        last_timestamp: '2026-08-17T09:57:00.000Z',
+        last_meaningful: null,
+        work_refs: [],
+        truncated: false,
+      },
+      entries: [
+        { ordinal: 1, kind: 'permission', sequence: 1, created_at: '2026-08-17T09:57:00.000Z', activity_id: 'a3', category: 'tool', status: '' , decision: null, summary: '' },
+      ],
+    },
+  ],
+};
+
+it('renders per-role session transcripts with role switching, truncation warning, permission honesty, and derived summary labeling', async () => {
+  const trace = parseRecordedTrace(reworkRecording);
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => MOCK_RESPONSE,
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+
+  try {
+    await act(async () => {
+      root.render(<SessionTranscripts trace={trace} />);
+    });
+    // Wait for fetch to resolve
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    // 1. Role list is visible and switchable
+    const roleNav = host.querySelector('[data-testid="session-role-nav"]');
+    expect(roleNav).not.toBeNull();
+    const roleButtons = [...roleNav!.querySelectorAll<HTMLButtonElement>('button')];
+    expect(roleButtons).toHaveLength(3);
+    expect(roleButtons[0]!.textContent).toContain('lead');
+    expect(roleButtons[1]!.textContent).toContain('worker');
+    expect(roleButtons[2]!.textContent).toContain('risk');
+
+    // First role is selected by default — entries are visible
+    const entries = host.querySelector('[data-testid="session-entries"]');
+    expect(entries).not.toBeNull();
+    // lead has 3 entries but assistant_text is hidden, so we should see lifecycle + tool_status + permission
+    const eventElements = entries!.querySelectorAll('.execution-transcript__event, .execution-transcript__event--row');
+    expect(eventElements.length).toBeGreaterThanOrEqual(2); // lifecycle + tool_status (+ maybe permission)
+
+    // Switch to worker role
+    await act(async () => {
+      roleButtons[1]!.click();
+    });
+
+    // 2. Truncated=true shows warning
+    const truncatedWarning = host.querySelector('[data-testid="session-truncated-warning"]');
+    expect(truncatedWarning).not.toBeNull();
+    expect(truncatedWarning!.textContent).toContain('truncated');
+
+    // Switch to risk role
+    await act(async () => {
+      roleButtons[2]!.click();
+    });
+
+    // 3. Permission with null decision and non-resolved status shows "Not captured / not triggered"
+    const riskEntries = host.querySelector('[data-testid="session-entries"]');
+    expect(riskEntries).not.toBeNull();
+    expect(riskEntries!.textContent).toContain('Not captured / not triggered');
+
+    // Switch back to lead role to check derived summary
+    await act(async () => {
+      roleButtons[0]!.click();
+    });
+
+    // 4. Derived summary has "not provider text" labeling
+    const summaryBlock = host.querySelector('[data-testid="session-summary"]');
+    expect(summaryBlock).not.toBeNull();
+    expect(summaryBlock!.textContent).toContain('not provider text');
+
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});

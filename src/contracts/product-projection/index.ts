@@ -26,6 +26,8 @@ import { ProductStateSchema } from './product-state.js';
 
 export { ProductStateSchema } from './product-state.js';
 export type { ProductState } from './product-state.js';
+export * from './execution-detail.js';
+export * from './session-transcripts.js';
 
 export const ProductWorkRunDetailSchema = WorkRunSummarySchema.extend({
   product_state: ProductStateSchema,

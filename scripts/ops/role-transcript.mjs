@@ -67,6 +67,11 @@ try {
         `# ${transcript.memberName} (${transcript.role}, ${transcript.status})\n` +
           `# agent ${transcript.providerAgentId}  epoch ${transcript.epoch}  ${transcript.entries.length} entries\n\n`,
       );
+      if (transcript.hasOlder) {
+        process.stdout.write(
+          `WARNING: this is a truncated tail; older transcript entries exist (cursor: ${JSON.stringify(transcript.cursor)}).\n\n`,
+        );
+      }
       for (const entry of transcript.entries) {
         const seq = entry.seqStart === null ? '-' : String(entry.seqStart);
         process.stdout.write(

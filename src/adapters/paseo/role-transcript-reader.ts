@@ -45,6 +45,10 @@ export interface RoleTimelineSource {
   ): Promise<{
     readonly epoch?: unknown;
     readonly entries?: unknown;
+    /** True when this tail page omits older timeline entries. */
+    readonly hasOlder?: unknown;
+    /** Opaque cursor for fetching older entries; this reader deliberately does not follow it. */
+    readonly startCursor?: unknown;
   }>;
 }
 
@@ -55,6 +59,10 @@ export interface RoleTranscript {
   readonly status: string;
   readonly providerAgentId: string;
   readonly epoch: string | null;
+  /** True when `entries` is only the most recent tail of the transcript. */
+  readonly hasOlder: boolean;
+  /** Paseo's opaque cursor for older entries; pagination is intentionally not implemented here. */
+  readonly cursor: unknown | null;
   readonly entries: readonly RoleTranscriptEntry[];
 }
 
@@ -132,6 +140,8 @@ export class RoleTranscriptReader {
       status: binding.status,
       providerAgentId: binding.providerAgentId,
       epoch: typeof page.epoch === 'string' ? page.epoch : null,
+      hasOlder: page.hasOlder === true,
+      cursor: page.startCursor ?? null,
       entries,
     };
   }

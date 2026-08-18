@@ -30,6 +30,7 @@ export default defineConfig({
       'features/run-trace/run-trace.browser.test.tsx',
       'features/run-trace/events.browser.test.tsx',
       'features/run-trace/map.browser.test.tsx',
+      'features/run-trace/execution-transcript.browser.test.tsx',
     ],
     browser: {
       enabled: true,

@@ -24,6 +24,7 @@ import {
   workTabHref,
   type WorkTab,
 } from '@/components/work/work-presentation';
+import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
 import { RunTrace } from '@/features/run-trace/run-trace';
 import './work-shell.css';
 import './work-shell-mve.css';
@@ -354,6 +355,7 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         </div>
       </div>
       <RunTrace live={live} trace={trace} />
+      <ExecutionTranscript trace={trace} />
       <RunReview run={run} trace={trace} />
     </section>
   );

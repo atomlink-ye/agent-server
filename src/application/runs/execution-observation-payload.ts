@@ -4,15 +4,11 @@ import type {
 } from '../ports/execution-plane.js';
 import { AGENT_SERVER_EXECUTION_MCP_SERVER_NAME } from '../ports/execution-plane.js';
 import type { RunEventPayload } from '../ports/run-events.js';
-import {
-  collaborationMcpName,
-  collaborationMcpRefForName,
-} from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { canonicalCollaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 
 export interface ExecutionObservationProjectionContext {
   readonly isTeamMember: boolean;
-  readonly runtimeToolRefs: readonly string[];
-  readonly catalogTools: readonly string[];
 }
 
 /** UI/evidence projection belongs to Application, not the Execution Plane. */
@@ -34,15 +30,11 @@ export function executionObservationPayload(
         ...(observation.text ? { text: observation.text } : {}),
       };
     case 'tool_updated': {
-      const collaborationToolName = collaborationMcpName(observation.toolName);
-      const collaborationToolRef = collaborationToolName
-        ? collaborationMcpRefForName(collaborationToolName)
-        : null;
+      const collaborationToolName = canonicalCollaborationMcpName(
+        observation.toolName,
+      );
       const authorizedCollaborationTool =
-        Boolean(context?.isTeamMember) &&
-        collaborationToolRef !== null &&
-        context?.runtimeToolRefs.includes(collaborationToolRef) === true &&
-        context?.catalogTools.includes(collaborationToolRef) === true;
+        Boolean(context?.isTeamMember) && collaborationToolName !== null;
       if (collaborationToolName && authorizedCollaborationTool) {
         return {
           kind: 'tool_status',
@@ -50,7 +42,7 @@ export function executionObservationPayload(
           category: observation.category,
           status: observation.status,
           tool_name: collaborationToolName,
-          provenance: 'server_authorized_collaboration_mcp_catalog',
+          provenance: SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
           tool_identity_capture_status: 'present',
           response_observed: observation.resultObserved === true,
         };

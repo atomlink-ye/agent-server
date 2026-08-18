@@ -8,6 +8,7 @@ import type {
   ExecutionToolStatus,
 } from '../../application/ports/execution-plane.js';
 import type { RunUsage } from '../../domain/runs/run.js';
+import { collaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 import type {
   PaseoAgentStreamEvent,
   PaseoProviderSubagentDescriptor,
@@ -576,7 +577,7 @@ export class PaseoObservationProjector {
       status,
       label,
       summary: `${categoryLabel(category)}.`,
-      toolName: call.name,
+      toolName: collaborationMcpName(call.name) ?? call.name,
       detail,
       quality: call.title ? 2 : detail ? 1 : 0,
       parentActivityId,
@@ -594,7 +595,7 @@ export class PaseoObservationProjector {
         status,
         label,
         summary: projection.summary,
-        toolName: call.name,
+        toolName: collaborationMcpName(call.name) ?? call.name,
         detail,
         quality: projection.quality,
       });

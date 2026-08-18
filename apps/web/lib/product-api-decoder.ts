@@ -59,13 +59,15 @@ function stripUnknownFields(value: unknown, schema: ZodType<unknown>): unknown {
       return definition.innerType
         ? stripUnknownFields(value, definition.innerType)
         : value;
-    case 'intersection':
-      return definition.left && definition.right
-        ? stripUnknownFields(
-            stripUnknownFields(value, definition.left),
-            definition.right,
-          )
-        : value;
+    case 'intersection': {
+      // Both sides describe the SAME value, so each must strip against the
+      // original input and the surviving keys are merged. Chaining the two
+      // strips would let the left side delete every key the right side owns.
+      if (!definition.left || !definition.right) return value;
+      const left = stripUnknownFields(value, definition.left);
+      const right = stripUnknownFields(value, definition.right);
+      return isRecord(left) && isRecord(right) ? { ...left, ...right } : value;
+    }
     default:
       return value;
   }

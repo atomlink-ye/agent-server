@@ -7,7 +7,8 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
-import { ExecutionEventRenderer } from './execution-event-renderer';
+import { ActivityRow } from './activity-row';
+import { projectTranscript } from './transcript-projection';
 import './execution-transcript.css';
 
 type Trace = Extract<
@@ -143,6 +144,9 @@ function ExecutionEvents({
   const assistantEvents = detail.events.filter(
     (event) => event.kind === 'assistant_text',
   );
+  const activityEntries = projectTranscript(
+    detail.events.map((event, index) => ({ ...event, ordinal: index + 1 })),
+  ).filter((entry) => entry.event.kind !== 'assistant_text' && entry.event.kind !== 'usage');
   return (
     <div className="execution-transcript__events">
       {messages.length ? (
@@ -175,8 +179,8 @@ function ExecutionEvents({
       ) : null}
       <section className="execution-transcript__timeline">
         <h3>Execution activity</h3>
-        {detail.events.map((event, index) => (
-          <ExecutionEventRenderer key={`${event.sequence}:${event.kind}:${index}`} event={event} />
+        {activityEntries.map((entry) => (
+          <ActivityRow key={entry.sourceOrdinals.join(':')} entry={entry} />
         ))}
       </section>
       {!detail.events.length ? (

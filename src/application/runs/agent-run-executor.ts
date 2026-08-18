@@ -641,8 +641,6 @@ export class AgentRunExecutor {
           emit: async (observation: ExecutionObservation) => {
             const payload = executionObservationPayload(observation, {
               isTeamMember: member != null,
-              runtimeToolRefs,
-              catalogTools: member ? domainToolRefs : runtimeToolRefs,
             });
             if (payload)
               await this.events!.append(claim.run.id, 'output', payload);

@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  AGENT_SERVER_COLLABORATION_MCP_NAMES,
-  AGENT_SERVER_COLLABORATION_TOOL_REFS,
-} from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { AGENT_SERVER_COLLABORATION_MCP_NAMES } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 import { executionObservationPayload } from './execution-observation-payload.js';
 
 describe('executionObservationPayload', () => {
@@ -46,11 +44,9 @@ describe('executionObservationPayload', () => {
     ).not.toHaveProperty('tool_name');
   });
 
-  it('publishes collaboration MCP identity only when the authorized catalog proves it', () => {
+  it('publishes a normalized collaboration MCP identity only for a team member', () => {
     const context = {
       isTeamMember: true,
-      runtimeToolRefs: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
-      catalogTools: [AGENT_SERVER_COLLABORATION_TOOL_REFS.messageSend],
     } as const;
     const observation = {
       kind: 'tool_updated',
@@ -59,7 +55,7 @@ describe('executionObservationPayload', () => {
       status: 'completed',
       label: 'Collaboration message',
       summary: 'Message.',
-      toolName: `agent-server_${AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend}`,
+      toolName: AGENT_SERVER_COLLABORATION_MCP_NAMES.messageSend,
       resultObserved: true,
       provider: 'opencode',
     } as const;
@@ -68,7 +64,7 @@ describe('executionObservationPayload', () => {
       expect.objectContaining({
         kind: 'tool_status',
         activity_id: 'activity-2',
-        provenance: 'server_authorized_collaboration_mcp_catalog',
+        provenance: SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
         tool_identity_capture_status: 'present',
         response_observed: true,
       }),
@@ -76,7 +72,7 @@ describe('executionObservationPayload', () => {
     expect(
       executionObservationPayload(observation, {
         ...context,
-        runtimeToolRefs: [],
+        isTeamMember: false,
       }),
     ).not.toHaveProperty('provenance');
   });

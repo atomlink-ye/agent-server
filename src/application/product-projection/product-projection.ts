@@ -24,6 +24,7 @@ import type {
   ExecutionEvent,
   McpActivity,
 } from '../../contracts/product-projection/edges.js';
+import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 import type {
   ProductProjectionDurableFacts,
   ProductProjectionFactsSlice,
@@ -32,7 +33,7 @@ import type {
   ProductRunTrace,
   ProductWorkRun,
 } from '../../contracts/product-projection/index.js';
-import { collaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
+import { canonicalCollaborationMcpName } from '../../domain/collaboration/canonical-collaboration-tools.js';
 
 export interface ProductProjectionOwnerScope {
   readonly tenantId: string;
@@ -534,10 +535,10 @@ function mapMcpActivity(
     !event.taskId
   )
     return null;
-  const canonicalToolName = collaborationMcpName(event.toolName);
+  const canonicalToolName = canonicalCollaborationMcpName(event.toolName);
   if (
     !canonicalToolName ||
-    event.provenance !== 'server_authorized_team_mcp_catalog' ||
+    event.provenance !== SERVER_AUTHORIZED_TEAM_MCP_CATALOG ||
     event.toolIdentityCaptureStatus !== 'present'
   )
     return null;
@@ -567,7 +568,7 @@ function mapMcpActivity(
         : ('not_present' as const),
     source_refs: sourceRefs,
     chat_detail: chatDetail,
-    provenance: 'server_authorized_team_mcp_catalog' as const,
+    provenance: SERVER_AUTHORIZED_TEAM_MCP_CATALOG,
     tool_identity_capture_status: 'present' as const,
   };
   if (event.activityKind === 'tool_status') {

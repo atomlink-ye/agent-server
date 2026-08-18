@@ -5,6 +5,7 @@ import type {
   ExecutionRunFact,
 } from '../../application/ports/execution-fact-query.js';
 import { ExecutionFactQueryError } from '../../application/ports/execution-fact-query.js';
+import { SERVER_AUTHORIZED_TEAM_MCP_CATALOG } from '../../contracts/product-projection/edges.js';
 
 interface Queryable {
   query<Row = Record<string, unknown>>(
@@ -142,20 +143,20 @@ export class PostgresExecutionFactQuery implements ExecutionFactQuery {
                   e.payload->>'category' AS activity_category,
                   e.payload->>'status' AS activity_status,
                   CASE WHEN e.payload->>'kind'='tool_status'
-                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'provenance'='${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}'
                        AND e.payload->>'tool_identity_capture_status'='present'
                        THEN e.payload->>'tool_name' ELSE NULL END AS tool_name,
                   CASE WHEN e.payload->>'kind'='tool_status'
-                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'provenance'='${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}'
                        AND e.payload->>'tool_identity_capture_status'='present'
                        THEN e.payload->>'provenance' ELSE NULL END AS provenance,
                   CASE WHEN e.payload->>'kind'='tool_status'
-                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'provenance'='${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}'
                        AND e.payload->>'tool_identity_capture_status'='present'
                        THEN e.payload->>'tool_identity_capture_status' ELSE NULL END
                        AS tool_identity_capture_status,
                   CASE WHEN e.payload->>'kind'='tool_status'
-                       AND e.payload->>'provenance'='server_authorized_team_mcp_catalog'
+                       AND e.payload->>'provenance'='${SERVER_AUTHORIZED_TEAM_MCP_CATALOG}'
                        AND e.payload->>'tool_identity_capture_status'='present'
                        AND e.payload->>'response_observed' IN ('true','false')
                        THEN (e.payload->>'response_observed')::boolean ELSE NULL END

@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { ProductSessionTranscriptsResponse } from '@atomlink-ye/agent-server/product-contract';
 import { expect, it, vi } from 'vitest';
 
 import reworkRecording from '@/lib/__fixtures__/product-recordings/rework-once.json';
@@ -12,7 +13,7 @@ import { parseRecordedTrace } from './recording-test-helpers';
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const MOCK_RESPONSE = {
+const MOCK_RESPONSE: ProductSessionTranscriptsResponse = {
   work_id: '00000000-0000-0000-0000-000000000001',
   work_run_id: '00000000-0000-0000-0000-000000000002',
   capture_scope: 'safe_run_events',
@@ -34,12 +35,12 @@ const MOCK_RESPONSE = {
       },
       entries: [
         { ordinal: 1, kind: 'lifecycle', sequence: 1, created_at: '2026-08-17T09:58:00.000Z', status: 'started' },
-        { ordinal: 2, kind: 'tool_status', sequence: 2, created_at: '2026-08-17T09:59:00.000Z', activity_id: 'a1', category: 'read', status: 'completed', label: 'read_file', summary: 'Read config.ts', tool_name: 'read_file', provider: null, detail_kind: 'read', detail_text: null, exit_code: null, parent_activity_id: null },
+        { ordinal: 2, kind: 'tool_status', sequence: 2, created_at: '2026-08-17T09:59:00.000Z', activity_id: 'a1', category: 'read', status: 'completed', label: 'read_file', summary: 'Read config.ts', tool_name: 'zzz_future_tool_v9', provider: null, detail_kind: 'read', detail_text: null, exit_code: null, parent_activity_id: null },
         { ordinal: 3, kind: 'permission', sequence: 3, created_at: '2026-08-17T10:00:00.000Z', activity_id: 'a2', category: 'tool', status: 'resolved', decision: 'allowed', summary: 'Allowed file write' },
       ],
     },
     {
-      label: { name: 'Worker Agent', role: 'worker', status: 'completed' },
+      label: { name: 'Worker Agent', role: 'member', status: 'completed' },
       summary: {
         status: 'completed',
         entry_count: 2,
@@ -54,7 +55,7 @@ const MOCK_RESPONSE = {
       ],
     },
     {
-      label: { name: 'Risk Agent', role: 'risk', status: 'idle' },
+      label: { name: 'Risk Agent', role: 'member', status: 'idle' },
       summary: {
         status: 'idle',
         entry_count: 1,
@@ -64,13 +65,13 @@ const MOCK_RESPONSE = {
         truncated: false,
       },
       entries: [
-        { ordinal: 1, kind: 'permission', sequence: 1, created_at: '2026-08-17T09:57:00.000Z', activity_id: 'a3', category: 'tool', status: '' , decision: null, summary: '' },
+        { ordinal: 1, kind: 'permission', sequence: 1, created_at: '2026-08-17T09:57:00.000Z', activity_id: 'a3', category: 'tool', status: 'requested', decision: null, summary: '' },
       ],
     },
   ],
 };
 
-it('renders per-role session transcripts with role switching, truncation warning, permission honesty, and derived summary labeling', async () => {
+it('renders per-session transcripts with switching between sessions that share a role, truncation warning, permission honesty, and derived summary labeling', async () => {
   const trace = parseRecordedTrace(reworkRecording);
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
@@ -96,31 +97,40 @@ it('renders per-role session transcripts with role switching, truncation warning
     expect(roleNav).not.toBeNull();
     const roleButtons = [...roleNav!.querySelectorAll<HTMLButtonElement>('button')];
     expect(roleButtons).toHaveLength(3);
-    expect(roleButtons[0]!.textContent).toContain('lead');
-    expect(roleButtons[1]!.textContent).toContain('worker');
-    expect(roleButtons[2]!.textContent).toContain('risk');
+    // Two sessions deliberately share the role 'member' — that is what a real
+    // team Run produces. Sessions must stay individually addressable anyway.
+    expect(roleButtons[0]!.textContent).toContain('Lead Agent');
+    expect(roleButtons[1]!.textContent).toContain('Worker Agent');
+    expect(roleButtons[2]!.textContent).toContain('Risk Agent');
 
     // First role is selected by default — entries are visible
     const entries = host.querySelector('[data-testid="session-entries"]');
     expect(entries).not.toBeNull();
-    // lead has 3 entries but assistant_text is hidden, so we should see lifecycle + tool_status + permission
-    const eventElements = entries!.querySelectorAll('.execution-transcript__event, .execution-transcript__event--row');
+    // Projected activity rows preserve the lifecycle, tool, and permission entries.
+    const eventElements = entries!.querySelectorAll('[data-testid="transcript-activity-row"], .transcript__lifecycle-start');
     expect(eventElements.length).toBeGreaterThanOrEqual(2); // lifecycle + tool_status (+ maybe permission)
 
-    // Switch to worker role
+    // Switch to the second session (same role as the third one)
     await act(async () => {
       roleButtons[1]!.click();
     });
+    expect(
+      host.querySelector('.execution-transcript__detail header')!.textContent,
+    ).toContain('Worker Agent');
 
     // 2. Truncated=true shows warning
     const truncatedWarning = host.querySelector('[data-testid="session-truncated-warning"]');
     expect(truncatedWarning).not.toBeNull();
     expect(truncatedWarning!.textContent).toContain('truncated');
 
-    // Switch to risk role
+    // Switch to the third session — same role as the second, must not collide
     await act(async () => {
       roleButtons[2]!.click();
     });
+    expect(
+      host.querySelector('.execution-transcript__detail header')!.textContent,
+    ).toContain('Risk Agent');
+    expect(host.querySelector('[data-testid="session-platform-tool-count"]')).toBeNull();
 
     // 3. Permission with null decision and non-resolved status shows "Not captured / not triggered"
     const riskEntries = host.querySelector('[data-testid="session-entries"]');
@@ -136,6 +146,37 @@ it('renders per-role session transcripts with role switching, truncation warning
     const summaryBlock = host.querySelector('[data-testid="session-summary"]');
     expect(summaryBlock).not.toBeNull();
     expect(summaryBlock!.textContent).toContain('not provider text');
+    expect(summaryBlock!.querySelector('[data-testid="session-platform-tool-count"]')?.textContent).toContain('1');
+
+    // The renderer is namespace/provenance-driven: a future server tool name
+    // stays visibly platform-owned rather than falling through a frontend list.
+    const platformRow = host.querySelector('[data-platform-tool="true"]');
+    expect(platformRow?.tagName).toBe('DETAILS');
+    expect(platformRow?.getAttribute('data-tool-name')).toBe('zzz_future_tool_v9');
+    expect(platformRow?.textContent).toContain('Zzz Future Tool V9');
+    expect(platformRow?.querySelector('.transcript__detail')?.textContent).toMatch(/not captured/i);
+    expect(platformRow?.querySelector('.transcript__detail pre')).toBeNull();
+
+    // Null provenance is intentionally not an interactive platform row, but
+    // preserving that entry still leaves the total rendered unit count intact.
+    const withPlatformCount = host.querySelectorAll('.transcript__item').length;
+    const withoutPlatform = structuredClone(MOCK_RESPONSE);
+    const toolEntry = withoutPlatform.sessions[0]!.entries.find(
+      (entry) => entry.kind === 'tool_status',
+    );
+    if (!toolEntry) throw new Error('Fixture must contain a tool_status entry.');
+    toolEntry.tool_name = null;
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => withoutPlatform });
+    await act(async () => {
+      root.render(<SessionTranscripts key="without-platform-provenance" trace={trace} />);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const staticTool = host.querySelector('[data-transcript-row-kind="tool"]');
+    expect(staticTool?.tagName).toBe('DIV');
+    expect(staticTool?.classList.contains('transcript__row--static')).toBe(true);
+    expect(host.querySelector('[data-platform-tool="true"]')).toBeNull();
+    expect(host.querySelector('[data-testid="session-platform-tool-count"]')).toBeNull();
+    expect(host.querySelectorAll('.transcript__item')).toHaveLength(withPlatformCount);
 
   } finally {
     await act(async () => root.unmount());

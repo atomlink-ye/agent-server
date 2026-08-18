@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
+import type { ProductExecutionDetailEvent, ProductRunTrace } from '@atomlink-ye/agent-server/product-contract';
 
-import { ExecutionEventRenderer } from './execution-event-renderer';
+import { AssistantMarkdown } from '@/components/chat/assistant-markdown';
+import { ActivityRow } from './activity-row';
+import { projectTranscript, type ProjectedTranscriptEntry, type TranscriptEntry } from './transcript-projection';
 import './execution-transcript.css';
+import './transcript-stream.css';
 
 type Trace = Extract<ProductRunTrace, { projection_status: 'internally_anchored' }>;
 
@@ -23,13 +26,7 @@ type SessionSummary = {
   readonly work_refs: readonly string[];
   readonly truncated: boolean;
 };
-type SessionEntry = {
-  readonly ordinal: number;
-  readonly kind: string;
-  readonly sequence: number;
-  readonly created_at: string;
-  readonly [key: string]: unknown;
-};
+type SessionEntry = ProductExecutionDetailEvent & { readonly ordinal: number };
 type Session = {
   readonly label: SessionLabel;
   readonly summary: SessionSummary;
@@ -54,7 +51,10 @@ type FetchState =
 
 export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  // Roles are NOT unique inside a Run: a team can run several 'member'
+  // sessions. Selection therefore addresses the session by its position in
+  // the response, which is the only identifier the contract guarantees.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -71,8 +71,8 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
           return;
         }
         setState({ status: 'ready', data: body });
-        if (body.sessions.length && !selectedRole) {
-          setSelectedRole(body.sessions[0]!.label.role);
+        if (body.sessions.length) {
+          setSelectedIndex(0);
         }
       })
       .catch(() => {
@@ -107,7 +107,8 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
     );
 
   const { data } = state;
-  const selected = data.sessions.find((s) => s.label.role === selectedRole) ?? null;
+  const selected =
+    selectedIndex === null ? null : (data.sessions[selectedIndex] ?? null);
 
   if (!data.sessions.length)
     return (
@@ -127,25 +128,25 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
       <div className="execution-transcript__heading">
         <div>
           <p className="work-shell-kicker">Session transcripts</p>
-          <h2>Per-role conversation and execution activity</h2>
+          <h2>Session conversation and execution activity</h2>
           <p>
-            Each role&apos;s real provider transcript, addressed by role name.
+            Each session&apos;s real provider transcript, addressed by session. Roles repeat inside one Run.
             Derived summaries are marked; they are not provider original text.
           </p>
         </div>
         <span>{data.sessions.length} role{data.sessions.length > 1 ? 's' : ''}</span>
       </div>
       <div className="execution-transcript__body">
-        <nav className="execution-transcript__attempts" aria-label="Session roles" data-testid="session-role-nav">
-          {data.sessions.map((session) => (
+        <nav className="execution-transcript__attempts" aria-label="Sessions" data-testid="session-role-nav">
+          {data.sessions.map((session, index) => (
             <button
-              aria-pressed={session.label.role === selectedRole}
-              key={session.label.role}
-              onClick={() => setSelectedRole(session.label.role)}
+              aria-pressed={index === selectedIndex}
+              key={`${index}:${session.label.name}`}
+              onClick={() => setSelectedIndex(index)}
               type="button"
             >
-              <span>{session.label.name}</span>
-              <strong>{session.label.role}</strong>
+              <strong>{session.label.name}</strong>
+              <span>{session.label.role}</span>
               <small>{humanize(session.label.status)} · {session.summary.entry_count} entries</small>
             </button>
           ))}
@@ -160,12 +161,17 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
                 </div>
                 <span>{selected.summary.entry_count} entries</span>
               </header>
-              <SessionSummaryBlock summary={selected.summary} />
-              <section className="execution-transcript__events" data-testid="session-entries">
-                <h3>Session execution activity</h3>
-                {selected.entries.length ? selected.entries.map((entry) => (
-                  <ExecutionEventRenderer key={`${entry.ordinal}:${entry.kind}`} event={entry} />
-                )) : (
+              <SessionSummaryBlock
+                summary={selected.summary}
+                platformToolCount={selected.entries.filter(
+                  (entry) =>
+                    entry.kind === 'tool_status' && entry.tool_name !== null,
+                ).length}
+              />
+              <section className="execution-transcript__events transcript__events" data-testid="session-entries">
+                <h3>Session conversation</h3>
+                <p className="execution-transcript__notice">Platform tool calls are shown with their real names; their arguments and results are not captured.</p>
+                {selected.entries.length ? <TranscriptStream entries={selected.entries} /> : (
                   <p className="execution-transcript__notice">No entries were captured for this session.</p>
                 )}
               </section>
@@ -185,7 +191,84 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
   );
 }
 
-function SessionSummaryBlock({ summary }: { readonly summary: SessionSummary }) {
+function TranscriptStream({ entries }: { readonly entries: readonly SessionEntry[] }) {
+  const projected = projectTranscript(entries as readonly TranscriptEntry[]);
+  const stream = buildVisibleStream(projected);
+  return <div className="transcript__stream" data-testid="transcript-stream">
+    {stream.map((item, index) => (
+      <div className={`transcript__item transcript__item--${item.kind}`} data-source-ordinals={item.sourceOrdinals.join(',')} key={item.key} style={{ marginTop: index ? `${gapAfter(stream[index - 1]!, item)}px` : undefined }}>
+        {item.kind === 'assistant' ? <div className="transcript__prose" data-testid="transcript-prose"><AssistantMarkdown text={assistantText(item.entry)} /></div> : null}
+        {item.kind === 'activity' ? <ActivityRow entry={item.entry} /> : null}
+        {item.kind === 'lifecycle' ? <LifecycleRow entry={item.entry} /> : null}
+        {item.kind === 'footer' ? <div className="transcript__footer">{item.text}</div> : null}
+      </div>
+    ))}
+  </div>;
+}
+
+type StreamItem =
+  | { readonly kind: 'assistant'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'activity'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'lifecycle'; readonly key: string; readonly entry: ProjectedTranscriptEntry; readonly sourceOrdinals: readonly number[] }
+  | { readonly kind: 'footer'; readonly key: string; readonly text: string; readonly sourceOrdinals: readonly number[] };
+
+function buildVisibleStream(entries: readonly ProjectedTranscriptEntry[]): readonly StreamItem[] {
+  const stream: StreamItem[] = [];
+  let pendingUsage: ProjectedTranscriptEntry[] = [];
+  let lastAssistant: ProjectedTranscriptEntry | null = null;
+  const flushFooter = () => {
+    if (!lastAssistant) return;
+    const parts = pendingUsage.flatMap((usage) => usage.event.kind === 'usage' ? usageParts(usage.event) : []);
+    stream.push({ kind: 'footer', key: `footer:${lastAssistant.sourceOrdinals.join(':')}`, text: parts.length ? parts.join(' · ') : formatTimestamp(lastAssistant.event.created_at), sourceOrdinals: [...lastAssistant.sourceOrdinals, ...pendingUsage.flatMap((usage) => usage.sourceOrdinals)] });
+    lastAssistant = null;
+    pendingUsage = [];
+  };
+  for (const entry of entries) {
+    if (entry.event.kind === 'usage') { pendingUsage.push(entry); continue; }
+    if (entry.event.kind !== 'assistant_text') flushFooter();
+    if (entry.event.kind === 'assistant_text') {
+      flushFooter();
+      stream.push({ kind: 'assistant', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
+      lastAssistant = entry;
+    } else if (entry.event.kind === 'lifecycle') {
+      stream.push({ kind: 'lifecycle', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
+    } else {
+      stream.push({ kind: 'activity', key: entry.sourceOrdinals.join(':'), entry, sourceOrdinals: entry.sourceOrdinals });
+    }
+  }
+  flushFooter();
+  return stream;
+}
+
+function gapAfter(previous: StreamItem, next: StreamItem): number {
+  const sequence = (item: StreamItem) => item.kind === 'activity';
+  if (sequence(previous) && sequence(next)) return 0;
+  if (previous.kind === 'assistant' && next.kind === 'activity') return 4;
+  if (previous.kind === 'activity' && next.kind === 'assistant') return 4;
+  if (next.kind === 'footer') return 4;
+  return 20;
+}
+
+function LifecycleRow({ entry }: { readonly entry: ProjectedTranscriptEntry }) {
+  const status = entry.event.kind === 'lifecycle' ? entry.event.status : 'unknown';
+  return status === 'started'
+    ? <div className="transcript__lifecycle-start">Run started</div>
+    : <div className="transcript__rule">Run {humanize(status)}</div>;
+}
+
+function usageParts(event: Extract<SessionEntry, { readonly kind: 'usage' }>): string[] {
+  return [
+    event.input_tokens === null ? null : `${event.input_tokens.toLocaleString()} input`,
+    event.output_tokens === null ? null : `${event.output_tokens.toLocaleString()} output`,
+    event.total_cost_usd === null ? null : `$${event.total_cost_usd.toFixed(4)}`,
+  ].filter((part): part is string => Boolean(part));
+}
+
+function assistantText(entry: ProjectedTranscriptEntry): string {
+  return entry.event.kind === 'assistant_text' ? entry.event.text : '';
+}
+
+function SessionSummaryBlock({ summary, platformToolCount }: { readonly summary: SessionSummary; readonly platformToolCount: number }) {
   return (
     <div className="execution-transcript__summary" data-testid="session-summary">
       <dl>
@@ -197,6 +280,9 @@ function SessionSummaryBlock({ summary }: { readonly summary: SessionSummary }) 
         </div>
         {summary.work_refs.length ? (
           <div><dt>Work refs</dt><dd>{summary.work_refs.join(', ')}</dd></div>
+        ) : null}
+        {platformToolCount ? (
+          <div data-testid="session-platform-tool-count"><dt>Platform tools</dt><dd>{platformToolCount}</dd></div>
         ) : null}
       </dl>
       {summary.last_meaningful ? (

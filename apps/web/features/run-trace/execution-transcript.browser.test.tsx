@@ -74,7 +74,7 @@ it('renders actual safe provider output through the Product-scoped Attempt detai
     expect(host.textContent).toContain(
       'Actual provider answer visible in Product execution detail.',
     );
-    expect(host.textContent).toContain('read_source');
+    expect(host.textContent).toContain('Read source');
     expect(host.textContent).toContain('bounded detail');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(

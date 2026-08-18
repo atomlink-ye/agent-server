@@ -105,8 +105,8 @@ it('renders per-session transcripts with switching between sessions that share a
     // First role is selected by default — entries are visible
     const entries = host.querySelector('[data-testid="session-entries"]');
     expect(entries).not.toBeNull();
-    // lead has 3 entries but assistant_text is hidden, so we should see lifecycle + tool_status + permission
-    const eventElements = entries!.querySelectorAll('.execution-transcript__event, .execution-transcript__event--row');
+    // Projected activity rows preserve the lifecycle, tool, and permission entries.
+    const eventElements = entries!.querySelectorAll('[data-testid="transcript-activity-row"], .transcript__lifecycle-start');
     expect(eventElements.length).toBeGreaterThanOrEqual(2); // lifecycle + tool_status (+ maybe permission)
 
     // Switch to the second session (same role as the third one)

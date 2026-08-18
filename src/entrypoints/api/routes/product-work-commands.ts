@@ -28,6 +28,8 @@ import type { StartWorkRun } from '../../../application/work/start-work-run.js';
 import {
   CreateWorkRequestSchema,
   StartWorkRunRequestSchema,
+  UpdateWorkDefinitionVersionRequestSchema,
+  UpdateWorkDefinitionVersionResponseSchema,
   WorkListResponseSchema,
   WorkDefinitionResponseSchema,
   WorkRunListResponseSchema,
@@ -49,7 +51,11 @@ export interface ProductWorkCommandDependencies {
   readonly config: AppConfig;
   readonly workIdentity: Pick<
     WorkIdentityApi,
-    'createWork' | 'listWorks' | 'listWorkRuns' | 'getWorkDefinition'
+    | 'createWork'
+    | 'listWorks'
+    | 'listWorkRuns'
+    | 'getWorkDefinition'
+    | 'updateCurrentDefinitionVersion'
   >;
   /** Production supplies latest-first Product list reads; compatibility tests may omit them. */
   readonly productLists?: ProductWorkListQuery;
@@ -230,6 +236,43 @@ export function registerProductWorkCommandRoutes(
         throw new HttpError(409, 'work_identity_conflict', error.message);
       if (error instanceof WorkWorkspaceScopeUnavailableError)
         throw new HttpError(409, 'workspace_scope_unavailable', error.message);
+      if (error instanceof WorkDefinitionValidationError)
+        throw new HttpError(400, error.code, error.message);
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/works/:workId/definition-version', async (context) => {
+    rejectTechnicalIdempotencyHeader(context);
+    const workId = context.req.param('workId');
+    if (!isCanonicalUuid(workId))
+      throw new HttpError(400, 'invalid_request', 'workId must be a UUID.');
+    const parsed = UpdateWorkDefinitionVersionRequestSchema.safeParse(
+      await readBoundedJson(context.req.raw, 64 * 1024),
+    );
+    if (!parsed.success)
+      throw new HttpError(
+        400,
+        'invalid_request',
+        'A valid Work Definition version request is required.',
+      );
+    const accessContext = getAuthenticatedAccessContext(context);
+    try {
+      const work = await dependencies.workIdentity.updateCurrentDefinitionVersion({
+        owner: WorkIdentityApi.ownerFromAccessContext(accessContext),
+        accessContext,
+        workId,
+        definitionVersionId: parsed.data.definition_version_id,
+      });
+      return context.json(
+        UpdateWorkDefinitionVersionResponseSchema.parse({
+          work: toWorkResponse(work),
+        }),
+        200,
+      );
+    } catch (error) {
+      if (error instanceof WorkNotFoundError)
+        throw new HttpError(404, 'work_not_found', error.message);
       if (error instanceof WorkDefinitionValidationError)
         throw new HttpError(400, error.code, error.message);
       throw error;

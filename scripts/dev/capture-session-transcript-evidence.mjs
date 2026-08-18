@@ -7,7 +7,7 @@ const pageUrl = `http://127.0.0.1:3001/works/${work}?tab=overview&run=${run}`;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-await page.getByTestId('session-transcripts').waitFor({ timeout: 15_000 });
+await page.getByTestId('session-transcripts').waitFor({ timeout: 60_000 });
 await page.getByTestId('session-transcripts').scrollIntoViewIfNeeded();
 
 for (const name of ['analyst', 'builder', 'lead']) {
@@ -22,12 +22,18 @@ await stream.scrollIntoViewIfNeeded();
 await page.screenshot({ path: '/workspace/transcript-lead-body.png' });
 
 const metrics = await page.evaluate(() => {
-  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="transcript-activity-row"]')];
-  const prose = document.querySelector<HTMLElement>('[data-testid="transcript-prose"]');
-  const streamItems = [...document.querySelectorAll<HTMLElement>('.transcript__item')];
+  const rows = [...document.querySelectorAll('[data-testid="transcript-activity-row"]')];
+  const prose = document.querySelector('[data-testid="transcript-prose"]');
+  const streamItems = [...document.querySelectorAll('.transcript__item')];
   const ordinals = new Set(streamItems.flatMap((item) => (item.dataset.sourceOrdinals ?? '').split(',').filter(Boolean).map(Number)));
-  const rowRects = rows.map((row) => row.getBoundingClientRect()).sort((a, b) => a.top - b.top);
-  const gaps = rowRects.slice(1).map((row, index) => row.top - rowRects[index].bottom);
+  const activityItems = [...document.querySelectorAll('.transcript__item--activity')];
+  const gaps = activityItems.flatMap((item, index) => {
+    const previous = activityItems[index - 1];
+    if (!previous || previous.nextElementSibling !== item) return [];
+    const before = previous.querySelector('[data-testid="transcript-activity-row"]')?.getBoundingClientRect();
+    const after = item.querySelector('[data-testid="transcript-activity-row"]')?.getBoundingClientRect();
+    return before && after ? [after.top - before.bottom] : [];
+  });
   const rowStyle = rows[0] ? getComputedStyle(rows[0]) : null;
   const proseStyle = prose ? getComputedStyle(prose) : null;
   const navStrong = document.querySelector('[data-testid="session-role-nav"] strong')?.textContent?.trim() ?? '';
@@ -39,8 +45,8 @@ const metrics = await page.evaluate(() => {
     prose_font_size_px: proseStyle ? Number.parseFloat(proseStyle.fontSize) : 0,
     activity_row_font_size_px: rowStyle ? Number.parseFloat(rowStyle.fontSize) : 0,
     prose_border_left_width: proseStyle?.borderLeftWidth ?? '',
-    matches_reasoning_started_or_completed: /Reasoning\s+(started|completed)/i.test(stream?.textContent ?? ''),
-    matches_activity_running: /activity running/i.test(stream?.textContent ?? ''),
+    matches_reasoning_started_or_completed: /Reasoning\s+(started|completed)/i.test(document.querySelector('[data-testid="transcript-stream"]')?.textContent ?? ''),
+    matches_activity_running: /activity running/i.test(document.querySelector('[data-testid="transcript-stream"]')?.textContent ?? ''),
     left_nav_first_strong_text: navStrong,
     page_contains_addressed_by_role_name: document.body.textContent?.includes('addressed by role name') ?? false,
     source_ordinal_coverage: ordinals.size,

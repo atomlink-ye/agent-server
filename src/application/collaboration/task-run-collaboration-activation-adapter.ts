@@ -68,7 +68,7 @@ export class TaskRunCollaborationActivationAdapter {
         'active',
         undefined,
         input.owner,
-        'idle',
+        ['starting', 'idle'],
       );
 
       const sequence = this.sequence(input, materializedTeam);

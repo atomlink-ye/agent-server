@@ -898,7 +898,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'],
     runtimeSessionId?: string | null,
     owner?: OwnerScope,
-    expectedCurrentStatus?: TeamMemberRun['status'],
+    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
     return this.updateMember(id, status, runtimeSessionId, owner, expectedCurrentStatus);
   }
@@ -2195,7 +2195,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'] | undefined,
     session: string | null | undefined,
     owner?: OwnerScope,
-    expectedCurrentStatus?: TeamMemberRun['status'],
+    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
     const vals: any[] = [];
     const sets: string[] = [];
@@ -2216,8 +2216,13 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       `${ownerSql('', ownerSqlStartIdx)}`,
     ];
     if (expectedCurrentStatus !== undefined) {
-      whereConditions.push(`status=$${vals.length + 1}`);
-      vals.push(expectedCurrentStatus);
+      if (Array.isArray(expectedCurrentStatus)) {
+        whereConditions.push(`status = ANY($${vals.length + 1})`);
+        vals.push(expectedCurrentStatus);
+      } else {
+        whereConditions.push(`status=$${vals.length + 1}`);
+        vals.push(expectedCurrentStatus);
+      }
     }
     const r = await this.database.query<MemberRow>(
       `UPDATE team_member_runs SET ${sets.join(',')}, updated_at=now() WHERE ${whereConditions.join(' AND ')} RETURNING *`,

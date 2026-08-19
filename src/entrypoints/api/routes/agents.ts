@@ -273,6 +273,8 @@ function definitionResponse(value: {
   displayName: string;
   createdAt: string;
   updatedAt: string;
+  roleLabel: string | null;
+  summary: string | null;
 }) {
   return {
     id: value.id,
@@ -280,6 +282,8 @@ function definitionResponse(value: {
     display_name: value.displayName,
     created_at: value.createdAt,
     updated_at: value.updatedAt,
+    role_label: value.roleLabel,
+    summary: value.summary,
     links: {
       self: `/api/v1/agents/${value.id}`,
       versions: `/api/v1/agents/${value.id}/versions`,

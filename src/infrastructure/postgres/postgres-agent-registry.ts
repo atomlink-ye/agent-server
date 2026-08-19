@@ -46,6 +46,8 @@ type DefinitionRow = {
   normalized_name: string;
   created_at: string | Date;
   updated_at: string | Date;
+  role_label: string | null;
+  summary: string | null;
 };
 type VersionRow = DefinitionRow & {
   definition_id: string;
@@ -103,10 +105,10 @@ export class PostgresAgentRegistry implements AgentRegistry {
 
       const definitionResult = await db.query<DefinitionRow>(
         `INSERT INTO agent_definitions
-          (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9)
+          (id, tenant_id, workspace_id, principal_type, principal_id, name, managed_discriminator, normalized_name, role_label, summary, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'managed_agent_v1',$7,$8,$9,$10,$11)
          ON CONFLICT DO NOTHING
-         RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, created_at, updated_at`,
+         RETURNING id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, created_at, updated_at`,
         [
           command.definition.id,
           command.owner.tenantId,
@@ -115,6 +117,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
           command.owner.principalId,
           command.definition.displayName,
           command.normalizedName,
+          command.definition.roleLabel,
+          command.definition.summary,
           command.definition.createdAt,
           command.definition.updatedAt,
         ],
@@ -123,7 +127,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
         definitionResult.rows?.[0] ??
         (
           await db.query<DefinitionRow>(
-            `SELECT id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, created_at, updated_at
+            `SELECT id, tenant_id, workspace_id, principal_type, principal_id, name, normalized_name, role_label, summary, created_at, updated_at
            FROM agent_definitions WHERE tenant_id=$1 AND principal_type=$2 AND principal_id=$3 AND normalized_name=$4
              AND managed_discriminator='managed_agent_v1' FOR UPDATE`,
             ownerNameValues(command.owner, command.normalizedName),
@@ -245,7 +249,7 @@ export class PostgresAgentRegistry implements AgentRegistry {
     definitionId: string,
   ): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
-      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,created_at,updated_at FROM agent_definitions
+      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
        WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
       [definitionId, owner.tenantId, owner.principalType, owner.principalId],
     );
@@ -447,7 +451,7 @@ async function loadImportResult(
   versionId: string,
 ) {
   const d = await db.query<DefinitionRow>(
-    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,created_at,updated_at FROM agent_definitions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
     [definitionId, owner.tenantId, owner.principalType, owner.principalId],
   );
   const v = await db.query<VersionRow>(
@@ -470,6 +474,8 @@ function mapDefinition(row: DefinitionRow): AgentDefinition {
     displayName: row.name,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+    roleLabel: row.role_label ?? null,
+    summary: row.summary ?? null,
   });
 }
 function mapVersion(row: VersionRow): ManagedAgentVersion {

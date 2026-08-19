@@ -21,8 +21,10 @@ if (process.env.REAL_POSTGRES_REQUIRED === '1' && !connectionString) {
     'REAL_POSTGRES_REQUIRED=1 requires DATABASE_URL or POSTGRES_URL for the real PostgreSQL integration lane',
   );
 }
+const workspaceId = '10000000-0000-4000-8000-000000000000';
 const owner = {
   tenantId: 'tenant_registry',
+  workspaceId,
   principalType: 'service_account',
   principalId: 'principal_registry',
 };

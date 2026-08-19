@@ -48,6 +48,7 @@ export async function importAgent(
 export function ownerFromContext(context: AccessContext): ManagedAgentOwner {
   return {
     tenantId: context.tenantId,
+    workspaceId: context.workspaceId,
     principalType: context.principalType,
     principalId: context.principalId,
   };

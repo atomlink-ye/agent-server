@@ -300,7 +300,7 @@ function WorkDetail({
         runId={runId}
         workId={work.id}
       />
-      {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
+      {activeTab === 'overview' ? <OverviewPanel data={data} key={data.run?.work_run.id} /> : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
       {activeTab === 'transcript' ? (
         <TranscriptPanel
@@ -463,6 +463,7 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
       <RunReview
         run={run}
         trace={trace}
+        selectedAttemptId={selectedAttemptId}
         onSelectAttempt={setSelectedAttemptId}
         onRequestTimelineView={() => setTraceView('timeline')}
       />
@@ -529,11 +530,13 @@ function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string
 function RunReview({
   run,
   trace,
+  selectedAttemptId,
   onSelectAttempt,
   onRequestTimelineView,
 }: {
   readonly run: AnchoredRun;
   readonly trace: AnchoredTrace;
+  readonly selectedAttemptId: string | null;
   readonly onSelectAttempt: (attemptId: string) => void;
   readonly onRequestTimelineView: () => void;
 }) {
@@ -612,7 +615,7 @@ function RunReview({
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={null} trace={trace} onSelect={(attemptId) => {
+        <MapView selectedAttemptKey={selectedAttemptId} trace={trace} onSelect={(attemptId) => {
           onSelectAttempt(attemptId);
           onRequestTimelineView();
           scrollTestIdIntoViewAfterRender('trace-timeline');

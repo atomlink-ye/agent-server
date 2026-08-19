@@ -78,6 +78,7 @@ export const ProductWorkDefinitionVersionSchema = z
     status: z.literal('published'),
     fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     source: z.record(z.string(), z.unknown()),
+    source_yaml: z.string().min(1).max(64 * 1024),
     resolved: z
       .object({
         resource_manifest_fingerprint: z

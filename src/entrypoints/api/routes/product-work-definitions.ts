@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { stringify } from 'yaml';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
 import {
   InvalidProductWorkDefinitionError,
@@ -251,6 +252,7 @@ function productVersionResponse(record: ProductWorkDefinitionVersionRecord) {
     status: 'published',
     fingerprint: record.authorFingerprint,
     source: record.authorSource,
+    source_yaml: stringify(record.authorSource, { lineWidth: 0 }),
     resolved: {
       resource_manifest_fingerprint: record.resolvedFingerprint,
     },

@@ -26,7 +26,7 @@ import {
   type WorkTab,
 } from '@/components/work/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
-import { MapView, RunTrace } from '@/features/run-trace/run-trace';
+import { MapView, RunTrace, type TraceView } from '@/features/run-trace/run-trace';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import './work-shell.css';
 import './work-shell-mve.css';
@@ -414,6 +414,7 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
 
 function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+  const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
@@ -455,9 +456,16 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
         trace={trace}
         selectedAttemptId={selectedAttemptId}
         onSelectAttempt={setSelectedAttemptId}
+        view={traceView}
+        onViewChange={setTraceView}
       />
       <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
-      <RunReview run={run} trace={trace} onSelectAttempt={setSelectedAttemptId} />
+      <RunReview
+        run={run}
+        trace={trace}
+        onSelectAttempt={setSelectedAttemptId}
+        onRequestTimelineView={() => setTraceView('timeline')}
+      />
     </section>
   );
 }
@@ -498,14 +506,36 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
   );
 }
 
+function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string) {
+  // Two nested requestAnimationFrame calls: the first fires after React has
+  // committed the state update that (may have) mounted the target element,
+  // the second fires after the browser has painted that commit -- this is
+  // the standard pattern for 'wait until a just-triggered state change has
+  // actually reached the DOM' without guessing at a setTimeout delay.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="${testId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (fallbackTestId) {
+        document.querySelector(`[data-testid="${fallbackTestId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+}
+
 function RunReview({
   run,
   trace,
   onSelectAttempt,
+  onRequestTimelineView,
 }: {
   readonly run: AnchoredRun;
   readonly trace: AnchoredTrace;
   readonly onSelectAttempt: (attemptId: string) => void;
+  readonly onRequestTimelineView: () => void;
 }) {
   const attemptCount = trace.work_items.reduce(
     (sum, item) => sum + item.attempts.length,
@@ -564,15 +594,18 @@ function RunReview({
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
           <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
-            document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
           }} />
           <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
             const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
             if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
-            document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
           }} />
           <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
-            document.querySelector('[data-testid="timeline-messages"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('timeline-messages', 'trace-timeline');
           }} />
           <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
         </dl>
@@ -581,7 +614,8 @@ function RunReview({
         <h3>Run Map</h3>
         <MapView selectedAttemptKey={null} trace={trace} onSelect={(attemptId) => {
           onSelectAttempt(attemptId);
-          document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          onRequestTimelineView();
+          scrollTestIdIntoViewAfterRender('trace-timeline');
         }} />
       </div>
       <div className="work-review__problems" data-testid="review-problems">

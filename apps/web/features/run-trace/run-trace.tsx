@@ -9,7 +9,7 @@ type WorkItem = Trace['work_items'][number];
 type Attempt = WorkItem['attempts'][number];
 type Entry = { readonly workItem: WorkItem; readonly attempt: Attempt };
 type Geometry = { readonly left: number; readonly width: number };
-type TraceView = 'timeline' | 'map' | 'events';
+export type TraceView = 'timeline' | 'map' | 'events';
 type InspectorMode = 'overview' | 'conversation' | 'activity';
 
 const TAB_LABELS: Record<TraceView, string> = {
@@ -23,14 +23,23 @@ export function RunTrace({
   live = false,
   selectedAttemptId,
   onSelectAttempt,
+  view: controlledView,
+  onViewChange,
 }: {
   readonly trace: Trace;
   readonly live?: boolean;
   readonly selectedAttemptId?: string | null;
   readonly onSelectAttempt?: (attemptId: string) => void;
+  readonly view?: TraceView;
+  readonly onViewChange?: (view: TraceView) => void;
 }) {
   const attempts = useMemo(() => attemptsFrom(trace), [trace]);
-  const [view, setView] = useState<TraceView>('timeline');
+  const [internalView, setInternalView] = useState<TraceView>('timeline');
+  const view = controlledView ?? internalView;
+  function setView(nextView: TraceView) {
+    setInternalView(nextView);
+    onViewChange?.(nextView);
+  }
   const [internalSelectedAttemptKey, setInternalSelectedAttemptKey] = useState<string | null>(
     attempts[0]?.attempt.id ?? null,
   );

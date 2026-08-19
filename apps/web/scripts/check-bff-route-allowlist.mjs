@@ -54,19 +54,20 @@ const MUST_REJECT_WRITE = [
   '../api/v1/works',
 ];
 
-const APPLY_PATH = '/api/v1/work-definitions:apply';
-
 let extractedRegexes;
+let extractedApplyPath;
 try {
   extractedRegexes = extractRegexes(clientFile);
+  extractedApplyPath = extractApplyPath(clientFile);
 } catch (error) {
   console.error(
-    `EXTRACTOR-BROKEN: could not extract productReadPath/productWritePath from ${path.relative(webRoot, clientFile)}: ` +
+    `EXTRACTOR-BROKEN: could not extract the allowlist regexes or the idempotency-key apply path from ${path.relative(webRoot, clientFile)}: ` +
       `${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(2);
 }
 const { productReadPath, productWritePath } = extractedRegexes;
+const APPLY_PATH = extractedApplyPath;
 
 const routeFiles = findRouteFiles(apiRoot);
 const uuidSample = '00000000-0000-4000-8000-000000000000';
@@ -216,6 +217,23 @@ function extractWriteProductCalls(source) {
     calls.push({ path: templatePath, hasIdempotencyKey: argsText.includes('idempotencyKey') });
   }
   return calls;
+}
+
+// Extracts the literal path string that product-api-client.ts itself
+// compares against to decide whether an idempotency key is required
+// (`const requiresIdempotencyKey = path === '...'`). This must be
+// extracted, not hardcoded: a hardcoded APPLY_PATH constant would keep
+// asserting a rule product-api-client.ts no longer enforces if that
+// comparison were ever removed or changed there -- deleting the whole
+// three-state check client-side would leave this script silently
+// checking against a stale copy of a rule nothing enforces anymore.
+function extractApplyPath(file) {
+  const text = readFileSync(file, 'utf8');
+  const match = text.match(/const requiresIdempotencyKey = path === (['"`])((?:(?!\1).)*)\1/);
+  if (!match) {
+    throw new Error(`could not find "const requiresIdempotencyKey = path === ..." in ${file}`);
+  }
+  return match[2];
 }
 
 function extractRegexes(file) {

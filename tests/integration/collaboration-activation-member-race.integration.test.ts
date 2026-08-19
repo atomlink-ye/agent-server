@@ -183,10 +183,12 @@ describe('Collaboration activation member race condition', () => {
 
     // The failure should be conflict error (benign lost claim)
     const failedReason = failures[0];
-    expect(failedReason.status).toBe('rejected');
-    if (failedReason.status === 'rejected') {
-      expect(failedReason.reason).toBeInstanceOf(TeamExecutionError);
-      expect((failedReason.reason as TeamExecutionError).code).toBe('conflict');
+    if (failedReason) {
+      expect(failedReason.status).toBe('rejected');
+      if (failedReason.status === 'rejected') {
+        expect(failedReason.reason).toBeInstanceOf(TeamExecutionError);
+        expect((failedReason.reason as TeamExecutionError).code).toBe('conflict');
+      }
     }
 
     // Verify final state: member is active (only one activation succeeded)

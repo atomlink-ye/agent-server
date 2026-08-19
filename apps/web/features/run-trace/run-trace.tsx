@@ -21,15 +21,24 @@ const TAB_LABELS: Record<TraceView, string> = {
 export function RunTrace({
   trace,
   live = false,
+  selectedAttemptId,
+  onSelectAttempt,
 }: {
   readonly trace: Trace;
   readonly live?: boolean;
+  readonly selectedAttemptId?: string | null;
+  readonly onSelectAttempt?: (attemptId: string) => void;
 }) {
   const attempts = useMemo(() => attemptsFrom(trace), [trace]);
   const [view, setView] = useState<TraceView>('timeline');
-  const [selectedAttemptKey, setSelectedAttemptKey] = useState<string | null>(
+  const [internalSelectedAttemptKey, setInternalSelectedAttemptKey] = useState<string | null>(
     attempts[0]?.attempt.id ?? null,
   );
+  const selectedAttemptKey = selectedAttemptId ?? internalSelectedAttemptKey;
+  function setSelectedAttemptKey(nextId: string | null) {
+    setInternalSelectedAttemptKey(nextId);
+    if (nextId !== null) onSelectAttempt?.(nextId);
+  }
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>('overview');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
@@ -352,7 +361,6 @@ function AttemptSpan({
       <span className="run-trace__attempt-label">
         Attempt {attempt.attempt_no} · {durationLabel(attempt)}
       </span>
-      <span aria-hidden="true" data-testid="attempt-id" style={{ display: 'none' }}>{attempt.id}</span>
       {feedbackSource ? (
         <span aria-label="Recorded feedback relation" data-attempt-id={attempt.id}>Feedback recorded</span>
       ) : null}

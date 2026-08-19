@@ -413,6 +413,7 @@ function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace;
 }
 
 function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
@@ -449,9 +450,14 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
           ) : null}
         </div>
       </div>
-      <RunTrace live={live} trace={trace} />
+      <RunTrace
+        live={live}
+        trace={trace}
+        selectedAttemptId={selectedAttemptId}
+        onSelectAttempt={setSelectedAttemptId}
+      />
       <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
-      <RunReview run={run} trace={trace} />
+      <RunReview run={run} trace={trace} onSelectAttempt={setSelectedAttemptId} />
     </section>
   );
 }
@@ -495,9 +501,11 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
 function RunReview({
   run,
   trace,
+  onSelectAttempt,
 }: {
   readonly run: AnchoredRun;
   readonly trace: AnchoredTrace;
+  readonly onSelectAttempt: (attemptId: string) => void;
 }) {
   const attemptCount = trace.work_items.reduce(
     (sum, item) => sum + item.attempts.length,
@@ -555,42 +563,18 @@ function RunReview({
         <dl className="work-review__facts">
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
-          <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
-            const el = document.querySelector('[data-testid="trace-timeline"]');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }} />
+          <ReviewFact label="Attempts" value={attemptCount} />
           <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
             const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
-            if (reworkItem) {
-              const allIds = document.querySelectorAll<HTMLElement>('[data-testid="attempt-id"]');
-              for (const el of allIds) {
-                if (reworkItem.attempts.some((a) => a.id === el.textContent)) {
-                  const button = el.closest('button');
-                  if (button) { button.scrollIntoView({ behavior: 'smooth', block: 'center' }); button.click(); break; }
-                }
-              }
-            }
+            if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
           }} />
-          <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
-            const el = document.querySelector('[data-testid="timeline-messages"]');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }} />
+          <ReviewFact label="Agent messages" value={messageCount} />
           <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={null} trace={trace} onSelect={(attemptId) => {
-          const target = document.querySelector(`[data-testid="attempt-id"]`) as HTMLElement | null;
-          const allIds = document.querySelectorAll<HTMLElement>('[data-testid="attempt-id"]');
-          for (const el of allIds) {
-            if (el.textContent === attemptId) {
-              const button = el.closest('button');
-              if (button) { button.scrollIntoView({ behavior: 'smooth', block: 'center' }); button.click(); }
-              break;
-            }
-          }
-        }} />
+        <MapView selectedAttemptKey={null} trace={trace} onSelect={onSelectAttempt} />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
         <h3>Problems & capture gaps</h3>

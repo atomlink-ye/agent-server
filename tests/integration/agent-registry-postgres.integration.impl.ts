@@ -960,9 +960,10 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(after?.status).toBe('published');
     expect(after?.publishedAt).toBe(published.publishedAt);
     expect(after?.updatedAt).toBe(published.updatedAt);
-    expect(await registry.findDefinition(owner, definition.id)).toEqual(
-      definition,
-    );
+    expect(await registry.findDefinition(owner, definition.id)).toEqual({
+      ...definition,
+      workspaceId: 'workspace-stale-publish',
+    });
     const idempotency = await db.query<{
       created_at: string;
       updated_at: string;
@@ -1504,7 +1505,7 @@ describeRealPostgres(
       ]);
     });
 
-    it('hides definitions, versions, lists, and publication from another principal', async () => {
+    it('allows same-tenant principals to read but not write another principal\'s managed agent', async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';
       await reset(tenant);
@@ -1519,28 +1520,39 @@ describeRealPostgres(
           'hidden-fp',
         ),
       );
-      const hidden = {
+      const otherPrincipal = {
         tenantId: tenant,
         workspaceId,
         principalType: 'service_account',
         principalId: 'other',
       };
-      expect(
-        await registry.findDefinition(hidden, imported.definition.id),
-      ).toBeNull();
-      expect(
-        await registry.findVersion(hidden, imported.version.id),
-      ).toBeNull();
-      expect(
-        await registry.listVersionsForOwner(hidden, {
-          definitionId: imported.definition.id,
-          cursor: null,
-          limit: 2,
-        }),
-      ).toBeNull();
+      // Same tenant, different principal: should be able to READ the definition
+      const def = await registry.findDefinition(
+        otherPrincipal,
+        imported.definition.id,
+      );
+      expect(def).toBeDefined();
+      expect(def?.id).toBe(imported.definition.id);
+      // Same tenant, different principal: should be able to READ the version
+      const ver = await registry.findVersion(
+        otherPrincipal,
+        imported.version.id,
+      );
+      expect(ver).toBeDefined();
+      expect(ver?.id).toBe(imported.version.id);
+      // Same tenant, different principal: should be able to LIST versions
+      const listResult = await registry.listVersionsForOwner(otherPrincipal, {
+        definitionId: imported.definition.id,
+        cursor: null,
+        limit: 2,
+      });
+      expect(listResult).toBeDefined();
+      expect(listResult?.versions).toHaveLength(1);
+      expect(listResult?.versions[0]?.id).toBe(imported.version.id);
+      // Same tenant, different principal: cannot WRITE (publish)
       await expect(
         registry.publishAgentVersion({
-          owner: hidden,
+          owner: otherPrincipal,
           idempotencyKey: 'hidden-publish',
           requestFingerprint: 'hidden',
           versionId: imported.version.id,

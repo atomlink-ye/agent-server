@@ -49,6 +49,15 @@ else
     })
   ).workspace_id;
 
+let sampleWorkId = env('WEB_SAMPLE_WORK_ID');
+if (!sampleWorkId) {
+  const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
+    agentVersionId,
+    environmentVersionId,
+  );
+  sampleWorkId = await bootstrapWork(definitionId, definitionVersionId);
+}
+
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(
   outputPath,
@@ -59,6 +68,7 @@ await writeFile(
     `WEB_AGENTIC_TEAM_VERSION_ID=${agenticTeamVersionId}`,
     `WEB_WORKSPACE_NAME=${quoteEnv(workspaceName)}`,
     `WEB_WORKSPACE_ID=${workspaceId}`,
+    `WEB_SAMPLE_WORK_ID=${sampleWorkId}`,
     '',
   ].join('\n'),
   { mode: 0o600 },
@@ -172,6 +182,66 @@ async function bootstrapEnvironmentVersion() {
   }
   return versionId;
 }
+
+async function bootstrapWorkDefinition(agentVersionId, environmentVersionId) {
+  const workDefinitionSource = `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: web-bootstrap-single-agent
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}`;
+
+  let response;
+  try {
+    const fetchResponse = await fetch(`${baseUrl}/api/v1/work-definitions:apply`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'idempotency-key': 'web-bootstrap-single-agent-apply-v1',
+      },
+      body: JSON.stringify({ source: workDefinitionSource }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    // :apply endpoint may return 200 (already exists) or 201 (newly created), both are success
+    if (fetchResponse.status !== 200 && fetchResponse.status !== 201)
+      fail(
+        `Agent Server bootstrap request failed (${fetchResponse.status}, expected 200 or 201).`,
+      );
+    response = await fetchResponse.json();
+  } catch {
+    fail('Agent Server is not reachable. Start the local API first.');
+  }
+
+  const definitionId = response.definition?.id;
+  const definitionVersionId = response.version?.id;
+
+  if (typeof definitionId !== 'string' || typeof definitionVersionId !== 'string')
+    fail('Work definition bootstrap returned no ids.');
+
+  return { definitionId, definitionVersionId };
+}
+
+async function bootstrapWork(definitionId, definitionVersionId) {
+  const response = await request(`${baseUrl}/api/v1/works`, {
+    method: 'POST',
+    body: {
+      definition_id: definitionId,
+      definition_version_id: definitionVersionId,
+      title: 'Web Bootstrap Sample',
+    },
+    expectedStatus: 201,
+  });
+
+  const workId = response.work?.id;
+  if (typeof workId !== 'string')
+    fail('Work bootstrap returned no id.');
+
+  return workId;
+}
+
 async function request(url, options = {}) {
   let response;
   try {

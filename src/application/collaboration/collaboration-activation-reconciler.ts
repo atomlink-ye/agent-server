@@ -97,7 +97,7 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         if (isBenignLostClaim(error)) continue;
         if (
           error instanceof TeamExecutionError &&
-          error.code === 'stale_state' &&
+          (error.code === 'stale_state' || error.code === 'conflict') &&
           pass + 1 < maxPasses
         )
           continue;
@@ -167,7 +167,7 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
           decision?.decision === 'reject' ? decision.feedback : null,
       });
       if (plan) {
-        await this.materialize({
+        const materialized = await this.materialize({
           team,
           member: lead,
           owner,
@@ -176,7 +176,9 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
           senderNameById,
           ...(parentTask ? { parentTask } : {}),
         });
-        return true;
+        if (materialized) return true;
+        // If lead materialization failed due to conflict, this round has no progress
+        return false;
       }
     }
 
@@ -241,7 +243,7 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         ...(hasDiscovery ? { workAvailableItem: openActionable } : {}),
       });
       if (!plan) continue;
-      await this.materialize({
+      const materialized = await this.materialize({
         team,
         member,
         owner,
@@ -250,14 +252,16 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         senderNameById,
         ...(parentTask ? { parentTask } : {}),
       });
-      return true;
+      if (materialized) return true;
+      // If materialize returned false (benign conflict), try the next member
+      continue;
     }
     return false;
   }
 
   private async materialize(
     input: Parameters<TaskRunCollaborationActivationAdapter['materialize']>[0],
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const result = await this.#adapter.materialize(input);
       this.logger?.log('info', 'collaboration.activation.materialized', {
@@ -268,14 +272,21 @@ export class CollaborationActivationReconciler implements CollaborationActivatio
         cause_count: input.plan.activation.causes.length,
         priority: input.plan.activation.priority,
       });
+      return true;
     } catch (error) {
-      if (isBenignLostClaim(error)) {
+      if (
+        isBenignLostClaim(error) ||
+        (error instanceof TeamExecutionError && error.code === 'conflict')
+      ) {
         this.logger?.log('info', 'collaboration.activation.claim_lost', {
           team_run_id: input.team.id,
           participant_id: input.member.id,
           dedupe_key: input.plan.activation.dedupeKey,
+          reason: error instanceof TeamExecutionError
+            ? 'member_already_active'
+            : 'work_item_dedup',
         });
-        return;
+        return false;
       }
       throw error;
     }

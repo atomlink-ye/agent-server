@@ -898,8 +898,9 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'],
     runtimeSessionId?: string | null,
     owner?: OwnerScope,
+    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
-    return this.updateMember(id, status, runtimeSessionId, owner);
+    return this.updateMember(id, status, runtimeSessionId, owner, expectedCurrentStatus);
   }
   public async updateMemberRuntimeSession(
     id: string,
@@ -2194,6 +2195,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'] | undefined,
     session: string | null | undefined,
     owner?: OwnerScope,
+    expectedCurrentStatus?: TeamMemberRun['status'] | readonly TeamMemberRun['status'][],
   ): Promise<TeamMemberRun> {
     const vals: any[] = [];
     const sets: string[] = [];
@@ -2205,12 +2207,33 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       sets.push(`runtime_session_id=$${vals.length + 1}`);
       vals.push(session);
     }
+    // Track id position before pushing
+    const idParamIdx = vals.length + 1;
     vals.push(id, ...ownerValues(owner!));
+    const ownerSqlStartIdx = idParamIdx + 1;
+    const whereConditions: string[] = [
+      `id=$${idParamIdx}`,
+      `${ownerSql('', ownerSqlStartIdx)}`,
+    ];
+    if (expectedCurrentStatus !== undefined) {
+      if (Array.isArray(expectedCurrentStatus)) {
+        whereConditions.push(`status = ANY($${vals.length + 1})`);
+        vals.push(expectedCurrentStatus);
+      } else {
+        whereConditions.push(`status=$${vals.length + 1}`);
+        vals.push(expectedCurrentStatus);
+      }
+    }
     const r = await this.database.query<MemberRow>(
-      `UPDATE team_member_runs SET ${sets.join(',')}, updated_at=now() WHERE id=$${sets.length + 1} AND ${ownerSql('', sets.length + 2)} RETURNING *`,
+      `UPDATE team_member_runs SET ${sets.join(',')}, updated_at=now() WHERE ${whereConditions.join(' AND ')} RETURNING *`,
       vals,
     );
-    if (!r.rows?.[0]) throw new Error('Member run was not found.');
+    if (!r.rows?.[0]) {
+      if (expectedCurrentStatus !== undefined) {
+        throw new TeamExecutionError('conflict');
+      }
+      throw new Error('Member run was not found.');
+    }
     return mapMember(r.rows[0]);
   }
 }

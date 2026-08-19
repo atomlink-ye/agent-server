@@ -468,12 +468,12 @@ function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDe
     );
   const live = data.run.work_run.product_state === 'running';
   return (
-    <section className="work-transcript-panel" data-testid="work-transcript-panel">
-      <div className="work-transcript-panel__tabs" role="tablist" aria-label="Transcript views">
+    <section className="work-transcript-panel run-trace" data-testid="work-transcript-panel">
+      <div className="run-trace__tabs" role="tablist" aria-label="Transcript views">
         {(['sessions', 'execution'] as const).map((item) => (
           <button
             aria-selected={view === item}
-            className="work-transcript-panel__tab"
+            className="run-trace__tab"
             key={item}
             onClick={() => setView(item)}
             role="tab"

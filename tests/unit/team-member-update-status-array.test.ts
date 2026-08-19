@@ -33,7 +33,7 @@ describe('TeamMemberRunStatus array update logic', () => {
     testCases.forEach(({ name, expectedCurrentStatus, isArray, expectedSqlFragment }) => {
       // Verify the detection logic
       const actualIsArray = Array.isArray(expectedCurrentStatus);
-      expect(actualIsArray).toBe(isArray, name);
+      expect(actualIsArray).toBe(isArray);
 
       // Verify SQL fragment selection
       let actualSqlFragment: string;
@@ -42,7 +42,7 @@ describe('TeamMemberRunStatus array update logic', () => {
       } else {
         actualSqlFragment = `status=$1`;
       }
-      expect(actualSqlFragment).toBe(expectedSqlFragment, name);
+      expect(actualSqlFragment).toBe(expectedSqlFragment);
     });
   });
 
@@ -50,17 +50,17 @@ describe('TeamMemberRunStatus array update logic', () => {
     // Before fix: UPDATE expects status='idle' but member has status='starting'
     // Result: WHERE status='idle' matches 0 rows -> conflict error
 
-    const memberStatus = 'starting'; // Real production state
+    const memberStatus: string = 'starting'; // Real production state
     const expectedStatusInOldCode = 'idle'; // Hardcoded in old code
     const expectedStatusInFixedCode = ['starting', 'idle']; // Array in fixed code
 
     // Old code would fail
     const oldCodeMatches = memberStatus === expectedStatusInOldCode;
-    expect(oldCodeMatches).toBe(false, 'Old code would fail to match');
+    expect(oldCodeMatches).toBe(false);
 
     // Fixed code succeeds
     const fixedCodeMatches = expectedStatusInFixedCode.includes(memberStatus);
-    expect(fixedCodeMatches).toBe(true, 'Fixed code successfully matches starting state');
+    expect(fixedCodeMatches).toBe(true);
   });
 
   it('verifies isIdle semantics match the fixed WHERE clause', () => {
@@ -81,7 +81,7 @@ describe('TeamMemberRunStatus array update logic', () => {
     // Verify that the array exactly matches the isIdle logic
     Object.entries(isIdleStatusMap).forEach(([status, shouldBeIdle]) => {
       const isInArray = expectedStatusesInArray.includes(status as any);
-      expect(isInArray).toBe(shouldBeIdle, `Status '${status}' expectation mismatch`);
+      expect(isInArray).toBe(shouldBeIdle);
     });
   });
 

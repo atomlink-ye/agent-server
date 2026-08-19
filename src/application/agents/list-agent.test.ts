@@ -32,6 +32,7 @@ describe('ListAgentVersions', () => {
     expect(calls[0]).toEqual({
       owner: {
         tenantId: 'tenant',
+        workspaceId: 'workspace',
         principalType: 'service_account',
         principalId: 'principal',
       },

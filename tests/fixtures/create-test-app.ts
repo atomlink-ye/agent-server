@@ -460,6 +460,7 @@ async function seedDefaultManagedPublishedAgent(
   const now = () => new Date('2026-07-22T12:00:00.000Z');
   const owner = {
     tenantId: 'tenant_alpha',
+    workspaceId,
     principalType: 'service_account' as const,
     principalId: 'svc_enabled',
   };

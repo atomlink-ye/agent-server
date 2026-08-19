@@ -135,6 +135,7 @@ function validateToolRefs(refs: readonly string[]): void {
 function managedOwner(scope: AgentVersionResolutionScope): ManagedAgentOwner {
   return {
     tenantId: scope.tenantId,
+    workspaceId: scope.workspaceId,
     principalType: scope.principalType,
     principalId: scope.principalId,
   };

@@ -21,8 +21,10 @@ if (process.env.REAL_POSTGRES_REQUIRED === '1' && !connectionString) {
     'REAL_POSTGRES_REQUIRED=1 requires DATABASE_URL or POSTGRES_URL for the real PostgreSQL integration lane',
   );
 }
+const workspaceId = '10000000-0000-4000-8000-000000000000';
 const owner = {
   tenantId: 'tenant_registry',
+  workspaceId,
   principalType: 'service_account',
   principalId: 'principal_registry',
 };
@@ -248,6 +250,7 @@ describe('managed agent registry migration', () => {
       '0034_work_composition_resources',
       '0035_product_work_definition_api',
       '0036_agent_definition_metadata',
+      '0037_agent_definition_scope',
     ]);
   });
 
@@ -958,9 +961,10 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(after?.status).toBe('published');
     expect(after?.publishedAt).toBe(published.publishedAt);
     expect(after?.updatedAt).toBe(published.updatedAt);
-    expect(await registry.findDefinition(owner, definition.id)).toEqual(
-      definition,
-    );
+    expect(await registry.findDefinition(owner, definition.id)).toEqual({
+      ...definition,
+      workspaceId: 'workspace-stale-publish',
+    });
     const idempotency = await db.query<{
       created_at: string;
       updated_at: string;
@@ -1031,6 +1035,7 @@ describeRealPostgres(
     ) {
       const realOwner = {
         tenantId,
+        workspaceId,
         principalType: 'service_account',
         principalId,
       };
@@ -1368,6 +1373,7 @@ describeRealPostgres(
       };
       const ownerForPublish = {
         tenantId: imported.version.tenantId,
+        workspaceId: imported.version.workspaceId,
         principalType: imported.version.principalType,
         principalId: imported.version.principalId,
       };
@@ -1425,6 +1431,7 @@ describeRealPostgres(
 
       const ownerForPublish = {
         tenantId: imported.version.tenantId,
+        workspaceId: imported.version.workspaceId,
         principalType: imported.version.principalType,
         principalId: imported.version.principalId,
       };
@@ -1499,7 +1506,7 @@ describeRealPostgres(
       ]);
     });
 
-    it('hides definitions, versions, lists, and publication from another principal', async () => {
+    it('allows same-tenant principals to read but not write another principal\'s managed agent', async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';
       await reset(tenant);
@@ -1514,27 +1521,39 @@ describeRealPostgres(
           'hidden-fp',
         ),
       );
-      const hidden = {
+      const otherPrincipal = {
         tenantId: tenant,
+        workspaceId,
         principalType: 'service_account',
         principalId: 'other',
       };
-      expect(
-        await registry.findDefinition(hidden, imported.definition.id),
-      ).toBeNull();
-      expect(
-        await registry.findVersion(hidden, imported.version.id),
-      ).toBeNull();
-      expect(
-        await registry.listVersionsForOwner(hidden, {
-          definitionId: imported.definition.id,
-          cursor: null,
-          limit: 2,
-        }),
-      ).toBeNull();
+      // Same tenant, different principal: should be able to READ the definition
+      const def = await registry.findDefinition(
+        otherPrincipal,
+        imported.definition.id,
+      );
+      expect(def).toBeDefined();
+      expect(def?.id).toBe(imported.definition.id);
+      // Same tenant, different principal: should be able to READ the version
+      const ver = await registry.findVersion(
+        otherPrincipal,
+        imported.version.id,
+      );
+      expect(ver).toBeDefined();
+      expect(ver?.id).toBe(imported.version.id);
+      // Same tenant, different principal: should be able to LIST versions
+      const listResult = await registry.listVersionsForOwner(otherPrincipal, {
+        definitionId: imported.definition.id,
+        cursor: null,
+        limit: 2,
+      });
+      expect(listResult).toBeDefined();
+      expect(listResult?.items).toHaveLength(1);
+      expect(listResult?.items[0]?.id).toBe(imported.version.id);
+      // Same tenant, different principal: cannot WRITE (publish)
       await expect(
         registry.publishAgentVersion({
-          owner: hidden,
+          owner: otherPrincipal,
           idempotencyKey: 'hidden-publish',
           requestFingerprint: 'hidden',
           versionId: imported.version.id,
@@ -1608,6 +1627,7 @@ describeRealPostgres(
         const page = await registry.listVersionsForOwner(
           {
             tenantId: tenant,
+            workspaceId,
             principalType: 'service_account',
             principalId: 'principal',
           },

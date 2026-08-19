@@ -1,5 +1,6 @@
 export interface ManagedAgentOwner {
   readonly tenantId: string;
+  readonly workspaceId: string;
   readonly principalType: string;
   readonly principalId: string;
 }

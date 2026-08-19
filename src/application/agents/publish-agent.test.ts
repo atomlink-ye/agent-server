@@ -35,6 +35,7 @@ describe('PublishAgentVersion application boundary', () => {
       {
         owner: {
           tenantId: 'tenant',
+          workspaceId: 'workspace',
           principalType: 'service_account',
           principalId: 'principal',
         },

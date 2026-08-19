@@ -346,6 +346,7 @@ export class AgentRunExecutor {
       const environment = await this.environments.findVersion(
         {
           tenantId: task.tenantId,
+          workspaceId: task.workspaceId,
           principalType: task.principalType,
           principalId: task.principalId,
         },

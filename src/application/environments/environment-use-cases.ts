@@ -22,6 +22,7 @@ export const validateEnvironmentPackage = (source: string) => {
 };
 const owner = (c: AccessContext) => ({
   tenantId: c.tenantId,
+  workspaceId: c.workspaceId,
   principalType: c.principalType,
   principalId: c.principalId,
 });

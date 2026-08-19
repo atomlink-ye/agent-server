@@ -149,6 +149,7 @@ export class PostgresEnvironmentRegistry implements EnvironmentRegistry {
 const mapD = (r: any): EnvironmentDefinition => ({
   id: r.id,
   tenantId: r.tenant_id,
+  workspaceId: r.workspace_id,
   principalType: r.principal_type,
   principalId: r.principal_id,
   normalizedName: r.normalized_name,
@@ -160,6 +161,7 @@ const mapV = (r: any): EnvironmentVersion => ({
   id: r.id,
   definitionId: r.definition_id,
   tenantId: r.tenant_id,
+  workspaceId: r.workspace_id,
   principalType: r.principal_type,
   principalId: r.principal_id,
   status: r.status,

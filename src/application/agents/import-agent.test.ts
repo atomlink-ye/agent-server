@@ -40,6 +40,7 @@ describe('ImportAgent application boundary', () => {
     expect(calls[0]).toMatchObject({
       owner: {
         tenantId: 'tenant',
+        workspaceId: 'workspace',
         principalType: 'service_account',
         principalId: 'principal',
       },
@@ -49,7 +50,6 @@ describe('ImportAgent application boundary', () => {
       requestFingerprint: hash(source),
       version: { package: { metadata: { name: 'My Agent' } }, status: 'draft' },
     });
-    expect(calls[0]).not.toHaveProperty('owner.workspaceId');
   });
 
   it('keeps workspace out of managed owner identity but carries its compatibility snapshot', async () => {
@@ -68,7 +68,19 @@ describe('ImportAgent application boundary', () => {
       idempotencyKey: 'two',
       source: validPackage('Agent'),
     });
-    expect(calls[0]!.owner).toEqual(calls[1]!.owner);
+    // Workspace is part of the owner identity, so they should differ
+    expect(calls[0]!.owner).toEqual({
+      tenantId: 'tenant',
+      workspaceId: 'workspace',
+      principalType: 'service_account',
+      principalId: 'principal',
+    });
+    expect(calls[1]!.owner).toEqual({
+      tenantId: 'tenant',
+      workspaceId: 'workspace-2',
+      principalType: 'service_account',
+      principalId: 'principal',
+    });
     expect(calls.map((call) => call.compatibilityWorkspaceId)).toEqual([
       'workspace',
       'workspace-2',

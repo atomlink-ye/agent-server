@@ -116,6 +116,7 @@ describe('ExecuteRun', () => {
         id: 'environment-version-1',
         definitionId: 'environment-definition-1',
         tenantId: task.tenantId,
+        workspaceId: 'workspace-1',
         principalType: task.principalType,
         principalId: task.principalId,
         status: 'published' as const,
@@ -933,6 +934,7 @@ describe('ExecuteRun', () => {
     expect(findVersion).toHaveBeenCalledWith(
       {
         tenantId: 'tenant-1',
+        workspaceId: 'workspace-1',
         principalType: 'user',
         principalId: 'user-1',
       },

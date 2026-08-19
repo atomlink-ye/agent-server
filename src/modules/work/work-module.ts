@@ -1,5 +1,7 @@
 import type { Hono } from 'hono';
 
+import type { TeamDriver } from '../../application/teams/team-driver.js';
+import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
 import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
 import { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
 import {
@@ -37,7 +39,17 @@ import type { AppConfig } from '../../shared/config.js';
 
 export interface WorkModule {
   readonly projection: ProductProjectionApi;
-  installHttp(app: Hono<ApiEnvironment>, config: AppConfig): void;
+  installHttp(
+    app: Hono<ApiEnvironment>,
+    config: AppConfig,
+    extras?: {
+      readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
+      readonly teamExecutions?: Pick<
+        TeamExecutionRepository,
+        'findTeamRunByRootTaskId'
+      >;
+    },
+  ): void;
   readonly contributeRuntime: RuntimeToolContributor;
 }
 
@@ -52,12 +64,18 @@ export function installWorkHttpRoutes(
       | 'listWorkRuns'
       | 'getWorkDefinition'
       | 'updateCurrentDefinitionVersion'
+      | 'getWorkRun'
     >;
     readonly productLists: ProductWorkListQuery;
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
     readonly projection: ProductProjectionApi;
     readonly executionDetail: Pick<GetProductExecutionDetail, 'execute'>;
     readonly sessionTranscripts: Pick<GetProductSessionTranscripts, 'execute'>;
+    readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
+    readonly teamExecutions?: Pick<
+      TeamExecutionRepository,
+      'findTeamRunByRootTaskId'
+    >;
   },
 ): void {
   const {
@@ -67,6 +85,8 @@ export function installWorkHttpRoutes(
     projection,
     executionDetail,
     sessionTranscripts,
+    teamDriver,
+    teamExecutions,
   } = dependencies;
   registerProductWorkCommandRoutes(app, {
     config,
@@ -75,6 +95,9 @@ export function installWorkHttpRoutes(
     startWorkRun,
     workListProjection: projection.getWorkListItem,
     workExists: projection.getWork,
+    productWorkRun: projection.getWorkRun,
+    ...(teamDriver ? { teamDriver } : {}),
+    ...(teamExecutions ? { teamExecutions } : {}),
   });
   registerProductWorkRoutes(app, {
     config,
@@ -175,7 +198,7 @@ export function createWorkModule(options: {
 
   return {
     projection,
-    installHttp(app, config) {
+    installHttp(app, config, extras) {
       installWorkHttpRoutes(app, config, {
         workIdentity,
         productLists,
@@ -183,6 +206,8 @@ export function createWorkModule(options: {
         projection,
         executionDetail,
         sessionTranscripts,
+        ...(extras?.teamDriver ? { teamDriver: extras.teamDriver } : {}),
+        ...(extras?.teamExecutions ? { teamExecutions: extras.teamExecutions } : {}),
       });
     },
     contributeRuntime(context) {

@@ -25,6 +25,12 @@ import {
   WorkRunBindingConflictError,
 } from '../../../domain/work/work-run.js';
 import type { StartWorkRun } from '../../../application/work/start-work-run.js';
+import type { TeamDriver } from '../../../application/teams/team-driver.js';
+import type {
+  TeamExecutionRepository,
+  OwnerScope,
+} from '../../../application/ports/team-execution-repository.js';
+import { TeamExecutionError } from '../../../application/ports/team-execution-repository.js';
 import {
   CreateWorkRequestSchema,
   StartWorkRunRequestSchema,
@@ -38,6 +44,10 @@ import {
   toWorkResponse,
   toWorkRunResponse,
 } from '../../../contracts/product-work-commands.js';
+import {
+  ProductCompletionDecisionRequestSchema,
+  ProductCompletionDecisionResponseSchema,
+} from '../../../contracts/product-work-controls.js';
 import { HttpError } from '../../../contracts/http.js';
 import type { AppConfig } from '../../../shared/config.js';
 import type { ApiEnvironment } from '../../../platform/http-types.js';
@@ -56,12 +66,16 @@ export interface ProductWorkCommandDependencies {
     | 'listWorkRuns'
     | 'getWorkDefinition'
     | 'updateCurrentDefinitionVersion'
+    | 'getWorkRun'
   >;
   /** Production supplies latest-first Product list reads; compatibility tests may omit them. */
   readonly productLists?: ProductWorkListQuery;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
   readonly workExists?: ProductProjectionApi['getWork'];
   readonly workListProjection: ProductProjectionApi['getWorkListItem'];
+  readonly productWorkRun?: ProductProjectionApi['getWorkRun'];
+  readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
+  readonly teamExecutions?: Pick<TeamExecutionRepository, 'findTeamRunByRootTaskId'>;
 }
 
 export function registerProductWorkCommandRoutes(
@@ -348,6 +362,130 @@ export function registerProductWorkCommandRoutes(
       throw error;
     }
   });
+
+  app.post(
+    '/api/v1/works/:workId/runs/:workRunId/completion-decision',
+    async (context) => {
+      rejectTechnicalIdempotencyHeader(context);
+      const workId = context.req.param('workId');
+      const workRunId = context.req.param('workRunId');
+      if (!isCanonicalUuid(workId) || !isCanonicalUuid(workRunId))
+        throw new HttpError(
+          400,
+          'invalid_request',
+          'workId and workRunId must be UUIDs.',
+        );
+      const parsed = ProductCompletionDecisionRequestSchema.safeParse(
+        await readBoundedJson(context.req.raw, 64 * 1024),
+      );
+      if (!parsed.success)
+        throw new HttpError(
+          400,
+          'invalid_request',
+          'A valid completion decision request is required.',
+        );
+      if (!dependencies.teamDriver || !dependencies.teamExecutions)
+        throw new HttpError(
+          503,
+          'team_driver_unavailable',
+          'Completion decisions are unavailable.',
+        );
+      const accessContext = getAuthenticatedAccessContext(context);
+      const owner: OwnerScope = accessContext;
+      const workRun = await dependencies.workIdentity.getWorkRun(
+        workRunId,
+        WorkIdentityApi.ownerFromAccessContext(accessContext),
+      );
+      if (!workRun || workRun.workId !== workId || workRun.rootTaskId === null)
+        throw new HttpError(
+          404,
+          'work_run_not_found',
+          'The requested WorkRun was not found.',
+        );
+      const team = await dependencies.teamExecutions.findTeamRunByRootTaskId(
+        workRun.rootTaskId,
+        owner,
+      );
+      if (!team)
+        throw new HttpError(
+          404,
+          'work_run_not_found',
+          'The requested WorkRun is not a collaboration Run.',
+        );
+      try {
+        const input =
+          parsed.data.decision === 'approve'
+            ? {
+                teamRunId: team.id,
+                expectedRevision: parsed.data.control_revision,
+                owner,
+                decidedBy: accessContext.principalId,
+                decision: 'approve' as const,
+              }
+            : {
+                teamRunId: team.id,
+                expectedRevision: parsed.data.control_revision,
+                owner,
+                decidedBy: accessContext.principalId,
+                decision: 'reject' as const,
+                feedback: parsed.data.feedback,
+                workItemIds: parsed.data.work_item_ids,
+              };
+        await dependencies.teamDriver.decideCompletion(input);
+      } catch (error) {
+        if (error instanceof TeamExecutionError) {
+          if (error.code === 'invalid_target')
+            throw new HttpError(
+              422,
+              'completion_decision_not_available',
+              error.message,
+            );
+          if (error.code === 'not_found')
+            throw new HttpError(404, 'work_run_not_found', error.message);
+          if (
+            error.code === 'stale_state' ||
+            error.code === 'conflict' ||
+            error.code === 'invalid_transition' ||
+            error.code === 'not_allowed'
+          )
+            throw new HttpError(
+              409,
+              'control_revision_stale',
+              error.message,
+            );
+        }
+        throw error;
+      }
+      if (!dependencies.productWorkRun)
+        throw new HttpError(
+          503,
+          'team_driver_unavailable',
+          'Completion decisions are unavailable.',
+        );
+      const refreshed = await dependencies.productWorkRun({
+        tenantId: accessContext.tenantId,
+        workspaceId: accessContext.workspaceId,
+        workId,
+        workRunId,
+      });
+      if (
+        !refreshed ||
+        !('projection_status' in refreshed) ||
+        refreshed.projection_status !== 'internally_anchored'
+      )
+        throw new HttpError(
+          503,
+          'team_driver_unavailable',
+          'Completion decisions are unavailable.',
+        );
+      return context.json(
+        ProductCompletionDecisionResponseSchema.parse({
+          work_run: refreshed.work_run,
+        }),
+        200,
+      );
+    },
+  );
 }
 
 function requireProductLists(

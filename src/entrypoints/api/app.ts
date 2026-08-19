@@ -150,7 +150,10 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  dependencies.workModule?.installHttp(app, dependencies.config);
+  dependencies.workModule?.installHttp(app, dependencies.config, {
+    ...(dependencies.teamDriver ? { teamDriver: dependencies.teamDriver } : {}),
+    ...(dependencies.teamExecutions ? { teamExecutions: dependencies.teamExecutions } : {}),
+  });
   if (dependencies.memoryModule) {
     dependencies.memoryModule.installHttp(app, dependencies.config);
   } else {

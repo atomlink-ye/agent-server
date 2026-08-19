@@ -1547,8 +1547,8 @@ describeRealPostgres(
         limit: 2,
       });
       expect(listResult).toBeDefined();
-      expect(listResult?.versions).toHaveLength(1);
-      expect(listResult?.versions[0]?.id).toBe(imported.version.id);
+      expect(listResult?.items).toHaveLength(1);
+      expect(listResult?.items[0]?.id).toBe(imported.version.id);
       // Same tenant, different principal: cannot WRITE (publish)
       await expect(
         registry.publishAgentVersion({

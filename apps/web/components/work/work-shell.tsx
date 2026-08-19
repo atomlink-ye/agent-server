@@ -548,7 +548,7 @@ function RunReview({
     (edge) => edge.kind === 'feedback',
   ).length;
   const messageCount = trace.edges.filter(
-    (edge) => edge.kind === 'observed_message',
+    (edge) => edge.kind === 'observed_message' && edge.source_created_at,
   ).length;
   const reworkItems = trace.work_items.filter(
     (item) => item.attempts.length > 1,

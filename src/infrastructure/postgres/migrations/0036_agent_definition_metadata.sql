@@ -10,6 +10,8 @@ ALTER TABLE agent_definitions
 
 -- Backfill summary from the earliest agent_versions.description for managed agents.
 -- This captures the agent's description from its package metadata into the definition row.
+ALTER TABLE agent_definitions DISABLE TRIGGER agent_definitions_managed_immutable_before_update;
+
 UPDATE agent_definitions ad
 SET summary = (
   SELECT av.description
@@ -21,5 +23,7 @@ SET summary = (
 )
 WHERE ad.managed_discriminator = 'managed_agent_v1'
   AND ad.summary IS NULL;
+
+ALTER TABLE agent_definitions ENABLE TRIGGER agent_definitions_managed_immutable_before_update;
 
 COMMIT;

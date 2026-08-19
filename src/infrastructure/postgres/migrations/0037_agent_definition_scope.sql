@@ -10,9 +10,13 @@ ALTER TABLE agent_definitions
 
 -- Backfill existing managed agent rows with 'principal' scope type and principal_id as scope_id.
 -- This maintains backward compatibility: existing principal-scoped agents remain visible only to their owner.
+ALTER TABLE agent_definitions DISABLE TRIGGER agent_definitions_managed_immutable_before_update;
+
 UPDATE agent_definitions
 SET scope_type = 'principal', scope_id = principal_id
 WHERE managed_discriminator = 'managed_agent_v1'
   AND scope_type IS NULL;
+
+ALTER TABLE agent_definitions ENABLE TRIGGER agent_definitions_managed_immutable_before_update;
 
 COMMIT;

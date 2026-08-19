@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "check:types": "tsc --noEmit --incremental false"
+    "check:types": "tsc --noEmit --incremental false",
+    "check:bff-routes": "node scripts/check-bff-route-allowlist.mjs"
   },
   "dependencies": {
     "@atomlink-ye/agent-server": "workspace:*",

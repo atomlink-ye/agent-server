@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Verifies every BFF route's readProduct()/writeProduct() call path is
-// accepted by product-api-client.ts's own path allowlist regexes.
+// accepted by product-api-client.ts's own path allowlist regexes, AND
+// that a fixed set of paths that must never be accepted are still
+// rejected (otherwise this script can't tell "the allowlist works" from
+// "the allowlist has been widened into a no-op like /.*/").
 //
 // Why this exists: the BFF route files (apps/web/app/api/**/route.ts) and
 // the allowlist regexes in product-api-client.ts encode the same fact --
@@ -19,7 +22,29 @@ const webRoot = path.resolve(import.meta.dirname, '..');
 const apiRoot = path.join(webRoot, 'app', 'api');
 const clientFile = path.join(webRoot, 'lib', 'product-api-client.ts');
 
-const { productReadPath, productWritePath } = extractRegexes(clientFile);
+// Paths that must NEVER be accepted by productReadPath, no matter how the
+// regex evolves. Catches a regex being widened into something too
+// permissive (e.g. `/.*/`), which the positive checks below cannot: a
+// no-op allowlist still accepts every real BFF call path, so it looks
+// like a PASS on the positive side alone.
+const MUST_REJECT_READ = [
+  '/api/v1/works/00000000-0000-4000-8000-000000000000/definition/extra',
+  '/api/v1/works/not-a-uuid/definition',
+  '/api/v1/nonexistent',
+  '../api/v1/works/00000000-0000-4000-8000-000000000000/definition',
+];
+
+let extractedRegexes;
+try {
+  extractedRegexes = extractRegexes(clientFile);
+} catch (error) {
+  console.error(
+    `EXTRACTOR-BROKEN: could not extract productReadPath/productWritePath from ${path.relative(webRoot, clientFile)}: ` +
+      `${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(2);
+}
+const { productReadPath, productWritePath } = extractedRegexes;
 
 const routeFiles = findRouteFiles(apiRoot);
 const uuidSample = '00000000-0000-4000-8000-000000000000';
@@ -49,12 +74,34 @@ if (extracted === 0) {
 console.log(
   `Checked ${extracted} readProduct/writeProduct call site(s) against product-api-client.ts's own allowlist regexes.`,
 );
-if (failures.length > 0) {
-  console.error(`FAIL: ${failures.length} BFF route(s) request a path the allowlist rejects:`);
-  for (const f of failures) console.error(`  [${f.kind}] ${f.file}: ${f.templatePath}`);
+
+const rejectFailures = [];
+for (const mustReject of MUST_REJECT_READ) {
+  if (productReadPath.test(mustReject)) {
+    rejectFailures.push(mustReject);
+  }
+}
+console.log(
+  `Checked ${MUST_REJECT_READ.length} path(s) that must stay rejected by productReadPath (guards against the allowlist being widened into a no-op).`,
+);
+
+if (failures.length > 0 || rejectFailures.length > 0) {
+  if (failures.length > 0) {
+    console.error(`FAIL: ${failures.length} BFF route(s) request a path the allowlist rejects:`);
+    for (const f of failures) console.error(`  [${f.kind}] ${f.file}: ${f.templatePath}`);
+  }
+  if (rejectFailures.length > 0) {
+    console.error(
+      `FAIL: ${rejectFailures.length} path(s) that must be rejected are now accepted by productReadPath ` +
+        '(the allowlist has been widened too far):',
+    );
+    for (const p of rejectFailures) console.error(`  ${p}`);
+  }
   process.exit(1);
 }
-console.log('PASS: every extracted BFF route path is accepted by the allowlist.');
+console.log(
+  'PASS: every extracted BFF route path is accepted by the allowlist, and every path that must stay rejected is still rejected.',
+);
 process.exit(0);
 
 function check(regex, kind, file, templatePath) {

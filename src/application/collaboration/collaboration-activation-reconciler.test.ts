@@ -126,6 +126,7 @@ function setup(
       return { ...attempt, executionTaskId, status: 'running' as const };
     },
   );
+  const updateMemberRunStatus = vi.fn(async () => member);
   const saveTask = vi.fn(async () => undefined);
   const saveRun = vi.fn(async () => undefined);
   const bindToTask = vi.fn(async () => [wake]);
@@ -136,7 +137,7 @@ function setup(
         tasks: { save: saveTask },
         runs: { save: saveRun },
         teamMessages: { bindToTask },
-        teamExecutions: { materializeAttempt },
+        teamExecutions: { materializeAttempt, updateMemberRunStatus },
         enqueueRunDispatch,
       }),
   );
@@ -175,6 +176,7 @@ function setup(
     reconciler,
     withTransaction,
     materializeAttempt,
+    updateMemberRunStatus,
     enqueueRunDispatch,
   };
 }

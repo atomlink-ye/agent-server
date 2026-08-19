@@ -198,6 +198,33 @@ async function seedFixture(database: Pool): Promise<Fixture> {
     ],
   );
 
+  // Create work item attempts so reconciler knows there's work to assign
+  const builderAttemptId = randomUUID();
+  const analystAttemptId = randomUUID();
+
+  await database.query(
+    `INSERT INTO team_work_item_attempts(
+      id,work_item_id,team_run_id,assignee_member_id,attempt_no,status,execution_task_id,
+      result_summary,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
+    ) VALUES
+    ($1,$2,$3,$4,1,'queued',NULL,NULL,$5,$6,$7,$8,$9,$9),
+    ($10,$11,$3,$12,1,'queued',NULL,NULL,$5,$6,$7,$8,$9,$9)`,
+    [
+      builderAttemptId,
+      fixture.builderWorkItemId,
+      fixture.teamRunId,
+      fixture.builderMemberId,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      timestamp,
+      analystAttemptId,
+      fixture.openWorkItemId,
+      fixture.analystMemberId,
+    ],
+  );
+
   return fixture;
 }
 

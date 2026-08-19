@@ -14,6 +14,7 @@ import type {
 } from '@atomlink-ye/agent-server/product-contract';
 
 import { DefinitionPanel } from '@/components/work/definition-panel';
+import { NewWork } from '@/components/work/new-work';
 import {
   WORK_TABS,
   formatTimestamp,
@@ -25,12 +26,12 @@ import {
   type WorkTab,
 } from '@/components/work/work-presentation';
 import { ExecutionTranscript } from '@/features/run-trace/execution-transcript';
-import { MapView, RunTrace } from '@/features/run-trace/run-trace';
+import { MapView, RunTrace, type TraceView } from '@/features/run-trace/run-trace';
 import { SessionTranscripts } from '@/features/run-trace/session-transcripts';
 import './work-shell.css';
 import './work-shell-mve.css';
 
-type LoadState = 'loading' | 'available' | 'error';
+type LoadState = 'loading' | 'available' | 'error' | 'starting';
 type AnchoredRun = Extract<
   ProductWorkRun,
   { projection_status: 'internally_anchored' }
@@ -43,6 +44,7 @@ type AnchoredTrace = Extract<
 export function WorkListShell() {
   const [state, setState] = useState<LoadState>('loading');
   const [works, setWorks] = useState<readonly WorkListItem[]>([]);
+  const [showNewWork, setShowNewWork] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,19 +65,30 @@ export function WorkListShell() {
   return (
     <WorkShellFrame testId="work-list-shell">
       <header className="work-list-header">
-        <p className="work-shell-kicker">My Work</p>
-        <h1>My Work</h1>
-        <p className="work-list-header__summary">
-          Does this need me? What happened in the latest Run?
-        </p>
-        <p className="work-list-header__coverage">
-          Delivered Artifacts are not shown until the Product API exposes them;
-          this view does not infer them from messages or tool output.
-        </p>
+        <div>
+          <p className="work-shell-kicker">My Work</p>
+          <h1>My Work</h1>
+          <p className="work-list-header__summary">
+            Does this need me? What happened in the latest Run?
+          </p>
+          <p className="work-list-header__coverage">
+            Delivered Artifacts are not shown until the Product API exposes them;
+            this view does not infer them from messages or tool output.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowNewWork(!showNewWork)}
+          type="button"
+          data-testid="new-work-cta"
+          className="work-list-header__cta"
+        >
+          {showNewWork ? 'Hide' : 'New Work'}
+        </button>
       </header>
+      {showNewWork ? <NewWork /> : null}
       {state === 'loading' ? <WorkListLoading /> : null}
       {state === 'error' ? <WorkListError /> : null}
-      {state === 'available' && works.length === 0 ? <WorkListEmpty /> : null}
+      {state === 'available' && works.length === 0 ? <WorkListEmpty showNewWork={showNewWork} onNewWork={() => setShowNewWork(true)} /> : null}
       {state === 'available' && works.length > 0 ? (
         <section aria-labelledby="work-list-heading" className="work-list-region">
           <div className="work-list-region__heading">
@@ -116,10 +129,12 @@ export function WorkDetailShell({
   workId,
   tab,
   selectedRunId,
+  selectedSessionIndex,
 }: {
   readonly workId: string;
   readonly tab?: string;
   readonly selectedRunId?: string;
+  readonly selectedSessionIndex?: string;
 }) {
   const [state, setState] = useState<LoadState>('loading');
   const [detail, setDetail] = useState<WorkDetailData | null>(null);
@@ -147,10 +162,18 @@ export function WorkDetailShell({
         firstLoad = false;
         if (loaded.run?.work_run.product_state === 'running')
           timer = setTimeout(() => void refresh(), 2_000);
-      } catch {
+      } catch (error) {
         if (!active) return;
-        if (firstLoad) setState('error');
-        else timer = setTimeout(() => void refresh(), 2_000);
+        const isProjectionUnavailable = error instanceof ProductReadError && error.status === 503;
+        if (isProjectionUnavailable && firstLoad) {
+          setState('starting');
+          timer = setTimeout(() => void refresh(), 2_000);
+        } else if (isProjectionUnavailable) {
+          timer = setTimeout(() => void refresh(), 2_000);
+        } else {
+          if (firstLoad) setState('error');
+          else timer = setTimeout(() => void refresh(), 2_000);
+        }
       }
     };
 
@@ -168,9 +191,14 @@ export function WorkDetailShell({
           Loading Work…
         </p>
       ) : null}
+      {state === 'starting' ? (
+        <p className="work-detail-loading" aria-live="polite">
+          Run is starting…
+        </p>
+      ) : null}
       {state === 'error' ? (
         <section className="work-list-state work-list-state--error" role="alert">
-          <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+          <p className="work-list-state__eyebrow">Couldn't load Work</p>
           <h2>The selected Work or Run is unavailable.</h2>
           <p>Return to My Work and choose an available Product Work record.</p>
         </section>
@@ -180,6 +208,7 @@ export function WorkDetailShell({
           activeTab={activeTab}
           data={detail}
           selectedRunId={selectedRunId}
+          selectedSessionIndex={selectedSessionIndex}
         />
       ) : null}
     </WorkShellFrame>
@@ -230,10 +259,12 @@ function WorkDetail({
   activeTab,
   data,
   selectedRunId,
+  selectedSessionIndex,
 }: {
   readonly activeTab: WorkTab;
   readonly data: WorkDetailData;
   readonly selectedRunId?: string;
+  readonly selectedSessionIndex?: string;
 }) {
   const { work, run } = data;
   const runId = run?.work_run.id;
@@ -246,7 +277,7 @@ function WorkDetail({
 
   return (
     <>
-      <p className="work-shell-breadcrumb">My Work / {work.title}</p>
+      <p className="work-shell-breadcrumb"><a href="/">My Work</a> / {work.title}</p>
       <header className="work-detail-header work-detail-header--stacked">
         <div>
           <p className="work-shell-kicker">Work</p>
@@ -265,12 +296,18 @@ function WorkDetail({
       <RunTrigger workId={work.id} />
       <WorkTabs
         activeTab={activeTab}
-        definitionRunId={selectedRunId}
+        definitionRunId={undefined}
         runId={runId}
         workId={work.id}
       />
-      {activeTab === 'overview' ? <OverviewPanel data={data} /> : null}
+      {activeTab === 'overview' ? <OverviewPanel data={data} key={data.run?.work_run.id} /> : null}
       {activeTab === 'runs' ? <RunsPanel data={data} /> : null}
+      {activeTab === 'transcript' ? (
+        <TranscriptPanel
+          data={data}
+          selectedSessionIndex={selectedSessionIndex ? Number(selectedSessionIndex) : undefined}
+        />
+      ) : null}
       {activeTab === 'artifacts' ? <ArtifactsUnavailable /> : null}
       {activeTab === 'definition' ? (
         <DefinitionPanel
@@ -318,7 +355,66 @@ function WorkTabs({
   );
 }
 
+type RoleSummary = {
+  readonly label: { readonly name: string; readonly role: string; readonly status: string };
+  readonly summary: {
+    readonly entry_count: number;
+    readonly last_meaningful: { readonly action: string | null } | null;
+  };
+};
+
+function RunRoleCards({ trace, workId, runId }: { readonly trace: AnchoredTrace; readonly workId: string; readonly runId: string }) {
+  const [sessions, setSessions] = useState<readonly RoleSummary[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/works/${encodeURIComponent(workId)}/runs/${encodeURIComponent(runId)}/session-transcripts`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json' },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!active) return;
+        setSessions(body?.sessions ?? []);
+      })
+      .catch(() => {
+        if (active) setSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workId, runId]);
+
+  if (!sessions || sessions.length === 0) return null;
+
+  return (
+    <div className="work-role-cards" data-testid="run-role-cards">
+      {sessions.map((session, index) => {
+        const action = session.summary.last_meaningful?.action;
+        const title = action ? action : 'No meaningful action captured';
+        return (
+          <button
+            className="work-role-card"
+            key={`${session.label.name}-${index}`}
+            onClick={() => {
+              window.location.assign(`${workTabHref(workId, 'transcript', runId)}&session=${index}`);
+            }}
+            title={title}
+            type="button"
+          >
+            <strong>{session.label.name}</strong>
+            <span>{session.label.role}</span>
+            <span>{session.summary.entry_count} entries</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
+  const [traceView, setTraceView] = useState<TraceView>('timeline');
   if (!data.run || !data.trace)
     return (
       <section className="work-detail-state" data-testid="work-no-runs">
@@ -355,20 +451,94 @@ function OverviewPanel({ data }: { readonly data: WorkDetailData }) {
           ) : null}
         </div>
       </div>
-      <RunTrace live={live} trace={trace} />
-      <ExecutionTranscript trace={trace} />
-      <SessionTranscripts trace={trace} />
-      <RunReview run={run} trace={trace} />
+      <RunTrace
+        live={live}
+        trace={trace}
+        selectedAttemptId={selectedAttemptId}
+        onSelectAttempt={setSelectedAttemptId}
+        view={traceView}
+        onViewChange={setTraceView}
+      />
+      <RunRoleCards trace={trace} workId={data.work.id} runId={run.work_run.id} />
+      <RunReview
+        run={run}
+        trace={trace}
+        selectedAttemptId={selectedAttemptId}
+        onSelectAttempt={setSelectedAttemptId}
+        onRequestTimelineView={() => setTraceView('timeline')}
+      />
     </section>
   );
+}
+
+function TranscriptPanel({ data, selectedSessionIndex }: { readonly data: WorkDetailData; readonly selectedSessionIndex?: number }) {
+  const [view, setView] = useState<'sessions' | 'execution'>('sessions');
+  if (!data.run || !data.trace)
+    return (
+      <section className="work-detail-state" data-testid="work-no-runs">
+        <p className="work-shell-kicker">Transcript</p>
+        <h2>No Run has been recorded yet.</h2>
+        <p>The Work exists, but there is no execution history to project.</p>
+      </section>
+    );
+  const live = data.run.work_run.product_state === 'running';
+  return (
+    <section className="work-transcript-panel run-trace" data-testid="work-transcript-panel">
+      <div className="run-trace__tabs" role="tablist" aria-label="Transcript views">
+        {(['sessions', 'execution'] as const).map((item) => (
+          <button
+            aria-selected={view === item}
+            className="run-trace__tab"
+            key={item}
+            onClick={() => setView(item)}
+            role="tab"
+            type="button"
+          >
+            {item === 'sessions' ? 'Session Transcripts' : 'Execution Transcript'}
+          </button>
+        ))}
+      </div>
+      {view === 'sessions' ? (
+        <SessionTranscripts live={live} trace={data.trace} initialSelectedIndex={selectedSessionIndex} />
+      ) : (
+        <ExecutionTranscript live={live} trace={data.trace} />
+      )}
+    </section>
+  );
+}
+
+function scrollTestIdIntoViewAfterRender(testId: string, fallbackTestId?: string) {
+  // Two nested requestAnimationFrame calls: the first fires after React has
+  // committed the state update that (may have) mounted the target element,
+  // the second fires after the browser has painted that commit -- this is
+  // the standard pattern for 'wait until a just-triggered state change has
+  // actually reached the DOM' without guessing at a setTimeout delay.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="${testId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (fallbackTestId) {
+        document.querySelector(`[data-testid="${fallbackTestId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
 }
 
 function RunReview({
   run,
   trace,
+  selectedAttemptId,
+  onSelectAttempt,
+  onRequestTimelineView,
 }: {
   readonly run: AnchoredRun;
   readonly trace: AnchoredTrace;
+  readonly selectedAttemptId: string | null;
+  readonly onSelectAttempt: (attemptId: string) => void;
+  readonly onRequestTimelineView: () => void;
 }) {
   const attemptCount = trace.work_items.reduce(
     (sum, item) => sum + item.attempts.length,
@@ -378,7 +548,7 @@ function RunReview({
     (edge) => edge.kind === 'feedback',
   ).length;
   const messageCount = trace.edges.filter(
-    (edge) => edge.kind === 'observed_message',
+    (edge) => edge.kind === 'observed_message' && edge.source_created_at,
   ).length;
   const reworkItems = trace.work_items.filter(
     (item) => item.attempts.length > 1,
@@ -427,40 +597,28 @@ function RunReview({
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
           <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
-            const el = document.querySelector('[data-testid="trace-timeline"]');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
           }} />
           <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
             const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
-            if (reworkItem) {
-              const allIds = document.querySelectorAll<HTMLElement>('[data-testid="attempt-id"]');
-              for (const el of allIds) {
-                if (reworkItem.attempts.some((a) => a.id === el.textContent)) {
-                  const button = el.closest('button');
-                  if (button) { button.scrollIntoView({ behavior: 'smooth', block: 'center' }); button.click(); break; }
-                }
-              }
-            }
+            if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('trace-timeline');
           }} />
           <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
-            const el = document.querySelector('[data-testid="timeline-messages"]');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            onRequestTimelineView();
+            scrollTestIdIntoViewAfterRender('timeline-messages', 'trace-timeline');
           }} />
           <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={null} trace={trace} onSelect={(attemptId) => {
-          const target = document.querySelector(`[data-testid="attempt-id"]`) as HTMLElement | null;
-          const allIds = document.querySelectorAll<HTMLElement>('[data-testid="attempt-id"]');
-          for (const el of allIds) {
-            if (el.textContent === attemptId) {
-              const button = el.closest('button');
-              if (button) { button.scrollIntoView({ behavior: 'smooth', block: 'center' }); button.click(); }
-              break;
-            }
-          }
+        <MapView selectedAttemptKey={selectedAttemptId} trace={trace} onSelect={(attemptId) => {
+          onSelectAttempt(attemptId);
+          onRequestTimelineView();
+          scrollTestIdIntoViewAfterRender('trace-timeline');
         }} />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
@@ -699,9 +857,11 @@ function isAnchoredTrace(value: ProductRunTrace): value is AnchoredTrace {
 
 function RunTrigger({ workId }: { readonly workId: string }) {
   const [state, setState] = useState<'idle' | 'starting' | 'error'>('idle');
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   async function handleRun() {
     setState('starting');
+    setErrorDetail(null);
     const response = await fetch(`/api/works/${encodeURIComponent(workId)}/runs`, {
       method: 'POST',
       cache: 'no-store',
@@ -713,6 +873,8 @@ function RunTrigger({ workId }: { readonly workId: string }) {
       : undefined;
     const runId = runIdFromStart(body);
     if (!response?.ok || !runId) {
+      const errorMsg = formatStartRunError(body);
+      setErrorDetail(errorMsg);
       setState('error');
       return;
     }
@@ -732,9 +894,37 @@ function RunTrigger({ workId }: { readonly workId: string }) {
             ? 'Error — Retry'
             : 'Start Run'}
       </button>
-      {state === 'error' ? <p>Failed to start Run. Please try again.</p> : null}
+      {state === 'error' ? (
+        <p>
+          Failed to start Run{errorDetail ? `: ${errorDetail}` : '. Please try again.'}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function formatStartRunError(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Please try again.';
+  }
+  const record = body as Record<string, unknown>;
+  const error = record.error;
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return 'Please try again.';
+  }
+  const errorRecord = error as Record<string, unknown>;
+  const path = errorRecord.path;
+  const message = errorRecord.message;
+  const code = errorRecord.code;
+
+  if (typeof path === 'string' && path.length > 0) {
+    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
+    return `${codePart}${path} — ${message}`;
+  }
+  if (typeof code === 'string' && code.length > 0) {
+    return `${code}: ${message}`;
+  }
+  return typeof message === 'string' ? message : 'Please try again.';
 }
 
 function runIdFromStart(value: unknown): string | null {
@@ -771,7 +961,7 @@ function WorkListError() {
       data-testid="work-list-error"
       role="alert"
     >
-      <p className="work-list-state__eyebrow">Couldn’t load Work</p>
+      <p className="work-list-state__eyebrow">Couldn't load Work</p>
       <h2>Work records are temporarily unavailable.</h2>
       <p>
         This is a connection problem, not a statement about the status of any
@@ -781,7 +971,11 @@ function WorkListError() {
   );
 }
 
-function WorkListEmpty() {
+function WorkListEmpty({ showNewWork, onNewWork }: {
+  readonly showNewWork: boolean;
+  readonly onNewWork: () => void;
+}) {
+  if (showNewWork) return null;
   return (
     <section
       aria-labelledby="work-list-empty-heading"
@@ -791,8 +985,21 @@ function WorkListEmpty() {
       <p className="work-list-state__eyebrow">No Work records</p>
       <h2 id="work-list-empty-heading">Nothing is available yet.</h2>
       <p>When Work is created, it will appear here as the durable entry.</p>
+      <button
+        onClick={onNewWork}
+        type="button"
+        className="work-list-state__cta"
+      >
+        Create your first Work
+      </button>
     </section>
   );
+}
+
+class ProductReadError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -801,7 +1008,7 @@ async function readJson<T>(path: string): Promise<T> {
     cache: 'no-store',
     headers: { accept: 'application/json' },
   });
-  if (!response.ok) throw new Error('Product read failed.');
+  if (!response.ok) throw new ProductReadError('Product read failed.', response.status);
   return (await response.json()) as T;
 }
 

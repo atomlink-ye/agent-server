@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ProductExecutionDetailResponse,
   ProductRunTrace,
@@ -26,16 +26,22 @@ type AttemptEntry = {
 type DetailState =
   | { readonly status: 'idle' | 'loading' }
   | { readonly status: 'ready'; readonly detail: ProductExecutionDetailResponse }
-  | { readonly status: 'unavailable' };
+  | { readonly status: 'unavailable'; readonly statusCode?: number };
 
-export function ExecutionTranscript({ trace }: { readonly trace: Trace }) {
+export function ExecutionTranscript({ live, trace }: { readonly live?: boolean; readonly trace: Trace }) {
   const attempts = useMemo(() => attemptEntries(trace), [trace]);
-  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(
-    attempts[0]?.attemptId ?? null,
-  );
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: 'idle' });
+  const lastAttemptIdRef = useRef<string | null>(null);
   const selected =
     attempts.find((attempt) => attempt.attemptId === selectedAttemptId) ?? null;
+
+  // Auto-select first attempt when it becomes available
+  useEffect(() => {
+    if (selectedAttemptId === null && attempts.length > 0) {
+      setSelectedAttemptId(attempts[0].attemptId);
+    }
+  }, [attempts, selectedAttemptId]);
 
   useEffect(() => {
     if (!selectedAttemptId) {
@@ -43,7 +49,12 @@ export function ExecutionTranscript({ trace }: { readonly trace: Trace }) {
       return;
     }
     let active = true;
-    setDetailState({ status: 'loading' });
+    // Only set loading on initial fetch for this attemptId, not on polling updates
+    const isNewAttempt = lastAttemptIdRef.current !== selectedAttemptId;
+    if (isNewAttempt) {
+      lastAttemptIdRef.current = selectedAttemptId;
+      setDetailState({ status: 'loading' });
+    }
     void fetch(
       `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
       { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
@@ -52,7 +63,7 @@ export function ExecutionTranscript({ trace }: { readonly trace: Trace }) {
         const body = await response.json().catch(() => undefined);
         if (!active) return;
         if (!response.ok || !isExecutionDetail(body)) {
-          setDetailState({ status: 'unavailable' });
+          setDetailState({ status: 'unavailable', statusCode: response.status });
           return;
         }
         setDetailState({ status: 'ready', detail: body });
@@ -64,6 +75,30 @@ export function ExecutionTranscript({ trace }: { readonly trace: Trace }) {
       active = false;
     };
   }, [selectedAttemptId, trace.work.id, trace.work_run.id]);
+
+  // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
+  useEffect(() => {
+    if (!live || !selectedAttemptId || detailState.status === 'idle' || detailState.status === 'loading') return;
+    const timer = setInterval(() => {
+      void fetch(
+        `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/execution-detail?attempt_id=${encodeURIComponent(selectedAttemptId)}`,
+        { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
+      )
+        .then(async (response) => {
+          const body = await response.json().catch(() => undefined);
+          if (!response.ok || !isExecutionDetail(body)) {
+            setDetailState({ status: 'unavailable', statusCode: response.status });
+            return;
+          }
+          // Update data without resetting selectedAttemptId or state
+          setDetailState({ status: 'ready', detail: body });
+        })
+        .catch(() => {
+          // On error, keep existing state
+        });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [live, selectedAttemptId, trace.work.id, trace.work_run.id, detailState.status]);
 
   if (!attempts.length)
     return (

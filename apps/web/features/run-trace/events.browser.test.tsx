@@ -42,7 +42,7 @@ it('renders only recorded MCP activities with sequence and association facts', a
       });
       const eventsTab = [
         ...host.querySelectorAll<HTMLButtonElement>('button'),
-      ].find((button) => button.textContent?.trim() === 'Events');
+      ].find((button) => button.textContent?.trim() === 'MCP Activity');
       expect(eventsTab).toBeDefined();
       if (!eventsTab) continue;
       await act(async () => eventsTab.click());

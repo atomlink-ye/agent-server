@@ -74,7 +74,7 @@
 .execution-transcript__attempts button span { color: #706c74; font-size: 9px; }
 .execution-transcript__attempts button strong { font-size: 11px; line-height: 1.35; }
 .execution-transcript__attempts button small { color: #8a8580; font-size: 9px; }
-.execution-transcript__detail { min-width: 0; padding: 16px 18px 24px; }
+.execution-transcript__detail { min-width: 0; padding: 16px 18px 24px; max-height: 620px; overflow: auto; }
 .execution-transcript__detail > header {
   align-items: start;
   border-bottom: 1px solid #e4e1db;

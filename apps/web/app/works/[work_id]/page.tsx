@@ -19,6 +19,7 @@ export default async function WorkDetailPage({
       workId={workId}
       tab={firstQueryValue(query.tab)}
       selectedRunId={firstQueryValue(query.run)}
+      selectedSessionIndex={firstQueryValue(query.session)}
     />
   );
 }

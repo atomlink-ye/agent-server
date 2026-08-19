@@ -31,6 +31,15 @@ export const workDefinitionAuthoringErrorSchema = z.union([
   ErrorResponseSchema,
 ]);
 
+export const startRunErrorSchema = z.object({
+  error: z.object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    request_id: z.string().min(1),
+    path: z.string().optional(),
+  }),
+});
+
 export async function readProduct(
   path: string,
   schema: ZodType<unknown>,

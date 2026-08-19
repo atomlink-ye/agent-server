@@ -215,3 +215,21 @@
 .work-review__fact--clickable { cursor: pointer; transition: background 0.15s; }
 .work-review__fact--clickable:hover { background: #f5f3ee; }
 .work-review__fact--clickable dt::after { content: ' ↗'; font-size: 8px; }
+
+/* Role cards on Overview (O-1 S3) */
+.work-role-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.work-role-card {
+  background: transparent;
+  border: 1px solid #d9d5ce;
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 3px;
+  min-width: 160px;
+  padding: 10px;
+  text-align: left;
+}
+.work-role-card:hover { background: #f9f8f5; }
+.work-role-card strong { font-size: 11px; line-height: 1.35; }
+.work-role-card span { color: #706c74; font-size: 9px; }

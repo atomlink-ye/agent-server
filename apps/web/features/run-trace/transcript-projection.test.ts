@@ -43,3 +43,20 @@ it('does not merge the same provider activity id across sequence-reset runs', ()
   expect(tools).toHaveLength(2);
   expect(tools.map((entry) => entry.sourceOrdinals)).toEqual([[2], [5]]);
 });
+
+it('nests tool_status rows with parent_activity_id under their parent', () => {
+  const input = [
+    at(1, { kind: 'tool_status', activity_id: 'subagent-1', category: 'subagent', status: 'running', label: 'Sub-agent task', summary: null, provider: null, tool_name: null, detail_kind: null, detail_text: null, exit_code: null, parent_activity_id: null, sequence: 1, created_at: timestamp }),
+    at(2, { kind: 'tool_status', activity_id: 'inner-call-1', category: 'read', status: 'completed', label: 'Read', summary: 'file.ts', provider: null, tool_name: null, detail_kind: 'read', detail_text: 'file content', exit_code: 0, parent_activity_id: 'subagent-1', sequence: 2, created_at: timestamp }),
+    at(3, { kind: 'tool_status', activity_id: 'subagent-1', category: 'subagent', status: 'completed', label: 'Sub-agent task', summary: 'completed', provider: null, tool_name: null, detail_kind: null, detail_text: null, exit_code: 0, parent_activity_id: null, sequence: 3, created_at: timestamp }),
+  ];
+  const output = projectTranscript(input);
+  expect(output).toHaveLength(1);
+  const parentRow = output[0];
+  expect(parentRow.event.kind).toBe('tool_status');
+  expect((parentRow.event as Extract<TranscriptEntry, { kind: 'tool_status' }>).activity_id).toBe('subagent-1');
+  expect(parentRow.children).toBeDefined();
+  expect(parentRow.children).toHaveLength(1);
+  expect((parentRow.children![0].event as Extract<TranscriptEntry, { kind: 'tool_status' }>).activity_id).toBe('inner-call-1');
+  expect((parentRow.children![0].event as Extract<TranscriptEntry, { kind: 'tool_status' }>).parent_activity_id).toBe('subagent-1');
+});

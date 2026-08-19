@@ -160,7 +160,7 @@ it('validates current Definition source and renders the server-resolved one-way 
       '[data-testid="definition-source-editor"]',
     );
     expect(editor).not.toBeNull();
-    expect(editor?.value).toContain('"kind": "collaboration"');
+    expect(editor?.value).toContain('kind: collaboration');
     expect(host.textContent).toContain('Current Work version');
 
     const validate = [...host.querySelectorAll<HTMLButtonElement>('button')].find(

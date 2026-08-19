@@ -154,6 +154,32 @@ async function seedFixture(database: Pool): Promise<Fixture> {
     ],
   );
 
+  // Create direct messages for each member so they have work to do
+  const builderMessageId = randomUUID();
+  const analystMessageId = randomUUID();
+
+  await database.query(
+    `INSERT INTO team_messages(
+      id,team_run_id,sender_member_id,recipient_member_id,kind,content,queued,
+      tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
+    ) VALUES
+    ($1,$2,$3,$4,'direct','builder message',true,$5,$6,$7,$8,$9,$9),
+    ($10,$2,$3,$11,'direct','analyst message',true,$5,$6,$7,$8,$9,$9)`,
+    [
+      builderMessageId,
+      fixture.teamRunId,
+      fixture.leadMemberId,
+      fixture.builderMemberId,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      timestamp,
+      analystMessageId,
+      fixture.analystMemberId,
+    ],
+  );
+
   return fixture;
 }
 

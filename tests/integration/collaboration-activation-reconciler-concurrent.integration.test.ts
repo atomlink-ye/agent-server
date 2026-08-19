@@ -158,70 +158,32 @@ async function seedFixture(database: Pool): Promise<Fixture> {
     ],
   );
 
-  // Create work items (mimics the real smoke test scenario with owned + open items)
-  // W-1: assigned to builder (owned work item)
-  await database.query(
-    `INSERT INTO team_work_items(
-      id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
-      completion_summary,execution_task_id,tenant_id,workspace_id,principal_type,
-      principal_id,created_at,updated_at,completed_at
-    ) VALUES ($1,$2,'Build component','builder task'::text,'open',$3,$4,NULL,NULL,$5,$6,$7,$8,$9,$9,NULL)`,
-    [
-      fixture.builderWorkItemId,
-      fixture.teamRunId,
-      fixture.builderMemberId,
-      fixture.leadMemberId,
-      owner.tenantId,
-      owner.workspaceId,
-      owner.principalType,
-      owner.principalId,
-      timestamp,
-    ],
-  );
-
-  // W-2: open (no owner, waiting for analyst to discover via openActionable logic)
-  await database.query(
-    `INSERT INTO team_work_items(
-      id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
-      completion_summary,execution_task_id,tenant_id,workspace_id,principal_type,
-      principal_id,created_at,updated_at,completed_at
-    ) VALUES ($1,$2,'Review results','analyst task'::text,'open',NULL,$3,NULL,NULL,$4,$5,$6,$7,$8,$8,NULL)`,
-    [
-      fixture.openWorkItemId,
-      fixture.teamRunId,
-      fixture.leadMemberId,
-      owner.tenantId,
-      owner.workspaceId,
-      owner.principalType,
-      owner.principalId,
-      timestamp,
-    ],
-  );
-
-  // Create work item attempts so reconciler knows there's work to assign
-  const builderAttemptId = randomUUID();
-  const analystAttemptId = randomUUID();
+  // Create direct messages for each member (simple path that just triggers activation)
+  // This tests the concurrent scenario where two reconcilers both try to activate idle members
+  const builderMessageId = randomUUID();
+  const analystMessageId = randomUUID();
 
   await database.query(
-    `INSERT INTO team_work_item_attempts(
-      id,work_item_id,team_run_id,assignee_member_id,attempt_no,status,execution_task_id,
-      result_summary,tenant_id,workspace_id,principal_type,principal_id,created_at,updated_at
+    `INSERT INTO team_messages(
+      id,team_run_id,sender_member_run_id,recipient_member_run_id,kind,body,status,
+      tenant_id,workspace_id,principal_type,principal_id,sequence,dedup_key,created_at
     ) VALUES
-    ($1,$2,$3,$4,1,'queued',NULL,NULL,$5,$6,$7,$8,$9,$9),
-    ($10,$11,$3,$12,1,'queued',NULL,NULL,$5,$6,$7,$8,$9,$9)`,
+    ($1,$2,$3,$4,'direct','Task for builder'::text,'queued',$5,$6,$7,$8,1,$9,$10),
+    ($11,$2,$3,$12,'direct','Task for analyst'::text,'queued',$5,$6,$7,$8,2,$13,$10)`,
     [
-      builderAttemptId,
-      fixture.builderWorkItemId,
+      builderMessageId,
       fixture.teamRunId,
+      fixture.leadMemberId,
       fixture.builderMemberId,
       owner.tenantId,
       owner.workspaceId,
       owner.principalType,
       owner.principalId,
+      `msg:builder:${builderMessageId}`,
       timestamp,
-      analystAttemptId,
-      fixture.openWorkItemId,
+      analystMessageId,
       fixture.analystMemberId,
+      `msg:analyst:${analystMessageId}`,
     ],
   );
 

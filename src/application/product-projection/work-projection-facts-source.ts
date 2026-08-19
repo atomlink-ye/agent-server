@@ -66,6 +66,7 @@ export interface ProductProjectionDurableFacts {
   readonly completionApprovalRequired: boolean | null;
   readonly completionRequestedByRunId: string | null;
   readonly approvalAccepted: boolean;
+  readonly rejectionRecorded: boolean;
   readonly finalText: string | null;
   readonly finalTextPresent: boolean;
 }
@@ -180,6 +181,7 @@ function mapProductDurableFacts(
     completionApprovalRequired: facts.completionApprovalRequired ?? null,
     completionRequestedByRunId: facts.completionRequestedByRunId ?? null,
     approvalAccepted: facts.approvalAccepted ?? false,
+    rejectionRecorded: facts.rejectionRecorded ?? false,
     finalText: facts.finalText ?? null,
     finalTextPresent:
       facts.finalTextPresent ??

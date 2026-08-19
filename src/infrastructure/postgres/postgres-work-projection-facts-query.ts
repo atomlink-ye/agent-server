@@ -30,6 +30,7 @@ interface TeamRunRow {
   completion_requested_by_run_id: string | null;
   final_text: string | null;
   approval_accepted: boolean | null;
+  rejection_recorded: boolean;
 }
 
 interface MemberRow {
@@ -104,7 +105,15 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
                    AND d.completion_requested_by_run_id=tr.completion_requested_by_run_id
                    AND d.decision='approve'
                    AND d.tenant_id=$2 AND d.workspace_id=$3
-              )) AS approval_accepted
+              )) AS approval_accepted,
+              EXISTS (
+                SELECT 1
+                  FROM team_completion_decisions d
+                 WHERE d.team_run_id=tr.id
+                   AND d.completion_requested_by_run_id=tr.completion_requested_by_run_id
+                   AND d.decision='reject'
+                   AND d.tenant_id=$2 AND d.workspace_id=$3
+              ) AS rejection_recorded
          FROM team_runs tr
         WHERE tr.root_task_id=$1 AND tr.tenant_id=$2 AND tr.workspace_id=$3
         LIMIT 1`,
@@ -274,6 +283,7 @@ export class PostgresWorkProjectionFactsQuery implements WorkProjectionFactsRead
       completionApprovalRequired: team.completion_approval_required ?? null,
       completionRequestedByRunId: team.completion_requested_by_run_id ?? null,
       approvalAccepted: team.approval_accepted ?? false,
+      rejectionRecorded: team.rejection_recorded ?? false,
       finalText: team.final_text ?? null,
       finalTextPresent:
         team.final_text !== null && team.final_text !== undefined,

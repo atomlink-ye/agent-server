@@ -77,6 +77,7 @@ describe('Product Work list projection', () => {
             completionApprovalRequired: false,
             completionRequestedByRunId: null,
             approvalAccepted: false,
+            rejectionRecorded: false,
             finalText: 'Done',
             finalTextPresent: true,
           },

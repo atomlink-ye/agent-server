@@ -33,7 +33,7 @@ export const ProductExecutionReasoningEventSchema = DetailEventBaseSchema.extend
   text: z.string().max(32_000).nullable(),
 }).strict();
 
-const toolCategories = [
+export const toolCategories = [
   'shell',
   'read',
   'edit',
@@ -43,8 +43,9 @@ const toolCategories = [
   'subagent',
   'other',
 ] as const;
-const toolStatuses = ['running', 'completed', 'failed', 'cancelled'] as const;
-const detailKinds = ['shell', 'read', 'write', 'edit', 'search', 'fetch'] as const;
+export const toolStatuses = ['running', 'completed', 'failed', 'cancelled'] as const;
+export const detailKinds = ['shell', 'read', 'write', 'edit', 'search', 'fetch'] as const;
+export const permissionCategories = ['tool', 'plan', 'question', 'mode', 'other'] as const;
 
 export const ProductExecutionToolEventSchema = DetailEventBaseSchema.extend({
   kind: z.literal('tool_status'),
@@ -78,7 +79,7 @@ export const ProductExecutionChildActivityEventSchema = DetailEventBaseSchema.ex
 export const ProductExecutionPermissionEventSchema = DetailEventBaseSchema.extend({
   kind: z.literal('permission'),
   activity_id: z.string().min(1).max(256),
-  category: z.enum(['tool', 'plan', 'question', 'mode', 'other']),
+  category: z.enum(permissionCategories),
   status: z.enum(['requested', 'resolved']),
   decision: z.enum(['allowed', 'denied']).nullable(),
   summary: z.string().max(2_000),

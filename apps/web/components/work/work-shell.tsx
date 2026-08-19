@@ -563,18 +563,26 @@ function RunReview({
         <dl className="work-review__facts">
           <ReviewFact label="Agents" value={trace.actors.length} />
           <ReviewFact label="Work Items" value={trace.work_items.length} />
-          <ReviewFact label="Attempts" value={attemptCount} />
+          <ReviewFact label="Attempts" value={attemptCount} onClick={() => {
+            document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }} />
           <ReviewFact label="Rework" value={feedbackCount} onClick={() => {
             const reworkItem = trace.work_items.find((item) => item.attempts.length > 1);
             if (reworkItem && reworkItem.attempts[0]) onSelectAttempt(reworkItem.attempts[0].id);
+            document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }} />
-          <ReviewFact label="Agent messages" value={messageCount} />
+          <ReviewFact label="Agent messages" value={messageCount} onClick={() => {
+            document.querySelector('[data-testid="timeline-messages"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }} />
           <ReviewFact label="MCP activities" value={trace.mcp_activities.length} />
         </dl>
       </div>
       <div className="work-review__map" data-testid="review-mini-map">
         <h3>Run Map</h3>
-        <MapView selectedAttemptKey={null} trace={trace} onSelect={onSelectAttempt} />
+        <MapView selectedAttemptKey={null} trace={trace} onSelect={(attemptId) => {
+          onSelectAttempt(attemptId);
+          document.querySelector('[data-testid="trace-timeline"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }} />
       </div>
       <div className="work-review__problems" data-testid="review-problems">
         <h3>Problems & capture gaps</h3>

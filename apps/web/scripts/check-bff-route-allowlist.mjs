@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // Verifies every BFF route's readProduct()/writeProduct() call path is
-// accepted by product-api-client.ts's own path allowlist regexes, AND
-// that a fixed set of paths that must never be accepted are still
-// rejected on BOTH sides (otherwise this script can't tell "the
-// allowlist works" from "the allowlist has been widened into a no-op
-// like /.*/" -- and a regex can be widened independently on either
-// side, so both need their own negative list).
+// accepted by product-api-client.ts's own path allowlist regexes, that a
+// fixed set of paths that must never be accepted are still rejected on
+// BOTH sides, and that every writeProduct() call site's idempotency-key
+// usage matches product-api-client.ts's own three-state contract
+// (only '/api/v1/work-definitions:apply' may carry a key, and it must).
 //
 // Why this exists: the BFF route files (apps/web/app/api/**/route.ts) and
 // the allowlist regexes in product-api-client.ts encode the same fact --
@@ -15,7 +14,13 @@
 // real reason). This script closes that gap by executing the *actual*
 // regex construction source extracted from product-api-client.ts against
 // the *actual* path templates extracted from each route.ts file -- not a
-// hand-copied duplicate of either side.
+// hand-copied duplicate of either side. The idempotency-key check below
+// mirrors postProductApi's own three-state contract for the same reason:
+// a route that forgets the key on :apply, or adds it anywhere else,
+// throws ProductApiClientError('invalid_path') at request time, which
+// again surfaces as a generic 503 -- and nothing was asserting this
+// before now (ORACLE-1's T4 flagged the coupling itself; the check was
+// never written).
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -49,6 +54,8 @@ const MUST_REJECT_WRITE = [
   '../api/v1/works',
 ];
 
+const APPLY_PATH = '/api/v1/work-definitions:apply';
+
 let extractedRegexes;
 try {
   extractedRegexes = extractRegexes(clientFile);
@@ -64,6 +71,7 @@ const { productReadPath, productWritePath } = extractedRegexes;
 const routeFiles = findRouteFiles(apiRoot);
 const uuidSample = '00000000-0000-4000-8000-000000000000';
 const failures = [];
+const idempotencyFailures = [];
 let extracted = 0;
 
 for (const file of routeFiles) {
@@ -72,9 +80,10 @@ for (const file of routeFiles) {
     extracted++;
     check(productReadPath, 'readProduct', file, call);
   }
-  for (const call of extractCalls(source, 'writeProduct')) {
+  for (const call of extractWriteProductCalls(source)) {
     extracted++;
-    check(productWritePath, 'writeProduct', file, call);
+    check(productWritePath, 'writeProduct', file, call.path);
+    checkIdempotencyKey(file, call);
   }
 }
 
@@ -100,7 +109,17 @@ console.log(
   `Checked ${MUST_REJECT_WRITE.length} path(s) that must stay rejected by productWritePath (same guard, independently, for the write side).`,
 );
 
-if (failures.length > 0 || readRejectFailures.length > 0 || writeRejectFailures.length > 0) {
+console.log(
+  `Checked idempotency-key usage on ${extracted > 0 ? 'each writeProduct(...) call site' : '0 sites'} against the ` +
+    `':apply must have a key, nothing else may' contract in product-api-client.ts.`,
+);
+
+if (
+  failures.length > 0 ||
+  readRejectFailures.length > 0 ||
+  writeRejectFailures.length > 0 ||
+  idempotencyFailures.length > 0
+) {
   if (failures.length > 0) {
     console.error(`FAIL: ${failures.length} BFF route(s) request a path the allowlist rejects:`);
     for (const f of failures) console.error(`  [${f.kind}] ${f.file}: ${f.templatePath}`);
@@ -119,15 +138,36 @@ if (failures.length > 0 || readRejectFailures.length > 0 || writeRejectFailures.
     );
     for (const p of writeRejectFailures) console.error(`  ${p}`);
   }
+  if (idempotencyFailures.length > 0) {
+    console.error(`FAIL: ${idempotencyFailures.length} writeProduct(...) call site(s) violate the idempotency-key contract:`);
+    for (const f of idempotencyFailures) console.error(`  ${f.file}: ${f.reason}`);
+  }
   process.exit(1);
 }
 console.log(
-  'PASS: every extracted BFF route path is accepted by the allowlist, and every path that must stay rejected is still rejected on both sides.',
+  'PASS: every extracted BFF route path is accepted by the allowlist, every path that must stay rejected ' +
+    'is still rejected on both sides, and every writeProduct(...) call site respects the idempotency-key contract.',
 );
 process.exit(0);
 
 function mustRejectFailures(regex, mustRejectList) {
   return mustRejectList.filter((p) => regex.test(p));
+}
+
+function checkIdempotencyKey(file, call) {
+  const requiresKey = call.path === APPLY_PATH;
+  if (requiresKey && !call.hasIdempotencyKey) {
+    idempotencyFailures.push({
+      file: path.relative(webRoot, file),
+      reason: `${call.path} requires an idempotency key but the call site doesn't pass one`,
+    });
+  }
+  if (!requiresKey && call.hasIdempotencyKey) {
+    idempotencyFailures.push({
+      file: path.relative(webRoot, file),
+      reason: `${call.path} must not pass an idempotency key, but the call site passes one`,
+    });
+  }
 }
 
 function check(regex, kind, file, templatePath) {
@@ -147,6 +187,35 @@ function extractCalls(source, fnName) {
     paths.push(m[1].replace(/\$\{[^}]*\}/g, uuidSample));
   }
   return paths;
+}
+
+// Like extractCalls, but for writeProduct(...) specifically: also captures
+// the full balanced argument list text (via bracket-depth counting, not a
+// bounded regex) so we can tell whether the call site's options object
+// mentions `idempotencyKey` at all.
+function extractWriteProductCalls(source) {
+  const calls = [];
+  const marker = 'writeProduct(';
+  let searchFrom = 0;
+  while (true) {
+    const start = source.indexOf(marker, searchFrom);
+    if (start === -1) break;
+    const argsStart = start + marker.length;
+    let depth = 1;
+    let i = argsStart;
+    while (i < source.length && depth > 0) {
+      if (source[i] === '(') depth++;
+      else if (source[i] === ')') depth--;
+      i++;
+    }
+    const argsText = source.slice(argsStart, i - 1);
+    searchFrom = i;
+    const pathMatch = argsText.match(/^\s*[`']([^`']*)[`']/);
+    if (!pathMatch) continue; // dynamic first argument (template with ${}) -- see below
+    const templatePath = pathMatch[1].replace(/\$\{[^}]*\}/g, uuidSample);
+    calls.push({ path: templatePath, hasIdempotencyKey: argsText.includes('idempotencyKey') });
+  }
+  return calls;
 }
 
 function extractRegexes(file) {

@@ -209,6 +209,7 @@ function createApp(
       listWorkRuns: vi.fn(),
       getWorkDefinition: overrides.getWorkDefinition ?? vi.fn(),
       updateCurrentDefinitionVersion: overrides.updateCurrentDefinitionVersion ?? vi.fn(),
+      getWorkRun: vi.fn(),
     },
     ...(overrides.productLists ? { productLists: overrides.productLists } : {}),
     startWorkRun: { execute: vi.fn() },

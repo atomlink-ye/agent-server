@@ -879,14 +879,14 @@ function toolCategory(
   name: string,
   detailType?: string,
 ): ExecutionToolCategory {
-  const value = `${name} ${detailType ?? ''}`.toLowerCase();
+  if (detailType === 'sub_agent') return 'subagent';
+  const value = name.toLowerCase();
   if (/(shell|command|terminal|exec)/u.test(value)) return 'shell';
   if (/(read|cat|list|glob|file)/u.test(value)) return 'read';
   if (/(edit|patch|replace)/u.test(value)) return 'edit';
   if (/(write|create|save)/u.test(value)) return 'write';
   if (/(search|grep|find)/u.test(value)) return 'search';
   if (/(fetch|http|url|web)/u.test(value)) return 'fetch';
-  if (/(agent|delegate|task)/u.test(value)) return 'subagent';
   return 'other';
 }
 

@@ -80,6 +80,7 @@ export interface WorkProjectionFacts {
   readonly completionApprovalRequired?: boolean | null;
   readonly completionRequestedByRunId?: string | null;
   readonly approvalAccepted?: boolean;
+  readonly rejectionRecorded?: boolean;
   readonly finalText?: string | null;
   readonly finalTextPresent?: boolean;
   readonly workItems: readonly WorkProjectionWorkItemFact[];

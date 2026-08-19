@@ -292,6 +292,7 @@ function singleAgentProjectionFacts(
       completionApprovalRequired: false,
       completionRequestedByRunId: null,
       approvalAccepted: false,
+      rejectionRecorded: false,
       finalText: null,
       finalTextPresent: false,
     },
@@ -452,7 +453,8 @@ function isApprovalPending(product: ProductProjectionDurableFacts): boolean {
   return (
     product.completionApprovalRequired === true &&
     product.completionRequestedByRunId !== null &&
-    !product.approvalAccepted
+    !product.approvalAccepted &&
+    !product.rejectionRecorded
   );
 }
 

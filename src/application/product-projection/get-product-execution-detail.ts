@@ -13,6 +13,10 @@ import {
 } from './product-projection.js';
 import {
   ProductExecutionDetailResponseSchema,
+  toolCategories as productToolCategories,
+  toolStatuses as productToolStatuses,
+  detailKinds as productDetailKinds,
+  permissionCategories as productPermissionCategories,
   type ProductExecutionDetailEvent,
   type ProductExecutionDetailResponse,
 } from '../../contracts/product-projection/execution-detail.js';
@@ -325,36 +329,22 @@ function finiteNumber(value: unknown): number | null {
 function integerValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) ? value : null;
 }
-const toolCategories = new Set([
-  'shell',
-  'read',
-  'edit',
-  'write',
-  'search',
-  'fetch',
-  'subagent',
-  'other',
-]);
+const toolCategories = new Set<string>(productToolCategories);
 function isToolCategory(value: unknown): value is 'shell' | 'read' | 'edit' | 'write' | 'search' | 'fetch' | 'subagent' | 'other' {
   return typeof value === 'string' && toolCategories.has(value);
 }
-const toolStatuses = new Set(['running', 'completed', 'failed', 'cancelled']);
+const toolStatuses = new Set<string>(productToolStatuses);
 function isToolStatus(value: unknown): value is 'running' | 'completed' | 'failed' | 'cancelled' {
   return typeof value === 'string' && toolStatuses.has(value);
 }
-const detailKinds = new Set(['shell', 'read', 'write', 'edit', 'search', 'fetch']);
+const detailKinds = new Set<string>(productDetailKinds);
 function isDetailKind(value: unknown): value is 'shell' | 'read' | 'write' | 'edit' | 'search' | 'fetch' {
   return typeof value === 'string' && detailKinds.has(value);
 }
 function isItemKind(value: unknown): value is 'assistant' | 'reasoning' | 'tool' {
   return value === 'assistant' || value === 'reasoning' || value === 'tool';
 }
+const permissionCategories = new Set<string>(productPermissionCategories);
 function isPermissionCategory(value: unknown): value is 'tool' | 'plan' | 'question' | 'mode' | 'other' {
-  return (
-    value === 'tool' ||
-    value === 'plan' ||
-    value === 'question' ||
-    value === 'mode' ||
-    value === 'other'
-  );
+  return typeof value === 'string' && permissionCategories.has(value);
 }

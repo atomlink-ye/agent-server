@@ -81,7 +81,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
       id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,
       team_version_id,environment_version_id,status,phase,control_state,revision,lead_turn_count,
       completion_approval_required,created_at,updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active','active','active',1,0,false,$10,$10)`,
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active','active','member_running',1,0,false,$10,$10)`,
     [
       fixture.teamRunId,
       owner.tenantId,

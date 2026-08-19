@@ -397,24 +397,16 @@ describe('task HTTP contracts', () => {
         input,
       }),
     });
-    expect(secondary.status).toBe(404);
-    expect(ErrorResponseSchema.parse(await secondary.json()).error.code).toBe(
-      'invokable_not_found',
-    );
-
-    const primaryAfterSecondary = await app.request('/api/v1/tasks:invoke', {
-      method: 'POST',
-      headers: {
-        ...authenticatedJsonHeaders,
-        // A secondary rejection must not consume an admission key or create a task.
-        'idempotency-key': 'managed-task-secondary',
-      },
-      body: JSON.stringify({
-        invokable: { kind: 'agent', version_id: versionId },
-        input: { text: 'primary after secondary' },
-      }),
+    expect(secondary.status).toBe(202);
+    const secondaryBody = InvokeTaskResponseSchema.parse(await secondary.json());
+    const secondaryTask = await app.request(secondaryBody.links.self, {
+      headers: { authorization: `Bearer ${secondaryServiceAccountToken}` },
     });
-    expect(primaryAfterSecondary.status).toBe(202);
+    expect(secondaryTask.status).toBe(200);
+    expect(GetTaskResponseSchema.parse(await secondaryTask.json()).invokable).toEqual({
+      kind: 'agent',
+      version_id: versionId,
+    });
   });
 
   it('returns the canonical task resource and task tree for the authenticated owner', async () => {

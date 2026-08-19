@@ -277,7 +277,7 @@ describe('managed agent HTTP contracts', () => {
     );
   });
 
-  it('reads, lists, publishes, and hides foreign resources', async () => {
+  it('reads, lists, publishes, and allows same-tenant reads', async () => {
     const { app, body } = await importedApp();
     const definition = AgentDefinitionResponseSchema.parse(
       await (
@@ -323,10 +323,12 @@ describe('managed agent HTTP contracts', () => {
     const foreign = await app.request(`/api/v1/agents/${body.agent.id}`, {
       headers: headers(secondaryServiceAccountToken),
     });
-    expect(foreign.status).toBe(404);
-    expect(ErrorResponseSchema.parse(await foreign.json()).error.code).toBe(
-      'agent_not_found',
+    expect(foreign.status).toBe(200);
+    const foreignDef = AgentDefinitionResponseSchema.parse(
+      await foreign.json(),
     );
+    expect(foreignDef.id).toBe(body.agent.id);
+    expectSafe(foreignDef, forbiddenResponseFields);
   });
 
   it('requires idempotency keys for mutation routes', async () => {
@@ -597,51 +599,86 @@ describe('managed agent HTTP contracts', () => {
     );
   });
 
-  it('hides every foreign Agent resource with the same safe 404 envelope', async () => {
+  it('allows same-tenant reads but still rejects a foreign publish', async () => {
     const { app, body } = await importedApp();
-    const requests = [
-      app.request(`/api/v1/agents/${body.agent.id}`, {
+
+    // Publish the version first so reads are against a published state
+    const published = await app.request(
+      `/api/v1/agent-versions/${body.version.id}:publish`,
+      {
+        method: 'POST',
+        headers: headers(primaryServiceAccountToken, 'pub-first'),
+        body: '{}',
+      },
+    );
+    expect(published.status).toBe(200);
+
+    // Read requests from secondary principal should succeed (200)
+    const readDefinition = await app.request(`/api/v1/agents/${body.agent.id}`, {
+      headers: headersWithRequestId(
+        secondaryServiceAccountToken,
+        undefined,
+        'read-def',
+      ),
+    });
+    expect(readDefinition.status).toBe(200);
+    const defResponse = AgentDefinitionResponseSchema.parse(
+      await readDefinition.json(),
+    );
+    expect(defResponse.id).toBe(body.agent.id);
+    expectSafe(defResponse, forbiddenResponseFields);
+
+    const readVersion = await app.request(
+      `/api/v1/agent-versions/${body.version.id}`,
+      {
         headers: headersWithRequestId(
           secondaryServiceAccountToken,
           undefined,
-          'foreign',
+          'read-ver',
         ),
-      }),
-      app.request(`/api/v1/agent-versions/${body.version.id}`, {
+      },
+    );
+    expect(readVersion.status).toBe(200);
+    const verResponse = AgentVersionResponseSchema.parse(
+      await readVersion.json(),
+    );
+    expect(verResponse.id).toBe(body.version.id);
+    expectSafe(verResponse, forbiddenResponseFields);
+
+    const readVersions = await app.request(
+      `/api/v1/agents/${body.agent.id}/versions`,
+      {
         headers: headersWithRequestId(
           secondaryServiceAccountToken,
           undefined,
-          'foreign',
+          'read-vers',
         ),
-      }),
-      app.request(`/api/v1/agents/${body.agent.id}/versions`, {
-        headers: headersWithRequestId(
-          secondaryServiceAccountToken,
-          undefined,
-          'foreign',
-        ),
-      }),
-      app.request(`/api/v1/agent-versions/${body.version.id}:publish`, {
+      },
+    );
+    expect(readVersions.status).toBe(200);
+    const versResponse = AgentVersionListResponseSchema.parse(
+      await readVersions.json(),
+    );
+    expect(versResponse.items.map((item) => item.id)).toContain(body.version.id);
+    expectSafe(versResponse, forbiddenResponseFields);
+
+    // Write operation (publish) from secondary principal should still fail (404)
+    const publishAttempt = await app.request(
+      `/api/v1/agent-versions/${body.version.id}:publish`,
+      {
         method: 'POST',
         headers: headersWithRequestId(
           secondaryServiceAccountToken,
           'foreign-publish',
-          'foreign',
+          'write-op',
         ),
         body: '{}',
-      }),
-    ];
-    const responses = await Promise.all(requests);
-    const envelopes = await Promise.all(
-      responses.map(async (response) => {
-        expect(response.status).toBe(404);
-        return ErrorResponseSchema.parse(await response.json());
-      }),
+      },
     );
-    expect(new Set(envelopes.map((value) => JSON.stringify(value))).size).toBe(
-      1,
-    );
-    expect(envelopes[0]?.error.code).toBe('agent_not_found');
+    expect(publishAttempt.status).toBe(404);
+    const publishError = ErrorResponseSchema.parse(await publishAttempt.json());
+    expect(publishError.error.code).toBe('agent_not_found');
+    expectSafe(publishError, forbiddenResponseFields);
   });
 
   it('paginates Agent versions in repository order without duplicates', async () => {

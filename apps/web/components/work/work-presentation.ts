@@ -1,6 +1,10 @@
-import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+import type {
+  LatestWorkRunSummary,
+  ProductWorkRunDetail,
+  WorkListItem,
+} from '@atomlink-ye/agent-server/product-contract';
 
-export type WorkTab = 'overview' | 'runs' | 'artifacts' | 'definition';
+export type WorkTab = 'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
 export const WORK_TABS: readonly {
   readonly id: WorkTab;
@@ -8,6 +12,7 @@ export const WORK_TABS: readonly {
 }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'runs', label: 'Runs' },
+  { id: 'transcript', label: 'Transcript' },
   { id: 'artifacts', label: 'Artifacts' },
   { id: 'definition', label: 'Definition' },
 ];
@@ -61,16 +66,20 @@ export function latestRunSummary(work: WorkListItem) {
   return resultCaptureLabel(latest.result_capture_status);
 }
 
-export function resultCaptureLabel(status: string) {
+export function resultCaptureLabel(
+  status:
+    | LatestWorkRunSummary['result_capture_status']
+    | ProductWorkRunDetail['result_capture_status'],
+): string {
   switch (status) {
+    case 'present':
+      return 'Result summary captured.';
     case 'redacted':
       return 'Result was captured but is redacted.';
     case 'not_present':
       return 'No result summary is present.';
     case 'not_captured':
       return 'Result capture is unavailable.';
-    default:
-      return 'Result summary captured.';
   }
 }
 

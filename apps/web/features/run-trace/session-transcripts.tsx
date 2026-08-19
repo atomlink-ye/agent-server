@@ -47,18 +47,24 @@ type FetchState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly data: SessionTranscriptsResponse }
-  | { readonly status: 'unavailable' };
+  | { readonly status: 'unavailable'; readonly statusCode?: number };
 
-export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
+export function SessionTranscripts({ live, trace, initialSelectedIndex }: { readonly live?: boolean; readonly trace: Trace; readonly initialSelectedIndex?: number }) {
   const [state, setState] = useState<FetchState>({ status: 'idle' });
   // Roles are NOT unique inside a Run: a team can run several 'member'
   // sessions. Selection therefore addresses the session by its position in
   // the response, which is the only identifier the contract guarantees.
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(initialSelectedIndex ?? null);
+
+  // Extract sessions array for use in effects and render
+  const sessions = state.status === 'ready' ? state.data.sessions : [];
 
   useEffect(() => {
     let active = true;
-    setState({ status: 'loading' });
+    // Only set loading on initial fetch, not on polling updates
+    if (state.status === 'idle') {
+      setState({ status: 'loading' });
+    }
     void fetch(
       `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/session-transcripts`,
       { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
@@ -67,11 +73,11 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
         const body = await response.json().catch(() => undefined);
         if (!active) return;
         if (!response.ok || !isSessionTranscripts(body)) {
-          setState({ status: 'unavailable' });
+          setState({ status: 'unavailable', statusCode: response.status });
           return;
         }
         setState({ status: 'ready', data: body });
-        if (body.sessions.length) {
+        if (body.sessions.length && selectedIndex === null) {
           setSelectedIndex(0);
         }
       })
@@ -80,6 +86,37 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
       });
     return () => { active = false; };
   }, [trace.work.id, trace.work_run.id]);
+
+  // Auto-select first session when it becomes available
+  useEffect(() => {
+    if (selectedIndex === null && sessions.length > 0) {
+      setSelectedIndex(0);
+    }
+  }, [sessions, selectedIndex]);
+
+  // Polling effect: when live=true, refetch every 2-3 seconds without resetting UI state
+  useEffect(() => {
+    if (!live || state.status === 'idle' || state.status === 'loading') return;
+    const timer = setInterval(() => {
+      void fetch(
+        `/api/works/${encodeURIComponent(trace.work.id)}/runs/${encodeURIComponent(trace.work_run.id)}/session-transcripts`,
+        { method: 'GET', cache: 'no-store', headers: { accept: 'application/json' } },
+      )
+        .then(async (response) => {
+          const body = await response.json().catch(() => undefined);
+          if (!response.ok || !isSessionTranscripts(body)) {
+            setState({ status: 'unavailable', statusCode: response.status });
+            return;
+          }
+          // Update data without resetting selectedIndex or state
+          setState({ status: 'ready', data: body });
+        })
+        .catch(() => {
+          // On error, keep existing state
+        });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [live, trace.work.id, trace.work_run.id, state.status]);
 
   if (state.status === 'idle' || state.status === 'loading')
     return (
@@ -93,18 +130,26 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
       </section>
     );
 
-  if (state.status === 'unavailable')
+  if (state.status === 'unavailable') {
+    const statusCode = state.statusCode;
+    let message = 'Captured session transcripts are not available.';
+    if (statusCode === 404) {
+      message = 'This Run has not been bound to a provider session yet.';
+    } else if (statusCode === 503) {
+      message = 'The service that reads session transcripts is temporarily unavailable. Please try again in a moment.';
+    }
     return (
       <section className="execution-transcript" data-testid="session-transcripts">
         <div className="execution-transcript__heading">
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
             <h2>Per-role session transcripts are not available for this Run.</h2>
-            <p>The endpoint did not return usable data. This may indicate the Run predates per-role capture or the provider session was not instrumented.</p>
+            <p>{message}</p>
           </div>
         </div>
       </section>
     );
+  }
 
   const { data } = state;
   const selected =
@@ -117,7 +162,11 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
           <div>
             <p className="work-shell-kicker">Session transcripts</p>
             <h2>No sessions were captured for this Run.</h2>
-            <p>The Run completed but no per-role session data was recorded.</p>
+            <p>
+              {live
+                ? 'Session data has not started streaming for this Run yet.'
+                : 'The Run completed but no per-role session data was recorded.'}
+            </p>
           </div>
         </div>
       </section>
@@ -177,8 +226,8 @@ export function SessionTranscripts({ trace }: { readonly trace: Trace }) {
               </section>
               {selected.summary.truncated ? (
                 <p className="execution-transcript__notice" data-testid="session-truncated-warning">
-                  ⚠️ This transcript is truncated — older entries exist but were not returned.
-                  The captured window shows the most recent {selected.entries.length} entries.
+                  ⚠️ This transcript is truncated — newer entries exist but were not returned.
+                  The captured window shows the earliest {selected.entries.length} entries.
                 </p>
               ) : null}
             </>

@@ -195,18 +195,32 @@ function nestChildren(rows: readonly MutableRow[]): readonly ProjectedTranscript
   );
   const visible: MutableRow[] = [];
   for (const row of rows) {
-    if (row.event.kind !== 'child_timeline_item') {
-      visible.push(row);
+    // Handle child_timeline_item (original logic)
+    if (row.event.kind === 'child_timeline_item') {
+      const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
+      if (!parent) {
+        visible.push(row);
+        continue;
+      }
+      parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];
+      (parent.children ??= []).push(row);
+      parent.sourceOrdinals.push(...row.sourceOrdinals);
       continue;
     }
-    const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
-    if (!parent) {
-      visible.push(row);
-      continue;
+
+    // Handle tool_status with parent_activity_id
+    if (row.event.kind === 'tool_status' && row.event.parent_activity_id !== null) {
+      const parent = parents.get(scopedActivityKey(row.runSegment, row.event.parent_activity_id));
+      if (parent && parent !== row) {
+        parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];
+        (parent.children ??= []).push(row);
+        parent.sourceOrdinals.push(...row.sourceOrdinals);
+        continue;
+      }
     }
-    parent.detailSourceOrdinals ??= [...parent.sourceOrdinals];
-    (parent.children ??= []).push(row);
-    parent.sourceOrdinals.push(...row.sourceOrdinals);
+
+    // Default: add to visible
+    visible.push(row);
   }
   return visible.map(freezeRow);
 }

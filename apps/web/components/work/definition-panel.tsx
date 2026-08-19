@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { stringify } from 'yaml';
 import type { ProductWorkDefinitionVersionResponse } from '@atomlink-ye/agent-server/product-contract';
 
 import { humanize, workTabHref } from '@/components/work/work-presentation';
@@ -58,7 +59,7 @@ export function DefinitionPanel({
   readonly editable: boolean;
 }) {
   const normalizedSource = useMemo(
-    () => (version ? JSON.stringify(version.source, null, 2) : ''),
+    () => (version ? stringify(version.source) : ''),
     [version],
   );
   const [source, setSource] = useState(normalizedSource);
@@ -199,7 +200,8 @@ export function DefinitionPanel({
     const runId = runIdFromStart(body);
     if (!response?.ok || !runId) {
       setState('error');
-      setStatusMessage('The current Definition version could not be started.');
+      const errorDetail = formatStartRunError(body);
+      setStatusMessage(`The current Definition version could not be started: ${errorDetail}`);
       return;
     }
     window.location.assign(workTabHref(workId, 'overview', runId));
@@ -229,9 +231,8 @@ export function DefinitionPanel({
               <div>
                 <h3>YAML source</h3>
                 <p>
-                  The API currently returns normalized source. It is seeded here as
-                  JSON-compatible YAML, so original comments and formatting are not
-                  round-tripped.
+                  The API currently returns normalized source. It is re-serialized as YAML here,
+                  so original comments and formatting are not round-tripped.
                 </p>
               </div>
               <span>{source.length.toLocaleString()} chars</span>
@@ -527,7 +528,7 @@ function isApply(value: unknown): value is {
   return typeof definition?.id === 'string' && typeof version?.id === 'string';
 }
 
-function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
+export function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
   const record = asRecord(value);
   if (!Array.isArray(record?.diagnostics)) return [];
   return record.diagnostics.flatMap((item) => {
@@ -544,6 +545,30 @@ function diagnosticsFrom(value: unknown): readonly Diagnostic[] {
         ]
       : [];
   });
+}
+
+function formatStartRunError(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Please try again.';
+  }
+  const record = body as Record<string, unknown>;
+  const error = record.error;
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return 'Please try again.';
+  }
+  const errorRecord = error as Record<string, unknown>;
+  const path = errorRecord.path;
+  const message = errorRecord.message;
+  const code = errorRecord.code;
+
+  if (typeof path === 'string' && path.length > 0) {
+    const codePart = typeof code === 'string' && code.length > 0 ? `${code}: ` : '';
+    return `${codePart}${path} — ${message}`;
+  }
+  if (typeof code === 'string' && code.length > 0) {
+    return `${code}: ${message}`;
+  }
+  return typeof message === 'string' ? message : 'Please try again.';
 }
 
 function runIdFromStart(value: unknown): string | null {

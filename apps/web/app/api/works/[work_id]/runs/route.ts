@@ -3,6 +3,7 @@ import {
   productSchemaFor,
   readProduct,
   writeProduct,
+  startRunErrorSchema,
 } from '@/lib/product-api-bff';
 import {
   GetWorkRequestSchema,
@@ -55,5 +56,6 @@ export async function POST(
     `/api/v1/works/${encodeURIComponent(workId)}/runs`,
     parsed.data,
     productSchemaFor('start-run'),
+    { errorSchema: startRunErrorSchema },
   );
 }

@@ -3,7 +3,7 @@ import 'server-only';
 const uuidPath =
   '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const productReadPath = new RegExp(
-  `^(?:/api/v1/works(?:/(?:${uuidPath})(?:/runs(?:/(?:${uuidPath})(?:/(?:trace|execution-detail|session-transcripts))?)?)?)?|/api/v1/work-definition-versions/(?:${uuidPath}))$`,
+  `^(?:/api/v1/works(?:/(?:${uuidPath})(?:/definition|/runs(?:/(?:${uuidPath})(?:/(?:trace|execution-detail|session-transcripts))?)?)?)?|/api/v1/work-definition-versions/(?:${uuidPath}))$`,
   'iu',
 );
 
@@ -37,7 +37,7 @@ export async function getProductApi(path: string): Promise<Response> {
 }
 
 const productWritePath = new RegExp(
-  `^(?:/api/v1/works/(?:${uuidPath})/(?:runs|definition-version)|/api/v1/work-definitions:(?:validate|plan|apply))$`,
+  `^(?:/api/v1/works(?:/(?:${uuidPath})/(?:runs|definition-version))?|/api/v1/work-definitions:(?:validate|plan|apply))$`,
   'iu',
 );
 
@@ -49,8 +49,11 @@ export async function postProductApi(
 ): Promise<Response> {
   if (!productWritePath.test(path))
     throw new ProductApiClientError('invalid_path');
-  const applyingDefinition = path === '/api/v1/work-definitions:apply';
-  if (applyingDefinition !== Boolean(options.idempotencyKey))
+  const requiresIdempotencyKey = path === '/api/v1/work-definitions:apply';
+  const hasIdempotencyKey = Boolean(options.idempotencyKey);
+  if (requiresIdempotencyKey && !hasIdempotencyKey)
+    throw new ProductApiClientError('invalid_path');
+  if (!requiresIdempotencyKey && hasIdempotencyKey)
     throw new ProductApiClientError('invalid_path');
 
   const { baseUrl, serviceToken } = productConnection();

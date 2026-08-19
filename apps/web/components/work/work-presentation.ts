@@ -1,4 +1,8 @@
-import type { WorkListItem } from '@atomlink-ye/agent-server/product-contract';
+import type {
+  LatestWorkRunSummary,
+  ProductWorkRunDetail,
+  WorkListItem,
+} from '@atomlink-ye/agent-server/product-contract';
 
 export type WorkTab = 'overview' | 'runs' | 'transcript' | 'artifacts' | 'definition';
 
@@ -63,8 +67,10 @@ export function latestRunSummary(work: WorkListItem) {
 }
 
 export function resultCaptureLabel(
-  status: 'present' | 'not_present' | 'redacted' | 'not_captured',
-) {
+  status:
+    | LatestWorkRunSummary['result_capture_status']
+    | ProductWorkRunDetail['result_capture_status'],
+): string {
   switch (status) {
     case 'present':
       return 'Result summary captured.';

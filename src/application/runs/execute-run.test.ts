@@ -934,6 +934,7 @@ describe('ExecuteRun', () => {
     expect(findVersion).toHaveBeenCalledWith(
       {
         tenantId: 'tenant-1',
+        workspaceId: 'workspace-1',
         principalType: 'user',
         principalId: 'user-1',
       },

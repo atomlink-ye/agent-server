@@ -47,6 +47,7 @@ describe('ResolveAgentVersion', () => {
     expect(findVersion).toHaveBeenCalledWith(
       {
         tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
         principalType: scope.principalType,
         principalId: scope.principalId,
       },

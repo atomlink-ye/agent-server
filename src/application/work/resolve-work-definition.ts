@@ -502,6 +502,7 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
 function managedOwner(input: ResolveWorkDefinitionInput) {
   return {
     tenantId: input.accessContext.tenantId,
+    workspaceId: input.accessContext.workspaceId,
     principalType: input.accessContext.principalType,
     principalId: input.accessContext.principalId,
   };

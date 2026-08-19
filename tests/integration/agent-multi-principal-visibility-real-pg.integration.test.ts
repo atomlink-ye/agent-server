@@ -10,6 +10,7 @@ import type { ManagedAgentOwner } from '../../src/domain/agents/managed-agent-ow
 import type { ImportAgentAtomicCommand } from '../../src/application/ports/agent-registry.js';
 import { createManagedAgentDefinition } from '../../src/domain/agents/managed-agent-definition.js';
 import { createManagedAgentDraft } from '../../src/domain/agents/managed-agent-version.js';
+import { parseManagedAgentPackage } from '../../src/domain/agents/managed-agent-package.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!connectionString)
@@ -41,26 +42,27 @@ const sa3: ManagedAgentOwner = {
   principalId: 'sa3-multi-test',
 };
 
-const AGENT_PACKAGE = {
-  apiVersion: 'agentserver.dev/v1alpha1',
-  kind: 'ManagedAgent',
-  metadata: {
-    name: 'test-agent',
-    description: 'Test agent for multi-principal visibility',
-  },
-  spec: {
-    runtime: {
-      provider: 'openai',
-      model: 'gpt-4',
-      modelPolicyRef: 'free-only',
-      mode: 'tool_use',
-    },
-    tools: [],
-    skills: [],
-    instructions: 'You are a test agent.',
-    memory: { proposalLimit: 0 },
-  },
-};
+const AGENT_PACKAGE_YAML = `apiVersion: agent-server/v1alpha1
+kind: ManagedAgent
+metadata:
+  name: test-agent
+spec:
+  description: Test agent for multi-principal visibility
+  instructions: You are a test agent.
+  runtime:
+    provider: paseo
+    modelPolicyRef: free-only
+    mode: isolated
+  tools: []
+  skills: []
+  input:
+    schema: { type: object, additionalProperties: false, properties: {} }
+    prompt: test
+  session: { invocation: fresh_per_invocation, followUps: queued, binding: reusable }
+  memory: { policy: workspace_snapshot, proposalLimit: 0 }
+  permissions: { network: none, filesystem: none }
+  completion: { type: executable, command: done }
+`;
 
 describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
   let pool: Pool;
@@ -99,8 +101,23 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    // Clean up created definitions
+    // Clean up created definitions (delete versions first due to foreign key)
     if (createdDefinitionIds.length) {
+      const versionIds = await pool.query(
+        'SELECT id FROM agent_versions WHERE definition_id = ANY($1::uuid[])',
+        [createdDefinitionIds],
+      );
+      const ids = versionIds.rows?.map((r: any) => r.id) ?? [];
+      if (ids.length) {
+        await pool.query(
+          'DELETE FROM agent_registry_idempotency WHERE version_id = ANY($1::uuid[])',
+          [ids],
+        );
+      }
+      await pool.query(
+        'DELETE FROM agent_versions WHERE definition_id = ANY($1::uuid[])',
+        [createdDefinitionIds],
+      );
       await pool.query(
         'DELETE FROM agent_definitions WHERE id = ANY($1::uuid[])',
         [createdDefinitionIds],
@@ -122,12 +139,10 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
       now: () => new Date('2026-01-01T00:00:00Z'),
     });
 
+    const parsed = parseManagedAgentPackage(AGENT_PACKAGE_YAML);
     const version = createManagedAgentDraft({
       definition,
-      parsed: {
-        normalizedName: 'test-agent-a',
-        package: AGENT_PACKAGE as any,
-      },
+      parsed,
       id: versionId,
       now: () => new Date('2026-01-01T00:00:00Z'),
     });
@@ -136,7 +151,7 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
       owner: sa1,
       compatibilityWorkspaceId: sa1.workspaceId,
       idempotencyKey: 'import-agent-a-1',
-      requestFingerprint: 'sha256:abc123',
+      requestFingerprint: parsed.fingerprint,
       normalizedName: 'test-agent-a',
       definition,
       version,

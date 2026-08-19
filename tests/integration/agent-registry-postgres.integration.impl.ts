@@ -1033,6 +1033,7 @@ describeRealPostgres(
     ) {
       const realOwner = {
         tenantId,
+        workspaceId,
         principalType: 'service_account',
         principalId,
       };
@@ -1370,6 +1371,7 @@ describeRealPostgres(
       };
       const ownerForPublish = {
         tenantId: imported.version.tenantId,
+        workspaceId: imported.version.workspaceId,
         principalType: imported.version.principalType,
         principalId: imported.version.principalId,
       };
@@ -1427,6 +1429,7 @@ describeRealPostgres(
 
       const ownerForPublish = {
         tenantId: imported.version.tenantId,
+        workspaceId: imported.version.workspaceId,
         principalType: imported.version.principalType,
         principalId: imported.version.principalId,
       };
@@ -1518,6 +1521,7 @@ describeRealPostgres(
       );
       const hidden = {
         tenantId: tenant,
+        workspaceId,
         principalType: 'service_account',
         principalId: 'other',
       };
@@ -1610,6 +1614,7 @@ describeRealPostgres(
         const page = await registry.listVersionsForOwner(
           {
             tenantId: tenant,
+            workspaceId,
             principalType: 'service_account',
             principalId: 'principal',
           },

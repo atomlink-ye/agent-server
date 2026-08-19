@@ -42,6 +42,7 @@ export function createManagedAgentDraft(options: {
     id: options.id ?? randomUUID(),
     definitionId: options.definition.id,
     tenantId: options.definition.tenantId,
+    workspaceId: options.definition.workspaceId,
     principalType: options.definition.principalType,
     principalId: options.definition.principalId,
     status: 'draft',

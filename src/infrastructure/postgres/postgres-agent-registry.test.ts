@@ -148,6 +148,7 @@ describe('PostgresAgentRegistry cursor validation', () => {
       registry.listVersionsForOwner(
         {
           tenantId: 'tenant',
+          workspaceId: 'workspace-1',
           principalType: 'service_account',
           principalId: 'principal',
         },

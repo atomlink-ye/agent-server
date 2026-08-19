@@ -466,6 +466,7 @@ function mapDefinition(row: DefinitionRow): AgentDefinition {
   return Object.freeze({
     id: row.id,
     tenantId: row.tenant_id,
+    workspaceId: row.workspace_id,
     principalType: row.principal_type,
     principalId: row.principal_id,
     normalizedName: row.normalized_name,
@@ -482,6 +483,7 @@ function mapVersion(row: VersionRow): ManagedAgentVersion {
     id: row.id,
     definitionId: row.definition_id,
     tenantId: row.tenant_id,
+    workspaceId: row.workspace_id,
     principalType: row.principal_type,
     principalId: row.principal_id,
     status: row.status,

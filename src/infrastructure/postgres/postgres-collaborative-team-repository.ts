@@ -2207,10 +2207,16 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       sets.push(`runtime_session_id=$${vals.length + 1}`);
       vals.push(session);
     }
+    // Track id position before pushing
+    const idParamIdx = vals.length + 1;
     vals.push(id, ...ownerValues(owner!));
-    const whereConditions: string[] = [`id=$${sets.length + 1}`, `${ownerSql('', sets.length + 2)}`];
+    const ownerSqlStartIdx = idParamIdx + 1;
+    const whereConditions: string[] = [
+      `id=$${idParamIdx}`,
+      `${ownerSql('', ownerSqlStartIdx)}`,
+    ];
     if (expectedCurrentStatus !== undefined) {
-      whereConditions.push(`status=$${sets.length + 3}`);
+      whereConditions.push(`status=$${vals.length + 1}`);
       vals.push(expectedCurrentStatus);
     }
     const r = await this.database.query<MemberRow>(

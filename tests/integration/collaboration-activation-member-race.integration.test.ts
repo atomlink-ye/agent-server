@@ -81,7 +81,7 @@ async function seedFixture(database: Pool): Promise<Fixture> {
       id,tenant_id,workspace_id,principal_type,principal_id,root_task_id,root_run_id,
       team_version_id,environment_version_id,status,phase,control_state,revision,lead_turn_count,
       completion_approval_required,created_at,updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active','active','member_running',1,0,false,$10,$10)`,
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active','member_work','member_work_running',1,0,false,$10,$10)`,
     [
       fixture.teamRunId,
       owner.tenantId,
@@ -152,70 +152,46 @@ describe('Collaboration activation member race condition', () => {
   it('prevents concurrent activation of same idle member (atomic update)', async () => {
     const fixture = await seedFixture(pool);
 
-    // Simulate two concurrent attempts to activate the same member
-    // Both check isIdle() first (which would both return true)
-    // Then both try to update status to 'active'
-    // Only one should succeed with the atomic check
+    // Verify member starts as idle
+    const before = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    expect(before?.status).toBe('idle');
 
-    const client1 = await pool.connect();
-    const client2 = await pool.connect();
+    // Launch two concurrent attempts to activate the same member
+    // Exactly one should succeed, one should fail with conflict
+    const results = await Promise.allSettled([
+      repository.updateMemberRunStatus(
+        fixture.memberId,
+        'active',
+        undefined,
+        fixture.owner,
+        'idle',
+      ),
+      repository.updateMemberRunStatus(
+        fixture.memberId,
+        'active',
+        undefined,
+        fixture.owner,
+        'idle',
+      ),
+    ]);
 
-    try {
-      // Start transactions for both clients
-      await client1.query('BEGIN');
-      await client2.query('BEGIN');
+    // One should succeed, one should fail
+    const successes = results.filter((r) => r.status === 'fulfilled');
+    const failures = results.filter((r) => r.status === 'rejected');
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
 
-      // Both clients read the member status (both see 'idle')
-      const read1 = await client1.query(
-        `SELECT status FROM team_member_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
-        [fixture.memberId, ...ownerValues(fixture.owner)],
-      );
-      const read2 = await client2.query(
-        `SELECT status FROM team_member_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
-        [fixture.memberId, ...ownerValues(fixture.owner)],
-      );
-
-      expect(read1.rows?.[0]?.status).toBe('idle');
-      expect(read2.rows?.[0]?.status).toBe('idle');
-
-      // Both try to update to 'active' with expectedCurrentStatus='idle' (atomic)
-      // First one succeeds
-      const update1 = await client1.query(
-        `UPDATE team_member_runs SET status=$1, updated_at=now() WHERE id=$2 AND status=$3 AND ${ownerSql('', 4)} RETURNING id`,
-        [
-          'active',
-          fixture.memberId,
-          'idle',
-          ...ownerValues(fixture.owner),
-        ],
-      );
-      expect(update1.rowCount).toBe(1); // First update succeeds
-
-      // Second one fails (member is no longer 'idle')
-      const update2 = await client2.query(
-        `UPDATE team_member_runs SET status=$1, updated_at=now() WHERE id=$2 AND status=$3 AND ${ownerSql('', 4)} RETURNING id`,
-        [
-          'active',
-          fixture.memberId,
-          'idle',
-          ...ownerValues(fixture.owner),
-        ],
-      );
-      expect(update2.rowCount).toBe(0); // Second update fails, no rows affected
-
-      // Verify final state: member is active
-      const final = await client1.query(
-        `SELECT status FROM team_member_runs WHERE id=$1 AND ${ownerSql('', 2)}`,
-        [fixture.memberId, ...ownerValues(fixture.owner)],
-      );
-      expect(final.rows?.[0]?.status).toBe('active');
-
-      await client1.query('COMMIT');
-      await client2.query('COMMIT');
-    } finally {
-      client1.release();
-      client2.release();
+    // The failure should be conflict error (benign lost claim)
+    const failedReason = failures[0];
+    expect(failedReason.status).toBe('rejected');
+    if (failedReason.status === 'rejected') {
+      expect(failedReason.reason).toBeInstanceOf(TeamExecutionError);
+      expect((failedReason.reason as TeamExecutionError).code).toBe('conflict');
     }
+
+    // Verify final state: member is active (only one activation succeeded)
+    const after = await repository.findMemberRunById(fixture.memberId, fixture.owner);
+    expect(after?.status).toBe('active');
   });
 
   it('rejects updateMemberRunStatus with conflict error when member no longer idle', async () => {

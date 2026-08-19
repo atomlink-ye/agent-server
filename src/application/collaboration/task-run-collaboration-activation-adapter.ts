@@ -56,6 +56,21 @@ export class TaskRunCollaborationActivationAdapter {
       const materializedTeam = input.plan.finalReview
         ? await this.advanceLead(input, tx)
         : input.team;
+
+      // Atomically mark member as active to prevent concurrent materialization
+      if (!tx.teamExecutions) {
+        throw new Error(
+          'Collaboration execution transaction dependency is unavailable.',
+        );
+      }
+      await tx.teamExecutions.updateMemberRunStatus(
+        input.member.id,
+        'active',
+        undefined,
+        input.owner,
+        'idle',
+      );
+
       const sequence = this.sequence(input, materializedTeam);
       const prompt = this.prompt(input, sequence);
       const taskKind = input.plan.finalReview

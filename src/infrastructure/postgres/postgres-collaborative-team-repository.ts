@@ -898,8 +898,9 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'],
     runtimeSessionId?: string | null,
     owner?: OwnerScope,
+    expectedCurrentStatus?: TeamMemberRun['status'],
   ): Promise<TeamMemberRun> {
-    return this.updateMember(id, status, runtimeSessionId, owner);
+    return this.updateMember(id, status, runtimeSessionId, owner, expectedCurrentStatus);
   }
   public async updateMemberRuntimeSession(
     id: string,
@@ -2194,6 +2195,7 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
     status: TeamMemberRun['status'] | undefined,
     session: string | null | undefined,
     owner?: OwnerScope,
+    expectedCurrentStatus?: TeamMemberRun['status'],
   ): Promise<TeamMemberRun> {
     const vals: any[] = [];
     const sets: string[] = [];
@@ -2206,11 +2208,21 @@ export class PostgresTeamExecutionRepository implements TeamExecutionRepository 
       vals.push(session);
     }
     vals.push(id, ...ownerValues(owner!));
+    const whereConditions: string[] = [`id=$${sets.length + 1}`, `${ownerSql('', sets.length + 2)}`];
+    if (expectedCurrentStatus !== undefined) {
+      whereConditions.push(`status=$${sets.length + 3}`);
+      vals.push(expectedCurrentStatus);
+    }
     const r = await this.database.query<MemberRow>(
-      `UPDATE team_member_runs SET ${sets.join(',')}, updated_at=now() WHERE id=$${sets.length + 1} AND ${ownerSql('', sets.length + 2)} RETURNING *`,
+      `UPDATE team_member_runs SET ${sets.join(',')}, updated_at=now() WHERE ${whereConditions.join(' AND ')} RETURNING *`,
       vals,
     );
-    if (!r.rows?.[0]) throw new Error('Member run was not found.');
+    if (!r.rows?.[0]) {
+      if (expectedCurrentStatus !== undefined) {
+        throw new TeamExecutionError('conflict');
+      }
+      throw new Error('Member run was not found.');
+    }
     return mapMember(r.rows[0]);
   }
 }

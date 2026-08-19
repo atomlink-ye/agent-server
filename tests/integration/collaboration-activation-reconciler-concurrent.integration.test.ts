@@ -31,6 +31,8 @@ type Fixture = {
   leadMemberId: string;
   builderMemberId: string;
   analystMemberId: string;
+  builderWorkItemId: string;
+  openWorkItemId: string;
 };
 
 async function seedFixture(database: Pool): Promise<Fixture> {
@@ -47,6 +49,8 @@ async function seedFixture(database: Pool): Promise<Fixture> {
     leadMemberId: randomUUID(),
     builderMemberId: randomUUID(),
     analystMemberId: randomUUID(),
+    builderWorkItemId: randomUUID(),
+    openWorkItemId: randomUUID(),
   };
   const timestamp = '2026-08-11T00:00:00.000Z';
   const owner = fixture.owner;
@@ -154,31 +158,43 @@ async function seedFixture(database: Pool): Promise<Fixture> {
     ],
   );
 
-  // Create direct messages for each member so they have work to do
-  const builderMessageId = randomUUID();
-  const analystMessageId = randomUUID();
-
+  // Create work items (mimics the real smoke test scenario with owned + open items)
+  // W-1: assigned to builder (owned work item)
   await database.query(
-    `INSERT INTO team_messages(
-      id,team_run_id,sender_member_run_id,recipient_member_run_id,kind,body,status,
-      tenant_id,workspace_id,principal_type,principal_id,sequence,dedup_key,created_at
-    ) VALUES
-    ($1,$2,$3,$4,'direct','builder task'::text,'queued',$5,$6,$7,$8,1,$9,$10),
-    ($11,$2,$3,$12,'direct','analyst task'::text,'queued',$5,$6,$7,$8,2,$13,$10)`,
+    `INSERT INTO team_work_items(
+      id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
+      completion_summary,execution_task_id,tenant_id,workspace_id,principal_type,
+      principal_id,created_at,updated_at,completed_at
+    ) VALUES ($1,$2,'Build component','builder task'::text,'open',$3,$4,NULL,NULL,$5,$6,$7,$8,$9,$9,NULL)`,
     [
-      builderMessageId,
+      fixture.builderWorkItemId,
       fixture.teamRunId,
-      fixture.leadMemberId,
       fixture.builderMemberId,
+      fixture.leadMemberId,
       owner.tenantId,
       owner.workspaceId,
       owner.principalType,
       owner.principalId,
-      `direct:builder:${builderMessageId}`,
       timestamp,
-      analystMessageId,
-      fixture.analystMemberId,
-      `direct:analyst:${analystMessageId}`,
+    ],
+  );
+
+  // W-2: open (no owner, waiting for analyst to discover via openActionable logic)
+  await database.query(
+    `INSERT INTO team_work_items(
+      id,team_run_id,subject,description,status,owner_member_id,created_by_member_id,
+      completion_summary,execution_task_id,tenant_id,workspace_id,principal_type,
+      principal_id,created_at,updated_at,completed_at
+    ) VALUES ($1,$2,'Review results','analyst task'::text,'open',NULL,$3,NULL,NULL,$4,$5,$6,$7,$8,$8,NULL)`,
+    [
+      fixture.openWorkItemId,
+      fixture.teamRunId,
+      fixture.leadMemberId,
+      owner.tenantId,
+      owner.workspaceId,
+      owner.principalType,
+      owner.principalId,
+      timestamp,
     ],
   );
 
@@ -236,9 +252,15 @@ describe('Collaboration activation reconciler concurrent materialization', () =>
     expect(analystBefore?.status).toBe('idle');
 
     // Launch two concurrent reconciliation attempts
-    // The fix ensures that if one reconciler's member activation fails due to
-    // concurrent conflict, it will try the next member in the list instead of
-    // falsely reporting success and blocking other members
+    // Both are processing the same team with two idle members:
+    // - builder has owned work (W-1, assigned to them)
+    // - analyst will discover open work (W-2, no owner, openActionable path)
+    //
+    // Without the fix: first reconciler claims builder, second fails on conflict,
+    // falsely reports success, and analyst never gets activated (stays idle).
+    //
+    // With the fix: if second reconciler hits conflict on builder, it continues
+    // to next candidate (analyst) and activates them instead.
     const [result1, result2] = await Promise.all([
       reconciler1.reconcileForRootTask(fixture.rootTaskId, owner),
       reconciler2.reconcileForRootTask(fixture.rootTaskId, owner),
@@ -254,16 +276,14 @@ describe('Collaboration activation reconciler concurrent materialization', () =>
       owner,
     );
 
-    // With the fix, both members should eventually be activated
-    // result1 and result2 each represent how many members were successfully materialized
-    // They should total at least 1 (and ideally both should be 1)
-    const totalMaterialized = result1 + result2;
-    const activeMembersCount = [builderAfter?.status, analystAfter?.status].filter(
-      (s) => s === 'active',
-    ).length;
+    console.log('DEBUG: result1 materialized:', result1);
+    console.log('DEBUG: result2 materialized:', result2);
+    console.log('DEBUG: builderAfter.status:', builderAfter?.status);
+    console.log('DEBUG: analystAfter.status:', analystAfter?.status);
 
-    // At minimum, at least one member should be activated
-    expect(totalMaterialized).toBeGreaterThan(0);
-    expect(activeMembersCount).toBeGreaterThan(0);
+    // Both members MUST be activated when running the fixed code
+    // If the bug is present, analyst stays idle
+    expect(builderAfter?.status).toBe('active');
+    expect(analystAfter?.status).toBe('active');
   });
 });

@@ -58,6 +58,7 @@ describe('ProductDeveloperClient', () => {
               definition_id: definitionId,
               status: 'published',
               fingerprint: `sha256:${'a'.repeat(64)}`,
+              source_yaml: source,
               source: {
                 apiVersion: 'agentserver.dev/v1alpha1',
                 kind: 'WorkDefinition',

@@ -62,16 +62,18 @@ export function latestRunSummary(work: WorkListItem) {
   return resultCaptureLabel(latest.result_capture_status);
 }
 
-export function resultCaptureLabel(status: string) {
+export function resultCaptureLabel(
+  status: 'present' | 'not_present' | 'redacted' | 'not_captured',
+) {
   switch (status) {
+    case 'present':
+      return 'Result summary captured.';
     case 'redacted':
       return 'Result was captured but is redacted.';
     case 'not_present':
       return 'No result summary is present.';
     case 'not_captured':
       return 'Result capture is unavailable.';
-    default:
-      return 'Result summary captured.';
   }
 }
 

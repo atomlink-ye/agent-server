@@ -250,6 +250,7 @@ describe('managed agent registry migration', () => {
       '0034_work_composition_resources',
       '0035_product_work_definition_api',
       '0036_agent_definition_metadata',
+      '0037_agent_definition_scope',
     ]);
   });
 

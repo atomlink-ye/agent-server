@@ -57,6 +57,8 @@ export const AgentDefinitionResponseSchema = z
     display_name: z.string().min(1),
     created_at: timestampSchema,
     updated_at: timestampSchema,
+    role_label: z.string().nullable(),
+    summary: z.string().nullable(),
     links: definitionLinksSchema,
   })
   .strict();

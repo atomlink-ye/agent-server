@@ -67,6 +67,7 @@ export const durableKernelMigrationFileNames = [
   '0033_team_activation_provenance.sql',
   '0034_work_composition_resources.sql',
   '0035_product_work_definition_api.sql',
+  '0036_agent_definition_metadata.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

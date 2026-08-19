@@ -225,6 +225,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0033_team_activation_provenance' },
       { version: '0034_work_composition_resources' },
       { version: '0035_product_work_definition_api' },
+      { version: '0036_agent_definition_metadata' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -285,6 +286,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0033_team_activation_provenance' },
       { version: '0034_work_composition_resources' },
       { version: '0035_product_work_definition_api' },
+      { version: '0036_agent_definition_metadata' },
     ]);
   });
 

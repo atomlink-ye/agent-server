@@ -29,6 +29,8 @@ describe('managed agent entities', () => {
       id: 'definition',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      roleLabel: null,
+      summary: null,
     });
     expect(Object.keys(definition)).not.toContain('now');
     expect(Object.prototype.hasOwnProperty.call(definition, 'now')).toBe(false);

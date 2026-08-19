@@ -2,8 +2,10 @@
 // Verifies every BFF route's readProduct()/writeProduct() call path is
 // accepted by product-api-client.ts's own path allowlist regexes, AND
 // that a fixed set of paths that must never be accepted are still
-// rejected (otherwise this script can't tell "the allowlist works" from
-// "the allowlist has been widened into a no-op like /.*/").
+// rejected on BOTH sides (otherwise this script can't tell "the
+// allowlist works" from "the allowlist has been widened into a no-op
+// like /.*/" -- and a regex can be widened independently on either
+// side, so both need their own negative list).
 //
 // Why this exists: the BFF route files (apps/web/app/api/**/route.ts) and
 // the allowlist regexes in product-api-client.ts encode the same fact --
@@ -23,7 +25,7 @@ const apiRoot = path.join(webRoot, 'app', 'api');
 const clientFile = path.join(webRoot, 'lib', 'product-api-client.ts');
 
 // Paths that must NEVER be accepted by productReadPath, no matter how the
-// regex evolves. Catches a regex being widened into something too
+// regex evolves. Catches productReadPath being widened into something too
 // permissive (e.g. `/.*/`), which the positive checks below cannot: a
 // no-op allowlist still accepts every real BFF call path, so it looks
 // like a PASS on the positive side alone.
@@ -32,6 +34,19 @@ const MUST_REJECT_READ = [
   '/api/v1/works/not-a-uuid/definition',
   '/api/v1/nonexistent',
   '../api/v1/works/00000000-0000-4000-8000-000000000000/definition',
+];
+
+// Same idea, but for productWritePath specifically. This is a SEPARATE
+// list, not a rename of the one above: productReadPath and productWritePath
+// are two independent regexes, and a widening of one does not imply a
+// widening of the other -- a check that only exercises the read side
+// would report PASS if the write side alone were widened to /.*/.
+const MUST_REJECT_WRITE = [
+  '/api/v1/works/00000000-0000-4000-8000-000000000000/definition-version/extra',
+  '/api/v1/works/00000000-0000-4000-8000-000000000000/definition',
+  '/api/v1/work-definitions:unknown',
+  '/api/v1/nonexistent',
+  '../api/v1/works',
 ];
 
 let extractedRegexes;
@@ -75,34 +90,45 @@ console.log(
   `Checked ${extracted} readProduct/writeProduct call site(s) against product-api-client.ts's own allowlist regexes.`,
 );
 
-const rejectFailures = [];
-for (const mustReject of MUST_REJECT_READ) {
-  if (productReadPath.test(mustReject)) {
-    rejectFailures.push(mustReject);
-  }
-}
+const readRejectFailures = mustRejectFailures(productReadPath, MUST_REJECT_READ);
 console.log(
-  `Checked ${MUST_REJECT_READ.length} path(s) that must stay rejected by productReadPath (guards against the allowlist being widened into a no-op).`,
+  `Checked ${MUST_REJECT_READ.length} path(s) that must stay rejected by productReadPath (guards against that allowlist being widened into a no-op).`,
 );
 
-if (failures.length > 0 || rejectFailures.length > 0) {
+const writeRejectFailures = mustRejectFailures(productWritePath, MUST_REJECT_WRITE);
+console.log(
+  `Checked ${MUST_REJECT_WRITE.length} path(s) that must stay rejected by productWritePath (same guard, independently, for the write side).`,
+);
+
+if (failures.length > 0 || readRejectFailures.length > 0 || writeRejectFailures.length > 0) {
   if (failures.length > 0) {
     console.error(`FAIL: ${failures.length} BFF route(s) request a path the allowlist rejects:`);
     for (const f of failures) console.error(`  [${f.kind}] ${f.file}: ${f.templatePath}`);
   }
-  if (rejectFailures.length > 0) {
+  if (readRejectFailures.length > 0) {
     console.error(
-      `FAIL: ${rejectFailures.length} path(s) that must be rejected are now accepted by productReadPath ` +
-        '(the allowlist has been widened too far):',
+      `FAIL: ${readRejectFailures.length} path(s) that must be rejected are now accepted by productReadPath ` +
+        '(the read allowlist has been widened too far):',
     );
-    for (const p of rejectFailures) console.error(`  ${p}`);
+    for (const p of readRejectFailures) console.error(`  ${p}`);
+  }
+  if (writeRejectFailures.length > 0) {
+    console.error(
+      `FAIL: ${writeRejectFailures.length} path(s) that must be rejected are now accepted by productWritePath ` +
+        '(the write allowlist has been widened too far):',
+    );
+    for (const p of writeRejectFailures) console.error(`  ${p}`);
   }
   process.exit(1);
 }
 console.log(
-  'PASS: every extracted BFF route path is accepted by the allowlist, and every path that must stay rejected is still rejected.',
+  'PASS: every extracted BFF route path is accepted by the allowlist, and every path that must stay rejected is still rejected on both sides.',
 );
 process.exit(0);
+
+function mustRejectFailures(regex, mustRejectList) {
+  return mustRejectList.filter((p) => regex.test(p));
+}
 
 function check(regex, kind, file, templatePath) {
   // The real getProductApi() strips the query string before testing the

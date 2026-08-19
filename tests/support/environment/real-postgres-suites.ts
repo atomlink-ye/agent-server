@@ -17,4 +17,6 @@ export const realPostgresSuites = [
   'tests/integration/collaboration-activation-member-race.integration.test.ts',
   'tests/integration/collaboration-activation-reconciler-concurrent.integration.test.ts',
   'tests/integration/collaboration-activation-starting-state.integration.test.ts',
+  'tests/integration/chat-conversation-plane-real-pg.integration.test.ts',
+  'tests/integration/chat-conversation-plane-migration-absence.integration.test.ts',
 ] as const satisfies readonly string[];

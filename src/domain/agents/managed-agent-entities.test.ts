@@ -8,6 +8,7 @@ import {
 
 const owner = {
   tenantId: 'tenant',
+  workspaceId: 'workspace',
   principalType: 'service_account',
   principalId: 'principal',
 };

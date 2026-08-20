@@ -1,5 +1,6 @@
 import type { ResolvedSkillPackage } from './skill-catalog.js';
 import type { ExecutionExtensionBinding } from '../ports/execution-plane.js';
+import type { RuntimeToolChatContext } from './runtime-tool-grant-service.js';
 
 export interface RuntimeExtensionBinder {
   bind(input: {
@@ -14,6 +15,8 @@ export interface RuntimeExtensionBinder {
     readonly teamMemberRunId?: string;
     readonly teamRunId?: string;
     readonly contextEpoch?: string;
+    /** Trusted origin for a Chat turn, when this binding serves one. */
+    readonly chatContext?: RuntimeToolChatContext;
     readonly cellCwd?: string;
     readonly skills: readonly ResolvedSkillPackage[];
     /** User/domain tools only. Platform Collaboration tools are auto-mounted. */

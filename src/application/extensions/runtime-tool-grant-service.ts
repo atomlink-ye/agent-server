@@ -17,6 +17,12 @@ export type RuntimeActiveTurn = Readonly<{
   readonly contextEpoch: string;
 }>;
 
+/** Trusted origin of a tool-capable Chat turn. */
+export type RuntimeToolChatContext = Readonly<{
+  readonly conversationId: string;
+  readonly triggerMessageId: string;
+}>;
+
 /**
  * Runtime bearer context.
  *
@@ -31,19 +37,23 @@ export type RuntimeToolGrant = Readonly<{
   readonly principalType: string;
   readonly principalId: string;
   readonly workspaceId: string;
-  readonly productSessionId: string;
+  readonly productSessionId?: string;
+  /** Runtime scope identity; chat grants use the agent_chat runtime session id. */
+  readonly scopeId?: string;
   readonly teamMemberRunId?: string;
   readonly teamRunId?: string;
   readonly allowedTools: readonly string[];
   readonly catalogTools: readonly string[];
   readonly activeTurn: RuntimeActiveTurn | null;
+  readonly chatContext?: RuntimeToolChatContext;
   readonly expiresAt: string;
 }>;
 
 export type RuntimeToolGrantReceipt = Readonly<{
   readonly grantId: string;
   readonly workspaceId: string;
-  readonly productSessionId: string;
+  readonly productSessionId?: string;
+  readonly scopeId: string;
   readonly allowedTools: readonly string[];
   readonly expiresAt: string;
 }>;
@@ -64,13 +74,17 @@ export class RuntimeToolGrantService {
     readonly principalType: string;
     readonly principalId: string;
     readonly workspaceId: string;
-    readonly productSessionId: string;
+    readonly productSessionId?: string;
+    /** Chat/runtime scope id; required when productSessionId is absent. */
+    readonly scopeId?: string;
     readonly taskId?: string;
     readonly runId?: string;
     readonly teamMemberRunId?: string;
     readonly teamRunId?: string;
     readonly allowedTools?: readonly string[];
     readonly catalogTools?: readonly string[];
+    /** Supplied only by the server-side Chat turn admission path. */
+    readonly chatContext?: RuntimeToolChatContext;
     readonly contextEpoch?: string;
     readonly ttlMs?: number;
   }): RuntimeToolGrantIssue {
@@ -79,17 +93,19 @@ export class RuntimeToolGrantService {
       AGENT_SERVER_MEMORY_READ_TOOL_REF,
     ];
     const catalogTools = input.catalogTools ?? allowedTools;
+    const scopeId = resolveScopeId(input);
     validateTools(allowedTools);
     validateTools(catalogTools);
     if (allowedTools.some((tool) => !catalogTools.includes(tool)))
       throw new Error('Runtime grant allowed tools exceed catalog.');
+    if (input.chatContext) validateChatContext(input.chatContext);
 
     const activeTurn = activeTurnFromIssue(input);
     const existing = input.teamMemberRunId
       ? [...this.#grants.values()].filter(
           (candidate) =>
             candidate.teamMemberRunId === input.teamMemberRunId &&
-            candidate.productSessionId === input.productSessionId,
+            candidate.scopeId === scopeId,
         )
       : [];
     if (existing.some((grant) => this.activeToolCalls(grant.grantId) > 0))
@@ -106,7 +122,10 @@ export class RuntimeToolGrantService {
       principalType: input.principalType,
       principalId: input.principalId,
       workspaceId: input.workspaceId,
-      productSessionId: input.productSessionId,
+      ...(input.productSessionId
+        ? { productSessionId: input.productSessionId }
+        : {}),
+      scopeId,
       ...(input.teamMemberRunId
         ? { teamMemberRunId: input.teamMemberRunId }
         : {}),
@@ -114,6 +133,14 @@ export class RuntimeToolGrantService {
       allowedTools: Object.freeze([...allowedTools]),
       catalogTools: Object.freeze([...catalogTools]),
       activeTurn,
+      ...(input.chatContext
+        ? {
+            chatContext: Object.freeze({
+              conversationId: input.chatContext.conversationId,
+              triggerMessageId: input.chatContext.triggerMessageId,
+            }),
+          }
+        : {}),
       expiresAt,
       tokenHash: hashToken(token),
     };
@@ -122,7 +149,10 @@ export class RuntimeToolGrantService {
       receipt: Object.freeze({
         grantId: grant.grantId,
         workspaceId: grant.workspaceId,
-        productSessionId: grant.productSessionId,
+        ...(grant.productSessionId
+          ? { productSessionId: grant.productSessionId }
+          : {}),
+        scopeId: grant.scopeId!,
         allowedTools: grant.allowedTools,
         expiresAt,
       }),
@@ -280,7 +310,7 @@ export class RuntimeToolGrantService {
     const matches = [...this.#grants.values()].filter(
       (grant) =>
         grant.teamMemberRunId === input.teamMemberRunId &&
-        grant.productSessionId === input.scopeId,
+        grant.scopeId === input.scopeId,
     );
     if (matches.length > 1)
       throw new Error('Runtime grant scope is ambiguous.');
@@ -302,7 +332,7 @@ export class RuntimeToolGrantService {
     const matches = [...this.#grants.values()].filter(
       (candidate) =>
         candidate.teamMemberRunId === input.teamMemberRunId &&
-        candidate.productSessionId === input.scopeId,
+        candidate.scopeId === input.scopeId,
     );
     if (matches.length === 0) throw new Error('Runtime grant scope not found.');
     if (matches.length > 1)
@@ -349,6 +379,26 @@ function validateTools(allowedTools: readonly string[]): void {
     allowedTools.some((tool) => !SUPPORTED_MANAGED_AGENT_TOOL_REFS.has(tool))
   )
     throw new Error('Unsupported or duplicate runtime tool ref.');
+}
+
+function validateChatContext(context: RuntimeToolChatContext): void {
+  if (!context.conversationId || !context.triggerMessageId)
+    throw new Error('Chat runtime grant context is incomplete.');
+}
+
+function resolveScopeId(input: {
+  readonly productSessionId?: string;
+  readonly scopeId?: string;
+}): string {
+  if (
+    input.productSessionId &&
+    input.scopeId &&
+    input.productSessionId !== input.scopeId
+  )
+    throw new Error('Runtime grant scope is ambiguous.');
+  const scopeId = input.productSessionId ?? input.scopeId;
+  if (!scopeId) throw new Error('Runtime grant scope is unavailable.');
+  return scopeId;
 }
 
 function publicGrant(grant: StoredGrant): RuntimeToolGrant {

@@ -43,12 +43,28 @@ export class ChatDeliveryReconciler {
       tenantId: dispatch.tenantId,
       conversationId: dispatch.conversationId,
     });
+    const triggerMessage = messages.find(
+      (message) =>
+        message.sequence === dispatch.throughSequence &&
+        message.tenantId === dispatch.tenantId &&
+        message.conversationId === dispatch.conversationId,
+    );
+    if (!triggerMessage) {
+      this.logger?.log('warn', 'chat.delivery.trigger_missing', {
+        dispatch_id: dispatch.id,
+        tenant_id: dispatch.tenantId,
+        conversation_id: dispatch.conversationId,
+        through_sequence: dispatch.throughSequence,
+      });
+      return;
+    }
 
     const reply = await this.provider.runTurn({
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
       agentVersionId: runtime.activeAgentVersionId,
       conversationId: dispatch.conversationId,
+      triggerMessageId: triggerMessage.id,
       instructions: '',
       capabilitySummary: {},
       agentHome: {},

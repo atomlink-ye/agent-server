@@ -89,6 +89,7 @@ export function createDirectMemoryMcpHandler(input: {
         server,
         grant,
         grants: input.grants,
+        chatContext: grant.chatContext ?? null,
       });
       refreshTools = (allowedTools) => {
         void allowedTools;

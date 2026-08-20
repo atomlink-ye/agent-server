@@ -37,6 +37,8 @@ export interface ChatTurnProvider {
     readonly agentDefinitionId: string;
     readonly agentVersionId: string;
     readonly conversationId: string;
+    /** Server-derived durable message that triggered this turn. */
+    readonly triggerMessageId: string;
     readonly instructions: string;
     readonly capabilitySummary: ChatTurnCapabilitySummary;
     readonly agentHome: ChatAgentHomeProjection;

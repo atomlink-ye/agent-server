@@ -78,6 +78,10 @@ import {
 } from './entrypoints/work-chat/worker.js';
 import { PostgresWorkChatWakeStateRepository } from './infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
 import { PostgresConversationWorkLinkRepository } from './modules/work/conversation-work-link-repository.js';
+import { ChatBrainResolver } from './application/chat/chat-brain-resolver.js';
+import { ListAgentHomeEntries } from './application/agents/agent-home.js';
+import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';
+import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -420,10 +424,19 @@ export async function createService(
     config.runtime?.adapter !== 'none'
       ? new ExecutionRuntimeChatTurnProvider(executionRuntime)
       : new MockChatTurnProvider();
+  const chatBrainResolver = new ChatBrainResolver(
+    resourceModule.managedAgentDefinitions,
+    resourceModule.agentResolutionApi,
+    new ListAgentHomeEntries(
+      new PostgresAgentHomeRepository(pool),
+      new PostgresAgentHomeDefinitionSource(pool),
+    ),
+  );
   const chatDeliveryReconciler = new ChatDeliveryReconciler(
     conversations,
     chatDispatches,
     chatTurnProvider,
+    chatBrainResolver,
     logger,
     undefined,
     conversationWorkEntitlements,

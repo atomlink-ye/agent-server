@@ -266,6 +266,18 @@ export class PostgresAgentRegistry implements AgentRegistry {
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
 
+  public async findManagedDefinitionByTenant(input: {
+    readonly tenantId: string;
+    readonly definitionId: string;
+  }): Promise<AgentDefinition | null> {
+    const result = await this.database.query<DefinitionRow>(
+      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
+       WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
+      [input.definitionId, input.tenantId],
+    );
+    return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
+  }
+
   public async findVersion(
     owner: ManagedAgentOwner,
     versionId: string,

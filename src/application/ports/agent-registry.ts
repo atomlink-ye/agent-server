@@ -39,6 +39,11 @@ export interface ManagedAgentDefinitionRead {
     owner: ManagedAgentOwner,
     definitionId: string,
   ): Promise<AgentDefinition | null>;
+  /** Internal delivery seam: tenant-scoped managed identity read. */
+  findManagedDefinitionByTenant(input: {
+    readonly tenantId: string;
+    readonly definitionId: string;
+  }): Promise<AgentDefinition | null>;
 }
 
 export interface ListAgentVersionsCommand {

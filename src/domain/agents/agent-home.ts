@@ -105,7 +105,10 @@ function hasUnpairedSurrogate(value: string): boolean {
 
 export function resolveAgentHomeScopeKey(
   namespace: AgentHomeNamespace,
-  accessContext: AccessContext,
+  accessContext: Pick<
+    AccessContext,
+    'tenantId' | 'workspaceId' | 'principalId'
+  > & { readonly principalType: string },
   scopeParams: AgentHomeScopeParams,
   isWrite: boolean = false,
 ): string {

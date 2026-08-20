@@ -8,9 +8,11 @@ import type {
   ChatDispatchRepository,
 } from '../ports/chat-dispatch-repository.js';
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
+import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import { ChatDeliveryReconciler } from './chat-delivery-reconciler.js';
+import { ChatBrainResolver } from './chat-brain-resolver.js';
 
 class FakeConversationRepository implements ConversationRepository {
   private runtimes = new Map<string, AgentChatRuntime>();
@@ -163,6 +165,41 @@ class FakeChatTurnProvider implements ChatTurnProvider {
   }
 }
 
+function createTestBrainResolver(): ChatBrainResolver {
+  const managedDefinitions = {
+    findManagedDefinitionByTenant: async (input: {
+      readonly tenantId: string;
+      readonly definitionId: string;
+    }) =>
+      Object.freeze({
+        id: input.definitionId,
+        tenantId: input.tenantId,
+        workspaceId: 'workspace-test',
+        principalType: 'service_account',
+        principalId: 'service-account-test',
+        normalizedName: 'test-agent',
+        displayName: 'Test Agent',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        roleLabel: null,
+        summary: null,
+      }),
+  };
+  const agentResolution: AgentResolutionApi = {
+    resolvePublished: async (versionId) => ({
+      source: 'managed',
+      id: versionId,
+      instructions: 'test instructions',
+      modelPolicyRef: 'free-only',
+      skills: [],
+      toolRefs: [],
+    }),
+  };
+  return new ChatBrainResolver(managedDefinitions, agentResolution, {
+    execute: async () => [],
+  });
+}
+
 describe('ChatDeliveryReconciler', () => {
   it('1. golden path: processes one dispatch and materialized agent reply', async () => {
     const convRepo = new FakeConversationRepository();
@@ -217,6 +254,7 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
       undefined,
       () => new Date('2026-07-22T10:00:00Z'),
     );
@@ -316,6 +354,7 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -356,6 +395,7 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -449,6 +489,7 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
     );
 
     const processed = await reconciler.reconcilePendingDispatches(50);

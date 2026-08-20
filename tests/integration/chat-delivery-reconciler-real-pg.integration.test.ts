@@ -8,6 +8,8 @@ import {
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
+import { ChatBrainResolver } from '../../src/application/chat/chat-brain-resolver.js';
+import type { AgentResolutionApi } from '../../src/application/ports/agent-resolution-api.js';
 import { MockChatTurnProvider } from '../../src/adapters/chat/mock-chat-turn-provider.js';
 import { postConversationMessage } from '../../src/application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../src/application/chat/enqueue-chat-dispatch.js';
@@ -32,6 +34,41 @@ const principalAuthor = (
   principalType: 'service_account',
   principalId,
 });
+
+function createTestBrainResolver(): ChatBrainResolver {
+  const managedDefinitions = {
+    findManagedDefinitionByTenant: async (input: {
+      readonly tenantId: string;
+      readonly definitionId: string;
+    }) =>
+      Object.freeze({
+        id: input.definitionId,
+        tenantId: input.tenantId,
+        workspaceId: 'workspace-test',
+        principalType: 'service_account',
+        principalId: 'service-account-test',
+        normalizedName: 'test-agent',
+        displayName: 'Test Agent',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        roleLabel: null,
+        summary: null,
+      }),
+  };
+  const agentResolution: AgentResolutionApi = {
+    resolvePublished: async (versionId) => ({
+      source: 'managed',
+      id: versionId,
+      instructions: 'test instructions',
+      modelPolicyRef: 'free-only',
+      skills: [],
+      toolRefs: [],
+    }),
+  };
+  return new ChatBrainResolver(managedDefinitions, agentResolution, {
+    execute: async () => [],
+  });
+}
 
 describe('Chat delivery reconciler on real PostgreSQL', () => {
   let pool: Pool;
@@ -101,6 +138,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       convRepo,
       dispatchRepo,
       new MockChatTurnProvider(),
+      createTestBrainResolver(),
     );
     const processed = await reconciler.reconcilePendingDispatches(50);
     expect(processed).toBe(1);
@@ -187,6 +225,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       convRepo,
       dispatchRepo,
       new MockChatTurnProvider(),
+      createTestBrainResolver(),
     );
     await reconciler.reconcilePendingDispatches(50);
 
@@ -263,6 +302,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       convRepo,
       dispatchRepo,
       new MockChatTurnProvider(),
+      createTestBrainResolver(),
     );
     await reconciler.reconcilePendingDispatches(50);
 

@@ -45,9 +45,9 @@ function buildSystemPrompt(
     `Trigger message ID: ${input.triggerMessageId}`,
     `Agent definition ID: ${input.agentDefinitionId}`,
     `Agent version ID: ${input.agentVersionId}`,
-    `\nTRUSTED AGENT INSTRUCTIONS:\n${input.instructions}`,
-    `\nCAPABILITY SUMMARY:\n${deterministicJson(input.capabilitySummary)}`,
-    `\nALLOWLISTED AGENT HOME PROJECTION:\n${deterministicJson(input.agentHome)}`,
+    `\nTRUSTED AGENT INSTRUCTIONS:\n${input.brain.instructions}`,
+    `\nCAPABILITY SUMMARY:\n${deterministicJson(input.brain.capabilitySummary)}`,
+    `\nALLOWLISTED AGENT HOME PROJECTION:\n${deterministicJson(input.brain.agentHome)}`,
   ].join('\n');
 }
 

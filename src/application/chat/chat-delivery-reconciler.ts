@@ -8,12 +8,14 @@ import {
   AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../agents/built-in-skills.js';
 import type { Logger } from '../../shared/observability/logger.js';
+import type { ChatBrainResolver } from './chat-brain-resolver.js';
 
 export class ChatDeliveryReconciler {
   public constructor(
     private readonly conversations: ConversationRepository,
     private readonly dispatches: ChatDispatchRepository,
     private readonly provider: ChatTurnProvider,
+    private readonly brainResolver: ChatBrainResolver,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
@@ -67,6 +69,13 @@ export class ChatDeliveryReconciler {
       return;
     }
 
+    const brain = await this.brainResolver.resolve({
+      tenantId: dispatch.tenantId,
+      agentDefinitionId: dispatch.agentDefinitionId,
+      conversationId: dispatch.conversationId,
+      runtime,
+    });
+
     const entitlement = this.workEntitlements
       ? await this.workEntitlements.resolveForChatTurn({
           tenantId: dispatch.tenantId,
@@ -103,9 +112,7 @@ export class ChatDeliveryReconciler {
       agentVersionId: runtime.activeAgentVersionId,
       conversationId: dispatch.conversationId,
       triggerMessageId: triggerMessage.id,
-      instructions: '',
-      capabilitySummary: {},
-      agentHome: {},
+      brain,
       messages: messages.map((message) => ({
         authorType: message.authorType,
         authorId: message.authorId,

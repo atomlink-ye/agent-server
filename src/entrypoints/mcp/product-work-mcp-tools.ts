@@ -8,11 +8,12 @@ import type {
 } from '../../application/extensions/runtime-tool-grant-service.js';
 import { ListAgentWorkflows } from '../../application/work/list-agent-workflows.js';
 import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
-import type {
-  WorkDefinitionSourceRepository,
-} from '../../application/ports/work-definition-source-repository.js';
+import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
-import type { ChatWorkOriginRef } from '../../domain/chat/chat-work-origin-ref.js';
+import type {
+  ConversationWorkLinkRepository,
+  ConversationWorkOrigin,
+} from '../../domain/chat/chat-work-origin-ref.js';
 import {
   toExecutionReceiptResponse,
   toWorkResponse,
@@ -36,10 +37,14 @@ const startInput = {
   work_id: z.string().uuid(),
   trigger_kind: z.literal('manual'),
   trigger_ref: z.string().min(1).max(256).optional(),
-  chat_origin: z.object({
-    conversation_id: z.string().uuid(),
-    trigger_message_id: z.string().uuid(),
-  }).optional(),
+  // Kept for the grant-context cutover in Lane 4. It is not trusted for
+  // durable conversation linkage in this slice.
+  chat_origin: z
+    .object({
+      conversation_id: z.string().uuid(),
+      trigger_message_id: z.string().uuid(),
+    })
+    .optional(),
 };
 const strictCreateInput = z.strictObject(createInput);
 const strictStartInput = z.strictObject(startInput);
@@ -54,7 +59,14 @@ export async function executeProductWorkRunStart(
   args: StartInput,
   deps: {
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+    /** Compatibility seam for the existing conversation module. */
     readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
+    readonly conversationWorkLinks?: Pick<
+      ConversationWorkLinkRepository,
+      'linkWorkToConversation'
+    >;
+    /** Origin supplied by the trusted server/grant context, not tool args. */
+    readonly conversationOrigin?: ConversationWorkOrigin;
     readonly current: {
       readonly tenantId: string;
       readonly workspaceId: string;
@@ -64,10 +76,14 @@ export async function executeProductWorkRunStart(
 ): Promise<
   | {
       readonly isError: true;
-      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
     }
   | {
-      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
     }
 > {
   const { current } = deps;
@@ -84,25 +100,17 @@ export async function executeProductWorkRunStart(
     ...(args.trigger_ref !== undefined ? { triggerRef: args.trigger_ref } : {}),
   });
 
-  if (args.chat_origin) {
-    if (!deps.conversations)
+  if (deps.conversationOrigin) {
+    if (!deps.conversationWorkLinks)
       return {
         isError: true,
         content: [{ type: 'text', text: 'not_found' }],
       };
-    const chatRef: ChatWorkOriginRef = {
-      conversationId: args.chat_origin.conversation_id,
-      triggerMessageId: args.chat_origin.trigger_message_id,
-      workId: result.workRun.workId,
-      workRunId: result.workRun.id,
-    };
-    await deps.conversations.appendMessage({
+    await deps.conversationWorkLinks.linkWorkToConversation({
       tenantId: current.tenantId,
-      conversationId: args.chat_origin.conversation_id,
-      authorType: 'agent_definition',
-      authorId: current.principalId,
-      body: `Started work run ${result.workRun.id}`,
-      workRef: JSON.stringify(chatRef),
+      workspaceId: current.workspaceId,
+      workId: result.workRun.workId,
+      conversationId: deps.conversationOrigin.conversationId,
     });
   }
 
@@ -112,7 +120,9 @@ export async function executeProductWorkRunStart(
         type: 'text',
         text: JSON.stringify({
           work_run: toWorkRunResponse(result.workRun),
-          execution_receipt: toExecutionReceiptResponse(result.executionReceipt),
+          execution_receipt: toExecutionReceiptResponse(
+            result.executionReceipt,
+          ),
         }),
       },
     ],
@@ -126,7 +136,14 @@ export function registerProductWorkMcpTools(input: {
   readonly workIdentity: Pick<WorkIdentityApi, 'createWork'>;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
   readonly definitions?: WorkDefinitionSourceRepository;
+  /** Compatibility seam for the existing conversation module. */
   readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
+  readonly conversationWorkLinks?: Pick<
+    ConversationWorkLinkRepository,
+    'linkWorkToConversation'
+  >;
+  /** Origin supplied by the trusted server/grant context, not tool args. */
+  readonly conversationOrigin?: ConversationWorkOrigin;
 }): void {
   const { server, grant, grants } = input;
   if (grant.catalogTools.includes(PRODUCT_WORK_CREATE_TOOL_REF))
@@ -203,6 +220,12 @@ export function registerProductWorkMcpTools(input: {
             startWorkRun: input.startWorkRun,
             ...(input.conversations
               ? { conversations: input.conversations }
+              : {}),
+            ...(input.conversationWorkLinks
+              ? { conversationWorkLinks: input.conversationWorkLinks }
+              : {}),
+            ...(input.conversationOrigin
+              ? { conversationOrigin: input.conversationOrigin }
               : {}),
             current: {
               tenantId: current.tenantId,
@@ -309,7 +332,9 @@ export function registerProductWorkMcpTools(input: {
           const describeWorkflow = new DescribeWorkflow(input.definitions);
           const result = await describeWorkflow.execute({
             definitionId: args.definition_id,
-            ...(args.version_id !== undefined ? { versionId: args.version_id } : {}),
+            ...(args.version_id !== undefined
+              ? { versionId: args.version_id }
+              : {}),
             accessContext: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,
@@ -332,11 +357,13 @@ export function registerProductWorkMcpTools(input: {
                     id: result.version.version.id,
                     definitionId: result.version.version.definitionId,
                   },
-                  input_contract: result.inputContract ? {
-                    name: result.inputContract.name,
-                    description: result.inputContract.description,
-                    schema: result.inputContract.schema,
-                  } : null,
+                  input_contract: result.inputContract
+                    ? {
+                        name: result.inputContract.name,
+                        description: result.inputContract.description,
+                        schema: result.inputContract.schema,
+                      }
+                    : null,
                 }),
               },
             ],

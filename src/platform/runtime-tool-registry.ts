@@ -10,7 +10,7 @@ export interface RuntimeToolContributionContext {
   readonly grant: RuntimeToolGrant;
   readonly grants: RuntimeToolGrantService;
   /** Trusted Chat origin, never sourced from MCP tool arguments. */
-  readonly chatContext: RuntimeToolChatContext | null;
+  readonly chatContext?: RuntimeToolChatContext;
 }
 
 export type RuntimeToolContributor = (

@@ -10,6 +10,8 @@ describe('loadConfig', () => {
       port: 3_000,
       logLevel: 'info',
       serviceName: 'agent-server',
+      directChatPlane: 'execution_runtime',
+      productWorkPlane: 'execution_runtime',
       runtime: {
         adapter: 'paseo',
       },

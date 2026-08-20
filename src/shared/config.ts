@@ -126,7 +126,15 @@ const ConfigSchema = z
     PORT: z.coerce.number().int().min(1).max(65_535).default(3_000),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     SERVICE_NAME: z.string().min(1).default('agent-server'),
-    CHAT_TURN_PROVIDER: z.enum(['mock', 'execution_runtime']).optional(),
+    // The legacy provider switch was ambiguous about which product surface it
+    // enabled. Reject it instead of silently accepting a second declaration.
+    CHAT_TURN_PROVIDER: z.never().optional(),
+    AGENT_SERVER_DIRECT_CHAT_PLANE: z
+      .enum(['absent', 'mock', 'execution_runtime'])
+      .default('execution_runtime'),
+    AGENT_SERVER_PRODUCT_WORK_PLANE: z
+      .enum(['absent', 'execution_runtime'])
+      .default('execution_runtime'),
     RUNTIME_ADAPTER: z.enum(['none', 'paseo']).default('paseo'),
     RUNTIME_MCP_LISTEN_HOST: z.string().min(1).default('127.0.0.1'),
     RUNTIME_MCP_ADVERTISED_HOST: z.string().min(1).default('127.0.0.1'),
@@ -263,7 +271,14 @@ export type AppConfig = Readonly<{
   port: number;
   logLevel: z.infer<typeof ConfigSchema>['LOG_LEVEL'];
   serviceName: string;
-  chatTurnProvider?: z.infer<typeof ConfigSchema>['CHAT_TURN_PROVIDER'];
+  /** Explicit Direct Chat bridge declaration; this does not cover generic Runs/Tasks. */
+  directChatPlane: z.infer<
+    typeof ConfigSchema
+  >['AGENT_SERVER_DIRECT_CHAT_PLANE'];
+  /** Explicit Product Work declaration; this does not cover generic Runs/Tasks/Sessions/Team execution. */
+  productWorkPlane: z.infer<
+    typeof ConfigSchema
+  >['AGENT_SERVER_PRODUCT_WORK_PLANE'];
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
@@ -328,9 +343,8 @@ export function loadConfig(
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
-    ...(parsed.data.CHAT_TURN_PROVIDER
-      ? { chatTurnProvider: parsed.data.CHAT_TURN_PROVIDER }
-      : {}),
+    directChatPlane: parsed.data.AGENT_SERVER_DIRECT_CHAT_PLANE,
+    productWorkPlane: parsed.data.AGENT_SERVER_PRODUCT_WORK_PLANE,
     runtime: {
       adapter: parsed.data.RUNTIME_ADAPTER,
     },

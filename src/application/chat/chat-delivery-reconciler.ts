@@ -17,10 +17,8 @@ export class ChatDeliveryReconciler {
     private readonly dispatches: ChatDispatchRepository,
     private readonly provider: ChatTurnProvider,
     private readonly brainResolver: ChatBrainResolver,
-    private readonly conversationWorkLinks: Pick<
-      ConversationWorkLinkRepository,
-      'findWorkIdsByOrigin'
-    >,
+    private readonly conversationWorkLinks:
+      Pick<ConversationWorkLinkRepository, 'findWorkIdsByOrigin'> | undefined,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
@@ -126,11 +124,13 @@ export class ChatDeliveryReconciler {
       ...(extensions ? { extensions } : {}),
     });
 
-    const workIds = await this.conversationWorkLinks.findWorkIdsByOrigin({
-      tenantId: dispatch.tenantId,
-      conversationId: dispatch.conversationId,
-      triggerMessageId: triggerMessage.id,
-    });
+    const workIds = this.conversationWorkLinks
+      ? await this.conversationWorkLinks.findWorkIdsByOrigin({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          triggerMessageId: triggerMessage.id,
+        })
+      : [];
     const workRef = workIds.length === 1 ? workIds[0]! : null;
     if (workIds.length > 1) {
       this.logger?.log('warn', 'chat.delivery.ambiguous_work_provenance', {

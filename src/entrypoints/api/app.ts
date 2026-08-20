@@ -126,6 +126,10 @@ export interface AppDependencies {
 export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   const app = new Hono<ApiEnvironment>();
   const version = dependencies.version ?? '0.1.0';
+  // These declarations gate only the Direct Chat/Product Work composition.
+  // Generic /runs, /tasks, Sessions, and Team execution remain composed below.
+  const directChatPlane = dependencies.config.directChatPlane;
+  const productWorkPlane = dependencies.config.productWorkPlane;
 
   app.use('*', async (context, next) => {
     const requestId = context.req.header('x-request-id') ?? randomUUID();
@@ -167,10 +171,15 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   });
   registerRunRoutes(app, dependencies);
   registerTaskRoutes(app, dependencies);
-  dependencies.workModule?.installHttp(app, dependencies.config, {
-    ...(dependencies.teamDriver ? { teamDriver: dependencies.teamDriver } : {}),
-    ...(dependencies.teamExecutions ? { teamExecutions: dependencies.teamExecutions } : {}),
-  });
+  if (productWorkPlane !== 'absent')
+    dependencies.workModule?.installHttp(app, dependencies.config, {
+      ...(dependencies.teamDriver
+        ? { teamDriver: dependencies.teamDriver }
+        : {}),
+      ...(dependencies.teamExecutions
+        ? { teamExecutions: dependencies.teamExecutions }
+        : {}),
+    });
   if (dependencies.memoryModule) {
     dependencies.memoryModule.installHttp(app, dependencies.config);
   } else {
@@ -269,7 +278,11 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
   const managedAgentDefinitions =
     dependencies.managedAgentDefinitions ??
     dependencies.resourceModule?.managedAgentDefinitions;
-  if (dependencies.conversations && dependencies.chatDispatches) {
+  if (
+    directChatPlane !== 'absent' &&
+    dependencies.conversations &&
+    dependencies.chatDispatches
+  ) {
     if (!managedAgentDefinitions)
       throw new Error(
         'conversation_routes_require_managed_agent_definition_read',
@@ -279,7 +292,8 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       conversations: dependencies.conversations,
       dispatches: dependencies.chatDispatches,
       managedAgentDefinitions,
-      ...(dependencies.conversationWorkEntitlements
+      ...(productWorkPlane !== 'absent' &&
+      dependencies.conversationWorkEntitlements
         ? { workEntitlements: dependencies.conversationWorkEntitlements }
         : {}),
     });

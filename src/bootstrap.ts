@@ -68,6 +68,7 @@ import { createTeamModule } from './modules/team/team-module.js';
 import { createWorkModule } from './modules/work/work-module.js';
 import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
+import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
 import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
 
 export interface ServiceResources {
@@ -277,27 +278,6 @@ export async function createService(
   const sessions = new PostgresSessionRepository(pool);
   const conversations = new PostgresConversationRepository(pool);
   const chatDispatches = new PostgresChatDispatchRepository(pool);
-  const chatDeliveryReconciler = new ChatDeliveryReconciler(
-    conversations,
-    chatDispatches,
-    new MockChatTurnProvider(),
-    logger,
-  );
-  const chatWorker = new ChatDeliveryWorker(
-    chatDispatches,
-    chatDeliveryReconciler,
-    {
-      workerId: `${workerId}:chat`,
-      leaseMs: leaseDurationMs,
-      onError: ({ phase, errorName }) => {
-        logger.log('error', 'chat.delivery_worker.failed', {
-          phase,
-          error_name: errorName,
-          worker_id: `${workerId}:chat`,
-        });
-      },
-    },
-  );
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
@@ -391,6 +371,31 @@ export async function createService(
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
+  const chatTurnProvider =
+    options.singleRunDebug || config.runtime?.adapter === 'none'
+      ? new MockChatTurnProvider()
+      : new ExecutionRuntimeChatTurnProvider(executionRuntime);
+  const chatDeliveryReconciler = new ChatDeliveryReconciler(
+    conversations,
+    chatDispatches,
+    chatTurnProvider,
+    logger,
+  );
+  const chatWorker = new ChatDeliveryWorker(
+    chatDispatches,
+    chatDeliveryReconciler,
+    {
+      workerId: `${workerId}:chat`,
+      leaseMs: leaseDurationMs,
+      onError: ({ phase, errorName }) => {
+        logger.log('error', 'chat.delivery_worker.failed', {
+          phase,
+          error_name: errorName,
+          worker_id: `${workerId}:chat`,
+        });
+      },
+    },
+  );
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(
     executionRuntime,
   );

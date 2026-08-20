@@ -6,6 +6,13 @@ import type {
   RuntimeToolGrant,
   RuntimeToolGrantService,
 } from '../../application/extensions/runtime-tool-grant-service.js';
+import { ListAgentWorkflows } from '../../application/work/list-agent-workflows.js';
+import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
+import type {
+  WorkDefinitionSourceRepository,
+} from '../../application/ports/work-definition-source-repository.js';
+import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
+import type { ChatWorkOriginRef } from '../../domain/chat/chat-work-origin-ref.js';
 import {
   toExecutionReceiptResponse,
   toWorkResponse,
@@ -15,6 +22,10 @@ import {
 export const PRODUCT_WORK_CREATE_TOOL_REF = 'agent-server/product-work-create';
 export const PRODUCT_WORK_RUN_START_TOOL_REF =
   'agent-server/product-work-run-start';
+export const PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF =
+  'agent-server/list-agent-workflows';
+export const PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF =
+  'agent-server/describe-workflow';
 
 const createInput = {
   definition_id: z.string().uuid(),
@@ -25,6 +36,10 @@ const startInput = {
   work_id: z.string().uuid(),
   trigger_kind: z.literal('manual'),
   trigger_ref: z.string().min(1).max(256).optional(),
+  chat_origin: z.object({
+    conversation_id: z.string().uuid(),
+    trigger_message_id: z.string().uuid(),
+  }).optional(),
 };
 const strictCreateInput = z.strictObject(createInput);
 const strictStartInput = z.strictObject(startInput);
@@ -37,6 +52,8 @@ export function registerProductWorkMcpTools(input: {
   readonly grants: RuntimeToolGrantService;
   readonly workIdentity: Pick<WorkIdentityApi, 'createWork'>;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+  readonly definitions?: WorkDefinitionSourceRepository;
+  readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
 }): void {
   const { server, grant, grants } = input;
   if (grant.catalogTools.includes(PRODUCT_WORK_CREATE_TOOL_REF))
@@ -123,6 +140,31 @@ export function registerProductWorkMcpTools(input: {
               ? { triggerRef: args.trigger_ref }
               : {}),
           });
+
+          // Handle chat provenance if present
+          if (args.chat_origin) {
+            if (!input.conversations) {
+              return {
+                isError: true,
+                content: [{ type: 'text', text: 'not_found' }],
+              };
+            }
+            const chatRef: ChatWorkOriginRef = {
+              conversationId: args.chat_origin.conversation_id,
+              triggerMessageId: args.chat_origin.trigger_message_id,
+              workId: result.workRun.id,
+              workRunId: result.workRun.id,
+            };
+            await input.conversations.appendMessage({
+              tenantId: current.tenantId,
+              conversationId: args.chat_origin.conversation_id,
+              authorType: 'agent_definition',
+              authorId: current.principalId,
+              body: `Started work run ${result.workRun.id}`,
+              workRef: JSON.stringify(chatRef),
+            });
+          }
+
           return {
             content: [
               {
@@ -132,6 +174,137 @@ export function registerProductWorkMcpTools(input: {
                   execution_receipt: toExecutionReceiptResponse(
                     result.executionReceipt,
                   ),
+                }),
+              },
+            ],
+          };
+        } finally {
+          grants.endToolCall(current.grantId);
+        }
+      },
+    );
+  if (grant.catalogTools.includes(PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF))
+    (server.registerTool as any)(
+      'list_agent_workflows',
+      {
+        description: 'List workflows associated with an agent.',
+        inputSchema: z.strictObject({
+          agent_definition_id: z.string().min(1),
+        }),
+      },
+      async (args: { agent_definition_id: string }) => {
+        const current = grants.get(grant.grantId);
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
+        grants.beginToolCall(current.grantId);
+        try {
+          if (!input.definitions) {
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
+          }
+          const listWorkflows = new ListAgentWorkflows(input.definitions);
+          const result = await listWorkflows.execute({
+            agentDefinitionId: args.agent_definition_id,
+            accessContext: {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+              principalType: 'service_account',
+              principalId: current.principalId,
+              policySnapshotVersion: 'runtime-mcp',
+            },
+          });
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  definitions: result.definitions.map((d) => ({
+                    id: d.id,
+                    name: d.name,
+                    description: d.description,
+                  })),
+                }),
+              },
+            ],
+          };
+        } finally {
+          grants.endToolCall(current.grantId);
+        }
+      },
+    );
+  if (grant.catalogTools.includes(PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF))
+    (server.registerTool as any)(
+      'describe_workflow',
+      {
+        description: 'Get detailed information about a workflow.',
+        inputSchema: z.strictObject({
+          definition_id: z.string().min(1),
+          version_id: z.string().min(1).optional(),
+        }),
+      },
+      async (args: { definition_id: string; version_id?: string }) => {
+        const current = grants.get(grant.grantId);
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
+        grants.beginToolCall(current.grantId);
+        try {
+          if (!input.definitions) {
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
+          }
+          const describeWorkflow = new DescribeWorkflow(input.definitions);
+          const result = await describeWorkflow.execute({
+            definitionId: args.definition_id,
+            ...(args.version_id !== undefined ? { versionId: args.version_id } : {}),
+            accessContext: {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+              principalType: 'service_account',
+              principalId: current.principalId,
+              policySnapshotVersion: 'runtime-mcp',
+            },
+          });
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  definition: {
+                    id: result.definition.id,
+                    name: result.definition.name,
+                    description: result.definition.description,
+                  },
+                  version: {
+                    id: result.version.version.id,
+                    definitionId: result.version.version.definitionId,
+                  },
+                  input_contract: result.inputContract ? {
+                    name: result.inputContract.name,
+                    description: result.inputContract.description,
+                    schema: result.inputContract.schema,
+                  } : null,
                 }),
               },
             ],

@@ -215,6 +215,7 @@ export function createWorkModule(options: {
         ...context,
         workIdentity,
         startWorkRun,
+        definitions: definitionSources,
       });
     },
   };

@@ -95,4 +95,16 @@ export interface WorkDefinitionSourceRepository {
     readonly resolvedFingerprint: string;
     readonly now: string;
   }): Promise<WorkDefinitionApplyRequestRecord>;
+  associateAgentWorkflow?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+    readonly definitionId: string;
+    readonly now: string;
+  }): Promise<void>;
+  listDefinitionsForAgent?(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<readonly WorkDefinitionSourceDefinition[]>;
 }

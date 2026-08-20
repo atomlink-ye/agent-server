@@ -128,7 +128,12 @@ const ConfigSchema = z
     SERVICE_NAME: z.string().min(1).default('agent-server'),
     // The legacy provider switch was ambiguous about which product surface it
     // enabled. Reject it instead of silently accepting a second declaration.
-    CHAT_TURN_PROVIDER: z.never().optional(),
+    CHAT_TURN_PROVIDER: z
+      .never({
+        error:
+          'has been replaced by AGENT_SERVER_DIRECT_CHAT_PLANE (absent|mock|execution_runtime). Remove CHAT_TURN_PROVIDER from your environment/compose.',
+      })
+      .optional(),
     AGENT_SERVER_DIRECT_CHAT_PLANE: z
       .enum(['absent', 'mock', 'execution_runtime'])
       .default('execution_runtime'),

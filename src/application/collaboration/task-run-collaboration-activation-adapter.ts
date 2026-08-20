@@ -20,6 +20,15 @@ import {
   workRef,
 } from '../../domain/collaboration/collaboration.js';
 
+export class CollaborationRootTaskStaleReadError extends Error {
+  public constructor(public readonly rootTaskId: string) {
+    super(
+      `Collaboration root task ${rootTaskId} was concurrently modified after it was read for activation.`,
+    );
+    this.name = 'CollaborationRootTaskStaleReadError';
+  }
+}
+
 /**
  * Mechanical adapter from provider-neutral ParticipantActivation to the
  * canonical durable Task/Run kernel. It knows Team persistence, but no provider
@@ -44,6 +53,7 @@ export class TaskRunCollaborationActivationAdapter {
   }): Promise<{ readonly taskId: string; readonly runId: string }> {
     const rootTask = await this.tasks.findById(input.team.rootTaskId);
     if (!rootTask) throw new Error('Collaboration root task is missing.');
+    const rootTaskSeenAt = rootTask.updatedAt;
     const parent = input.parentTask ?? rootTask;
     const causeMessageIds = Object.freeze([
       ...(input.plan.primaryWorkMessage
@@ -53,6 +63,11 @@ export class TaskRunCollaborationActivationAdapter {
     ]);
 
     return this.admission.withTransaction(async (tx) => {
+      const freshRootTask = await tx.tasks.findById(input.team.rootTaskId);
+      if (!freshRootTask || freshRootTask.updatedAt !== rootTaskSeenAt) {
+        throw new CollaborationRootTaskStaleReadError(input.team.rootTaskId);
+      }
+
       const materializedTeam = input.plan.finalReview
         ? await this.advanceLead(input, tx)
         : input.team;

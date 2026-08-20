@@ -134,7 +134,7 @@ function setup(
   const withTransaction = vi.fn(
     async (operation: (tx: any) => Promise<unknown>) =>
       operation({
-        tasks: { save: saveTask },
+        tasks: { save: saveTask, findById: vi.fn(async () => rootTask) },
         runs: { save: saveRun },
         teamMessages: { bindToTask },
         teamExecutions: { materializeAttempt, updateMemberRunStatus },

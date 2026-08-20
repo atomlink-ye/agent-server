@@ -253,6 +253,7 @@ describe('managed agent registry migration', () => {
       '0037_agent_definition_scope',
       '0038_chat_conversation_plane',
       '0039_chat_delivery_outbox',
+      '0040_agent_home_vfs',
     ]);
   });
 

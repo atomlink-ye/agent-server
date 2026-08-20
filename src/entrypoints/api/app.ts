@@ -51,6 +51,10 @@ import {
   registerMemoryApiRoutes,
   type MemoryApiRouteDependencies,
 } from './routes/memory-api.js';
+import {
+  registerAgentHomeRoutes,
+  type AgentHomeRouteDependencies,
+} from './routes/agent-home.js';
 import { registerLearningProposalRoutes } from './routes/learning-proposals.js';
 import { ProjectAgenticTeam } from '../../application/teams/project-agentic-team.js';
 import type { TeamDriver } from '../../application/teams/team-driver.js';
@@ -99,6 +103,7 @@ export interface AppDependencies {
   readonly cancelTask?: CancelTask;
   readonly managedMemory?: MemoryWorkspaceHttpApi['managedMemory'];
   readonly memoryApi?: Omit<MemoryApiRouteDependencies, 'config'>;
+  readonly agentHomeApi?: Omit<AgentHomeRouteDependencies, 'config'>;
   readonly version?: string;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
   readonly memoryModule?: Pick<MemoryModule, 'installHttp'>;
@@ -175,6 +180,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       registerMemoryApiRoutes(app, {
         config: dependencies.config,
         ...dependencies.memoryApi,
+      });
+    }
+    if (dependencies.agentHomeApi) {
+      registerAgentHomeRoutes(app, {
+        config: dependencies.config,
+        ...dependencies.agentHomeApi,
       });
     }
     if (

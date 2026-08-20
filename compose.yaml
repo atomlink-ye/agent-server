@@ -25,6 +25,11 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
+    # Development Compose is the only server deployment defined in this
+    # repository. Keep startup fail-fast, but let Compose retry a process that
+    # lost the Postgres readiness race instead of leaving the stack permanently
+    # health-starting under node --watch.
+    restart: on-failure
     depends_on:
       postgres:
         condition: service_healthy

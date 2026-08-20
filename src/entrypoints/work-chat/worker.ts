@@ -1,8 +1,6 @@
-/**
- * Entrypoint-facing export. Composition is intentionally left to the host
- * because the work/conversation link resolver is not available in this lane.
- */
+/** Entrypoint-facing exports; the host supplies the scoped link repository. */
 export {
+  createWorkChatConversationResolver,
   createWorkChatWakeWorker,
   WorkChatWakeWorker,
 } from '../../application/work-chat/work-chat-wake-worker.js';

@@ -2,6 +2,7 @@ import type {
   ChatWorkCard,
   ChatWorkCardProjection,
 } from '../product-projection/chat-work-card-projection.js';
+import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeWorkKey,
@@ -9,15 +10,26 @@ import type {
 
 export interface WorkChatConversationLink {
   readonly conversationId: string;
-  readonly agentDefinitionId: string;
-  readonly activeAgentVersionId: string;
 }
 
-/** Narrow Lane 2 seam; no lookup or storage is assumed here. */
+/** Narrow adapter over Lane 2's tenant/workspace/work-scoped link repository. */
 export interface WorkChatConversationResolver {
-  resolve(
-    input: WorkChatWakeWorkKey,
-  ): Promise<readonly WorkChatConversationLink[]>;
+  resolve(input: WorkChatWakeWorkKey): Promise<WorkChatConversationLink | null>;
+}
+
+export function createWorkChatConversationResolver(
+  links: Pick<ConversationWorkLinkRepository, 'findConversationIdByWork'>,
+): WorkChatConversationResolver {
+  return {
+    async resolve(input) {
+      const conversationId = await links.findConversationIdByWork({
+        tenantId: input.tenantId,
+        workspaceId: input.workspaceId,
+        workId: input.workId,
+      });
+      return conversationId ? { conversationId } : null;
+    },
+  };
 }
 
 export interface WorkChatWakeWorkSource {
@@ -27,8 +39,14 @@ export interface WorkChatWakeWorkSource {
 export interface WorkChatWakeWorkerOptions {
   readonly pollIntervalMs?: number;
   readonly now?: () => Date;
+  /** Readiness hook only; it must not be used to bypass the durable Chat grant. */
+  readonly onEligibleTransition?: (event: {
+    readonly key: WorkChatWakeWorkKey;
+    readonly card: ChatWorkCard;
+    readonly conversationId: string;
+  }) => void | Promise<void>;
   readonly onError?: (failure: {
-    readonly phase: 'poll' | 'project' | 'loop';
+    readonly phase: 'poll' | 'project' | 'link' | 'ready' | 'loop';
     readonly errorName: string;
   }) => void;
 }
@@ -37,14 +55,18 @@ export interface WorkChatWakeWorkerDependencies {
   readonly workSource: WorkChatWakeWorkSource;
   readonly state: WorkChatWakeStateRepository;
   readonly projection: Pick<ChatWorkCardProjection, 'getByWorkId'>;
-  /** Omit until Lane 2's conversation-link resolver is available. */
-  readonly resolver?: WorkChatConversationResolver;
+  readonly conversationWorkLinks: Pick<
+    ConversationWorkLinkRepository,
+    'findConversationIdByWork'
+  >;
 }
 
 /** Polls product cards and records each changed observed state once. */
 export class WorkChatWakeWorker {
   readonly #dependencies: WorkChatWakeWorkerDependencies;
+  readonly #conversationResolver: WorkChatConversationResolver;
   readonly #options: Required<Pick<WorkChatWakeWorkerOptions, 'now'>> & {
+    readonly onEligibleTransition?: WorkChatWakeWorkerOptions['onEligibleTransition'];
     readonly onError?: WorkChatWakeWorkerOptions['onError'];
   } & {
     pollIntervalMs: number;
@@ -60,9 +82,15 @@ export class WorkChatWakeWorker {
     options: WorkChatWakeWorkerOptions = {},
   ) {
     this.#dependencies = dependencies;
+    this.#conversationResolver = createWorkChatConversationResolver(
+      dependencies.conversationWorkLinks,
+    );
     this.#options = {
       now: options.now ?? (() => new Date()),
       pollIntervalMs: options.pollIntervalMs ?? 250,
+      ...(options.onEligibleTransition
+        ? { onEligibleTransition: options.onEligibleTransition }
+        : {}),
       ...(options.onError ? { onError: options.onError } : {}),
     };
   }
@@ -110,6 +138,24 @@ export class WorkChatWakeWorker {
       const previous = await this.#dependencies.state.getLastObserved(key);
       if (previous === card.productState) continue;
 
+      const conversationId = isEligibleState(card.productState)
+        ? await this.resolveConversationId(key)
+        : null;
+      if (isEligibleState(card.productState) && !conversationId) continue;
+
+      if (conversationId && isEligibleState(card.productState)) {
+        try {
+          await this.#options.onEligibleTransition?.({
+            key,
+            card,
+            conversationId,
+          });
+        } catch (error: unknown) {
+          this.fail('ready', error);
+          continue;
+        }
+      }
+
       await this.#dependencies.state.saveObserved({
         ...key,
         state: card.productState,
@@ -120,6 +166,18 @@ export class WorkChatWakeWorker {
     return processed;
   }
 
+  private async resolveConversationId(
+    key: WorkChatWakeWorkKey,
+  ): Promise<string | null> {
+    try {
+      const link = await this.#conversationResolver.resolve(key);
+      return link?.conversationId ?? null;
+    } catch (error: unknown) {
+      this.fail('link', error);
+      return null;
+    }
+  }
+
   private async runLoop(): Promise<void> {
     while (!this.#stopping) {
       const processed = await this.processOnce();
@@ -128,7 +186,10 @@ export class WorkChatWakeWorker {
     }
   }
 
-  private fail(phase: 'poll' | 'project' | 'loop', error: unknown): void {
+  private fail(
+    phase: 'poll' | 'project' | 'link' | 'ready' | 'loop',
+    error: unknown,
+  ): void {
     this.#stopping = true;
     this.#running = false;
     try {
@@ -155,6 +216,12 @@ export class WorkChatWakeWorker {
       this.#timer = timer;
     });
   }
+}
+
+function isEligibleState(
+  state: ChatWorkCard['productState'],
+): state is 'complete' | 'needs_you' | 'problem' {
+  return state === 'complete' || state === 'needs_you' || state === 'problem';
 }
 
 export function createWorkChatWakeWorker(

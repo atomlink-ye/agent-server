@@ -46,4 +46,10 @@ CREATE INDEX IF NOT EXISTS work_chat_wake_outbox_pending_idx
   ON work_chat_wake_outbox (created_at, id)
   WHERE delivered_at IS NULL;
 
+ALTER TABLE chat_messages
+  ADD COLUMN IF NOT EXISTS delivery_id text NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_delivery_id_uq
+  ON chat_messages (tenant_id, conversation_id, delivery_id)
+  WHERE delivery_id IS NOT NULL;
+
 COMMIT;

@@ -22,6 +22,8 @@ const imageWebNodeModules = '/home/node/image-web-node_modules';
 const imageWebViteNodeModules = '/home/node/image-web-vite-node_modules';
 const includeWebViteNodeModules =
   process.env.DOCKER_ENSURE_WEB_VITE_NODE_MODULES === 'true';
+const includeWebNodeModules =
+  process.env.DOCKER_ENSURE_WEB_NODE_MODULES !== 'false';
 const restoreLockPath = `${workspaceNodeModules}/.dependency-restore.lock`;
 const restoreLockTimeoutMs = Number(
   process.env.DEPENDENCY_RESTORE_LOCK_TIMEOUT_MS ?? 120000,
@@ -63,7 +65,9 @@ const criticalArtifacts = [
 
 const dependencyTrees = [
   [workspaceNodeModules, imageNodeModules],
-  [workspaceWebNodeModules, imageWebNodeModules],
+  ...(includeWebNodeModules
+    ? [[workspaceWebNodeModules, imageWebNodeModules]]
+    : []),
   ...(includeWebViteNodeModules
     ? [[workspaceWebViteNodeModules, imageWebViteNodeModules]]
     : []),
@@ -214,7 +218,12 @@ if (command.length === 0) {
             await clearAndRestore(workspaceNodeModules, imageNodeModules, [
               '.dependency-restore.lock',
             ]);
-            await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
+            if (includeWebNodeModules) {
+              await clearAndRestore(
+                workspaceWebNodeModules,
+                imageWebNodeModules,
+              );
+            }
             if (includeWebViteNodeModules) {
               await clearAndRestore(
                 workspaceWebViteNodeModules,
@@ -226,11 +235,13 @@ if (command.length === 0) {
               expectedStamp,
               'utf8',
             );
-            await writeFile(
-              stampPath(workspaceWebNodeModules),
-              expectedStamp,
-              'utf8',
-            );
+            if (includeWebNodeModules) {
+              await writeFile(
+                stampPath(workspaceWebNodeModules),
+                expectedStamp,
+                'utf8',
+              );
+            }
             if (includeWebViteNodeModules) {
               await writeFile(
                 stampPath(workspaceWebViteNodeModules),

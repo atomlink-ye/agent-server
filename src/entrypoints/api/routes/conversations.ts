@@ -4,6 +4,7 @@ import type { Conversation } from '../../../domain/chat/conversation.js';
 import type { ChatMessage } from '../../../domain/chat/chat-message.js';
 import type { ConversationRepository } from '../../../application/ports/conversation-repository.js';
 import type { ChatDispatchRepository } from '../../../application/ports/chat-dispatch-repository.js';
+import type { ConversationWorkEntitlementRepository } from '../../../application/ports/conversation-work-entitlement-repository.js';
 import { postConversationMessage } from '../../../application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../../application/chat/enqueue-chat-dispatch.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
@@ -45,6 +46,7 @@ export interface ConversationRouteDependencies {
   readonly config: AppConfig;
   readonly conversations: ConversationRepository;
   readonly dispatches: ChatDispatchRepository;
+  readonly workEntitlements?: ConversationWorkEntitlementRepository;
 }
 
 export function registerConversationRoutes(
@@ -99,6 +101,13 @@ export function registerConversationRoutes(
     });
     return c.json({ messages: messages.map(messageResponse) });
   });
+
+  const enableWorkContext = (c: any) =>
+    enableConversationWorkContext(c, dependencies);
+  const revokeWorkContext = (c: any) =>
+    revokeConversationWorkContext(c, dependencies);
+  app.post(`${BASE}/:conversationId/work-context`, enableWorkContext);
+  app.delete(`${BASE}/:conversationId/work-context`, revokeWorkContext);
 
   app.post(`${BASE}/:conversationId/messages`, async (c) => {
     const conversation = await requireConversation(c, dependencies);
@@ -259,6 +268,66 @@ function notFound(): HttpError {
     'not_found',
     'The requested conversation does not exist.',
   );
+}
+
+function workContextResponse(
+  entitlement: import('../../../domain/chat/conversation-work-entitlement.js').ConversationWorkEntitlement,
+) {
+  return {
+    conversation_id: entitlement.conversationId,
+    workspace_id: entitlement.workspaceId,
+    principal_type: entitlement.principalType,
+    principal_id: entitlement.principalId,
+    created_at: entitlement.createdAt,
+    updated_at: entitlement.updatedAt,
+  };
+}
+
+async function enableConversationWorkContext(
+  c: any,
+  dependencies: ConversationRouteDependencies,
+) {
+  if (!dependencies.workEntitlements)
+    throw new HttpError(404, 'not_found', 'The requested route does not exist.');
+  const conversation = await requireConversation(c, dependencies);
+  if (conversation.kind !== 'direct')
+    throw new HttpError(
+      409,
+      'conversation_work_context_unavailable',
+      'Work context is available only for direct conversations.',
+    );
+  const access = getAuthenticatedAccessContext(c);
+  const entitlement = await dependencies.workEntitlements.enable({
+    tenantId: access.tenantId,
+    conversationId: conversation.id,
+    workspaceId: access.workspaceId,
+    principalType: access.principalType,
+    principalId: access.principalId,
+  });
+  if (!entitlement)
+    throw new HttpError(
+      409,
+      'conversation_work_context_unavailable',
+      'The conversation is not an eligible direct conversation for this service account.',
+    );
+  return c.json({ work_context: workContextResponse(entitlement) }, 200);
+}
+
+async function revokeConversationWorkContext(
+  c: any,
+  dependencies: ConversationRouteDependencies,
+) {
+  if (!dependencies.workEntitlements)
+    throw new HttpError(404, 'not_found', 'The requested route does not exist.');
+  await requireConversation(c, dependencies);
+  const access = getAuthenticatedAccessContext(c);
+  await dependencies.workEntitlements.revoke({
+    tenantId: access.tenantId,
+    conversationId: c.req.param('conversationId'),
+    principalType: access.principalType,
+    principalId: access.principalId,
+  });
+  return c.body(null, 204);
 }
 
 function conversationResponse(conversation: Conversation) {

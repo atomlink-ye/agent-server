@@ -24,6 +24,7 @@ import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresConversationRepository } from './infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresConversationWorkEntitlementRepository } from './infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { PostgresChatDispatchRepository } from './infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
@@ -69,12 +70,21 @@ import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconci
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
 import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
 import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
+import {
+  createWorkChatWakeWorker,
+  PostgresWorkChatConversationAgentResolver,
+  PostgresWorkChatWakeWorkSource,
+  type WorkChatWakeWorker,
+} from './entrypoints/work-chat/worker.js';
+import { PostgresWorkChatWakeStateRepository } from './infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
+import { PostgresConversationWorkLinkRepository } from './modules/work/conversation-work-link-repository.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
   readonly larkWorker?: Pick<LarkIngressWorker, 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'stop'>;
+  readonly workChatWorker?: Pick<WorkChatWakeWorker, 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
@@ -89,6 +99,7 @@ type StartableServiceResources = ServiceResources & {
   readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
   readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
+  readonly workChatWorker?: Pick<WorkChatWakeWorker, 'start' | 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'start' | 'stop'
@@ -121,6 +132,13 @@ export async function closeServiceResources(
     resources.chatWorker ? () => resources.chatWorker!.stop() : undefined,
     failures,
   );
+  await cleanup(
+    'work chat worker',
+    resources.workChatWorker
+      ? () => resources.workChatWorker!.stop()
+      : undefined,
+    failures,
+  );
   await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
   await cleanup('runtime', () => resources.runtime.close(), failures);
   await cleanup(
@@ -143,6 +161,7 @@ export async function startServiceResources(
     resources.larkWorker?.start();
     resources.larkOutboxWorker?.start();
     resources.chatWorker?.start();
+    resources.workChatWorker?.start();
   } catch (error: unknown) {
     const startupFailure = safeLifecycleError('service startup', error);
     try {
@@ -276,6 +295,8 @@ export async function createService(
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
   const conversations = new PostgresConversationRepository(pool);
+  const conversationWorkEntitlements =
+    new PostgresConversationWorkEntitlementRepository(pool);
   const chatDispatches = new PostgresChatDispatchRepository(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
@@ -363,6 +384,29 @@ export async function createService(
     runtimeCapabilities: runtimeModule,
   });
   runtimeModule.registerToolContributor(workModule.contributeRuntime);
+  const chatWorkCardProjection = workModule.createChatWorkCardProjection();
+  const workChatWorker = createWorkChatWakeWorker(
+    {
+      workSource: new PostgresWorkChatWakeWorkSource(pool),
+      state: new PostgresWorkChatWakeStateRepository(pool),
+      projection: chatWorkCardProjection,
+      conversationWorkLinks: new PostgresConversationWorkLinkRepository(pool),
+      conversations,
+      conversationAgentDefinitions:
+        new PostgresWorkChatConversationAgentResolver(pool),
+    },
+    {
+      workerId: `${workerId}:work-chat`,
+      leaseMs: leaseDurationMs,
+      onError: ({ phase, errorName }) => {
+        logger.log('error', 'work_chat.wake_worker.failed', {
+          phase,
+          error_name: errorName,
+          worker_id: `${workerId}:work-chat`,
+        });
+      },
+    },
+  );
   const {
     executionRuntime,
     executionRuns,
@@ -381,6 +425,9 @@ export async function createService(
     chatDispatches,
     chatTurnProvider,
     logger,
+    undefined,
+    conversationWorkEntitlements,
+    runtimeExtensionBinder,
   );
   const chatWorker = new ChatDeliveryWorker(
     chatDispatches,
@@ -621,6 +668,7 @@ export async function createService(
     sessions,
     conversations,
     chatDispatches,
+    conversationWorkEntitlements,
     submitSessionTurn,
     events,
     cancelTask,
@@ -635,6 +683,7 @@ export async function createService(
       ...(larkWorker ? { larkWorker } : {}),
       ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
       chatWorker,
+      workChatWorker,
       ...(larkReceiver ? { larkReceiver } : {}),
       runtime: executionRuntime,
       runtimeMcpServer,
@@ -681,6 +730,7 @@ export async function createService(
         ...(larkWorker ? { larkWorker } : {}),
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
         chatWorker,
+        workChatWorker,
         ...(larkReceiver ? { larkReceiver } : {}),
         runtime: executionRuntime,
         runtimeMcpServer,

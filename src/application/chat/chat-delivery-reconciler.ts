@@ -1,6 +1,12 @@
 import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type { ChatDispatch, ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
+import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
+import type { RuntimeExtensionBinder } from '../extensions/runtime-extension-binder.js';
+import {
+  AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+  AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+} from '../agents/built-in-skills.js';
 import type { Logger } from '../../shared/observability/logger.js';
 
 export class ChatDeliveryReconciler {
@@ -10,6 +16,8 @@ export class ChatDeliveryReconciler {
     private readonly provider: ChatTurnProvider,
     private readonly logger?: Logger,
     private readonly now: () => Date = () => new Date(),
+    private readonly workEntitlements?: ConversationWorkEntitlementRepository,
+    private readonly extensions?: RuntimeExtensionBinder,
   ) {}
 
   public async reconcilePendingDispatches(limit = 50): Promise<number> {
@@ -59,6 +67,36 @@ export class ChatDeliveryReconciler {
       return;
     }
 
+    const entitlement = this.workEntitlements
+      ? await this.workEntitlements.resolveForChatTurn({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          agentDefinitionId: dispatch.agentDefinitionId,
+        })
+      : null;
+    const extensions = entitlement && this.extensions
+      ? await this.extensions.bind({
+          tenantId: entitlement.tenantId,
+          principalType: entitlement.principalType,
+          principalId: entitlement.principalId,
+          workspaceId: entitlement.workspaceId,
+          scopeId: runtime.id,
+          chatContext: {
+            conversationId: dispatch.conversationId,
+            triggerMessageId: triggerMessage.id,
+          },
+          skills: [],
+          toolRefs: [
+            AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+            AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+          ],
+          catalogTools: [
+            AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+            AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+          ],
+        })
+      : undefined;
+
     const reply = await this.provider.runTurn({
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
@@ -73,6 +111,7 @@ export class ChatDeliveryReconciler {
         authorId: message.authorId,
         body: message.body,
       })),
+      ...(extensions ? { extensions } : {}),
     });
 
     await this.conversations.appendMessage({

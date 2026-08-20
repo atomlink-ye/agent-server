@@ -35,6 +35,7 @@ import { createLarkWebsocketReceiver } from './adapters/lark/lark-websocket-rece
 import { createLarkDeliveryAdapter } from './adapters/lark/lark-delivery-adapter.js';
 import { larkMemoryReviewCardRenderer } from './adapters/lark/lark-memory-card.js';
 import { PostgresChannelRepository } from './infrastructure/postgres/postgres-channel-repository.js';
+import { PostgresConversationRepository } from './infrastructure/postgres/postgres-conversation-repository.js';
 import { PostgresLarkReviewSurfaceRepository } from './infrastructure/postgres/postgres-lark-review-surface-repository.js';
 import { DeliverChannelOutbox } from './application/channels/deliver-channel-outbox.js';
 import { ProcessLarkIngress } from './application/channels/process-lark-ingress.js';
@@ -343,6 +344,7 @@ export async function createService(
     definitionResolution: resourceModule.workDefinitionResolution,
     execution: new InvokeTaskExecutionAdmission(invokeTask),
     executionFacts: new PostgresExecutionFactQuery(pool),
+    conversations: new PostgresConversationRepository(pool),
     runtimeCapabilities: runtimeModule,
   });
   runtimeModule.registerToolContributor(workModule.contributeRuntime);

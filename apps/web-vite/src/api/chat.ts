@@ -3,6 +3,8 @@ import type {
   ChatMessage,
   Conversation,
   ConversationId,
+  WorkListItem,
+  WorkListProductState,
 } from '../components/chat/contracts';
 
 export type WorkProductState =
@@ -111,6 +113,13 @@ export async function createConversation(
   return normalizeConversation(conversation);
 }
 
+export async function loadWorks(): Promise<readonly WorkListItem[]> {
+  const payload = asRecord(await request<unknown>('/api/works'));
+  const values = payload?.works;
+  if (!Array.isArray(values)) throw invalidResponse();
+  return values.map(normalizeWorkListItem);
+}
+
 export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
@@ -158,6 +167,7 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
 export const chatCommands: ChatCommands = {
   loadConversations,
   createConversation,
+  loadWorks,
   loadMessages,
   sendMessage,
 };
@@ -168,6 +178,31 @@ function normalizeConversation(value: unknown): Conversation {
     id: requiredString(record?.conversation_id),
     title: nullableString(record?.title),
     updatedAt: requiredString(record?.updated_at),
+  };
+}
+
+function normalizeWorkListItem(value: unknown): WorkListItem {
+  const record = asRecord(value);
+  return {
+    id: requiredString(record?.id),
+    title: requiredString(record?.title),
+    productState: requiredWorkListProductState(record?.product_state),
+    updatedAt: requiredString(record?.updated_at),
+    latestRunSummary: normalizeLatestRunSummary(record?.latest_run_summary),
+  };
+}
+
+function normalizeLatestRunSummary(
+  value: unknown,
+): WorkListItem['latestRunSummary'] {
+  if (value === null || value === undefined) return null;
+  const record = asRecord(value);
+  if (!record) throw invalidResponse();
+  return {
+    id: requiredString(record.id),
+    updatedAt: requiredString(record.updated_at),
+    resultSummary: nullableString(record.result_summary),
+    resultCaptureStatus: requiredString(record.result_capture_status),
   };
 }
 
@@ -253,6 +288,21 @@ function nullableString(value: unknown): string | null {
 
 function requiredAuthorType(value: unknown): ChatMessage['authorType'] {
   if (value === 'principal' || value === 'agent_definition') return value;
+  throw invalidResponse();
+}
+
+function requiredWorkListProductState(
+  value: unknown,
+): WorkListProductState {
+  if (
+    value === 'running' ||
+    value === 'needs_you' ||
+    value === 'complete' ||
+    value === 'problem' ||
+    value === 'not_captured'
+  ) {
+    return value;
+  }
   throw invalidResponse();
 }
 

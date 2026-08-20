@@ -1,5 +1,25 @@
 export type ConversationId = string;
 
+export type WorkListProductState =
+  | 'running'
+  | 'needs_you'
+  | 'complete'
+  | 'problem'
+  | 'not_captured';
+
+export interface WorkListItem {
+  readonly id: string;
+  readonly title: string;
+  readonly productState: WorkListProductState;
+  readonly updatedAt: string;
+  readonly latestRunSummary: {
+    readonly id: string;
+    readonly updatedAt: string;
+    readonly resultSummary: string | null;
+    readonly resultCaptureStatus: string;
+  } | null;
+}
+
 export interface Conversation {
   readonly id: ConversationId;
   readonly title: string | null;
@@ -24,6 +44,7 @@ export interface ChatCommands {
   readonly createConversation: (
     agentDefinitionId: string,
   ) => Promise<Conversation>;
+  readonly loadWorks: () => Promise<readonly WorkListItem[]>;
   readonly loadMessages: (
     conversationId: ConversationId,
   ) => Promise<readonly ChatMessage[]>;

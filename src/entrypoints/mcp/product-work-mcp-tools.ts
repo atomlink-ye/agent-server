@@ -44,14 +44,6 @@ const startInput = {
   work_id: z.string().uuid(),
   trigger_kind: z.literal('manual'),
   trigger_ref: z.string().min(1).max(256).optional(),
-  // Kept for the grant-context cutover in Lane 4. It is not trusted for
-  // durable conversation linkage in this slice.
-  chat_origin: z
-    .object({
-      conversation_id: z.string().uuid(),
-      trigger_message_id: z.string().uuid(),
-    })
-    .optional(),
 };
 const strictCreateInput = z.strictObject(createInput);
 const strictStartInput = z.strictObject(startInput);
@@ -149,7 +141,11 @@ export function registerProductWorkMcpTools(input: {
     ConversationWorkLinkRepository,
     'linkWorkToConversation'
   >;
-  /** Origin supplied by the trusted server/grant context, not tool args. */
+  /**
+   * TODO(Lane1 PR#92): populate this from RuntimeToolContributionContext
+   * once the trusted grant carries conversation/trigger identity. Until then,
+   * this stays unset; there is no caller or inferred-ID fallback.
+   */
   readonly conversationOrigin?: ConversationWorkOrigin;
 }): void {
   const { server, grant, grants } = input;

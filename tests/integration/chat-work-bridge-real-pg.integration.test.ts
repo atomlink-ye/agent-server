@@ -107,6 +107,9 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     );
 
     const invokables = new PostgresInvokableRepository(pool);
+    const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+      pool,
+    );
     const resolver = new ResolveWorkDefinition({
       agents: {
         async findDefinition() {
@@ -144,6 +147,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
         },
       },
       definitions: invokables,
+      authoredDefinitions,
       environments: {
         async findVersion(_owner, versionId) {
           return versionId === environmentVersionId

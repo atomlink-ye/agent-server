@@ -4,6 +4,7 @@ import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
 import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
 import { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
+import { createChatWorkCardProjection } from '../../application/product-projection/chat-work-card-projection.js';
 import {
   createProductProjection,
   type ProductProjectionApi,
@@ -24,6 +25,7 @@ import { WorkIdentityApi } from '../../application/work/work-identity-api.js';
 import type { RuntimeToolContributor } from '../../platform/runtime-tool-registry.js';
 import { registerProductWorkCommandRoutes } from '../../entrypoints/api/routes/product-work-commands.js';
 import { registerProductWorkRoutes } from '../../entrypoints/api/routes/product-work.js';
+import { registerWorkCardRoutes } from '../../entrypoints/api/routes/work-cards.js';
 import { registerProductWorkMcpTools } from '../../entrypoints/mcp/product-work-mcp-tools.js';
 import {
   PostgresWorkIdentityRepository,
@@ -71,6 +73,7 @@ export function installWorkHttpRoutes(
     readonly productLists: ProductWorkListQuery;
     readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
     readonly projection: ProductProjectionApi;
+    readonly chatWorkCard: ReturnType<typeof createChatWorkCardProjection>;
     readonly executionDetail: Pick<GetProductExecutionDetail, 'execute'>;
     readonly sessionTranscripts: Pick<GetProductSessionTranscripts, 'execute'>;
     readonly teamDriver?: Pick<TeamDriver, 'decideCompletion'>;
@@ -85,6 +88,7 @@ export function installWorkHttpRoutes(
     productLists,
     startWorkRun,
     projection,
+    chatWorkCard,
     executionDetail,
     sessionTranscripts,
     teamDriver,
@@ -106,6 +110,10 @@ export function installWorkHttpRoutes(
     productProjection: projection,
     executionDetail,
     sessionTranscripts,
+  });
+  registerWorkCardRoutes(app, {
+    config,
+    chatWorkCard,
   });
 }
 
@@ -191,6 +199,10 @@ export function createWorkModule(options: {
     workFacts,
     executionFacts: options.executionFacts,
   });
+  const chatWorkCard = createChatWorkCardProjection({
+    workIdentity: workIdentityQuery,
+    productProjection: projection,
+  });
   const executionDetail = new GetProductExecutionDetail(
     workIdentityQuery,
     workFacts,
@@ -211,6 +223,7 @@ export function createWorkModule(options: {
         productLists,
         startWorkRun,
         projection,
+        chatWorkCard,
         executionDetail,
         sessionTranscripts,
         ...(extras?.teamDriver ? { teamDriver: extras.teamDriver } : {}),

@@ -81,6 +81,43 @@ button {
   background: #1d2330;
 }
 
+.new-conversation-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 0 4px;
+  color: #c7d0df;
+  font-size: 12px;
+}
+
+.new-conversation-form input {
+  min-width: 0;
+  border: 1px solid #3d4656;
+  border-radius: 8px;
+  background: #10131a;
+  color: #eef2f7;
+  padding: 8px 9px;
+}
+
+.new-conversation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.new-conversation-actions button {
+  border: 1px solid #59657a;
+  border-radius: 8px;
+  background: transparent;
+  color: #eef2f7;
+  padding: 7px 10px;
+}
+
+.new-conversation-form p[role='alert'] {
+  margin: 0;
+  color: #f3b9c5;
+  line-height: 1.4;
+}
+
 .sidebar-section {
   flex: 1;
   padding: 34px 8px 24px;

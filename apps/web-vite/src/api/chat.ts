@@ -97,6 +97,20 @@ export async function loadConversations(): Promise<readonly Conversation[]> {
   return values.map(normalizeConversation);
 }
 
+export async function createConversation(
+  agentDefinitionId: string,
+): Promise<Conversation> {
+  const payload = asRecord(
+    await request<unknown>('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
+    }),
+  );
+  const conversation = payload?.conversation;
+  if (!conversation) throw invalidResponse();
+  return normalizeConversation(conversation);
+}
+
 export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
@@ -143,6 +157,7 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
 
 export const chatCommands: ChatCommands = {
   loadConversations,
+  createConversation,
   loadMessages,
   sendMessage,
 };

@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   AgentServerError,
+  createConversation,
   getConversation,
   listConversationMessages,
   listConversations,
@@ -38,12 +39,20 @@ export type PublicConversationMessage = Pick<
 export class ConversationBffError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly body: unknown;
+  readonly preserveBody: boolean;
 
-  constructor(status: number, code: string) {
+  constructor(
+    status: number,
+    code: string,
+    options: { readonly body?: unknown; readonly preserveBody?: boolean } = {},
+  ) {
     super(code);
     this.name = 'ConversationBffError';
     this.status = status;
     this.code = code;
+    this.body = options.body ?? null;
+    this.preserveBody = options.preserveBody === true;
   }
 }
 
@@ -62,6 +71,25 @@ export async function listConversationBff(sessionId: string | undefined) {
     return { conversations };
   } catch (error) {
     throw sanitizeError(error);
+  }
+}
+
+export async function createConversationBff(
+  sessionId: string | undefined,
+  agentDefinitionId: unknown,
+) {
+  const sessionKey = requireSession(sessionId);
+  if (!isNonEmptyString(agentDefinitionId))
+    throw new ConversationBffError(400, 'invalid_request');
+  try {
+    const upstream = await createConversation(agentDefinitionId);
+    const conversation = sanitizeConversation(upstream.conversation);
+    const allowed = allowedConversationIds.get(sessionKey) ?? new Set<string>();
+    allowed.add(conversation.conversation_id);
+    allowedConversationIds.set(sessionKey, allowed);
+    return { conversation };
+  } catch (error) {
+    throw sanitizeCreateError(error);
   }
 }
 
@@ -119,6 +147,12 @@ export function conversationErrorResponse(error: unknown) {
     error instanceof ConversationBffError
       ? error
       : new ConversationBffError(502, 'conversation_unavailable');
+  if (bffError.preserveBody) {
+    return {
+      status: bffError.status,
+      body: bffError.body,
+    };
+  }
   const messages: Record<string, string> = {
     invalid_request: 'The conversation request is invalid.',
     missing_session: 'A product session is required.',
@@ -162,6 +196,27 @@ function sanitizeError(error: unknown): ConversationBffError {
       'conversation_unavailable',
     );
   return new ConversationBffError(502, 'conversation_unavailable');
+}
+
+function sanitizeCreateError(error: unknown): ConversationBffError {
+  if (error instanceof ConversationBffError) return error;
+  if (
+    error instanceof AgentServerError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    isJsonErrorEnvelope(error.body)
+  ) {
+    return new ConversationBffError(error.status, 'conversation_create_failed', {
+      body: error.body,
+      preserveBody: true,
+    });
+  }
+  return new ConversationBffError(502, 'conversation_unavailable');
+}
+
+function isJsonErrorEnvelope(value: unknown): boolean {
+  const record = asRecord(value);
+  return record !== null && asRecord(record.error) !== null;
 }
 
 function sanitizeConversation(value: AgentConversation): PublicConversation {
@@ -225,6 +280,12 @@ function nullableString(value: unknown): value is string | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function invalidUpstream(): ConversationBffError {

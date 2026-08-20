@@ -1,4 +1,8 @@
-import type { ChatCommands, ConversationId } from '../components/chat/contracts';
+import { useState } from 'react';
+import type {
+  ChatCommands,
+  ConversationId,
+} from '../components/chat/contracts';
 import { ConversationsList } from '../components/chat/ConversationsList';
 import type { AppStore } from '../stores/app';
 import type { ConversationsStore } from '../stores/conversations';
@@ -17,7 +21,14 @@ export function ConversationsPane({
   conversationsStore,
   onSelectConversation,
 }: ConversationsPaneProps) {
-  const selection = useSyncExternalStore(appStore.subscribe, appStore.getSnapshot);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [agentDefinitionId, setAgentDefinitionId] = useState('');
+  const [createStatus, setCreateStatus] = useState<'idle' | 'pending'>('idle');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const selection = useSyncExternalStore(
+    appStore.subscribe,
+    appStore.getSnapshot,
+  );
   const state = useSyncExternalStore(
     conversationsStore.subscribe,
     conversationsStore.getSnapshot,
@@ -25,6 +36,31 @@ export function ConversationsPane({
   const select = (conversationId: ConversationId): void => {
     appStore.select(conversationId);
     onSelectConversation?.(conversationId);
+  };
+
+  const create = async (): Promise<void> => {
+    const trimmedAgentDefinitionId = agentDefinitionId.trim();
+    if (!trimmedAgentDefinitionId || createStatus === 'pending') return;
+    setCreateStatus('pending');
+    setCreateError(null);
+    try {
+      const conversation = await commands.createConversation(
+        trimmedAgentDefinitionId,
+      );
+      conversationsStore.hydrate([
+        ...conversationsStore
+          .getSnapshot()
+          .conversations.filter(({ id }) => id !== conversation.id),
+        conversation,
+      ]);
+      select(conversation.id);
+      setAgentDefinitionId('');
+      setCreateOpen(false);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreateStatus('idle');
+    }
   };
 
   return (
@@ -35,6 +71,63 @@ export function ConversationsPane({
         </span>
         <span>Chat</span>
       </div>
+
+      <button
+        className="new-chat-button"
+        type="button"
+        disabled={createStatus === 'pending'}
+        aria-expanded={createOpen}
+        onClick={() => {
+          setCreateOpen((open) => !open);
+          setCreateError(null);
+        }}
+      >
+        <span aria-hidden="true">+</span>
+        New conversation
+      </button>
+
+      {createOpen ? (
+        <form
+          className="new-conversation-form"
+          aria-busy={createStatus === 'pending'}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void create();
+          }}
+        >
+          <label htmlFor="new-conversation-agent-definition">
+            Agent definition ID
+          </label>
+          <input
+            id="new-conversation-agent-definition"
+            value={agentDefinitionId}
+            disabled={createStatus === 'pending'}
+            onChange={(event) => setAgentDefinitionId(event.target.value)}
+          />
+          <div className="new-conversation-actions">
+            <button
+              type="submit"
+              disabled={
+                createStatus === 'pending' ||
+                agentDefinitionId.trim().length === 0
+              }
+            >
+              {createStatus === 'pending' ? 'Creating…' : 'Create'}
+            </button>
+            <button
+              type="button"
+              disabled={createStatus === 'pending'}
+              onClick={() => {
+                setCreateOpen(false);
+                setCreateError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {createError !== null ? <p role="alert">{createError}</p> : null}
+        </form>
+      ) : null}
 
       <div className="sidebar-section">
         <span className="sidebar-label">Conversations</span>

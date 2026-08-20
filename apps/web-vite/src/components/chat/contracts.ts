@@ -21,6 +21,9 @@ export interface ChatMessage {
 
 export interface ChatCommands {
   readonly loadConversations: () => Promise<readonly Conversation[]>;
+  readonly createConversation: (
+    agentDefinitionId: string,
+  ) => Promise<Conversation>;
   readonly loadMessages: (
     conversationId: ConversationId,
   ) => Promise<readonly ChatMessage[]>;

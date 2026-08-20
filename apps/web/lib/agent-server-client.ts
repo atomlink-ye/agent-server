@@ -145,10 +145,17 @@ export type AgentConversationMessage = {
 export class AgentServerError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code = 'agent_server_error') {
+  readonly body: unknown;
+
+  constructor(
+    status: number,
+    code = 'agent_server_error',
+    body: unknown = null,
+  ) {
     super(code);
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -186,13 +193,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     let code = 'agent_server_error';
+    let body: unknown = null;
     try {
-      const body = (await response.json()) as { error?: { code?: string } };
-      if (body.error?.code) code = body.error.code;
+      body = await response.json();
+      const error = asRecord(body)?.error;
+      if (asRecord(error)?.code) code = asRecord(error)?.code as string;
     } catch {
       /* Keep the safe generic code. */
     }
-    throw new AgentServerError(response.status, code);
+    throw new AgentServerError(response.status, code, body);
   }
   return (await response.json()) as T;
 }
@@ -230,6 +239,15 @@ export async function listConversations(): Promise<{
   conversations: AgentConversation[];
 }> {
   return request('/api/v1/conversations');
+}
+
+export async function createConversation(
+  agentDefinitionId: string,
+): Promise<{ conversation: AgentConversation }> {
+  return request('/api/v1/conversations', {
+    method: 'POST',
+    body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
+  });
 }
 
 export async function getConversation(

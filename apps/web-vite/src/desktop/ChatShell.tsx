@@ -198,7 +198,7 @@ export function ChatShell({
                   {selectedConversation
                     ? conversationDisplayName(selectedConversation)
                         .slice(0, 1)
-                        .toUpperCase()
+                        .toUpperCase() || 'C'
                     : 'C'}
                 </span>
                 <div>

@@ -1,4 +1,35 @@
 services:
+  web-vite-dependencies-init:
+    image: agent-server-runner:latest
+    user: '0:0'
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: volume
+        source: web-vite-root-node-modules
+        target: /workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: web-vite-node-modules
+        target: /workspace/apps/web-vite/node_modules
+        volume:
+          nocopy: true
+    entrypoint: []
+    command:
+      [
+        '/bin/sh',
+        '-c',
+        'chown 1000:1000 /workspace/node_modules && chown 1000:1000 /workspace/apps/web-vite/node_modules',
+      ]
+    restart: 'no'
+
   web-vite:
     build:
       context: .
@@ -10,6 +41,8 @@ services:
     depends_on:
       web:
         condition: service_started
+      web-vite-dependencies-init:
+        condition: service_completed_successfully
     environment:
       DOCKER_ENSURE_WEB_VITE_NODE_MODULES: 'true'
       DOCKER_ENSURE_WEB_NODE_MODULES: 'false'

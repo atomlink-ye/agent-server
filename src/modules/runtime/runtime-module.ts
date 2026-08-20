@@ -26,6 +26,7 @@ import {
   RuntimeToolRegistry,
   type RuntimeToolContributor,
 } from '../../platform/runtime-tool-registry.js';
+import type { ManagedEnvironmentProvider } from '../../domain/environments/managed-environment-package.js';
 import type { AppConfig } from '../../shared/config.js';
 import type { Logger } from '../../shared/observability/logger.js';
 
@@ -52,9 +53,15 @@ export interface RuntimeModule {
   registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
-function normalizePaseoRequestedModel(model: string): string {
+function normalizePaseoRequestedModel(
+  provider: ManagedEnvironmentProvider,
+  model: string,
+): string {
   const prefix = 'opencode-go/';
-  return model.startsWith(prefix) ? model.slice(prefix.length) : model;
+  const stripsProviderPrefix = provider === 'claude' || provider === 'codex';
+  return stripsProviderPrefix && model.startsWith(prefix)
+    ? model.slice(prefix.length)
+    : model;
 }
 
 export function createRuntimeModule(options: {
@@ -89,6 +96,7 @@ export function createRuntimeModule(options: {
             ...(options.config.paseo.model
               ? {
                   requestedModel: normalizePaseoRequestedModel(
+                    options.config.paseo.provider,
                     options.config.paseo.model,
                   ),
                 }

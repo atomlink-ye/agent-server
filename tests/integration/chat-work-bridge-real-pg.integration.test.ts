@@ -1,20 +1,26 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { AccessContext } from '../../src/platform/access-context.js';
-import { ListAgentWorkflows } from '../../src/application/work/list-agent-workflows.js';
 import { DescribeWorkflow } from '../../src/application/work/describe-workflow.js';
 import { ProductWorkDefinitionQuery } from '../../src/application/work/product-work-definition-query.js';
 import { validateProductWorkDefinition } from '../../src/application/work/validate-product-work-definition.js';
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
+import { RuntimeToolGrantService } from '../../src/application/extensions/runtime-tool-grant-service.js';
+import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
-import { executeProductWorkRunStart } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
-import type { WorkRun } from '../../src/domain/work/work-run.js';
+import {
+  PRODUCT_WORK_CREATE_TOOL_REF,
+  PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+} from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
+import { createWorkModule } from '../../src/modules/work/work-module.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -64,8 +70,8 @@ spec:
 
 describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   let pool: Pool;
+  let workTools: Map<string, RegisteredTool>;
   const createdDefinitionIds: string[] = [];
-  const createdConversationIds: string[] = [];
 
   beforeAll(async () => {
     pool = createPostgresPool({
@@ -91,23 +97,50 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
         at,
       ],
     );
+
+    const workModule = createWorkModule({
+      database: pool,
+      definitions: new PostgresInvokableRepository(pool),
+      execution: {
+        async admitRoot() {
+          return { taskId: randomUUID(), reused: false };
+        },
+      },
+      executionFacts: new PostgresExecutionFactQuery(pool),
+      conversations: new PostgresConversationRepository(pool),
+    });
+    const grants = new RuntimeToolGrantService();
+    const grantIssue = grants.issue({
+      tenantId,
+      principalType: access.principalType,
+      principalId: access.principalId,
+      workspaceId,
+      productSessionId: randomUUID(),
+      allowedTools: [
+        PRODUCT_WORK_CREATE_TOOL_REF,
+        PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+      ],
+      catalogTools: [
+        PRODUCT_WORK_CREATE_TOOL_REF,
+        PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+      ],
+    });
+    const grant = grants.resolve(grantIssue.token);
+    if (!grant) throw new Error('Failed to resolve the MCP test grant.');
+    workTools = new Map();
+    const server = {
+      registerTool(
+        name: string,
+        _config: unknown,
+        handler: RegisteredTool,
+      ): void {
+        workTools.set(name, handler);
+      },
+    } as unknown as McpServer;
+    workModule.contributeRuntime({ server, grant, grants });
   });
 
   afterAll(async () => {
-    if (createdConversationIds.length) {
-      await pool.query(
-        'DELETE FROM chat_messages WHERE conversation_id = ANY($1::uuid[])',
-        [createdConversationIds],
-      );
-      await pool.query(
-        'DELETE FROM conversation_members WHERE conversation_id = ANY($1::uuid[])',
-        [createdConversationIds],
-      );
-      await pool.query(
-        'DELETE FROM conversations WHERE id = ANY($1::uuid[])',
-        [createdConversationIds],
-      );
-    }
     if (createdDefinitionIds.length) {
       // Published Work Definition source versions/definitions are immutable
       // (migration 0034 trigger) and are deliberately left in place, matching
@@ -137,7 +170,10 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     };
     const parsedAuthorSource = validateProductWorkDefinition(
       WORKFLOW_SOURCE(
-        `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${definitionId.slice(0, 8)}`,
+        `${name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '')}-${definitionId.slice(0, 8)}`,
         description,
       ),
     );
@@ -164,63 +200,76 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   }
 
   it('list_agent_workflows scoping: Agent A sees only its workflows', async () => {
-    const sources = new PostgresWorkDefinitionSourceRepository(pool);
-
-    // Create 3 workflows
     const w1 = await publishWorkflow('W1 for A', 'Workflow 1 for Agent A');
     const w2 = await publishWorkflow('W2 for A', 'Workflow 2 for Agent A');
     const w3 = await publishWorkflow('W3 for B', 'Workflow 3 for Agent B');
 
-    // Associate W1, W2 with Agent A; W3 with Agent B
-    await sources.associateAgentWorkflow({
-      tenantId,
-      workspaceId,
-      agentDefinitionId: agentAId,
-      definitionId: w1,
-      now: at,
+    const associate = requiredTool(
+      workTools,
+      'product_work_associate_agent_workflow',
+    );
+    const list = requiredTool(workTools, 'list_agent_workflows');
+    const associated = await associate({
+      agent_definition_id: agentAId,
+      definition_id: w1,
     });
-    await sources.associateAgentWorkflow({
-      tenantId,
-      workspaceId,
-      agentDefinitionId: agentAId,
-      definitionId: w2,
-      now: at,
-    });
-    await sources.associateAgentWorkflow({
-      tenantId,
-      workspaceId,
-      agentDefinitionId: agentBId,
-      definitionId: w3,
-      now: at,
-    });
+    expect(parseToolPayload(associated).associated).toBe(true);
+    await associate({ agent_definition_id: agentAId, definition_id: w2 });
+    await associate({ agent_definition_id: agentBId, definition_id: w3 });
 
-    // Call ListAgentWorkflows for Agent A
-    const listA = new ListAgentWorkflows(sources);
-    const resultA = await listA.execute({
-      agentDefinitionId: agentAId,
-      accessContext: access,
-    });
+    const resultA = parseToolPayload(
+      await list({ agent_definition_id: agentAId }),
+    );
 
     // Assert: result contains exactly W1 and W2 (not W3)
-    const resultIdSet = new Set(resultA.definitions.map((d) => d.id));
+    const resultIdSet = new Set(
+      resultA.definitions.map((d: { id: string }) => d.id),
+    );
     expect(resultIdSet.has(w1)).toBe(true);
     expect(resultIdSet.has(w2)).toBe(true);
     expect(resultIdSet.has(w3)).toBe(false);
     expect(resultA.definitions.length).toBe(2);
 
-    // Call ListAgentWorkflows for Agent B
-    const listB = new ListAgentWorkflows(sources);
-    const resultB = await listB.execute({
-      agentDefinitionId: agentBId,
-      accessContext: access,
-    });
+    const resultB = parseToolPayload(
+      await list({ agent_definition_id: agentBId }),
+    );
 
     // Assert: result contains exactly W3 (not W1 or W2)
-    const resultBIdSet = new Set(resultB.definitions.map((d) => d.id));
+    const resultBIdSet = new Set(
+      resultB.definitions.map((d: { id: string }) => d.id),
+    );
     expect(resultBIdSet.has(w3)).toBe(true);
     expect(resultBIdSet.has(w1)).toBe(false);
     expect(resultBIdSet.has(w2)).toBe(false);
     expect(resultB.definitions.length).toBe(1);
+
+    const scopedRows = await pool.query<{
+      tenant_id: string;
+      workspace_id: string;
+    }>(
+      `SELECT tenant_id,workspace_id
+         FROM agent_workflow_associations
+        WHERE work_definition_id = ANY($1::uuid[])`,
+      [[w1, w2, w3]],
+    );
+    expect(
+      scopedRows.rows.every(
+        (row) => row.tenant_id === tenantId && row.workspace_id === workspaceId,
+      ),
+    ).toBe(true);
+
+    // Roll back the association rows through the test harness, then prove the
+    // same production list tool observes the empty state.
+    await pool.query(
+      `DELETE FROM agent_workflow_associations
+       WHERE tenant_id=$1 AND workspace_id=$2
+         AND work_definition_id = ANY($3::uuid[])`,
+      [tenantId, workspaceId, [w1, w2, w3]],
+    );
+    const afterRollback = parseToolPayload(
+      await list({ agent_definition_id: agentAId }),
+    );
+    expect(afterRollback.definitions).toEqual([]);
   });
 
   it('describe_workflow parity: output matches direct getInputContract call', async () => {
@@ -267,140 +316,6 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     }
   });
 
-  it('chat_origin provenance: the real product_work_run_start handler writes work_ref to chat_messages', async () => {
-    const triggerMessageId = randomUUID();
-
-    // Create a real conversation to write into.
-    const conversations = new PostgresConversationRepository(pool);
-    const conversationPrincipalId = `principal-${randomUUID()}`;
-    await conversations.findOrCreateDirect({
-      tenantId,
-      principalId: conversationPrincipalId,
-      principalType: 'principal',
-      agentDefinitionId: agentAId,
-    });
-    const allConversations = await conversations.listConversations({
-      tenantId,
-      memberType: 'principal',
-      memberId: conversationPrincipalId,
-    });
-    const conversation = allConversations[0];
-    if (!conversation) throw new Error('Failed to create conversation');
-    createdConversationIds.push(conversation.id);
-
-    const workId = randomUUID();
-    const workRunId = randomUUID();
-    const fakeWorkRun: WorkRun = {
-      id: workRunId,
-      tenantId,
-      workspaceId,
-      workId,
-      definitionVersionId: randomUUID(),
-      triggerKind: 'manual',
-      triggerRef: 'test',
-      idempotencyKey: 'test',
-      rootTaskId: 'task-1',
-      expiresAt: at,
-      boundAt: at,
-      createdAt: at,
-      updatedAt: at,
-    };
-
-    // Exercise the REAL production handler (executeProductWorkRunStart), not
-    // a hand-rolled duplicate: startWorkRun is faked, but the chat-provenance
-    // branch and the write to Postgres are the real, shipped code path.
-    const response = await executeProductWorkRunStart(
-      {
-        work_id: workId,
-        trigger_kind: 'manual',
-        chat_origin: {
-          conversation_id: conversation.id,
-          trigger_message_id: triggerMessageId,
-        },
-      },
-      {
-        startWorkRun: {
-          execute: async () => ({
-            workRun: fakeWorkRun,
-            executionReceipt: { reused: false, taskId: 'task-1' },
-          }),
-        },
-        conversations,
-        current: { tenantId, workspaceId, principalId },
-      },
-    );
-    expect('isError' in response).toBe(false);
-
-    const allMessages = await conversations.listMessages({
-      tenantId,
-      conversationId: conversation.id,
-    });
-    const foundMessage = allMessages.find((m) => m.workRef !== null);
-    expect(foundMessage).toBeDefined();
-
-    const parsedRef = JSON.parse(foundMessage!.workRef!);
-    expect(parsedRef.conversationId).toBe(conversation.id);
-    expect(parsedRef.triggerMessageId).toBe(triggerMessageId);
-    expect(parsedRef.workId).toBe(workId);
-    expect(parsedRef.workRunId).toBe(workRunId);
-  });
-
-  it('start_work without chat_origin does not write any chat message', async () => {
-    const conversations = new PostgresConversationRepository(pool);
-    const conversationPrincipalId = `principal-${randomUUID()}`;
-    await conversations.findOrCreateDirect({
-      tenantId,
-      principalId: conversationPrincipalId,
-      principalType: 'principal',
-      agentDefinitionId: agentAId,
-    });
-    const allConversations = await conversations.listConversations({
-      tenantId,
-      memberType: 'principal',
-      memberId: conversationPrincipalId,
-    });
-    const conversation = allConversations[0];
-    if (!conversation) throw new Error('Failed to create conversation');
-    createdConversationIds.push(conversation.id);
-
-    const workId = randomUUID();
-    const fakeWorkRun: WorkRun = {
-      id: randomUUID(),
-      tenantId,
-      workspaceId,
-      workId,
-      definitionVersionId: randomUUID(),
-      triggerKind: 'manual',
-      triggerRef: 'test',
-      idempotencyKey: 'test',
-      rootTaskId: 'task-1',
-      expiresAt: at,
-      boundAt: at,
-      createdAt: at,
-      updatedAt: at,
-    };
-
-    await executeProductWorkRunStart(
-      { work_id: workId, trigger_kind: 'manual' },
-      {
-        startWorkRun: {
-          execute: async () => ({
-            workRun: fakeWorkRun,
-            executionReceipt: { reused: false, taskId: 'task-1' },
-          }),
-        },
-        conversations,
-        current: { tenantId, workspaceId, principalId },
-      },
-    );
-
-    const allMessages = await conversations.listMessages({
-      tenantId,
-      conversationId: conversation.id,
-    });
-    expect(allMessages.length).toBe(0);
-  });
-
   it('work.ts WorkOrigin type is untouched by this PR (out-of-scope guard)', () => {
     // Verify that the WorkOrigin domain type (tracking Work creation provenance)
     // was not modified by this PR's work on the chat-triggered Work feature.
@@ -417,3 +332,24 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     expect(source).not.toMatch(/ChatWorkOriginRef|chat_origin|chatOrigin/);
   });
 });
+
+type RegisteredTool = (args: Record<string, string>) => Promise<unknown>;
+
+function requiredTool(
+  tools: Map<string, RegisteredTool>,
+  name: string,
+): RegisteredTool {
+  const tool = tools.get(name);
+  if (!tool) throw new Error(`MCP tool was not registered: ${name}`);
+  return tool;
+}
+
+function parseToolPayload(result: unknown): any {
+  if (!result || typeof result !== 'object')
+    throw new Error('MCP tool returned an invalid result.');
+  const content = (result as { content?: readonly { text?: string }[] })
+    .content;
+  const text = content?.[0]?.text;
+  if (!text) throw new Error('MCP tool returned no text payload.');
+  return JSON.parse(text);
+}

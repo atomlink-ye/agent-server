@@ -406,6 +406,7 @@ describe('Work Chat wake on real PostgreSQL', () => {
       workspaceId,
       workId,
       conversationId,
+      triggerMessageId: '00000000-0000-4000-8000-000000000001',
     });
   }
 

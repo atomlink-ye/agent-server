@@ -45,5 +45,5 @@ export interface ChatTurnProvider {
     readonly brain: ResolvedChatBrain;
     readonly messages: readonly ChatTurnMessage[];
     readonly extensions?: ExecutionExtensionBinding;
-  }): Promise<{ readonly body: string }>;
+  }): Promise<{ readonly body: string; readonly provider: string }>;
 }

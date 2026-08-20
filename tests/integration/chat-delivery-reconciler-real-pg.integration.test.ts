@@ -6,6 +6,7 @@ import {
   createPostgresPool,
 } from '../../src/infrastructure/postgres/postgres.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
 import { PostgresChatDispatchRepository } from '../../src/infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { ChatDeliveryReconciler } from '../../src/application/chat/chat-delivery-reconciler.js';
 import { ChatBrainResolver } from '../../src/application/chat/chat-brain-resolver.js';
@@ -74,6 +75,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
   let pool: Pool;
   let convRepo: PostgresConversationRepository;
   let dispatchRepo: PostgresChatDispatchRepository;
+  let conversationWorkLinks: PostgresConversationWorkLinkRepository;
 
   beforeAll(async () => {
     pool = createPostgresPool({
@@ -83,6 +85,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
     await applyDurableKernelMigrations(pool);
     convRepo = new PostgresConversationRepository(pool);
     dispatchRepo = new PostgresChatDispatchRepository(pool);
+    conversationWorkLinks = new PostgresConversationWorkLinkRepository(pool);
   });
 
   afterAll(async () => {
@@ -139,6 +142,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       dispatchRepo,
       new MockChatTurnProvider(),
       createTestBrainResolver(),
+      conversationWorkLinks,
     );
     const processed = await reconciler.reconcilePendingDispatches(50);
     expect(processed).toBe(1);
@@ -226,6 +230,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       dispatchRepo,
       new MockChatTurnProvider(),
       createTestBrainResolver(),
+      conversationWorkLinks,
     );
     await reconciler.reconcilePendingDispatches(50);
 
@@ -303,6 +308,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
       dispatchRepo,
       new MockChatTurnProvider(),
       createTestBrainResolver(),
+      conversationWorkLinks,
     );
     await reconciler.reconcilePendingDispatches(50);
 

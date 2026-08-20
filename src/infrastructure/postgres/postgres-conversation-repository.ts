@@ -65,6 +65,7 @@ type ChatMessageRow = {
   agent_definition_id: string | null;
   agent_version_id: string | null;
   runtime_epoch: number | null;
+  provider: string | null;
   work_ref: string | null;
   delivery_id: string | null;
   created_at: string | Date;
@@ -238,6 +239,10 @@ export class PostgresConversationRepository implements ConversationRepository {
       authorType === 'agent_definition'
         ? (input.author.runtimeEpoch ?? null)
         : null;
+    const provider =
+      authorType === 'agent_definition'
+        ? (input.author.provider ?? null)
+        : null;
 
     const client = await this.acquire();
     try {
@@ -299,8 +304,8 @@ export class PostgresConversationRepository implements ConversationRepository {
       const messageResult = hasDeliveryId
         ? await client.query<ChatMessageRow>(
             `INSERT INTO chat_messages
-             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, work_ref, delivery_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, delivery_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              ON CONFLICT (tenant_id, conversation_id, delivery_id)
              WHERE delivery_id IS NOT NULL DO NOTHING
              RETURNING *`,
@@ -315,6 +320,7 @@ export class PostgresConversationRepository implements ConversationRepository {
               agentDefinitionId,
               agentVersionId,
               runtimeEpoch,
+              provider,
               input.workRef ?? null,
               input.deliveryId,
               now,
@@ -322,8 +328,8 @@ export class PostgresConversationRepository implements ConversationRepository {
           )
         : await client.query<ChatMessageRow>(
             `INSERT INTO chat_messages
-             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, work_ref, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, provider, work_ref, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING *`,
             [
               messageId,
@@ -336,6 +342,7 @@ export class PostgresConversationRepository implements ConversationRepository {
               agentDefinitionId,
               agentVersionId,
               runtimeEpoch,
+              provider,
               input.workRef ?? null,
               now,
             ],
@@ -554,6 +561,7 @@ function mapChatMessage(row: ChatMessageRow): ChatMessage {
     agentDefinitionId: row.agent_definition_id ?? null,
     agentVersionId: row.agent_version_id ?? null,
     runtimeEpoch: row.runtime_epoch ?? null,
+    provider: row.provider ?? null,
     workRef: row.work_ref ?? null,
     deliveryId: row.delivery_id ?? null,
     createdAt: iso_date(row.created_at),

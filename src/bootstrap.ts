@@ -389,12 +389,15 @@ export async function createService(
   });
   runtimeModule.registerToolContributor(workModule.contributeRuntime);
   const chatWorkCardProjection = workModule.createChatWorkCardProjection();
+  const conversationWorkLinks = new PostgresConversationWorkLinkRepository(
+    pool,
+  );
   const workChatWorker = createWorkChatWakeWorker(
     {
       workSource: new PostgresWorkChatWakeWorkSource(pool),
       state: new PostgresWorkChatWakeStateRepository(pool),
       projection: chatWorkCardProjection,
-      conversationWorkLinks: new PostgresConversationWorkLinkRepository(pool),
+      conversationWorkLinks,
       conversations,
       conversationAgentDefinitions:
         new PostgresWorkChatConversationAgentResolver(pool),
@@ -437,6 +440,7 @@ export async function createService(
     chatDispatches,
     chatTurnProvider,
     chatBrainResolver,
+    conversationWorkLinks,
     logger,
     undefined,
     conversationWorkEntitlements,

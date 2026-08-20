@@ -127,6 +127,7 @@ export async function executeProductWorkRunStart(
       workspaceId: current.workspaceId,
       workId: result.workRun.workId,
       conversationId: deps.conversationOrigin.conversationId,
+      triggerMessageId: deps.conversationOrigin.triggerMessageId,
     });
   }
 
@@ -245,6 +246,7 @@ async function executeOneCallWorkStart(
       workspaceId: current.workspaceId,
       workId: work.id,
       conversationId: deps.conversationOrigin.conversationId,
+      triggerMessageId: deps.conversationOrigin.triggerMessageId,
     });
   }
   const workReference: WorkReference = {

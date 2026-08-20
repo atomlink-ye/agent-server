@@ -60,6 +60,10 @@ class FakeConversationRepository implements ConversationRepository {
         authorType === 'agent_definition'
           ? (input.author.runtimeEpoch ?? null)
           : null,
+      provider:
+        authorType === 'agent_definition'
+          ? (input.author.provider ?? null)
+          : null,
       workRef: input.workRef ?? null,
       createdAt: new Date().toISOString(),
     });
@@ -159,11 +163,15 @@ class FakeChatDispatchRepository implements ChatDispatchRepository {
 class FakeChatTurnProvider implements ChatTurnProvider {
   lastRunTurnInput: Parameters<ChatTurnProvider['runTurn']>[0] | null = null;
 
-  async runTurn(input: Parameters<ChatTurnProvider['runTurn']>[0]): Promise<{ readonly body: string }> {
+  async runTurn(input: Parameters<ChatTurnProvider['runTurn']>[0]): Promise<{ readonly body: string; readonly provider: string }> {
     this.lastRunTurnInput = input;
-    return { body: '[mock reply]' };
+    return { body: '[mock reply]', provider: 'mock' };
   }
 }
+
+const fakeConversationWorkLinks = {
+  findWorkIdsByOrigin: async () => [],
+};
 
 function createTestBrainResolver(): ChatBrainResolver {
   const managedDefinitions = {
@@ -231,6 +239,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -255,6 +264,7 @@ describe('ChatDeliveryReconciler', () => {
       dispatchRepo,
       provider,
       createTestBrainResolver(),
+      fakeConversationWorkLinks,
       undefined,
       () => new Date('2026-07-22T10:00:00Z'),
     );
@@ -313,6 +323,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -331,6 +342,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -355,6 +367,7 @@ describe('ChatDeliveryReconciler', () => {
       dispatchRepo,
       provider,
       createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -396,6 +409,7 @@ describe('ChatDeliveryReconciler', () => {
       dispatchRepo,
       provider,
       createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -437,6 +451,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -454,6 +469,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -490,6 +506,7 @@ describe('ChatDeliveryReconciler', () => {
       dispatchRepo,
       provider,
       createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     const processed = await reconciler.reconcilePendingDispatches(50);

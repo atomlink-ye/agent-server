@@ -22,6 +22,7 @@ export type ConversationMessageAuthorContext =
       readonly agentDefinitionId: string;
       readonly agentVersionId?: string | null;
       readonly runtimeEpoch?: number | null;
+      readonly provider?: string | null;
       /** Trusted turn metadata supplied by the server-side runtime path. */
       readonly turnMetadata?: Readonly<Record<string, unknown>>;
     };

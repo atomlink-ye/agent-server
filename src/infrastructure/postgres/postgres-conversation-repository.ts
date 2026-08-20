@@ -66,6 +66,7 @@ type ChatMessageRow = {
   agent_version_id: string | null;
   runtime_epoch: number | null;
   work_ref: string | null;
+  delivery_id: string | null;
   created_at: string | Date;
 };
 
@@ -217,6 +218,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     readonly author: ConversationMessageAuthorContext;
     readonly body: string;
     readonly workRef?: string | null;
+    readonly deliveryId?: string | null;
   }): Promise<ChatMessage> {
     const authorType = input.author.type;
     const authorId =
@@ -292,31 +294,74 @@ export class PostgresConversationRepository implements ConversationRepository {
       const messageId = randomUUID();
       const now = iso();
 
-      // Insert message
-      const messageResult = await client.query<ChatMessageRow>(
-        `INSERT INTO chat_messages
-         (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, work_ref, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING *`,
-        [
-          messageId,
-          input.author.tenantId,
-          input.author.conversationId,
-          sequence,
-          authorType,
-          authorId,
-          input.body,
-          agentDefinitionId,
-          agentVersionId,
-          runtimeEpoch,
-          input.workRef ?? null,
-          now,
-        ],
-      );
+      const hasDeliveryId = input.deliveryId !== undefined && input.deliveryId !== null;
+      const messageResult = hasDeliveryId
+        ? await client.query<ChatMessageRow>(
+            `INSERT INTO chat_messages
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, work_ref, delivery_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             ON CONFLICT (tenant_id, conversation_id, delivery_id)
+             WHERE delivery_id IS NOT NULL DO NOTHING
+             RETURNING *`,
+            [
+              messageId,
+              input.author.tenantId,
+              input.author.conversationId,
+              sequence,
+              authorType,
+              authorId,
+              input.body,
+              agentDefinitionId,
+              agentVersionId,
+              runtimeEpoch,
+              input.workRef ?? null,
+              input.deliveryId,
+              now,
+            ],
+          )
+        : await client.query<ChatMessageRow>(
+            `INSERT INTO chat_messages
+             (id, tenant_id, conversation_id, sequence, author_type, author_id, body, agent_definition_id, agent_version_id, runtime_epoch, work_ref, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             RETURNING *`,
+            [
+              messageId,
+              input.author.tenantId,
+              input.author.conversationId,
+              sequence,
+              authorType,
+              authorId,
+              input.body,
+              agentDefinitionId,
+              agentVersionId,
+              runtimeEpoch,
+              input.workRef ?? null,
+              now,
+            ],
+          );
 
-      const message = messageResult.rows?.[0];
+      let message = messageResult.rows?.[0];
+      if (!message && hasDeliveryId) {
+        const existing = await client.query<ChatMessageRow>(
+          `SELECT * FROM chat_messages
+           WHERE tenant_id=$1 AND conversation_id=$2 AND delivery_id=$3`,
+          [
+            input.author.tenantId,
+            input.author.conversationId,
+            input.deliveryId,
+          ],
+        );
+        message = existing.rows?.[0];
+      }
       if (!message) {
         throw new Error('Failed to insert chat message.');
+      }
+
+      // A delivery-key conflict returns the already durable message and must
+      // not consume another conversation sequence.
+      if (!messageResult.rows?.[0]) {
+        await client.query('COMMIT');
+        return mapChatMessage(message);
       }
 
       // Increment next_sequence
@@ -509,6 +554,7 @@ function mapChatMessage(row: ChatMessageRow): ChatMessage {
     agentVersionId: row.agent_version_id ?? null,
     runtimeEpoch: row.runtime_epoch ?? null,
     workRef: row.work_ref ?? null,
+    deliveryId: row.delivery_id ?? null,
     createdAt: iso_date(row.created_at),
   });
 }

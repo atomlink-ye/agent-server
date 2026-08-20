@@ -51,6 +51,7 @@ export interface ConversationRepository {
     readonly author: ConversationMessageAuthorContext;
     readonly body: string;
     readonly workRef?: string | null;
+    readonly deliveryId?: string | null;
   }): Promise<ChatMessage>;
 
   listMessages(input: {

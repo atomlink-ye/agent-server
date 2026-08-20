@@ -47,7 +47,7 @@ profiles:
     runtime:
       enabled: true
       adapter: paseo
-      provider: opencode
+      provider: claude
       model: opencode-go/deepseek-v4-flash
     compose:
       transport: repository

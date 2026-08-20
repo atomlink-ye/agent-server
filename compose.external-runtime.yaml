@@ -73,7 +73,7 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
-      AGENT_SERVER_DIRECT_CHAT_PLANE: mock
+      AGENT_SERVER_DIRECT_CHAT_PLANE: execution_runtime
       AGENT_SERVER_PRODUCT_WORK_PLANE: execution_runtime
       RUNTIME_ADAPTER: ${RUNTIME_ADAPTER:-paseo}
       RUNTIME_MCP_LISTEN_HOST: 0.0.0.0

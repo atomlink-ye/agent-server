@@ -834,6 +834,41 @@ describe('PostgresAgentRegistry repository contract (PGlite)', () => {
     expect(page?.nextCursor).toBeNull();
   });
 
+  it('strictly hides a managed definition from a different principal in the same tenant', async () => {
+    const db = await database();
+    const registry = new PostgresAgentRegistry(db);
+    const parsed = parseManagedAgentPackage(source);
+    const definition = createManagedAgentDefinition({
+      ...owner,
+      normalizedName: 'owner-scope-agent',
+      displayName: 'Owner Scope Agent',
+      id: '00000000-0000-4000-8000-0000000c0011',
+      now: () => new Date(now),
+    });
+    const version = createManagedAgentDraft({
+      definition,
+      parsed,
+      id: '00000000-0000-4000-8000-0000000c0111',
+      now: () => new Date(now),
+    });
+    await registry.importAgent({
+      owner,
+      compatibilityWorkspaceId: owner.workspaceId,
+      idempotencyKey: 'owner-scope-import',
+      requestFingerprint: 'owner-scope-fingerprint',
+      normalizedName: definition.normalizedName,
+      definition,
+      version,
+    });
+    expect(await registry.findDefinition(owner, definition.id)).not.toBeNull();
+    expect(
+      await registry.findDefinition(
+        { ...owner, principalId: 'principal_other' },
+        definition.id,
+      ),
+    ).toBeNull();
+  });
+
   it('keeps import idempotency timestamps on database time when entity timestamps are stale', async () => {
     const db = await database();
     const registry = new PostgresAgentRegistry(db);
@@ -1474,7 +1509,7 @@ describeRealPostgres(
       ]);
     });
 
-    it('allows same-tenant principals to read but not write another principal\'s managed agent', async () => {
+    it('hides another principal\'s managed agent within the same tenant', async () => {
       if (!pool) return;
       const tenant = 'real_registry_hidden';
       await reset(tenant);
@@ -1495,29 +1530,30 @@ describeRealPostgres(
         principalType: 'service_account',
         principalId: 'other',
       };
-      // Same tenant, different principal: should be able to READ the definition
+      const ownDefinition = await registry.findDefinition(
+        imported.definition,
+        imported.definition.id,
+      );
+      expect(ownDefinition?.id).toBe(imported.definition.id);
+      // Same tenant, different principal: cannot READ the definition
       const def = await registry.findDefinition(
         otherPrincipal,
         imported.definition.id,
       );
-      expect(def).toBeDefined();
-      expect(def?.id).toBe(imported.definition.id);
-      // Same tenant, different principal: should be able to READ the version
+      expect(def).toBeNull();
+      // Same tenant, different principal: cannot READ the version
       const ver = await registry.findVersion(
         otherPrincipal,
         imported.version.id,
       );
-      expect(ver).toBeDefined();
-      expect(ver?.id).toBe(imported.version.id);
-      // Same tenant, different principal: should be able to LIST versions
+      expect(ver).toBeNull();
+      // Same tenant, different principal: cannot LIST versions
       const listResult = await registry.listVersionsForOwner(otherPrincipal, {
         definitionId: imported.definition.id,
         cursor: null,
         limit: 2,
       });
-      expect(listResult).toBeDefined();
-      expect(listResult?.items).toHaveLength(1);
-      expect(listResult?.items[0]?.id).toBe(imported.version.id);
+      expect(listResult).toBeNull();
       // Same tenant, different principal: cannot WRITE (publish)
       await expect(
         registry.publishAgentVersion({

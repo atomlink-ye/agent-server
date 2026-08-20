@@ -47,7 +47,10 @@ export interface ConversationRouteDependencies {
   readonly config: AppConfig;
   readonly conversations: ConversationRepository;
   readonly dispatches: ChatDispatchRepository;
-  readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
+  readonly managedAgentDefinitions: Pick<
+    ManagedAgentDefinitionRead,
+    'findManagedDefinitionByTenant'
+  >;
   readonly workEntitlements?: ConversationWorkEntitlementRepository;
 }
 
@@ -78,15 +81,11 @@ export function registerConversationRoutes(
     );
     if (!parsed.success) throw invalidRequest();
     const access = getAuthenticatedAccessContext(c);
-    const definition = await dependencies.managedAgentDefinitions.findDefinition(
-      {
+    const definition =
+      await dependencies.managedAgentDefinitions.findManagedDefinitionByTenant({
         tenantId: access.tenantId,
-        workspaceId: access.workspaceId,
-        principalType: access.principalType,
-        principalId: access.principalId,
-      },
-      parsed.data.agent_definition_id,
-    );
+        definitionId: parsed.data.agent_definition_id,
+      });
     if (!definition) throw notFound();
     const runtime = await dependencies.conversations.getChatRuntime({
       tenantId: access.tenantId,

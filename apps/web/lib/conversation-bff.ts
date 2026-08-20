@@ -204,7 +204,7 @@ function sanitizeCreateError(error: unknown): ConversationBffError {
     error instanceof AgentServerError &&
     error.status >= 400 &&
     error.status < 500 &&
-    (error.hasJsonBody === true || error.body !== null)
+    error.hasJsonBody === true
   ) {
     return new ConversationBffError(error.status, 'conversation_create_failed', {
       body: error.body,

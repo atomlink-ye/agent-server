@@ -335,6 +335,12 @@ function conversationResponse(conversation: Conversation) {
     conversation_id: conversation.id,
     kind: conversation.kind,
     title: conversation.title,
+    direct_agent: conversation.directAgent
+      ? {
+          agent_definition_id: conversation.directAgent.agentDefinitionId,
+          display_name: conversation.directAgent.displayName,
+        }
+      : null,
     topic: conversation.topic,
     created_at: conversation.createdAt,
     updated_at: conversation.updatedAt,

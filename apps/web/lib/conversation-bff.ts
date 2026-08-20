@@ -16,6 +16,7 @@ export type PublicConversation = Pick<
   | 'conversation_id'
   | 'kind'
   | 'title'
+  | 'direct_agent'
   | 'topic'
   | 'created_at'
   | 'updated_at'
@@ -218,6 +219,15 @@ function sanitizeConversation(value: AgentConversation): PublicConversation {
   if (!value || typeof value.conversation_id !== 'string' || !value.conversation_id)
     throw invalidUpstream();
   if (value.kind !== 'direct' && value.kind !== 'group') throw invalidUpstream();
+  if (value.direct_agent !== null) {
+    if (
+      !value.direct_agent ||
+      !isNonEmptyString(value.direct_agent.agent_definition_id) ||
+      !nullableString(value.direct_agent.display_name)
+    ) {
+      throw invalidUpstream();
+    }
+  }
   if (!nullableString(value.title) || value.title === undefined) {
     if (value.title !== null) throw invalidUpstream();
   }
@@ -230,6 +240,7 @@ function sanitizeConversation(value: AgentConversation): PublicConversation {
     conversation_id: value.conversation_id,
     kind: value.kind,
     title: value.title,
+    direct_agent: value.direct_agent,
     topic: value.topic,
     created_at: value.created_at,
     updated_at: value.updated_at,

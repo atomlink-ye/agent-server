@@ -86,7 +86,7 @@ export function WorkPane({ commands, onOpenWork }: WorkPaneProps) {
             </button>
           </div>
         ) : null}
-        {state.status !== 'error' && state.works.length === 0 ? (
+        {state.status === 'ready' && state.works.length === 0 ? (
           <p className="pane-placeholder">No Work yet.</p>
         ) : null}
         {state.works.map((work) => (

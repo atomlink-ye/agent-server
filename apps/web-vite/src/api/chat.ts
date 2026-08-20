@@ -176,8 +176,22 @@ function normalizeConversation(value: unknown): Conversation {
   const record = asRecord(value);
   return {
     id: requiredString(record?.conversation_id),
+    kind: requiredConversationKind(record?.kind),
     title: nullableString(record?.title),
+    directAgent: normalizeDirectAgent(record?.direct_agent),
     updatedAt: requiredString(record?.updated_at),
+  };
+}
+
+function normalizeDirectAgent(
+  value: unknown,
+): Conversation['directAgent'] {
+  if (value === null) return null;
+  const record = asRecord(value);
+  if (!record) throw invalidResponse();
+  return {
+    agentDefinitionId: requiredString(record.agent_definition_id),
+    displayName: nullableString(record.display_name),
   };
 }
 
@@ -288,6 +302,11 @@ function nullableString(value: unknown): string | null {
 
 function requiredAuthorType(value: unknown): ChatMessage['authorType'] {
   if (value === 'principal' || value === 'agent_definition') return value;
+  throw invalidResponse();
+}
+
+function requiredConversationKind(value: unknown): Conversation['kind'] {
+  if (value === 'direct' || value === 'group') return value;
   throw invalidResponse();
 }
 

@@ -201,7 +201,11 @@ export function ChatShell({
                 </span>
                 <div>
                   <span className="eyebrow">Conversation</span>
-                  <h1>{selectedConversation?.title ?? 'Untitled conversation'}</h1>
+                  <h1>
+                    {selectedConversation
+                      ? conversationDisplayName(selectedConversation)
+                      : 'Conversation'}
+                  </h1>
                 </div>
               </div>
               <button
@@ -254,6 +258,18 @@ export function ChatShell({
       )}
     </div>
   );
+}
+
+function conversationDisplayName(conversation: {
+  readonly kind: 'direct' | 'group';
+  readonly title: string | null;
+  readonly directAgent: { readonly displayName: string | null } | null;
+}): string {
+  if (conversation.title !== null) return conversation.title;
+  if (conversation.kind === 'direct') {
+    return conversation.directAgent?.displayName?.trim() || 'Agent';
+  }
+  return 'Conversation';
 }
 
 export default ChatShell;

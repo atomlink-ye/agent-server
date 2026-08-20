@@ -123,6 +123,10 @@ export type AgentConversation = {
   conversation_id: string;
   kind: 'direct' | 'group';
   title: string | null;
+  direct_agent: {
+    agent_definition_id: string;
+    display_name: string | null;
+  } | null;
   topic: string | null;
   created_at: string;
   updated_at: string;

@@ -42,6 +42,9 @@ type ConversationRow = {
   next_sequence: string | number;
   created_at: string | Date;
   updated_at: string | Date;
+  direct_agent_peer_count: string | number | null;
+  direct_agent_definition_id: string | null;
+  direct_agent_display_name: string | null;
 };
 
 type ConversationMemberRow = {
@@ -91,6 +94,44 @@ type AgentChatRuntimeRow = {
 };
 
 const iso = () => new Date().toISOString();
+
+const conversationSelectColumns = `
+         c.id,
+         c.tenant_id,
+         c.kind,
+         c.title,
+         c.topic,
+         c.direct_pair_key,
+         c.next_sequence,
+         c.created_at,
+         c.updated_at,
+         direct_agent_peer.agent_peer_count AS direct_agent_peer_count,
+         CASE
+           WHEN c.kind = 'direct' AND direct_agent_peer.agent_peer_count = 1
+           THEN direct_agent_peer.member_id
+           ELSE NULL
+         END AS direct_agent_definition_id,
+         CASE
+           WHEN c.kind = 'direct' AND direct_agent_peer.agent_peer_count = 1
+           THEN ad.name
+           ELSE NULL
+         END AS direct_agent_display_name`;
+
+const conversationJoins = `
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*)::int AS agent_peer_count,
+           CASE WHEN COUNT(*) = 1 THEN MAX(cm.member_id) ELSE NULL END AS member_id
+         FROM conversation_members cm
+         WHERE cm.conversation_id = c.id
+           AND cm.tenant_id = c.tenant_id
+           AND cm.member_type = 'agent_definition'
+       ) direct_agent_peer ON TRUE
+       LEFT JOIN agent_definitions ad
+         ON ad.tenant_id = c.tenant_id
+        AND c.kind = 'direct'
+        AND direct_agent_peer.agent_peer_count = 1
+        AND ad.id::text = direct_agent_peer.member_id`;
 
 export class PostgresConversationRepository implements ConversationRepository {
   constructor(
@@ -154,9 +195,21 @@ export class PostgresConversationRepository implements ConversationRepository {
         [actualConversationId, input.tenantId, input.agentDefinitionId, now],
       );
 
+      const projectedConversationResult = await client.query<ConversationRow>(
+        `SELECT ${conversationSelectColumns}
+         FROM conversations c
+         ${conversationJoins}
+         WHERE c.id=$1 AND c.tenant_id=$2`,
+        [actualConversationId, input.tenantId],
+      );
+      const projectedConversation = projectedConversationResult.rows?.[0];
+      if (!projectedConversation) {
+        throw new Error('Failed to project direct conversation.');
+      }
+
       await client.query('COMMIT');
 
-      return mapConversation(conversation);
+      return mapConversation(projectedConversation);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -173,7 +226,9 @@ export class PostgresConversationRepository implements ConversationRepository {
   }): Promise<Conversation | null> {
     // Check membership gate: requester must be a member of the conversation
     const membershipResult = await this.database.query<ConversationMemberRow>(
-      `SELECT * FROM conversation_members
+      `SELECT conversation_id, tenant_id, member_type, member_id,
+              member_principal_type, role, joined_at
+       FROM conversation_members
        WHERE conversation_id=$1 AND tenant_id=$2 AND member_type=$3 AND member_id=$4`,
       [
         input.conversationId,
@@ -189,8 +244,10 @@ export class PostgresConversationRepository implements ConversationRepository {
 
     // Requester is a member; fetch the conversation
     const conversationResult = await this.database.query<ConversationRow>(
-      `SELECT * FROM conversations
-       WHERE id=$1 AND tenant_id=$2`,
+      `SELECT ${conversationSelectColumns}
+       FROM conversations c
+       ${conversationJoins}
+         WHERE c.id=$1 AND c.tenant_id=$2`,
       [input.conversationId, input.tenantId],
     );
 
@@ -205,7 +262,9 @@ export class PostgresConversationRepository implements ConversationRepository {
     readonly memberId: string;
   }): Promise<readonly Conversation[]> {
     const result = await this.database.query<ConversationRow>(
-      `SELECT c.* FROM conversations c
+      `SELECT ${conversationSelectColumns}
+       FROM conversations c
+       ${conversationJoins}
        JOIN conversation_members m ON m.conversation_id = c.id
        WHERE c.tenant_id=$1 AND m.tenant_id=$1 AND m.member_type=$2 AND m.member_id=$3
        ORDER BY c.updated_at DESC`,
@@ -517,11 +576,25 @@ export class PostgresConversationRepository implements ConversationRepository {
 }
 
 function mapConversation(row: ConversationRow): Conversation {
+  const directAgentPeerCount = Number(row.direct_agent_peer_count ?? 0);
+  if (row.kind === 'direct' && directAgentPeerCount > 1) {
+    throw new Error('Direct conversation has multiple agent_definition peers.');
+  }
+  const directAgent =
+    row.kind === 'direct' &&
+    directAgentPeerCount === 1 &&
+    row.direct_agent_definition_id
+      ? {
+          agentDefinitionId: row.direct_agent_definition_id,
+          displayName: row.direct_agent_display_name ?? null,
+        }
+      : null;
   return Object.freeze({
     id: row.id,
     tenantId: row.tenant_id,
     kind: row.kind as 'direct' | 'group',
     title: row.title ?? null,
+    directAgent,
     topic: row.topic ?? null,
     directPairKey: row.direct_pair_key ?? null,
     nextSequence: Number(row.next_sequence),

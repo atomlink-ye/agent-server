@@ -63,7 +63,7 @@ export function ConversationsList({
             {conversationInitials(conversation)}
           </span>
           <span className="conversation-row-copy">
-            <strong>{conversation.title ?? 'Untitled conversation'}</strong>
+            <strong>{conversationDisplayName(conversation)}</strong>
             <time dateTime={conversation.updatedAt}>
               {formatUpdatedTime(conversation.updatedAt)}
             </time>
@@ -83,12 +83,20 @@ export function ConversationsList({
 }
 
 function conversationInitials(conversation: Conversation): string {
-  const source = conversation.title?.trim() || conversation.id;
+  const source = conversationDisplayName(conversation).trim() || conversation.id;
   const words = source.split(/\s+/).filter(Boolean);
   return (words.length > 1
     ? `${words[0][0] ?? ''}${words[1][0] ?? ''}`
     : source.slice(0, 2)
   ).toUpperCase();
+}
+
+function conversationDisplayName(conversation: Conversation): string {
+  if (conversation.title !== null) return conversation.title;
+  if (conversation.kind === 'direct') {
+    return conversation.directAgent?.displayName?.trim() || 'Agent';
+  }
+  return 'Conversation';
 }
 
 function avatarTone(conversation: Conversation): number {

@@ -22,7 +22,12 @@ export interface WorkListItem {
 
 export interface Conversation {
   readonly id: ConversationId;
+  readonly kind: 'direct' | 'group';
   readonly title: string | null;
+  readonly directAgent: {
+    readonly agentDefinitionId: string;
+    readonly displayName: string | null;
+  } | null;
   readonly updatedAt: string;
 }
 

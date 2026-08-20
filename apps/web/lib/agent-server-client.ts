@@ -235,9 +235,13 @@ export async function listConversations(): Promise<{
 export async function getConversation(
   conversationId: string,
 ): Promise<{ conversation: AgentConversation }> {
-  return request(
-    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
-  );
+  return request(`/api/v1/conversations/${encodeURIComponent(conversationId)}`);
+}
+
+export async function getChatWorkCard(workId: string): Promise<unknown> {
+  return request(`/api/v1/works/${encodeURIComponent(workId)}/chat-card`, {
+    method: 'GET',
+  });
 }
 
 export async function postConversationMessage(

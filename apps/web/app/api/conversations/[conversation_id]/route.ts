@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import {
-  conversationErrorResponse,
-  readConversationBff,
-} from '@/lib/conversation-bff';
-import { readProductSessionId } from '@/lib/session-cookie';
+import { conversationErrorResponse, readConversationBff } from '@/lib/conversation-bff';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +10,7 @@ export async function GET(
 ) {
   try {
     const { conversation_id: conversationId } = await params;
-    return NextResponse.json(
-      await readConversationBff(await readProductSessionId(), conversationId),
-    );
+    return NextResponse.json(await readConversationBff(conversationId));
   } catch (error) {
     const safe = conversationErrorResponse(error);
     return NextResponse.json(safe.body, { status: safe.status });

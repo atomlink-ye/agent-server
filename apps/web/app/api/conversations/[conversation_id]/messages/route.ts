@@ -5,7 +5,6 @@ import {
   readConversationMessagesBff,
   postConversationBff,
 } from '@/lib/conversation-bff';
-import { readProductSessionId } from '@/lib/session-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,12 +14,7 @@ export async function GET(
 ) {
   try {
     const { conversation_id: conversationId } = await params;
-    return NextResponse.json(
-      await readConversationMessagesBff(
-        await readProductSessionId(),
-        conversationId,
-      ),
-    );
+    return NextResponse.json(await readConversationMessagesBff(conversationId));
   } catch (error) {
     const safe = conversationErrorResponse(error);
     return NextResponse.json(safe.body, { status: safe.status });
@@ -47,14 +41,7 @@ export async function POST(
       Object.prototype.hasOwnProperty.call(body, 'body')
         ? (body as { body?: unknown }).body
         : undefined;
-    return NextResponse.json(
-      await postConversationBff(
-        await readProductSessionId(),
-        conversationId,
-        payload,
-      ),
-      { status: 202 },
-    );
+    return NextResponse.json(await postConversationBff(conversationId, payload), { status: 202 });
   } catch (error) {
     const safe = conversationErrorResponse(error);
     return NextResponse.json(safe.body, { status: safe.status });

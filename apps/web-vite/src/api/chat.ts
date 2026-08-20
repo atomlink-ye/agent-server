@@ -7,17 +7,9 @@ import type {
   WorkListProductState,
 } from '../components/chat/contracts';
 
-export type WorkProductState =
-  | 'running'
-  | 'needs_you'
-  | 'complete'
-  | 'problem';
+export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
 
-export type WorkResultCaptureStatus =
-  | 'present'
-  | 'not_present'
-  | 'redacted'
-  | 'not_captured';
+export type WorkResultCaptureStatus = 'present' | 'not_present' | 'redacted' | 'not_captured';
 
 export interface WorkChatCard {
   readonly workId: string;
@@ -45,9 +37,7 @@ export class ChatApiError extends Error {
 
 export const isUuid = (value: unknown): value is string =>
   typeof value === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
@@ -88,10 +78,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-export async function initializeSession(): Promise<void> {
-  await request<unknown>('/api/session', { cache: 'no-store' });
-}
-
 export async function loadConversations(): Promise<readonly Conversation[]> {
   const payload = asRecord(await request<unknown>('/api/conversations'));
   const values = payload?.conversations;
@@ -99,9 +85,7 @@ export async function loadConversations(): Promise<readonly Conversation[]> {
   return values.map(normalizeConversation);
 }
 
-export async function createConversation(
-  agentDefinitionId: string,
-): Promise<Conversation> {
+export async function createConversation(agentDefinitionId: string): Promise<Conversation> {
   const payload = asRecord(
     await request<unknown>('/api/conversations', {
       method: 'POST',
@@ -124,9 +108,7 @@ export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
   const payload = asRecord(
-    await request<unknown>(
-      `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-    ),
+    await request<unknown>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`),
   );
   const values = payload?.messages;
   if (!Array.isArray(values)) throw invalidResponse();
@@ -142,10 +124,10 @@ export async function sendMessage(
   body: string,
 ): Promise<ChatMessage> {
   const payload = asRecord(
-    await request<unknown>(
-      `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { method: 'POST', body: JSON.stringify({ body }) },
-    ),
+    await request<unknown>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
   );
   const message = payload?.message;
   if (!message) throw invalidResponse();
@@ -183,9 +165,7 @@ function normalizeConversation(value: unknown): Conversation {
   };
 }
 
-function normalizeDirectAgent(
-  value: unknown,
-): Conversation['directAgent'] {
+function normalizeDirectAgent(value: unknown): Conversation['directAgent'] {
   if (value === null) return null;
   const record = asRecord(value);
   if (!record) throw invalidResponse();
@@ -206,9 +186,7 @@ function normalizeWorkListItem(value: unknown): WorkListItem {
   };
 }
 
-function normalizeLatestRunSummary(
-  value: unknown,
-): WorkListItem['latestRunSummary'] {
+function normalizeLatestRunSummary(value: unknown): WorkListItem['latestRunSummary'] {
   if (value === null || value === undefined) return null;
   const record = asRecord(value);
   if (!record) throw invalidResponse();
@@ -310,9 +288,7 @@ function requiredConversationKind(value: unknown): Conversation['kind'] {
   throw invalidResponse();
 }
 
-function requiredWorkListProductState(
-  value: unknown,
-): WorkListProductState {
+function requiredWorkListProductState(value: unknown): WorkListProductState {
   if (
     value === 'running' ||
     value === 'needs_you' ||
@@ -333,10 +309,7 @@ function nullableEnum<T extends string>(value: unknown, values: readonly T[]): T
 
 function isWorkProductState(value: unknown): value is WorkProductState {
   return (
-    value === 'running' ||
-    value === 'needs_you' ||
-    value === 'complete' ||
-    value === 'problem'
+    value === 'running' || value === 'needs_you' || value === 'complete' || value === 'problem'
   );
 }
 

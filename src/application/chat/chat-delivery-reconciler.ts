@@ -16,13 +16,16 @@ export class ChatDeliveryReconciler {
     const pending = await this.dispatches.listPending(limit);
     let processed = 0;
     for (const dispatch of pending) {
-      await this.reconcileOne(dispatch);
+      await this.reconcile(dispatch);
       processed += 1;
     }
     return processed;
   }
 
-  private async reconcileOne(dispatch: ChatDispatch): Promise<void> {
+  public async reconcile(
+    dispatch: ChatDispatch,
+    workerId?: string,
+  ): Promise<void> {
     const runtime = await this.conversations.getChatRuntime({
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
@@ -40,12 +43,31 @@ export class ChatDeliveryReconciler {
       tenantId: dispatch.tenantId,
       conversationId: dispatch.conversationId,
     });
+    const triggerMessage = messages.find(
+      (message) =>
+        message.sequence === dispatch.throughSequence &&
+        message.tenantId === dispatch.tenantId &&
+        message.conversationId === dispatch.conversationId,
+    );
+    if (!triggerMessage) {
+      this.logger?.log('warn', 'chat.delivery.trigger_missing', {
+        dispatch_id: dispatch.id,
+        tenant_id: dispatch.tenantId,
+        conversation_id: dispatch.conversationId,
+        through_sequence: dispatch.throughSequence,
+      });
+      return;
+    }
 
     const reply = await this.provider.runTurn({
       tenantId: dispatch.tenantId,
       agentDefinitionId: dispatch.agentDefinitionId,
       agentVersionId: runtime.activeAgentVersionId,
       conversationId: dispatch.conversationId,
+      triggerMessageId: triggerMessage.id,
+      instructions: '',
+      capabilitySummary: {},
+      agentHome: {},
       messages: messages.map((message) => ({
         authorType: message.authorType,
         authorId: message.authorId,
@@ -65,7 +87,23 @@ export class ChatDeliveryReconciler {
       body: reply.body,
     });
 
-    await this.dispatches.markPublished(dispatch.id, this.now().toISOString());
+    const publishedAt = this.now().toISOString();
+    if (workerId) {
+      const published = await this.dispatches.completeClaim({
+        id: dispatch.id,
+        workerId,
+        publishedAt,
+      });
+      if (!published) {
+        this.logger?.log('warn', 'chat.delivery.lease_lost', {
+          dispatch_id: dispatch.id,
+          worker_id: workerId,
+        });
+        return;
+      }
+    } else {
+      await this.dispatches.markPublished(dispatch.id, publishedAt);
+    }
 
     this.logger?.log('info', 'chat.delivery.materialized', {
       tenant_id: dispatch.tenantId,
@@ -73,5 +111,10 @@ export class ChatDeliveryReconciler {
       conversation_id: dispatch.conversationId,
       dispatch_id: dispatch.id,
     });
+  }
+
+  // Retained for the existing focused test seam; leased workers use reconcile.
+  private async reconcileOne(dispatch: ChatDispatch): Promise<void> {
+    return this.reconcile(dispatch);
   }
 }

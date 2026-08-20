@@ -2,12 +2,15 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type {
   RuntimeToolGrant,
   RuntimeToolGrantService,
+  RuntimeToolChatContext,
 } from '../application/extensions/runtime-tool-grant-service.js';
 
 export interface RuntimeToolContributionContext {
   readonly server: McpServer;
   readonly grant: RuntimeToolGrant;
   readonly grants: RuntimeToolGrantService;
+  /** Trusted Chat origin, never sourced from MCP tool arguments. */
+  readonly chatContext?: RuntimeToolChatContext;
 }
 
 export type RuntimeToolContributor = (

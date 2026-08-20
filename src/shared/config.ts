@@ -126,6 +126,7 @@ const ConfigSchema = z
     PORT: z.coerce.number().int().min(1).max(65_535).default(3_000),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     SERVICE_NAME: z.string().min(1).default('agent-server'),
+    CHAT_TURN_PROVIDER: z.enum(['mock', 'execution_runtime']).optional(),
     RUNTIME_ADAPTER: z.enum(['none', 'paseo']).default('paseo'),
     RUNTIME_MCP_LISTEN_HOST: z.string().min(1).default('127.0.0.1'),
     RUNTIME_MCP_ADVERTISED_HOST: z.string().min(1).default('127.0.0.1'),
@@ -262,6 +263,7 @@ export type AppConfig = Readonly<{
   port: number;
   logLevel: z.infer<typeof ConfigSchema>['LOG_LEVEL'];
   serviceName: string;
+  chatTurnProvider?: z.infer<typeof ConfigSchema>['CHAT_TURN_PROVIDER'];
   runtime?: {
     adapter: z.infer<typeof ConfigSchema>['RUNTIME_ADAPTER'];
   };
@@ -326,6 +328,9 @@ export function loadConfig(
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
     serviceName: parsed.data.SERVICE_NAME,
+    ...(parsed.data.CHAT_TURN_PROVIDER
+      ? { chatTurnProvider: parsed.data.CHAT_TURN_PROVIDER }
+      : {}),
     runtime: {
       adapter: parsed.data.RUNTIME_ADAPTER,
     },

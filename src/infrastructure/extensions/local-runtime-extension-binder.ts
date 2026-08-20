@@ -59,15 +59,17 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
     // Team participant. Collaboration MCP is platform-owned and auto-mounted.
     if (!input.toolRefs.length && !platformCollaboration) return {};
 
-    const grantScopeId = input.productSessionId ?? input.scopeId;
-    if (!grantScopeId)
+    if (!input.productSessionId && !input.scopeId)
       throw new Error('Runtime extension scope is unavailable.');
     const receipt = this.#mcp.grants.issue({
       tenantId: input.tenantId,
       principalType: input.principalType,
       principalId: input.principalId,
       workspaceId: input.workspaceId,
-      productSessionId: grantScopeId,
+      ...(input.productSessionId
+        ? { productSessionId: input.productSessionId }
+        : {}),
+      ...(input.scopeId ? { scopeId: input.scopeId } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.teamMemberRunId
@@ -75,6 +77,7 @@ export class LocalRuntimeExtensionBinder implements RuntimeExtensionBinder {
         : {}),
       ...(input.teamRunId ? { teamRunId: input.teamRunId } : {}),
       ...(input.contextEpoch ? { contextEpoch: input.contextEpoch } : {}),
+      ...(input.chatContext ? { chatContext: input.chatContext } : {}),
       // These are intentionally user/domain tools only. Collaboration tool
       // visibility is supplied by the platform contributor, not by the grant.
       allowedTools: input.toolRefs,

@@ -70,6 +70,9 @@ import {
 import { requireServiceAccountAccess } from './authentication.js';
 import { getAuthenticatedAccessContext } from '../../platform/access-context.js';
 import { ServiceAccountAuthenticator } from '../../application/control-plane/service-account-authenticator.js';
+import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
+import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
+import { registerConversationRoutes } from './routes/conversations.js';
 
 export interface AppDependencies {
   readonly config: AppConfig;
@@ -98,6 +101,8 @@ export interface AppDependencies {
   readonly teamMessages?: TeamMessageRepository;
   readonly tasks?: TaskRepository;
   readonly sessions?: SessionRepository;
+  readonly conversations?: ConversationRepository;
+  readonly chatDispatches?: ChatDispatchRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
   readonly cancelTask?: CancelTask;
@@ -253,6 +258,12 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
       submitSessionTurn:
         dependencies.submitSessionTurn ??
         new SubmitSessionTurn(dependencies.sessions),
+    });
+  if (dependencies.conversations && dependencies.chatDispatches)
+    registerConversationRoutes(app, {
+      config: dependencies.config,
+      conversations: dependencies.conversations,
+      dispatches: dependencies.chatDispatches,
     });
 
   app.notFound((context) => {

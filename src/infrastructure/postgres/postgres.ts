@@ -73,6 +73,7 @@ export const durableKernelMigrationFileNames = [
   '0039_chat_delivery_outbox.sql',
   '0040_agent_home_vfs.sql',
   '0041_agent_workflow_associations.sql',
+  '0042_chat_dispatch_leases.sql',
   '0043_conversation_work_links.sql',
   '0044_work_chat_wake.sql',
   '0045_work_run_continuation_links.sql',

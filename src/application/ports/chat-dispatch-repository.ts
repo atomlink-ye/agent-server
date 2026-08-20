@@ -20,5 +20,13 @@ export interface ChatDispatchRepository {
 
   listPending(limit: number): Promise<readonly ChatDispatch[]>;
 
+  claimNext(workerId: string, leaseMs: number): Promise<ChatDispatch | null>;
+
+  completeClaim(input: {
+    readonly id: string;
+    readonly workerId: string;
+    readonly publishedAt: string;
+  }): Promise<boolean>;
+
   markPublished(id: string, publishedAt: string): Promise<void>;
 }

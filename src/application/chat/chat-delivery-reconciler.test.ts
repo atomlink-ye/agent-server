@@ -131,6 +131,14 @@ class FakeChatDispatchRepository implements ChatDispatchRepository {
     throw new Error('not implemented');
   }
 
+  async claimNext(): Promise<ChatDispatch | null> {
+    return null;
+  }
+
+  async completeClaim(): Promise<boolean> {
+    return true;
+  }
+
   markPublishedCalled = false;
   markPublishedWithId: string | null = null;
   markPublishedWithTime: string | null = null;

@@ -23,6 +23,8 @@ import { PostgresRunRepository } from './infrastructure/postgres/postgres-run-re
 import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-repository.js';
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
+import { PostgresConversationRepository } from './infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresChatDispatchRepository } from './infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
 import type { Logger } from './shared/observability/logger.js';
@@ -64,11 +66,15 @@ import { createResourceModule } from './modules/resource/resource-module.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
 import { createTeamModule } from './modules/team/team-module.js';
 import { createWorkModule } from './modules/work/work-module.js';
+import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
+import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
+import { ChatDeliveryWorker } from './entrypoints/chat/worker.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
   readonly larkWorker?: Pick<LarkIngressWorker, 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'stop'>;
+  readonly chatWorker?: Pick<ChatDeliveryWorker, 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'stop'
@@ -82,6 +88,7 @@ type StartableServiceResources = ServiceResources & {
   readonly dispatcher: Pick<RunDispatcher, 'start' | 'stop'>;
   readonly larkWorker?: Pick<LarkIngressWorker, 'start' | 'stop'>;
   readonly larkOutboxWorker?: Pick<LarkOutboxWorker, 'start' | 'stop'>;
+  readonly chatWorker?: Pick<ChatDeliveryWorker, 'start' | 'stop'>;
   readonly larkReceiver?: Pick<
     ReturnType<typeof createLarkWebsocketReceiver>,
     'start' | 'stop'
@@ -109,6 +116,11 @@ export async function closeServiceResources(
       : undefined,
     failures,
   );
+  await cleanup(
+    'chat worker',
+    resources.chatWorker ? () => resources.chatWorker!.stop() : undefined,
+    failures,
+  );
   await cleanup('dispatcher', () => resources.dispatcher.stop(), failures);
   await cleanup('runtime', () => resources.runtime.close(), failures);
   await cleanup(
@@ -130,6 +142,7 @@ export async function startServiceResources(
     await resources.larkReceiver?.start();
     resources.larkWorker?.start();
     resources.larkOutboxWorker?.start();
+    resources.chatWorker?.start();
   } catch (error: unknown) {
     const startupFailure = safeLifecycleError('service startup', error);
     try {
@@ -262,6 +275,29 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
+  const conversations = new PostgresConversationRepository(pool);
+  const chatDispatches = new PostgresChatDispatchRepository(pool);
+  const chatDeliveryReconciler = new ChatDeliveryReconciler(
+    conversations,
+    chatDispatches,
+    new MockChatTurnProvider(),
+    logger,
+  );
+  const chatWorker = new ChatDeliveryWorker(
+    chatDispatches,
+    chatDeliveryReconciler,
+    {
+      workerId: `${workerId}:chat`,
+      leaseMs: leaseDurationMs,
+      onError: ({ phase, errorName }) => {
+        logger.log('error', 'chat.delivery_worker.failed', {
+          phase,
+          error_name: errorName,
+          worker_id: `${workerId}:chat`,
+        });
+      },
+    },
+  );
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
@@ -590,6 +626,7 @@ export async function createService(
       dispatcher,
       ...(larkWorker ? { larkWorker } : {}),
       ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+      chatWorker,
       ...(larkReceiver ? { larkReceiver } : {}),
       runtime: executionRuntime,
       runtimeMcpServer,
@@ -635,6 +672,7 @@ export async function createService(
         dispatcher,
         ...(larkWorker ? { larkWorker } : {}),
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
+        chatWorker,
         ...(larkReceiver ? { larkReceiver } : {}),
         runtime: executionRuntime,
         runtimeMcpServer,

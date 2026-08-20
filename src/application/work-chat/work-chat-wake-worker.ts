@@ -3,11 +3,7 @@ import type {
   ChatWorkCard,
   ChatWorkCardProjection,
 } from '../product-projection/chat-work-card-projection.js';
-import {
-  createWorkChatWakeDelivery,
-  type WorkChatConversationAgentDefinitionResolver,
-} from './work-chat-wake-delivery.js';
-import type { ConversationRepository } from '../ports/conversation-repository.js';
+import type { WorkChatWakeDeliveryPort } from './work-chat-wake-delivery.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeCursor,
@@ -66,22 +62,18 @@ export interface WorkChatWakeWorkerDependencies {
     ConversationWorkLinkRepository,
     'findConversationIdByWork'
   >;
-  /** Lane 1's durable conversation repository is composed into the adapter. */
-  readonly conversations: Pick<
-    ConversationRepository,
-    'appendMessage' | 'getChatRuntime' | 'listMessages'
-  >;
-  /** Server-derived agent identity lookup for the linked conversation. */
-  readonly conversationAgentDefinitions: WorkChatConversationAgentDefinitionResolver;
+  /**
+   * Lane 1 must supply the grant-derived idempotent append adapter. The
+   * current ConversationRepository contract has no persisted delivery key, so
+   * this dependency remains explicit and is not fabricated from a generic
+   * callback or historical-message scan.
+   */
+  readonly delivery: WorkChatWakeDeliveryPort;
 }
-
-type WorkChatWakeWorkerRuntimeDependencies = WorkChatWakeWorkerDependencies & {
-  readonly delivery: ReturnType<typeof createWorkChatWakeDelivery>;
-};
 
 /** Polls product cards, atomically queues transitions, and drains the outbox. */
 export class WorkChatWakeWorker {
-  readonly #dependencies: WorkChatWakeWorkerRuntimeDependencies;
+  readonly #dependencies: WorkChatWakeWorkerDependencies;
   readonly #conversationResolver: WorkChatConversationResolver;
   readonly #options: Required<
     Pick<WorkChatWakeWorkerOptions, 'workerId' | 'leaseMs' | 'now'>
@@ -99,13 +91,7 @@ export class WorkChatWakeWorker {
     dependencies: WorkChatWakeWorkerDependencies,
     options: WorkChatWakeWorkerOptions,
   ) {
-    this.#dependencies = {
-      ...dependencies,
-      delivery: createWorkChatWakeDelivery({
-        conversations: dependencies.conversations,
-        agentDefinitions: dependencies.conversationAgentDefinitions,
-      }),
-    };
+    this.#dependencies = dependencies;
     this.#conversationResolver = createWorkChatConversationResolver(
       dependencies.conversationWorkLinks,
     );

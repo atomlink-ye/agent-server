@@ -200,6 +200,11 @@ async function executeOneCallWorkStart(
       isError: true,
       content: [{ type: 'text', text: 'not_found' }],
     };
+  if (deps.conversationOrigin && !deps.conversationWorkLinks)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
   const accessContext = {
     tenantId: current.tenantId,
     workspaceId: current.workspaceId,

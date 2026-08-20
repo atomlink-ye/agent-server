@@ -399,7 +399,7 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
     readonly agentDefinitionId: string;
   }): Promise<readonly WorkDefinitionSourceDefinition[]> {
     const result = await this.db.query<DefinitionRow>(
-      `SELECT ${definitionColumns}
+      `SELECT d.${definitionColumns.split(',').join(',d.')}
          FROM work_definition_source_definitions d
          JOIN agent_workflow_associations a ON a.work_definition_id = d.id
         WHERE a.tenant_id=$1 AND a.workspace_id=$2 AND a.agent_definition_id=$3

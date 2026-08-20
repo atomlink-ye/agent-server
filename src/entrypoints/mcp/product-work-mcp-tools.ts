@@ -46,6 +46,79 @@ const strictStartInput = z.strictObject(startInput);
 type CreateInput = z.infer<typeof strictCreateInput>;
 type StartInput = z.infer<typeof strictStartInput>;
 
+/**
+ * Extracted so integration tests can exercise the real `start_work`
+ * provenance-writing code path without standing up a full MCP transport.
+ */
+export async function executeProductWorkRunStart(
+  args: StartInput,
+  deps: {
+    readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+    readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
+    readonly current: {
+      readonly tenantId: string;
+      readonly workspaceId: string;
+      readonly principalId: string;
+    };
+  },
+): Promise<
+  | {
+      readonly isError: true;
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }
+  | {
+      readonly content: readonly [{ readonly type: 'text'; readonly text: string }];
+    }
+> {
+  const { current } = deps;
+  const result = await deps.startWorkRun.execute({
+    accessContext: {
+      tenantId: current.tenantId,
+      workspaceId: current.workspaceId,
+      principalType: 'service_account',
+      principalId: current.principalId,
+      policySnapshotVersion: 'runtime-mcp',
+    },
+    workId: args.work_id,
+    triggerKind: args.trigger_kind,
+    ...(args.trigger_ref !== undefined ? { triggerRef: args.trigger_ref } : {}),
+  });
+
+  if (args.chat_origin) {
+    if (!deps.conversations)
+      return {
+        isError: true,
+        content: [{ type: 'text', text: 'not_found' }],
+      };
+    const chatRef: ChatWorkOriginRef = {
+      conversationId: args.chat_origin.conversation_id,
+      triggerMessageId: args.chat_origin.trigger_message_id,
+      workId: result.workRun.workId,
+      workRunId: result.workRun.id,
+    };
+    await deps.conversations.appendMessage({
+      tenantId: current.tenantId,
+      conversationId: args.chat_origin.conversation_id,
+      authorType: 'agent_definition',
+      authorId: current.principalId,
+      body: `Started work run ${result.workRun.id}`,
+      workRef: JSON.stringify(chatRef),
+    });
+  }
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          work_run: toWorkRunResponse(result.workRun),
+          execution_receipt: toExecutionReceiptResponse(result.executionReceipt),
+        }),
+      },
+    ],
+  };
+}
+
 export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
   readonly grant: RuntimeToolGrant;
@@ -126,58 +199,17 @@ export function registerProductWorkMcpTools(input: {
           };
         grants.beginToolCall(current.grantId);
         try {
-          const result = await input.startWorkRun.execute({
-            accessContext: {
+          return await executeProductWorkRunStart(args, {
+            startWorkRun: input.startWorkRun,
+            ...(input.conversations
+              ? { conversations: input.conversations }
+              : {}),
+            current: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,
-              principalType: 'service_account',
               principalId: current.principalId,
-              policySnapshotVersion: 'runtime-mcp',
             },
-            workId: args.work_id,
-            triggerKind: args.trigger_kind,
-            ...(args.trigger_ref !== undefined
-              ? { triggerRef: args.trigger_ref }
-              : {}),
           });
-
-          // Handle chat provenance if present
-          if (args.chat_origin) {
-            if (!input.conversations) {
-              return {
-                isError: true,
-                content: [{ type: 'text', text: 'not_found' }],
-              };
-            }
-            const chatRef: ChatWorkOriginRef = {
-              conversationId: args.chat_origin.conversation_id,
-              triggerMessageId: args.chat_origin.trigger_message_id,
-              workId: result.workRun.id,
-              workRunId: result.workRun.id,
-            };
-            await input.conversations.appendMessage({
-              tenantId: current.tenantId,
-              conversationId: args.chat_origin.conversation_id,
-              authorType: 'agent_definition',
-              authorId: current.principalId,
-              body: `Started work run ${result.workRun.id}`,
-              workRef: JSON.stringify(chatRef),
-            });
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  work_run: toWorkRunResponse(result.workRun),
-                  execution_receipt: toExecutionReceiptResponse(
-                    result.executionReceipt,
-                  ),
-                }),
-              },
-            ],
-          };
         } finally {
           grants.endToolCall(current.grantId);
         }

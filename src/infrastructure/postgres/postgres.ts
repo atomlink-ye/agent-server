@@ -72,6 +72,7 @@ export const durableKernelMigrationFileNames = [
   '0038_chat_conversation_plane.sql',
   '0039_chat_delivery_outbox.sql',
   '0040_agent_home_vfs.sql',
+  '0040_agent_workflow_associations.sql',
 ] as const;
 const durableKernelMigrationRegistryTable = 'durable_kernel_schema_migrations';
 const durableKernelMigrationAdvisoryLock = [

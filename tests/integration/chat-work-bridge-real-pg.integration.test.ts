@@ -3,12 +3,15 @@ import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
 
 import type { AccessContext } from '../../src/platform/access-context.js';
-import type { WorkDefinitionSourceDefinition } from '../../src/domain/work/work-definition-source.js';
 import { ListAgentWorkflows } from '../../src/application/work/list-agent-workflows.js';
 import { DescribeWorkflow } from '../../src/application/work/describe-workflow.js';
 import { ProductWorkDefinitionQuery } from '../../src/application/work/product-work-definition-query.js';
+import { validateProductWorkDefinition } from '../../src/application/work/validate-product-work-definition.js';
+import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 import { PostgresConversationRepository } from '../../src/infrastructure/postgres/postgres-conversation-repository.js';
+import { executeProductWorkRunStart } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
+import type { WorkRun } from '../../src/domain/work/work-run.js';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
@@ -103,16 +106,12 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       );
     }
     if (createdDefinitionIds.length) {
+      // Published Work Definition source versions/definitions are immutable
+      // (migration 0034 trigger) and are deliberately left in place, matching
+      // the convention in product-work-definition-real-pg.integration.test.ts.
+      // Only the (non-immutable) association rows are cleaned up.
       await pool.query(
         'DELETE FROM agent_workflow_associations WHERE work_definition_id = ANY($1::uuid[])',
-        [createdDefinitionIds],
-      );
-      await pool.query(
-        'DELETE FROM work_definition_source_versions WHERE definition_id = ANY($1::uuid[])',
-        [createdDefinitionIds],
-      );
-      await pool.query(
-        'DELETE FROM work_definition_source_definitions WHERE id = ANY($1::uuid[])',
         [createdDefinitionIds],
       );
     }
@@ -127,6 +126,23 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     const versionId = randomUUID();
     createdDefinitionIds.push(definitionId);
 
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+    };
+    const parsedAuthorSource = validateProductWorkDefinition(
+      WORKFLOW_SOURCE(
+        `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${definitionId.slice(0, 8)}`,
+        description,
+      ),
+    );
+    if (!parsedAuthorSource.valid)
+      throw new Error(
+        `Test fixture YAML failed validation: ${JSON.stringify(parsedAuthorSource.diagnostics)}`,
+      );
+
     const sources = new PostgresWorkDefinitionSourceRepository(pool);
     await sources.publish({
       definitionId,
@@ -134,17 +150,10 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       owner: access,
       name,
       description,
-      source: {
-        kind: 'single_agent',
-        agentVersionId,
-        environmentVersionId,
-        memoryVersionIds: [],
-      },
-      fingerprint: 'sha256:test-fp',
-      authorSource: JSON.parse(
-        WORKFLOW_SOURCE(name.replace(/\s+/g, '_'), description),
-      ),
-      authorFingerprint: 'sha256:author-fp',
+      source,
+      fingerprint: fingerprintWorkDefinitionSource(source),
+      authorSource: parsedAuthorSource.document,
+      authorFingerprint: parsedAuthorSource.fingerprint,
       now: at,
     });
 
@@ -255,78 +264,149 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     }
   });
 
-  it('chat_origin provenance: work reference is persisted in chat message', async () => {
-    const conversationId = randomUUID();
-    createdConversationIds.push(conversationId);
+  it('chat_origin provenance: the real product_work_run_start handler writes work_ref to chat_messages', async () => {
     const triggerMessageId = randomUUID();
 
-    // Create a conversation first
+    // Create a real conversation to write into.
     const conversations = new PostgresConversationRepository(pool);
+    const conversationPrincipalId = `principal-${randomUUID()}`;
     await conversations.findOrCreateDirect({
       tenantId,
-      principalId: 'principal-123',
+      principalId: conversationPrincipalId,
       principalType: 'principal',
       agentDefinitionId: agentAId,
     });
-
-    // Use the actual conversation ID from the created one
     const allConversations = await conversations.listConversations({
       tenantId,
       memberType: 'principal',
-      memberId: 'principal-123',
+      memberId: conversationPrincipalId,
     });
-    if (!allConversations[0]) {
-      throw new Error('Failed to create conversation');
-    }
-    const actualConversationId = allConversations[0].id;
-    createdConversationIds[createdConversationIds.length - 1] =
-      actualConversationId;
+    const conversation = allConversations[0];
+    if (!conversation) throw new Error('Failed to create conversation');
+    createdConversationIds.push(conversation.id);
 
-    // Create a chat message with a work reference (simulating what the MCP tool does)
-    const workRef = JSON.stringify({
-      conversationId: actualConversationId,
-      triggerMessageId,
-      workId: randomUUID(),
-      workRunId: randomUUID(),
-    });
-
-    const message = await conversations.appendMessage({
+    const workId = randomUUID();
+    const workRunId = randomUUID();
+    const fakeWorkRun: WorkRun = {
+      id: workRunId,
       tenantId,
-      conversationId: actualConversationId,
-      authorType: 'agent_definition',
-      authorId: agentAId,
-      body: 'Started work run xyz',
-      workRef,
-    });
+      workspaceId,
+      workId,
+      definitionVersionId: randomUUID(),
+      triggerKind: 'manual',
+      triggerRef: 'test',
+      idempotencyKey: 'test',
+      rootTaskId: 'task-1',
+      expiresAt: at,
+      boundAt: at,
+      createdAt: at,
+      updatedAt: at,
+    };
 
-    // Verify: read back the message and confirm work_ref is present
+    // Exercise the REAL production handler (executeProductWorkRunStart), not
+    // a hand-rolled duplicate: startWorkRun is faked, but the chat-provenance
+    // branch and the write to Postgres are the real, shipped code path.
+    const response = await executeProductWorkRunStart(
+      {
+        work_id: workId,
+        trigger_kind: 'manual',
+        chat_origin: {
+          conversation_id: conversation.id,
+          trigger_message_id: triggerMessageId,
+        },
+      },
+      {
+        startWorkRun: {
+          execute: async () => ({
+            workRun: fakeWorkRun,
+            executionReceipt: { reused: false, taskId: 'task-1' },
+          }),
+        },
+        conversations,
+        current: { tenantId, workspaceId, principalId },
+      },
+    );
+    expect('isError' in response).toBe(false);
+
     const allMessages = await conversations.listMessages({
       tenantId,
-      conversationId: actualConversationId,
+      conversationId: conversation.id,
     });
-
-    expect(allMessages.length).toBeGreaterThan(0);
-    const foundMessage = allMessages.find(
-      (m) => m.id === message.id && m.workRef !== null,
-    );
+    const foundMessage = allMessages.find((m) => m.workRef !== null);
     expect(foundMessage).toBeDefined();
-    expect(foundMessage?.workRef).toBe(workRef);
 
-    // Verify: parse the work reference and check its structure
     const parsedRef = JSON.parse(foundMessage!.workRef!);
-    expect(parsedRef.conversationId).toBe(actualConversationId);
+    expect(parsedRef.conversationId).toBe(conversation.id);
     expect(parsedRef.triggerMessageId).toBe(triggerMessageId);
-    expect(parsedRef.workId).toBeDefined();
-    expect(parsedRef.workRunId).toBeDefined();
+    expect(parsedRef.workId).toBe(workId);
+    expect(parsedRef.workRunId).toBe(workRunId);
   });
 
-  it('work.ts file has zero diffs', async () => {
-    // Verify that work.ts has not been modified by checking the git diff
-    const { execSync } = await import('node:child_process');
-    const diffOutput = execSync('git diff HEAD -- src/domain/work/work.ts', {
-      cwd: '/Volumes/AgentsWorkspace/orgs/0xdtech/code/agent-server/.worktrees/chat-work-bridge',
-      encoding: 'utf8',
+  it('start_work without chat_origin does not write any chat message', async () => {
+    const conversations = new PostgresConversationRepository(pool);
+    const conversationPrincipalId = `principal-${randomUUID()}`;
+    await conversations.findOrCreateDirect({
+      tenantId,
+      principalId: conversationPrincipalId,
+      principalType: 'principal',
+      agentDefinitionId: agentAId,
     });
+    const allConversations = await conversations.listConversations({
+      tenantId,
+      memberType: 'principal',
+      memberId: conversationPrincipalId,
+    });
+    const conversation = allConversations[0];
+    if (!conversation) throw new Error('Failed to create conversation');
+    createdConversationIds.push(conversation.id);
+
+    const workId = randomUUID();
+    const fakeWorkRun: WorkRun = {
+      id: randomUUID(),
+      tenantId,
+      workspaceId,
+      workId,
+      definitionVersionId: randomUUID(),
+      triggerKind: 'manual',
+      triggerRef: 'test',
+      idempotencyKey: 'test',
+      rootTaskId: 'task-1',
+      expiresAt: at,
+      boundAt: at,
+      createdAt: at,
+      updatedAt: at,
+    };
+
+    await executeProductWorkRunStart(
+      { work_id: workId, trigger_kind: 'manual' },
+      {
+        startWorkRun: {
+          execute: async () => ({
+            workRun: fakeWorkRun,
+            executionReceipt: { reused: false, taskId: 'task-1' },
+          }),
+        },
+        conversations,
+        current: { tenantId, workspaceId, principalId },
+      },
+    );
+
+    const allMessages = await conversations.listMessages({
+      tenantId,
+      conversationId: conversation.id,
+    });
+    expect(allMessages.length).toBe(0);
+  });
+
+  it('work.ts has zero diff relative to the branch point (out-of-scope guard)', async () => {
+    // 263be1c is the commit this branch was cut from (feat/chat-work-bridge's
+    // merge-base with master at the time this lane started); it's always an
+    // ancestor of HEAD on this branch regardless of clone/remote setup.
+    const { execSync } = await import('node:child_process');
+    const diffOutput = execSync(
+      'git diff 263be1c..HEAD -- src/domain/work/work.ts',
+      { encoding: 'utf8' },
+    );
     expect(diffOutput.trim()).toBe('');
   });
 });

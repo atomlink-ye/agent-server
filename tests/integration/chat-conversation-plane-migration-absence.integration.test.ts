@@ -29,16 +29,16 @@ describe('Chat conversation plane migration absence (variant pair)', () => {
     await pool?.end();
   });
 
-  it('confirms 0038_chat_conversation_plane.sql is the final migration', () => {
+  it('confirms 0039_chat_delivery_outbox.sql is the final migration', () => {
     const lastMigration =
       durableKernelMigrationFileNames[
         durableKernelMigrationFileNames.length - 1
       ];
-    expect(lastMigration).toBe('0038_chat_conversation_plane.sql');
+    expect(lastMigration).toBe('0039_chat_delivery_outbox.sql');
   });
 
-  it('confirms at least 38 migrations are registered', () => {
-    expect(durableKernelMigrationFileNames.length).toBeGreaterThanOrEqual(38);
+  it('confirms at least 39 migrations are registered', () => {
+    expect(durableKernelMigrationFileNames.length).toBeGreaterThanOrEqual(39);
   });
 
   it('variant pair: chat tables DO NOT exist when migration is absent (simulated via transaction rollback)', async () => {

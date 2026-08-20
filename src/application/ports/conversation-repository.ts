@@ -70,4 +70,9 @@ export interface ConversationRepository {
     readonly agentDefinitionId: string;
     readonly newVersionId: string;
   }): Promise<AgentChatRuntime>;
+
+  getChatRuntime(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<AgentChatRuntime | null>;
 }

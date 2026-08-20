@@ -400,6 +400,18 @@ export class PostgresConversationRepository implements ConversationRepository {
     return mapAgentChatRuntime(runtime);
   }
 
+  async getChatRuntime(input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<AgentChatRuntime | null> {
+    const result = await this.database.query<AgentChatRuntimeRow>(
+      `SELECT * FROM agent_chat_runtimes WHERE tenant_id=$1 AND agent_definition_id=$2`,
+      [input.tenantId, input.agentDefinitionId],
+    );
+    const row = result.rows?.[0];
+    return row ? mapAgentChatRuntime(row) : null;
+  }
+
   private async acquire(): Promise<PostgresClient> {
     if ('connect' in this.database && typeof this.database.connect === 'function') {
       return await (this.database as PostgresConnectable).connect();

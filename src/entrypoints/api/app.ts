@@ -73,6 +73,7 @@ import { ServiceAccountAuthenticator } from '../../application/control-plane/ser
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../application/ports/conversation-work-entitlement-repository.js';
+import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import { registerConversationRoutes } from './routes/conversations.js';
 
 export interface AppDependencies {
@@ -104,6 +105,7 @@ export interface AppDependencies {
   readonly sessions?: SessionRepository;
   readonly conversations?: ConversationRepository;
   readonly chatDispatches?: ChatDispatchRepository;
+  readonly managedAgentDefinitions?: ManagedAgentDefinitionRead;
   readonly conversationWorkEntitlements?: ConversationWorkEntitlementRepository;
   readonly submitSessionTurn?: SubmitSessionTurn;
   readonly events?: RunEventRepository;
@@ -114,7 +116,10 @@ export interface AppDependencies {
   readonly version?: string;
   readonly workModule?: Pick<WorkModule, 'installHttp'>;
   readonly memoryModule?: Pick<MemoryModule, 'installHttp'>;
-  readonly resourceModule?: Pick<ResourceModule, 'installHttp'>;
+  readonly resourceModule?: Pick<
+    ResourceModule,
+    'installHttp' | 'managedAgentDefinitions'
+  >;
   readonly installPlatformHttp?: PlatformHttpInstaller;
 }
 
@@ -261,15 +266,24 @@ export function createApp(dependencies: AppDependencies): Hono<ApiEnvironment> {
         dependencies.submitSessionTurn ??
         new SubmitSessionTurn(dependencies.sessions),
     });
-  if (dependencies.conversations && dependencies.chatDispatches)
+  const managedAgentDefinitions =
+    dependencies.managedAgentDefinitions ??
+    dependencies.resourceModule?.managedAgentDefinitions;
+  if (dependencies.conversations && dependencies.chatDispatches) {
+    if (!managedAgentDefinitions)
+      throw new Error(
+        'conversation_routes_require_managed_agent_definition_read',
+      );
     registerConversationRoutes(app, {
       config: dependencies.config,
       conversations: dependencies.conversations,
       dispatches: dependencies.chatDispatches,
+      managedAgentDefinitions,
       ...(dependencies.conversationWorkEntitlements
         ? { workEntitlements: dependencies.conversationWorkEntitlements }
         : {}),
     });
+  }
 
   app.notFound((context) => {
     return context.json(

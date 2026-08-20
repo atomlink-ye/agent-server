@@ -7,6 +7,7 @@ import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
 } from '../../application/agents/built-in-skills.js';
 import type { AgentResolutionApi } from '../../application/ports/agent-resolution-api.js';
+import type { ManagedAgentDefinitionRead } from '../../application/ports/agent-registry.js';
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../../application/ports/environment-read-api.js';
 import type { MemoryVersionReadApi } from '../../application/ports/memory-version-read-api.js';
@@ -37,6 +38,7 @@ export interface ResourceModuleDatabase {
 }
 
 export interface ResourceModule {
+  readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
   readonly agentResolutionApi: AgentResolutionApi;
   readonly definitionReadApi: DefinitionReadApi;
   readonly environmentReadApi: EnvironmentReadApi;
@@ -119,6 +121,7 @@ export async function createResourceModule(
   });
 
   return {
+    managedAgentDefinitions: agentRegistry,
     agentResolutionApi,
     definitionReadApi,
     environmentReadApi,

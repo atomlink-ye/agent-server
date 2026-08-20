@@ -668,6 +668,7 @@ export async function createService(
     sessions,
     conversations,
     chatDispatches,
+    managedAgentDefinitions: resourceModule.managedAgentDefinitions,
     conversationWorkEntitlements,
     submitSessionTurn,
     events,

@@ -5,6 +5,7 @@ import type { ChatMessage } from '../../../domain/chat/chat-message.js';
 import type { ConversationRepository } from '../../../application/ports/conversation-repository.js';
 import type { ChatDispatchRepository } from '../../../application/ports/chat-dispatch-repository.js';
 import type { ConversationWorkEntitlementRepository } from '../../../application/ports/conversation-work-entitlement-repository.js';
+import type { ManagedAgentDefinitionRead } from '../../../application/ports/agent-registry.js';
 import { postConversationMessage } from '../../../application/chat/post-conversation-message.js';
 import { enqueueChatDispatchForMessage } from '../../../application/chat/enqueue-chat-dispatch.js';
 import { ServiceAccountAuthenticator } from '../../../application/control-plane/service-account-authenticator.js';
@@ -46,6 +47,7 @@ export interface ConversationRouteDependencies {
   readonly config: AppConfig;
   readonly conversations: ConversationRepository;
   readonly dispatches: ChatDispatchRepository;
+  readonly managedAgentDefinitions: ManagedAgentDefinitionRead;
   readonly workEntitlements?: ConversationWorkEntitlementRepository;
 }
 
@@ -76,11 +78,31 @@ export function registerConversationRoutes(
     );
     if (!parsed.success) throw invalidRequest();
     const access = getAuthenticatedAccessContext(c);
+    const definition = await dependencies.managedAgentDefinitions.findDefinition(
+      {
+        tenantId: access.tenantId,
+        workspaceId: access.workspaceId,
+        principalType: access.principalType,
+        principalId: access.principalId,
+      },
+      parsed.data.agent_definition_id,
+    );
+    if (!definition) throw notFound();
+    const runtime = await dependencies.conversations.getChatRuntime({
+      tenantId: access.tenantId,
+      agentDefinitionId: definition.id,
+    });
+    if (!runtime || runtime.status !== 'available')
+      throw new HttpError(
+        409,
+        'chat_runtime_unavailable',
+        'The requested agent is not available for chat.',
+      );
     const conversation = await dependencies.conversations.findOrCreateDirect({
       tenantId: access.tenantId,
       principalId: access.principalId,
       principalType: access.principalType,
-      agentDefinitionId: parsed.data.agent_definition_id,
+      agentDefinitionId: definition.id,
     });
     return c.json({ conversation: conversationResponse(conversation) }, 201);
   });

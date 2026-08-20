@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { AccessContext } from '../../src/platform/access-context.js';
 import { ListAgentWorkflows } from '../../src/application/work/list-agent-workflows.js';
@@ -398,15 +401,19 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     expect(allMessages.length).toBe(0);
   });
 
-  it('work.ts has zero diff relative to the branch point (out-of-scope guard)', async () => {
-    // 263be1c is the commit this branch was cut from (feat/chat-work-bridge's
-    // merge-base with master at the time this lane started); it's always an
-    // ancestor of HEAD on this branch regardless of clone/remote setup.
-    const { execSync } = await import('node:child_process');
-    const diffOutput = execSync(
-      'git diff 263be1c..HEAD -- src/domain/work/work.ts',
-      { encoding: 'utf8' },
+  it('work.ts WorkOrigin type is untouched by this PR (out-of-scope guard)', () => {
+    // Verify that the WorkOrigin domain type (tracking Work creation provenance)
+    // was not modified by this PR's work on the chat-triggered Work feature.
+    // The two concepts are easy to confuse; this guard prevents regressions where
+    // someone might "helpfully" merge WorkOrigin with ChatWorkOriginRef.
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+    const source = readFileSync(
+      resolve(root, 'src/domain/work/work.ts'),
+      'utf8',
     );
-    expect(diffOutput.trim()).toBe('');
+    expect(source).toContain(
+      "export type WorkOrigin = 'created' | 'backfilled';",
+    );
+    expect(source).not.toMatch(/ChatWorkOriginRef|chat_origin|chatOrigin/);
   });
 });

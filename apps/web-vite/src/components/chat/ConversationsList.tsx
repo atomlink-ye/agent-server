@@ -92,11 +92,10 @@ function conversationInitials(conversation: Conversation): string {
 }
 
 function conversationDisplayName(conversation: Conversation): string {
-  if (conversation.title !== null) return conversation.title;
   if (conversation.kind === 'direct') {
     return conversation.directAgent?.displayName?.trim() || 'Agent';
   }
-  return 'Conversation';
+  return conversation.title ?? 'Conversation';
 }
 
 function avatarTone(conversation: Conversation): number {

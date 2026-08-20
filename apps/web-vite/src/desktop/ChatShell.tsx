@@ -196,7 +196,9 @@ export function ChatShell({
               <div className="chat-header-title">
                 <span className="conversation-header-avatar" aria-hidden="true">
                   {selectedConversation
-                    ? selectedConversation.title?.slice(0, 1).toUpperCase() || 'C'
+                    ? conversationDisplayName(selectedConversation)
+                        .slice(0, 1)
+                        .toUpperCase()
                     : 'C'}
                 </span>
                 <div>
@@ -265,11 +267,10 @@ function conversationDisplayName(conversation: {
   readonly title: string | null;
   readonly directAgent: { readonly displayName: string | null } | null;
 }): string {
-  if (conversation.title !== null) return conversation.title;
   if (conversation.kind === 'direct') {
     return conversation.directAgent?.displayName?.trim() || 'Agent';
   }
-  return 'Conversation';
+  return conversation.title ?? 'Conversation';
 }
 
 export default ChatShell;

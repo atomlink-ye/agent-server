@@ -51,9 +51,14 @@ const strictOneCallStartInput = z.strictObject({
   work_definition_version_id: z.string().uuid(),
   input: z.record(z.string(), z.unknown()),
 });
+const strictContinueInput = z.strictObject({
+  work_ref: z.string().uuid(),
+  feedback: z.string(),
+});
 type CreateInput = z.infer<typeof strictCreateInput>;
 type StartInput = z.infer<typeof strictStartInput>;
 type OneCallStartInput = z.infer<typeof strictOneCallStartInput>;
+type ContinueInput = z.infer<typeof strictContinueInput>;
 
 export interface WorkReference {
   readonly work_id: string;
@@ -256,18 +261,119 @@ async function executeOneCallWorkStart(
   };
 }
 
+async function executeContinueWork(
+  args: ContinueInput,
+  deps: {
+    readonly workIdentity: Pick<
+      WorkIdentityApi,
+      'findWorkById' | 'findLatestWorkRun'
+    >;
+    readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+    readonly conversationWorkLinks?: Pick<
+      ConversationWorkLinkRepository,
+      'findConversationIdByWork'
+    >;
+    readonly conversationOrigin?: ConversationWorkOrigin;
+    readonly current: {
+      readonly tenantId: string;
+      readonly workspaceId: string;
+      readonly principalId: string;
+    };
+  },
+): Promise<
+  | {
+      readonly isError: true;
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
+    }
+  | {
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
+    }
+> {
+  const owner = {
+    tenantId: deps.current.tenantId,
+    workspaceId: deps.current.workspaceId,
+  };
+  const work = await deps.workIdentity.findWorkById(args.work_ref, owner);
+  if (!work)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
+  const predecessor = await deps.workIdentity.findLatestWorkRun(work.id, owner);
+  if (!predecessor)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
+  if (deps.conversationOrigin) {
+    if (!deps.conversationWorkLinks)
+      return {
+        isError: true,
+        content: [{ type: 'text', text: 'not_found' }],
+      };
+    const linkedConversation =
+      await deps.conversationWorkLinks.findConversationIdByWork({
+        ...owner,
+        workId: work.id,
+      });
+    if (linkedConversation !== deps.conversationOrigin.conversationId)
+      return {
+        isError: true,
+        content: [{ type: 'text', text: 'not_found' }],
+      };
+  }
+  const accessContext = {
+    tenantId: deps.current.tenantId,
+    workspaceId: deps.current.workspaceId,
+    principalType: 'service_account' as const,
+    principalId: deps.current.principalId,
+    policySnapshotVersion: 'runtime-mcp',
+  };
+  await deps.startWorkRun.execute({
+    accessContext,
+    workId: work.id,
+    triggerKind: 'manual',
+    predecessorWorkRunId: predecessor.id,
+    input: { feedback: args.feedback },
+  });
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          work_reference: {
+            work_id: work.id,
+            definition_id: work.definitionId,
+            definition_version_id: work.currentDefinitionVersionId,
+          } satisfies WorkReference,
+          continuation_kind: 'new_work_run',
+        }),
+      },
+    ],
+  };
+}
+
 export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
   readonly grant: RuntimeToolGrant;
   readonly grants: RuntimeToolGrantService;
-  readonly workIdentity: Pick<WorkIdentityApi, 'createWork'>;
+  readonly workIdentity: Pick<
+    WorkIdentityApi,
+    'createWork' | 'findWorkById' | 'findLatestWorkRun'
+  >;
   readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
   readonly definitions?: WorkDefinitionSourceRepository;
   /** Compatibility seam for the existing conversation module. */
   readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
   readonly conversationWorkLinks?: Pick<
     ConversationWorkLinkRepository,
-    'linkWorkToConversation'
+    | 'linkWorkToConversation'
+    | 'findConversationIdByWork'
+    | 'findRecentWorkByConversation'
   >;
   /**
    * TODO(Lane1 PR#92): populate this from RuntimeToolContributionContext
@@ -477,6 +583,48 @@ export function registerProductWorkMcpTools(input: {
             ...(input.conversations
               ? { conversations: input.conversations }
               : {}),
+            ...(input.conversationWorkLinks
+              ? { conversationWorkLinks: input.conversationWorkLinks }
+              : {}),
+            ...(input.conversationOrigin
+              ? { conversationOrigin: input.conversationOrigin }
+              : {}),
+            current: {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+              principalId: current.principalId,
+            },
+          });
+        } finally {
+          grants.endToolCall(current.grantId);
+        }
+      },
+    );
+  if (grant.catalogTools.includes(PRODUCT_WORK_RUN_START_TOOL_REF))
+    (server.registerTool as any)(
+      'continue_work',
+      {
+        description: 'Continue a Product Work with feedback.',
+        inputSchema: strictContinueInput,
+      },
+      async (args: ContinueInput) => {
+        const current = grants.get(grant.grantId);
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_RUN_START_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
+        grants.beginToolCall(current.grantId);
+        try {
+          return await executeContinueWork(args, {
+            workIdentity: input.workIdentity,
+            startWorkRun: input.startWorkRun,
             ...(input.conversationWorkLinks
               ? { conversationWorkLinks: input.conversationWorkLinks }
               : {}),

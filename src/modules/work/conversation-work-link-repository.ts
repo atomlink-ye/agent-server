@@ -73,6 +73,24 @@ export class PostgresConversationWorkLinkRepository implements ConversationWorkL
     return result.rows?.[0]?.conversation_id ?? null;
   }
 
+  public async findRecentWorkByConversation(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly conversationId: string;
+    readonly limit?: number;
+  }): Promise<readonly ConversationWorkLink[]> {
+    const limit = Math.max(1, Math.min(100, input.limit ?? 20));
+    const result = await this.database.query<ConversationWorkLinkRow>(
+      `SELECT ${LINK_COLUMNS}
+       FROM conversation_work_links
+       WHERE tenant_id=$1 AND workspace_id=$2 AND conversation_id=$3
+       ORDER BY created_at DESC,work_id DESC
+       LIMIT $4`,
+      [input.tenantId, input.workspaceId, input.conversationId, limit],
+    );
+    return (result.rows ?? []).map(mapLink);
+  }
+
   private async findLink(input: {
     readonly tenantId: string;
     readonly workspaceId: string;

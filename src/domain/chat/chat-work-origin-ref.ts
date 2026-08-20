@@ -24,6 +24,13 @@ export interface ConversationWorkLinkRepository {
     readonly workspaceId: string;
     readonly workId: string;
   }): Promise<string | null>;
+
+  findRecentWorkByConversation(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly conversationId: string;
+    readonly limit?: number;
+  }): Promise<readonly ConversationWorkLink[]>;
 }
 
 /** Server-derived origin carried by a trusted grant/context layer. */

@@ -40,6 +40,7 @@ export interface StartPendingWorkRunInput {
   readonly workId: string;
   readonly triggerKind: 'manual';
   readonly triggerRef?: string;
+  readonly predecessorWorkRunId?: string;
   readonly accessContext: AccessContext;
 }
 
@@ -148,10 +149,29 @@ export class WorkIdentityApi {
       definitionVersionId: work.currentDefinitionVersionId,
       triggerKind: input.triggerKind,
       triggerRef,
+      ...(input.predecessorWorkRunId !== undefined
+        ? { predecessorWorkRunId: input.predecessorWorkRunId }
+        : {}),
       idempotencyKey,
       expiresAt: new Date(now.getTime() + this.pendingTtlMs).toISOString(),
       now: now.toISOString(),
     });
+  }
+
+  public findWorkById(
+    id: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<Work | null> {
+    return this.repository.findWorkById(id, owner);
+  }
+
+  public async findLatestWorkRun(
+    workId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null> {
+    if (!this.repository.findLatestWorkRun)
+      throw new Error('Latest WorkRun lookup is unavailable.');
+    return this.repository.findLatestWorkRun(workId, owner);
   }
 
   /** Controlled same-lineage version pin update; the product title is immutable. */

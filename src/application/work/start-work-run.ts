@@ -34,6 +34,7 @@ export interface StartWorkRunRequest {
   readonly workId: string;
   readonly triggerKind: 'manual';
   readonly triggerRef?: string;
+  readonly predecessorWorkRunId?: string;
   /** Product-authored Work Definitions may declare a bounded object input contract. */
   readonly input?: Readonly<Record<string, unknown>>;
 }
@@ -53,7 +54,10 @@ export interface StartWorkRunOptions {
   readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
-  readonly productDefinitions?: Pick<ProductWorkDefinitionApi, 'getInputContract'>;
+  readonly productDefinitions?: Pick<
+    ProductWorkDefinitionApi,
+    'getInputContract'
+  >;
   readonly workRunInputs?: WorkRunInputStore;
   readonly now?: () => Date;
 }
@@ -95,6 +99,15 @@ export class StartWorkRun {
     )
       throw new WorkDefinitionValidationError();
 
+    if (input.predecessorWorkRunId) {
+      const predecessor = await this.identity.getWorkRun(
+        input.predecessorWorkRunId,
+        owner,
+      );
+      if (!predecessor || predecessor.workId !== input.workId)
+        throw new WorkDefinitionValidationError();
+    }
+
     const resolved = await this.identity.resolveCurrentDefinition({
       owner,
       accessContext: input.accessContext,
@@ -114,6 +127,9 @@ export class StartWorkRun {
       triggerKind: input.triggerKind,
       ...(input.triggerRef !== undefined
         ? { triggerRef: input.triggerRef }
+        : {}),
+      ...(input.predecessorWorkRunId !== undefined
+        ? { predecessorWorkRunId: input.predecessorWorkRunId }
         : {}),
     } satisfies StartPendingWorkRunInput);
     if (pending.definitionVersionId !== resolved.definitionVersionId)

@@ -146,16 +146,19 @@ export class AgentServerError extends Error {
   readonly status: number;
   readonly code: string;
   readonly body: unknown;
+  readonly hasJsonBody: boolean;
 
   constructor(
     status: number,
     code = 'agent_server_error',
     body: unknown = null,
+    hasJsonBody = body !== null,
   ) {
     super(code);
     this.status = status;
     this.code = code;
     this.body = body;
+    this.hasJsonBody = hasJsonBody;
   }
 }
 
@@ -197,11 +200,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       body = await response.json();
       const error = asRecord(body)?.error;
-      if (asRecord(error)?.code) code = asRecord(error)?.code as string;
+      const errorCode = asRecord(error)?.code;
+      if (typeof errorCode === 'string' && errorCode) code = errorCode;
     } catch {
       /* Keep the safe generic code. */
     }
-    throw new AgentServerError(response.status, code, body);
+    throw new AgentServerError(response.status, code, body, true);
   }
   return (await response.json()) as T;
 }

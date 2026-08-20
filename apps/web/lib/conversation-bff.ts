@@ -204,7 +204,7 @@ function sanitizeCreateError(error: unknown): ConversationBffError {
     error instanceof AgentServerError &&
     error.status >= 400 &&
     error.status < 500 &&
-    isJsonErrorEnvelope(error.body)
+    (error.hasJsonBody === true || error.body !== null)
   ) {
     return new ConversationBffError(error.status, 'conversation_create_failed', {
       body: error.body,
@@ -212,11 +212,6 @@ function sanitizeCreateError(error: unknown): ConversationBffError {
     });
   }
   return new ConversationBffError(502, 'conversation_unavailable');
-}
-
-function isJsonErrorEnvelope(value: unknown): boolean {
-  const record = asRecord(value);
-  return record !== null && asRecord(record.error) !== null;
 }
 
 function sanitizeConversation(value: AgentConversation): PublicConversation {
@@ -280,12 +275,6 @@ function nullableString(value: unknown): value is string | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function invalidUpstream(): ConversationBffError {

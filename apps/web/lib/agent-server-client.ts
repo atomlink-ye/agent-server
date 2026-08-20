@@ -119,6 +119,29 @@ export type SubmittedMessage = ProductMessage & {
   run_id: string;
 };
 
+export type AgentConversation = {
+  conversation_id: string;
+  kind: 'direct' | 'group';
+  title: string | null;
+  topic: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentConversationMessage = {
+  message_id: string;
+  conversation_id: string;
+  sequence: number;
+  author_type: 'principal' | 'agent_definition';
+  author_id: string;
+  body: string;
+  agent_definition_id: string | null;
+  agent_version_id: string | null;
+  runtime_epoch: number | null;
+  work_ref: string | null;
+  created_at: string;
+};
+
 export class AgentServerError extends Error {
   readonly status: number;
   readonly code: string;
@@ -201,6 +224,33 @@ export async function getMessages(
   if (!Array.isArray(response.messages))
     throw new AgentServerError(502, 'agent_server_invalid_messages');
   return response.messages.map((message) => normalizeMessage(message));
+}
+
+export async function listConversations(): Promise<{
+  conversations: AgentConversation[];
+}> {
+  return request('/api/v1/conversations');
+}
+
+export async function getConversation(
+  conversationId: string,
+): Promise<{ conversation: AgentConversation }> {
+  return request(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+  );
+}
+
+export async function postConversationMessage(
+  conversationId: string,
+  body: string,
+): Promise<{
+  message: AgentConversationMessage;
+  dispatch_enqueued: boolean;
+}> {
+  return request(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+    { method: 'POST', body: JSON.stringify({ body }) },
+  );
 }
 
 export async function createWorkspace(): Promise<{ workspace_id: string }> {

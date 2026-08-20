@@ -22,6 +22,11 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: web-node-modules
+        target: /workspace/apps/web/node_modules
+        volume:
+          nocopy: true
+      - type: volume
         source: web-vite-node-modules
         target: /workspace/apps/web-vite/node_modules
     working_dir: /workspace

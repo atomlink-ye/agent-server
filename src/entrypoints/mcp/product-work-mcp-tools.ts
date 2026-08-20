@@ -47,8 +47,19 @@ const startInput = {
 };
 const strictCreateInput = z.strictObject(createInput);
 const strictStartInput = z.strictObject(startInput);
+const strictOneCallStartInput = z.strictObject({
+  work_definition_version_id: z.string().uuid(),
+  input: z.record(z.string(), z.unknown()),
+});
 type CreateInput = z.infer<typeof strictCreateInput>;
 type StartInput = z.infer<typeof strictStartInput>;
+type OneCallStartInput = z.infer<typeof strictOneCallStartInput>;
+
+export interface WorkReference {
+  readonly work_id: string;
+  readonly definition_id: string;
+  readonly definition_version_id: string;
+}
 
 /**
  * Extracted so integration tests can exercise the real `start_work`
@@ -123,6 +134,118 @@ export async function executeProductWorkRunStart(
             result.executionReceipt,
           ),
         }),
+      },
+    ],
+  };
+}
+
+async function executeOneCallWorkStart(
+  args: OneCallStartInput,
+  deps: {
+    readonly workIdentity: Pick<WorkIdentityApi, 'createWork'>;
+    readonly startWorkRun: Pick<StartWorkRun, 'execute'>;
+    readonly definitions?: WorkDefinitionSourceRepository;
+    readonly conversationWorkLinks?: Pick<
+      ConversationWorkLinkRepository,
+      'linkWorkToConversation'
+    >;
+    readonly conversationOrigin?: ConversationWorkOrigin;
+    readonly current: {
+      readonly tenantId: string;
+      readonly workspaceId: string;
+      readonly principalId: string;
+    };
+  },
+): Promise<
+  | {
+      readonly isError: true;
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
+    }
+  | {
+      readonly content: readonly [
+        { readonly type: 'text'; readonly text: string },
+      ];
+    }
+> {
+  const { current } = deps;
+  const definitions = deps.definitions;
+  if (!definitions?.findDefinition || !definitions.findProductVersion)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
+  const owner = {
+    tenantId: current.tenantId,
+    workspaceId: current.workspaceId,
+    principalType: 'service_account',
+    principalId: current.principalId,
+  };
+  const version = await definitions.findProductVersion(
+    args.work_definition_version_id,
+    owner,
+  );
+  if (!version)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
+  const definition = await definitions.findDefinition(
+    version.version.definitionId,
+    owner,
+  );
+  if (!definition || definition.id !== version.version.definitionId)
+    return {
+      isError: true,
+      content: [{ type: 'text', text: 'not_found' }],
+    };
+  const accessContext = {
+    tenantId: current.tenantId,
+    workspaceId: current.workspaceId,
+    principalType: 'service_account' as const,
+    principalId: current.principalId,
+    policySnapshotVersion: 'runtime-mcp',
+  };
+  const work = await deps.workIdentity.createWork({
+    owner: {
+      tenantId: current.tenantId,
+      workspaceId: current.workspaceId,
+    },
+    accessContext,
+    definitionId: definition.id,
+    definitionVersionId: version.version.id,
+    title: definition.name,
+  });
+  await deps.startWorkRun.execute({
+    accessContext,
+    workId: work.id,
+    triggerKind: 'manual',
+    input: args.input,
+  });
+  if (deps.conversationOrigin) {
+    if (!deps.conversationWorkLinks)
+      return {
+        isError: true,
+        content: [{ type: 'text', text: 'not_found' }],
+      };
+    await deps.conversationWorkLinks.linkWorkToConversation({
+      tenantId: current.tenantId,
+      workspaceId: current.workspaceId,
+      workId: work.id,
+      conversationId: deps.conversationOrigin.conversationId,
+    });
+  }
+  const workReference: WorkReference = {
+    work_id: work.id,
+    definition_id: work.definitionId,
+    definition_version_id: work.currentDefinitionVersionId,
+  };
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ work_reference: workReference }),
       },
     ],
   };
@@ -273,6 +396,50 @@ export function registerProductWorkMcpTools(input: {
               },
             ],
           };
+        } finally {
+          grants.endToolCall(current.grantId);
+        }
+      },
+    );
+  if (grant.catalogTools.includes(PRODUCT_WORK_RUN_START_TOOL_REF))
+    (server.registerTool as any)(
+      'start_work',
+      {
+        description:
+          'Create and start a Product Work from a definition version.',
+        inputSchema: strictOneCallStartInput,
+      },
+      async (args: OneCallStartInput) => {
+        const current = grants.get(grant.grantId);
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_RUN_START_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
+        grants.beginToolCall(current.grantId);
+        try {
+          return await executeOneCallWorkStart(args, {
+            workIdentity: input.workIdentity,
+            startWorkRun: input.startWorkRun,
+            ...(input.definitions ? { definitions: input.definitions } : {}),
+            ...(input.conversationWorkLinks
+              ? { conversationWorkLinks: input.conversationWorkLinks }
+              : {}),
+            ...(input.conversationOrigin
+              ? { conversationOrigin: input.conversationOrigin }
+              : {}),
+            current: {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+              principalId: current.principalId,
+            },
+          });
         } finally {
           grants.endToolCall(current.grantId);
         }

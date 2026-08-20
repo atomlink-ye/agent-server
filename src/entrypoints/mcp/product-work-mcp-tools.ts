@@ -362,7 +362,7 @@ export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
   readonly grant: RuntimeToolGrant;
   readonly grants: RuntimeToolGrantService;
-  readonly chatContext: RuntimeToolChatContext | null;
+  readonly chatContext?: RuntimeToolChatContext | null;
   readonly workIdentity: Pick<
     WorkIdentityApi,
     'createWork' | 'findWorkById' | 'findLatestWorkRun'

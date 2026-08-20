@@ -134,7 +134,12 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       owner: access,
       name,
       description,
-      source: { kind: 'single_agent', agentVersionId },
+      source: {
+        kind: 'single_agent',
+        agentVersionId,
+        environmentVersionId,
+        memoryVersionIds: [],
+      },
       fingerprint: 'sha256:test-fp',
       authorSource: JSON.parse(
         WORKFLOW_SOURCE(name.replace(/\s+/g, '_'), description),
@@ -270,6 +275,9 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       memberType: 'principal',
       memberId: 'principal-123',
     });
+    if (!allConversations[0]) {
+      throw new Error('Failed to create conversation');
+    }
     const actualConversationId = allConversations[0].id;
     createdConversationIds[createdConversationIds.length - 1] =
       actualConversationId;

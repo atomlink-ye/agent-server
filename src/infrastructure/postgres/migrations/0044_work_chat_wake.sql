@@ -11,4 +11,36 @@ CREATE TABLE IF NOT EXISTS work_chat_wake_states (
   PRIMARY KEY (tenant_id, workspace_id, work_id)
 );
 
+CREATE TABLE IF NOT EXISTS work_chat_wake_outbox (
+  id bigserial PRIMARY KEY,
+  tenant_id text NOT NULL,
+  workspace_id uuid NOT NULL,
+  work_id uuid NOT NULL,
+  conversation_id uuid NOT NULL,
+  work_ref text NOT NULL,
+  title text NOT NULL,
+  product_state text NOT NULL CHECK (
+    product_state IN ('complete', 'needs_you', 'problem')
+  ),
+  problem_kind text NULL CHECK (
+    problem_kind IN ('failed', 'cancelled', 'not_captured')
+  ),
+  attention_reason text NULL CHECK (
+    attention_reason IN ('completion_approval_pending', 'not_captured')
+  ),
+  result_summary text NULL,
+  result_capture_status text NOT NULL CHECK (
+    result_capture_status IN ('present', 'not_present', 'redacted', 'not_captured')
+  ),
+  observed_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL,
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  claimed_by text NULL,
+  lease_expires_at timestamptz NULL,
+  delivered_at timestamptz NULL
+);
+CREATE INDEX IF NOT EXISTS work_chat_wake_outbox_pending_idx
+  ON work_chat_wake_outbox (created_at, id)
+  WHERE delivered_at IS NULL;
+
 COMMIT;

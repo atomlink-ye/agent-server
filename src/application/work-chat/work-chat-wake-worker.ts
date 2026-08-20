@@ -1,8 +1,9 @@
+import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
 import type {
   ChatWorkCard,
   ChatWorkCardProjection,
 } from '../product-projection/chat-work-card-projection.js';
-import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
+import type { WorkChatWakeDeliveryPort } from './work-chat-wake-delivery.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeWorkKey,
@@ -37,16 +38,12 @@ export interface WorkChatWakeWorkSource {
 }
 
 export interface WorkChatWakeWorkerOptions {
+  readonly workerId: string;
+  readonly leaseMs: number;
   readonly pollIntervalMs?: number;
   readonly now?: () => Date;
-  /** Readiness hook only; it must not be used to bypass the durable Chat grant. */
-  readonly onEligibleTransition?: (event: {
-    readonly key: WorkChatWakeWorkKey;
-    readonly card: ChatWorkCard;
-    readonly conversationId: string;
-  }) => void | Promise<void>;
   readonly onError?: (failure: {
-    readonly phase: 'poll' | 'project' | 'link' | 'ready' | 'loop';
+    readonly phase: 'scan' | 'claim' | 'deliver' | 'loop';
     readonly errorName: string;
   }) => void;
 }
@@ -59,18 +56,18 @@ export interface WorkChatWakeWorkerDependencies {
     ConversationWorkLinkRepository,
     'findConversationIdByWork'
   >;
+  /** Lane 1 supplies the grant-derived, idempotent durable append adapter. */
+  readonly delivery: WorkChatWakeDeliveryPort;
 }
 
-/** Polls product cards and records each changed observed state once. */
+/** Polls product cards, atomically queues transitions, and drains the outbox. */
 export class WorkChatWakeWorker {
   readonly #dependencies: WorkChatWakeWorkerDependencies;
   readonly #conversationResolver: WorkChatConversationResolver;
-  readonly #options: Required<Pick<WorkChatWakeWorkerOptions, 'now'>> & {
-    readonly onEligibleTransition?: WorkChatWakeWorkerOptions['onEligibleTransition'];
-    readonly onError?: WorkChatWakeWorkerOptions['onError'];
-  } & {
-    pollIntervalMs: number;
-  };
+  readonly #options: Required<
+    Pick<WorkChatWakeWorkerOptions, 'workerId' | 'leaseMs' | 'now'>
+  > &
+    Pick<WorkChatWakeWorkerOptions, 'onError'> & { pollIntervalMs: number };
   #stopping = false;
   #running = false;
   #loop: Promise<void> | null = null;
@@ -79,18 +76,17 @@ export class WorkChatWakeWorker {
 
   public constructor(
     dependencies: WorkChatWakeWorkerDependencies,
-    options: WorkChatWakeWorkerOptions = {},
+    options: WorkChatWakeWorkerOptions,
   ) {
     this.#dependencies = dependencies;
     this.#conversationResolver = createWorkChatConversationResolver(
       dependencies.conversationWorkLinks,
     );
     this.#options = {
+      workerId: options.workerId,
+      leaseMs: options.leaseMs,
       now: options.now ?? (() => new Date()),
       pollIntervalMs: options.pollIntervalMs ?? 250,
-      ...(options.onEligibleTransition
-        ? { onEligibleTransition: options.onEligibleTransition }
-        : {}),
       ...(options.onError ? { onError: options.onError } : {}),
     };
   }
@@ -115,55 +111,82 @@ export class WorkChatWakeWorker {
     this.#loop = null;
   }
 
-  /** One poll, exposed for an entrypoint or an in-process caller. */
+  /** One scan plus at most one claimed delivery. */
   public async processOnce(): Promise<boolean> {
+    const observed = await this.scanOnce();
+    let delivery;
+    try {
+      delivery = await this.#dependencies.state.claimPending(
+        this.#options.workerId,
+        this.#options.leaseMs,
+      );
+    } catch (error: unknown) {
+      this.fail('claim', error);
+      return observed;
+    }
+    if (!delivery) return observed;
+
+    try {
+      await this.#dependencies.delivery.deliver(delivery);
+    } catch (error: unknown) {
+      // Leave the lease in place. Reclaim is allowed only after it expires.
+      this.report('deliver', error);
+      return true;
+    }
+
+    try {
+      await this.#dependencies.state.markDelivered(
+        delivery.deliveryId,
+        this.#options.workerId,
+      );
+    } catch (error: unknown) {
+      // The adapter is required to be idempotent because a successful append
+      // followed by a lost acknowledgement will be reclaimed after the lease.
+      this.fail('deliver', error);
+    }
+    return true;
+  }
+
+  private async scanOnce(): Promise<boolean> {
     let workKeys: readonly WorkChatWakeWorkKey[];
     try {
       workKeys = await this.#dependencies.workSource.listWorkKeys();
     } catch (error: unknown) {
-      this.fail('poll', error);
+      this.fail('scan', error);
       return false;
     }
 
-    let processed = false;
+    let observed = false;
     for (const key of workKeys) {
       let card: ChatWorkCard;
       try {
         card = await this.#dependencies.projection.getByWorkId(key);
       } catch (error: unknown) {
-        this.fail('project', error);
+        this.fail('scan', error);
         continue;
       }
-
-      const previous = await this.#dependencies.state.getLastObserved(key);
-      if (previous === card.productState) continue;
 
       const conversationId = isEligibleState(card.productState)
         ? await this.resolveConversationId(key)
         : null;
+      // Do not advance a terminal/attention checkpoint until its durable link
+      // exists; a later poll can then enqueue the transition.
       if (isEligibleState(card.productState) && !conversationId) continue;
 
-      if (conversationId && isEligibleState(card.productState)) {
-        try {
-          await this.#options.onEligibleTransition?.({
-            key,
-            card,
-            conversationId,
-          });
-        } catch (error: unknown) {
-          this.fail('ready', error);
-          continue;
-        }
+      try {
+        const result = await this.#dependencies.state.observe({
+          key,
+          card,
+          conversationId,
+          observedAt: this.#options.now().toISOString(),
+        });
+        if (result !== 'unchanged') observed = true;
+      } catch (error: unknown) {
+        this.fail('scan', error);
+        break;
       }
-
-      await this.#dependencies.state.saveObserved({
-        ...key,
-        state: card.productState,
-        observedAt: this.#options.now().toISOString(),
-      });
-      processed = true;
     }
-    return processed;
+    return observed;
   }
 
   private async resolveConversationId(
@@ -173,7 +196,7 @@ export class WorkChatWakeWorker {
       const link = await this.#conversationResolver.resolve(key);
       return link?.conversationId ?? null;
     } catch (error: unknown) {
-      this.fail('link', error);
+      this.fail('scan', error);
       return null;
     }
   }
@@ -187,11 +210,18 @@ export class WorkChatWakeWorker {
   }
 
   private fail(
-    phase: 'poll' | 'project' | 'link' | 'ready' | 'loop',
+    phase: 'scan' | 'claim' | 'deliver' | 'loop',
     error: unknown,
   ): void {
     this.#stopping = true;
     this.#running = false;
+    this.report(phase, error);
+  }
+
+  private report(
+    phase: 'scan' | 'claim' | 'deliver' | 'loop',
+    error: unknown,
+  ): void {
     try {
       this.#options.onError?.({
         phase,
@@ -226,7 +256,7 @@ function isEligibleState(
 
 export function createWorkChatWakeWorker(
   dependencies: WorkChatWakeWorkerDependencies,
-  options: WorkChatWakeWorkerOptions = {},
+  options: WorkChatWakeWorkerOptions,
 ): WorkChatWakeWorker {
   return new WorkChatWakeWorker(dependencies, options);
 }

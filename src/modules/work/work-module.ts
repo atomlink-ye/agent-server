@@ -8,7 +8,6 @@ import {
 } from '../../application/product-projection/chat-work-card-projection.js';
 import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
 import { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
-import { createChatWorkCardProjection } from '../../application/product-projection/chat-work-card-projection.js';
 import {
   createProductProjection,
   type ProductProjectionApi,

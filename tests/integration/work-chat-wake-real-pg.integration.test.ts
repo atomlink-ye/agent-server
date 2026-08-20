@@ -89,15 +89,21 @@ describe('Work Chat wake on real PostgreSQL', () => {
     );
     await pool.query('DELETE FROM team_member_runs WHERE id=$1', [memberRunId]);
     await pool.query('DELETE FROM team_runs WHERE id=$1', [teamRunId]);
+    await pool.query(
+      `DELETE FROM work_run_resource_manifest
+        WHERE work_run_id IN (
+          SELECT id FROM work_runs WHERE root_task_id=$1
+        )`,
+      [rootTaskId],
+    );
+    await pool.query('DELETE FROM work_runs WHERE root_task_id=$1 OR id=$2', [
+      rootTaskId,
+      workRunId,
+    ]);
     await pool.query('DELETE FROM runs WHERE id = ANY($1::uuid[])', [
       [rootRunId, completionRequestRunId, secondCompletionRequestRunId],
     ]);
     await pool.query('DELETE FROM tasks WHERE id=$1', [rootTaskId]);
-    await pool.query(
-      'DELETE FROM work_run_resource_manifest WHERE work_run_id=$1',
-      [workRunId],
-    );
-    await pool.query('DELETE FROM work_runs WHERE id=$1', [workRunId]);
     await pool.query('DELETE FROM works WHERE id=$1', [workId]);
     await pool.query('DELETE FROM team_versions WHERE id=$1', [teamVersionId]);
     await pool.query('DELETE FROM team_definitions WHERE id=$1', [

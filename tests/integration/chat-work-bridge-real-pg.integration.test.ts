@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { AccessContext } from '../../src/platform/access-context.js';
 import { DescribeWorkflow } from '../../src/application/work/describe-workflow.js';
 import { ProductWorkDefinitionQuery } from '../../src/application/work/product-work-definition-query.js';
+import { ResolveWorkDefinition } from '../../src/application/work/resolve-work-definition.js';
 import { validateProductWorkDefinition } from '../../src/application/work/validate-product-work-definition.js';
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
 import { RuntimeToolGrantService } from '../../src/application/extensions/runtime-tool-grant-service.js';
@@ -19,6 +20,7 @@ import { PostgresConversationRepository } from '../../src/infrastructure/postgre
 import {
   PRODUCT_WORK_CREATE_TOOL_REF,
   PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+  PRODUCT_WORK_RUN_START_TOOL_REF,
 } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
 import { createWorkModule } from '../../src/modules/work/work-module.js';
 import {
@@ -49,7 +51,11 @@ const access: AccessContext = {
   policySnapshotVersion: 'chat-work-bridge-v1',
 };
 
-const WORKFLOW_SOURCE = (name: string, description: string) =>
+const WORKFLOW_SOURCE = (
+  name: string,
+  description: string,
+  inputField = 'query',
+) =>
   `apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
@@ -62,9 +68,9 @@ spec:
   input_schema:
     type: object
     properties:
-      query:
+      ${inputField}:
         type: string
-    required: [query]
+    required: [${inputField}]
     additional_properties: false
 `;
 
@@ -72,6 +78,8 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   let pool: Pool;
   let workTools: Map<string, RegisteredTool>;
   const createdDefinitionIds: string[] = [];
+  const createdWorkIds: string[] = [];
+  const createdTaskIds: string[] = [];
 
   beforeAll(async () => {
     pool = createPostgresPool({
@@ -98,16 +106,105 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       ],
     );
 
+    const invokables = new PostgresInvokableRepository(pool);
+    const resolver = new ResolveWorkDefinition({
+      agents: {
+        async findDefinition() {
+          return null;
+        },
+        async findVersion(_owner, versionId) {
+          return versionId === agentVersionId
+            ? ({
+                id: agentVersionId,
+                definitionId: randomUUID(),
+                tenantId,
+                workspaceId,
+                principalType: access.principalType,
+                principalId,
+                status: 'published',
+                displayName: 'Chat Work Bridge Agent',
+                fingerprint: `sha256:${'a'.repeat(64)}`,
+              } as any)
+            : null;
+        },
+      },
+      agentResolution: {
+        async resolvePublished(versionId) {
+          return versionId === agentVersionId
+            ? {
+                source: 'managed' as const,
+                id: agentVersionId,
+                instructions: 'Handle typed Product Work input.',
+                modelPolicyRef: 'free-only' as const,
+                proposalLimit: 0,
+                skills: [],
+                toolRefs: [],
+              }
+            : null;
+        },
+      },
+      definitions: invokables,
+      environments: {
+        async findVersion(_owner, versionId) {
+          return versionId === environmentVersionId
+            ? ({
+                id: environmentVersionId,
+                definitionId: randomUUID(),
+                tenantId,
+                workspaceId,
+                principalType: access.principalType,
+                principalId,
+                status: 'published',
+                displayName: 'Chat Work Bridge Environment',
+                package: {},
+                canonicalJson: '{}',
+                fingerprint: `sha256:${'e'.repeat(64)}`,
+                createdAt: at,
+                updatedAt: at,
+                publishedAt: at,
+              } as any)
+            : null;
+        },
+      },
+    });
     const workModule = createWorkModule({
       database: pool,
-      definitions: new PostgresInvokableRepository(pool),
+      definitions: invokables,
+      definitionResolution: resolver,
       execution: {
-        async admitRoot() {
-          return { taskId: randomUUID(), reused: false };
+        async admitRoot(request) {
+          const taskId = randomUUID();
+          await pool.query(
+            `INSERT INTO tasks
+             (id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,
+              root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,
+              input_snapshot_ref,input_fingerprint,created_at,updated_at)
+             VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,$9,$10,$11,$11)`,
+            [
+              taskId,
+              request.accessContext.tenantId,
+              request.accessContext.workspaceId,
+              request.accessContext.principalType,
+              request.accessContext.principalId,
+              request.accessContext.policySnapshotVersion,
+              request.invokable.kind,
+              request.invokable.versionId,
+              'chat-work-bridge',
+              'chat-work-bridge',
+              at,
+            ],
+          );
+          createdTaskIds.push(taskId);
+          return { taskId, reused: false };
         },
       },
       executionFacts: new PostgresExecutionFactQuery(pool),
       conversations: new PostgresConversationRepository(pool),
+      runtimeCapabilities: {
+        capabilities() {
+          return { supported: new Set(['external_workspace'] as const) };
+        },
+      },
     });
     const grants = new RuntimeToolGrantService();
     const grantIssue = grants.issue({
@@ -119,10 +216,12 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
       allowedTools: [
         PRODUCT_WORK_CREATE_TOOL_REF,
         PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+        PRODUCT_WORK_RUN_START_TOOL_REF,
       ],
       catalogTools: [
         PRODUCT_WORK_CREATE_TOOL_REF,
         PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF,
+        PRODUCT_WORK_RUN_START_TOOL_REF,
       ],
     });
     const grant = grants.resolve(grantIssue.token);
@@ -141,6 +240,32 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    if (createdWorkIds.length) {
+      await pool.query(
+        `DELETE FROM work_run_resource_manifest
+         WHERE work_run_id IN (
+           SELECT id FROM work_runs
+            WHERE tenant_id=$1 AND workspace_id=$2
+              AND work_id = ANY($3::uuid[])
+         )`,
+        [tenantId, workspaceId, createdWorkIds],
+      );
+      await pool.query(
+        `DELETE FROM work_runs
+         WHERE tenant_id=$1 AND workspace_id=$2
+           AND work_id = ANY($3::uuid[])`,
+        [tenantId, workspaceId, createdWorkIds],
+      );
+      await pool.query(
+        `DELETE FROM works
+         WHERE tenant_id=$1 AND workspace_id=$2 AND id = ANY($3::uuid[])`,
+        [tenantId, workspaceId, createdWorkIds],
+      );
+    }
+    if (createdTaskIds.length)
+      await pool.query('DELETE FROM tasks WHERE id = ANY($1::uuid[])', [
+        createdTaskIds,
+      ]);
     if (createdDefinitionIds.length) {
       // Published Work Definition source versions/definitions are immutable
       // (migration 0034 trigger) and are deliberately left in place, matching
@@ -157,6 +282,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   async function publishWorkflow(
     name: string,
     description: string,
+    inputField = 'query',
   ): Promise<string> {
     const definitionId = randomUUID();
     const versionId = randomUUID();
@@ -175,6 +301,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, '')}-${definitionId.slice(0, 8)}`,
         description,
+        inputField,
       ),
     );
     if (!parsedAuthorSource.valid)
@@ -316,6 +443,94 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
     }
   });
 
+  it('continue_work persists a typed predecessor link through the MCP path', async () => {
+    const definitionId = await publishWorkflow(
+      'Feedback Continuation Workflow',
+      'Continues a Product Work from typed feedback.',
+      'feedback',
+    );
+    const sources = new PostgresWorkDefinitionSourceRepository(pool);
+    const versions = await sources.listProductVersions!({
+      definitionId,
+      owner: access,
+      limit: 1,
+      cursor: null,
+    });
+    const version = versions.items[0]?.version;
+    if (!version)
+      throw new Error('Feedback workflow version was not published.');
+
+    const start = requiredTool(workTools, 'start_work');
+    const continueWork = requiredTool(workTools, 'continue_work');
+    const startPayload = parseToolPayload(
+      await start({
+        work_definition_version_id: version.id,
+        input: { feedback: 'initial feedback' },
+      }),
+    );
+    const workReference = startPayload.work_reference;
+    createdWorkIds.push(workReference.work_id);
+    expect(workReference).toEqual({
+      work_id: expect.any(String),
+      definition_id: definitionId,
+      definition_version_id: version.id,
+    });
+
+    const initialRuns = await pool.query<{ id: string }>(
+      `SELECT id
+         FROM work_runs
+        WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
+        ORDER BY created_at DESC,id DESC`,
+      [tenantId, workspaceId, workReference.work_id],
+    );
+    expect(initialRuns.rows).toHaveLength(1);
+    const predecessorId = initialRuns.rows[0]!.id;
+
+    const chatBefore = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+         FROM chat_messages
+        WHERE tenant_id=$1 AND work_ref=$2`,
+      [tenantId, workReference.work_id],
+    );
+    const continuationPayload = parseToolPayload(
+      await continueWork({
+        work_ref: workReference.work_id,
+        feedback: 'follow-up feedback',
+      }),
+    );
+    expect(continuationPayload).toEqual({
+      work_reference: workReference,
+      continuation_kind: 'new_work_run',
+    });
+
+    const runs = await pool.query<{
+      id: string;
+      predecessor_work_run_id: string | null;
+      input_snapshot: Record<string, unknown> | null;
+    }>(
+      `SELECT id,predecessor_work_run_id,input_snapshot
+         FROM work_runs
+        WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
+        ORDER BY created_at DESC,id DESC`,
+      [tenantId, workspaceId, workReference.work_id],
+    );
+    expect(runs.rows).toHaveLength(2);
+    const successor = runs.rows[0]!;
+    expect(successor.id).not.toBe(predecessorId);
+    expect(successor.predecessor_work_run_id).toBe(predecessorId);
+    expect(successor.input_snapshot).toEqual({
+      feedback: 'follow-up feedback',
+    });
+
+    const chatAfter = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+         FROM chat_messages
+        WHERE tenant_id=$1 AND work_ref=$2`,
+      [tenantId, workReference.work_id],
+    );
+    expect(chatAfter.rows[0]?.count).toBe(chatBefore.rows[0]?.count);
+  });
+
   it('work.ts WorkOrigin type is untouched by this PR (out-of-scope guard)', () => {
     // Verify that the WorkOrigin domain type (tracking Work creation provenance)
     // was not modified by this PR's work on the chat-triggered Work feature.
@@ -333,7 +548,7 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
   });
 });
 
-type RegisteredTool = (args: Record<string, string>) => Promise<unknown>;
+type RegisteredTool = (args: Record<string, unknown>) => Promise<unknown>;
 
 function requiredTool(
   tools: Map<string, RegisteredTool>,

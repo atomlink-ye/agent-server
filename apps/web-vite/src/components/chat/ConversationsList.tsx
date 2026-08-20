@@ -6,7 +6,6 @@ export interface ConversationsListProps {
   readonly selectedConversationId: ConversationId | null;
   readonly onSelect: (conversationId: ConversationId) => void;
   readonly onRetry: () => void;
-  readonly connected: boolean;
 }
 
 export function ConversationsList({
@@ -14,7 +13,6 @@ export function ConversationsList({
   selectedConversationId,
   onSelect,
   onRetry,
-  connected,
 }: ConversationsListProps) {
   if (state.status === 'loading' && state.conversations.length === 0) {
     return <p className="conversation-placeholder">Loading conversations…</p>;
@@ -37,7 +35,7 @@ export function ConversationsList({
     return (
       <p className="conversation-placeholder">
         <span className="placeholder-dot" aria-hidden="true" />
-        {connected ? 'No conversations yet.' : 'Conversations are not connected yet.'}
+        No conversations yet.
       </p>
     );
   }

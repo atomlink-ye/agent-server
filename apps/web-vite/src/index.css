@@ -205,6 +205,127 @@ button {
   padding: 36px 24px 24px;
 }
 
+.chat-transcript {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 8px 0 20px;
+}
+
+.chat-message {
+  align-self: flex-start;
+  max-width: 78%;
+  border: 1px solid #2d3542;
+  border-radius: 12px;
+  background: #171c25;
+  padding: 12px 14px;
+  color: #e2e8f2;
+  line-height: 1.55;
+}
+
+.chat-message[data-author-type='principal'] {
+  align-self: flex-end;
+  background: #211c32;
+  border-color: #3c3459;
+}
+
+.chat-message p {
+  margin: 0;
+}
+
+.work-card {
+  margin-top: 12px;
+  border-top: 1px solid #303949;
+  padding-top: 12px;
+  color: #c1cada;
+  font-size: 13px;
+}
+
+.work-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.work-card h3 {
+  margin: 8px 0 6px;
+  color: #f1f3f8;
+  font-size: 14px;
+}
+
+.work-card-result {
+  color: #9ca8ba;
+}
+
+.work-card button,
+.work-status-actions button {
+  margin-top: 12px;
+  border: 1px solid #59657a;
+  border-radius: 8px;
+  background: transparent;
+  color: #eef2f7;
+  padding: 7px 10px;
+}
+
+.work-status {
+  display: inline-block;
+  border-radius: 999px;
+  background: #2a3548;
+  padding: 4px 8px;
+  color: #dce2ec;
+  font-size: 11px;
+}
+
+.work-status--running { background: #1b463c; color: #a8e5c8; }
+.work-status--needs_you { background: #4a3d21; color: #f2d59a; }
+.work-status--complete { background: #263e4c; color: #b4dff2; }
+.work-status--problem { background: #4b2b34; color: #f3b9c5; }
+.work-status--unavailable { background: #2a3548; color: #b5bfce; }
+
+.work-status-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: #10131a;
+  padding: 24px;
+}
+
+.work-status-content {
+  width: min(100%, 680px);
+  border: 1px solid #2d3542;
+  border-radius: 16px;
+  background: #151922;
+  padding: 28px;
+}
+
+.work-status-details h1,
+.work-status-content h1 {
+  margin: 12px 0;
+  color: #f5f7fb;
+  font-size: 24px;
+}
+
+.work-status-details > p:last-child,
+.work-status-content > div[role='alert'] p {
+  color: #9ca8ba;
+  line-height: 1.6;
+}
+
+.work-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.work-status-actions button {
+  margin-top: 0;
+}
+
 .empty-chat {
   display: flex;
   max-width: 460px;

@@ -4,9 +4,10 @@ import {
   useMemo,
   useSyncExternalStore,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChatComposer } from '../components/chat/ChatComposer';
 import { ChatTranscript } from '../components/chat/ChatTranscript';
-import type { ChatCommands, Conversation } from '../components/chat/contracts';
+import type { ChatCommands } from '../components/chat/contracts';
 import { ConversationsPane } from './ConversationsPane';
 import { createAppStore, type AppStore } from '../stores/app';
 import {
@@ -16,16 +17,13 @@ import {
 import { createMessagesStore, type MessagesStore } from '../stores/messages';
 
 export interface ChatShellProps {
-  readonly commands?: ChatCommands;
+  readonly commands: ChatCommands;
   readonly appStore?: AppStore;
   readonly conversationsStore?: ConversationsStore;
   readonly messagesStore?: MessagesStore;
-  readonly onConversationSelected?: (conversationId: string) => void;
-  readonly onConversationCreated?: (conversation: Conversation) => void;
+  readonly returnConversationId?: string | null;
 }
 
-const disconnectedSendMessage =
-  'Sending is not connected yet. Connect a sendMessage command to send messages.';
 const sendFailureMessage = 'Unable to send this message. Please try again.';
 
 export function ChatShell({
@@ -33,9 +31,9 @@ export function ChatShell({
   appStore: providedAppStore,
   conversationsStore: providedConversationsStore,
   messagesStore: providedMessagesStore,
-  onConversationSelected,
-  onConversationCreated,
+  returnConversationId = null,
 }: ChatShellProps) {
+  const navigate = useNavigate();
   const appSelectionStore = useMemo(
     () => providedAppStore ?? createAppStore(),
     [providedAppStore],
@@ -72,23 +70,40 @@ export function ChatShell({
     : undefined;
 
   useEffect(() => {
-    if (commands?.loadConversations) {
-      void conversationListStore.load(commands.loadConversations);
-    }
-  }, [commands?.loadConversations, conversationListStore]);
+    void conversationListStore.load(commands.loadConversations);
+  }, [commands.loadConversations, conversationListStore]);
 
   useEffect(() => {
-    if (!conversationId || !commands?.loadMessages) return;
+    if (conversationState.status !== 'ready') return;
+    const returnedConversation = returnConversationId
+      ? conversationState.conversations.some(({ id }) => id === returnConversationId)
+      : false;
+    const selected = appSelectionStore.getSnapshot().selectedConversationId;
+    if (returnedConversation) {
+      appSelectionStore.select(returnConversationId);
+    } else if (returnConversationId || !conversationState.conversations.length) {
+      appSelectionStore.clearSelection();
+    } else if (
+      selected === null ||
+      !conversationState.conversations.some(({ id }) => id === selected)
+    ) {
+      appSelectionStore.select(conversationState.conversations[0].id);
+    }
+  }, [
+    appSelectionStore,
+    conversationState.conversations,
+    conversationState.status,
+    returnConversationId,
+  ]);
+
+  useEffect(() => {
+    if (!conversationId) return;
     void messageStore.load(conversationId, commands.loadMessages);
-  }, [commands?.loadMessages, conversationId, messageStore]);
+  }, [commands.loadMessages, conversationId, messageStore]);
 
   const send = useCallback(
     async (body: string): Promise<void> => {
       if (!conversationId || !messageStore.beginSend(conversationId, body)) return;
-      if (!commands?.sendMessage) {
-        messageStore.failSend(conversationId, body, disconnectedSendMessage);
-        return;
-      }
       try {
         const message = await commands.sendMessage(conversationId, body);
         if (!message) {
@@ -113,7 +128,7 @@ export function ChatShell({
         messageStore.failSend(conversationId, body, sendFailureMessage);
       }
     },
-    [commands?.sendMessage, conversationId, messageStore],
+    [commands.sendMessage, conversationId, messageStore],
   );
 
   const retrySend = useCallback((): void => {
@@ -122,10 +137,10 @@ export function ChatShell({
   }, [conversationId, messageState?.failedBody, send]);
 
   const retryMessages = useCallback((): void => {
-    if (conversationId && commands?.loadMessages) {
+    if (conversationId) {
       void messageStore.load(conversationId, commands.loadMessages);
     }
-  }, [commands?.loadMessages, conversationId, messageStore]);
+  }, [commands.loadMessages, conversationId, messageStore]);
 
   const setDraft = useCallback(
     (draft: string): void => {
@@ -134,12 +149,20 @@ export function ChatShell({
     [conversationId, messageStore],
   );
 
+  const openWork = useCallback(
+    (workId: string, returnConversationId: string): void => {
+      navigate(`/work/${encodeURIComponent(workId)}`, {
+        state: { returnConversationId },
+      });
+    },
+    [navigate],
+  );
+
   const handleSelect = useCallback(
     (selectedConversationId: string): void => {
       appSelectionStore.select(selectedConversationId);
-      onConversationSelected?.(selectedConversationId);
     },
-    [appSelectionStore, onConversationSelected],
+    [appSelectionStore],
   );
 
   return (
@@ -148,7 +171,6 @@ export function ChatShell({
         commands={commands}
         appStore={appSelectionStore}
         conversationsStore={conversationListStore}
-        onNewConversation={onConversationCreated}
         onSelectConversation={handleSelect}
       />
 
@@ -167,9 +189,9 @@ export function ChatShell({
           <ChatTranscript
             conversationId={conversationId}
             hasConversations={conversationState.conversations.length > 0}
-            connected={commands?.loadMessages !== undefined}
             state={messageState}
             onRetry={retryMessages}
+            onOpenWork={openWork}
           />
           <ChatComposer
             draft={messageState?.draft ?? ''}

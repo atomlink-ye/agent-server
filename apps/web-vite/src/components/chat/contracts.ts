@@ -15,17 +15,17 @@ export interface ChatMessage {
   readonly authorType: ChatAuthorType;
   readonly authorId: string;
   readonly body: string;
+  readonly workRef: string | null;
   readonly createdAt: string;
 }
 
 export interface ChatCommands {
-  readonly loadConversations?: () => Promise<readonly Conversation[]>;
-  readonly loadMessages?: (
+  readonly loadConversations: () => Promise<readonly Conversation[]>;
+  readonly loadMessages: (
     conversationId: ConversationId,
   ) => Promise<readonly ChatMessage[]>;
-  readonly sendMessage?: (
+  readonly sendMessage: (
     conversationId: ConversationId,
     body: string,
   ) => Promise<ChatMessage>;
-  readonly createConversation?: () => Promise<Conversation>;
 }

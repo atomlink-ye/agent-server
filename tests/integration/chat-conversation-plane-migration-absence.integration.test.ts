@@ -29,12 +29,12 @@ describe('Chat conversation plane migration absence (variant pair)', () => {
     await pool?.end();
   });
 
-  it('confirms 0039_chat_delivery_outbox.sql is the final migration', () => {
+  it('confirms 0040_agent_home_vfs.sql is the final migration', () => {
     const lastMigration =
       durableKernelMigrationFileNames[
         durableKernelMigrationFileNames.length - 1
       ];
-    expect(lastMigration).toBe('0039_chat_delivery_outbox.sql');
+    expect(lastMigration).toBe('0040_agent_home_vfs.sql');
   });
 
   it('confirms at least 39 migrations are registered', () => {

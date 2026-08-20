@@ -613,6 +613,8 @@ export async function createService(
     teamMessages,
     tasks: taskRepository,
     sessions,
+    conversations,
+    chatDispatches,
     submitSessionTurn,
     events,
     cancelTask,

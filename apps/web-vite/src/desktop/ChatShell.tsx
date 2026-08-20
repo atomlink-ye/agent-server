@@ -29,6 +29,7 @@ export interface ChatShellProps {
 }
 
 const sendFailureMessage = 'Unable to send this message. Please try again.';
+const messageRefreshIntervalMs = 3000;
 
 export function ChatShell({
   commands,
@@ -105,6 +106,72 @@ export function ChatShell({
     if (!conversationId) return;
     void messageStore.load(conversationId, commands.loadMessages);
   }, [commands.loadMessages, conversationId, messageStore]);
+
+  useEffect(() => {
+    if (activeTab !== 'conversations' || !conversationId) return;
+
+    let disposed = false;
+    let visibilityGeneration = 0;
+    let refreshInFlight = false;
+    let intervalId: number | null = null;
+
+    const stopPolling = (): void => {
+      if (intervalId === null) return;
+      window.clearInterval(intervalId);
+      intervalId = null;
+    };
+
+    const refresh = (): void => {
+      if (
+        disposed ||
+        refreshInFlight ||
+        document.visibilityState !== 'visible'
+      ) {
+        return;
+      }
+      const requestGeneration = visibilityGeneration;
+      refreshInFlight = true;
+      void messageStore
+        .refresh(
+          conversationId,
+          commands.loadMessages,
+          () =>
+            !disposed &&
+            requestGeneration === visibilityGeneration &&
+            document.visibilityState === 'visible',
+        )
+        .then(
+          () => {
+            refreshInFlight = false;
+          },
+          () => {
+            refreshInFlight = false;
+          },
+        );
+    };
+
+    const startPolling = (): void => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      stopPolling();
+      intervalId = window.setInterval(refresh, messageRefreshIntervalMs);
+    };
+
+    const handleVisibilityChange = (): void => {
+      visibilityGeneration += 1;
+      stopPolling();
+      if (document.visibilityState === 'visible') startPolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    startPolling();
+
+    return () => {
+      disposed = true;
+      visibilityGeneration += 1;
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeTab, commands.loadMessages, conversationId, messageStore]);
 
   const send = useCallback(
     async (body: string): Promise<void> => {

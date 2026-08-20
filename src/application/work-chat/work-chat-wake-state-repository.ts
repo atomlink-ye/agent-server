@@ -8,6 +8,13 @@ export interface WorkChatWakeWorkKey {
   readonly workId: string;
 }
 
+export type WorkChatWakeCursor = WorkChatWakeWorkKey;
+
+export interface WorkChatWakeWorkPage {
+  readonly items: readonly WorkChatWakeWorkKey[];
+  readonly nextCursor: WorkChatWakeCursor | null;
+}
+
 export interface WorkChatWakeStateRepository {
   observe(input: {
     readonly key: WorkChatWakeWorkKey;

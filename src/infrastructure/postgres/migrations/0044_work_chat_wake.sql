@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS work_chat_wake_states (
   last_observed_state text NOT NULL CHECK (
     last_observed_state IN ('running', 'needs_you', 'complete', 'problem', 'not_captured')
   ),
+  transition_no bigint NOT NULL CHECK (transition_no > 0),
   last_observed_at timestamptz NOT NULL,
   PRIMARY KEY (tenant_id, workspace_id, work_id)
 );
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS work_chat_wake_outbox (
   tenant_id text NOT NULL,
   workspace_id uuid NOT NULL,
   work_id uuid NOT NULL,
+  transition_no bigint NOT NULL CHECK (transition_no > 0),
   conversation_id uuid NOT NULL,
   work_ref text NOT NULL,
   title text NOT NULL,
@@ -37,7 +39,8 @@ CREATE TABLE IF NOT EXISTS work_chat_wake_outbox (
   attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   claimed_by text NULL,
   lease_expires_at timestamptz NULL,
-  delivered_at timestamptz NULL
+  delivered_at timestamptz NULL,
+  UNIQUE (tenant_id, workspace_id, work_id, transition_no)
 );
 CREATE INDEX IF NOT EXISTS work_chat_wake_outbox_pending_idx
   ON work_chat_wake_outbox (created_at, id)

@@ -16,7 +16,7 @@ interface Queryable {
   }>;
 }
 
-interface Connectable extends Queryable {
+export interface WorkChatWakeDatabase extends Queryable {
   connect(): Promise<Client>;
 }
 
@@ -24,12 +24,16 @@ interface Client extends Queryable {
   release(): void;
 }
 
-type StateRow = { last_observed_state: string };
+type StateRow = {
+  last_observed_state: string;
+  transition_no: string | number;
+};
 type OutboxRow = {
   id: string | number;
   tenant_id: string;
   workspace_id: string;
   work_id: string;
+  transition_no: string | number;
   conversation_id: string;
   work_ref: string;
   title: string;
@@ -44,7 +48,7 @@ type OutboxRow = {
 
 /** Durable transition checkpoint plus leaseable Chat wake outbox. */
 export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRepository {
-  public constructor(private readonly database: Queryable | Connectable) {}
+  public constructor(private readonly database: WorkChatWakeDatabase) {}
 
   public async observe(input: {
     readonly key: WorkChatWakeWorkKey;
@@ -55,24 +59,12 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
     const client = await this.acquire();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<StateRow>(
-        `SELECT last_observed_state
-         FROM work_chat_wake_states
-         WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
-         FOR UPDATE`,
-        [input.key.tenantId, input.key.workspaceId, input.key.workId],
-      );
-      if (existing.rows?.[0]?.last_observed_state === input.card.productState) {
-        await client.query('COMMIT');
-        return 'unchanged';
-      }
-
-      await client.query(
+      const inserted = await client.query<StateRow>(
         `INSERT INTO work_chat_wake_states
-           (tenant_id, workspace_id, work_id, last_observed_state, last_observed_at)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (tenant_id, workspace_id, work_id)
-         DO UPDATE SET last_observed_state=$4, last_observed_at=$5`,
+           (tenant_id, workspace_id, work_id, last_observed_state, transition_no, last_observed_at)
+         VALUES ($1, $2, $3, $4, 1, $5)
+         ON CONFLICT (tenant_id, workspace_id, work_id) DO NOTHING
+         RETURNING last_observed_state, transition_no`,
         [
           input.key.tenantId,
           input.key.workspaceId,
@@ -81,20 +73,59 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
           input.observedAt,
         ],
       );
+      const firstObservation = (inserted.rows?.length ?? 0) > 0;
+      const existing = firstObservation
+        ? null
+        : await client.query<StateRow>(
+            `SELECT last_observed_state, transition_no
+             FROM work_chat_wake_states
+             WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3
+             FOR UPDATE`,
+            [input.key.tenantId, input.key.workspaceId, input.key.workId],
+          );
+      if (
+        !firstObservation &&
+        existing?.rows?.[0]?.last_observed_state === input.card.productState
+      ) {
+        await client.query('COMMIT');
+        return 'unchanged';
+      }
+
+      const transitionNo = firstObservation
+        ? 1
+        : Number(existing?.rows?.[0]?.transition_no ?? 0) + 1;
+      if (!firstObservation) {
+        const updated = await client.query(
+          `UPDATE work_chat_wake_states
+           SET last_observed_state=$4, transition_no=$5, last_observed_at=$6
+           WHERE tenant_id=$1 AND workspace_id=$2 AND work_id=$3`,
+          [
+            input.key.tenantId,
+            input.key.workspaceId,
+            input.key.workId,
+            input.card.productState,
+            transitionNo,
+            input.observedAt,
+          ],
+        );
+        if ((updated.rowCount ?? 0) !== 1)
+          throw new Error('Work Chat wake state disappeared during admission.');
+      }
 
       if (input.conversationId && isEligibleState(input.card.productState)) {
         await client.query(
           `INSERT INTO work_chat_wake_outbox
              (tenant_id, workspace_id, work_id, conversation_id, work_ref,
-              title, product_state, problem_kind, attention_reason,
+              transition_no, title, product_state, problem_kind, attention_reason,
               result_summary, result_capture_status, observed_at, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
           [
             input.key.tenantId,
             input.key.workspaceId,
             input.key.workId,
             input.conversationId,
             input.card.workRef,
+            transitionNo,
             input.card.title,
             input.card.productState,
             input.card.problemKind,
@@ -143,7 +174,8 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
        FROM candidate
        WHERE outbox.id=candidate.id
        RETURNING outbox.id, outbox.tenant_id, outbox.workspace_id,
-         outbox.work_id, outbox.conversation_id, outbox.work_ref, outbox.title,
+         outbox.work_id, outbox.transition_no, outbox.conversation_id,
+         outbox.work_ref, outbox.title,
          outbox.product_state, outbox.problem_kind, outbox.attention_reason,
          outbox.result_summary, outbox.result_capture_status, outbox.observed_at`,
       [workerId, leaseMs],
@@ -167,12 +199,7 @@ export class PostgresWorkChatWakeStateRepository implements WorkChatWakeStateRep
   }
 
   private async acquire(): Promise<Client> {
-    if (
-      'connect' in this.database &&
-      typeof this.database.connect === 'function'
-    )
-      return await (this.database as Connectable).connect();
-    return this.database as Client;
+    return await this.database.connect();
   }
 }
 

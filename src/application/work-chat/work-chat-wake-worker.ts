@@ -6,7 +6,9 @@ import type {
 import type { WorkChatWakeDeliveryPort } from './work-chat-wake-delivery.js';
 import type {
   WorkChatWakeStateRepository,
+  WorkChatWakeCursor,
   WorkChatWakeWorkKey,
+  WorkChatWakeWorkPage,
 } from './work-chat-wake-state-repository.js';
 
 export interface WorkChatConversationLink {
@@ -34,12 +36,16 @@ export function createWorkChatConversationResolver(
 }
 
 export interface WorkChatWakeWorkSource {
-  listWorkKeys(): Promise<readonly WorkChatWakeWorkKey[]>;
+  listWorkKeys(input: {
+    readonly cursor: WorkChatWakeCursor | null;
+    readonly limit: number;
+  }): Promise<WorkChatWakeWorkPage>;
 }
 
 export interface WorkChatWakeWorkerOptions {
   readonly workerId: string;
   readonly leaseMs: number;
+  readonly candidateLimit?: number;
   readonly pollIntervalMs?: number;
   readonly now?: () => Date;
   readonly onError?: (failure: {
@@ -73,6 +79,8 @@ export class WorkChatWakeWorker {
   #loop: Promise<void> | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #resolveDelay: (() => void) | null = null;
+  #cursor: WorkChatWakeCursor | null = null;
+  readonly #candidateLimit: number;
 
   public constructor(
     dependencies: WorkChatWakeWorkerDependencies,
@@ -81,6 +89,14 @@ export class WorkChatWakeWorker {
     this.#dependencies = dependencies;
     this.#conversationResolver = createWorkChatConversationResolver(
       dependencies.conversationWorkLinks,
+    );
+    const requestedLimit = options.candidateLimit ?? 50;
+    this.#candidateLimit = Math.max(
+      1,
+      Math.min(
+        100,
+        Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 50,
+      ),
     );
     this.#options = {
       workerId: options.workerId,
@@ -148,16 +164,19 @@ export class WorkChatWakeWorker {
   }
 
   private async scanOnce(): Promise<boolean> {
-    let workKeys: readonly WorkChatWakeWorkKey[];
+    let page: WorkChatWakeWorkPage;
     try {
-      workKeys = await this.#dependencies.workSource.listWorkKeys();
+      page = await this.#dependencies.workSource.listWorkKeys({
+        cursor: this.#cursor,
+        limit: this.#candidateLimit,
+      });
     } catch (error: unknown) {
       this.fail('scan', error);
       return false;
     }
 
     let observed = false;
-    for (const key of workKeys) {
+    for (const key of page.items) {
       let card: ChatWorkCard;
       try {
         card = await this.#dependencies.projection.getByWorkId(key);
@@ -186,6 +205,7 @@ export class WorkChatWakeWorker {
         break;
       }
     }
+    this.#cursor = page.nextCursor;
     return observed;
   }
 

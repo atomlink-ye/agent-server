@@ -23,6 +23,13 @@ import {
 export const PRODUCT_WORK_CREATE_TOOL_REF = 'agent-server/product-work-create';
 export const PRODUCT_WORK_RUN_START_TOOL_REF =
   'agent-server/product-work-run-start';
+/**
+ * Agent workflow association is an authoring mutation and therefore reuses
+ * the existing Product Work authoring grant. It is deliberately not covered
+ * by the read-only list capability.
+ */
+export const PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF =
+  PRODUCT_WORK_CREATE_TOOL_REF;
 export const PRODUCT_WORK_LIST_AGENT_WORKFLOWS_TOOL_REF =
   'agent-server/list-agent-workflows';
 export const PRODUCT_WORK_DESCRIBE_WORKFLOW_TOOL_REF =
@@ -186,6 +193,87 @@ export function registerProductWorkMcpTools(input: {
               {
                 type: 'text',
                 text: JSON.stringify({ work: toWorkResponse(work) }),
+              },
+            ],
+          };
+        } finally {
+          grants.endToolCall(current.grantId);
+        }
+      },
+    );
+  if (
+    grant.catalogTools.includes(PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF)
+  )
+    (server.registerTool as any)(
+      'product_work_associate_agent_workflow',
+      {
+        description: 'Associate a Product Work Definition with an agent.',
+        inputSchema: z.strictObject({
+          agent_definition_id: z.string().trim().min(1).max(256),
+          definition_id: z.string().uuid(),
+        }),
+      },
+      async (args: {
+        readonly agent_definition_id: string;
+        readonly definition_id: string;
+      }) => {
+        const current = grants.get(grant.grantId);
+        if (
+          !current ||
+          !grants.isToolAllowed(
+            current.grantId,
+            PRODUCT_WORK_ASSOCIATE_AGENT_WORKFLOW_TOOL_REF,
+          )
+        )
+          return {
+            isError: true,
+            content: [{ type: 'text', text: 'not_found' }],
+          };
+        grants.beginToolCall(current.grantId);
+        try {
+          const definitions = input.definitions;
+          if (
+            !definitions?.associateAgentWorkflow ||
+            !definitions.findDefinition
+          )
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
+          const definition = await definitions.findDefinition(
+            args.definition_id,
+            {
+              tenantId: current.tenantId,
+              workspaceId: current.workspaceId,
+              principalType: 'service_account',
+              principalId: current.principalId,
+            },
+          );
+          if (
+            !definition ||
+            definition.owner.tenantId !== current.tenantId ||
+            definition.owner.workspaceId !== current.workspaceId
+          )
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'not_found' }],
+            };
+          await definitions.associateAgentWorkflow({
+            tenantId: current.tenantId,
+            workspaceId: current.workspaceId,
+            agentDefinitionId: args.agent_definition_id,
+            definitionId: args.definition_id,
+            now: new Date().toISOString(),
+          });
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  associated: true,
+                  agent_definition_id: args.agent_definition_id,
+                  definition_id: args.definition_id,
+                }),
               },
             ],
           };

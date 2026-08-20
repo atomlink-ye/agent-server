@@ -2,6 +2,10 @@ import type { Hono } from 'hono';
 
 import type { TeamDriver } from '../../application/teams/team-driver.js';
 import type { TeamExecutionRepository } from '../../application/ports/team-execution-repository.js';
+import {
+  createChatWorkCardProjection,
+  type ChatWorkCardProjection,
+} from '../../application/product-projection/chat-work-card-projection.js';
 import { GetProductExecutionDetail } from '../../application/product-projection/get-product-execution-detail.js';
 import { GetProductSessionTranscripts } from '../../application/product-projection/get-product-session-transcripts.js';
 import { createChatWorkCardProjection } from '../../application/product-projection/chat-work-card-projection.js';
@@ -43,6 +47,7 @@ import type { AppConfig } from '../../shared/config.js';
 
 export interface WorkModule {
   readonly projection: ProductProjectionApi;
+  createChatWorkCardProjection(): ChatWorkCardProjection;
   installHttp(
     app: Hono<ApiEnvironment>,
     config: AppConfig,
@@ -217,6 +222,12 @@ export function createWorkModule(options: {
 
   return {
     projection,
+    createChatWorkCardProjection() {
+      return createChatWorkCardProjection({
+        workIdentity: workIdentityQuery,
+        productProjection: projection,
+      });
+    },
     installHttp(app, config, extras) {
       installWorkHttpRoutes(app, config, {
         workIdentity,

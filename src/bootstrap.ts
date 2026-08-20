@@ -65,7 +65,6 @@ import { createResourceModule } from './modules/resource/resource-module.js';
 import { createRuntimeModule } from './modules/runtime/runtime-module.js';
 import { createTeamModule } from './modules/team/team-module.js';
 import { createWorkModule } from './modules/work/work-module.js';
-import { createChatWorkCardProjection } from './application/product-projection/chat-work-card-projection.js';
 import { ChatDeliveryReconciler } from './application/chat/chat-delivery-reconciler.js';
 import { MockChatTurnProvider } from './adapters/chat/mock-chat-turn-provider.js';
 import { ExecutionRuntimeChatTurnProvider } from './adapters/chat/execution-runtime-chat-turn-provider.js';
@@ -78,7 +77,6 @@ import {
 } from './entrypoints/work-chat/worker.js';
 import { PostgresWorkChatWakeStateRepository } from './infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
 import { PostgresConversationWorkLinkRepository } from './modules/work/conversation-work-link-repository.js';
-import { PostgresWorkIdentityRepository } from './infrastructure/postgres/postgres-work-identity-repository.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -383,18 +381,7 @@ export async function createService(
     runtimeCapabilities: runtimeModule,
   });
   runtimeModule.registerToolContributor(workModule.contributeRuntime);
-  const workIdentityRepository = new PostgresWorkIdentityRepository(pool);
-  const chatWorkCardProjection = createChatWorkCardProjection({
-    workIdentity: {
-      findWorkById: (id, owner) =>
-        workIdentityRepository.findWorkById(id, owner),
-      findWorkRunById: (id, owner) =>
-        workIdentityRepository.findWorkRunById(id, owner),
-      findLatestVisibleWorkRun: (workId, owner) =>
-        workIdentityRepository.findLatestVisibleWorkRun(workId, owner),
-    },
-    productProjection: workModule.projection,
-  });
+  const chatWorkCardProjection = workModule.createChatWorkCardProjection();
   const workChatWorker = createWorkChatWakeWorker(
     {
       workSource: new PostgresWorkChatWakeWorkSource(pool),

@@ -10,6 +10,7 @@ import { ListAgentWorkflows } from '../../application/work/list-agent-workflows.
 import { DescribeWorkflow } from '../../application/work/describe-workflow.js';
 import type { WorkDefinitionSourceRepository } from '../../application/ports/work-definition-source-repository.js';
 import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
+import type { RuntimeToolChatContext } from '../../application/extensions/runtime-tool-grant-service.js';
 import type {
   ConversationWorkLinkRepository,
   ConversationWorkOrigin,
@@ -361,6 +362,7 @@ export function registerProductWorkMcpTools(input: {
   readonly server: McpServer;
   readonly grant: RuntimeToolGrant;
   readonly grants: RuntimeToolGrantService;
+  readonly chatContext?: RuntimeToolChatContext | null;
   readonly workIdentity: Pick<
     WorkIdentityApi,
     'createWork' | 'findWorkById' | 'findLatestWorkRun'
@@ -375,14 +377,15 @@ export function registerProductWorkMcpTools(input: {
     | 'findConversationIdByWork'
     | 'findRecentWorkByConversation'
   >;
-  /**
-   * TODO(Lane1 PR#92): populate this from RuntimeToolContributionContext
-   * once the trusted grant carries conversation/trigger identity. Until then,
-   * this stays unset; there is no caller or inferred-ID fallback.
-   */
-  readonly conversationOrigin?: ConversationWorkOrigin;
 }): void {
   const { server, grant, grants } = input;
+  const conversationOrigin: ConversationWorkOrigin | undefined =
+    input.chatContext
+      ? {
+          conversationId: input.chatContext.conversationId,
+          triggerMessageId: input.chatContext.triggerMessageId,
+        }
+      : undefined;
   if (grant.catalogTools.includes(PRODUCT_WORK_CREATE_TOOL_REF))
     (server.registerTool as any)(
       'product_work_create',
@@ -542,9 +545,7 @@ export function registerProductWorkMcpTools(input: {
             ...(input.conversationWorkLinks
               ? { conversationWorkLinks: input.conversationWorkLinks }
               : {}),
-            ...(input.conversationOrigin
-              ? { conversationOrigin: input.conversationOrigin }
-              : {}),
+            ...(conversationOrigin ? { conversationOrigin } : {}),
             current: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,
@@ -586,9 +587,7 @@ export function registerProductWorkMcpTools(input: {
             ...(input.conversationWorkLinks
               ? { conversationWorkLinks: input.conversationWorkLinks }
               : {}),
-            ...(input.conversationOrigin
-              ? { conversationOrigin: input.conversationOrigin }
-              : {}),
+            ...(conversationOrigin ? { conversationOrigin } : {}),
             current: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,
@@ -628,9 +627,7 @@ export function registerProductWorkMcpTools(input: {
             ...(input.conversationWorkLinks
               ? { conversationWorkLinks: input.conversationWorkLinks }
               : {}),
-            ...(input.conversationOrigin
-              ? { conversationOrigin: input.conversationOrigin }
-              : {}),
+            ...(conversationOrigin ? { conversationOrigin } : {}),
             current: {
               tenantId: current.tenantId,
               workspaceId: current.workspaceId,

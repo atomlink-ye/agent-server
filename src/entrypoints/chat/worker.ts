@@ -8,6 +8,7 @@ export type ChatDeliveryWorkerOptions = {
   readonly onError?: (failure: {
     readonly phase: 'claim' | 'deliver' | 'loop';
     readonly errorName: string;
+    readonly error: unknown;
   }) => void;
 };
 
@@ -96,6 +97,7 @@ export class ChatDeliveryWorker {
       this.#options.onError?.({
         phase,
         errorName: error instanceof Error ? error.name : 'UnknownError',
+        error,
       });
     } catch {
       /* safe reporting */

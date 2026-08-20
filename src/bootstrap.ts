@@ -448,10 +448,16 @@ export async function createService(
     {
       workerId: `${workerId}:chat`,
       leaseMs: leaseDurationMs,
-      onError: ({ phase, errorName }) => {
+      onError: ({ phase, errorName, error }) => {
         logger.log('error', 'chat.delivery_worker.failed', {
           phase,
           error_name: errorName,
+          error_message: error instanceof Error ? error.message : undefined,
+          error_stack: error instanceof Error ? error.stack : undefined,
+          postgres_code:
+            typeof (error as { code?: unknown })?.code === 'string'
+              ? (error as { code: string }).code
+              : undefined,
           worker_id: `${workerId}:chat`,
         });
       },

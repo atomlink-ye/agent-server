@@ -86,6 +86,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+export async function initializeSession(): Promise<void> {
+  await request<unknown>('/api/session', { cache: 'no-store' });
+}
+
 export async function loadConversations(): Promise<readonly Conversation[]> {
   const payload = asRecord(await request<unknown>('/api/conversations'));
   const values = payload?.conversations;

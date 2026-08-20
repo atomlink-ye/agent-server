@@ -372,9 +372,11 @@ export async function createService(
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
   const chatTurnProvider =
-    options.singleRunDebug || config.runtime?.adapter === 'none'
-      ? new MockChatTurnProvider()
-      : new ExecutionRuntimeChatTurnProvider(executionRuntime);
+    config.chatTurnProvider === 'execution_runtime' &&
+    !options.singleRunDebug &&
+    config.runtime?.adapter !== 'none'
+      ? new ExecutionRuntimeChatTurnProvider(executionRuntime)
+      : new MockChatTurnProvider();
   const chatDeliveryReconciler = new ChatDeliveryReconciler(
     conversations,
     chatDispatches,

@@ -18,4 +18,9 @@ export type {
   WorkChatWakeWorkPage,
 } from '../../application/work-chat/work-chat-wake-state-repository.js';
 export type { WorkChatWakeDeliveryPort } from '../../application/work-chat/work-chat-wake-delivery.js';
+export type {
+  WorkChatConversationAgentDefinitionResolver,
+  WorkChatWakeDeliveryDependencies,
+} from '../../application/work-chat/work-chat-wake-delivery.js';
 export { PostgresWorkChatWakeWorkSource } from '../../infrastructure/postgres/postgres-work-chat-wake-work-source.js';
+export { PostgresWorkChatConversationAgentResolver } from '../../infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';

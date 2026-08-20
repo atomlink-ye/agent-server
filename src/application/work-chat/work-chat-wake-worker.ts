@@ -3,7 +3,11 @@ import type {
   ChatWorkCard,
   ChatWorkCardProjection,
 } from '../product-projection/chat-work-card-projection.js';
-import type { WorkChatWakeDeliveryPort } from './work-chat-wake-delivery.js';
+import {
+  createWorkChatWakeDelivery,
+  type WorkChatConversationAgentDefinitionResolver,
+} from './work-chat-wake-delivery.js';
+import type { ConversationRepository } from '../ports/conversation-repository.js';
 import type {
   WorkChatWakeStateRepository,
   WorkChatWakeCursor,
@@ -62,13 +66,22 @@ export interface WorkChatWakeWorkerDependencies {
     ConversationWorkLinkRepository,
     'findConversationIdByWork'
   >;
-  /** Lane 1 supplies the grant-derived, idempotent durable append adapter. */
-  readonly delivery: WorkChatWakeDeliveryPort;
+  /** Lane 1's durable conversation repository is composed into the adapter. */
+  readonly conversations: Pick<
+    ConversationRepository,
+    'appendMessage' | 'getChatRuntime' | 'listMessages'
+  >;
+  /** Server-derived agent identity lookup for the linked conversation. */
+  readonly conversationAgentDefinitions: WorkChatConversationAgentDefinitionResolver;
 }
+
+type WorkChatWakeWorkerRuntimeDependencies = WorkChatWakeWorkerDependencies & {
+  readonly delivery: ReturnType<typeof createWorkChatWakeDelivery>;
+};
 
 /** Polls product cards, atomically queues transitions, and drains the outbox. */
 export class WorkChatWakeWorker {
-  readonly #dependencies: WorkChatWakeWorkerDependencies;
+  readonly #dependencies: WorkChatWakeWorkerRuntimeDependencies;
   readonly #conversationResolver: WorkChatConversationResolver;
   readonly #options: Required<
     Pick<WorkChatWakeWorkerOptions, 'workerId' | 'leaseMs' | 'now'>
@@ -86,7 +99,13 @@ export class WorkChatWakeWorker {
     dependencies: WorkChatWakeWorkerDependencies,
     options: WorkChatWakeWorkerOptions,
   ) {
-    this.#dependencies = dependencies;
+    this.#dependencies = {
+      ...dependencies,
+      delivery: createWorkChatWakeDelivery({
+        conversations: dependencies.conversations,
+        agentDefinitions: dependencies.conversationAgentDefinitions,
+      }),
+    };
     this.#conversationResolver = createWorkChatConversationResolver(
       dependencies.conversationWorkLinks,
     );
@@ -156,8 +175,6 @@ export class WorkChatWakeWorker {
         this.#options.workerId,
       );
     } catch (error: unknown) {
-      // The adapter is required to be idempotent because a successful append
-      // followed by a lost acknowledgement will be reclaimed after the lease.
       this.fail('deliver', error);
     }
     return true;

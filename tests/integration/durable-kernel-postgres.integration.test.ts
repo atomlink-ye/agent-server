@@ -230,6 +230,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0038_chat_conversation_plane' },
       { version: '0039_chat_delivery_outbox' },
       { version: '0040_agent_home_vfs' },
+      { version: '0041_agent_workflow_associations' },
     ]);
     expect(taskRows.rows).toEqual([{ table_name: 'tasks' }]);
     expect(runRows.rows).toEqual([{ table_name: 'runs' }]);
@@ -295,6 +296,7 @@ describe('durable kernel postgres bootstrap', () => {
       { version: '0038_chat_conversation_plane' },
       { version: '0039_chat_delivery_outbox' },
       { version: '0040_agent_home_vfs' },
+      { version: '0041_agent_workflow_associations' },
     ]);
   });
 

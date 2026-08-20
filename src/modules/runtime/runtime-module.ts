@@ -52,6 +52,11 @@ export interface RuntimeModule {
   registerToolContributor(contributor: RuntimeToolContributor): void;
 }
 
+function normalizePaseoRequestedModel(model: string): string {
+  const prefix = 'opencode-go/';
+  return model.startsWith(prefix) ? model.slice(prefix.length) : model;
+}
+
 export function createRuntimeModule(options: {
   readonly database: {
     query(
@@ -82,7 +87,11 @@ export function createRuntimeModule(options: {
             cwd: options.config.paseo.agentCwd,
             workspaceTitle: options.config.paseo.workspaceTitle,
             ...(options.config.paseo.model
-              ? { requestedModel: options.config.paseo.model }
+              ? {
+                  requestedModel: normalizePaseoRequestedModel(
+                    options.config.paseo.model,
+                  ),
+                }
               : {}),
             connectTimeoutMs: options.config.paseo.connectTimeoutMs,
             executionTimeoutMs: options.config.paseo.executionTimeoutMs,

@@ -1,10 +1,16 @@
 export type ConversationKind = 'direct' | 'group';
 
+export interface DirectAgentIdentity {
+  readonly agentDefinitionId: string;
+  readonly displayName: string | null;
+}
+
 export interface Conversation {
   readonly id: string;
   readonly tenantId: string;
   readonly kind: ConversationKind;
   readonly title: string | null;
+  readonly directAgent: DirectAgentIdentity | null;
   readonly topic: string | null;
   readonly directPairKey: string | null;
   readonly nextSequence: number;

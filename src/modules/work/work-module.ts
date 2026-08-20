@@ -14,6 +14,7 @@ import type { ExecutionFactQuery } from '../../application/ports/execution-fact-
 import type { DefinitionReadApi } from '../../application/ports/definition-read-api.js';
 import type { ExecutionPlaneCapabilities } from '../../application/ports/execution-plane.js';
 import type { ProductWorkListQuery } from '../../application/ports/product-work-list-query.js';
+import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
 import type { WorkDefinitionResolutionPort } from '../../application/ports/work-definition-resolution.js';
 import type { WorkIdentityOwnerScope } from '../../application/ports/work-identity-repository.js';
 import { StartWorkRun } from '../../application/work/start-work-run.js';
@@ -28,6 +29,7 @@ import {
   PostgresWorkIdentityRepository,
   type WorkIdentityConnectable,
 } from '../../infrastructure/postgres/postgres-work-identity-repository.js';
+import { PostgresConversationWorkLinkRepository } from './conversation-work-link-repository.js';
 import { PostgresRunEventRepository } from '../../infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresSessionTranscriptFactsQuery } from '../../infrastructure/postgres/postgres-session-transcript-facts-query.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../infrastructure/postgres/postgres-work-definition-source-repository.js';
@@ -117,12 +119,17 @@ export function createWorkModule(options: {
   readonly definitionResolution?: WorkDefinitionResolutionPort;
   readonly execution: ExecutionAdmission;
   readonly executionFacts: ExecutionFactQuery;
+  /** Production supplies the conversation adapter; legacy construction may omit it. */
+  readonly conversations?: Pick<ConversationRepository, 'appendMessage'>;
   /** Production supplies the RuntimeModule capability authority. */
   readonly runtimeCapabilities?: {
     capabilities(): ExecutionPlaneCapabilities;
   };
 }): WorkModule {
   const repository = new PostgresWorkIdentityRepository(options.database);
+  const conversationWorkLinks = new PostgresConversationWorkLinkRepository(
+    options.database,
+  );
   const productLists = new PostgresProductWorkListQuery(options.database);
   const definitionSources = new PostgresWorkDefinitionSourceRepository(
     options.database,
@@ -207,7 +214,9 @@ export function createWorkModule(options: {
         executionDetail,
         sessionTranscripts,
         ...(extras?.teamDriver ? { teamDriver: extras.teamDriver } : {}),
-        ...(extras?.teamExecutions ? { teamExecutions: extras.teamExecutions } : {}),
+        ...(extras?.teamExecutions
+          ? { teamExecutions: extras.teamExecutions }
+          : {}),
       });
     },
     contributeRuntime(context) {
@@ -215,6 +224,11 @@ export function createWorkModule(options: {
         ...context,
         workIdentity,
         startWorkRun,
+        definitions: definitionSources,
+        ...(options.conversations
+          ? { conversations: options.conversations }
+          : {}),
+        conversationWorkLinks,
       });
     },
   };

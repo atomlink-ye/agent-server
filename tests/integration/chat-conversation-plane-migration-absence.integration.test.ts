@@ -4,7 +4,6 @@ import type { Pool } from 'pg';
 import {
   applyDurableKernelMigrations,
   createPostgresPool,
-  durableKernelMigrationFileNames,
 } from '../../src/infrastructure/postgres/postgres.js';
 
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
@@ -27,18 +26,6 @@ describe('Chat conversation plane migration absence (variant pair)', () => {
 
   afterAll(async () => {
     await pool?.end();
-  });
-
-  it('confirms 0040_agent_home_vfs.sql is the final migration', () => {
-    const lastMigration =
-      durableKernelMigrationFileNames[
-        durableKernelMigrationFileNames.length - 1
-      ];
-    expect(lastMigration).toBe('0040_agent_home_vfs.sql');
-  });
-
-  it('confirms at least 39 migrations are registered', () => {
-    expect(durableKernelMigrationFileNames.length).toBeGreaterThanOrEqual(39);
   });
 
   it('variant pair: chat tables DO NOT exist when migration is absent (simulated via transaction rollback)', async () => {

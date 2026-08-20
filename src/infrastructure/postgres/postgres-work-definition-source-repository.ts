@@ -370,6 +370,44 @@ export class PostgresWorkDefinitionSourceRepository implements WorkDefinitionSou
       throw new Error('idempotency_conflict');
     return persisted;
   }
+
+  public async associateAgentWorkflow(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+    readonly definitionId: string;
+    readonly now: string;
+  }): Promise<void> {
+    await this.db.query(
+      `INSERT INTO agent_workflow_associations
+       (tenant_id,workspace_id,agent_definition_id,work_definition_id,created_at)
+       VALUES($1,$2,$3,$4,$5)
+       ON CONFLICT (tenant_id,workspace_id,agent_definition_id,work_definition_id) DO NOTHING`,
+      [
+        input.tenantId,
+        input.workspaceId,
+        input.agentDefinitionId,
+        input.definitionId,
+        input.now,
+      ],
+    );
+  }
+
+  public async listDefinitionsForAgent(input: {
+    readonly tenantId: string;
+    readonly workspaceId: string;
+    readonly agentDefinitionId: string;
+  }): Promise<readonly WorkDefinitionSourceDefinition[]> {
+    const result = await this.db.query<DefinitionRow>(
+      `SELECT d.${definitionColumns.split(',').join(',d.')}
+         FROM work_definition_source_definitions d
+         JOIN agent_workflow_associations a ON a.work_definition_id = d.id
+        WHERE a.tenant_id=$1 AND a.workspace_id=$2 AND a.agent_definition_id=$3
+        ORDER BY a.created_at ASC`,
+      [input.tenantId, input.workspaceId, input.agentDefinitionId],
+    );
+    return (result.rows ?? []).map(mapDefinition);
+  }
 }
 
 function productVersionSelect(where: string): string {

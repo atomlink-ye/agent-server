@@ -18,6 +18,7 @@ export interface CreateOrLoadPendingWorkRunInput {
   readonly owner: WorkIdentityOwnerScope;
   readonly workId: string;
   readonly definitionVersionId: string;
+  readonly predecessorWorkRunId?: string | null;
   readonly triggerKind: WorkRunTriggerKind;
   readonly triggerRef: string;
   readonly idempotencyKey: string;
@@ -80,6 +81,10 @@ export interface WorkIdentityRepository {
     owner: WorkIdentityOwnerScope,
   ): Promise<WorkRun | null>;
   findLatestVisibleWorkRun?(
+    workId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null>;
+  findLatestWorkRun?(
     workId: string,
     owner: WorkIdentityOwnerScope,
   ): Promise<WorkRun | null>;

@@ -135,6 +135,7 @@ type WorkRunRow = {
   workspace_id: string;
   work_id: string;
   definition_version_id: string;
+  predecessor_work_run_id: string | null;
   trigger_kind: WorkRun['triggerKind'];
   trigger_ref: string;
   idempotency_key: string;
@@ -160,7 +161,7 @@ type ManifestRow = {
 const workColumns =
   'id,tenant_id,workspace_id,definition_id,current_definition_version_id,title,origin,archived_at,created_at,updated_at';
 const runColumns =
-  'id,tenant_id,workspace_id,work_id,definition_version_id,trigger_kind,trigger_ref,idempotency_key,root_task_id,expires_at,bound_at,created_at,updated_at';
+  'id,tenant_id,workspace_id,work_id,definition_version_id,predecessor_work_run_id,trigger_kind,trigger_ref,idempotency_key,root_task_id,expires_at,bound_at,created_at,updated_at';
 const manifestColumns =
   'work_run_id,tenant_id,workspace_id,slot,resource_kind,requested_ref,resolved_version_id,resolved_fingerprint,resolved_at';
 
@@ -256,10 +257,18 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
   public async createOrLoadPending(
     input: CreateOrLoadPendingWorkRunInput,
   ): Promise<WorkRun> {
+    if (input.predecessorWorkRunId) {
+      const predecessor = await this.findWorkRunById(
+        input.predecessorWorkRunId,
+        input.owner,
+      );
+      if (!predecessor || predecessor.workId !== input.workId)
+        throw new WorkRunNotFoundError();
+    }
     const inserted = await this.database.query<WorkRunRow>(
       `INSERT INTO work_runs
-       (id,tenant_id,workspace_id,work_id,definition_version_id,trigger_kind,trigger_ref,idempotency_key,root_task_id,expires_at,bound_at,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,$9,NULL,$10,$11)
+       (id,tenant_id,workspace_id,work_id,definition_version_id,predecessor_work_run_id,trigger_kind,trigger_ref,idempotency_key,root_task_id,expires_at,bound_at,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,NULL,$11,$12)
        ON CONFLICT (tenant_id,workspace_id,idempotency_key) DO NOTHING
        RETURNING ${runColumns}`,
       [
@@ -268,6 +277,7 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
         input.owner.workspaceId,
         input.workId,
         input.definitionVersionId,
+        input.predecessorWorkRunId ?? null,
         input.triggerKind,
         input.triggerRef,
         input.idempotencyKey,
@@ -329,6 +339,19 @@ export class PostgresWorkIdentityRepository implements WorkIdentityRepository {
       `SELECT ${runColumns} FROM work_runs
        WHERE work_id=$1 AND tenant_id=$2 AND workspace_id=$3
          AND (root_task_id IS NOT NULL OR expires_at > now())
+       ORDER BY created_at DESC,id DESC LIMIT 1`,
+      [workId, owner.tenantId, owner.workspaceId],
+    );
+    return result.rows?.[0] ? mapWorkRun(result.rows[0]) : null;
+  }
+
+  public async findLatestWorkRun(
+    workId: string,
+    owner: WorkIdentityOwnerScope,
+  ): Promise<WorkRun | null> {
+    const result = await this.database.query<WorkRunRow>(
+      `SELECT ${runColumns} FROM work_runs
+       WHERE work_id=$1 AND tenant_id=$2 AND workspace_id=$3
        ORDER BY created_at DESC,id DESC LIMIT 1`,
       [workId, owner.tenantId, owner.workspaceId],
     );
@@ -604,6 +627,7 @@ function mapWorkRun(row: WorkRunRow): WorkRun {
     workspaceId: row.workspace_id,
     workId: row.work_id,
     definitionVersionId: row.definition_version_id,
+    predecessorWorkRunId: row.predecessor_work_run_id,
     triggerKind: row.trigger_kind,
     triggerRef: row.trigger_ref,
     idempotencyKey: row.idempotency_key,

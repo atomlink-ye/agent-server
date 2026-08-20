@@ -9,6 +9,7 @@ export interface WorkRun {
   readonly workspaceId: string;
   readonly workId: string;
   readonly definitionVersionId: string;
+  readonly predecessorWorkRunId?: string | null;
   readonly triggerKind: WorkRunTriggerKind;
   readonly triggerRef: string;
   readonly idempotencyKey: string;
@@ -33,6 +34,7 @@ export interface CreatePendingWorkRunInput {
   readonly owner: WorkOwnerScope;
   readonly workId: string;
   readonly definitionVersionId: string;
+  readonly predecessorWorkRunId?: string | null;
   readonly triggerKind: WorkRunTriggerKind;
   readonly triggerRef: string;
   readonly idempotencyKey: string;
@@ -99,6 +101,7 @@ export function createPendingWorkRun(
     workspaceId: input.owner.workspaceId,
     workId: input.workId,
     definitionVersionId: input.definitionVersionId,
+    predecessorWorkRunId: input.predecessorWorkRunId ?? null,
     triggerKind: input.triggerKind,
     triggerRef: input.triggerRef,
     idempotencyKey: input.idempotencyKey,

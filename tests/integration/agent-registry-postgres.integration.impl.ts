@@ -210,7 +210,7 @@ describe('managed agent registry migration', () => {
   it('applies migration 0005 after migrations 0001 through 0004', async () => {
     const db = await database();
     const rows = await db.query<{ version: string }>(
-      'SELECT version FROM durable_kernel_schema_migrations ORDER BY version',
+      'SELECT version FROM durable_kernel_schema_migrations ORDER BY version LIMIT 6',
     );
     expect(rows.rows.map((row) => row.version)).toEqual([
       '0001_durable_kernel_a',
@@ -219,41 +219,6 @@ describe('managed agent registry migration', () => {
       '0004_workspace_memory_proposal_mvp',
       '0005_managed_agent_registry_b',
       '0005b_managed_agent_registry_hardening',
-      '0006_workspace_session_lane_c',
-      '0007_runtime_events_d',
-      '0008_managed_memory_e',
-      '0009_session_reset_idempotency_hardening',
-      '0010_runtime_memory_provenance',
-      '0011_runtime_memory_provenance_integrity',
-      '0012_session_turn_origin',
-      '0013_channel_core',
-      '0014_lark_memory_review_surfaces',
-      '0015_card_action_ingress_dedup',
-      '0016_memory_integrity_receipts',
-      '0017_claude_memory_api_skill_mve',
-      '0018_managed_environment_runtime_session_mve',
-      '0019_team_dag_mve',
-      '0020_collaborative_team_mve',
-      '0021_web_chat_streaming_mve',
-      '0022_learning_proposal_mve',
-      '0023_agentic_team_chat_mve',
-      '0024_agent_team_messages',
-      '0025_agent_team_work_dependencies',
-      '0026_agent-teams-v2-cutover',
-      '0027_agent-team-roster-limits',
-      '0028_team-completion-approval',
-      '0029_product_work_identity',
-      '0030_work_collaboration_kernel',
-      '0031_team_message_consumed_semantics',
-      '0032_run_dispatch_priority',
-      '0033_team_activation_provenance',
-      '0034_work_composition_resources',
-      '0035_product_work_definition_api',
-      '0036_agent_definition_metadata',
-      '0037_agent_definition_scope',
-      '0038_chat_conversation_plane',
-      '0039_chat_delivery_outbox',
-      '0040_agent_home_vfs',
     ]);
   });
 

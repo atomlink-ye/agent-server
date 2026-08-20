@@ -23,6 +23,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         conversation_id: input.conversationId,
         trigger_message_id: input.triggerMessageId,
       },
+      ...(input.extensions ? { extensions: input.extensions } : {}),
       proposalLimit: 0,
     });
     return { body: result.text };

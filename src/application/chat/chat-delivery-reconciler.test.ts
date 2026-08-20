@@ -170,6 +170,7 @@ describe('ChatDeliveryReconciler', () => {
     const provider = new FakeChatTurnProvider();
 
     const runtime: AgentChatRuntime = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000001',
       tenantId: 'tenant-1',
       agentDefinitionId: 'agent-d1',
       activeAgentVersionId: 'v1',
@@ -249,6 +250,7 @@ describe('ChatDeliveryReconciler', () => {
     const provider = new FakeChatTurnProvider();
 
     const runtime: AgentChatRuntime = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000002',
       tenantId: 'tenant-2',
       agentDefinitionId: 'agent-d2',
       activeAgentVersionId: 'v1',
@@ -371,6 +373,7 @@ describe('ChatDeliveryReconciler', () => {
     const provider = new FakeChatTurnProvider();
 
     const runtime: AgentChatRuntime = Object.freeze({
+      id: '00000000-0000-4000-8000-000000000003',
       tenantId: 'tenant-3',
       agentDefinitionId: 'agent-d3',
       activeAgentVersionId: 'v1',

@@ -24,6 +24,7 @@ import { PostgresTaskRepository } from './infrastructure/postgres/postgres-task-
 import { PostgresSessionRepository } from './infrastructure/postgres/postgres-session-repository.js';
 import { PostgresRunEventRepository } from './infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresConversationRepository } from './infrastructure/postgres/postgres-conversation-repository.js';
+import { PostgresConversationWorkEntitlementRepository } from './infrastructure/postgres/postgres-conversation-work-entitlement-repository.js';
 import { PostgresChatDispatchRepository } from './infrastructure/postgres/postgres-chat-dispatch-repository.js';
 import { CancelTask } from './application/tasks/cancel-task.js';
 import type { AppConfig, LarkCanaryEnabledConfig } from './shared/config.js';
@@ -294,6 +295,8 @@ export async function createService(
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
   const conversations = new PostgresConversationRepository(pool);
+  const conversationWorkEntitlements =
+    new PostgresConversationWorkEntitlementRepository(pool);
   const chatDispatches = new PostgresChatDispatchRepository(pool);
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
@@ -422,6 +425,9 @@ export async function createService(
     chatDispatches,
     chatTurnProvider,
     logger,
+    undefined,
+    conversationWorkEntitlements,
+    runtimeExtensionBinder,
   );
   const chatWorker = new ChatDeliveryWorker(
     chatDispatches,
@@ -662,6 +668,7 @@ export async function createService(
     sessions,
     conversations,
     chatDispatches,
+    conversationWorkEntitlements,
     submitSessionTurn,
     events,
     cancelTask,

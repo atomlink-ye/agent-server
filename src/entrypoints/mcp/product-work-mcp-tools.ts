@@ -680,16 +680,53 @@ export function registerProductWorkMcpTools(input: {
               policySnapshotVersion: 'runtime-mcp',
             },
           });
+          const startable = (
+            await Promise.all(
+              result.definitions.map(async (definition) => {
+                const versions = input.definitions?.listProductVersions
+                  ? await input.definitions.listProductVersions({
+                      definitionId: definition.id,
+                      owner: {
+                        tenantId: current.tenantId,
+                        workspaceId: current.workspaceId,
+                        principalType: 'service_account',
+                        principalId: current.principalId,
+                      },
+                      limit: 1,
+                      cursor: null,
+                    })
+                  : null;
+                const version = versions?.items[0];
+                if (!version) return null;
+                const authored = version.authorSource as {
+                  readonly spec?: {
+                    readonly input_schema?: unknown;
+                  };
+                };
+                return {
+                  id: definition.id,
+                  name: definition.name,
+                  description: definition.description,
+                  work_definition_version_id: version.version.id,
+                  input_schema: authored.spec?.input_schema ?? {
+                    type: 'object',
+                    properties: {},
+                    required: [],
+                    additional_properties: false,
+                  },
+                };
+              }),
+            )
+          ).filter(
+            (definition): definition is NonNullable<typeof definition> =>
+              definition !== null,
+          );
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  definitions: result.definitions.map((d) => ({
-                    id: d.id,
-                    name: d.name,
-                    description: d.description,
-                  })),
+                  definitions: startable,
                 }),
               },
             ],

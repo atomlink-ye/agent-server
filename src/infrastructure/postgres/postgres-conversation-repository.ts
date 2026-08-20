@@ -79,6 +79,7 @@ type ConversationReadRow = {
 };
 
 type AgentChatRuntimeRow = {
+  id: string;
   tenant_id: string;
   agent_definition_id: string;
   active_agent_version_id: string;
@@ -561,6 +562,7 @@ function mapChatMessage(row: ChatMessageRow): ChatMessage {
 
 function mapAgentChatRuntime(row: AgentChatRuntimeRow): AgentChatRuntime {
   return Object.freeze({
+    id: row.id,
     tenantId: row.tenant_id,
     agentDefinitionId: row.agent_definition_id,
     activeAgentVersionId: row.active_agent_version_id,

@@ -1,3 +1,5 @@
+import type { ExecutionExtensionBinding } from './execution-plane.js';
+
 export interface ChatTurnMessage {
   readonly authorType: 'principal' | 'agent_definition';
   readonly authorId: string;
@@ -43,5 +45,6 @@ export interface ChatTurnProvider {
     readonly capabilitySummary: ChatTurnCapabilitySummary;
     readonly agentHome: ChatAgentHomeProjection;
     readonly messages: readonly ChatTurnMessage[];
+    readonly extensions?: ExecutionExtensionBinding;
   }): Promise<{ readonly body: string }>;
 }

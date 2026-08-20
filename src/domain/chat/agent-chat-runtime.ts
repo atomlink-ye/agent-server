@@ -4,6 +4,8 @@ export type AgentChatRuntimeStatus =
   | 'unavailable';
 
 export interface AgentChatRuntime {
+  /** UUID-backed runtime identity used as the chat extension scope. */
+  readonly id: string;
   readonly tenantId: string;
   readonly agentDefinitionId: string;
   readonly activeAgentVersionId: string;
@@ -28,6 +30,7 @@ export function rotateChatRuntimeEpoch(
     );
   }
   return Object.freeze({
+    id: current.id,
     tenantId: current.tenantId,
     agentDefinitionId: current.agentDefinitionId,
     activeAgentVersionId: newVersionId,

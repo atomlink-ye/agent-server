@@ -253,6 +253,9 @@ export function createWorkModule(options: {
           ? { conversations: options.conversations }
           : {}),
         conversationWorkLinks,
+        ...(context.chatContext
+          ? { conversationOrigin: context.chatContext }
+          : {}),
       });
     },
   };

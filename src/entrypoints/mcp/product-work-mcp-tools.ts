@@ -698,17 +698,12 @@ export function registerProductWorkMcpTools(input: {
                   : null;
                 const version = versions?.items[0];
                 if (!version) return null;
-                const authored = version.authorSource as {
-                  readonly spec?: {
-                    readonly input_schema?: unknown;
-                  };
-                };
                 return {
                   id: definition.id,
                   name: definition.name,
                   description: definition.description,
                   work_definition_version_id: version.version.id,
-                  input_schema: authored.spec?.input_schema ?? {
+                  input_schema: version.version.source.inputSchema ?? {
                     type: 'object',
                     properties: {},
                     required: [],

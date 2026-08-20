@@ -107,12 +107,7 @@ export function registerConversationRoutes(
   const revokeWorkContext = (c: any) =>
     revokeConversationWorkContext(c, dependencies);
   app.post(`${BASE}/:conversationId/work-context`, enableWorkContext);
-  app.put(`${BASE}/:conversationId/work-context`, enableWorkContext);
   app.delete(`${BASE}/:conversationId/work-context`, revokeWorkContext);
-  // Keep the action form available to channel clients that use the existing
-  // colon-action convention for conversation mutations.
-  app.post(`${BASE}/:conversationId:enable-work-context`, enableWorkContext);
-  app.post(`${BASE}/:conversationId:revoke-work-context`, revokeWorkContext);
 
   app.post(`${BASE}/:conversationId/messages`, async (c) => {
     const conversation = await requireConversation(c, dependencies);

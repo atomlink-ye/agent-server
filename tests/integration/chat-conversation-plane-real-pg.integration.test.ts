@@ -18,6 +18,18 @@ if (!connectionString)
 const tenantId = 'chat-plane-test';
 const tenantIdT2 = 'chat-plane-test-t2';
 
+const principalAuthor = (
+  tenantId: string,
+  conversationId: string,
+  principalId: string,
+) => ({
+  type: 'principal' as const,
+  tenantId,
+  conversationId,
+  principalType: 'service_account',
+  principalId,
+});
+
 describe('Chat conversation plane on real PostgreSQL', () => {
   let pool: Pool;
   let repo: PostgresConversationRepository;
@@ -157,10 +169,7 @@ describe('Chat conversation plane on real PostgreSQL', () => {
 
     // Post a chat message via the application layer
     await postConversationMessage(repo, {
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Hello agent!',
     });
 
@@ -209,10 +218,7 @@ describe('Chat conversation plane on real PostgreSQL', () => {
     // Fire off 5 concurrent message appends to the same conversation
     const messagePromises = Array.from({ length: 5 }, (_, i) =>
       repo.appendMessage({
-        tenantId,
-        conversationId: conv.id,
-        authorType: 'principal',
-        authorId: sa1,
+        author: principalAuthor(tenantId, conv.id, sa1),
         body: `Concurrent message ${i + 1}`,
       }),
     );
@@ -265,13 +271,15 @@ describe('Chat conversation plane on real PostgreSQL', () => {
     });
 
     const msg = await repo.appendMessage({
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'agent_definition',
-      authorId: agentD,
+      author: {
+        type: 'agent_definition',
+        tenantId,
+        conversationId: conv.id,
+        agentDefinitionId: agentD,
+        agentVersionId: v1,
+        runtimeEpoch: 1,
+      },
       body: 'Agent response v1',
-      agentVersionId: v1,
-      runtimeEpoch: 1,
     });
     expect(msg.agentVersionId).toBe(v1);
     expect(msg.runtimeEpoch).toBe(1);
@@ -331,26 +339,17 @@ describe('Chat conversation plane on real PostgreSQL', () => {
 
     // Append 3 messages
     await repo.appendMessage({
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Message 1',
     });
 
     await repo.appendMessage({
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Message 2',
     });
 
     await repo.appendMessage({
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Message 3',
     });
 

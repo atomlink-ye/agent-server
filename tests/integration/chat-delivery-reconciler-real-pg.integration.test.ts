@@ -21,6 +21,18 @@ if (!connectionString)
 const tenantId = 'chat-delivery-test';
 const tenantIdT2 = 'chat-delivery-test-t2';
 
+const principalAuthor = (
+  tenantId: string,
+  conversationId: string,
+  principalId: string,
+) => ({
+  type: 'principal' as const,
+  tenantId,
+  conversationId,
+  principalType: 'service_account',
+  principalId,
+});
+
 describe('Chat delivery reconciler on real PostgreSQL', () => {
   let pool: Pool;
   let convRepo: PostgresConversationRepository;
@@ -61,10 +73,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
 
     // Post principal message
     await postConversationMessage(convRepo, {
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Hello agent',
     });
 
@@ -155,10 +164,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
 
     // Full delivery flow
     await postConversationMessage(convRepo, {
-      tenantId,
-      conversationId: conv.id,
-      authorType: 'principal',
-      authorId: sa1,
+      author: principalAuthor(tenantId, conv.id, sa1),
       body: 'Test message',
     });
 
@@ -233,10 +239,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
 
     // Alice posts a secret message
     await postConversationMessage(convRepo, {
-      tenantId: tenantIdT2,
-      conversationId: convAlice.id,
-      authorType: 'principal',
-      authorId: saAlice,
+      author: principalAuthor(tenantIdT2, convAlice.id, saAlice),
       body: "Alice's secret is xyz789",
     });
 
@@ -265,10 +268,7 @@ describe('Chat delivery reconciler on real PostgreSQL', () => {
 
     // Bob posts a message
     await postConversationMessage(convRepo, {
-      tenantId: tenantIdT2,
-      conversationId: convBob.id,
-      authorType: 'principal',
-      authorId: saBob,
+      author: principalAuthor(tenantIdT2, convBob.id, saBob),
       body: "What's up?",
     });
 

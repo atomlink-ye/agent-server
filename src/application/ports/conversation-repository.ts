@@ -5,6 +5,27 @@ import type {
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 
+export type ConversationMessageAuthorContext =
+  | {
+      readonly type: 'principal';
+      readonly tenantId: string;
+      readonly conversationId: string;
+      readonly principalType: string;
+      readonly principalId: string;
+      /** Trusted turn metadata supplied by the server-side admission path. */
+      readonly turnMetadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly type: 'agent_definition';
+      readonly tenantId: string;
+      readonly conversationId: string;
+      readonly agentDefinitionId: string;
+      readonly agentVersionId?: string | null;
+      readonly runtimeEpoch?: number | null;
+      /** Trusted turn metadata supplied by the server-side runtime path. */
+      readonly turnMetadata?: Readonly<Record<string, unknown>>;
+    };
+
 export interface ConversationRepository {
   findOrCreateDirect(input: {
     readonly tenantId: string;
@@ -27,14 +48,8 @@ export interface ConversationRepository {
   }): Promise<readonly Conversation[]>;
 
   appendMessage(input: {
-    readonly tenantId: string;
-    readonly conversationId: string;
-    readonly authorType: 'principal' | 'agent_definition';
-    readonly authorId: string;
+    readonly author: ConversationMessageAuthorContext;
     readonly body: string;
-    readonly agentDefinitionId?: string | null;
-    readonly agentVersionId?: string | null;
-    readonly runtimeEpoch?: number | null;
     readonly workRef?: string | null;
   }): Promise<ChatMessage>;
 

@@ -54,14 +54,15 @@ export class ChatDeliveryReconciler {
     });
 
     await this.conversations.appendMessage({
-      tenantId: dispatch.tenantId,
-      conversationId: dispatch.conversationId,
-      authorType: 'agent_definition',
-      authorId: dispatch.agentDefinitionId,
+      author: {
+        type: 'agent_definition',
+        tenantId: dispatch.tenantId,
+        conversationId: dispatch.conversationId,
+        agentDefinitionId: dispatch.agentDefinitionId,
+        agentVersionId: runtime.activeAgentVersionId,
+        runtimeEpoch: runtime.epoch,
+      },
       body: reply.body,
-      agentDefinitionId: dispatch.agentDefinitionId,
-      agentVersionId: runtime.activeAgentVersionId,
-      runtimeEpoch: runtime.epoch,
     });
 
     await this.dispatches.markPublished(dispatch.id, this.now().toISOString());

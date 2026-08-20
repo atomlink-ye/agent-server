@@ -9,7 +9,10 @@ import {
 } from '../../domain/chat/conversation.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
-import type { ConversationRepository } from '../../application/ports/conversation-repository.js';
+import type {
+  ConversationMessageAuthorContext,
+  ConversationRepository,
+} from '../../application/ports/conversation-repository.js';
 
 export interface PostgresQueryable {
   query<Row = Record<string, unknown>>(
@@ -211,31 +214,71 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
 
   async appendMessage(input: {
-    readonly tenantId: string;
-    readonly conversationId: string;
-    readonly authorType: 'principal' | 'agent_definition';
-    readonly authorId: string;
+    readonly author: ConversationMessageAuthorContext;
     readonly body: string;
-    readonly agentDefinitionId?: string | null;
-    readonly agentVersionId?: string | null;
-    readonly runtimeEpoch?: number | null;
     readonly workRef?: string | null;
   }): Promise<ChatMessage> {
+    const authorType = input.author.type;
+    const authorId =
+      authorType === 'principal'
+        ? input.author.principalId
+        : input.author.agentDefinitionId;
+    const agentDefinitionId =
+      authorType === 'agent_definition'
+        ? input.author.agentDefinitionId
+        : null;
+    const agentVersionId =
+      authorType === 'agent_definition'
+        ? (input.author.agentVersionId ?? null)
+        : null;
+    const runtimeEpoch =
+      authorType === 'agent_definition'
+        ? (input.author.runtimeEpoch ?? null)
+        : null;
+
     const client = await this.acquire();
     try {
       await client.query('BEGIN');
 
-      // Acquire lock and read next_sequence
+      // Lock the conversation before checking membership and allocating a sequence.
       const conversationLockResult = await client.query<ConversationRow>(
         `SELECT next_sequence FROM conversations
          WHERE id=$1 AND tenant_id=$2
          FOR UPDATE`,
-        [input.conversationId, input.tenantId],
+        [input.author.conversationId, input.author.tenantId],
       );
 
       const conversationRow = conversationLockResult.rows?.[0];
       if (!conversationRow) {
         throw new Error('Conversation not found or access denied.');
+      }
+
+      // Membership is part of the write transaction. Do not rely on a prior
+      // getConversation read, which would leave a TOCTOU gap before insertion.
+      const memberResult = await client.query<ConversationMemberRow>(
+        `SELECT conversation_id, tenant_id, member_type, member_id,
+                member_principal_type, role, joined_at
+         FROM conversation_members
+         WHERE conversation_id=$1 AND tenant_id=$2 AND member_type=$3 AND member_id=$4
+         FOR KEY SHARE`,
+        [
+          input.author.conversationId,
+          input.author.tenantId,
+          authorType,
+          authorId,
+        ],
+      );
+      const member = memberResult.rows?.[0];
+      if (!member) {
+        throw new Error('Message author is not a conversation member.');
+      }
+
+      if (
+        authorType === 'agent_definition' &&
+        (member.member_type !== 'agent_definition' ||
+          member.member_id !== input.author.agentDefinitionId)
+      ) {
+        throw new Error('Agent message author does not match its definition.');
       }
 
       const sequence = Number(conversationRow.next_sequence);
@@ -250,15 +293,15 @@ export class PostgresConversationRepository implements ConversationRepository {
          RETURNING *`,
         [
           messageId,
-          input.tenantId,
-          input.conversationId,
+          input.author.tenantId,
+          input.author.conversationId,
           sequence,
-          input.authorType,
-          input.authorId,
+          authorType,
+          authorId,
           input.body,
-          input.agentDefinitionId ?? null,
-          input.agentVersionId ?? null,
-          input.runtimeEpoch ?? null,
+          agentDefinitionId,
+          agentVersionId,
+          runtimeEpoch,
           input.workRef ?? null,
           now,
         ],
@@ -272,8 +315,8 @@ export class PostgresConversationRepository implements ConversationRepository {
       // Increment next_sequence
       await client.query(
         `UPDATE conversations SET next_sequence=next_sequence+1, updated_at=$2
-         WHERE id=$1`,
-        [input.conversationId, now],
+         WHERE id=$1 AND tenant_id=$3`,
+        [input.author.conversationId, now, input.author.tenantId],
       );
 
       await client.query('COMMIT');

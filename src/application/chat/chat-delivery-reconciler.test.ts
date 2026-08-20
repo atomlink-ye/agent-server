@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ConversationRepository } from '../ports/conversation-repository.js';
+import type {
+  ConversationMessageAuthorContext,
+  ConversationRepository,
+} from '../ports/conversation-repository.js';
 import type {
   ChatDispatch,
   ChatDispatchRepository,
@@ -26,35 +29,43 @@ class FakeConversationRepository implements ConversationRepository {
   }
 
   async appendMessage(input: {
-    readonly tenantId: string;
-    readonly conversationId: string;
-    readonly authorType: 'principal' | 'agent_definition';
-    readonly authorId: string;
+    readonly author: ConversationMessageAuthorContext;
     readonly body: string;
-    readonly agentDefinitionId?: string | null;
-    readonly agentVersionId?: string | null;
-    readonly runtimeEpoch?: number | null;
     readonly workRef?: string | null;
   }): Promise<ChatMessage> {
+    const authorType = input.author.type;
+    const authorId =
+      authorType === 'principal'
+        ? input.author.principalId
+        : input.author.agentDefinitionId;
     const message: ChatMessage = Object.freeze({
       id: `msg-${Date.now()}`,
-      tenantId: input.tenantId,
-      conversationId: input.conversationId,
+      tenantId: input.author.tenantId,
+      conversationId: input.author.conversationId,
       sequence: 1,
-      authorType: input.authorType,
-      authorId: input.authorId,
+      authorType,
+      authorId,
       body: input.body,
-      agentDefinitionId: input.agentDefinitionId ?? null,
-      agentVersionId: input.agentVersionId ?? null,
-      runtimeEpoch: input.runtimeEpoch ?? null,
+      agentDefinitionId:
+        authorType === 'agent_definition'
+          ? input.author.agentDefinitionId
+          : null,
+      agentVersionId:
+        authorType === 'agent_definition'
+          ? (input.author.agentVersionId ?? null)
+          : null,
+      runtimeEpoch:
+        authorType === 'agent_definition'
+          ? (input.author.runtimeEpoch ?? null)
+          : null,
       workRef: input.workRef ?? null,
       createdAt: new Date().toISOString(),
     });
     const convMessages = this.messagesByConversationId.get(
-      input.conversationId,
+      input.author.conversationId,
     ) ?? [];
     convMessages.push(message);
-    this.messagesByConversationId.set(input.conversationId, convMessages);
+    this.messagesByConversationId.set(input.author.conversationId, convMessages);
     return message;
   }
 

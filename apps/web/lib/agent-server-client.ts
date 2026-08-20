@@ -238,6 +238,14 @@ export async function getConversation(
   return request(`/api/v1/conversations/${encodeURIComponent(conversationId)}`);
 }
 
+export async function listConversationMessages(
+  conversationId: string,
+): Promise<{ messages: AgentConversationMessage[] }> {
+  return request(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+  );
+}
+
 export async function getChatWorkCard(workId: string): Promise<unknown> {
   return request(`/api/v1/works/${encodeURIComponent(workId)}/chat-card`, {
     method: 'GET',

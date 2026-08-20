@@ -1,88 +1,82 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
-function ChatShell() {
-  return (
-    <div className="app-shell">
-      <aside className="sidebar" aria-label="Chat navigation">
-        <div className="wordmark">
-          <span className="wordmark-mark" aria-hidden="true">
-            ✦
-          </span>
-          <span>Chat</span>
-        </div>
-
-        <button className="new-chat-button" type="button">
-          <span aria-hidden="true">＋</span>
-          New conversation
-        </button>
-
-        <div className="sidebar-section">
-          <span className="sidebar-label">Conversations</span>
-          <div className="conversation-placeholder">
-            <span className="placeholder-dot" aria-hidden="true" />
-            Your conversations will appear here
-          </div>
-        </div>
-
-        <div className="sidebar-footer">
-          <div className="profile-avatar" aria-hidden="true">
-            PT
-          </div>
-          <div>
-            <strong>Signed in</strong>
-            <span>Personal workspace</span>
-          </div>
-          <span className="online-indicator" aria-label="Online" />
-        </div>
-      </aside>
-
-      <main className="chat-panel">
-        <header className="chat-header">
-          <div>
-            <span className="eyebrow">Workspace</span>
-            <h1>New conversation</h1>
-          </div>
-          <button className="icon-button" type="button" aria-label="More options">
-            ···
-          </button>
-        </header>
-
-        <section className="chat-content" aria-label="Conversation">
-          <div className="empty-chat">
-            <div className="empty-chat-icon" aria-hidden="true">
-              <span>✦</span>
-            </div>
-            <span className="eyebrow">A quiet place to start</span>
-            <h2>What would you like to explore?</h2>
-            <p>Start a conversation whenever you are ready.</p>
-          </div>
-
-          <form className="composer" onSubmit={(event) => event.preventDefault()}>
-            <label className="sr-only" htmlFor="message">
-              Message
-            </label>
-            <textarea id="message" placeholder="Write a message..." rows={1} />
-            <div className="composer-actions">
-              <button className="composer-tool" type="button" aria-label="Attach a file">
-                ＋
-              </button>
-              <button className="send-button" type="submit" aria-label="Send message">
-                ↑
-              </button>
-            </div>
-          </form>
-          <p className="composer-hint">Press Enter to send · Shift + Enter for a new line</p>
-        </section>
-      </main>
-    </div>
-  );
-}
+import { chatCommands, initializeSession } from './api/chat';
+import ChatShell from './desktop/ChatShell';
+import { WorkStatusPage } from './components/work/WorkStatusPage';
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<ChatShell />} />
+      <Route path="/" element={<ChatRoute />} />
+      <Route path="/work/:workId" element={<WorkStatusPage />} />
       <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
+  );
+}
+
+function ChatRoute() {
+  const location = useLocation();
+  const [startupStatus, setStartupStatus] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading');
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const state = location.state as { returnConversationId?: unknown } | null;
+  const returnConversationId =
+    typeof state?.returnConversationId === 'string'
+      ? state.returnConversationId
+      : null;
+
+  useEffect(() => {
+    let active = true;
+    setStartupStatus('loading');
+    void initializeSession()
+      .then(() => {
+        if (active) setStartupStatus('ready');
+      })
+      .catch(() => {
+        if (active) setStartupStatus('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, [retryAttempt]);
+
+  if (startupStatus === 'loading') {
+    return (
+      <main className="work-status-page">
+        <div className="work-status-content">
+          <p role="status">Loading chat…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (startupStatus === 'error') {
+    return (
+      <main className="work-status-page">
+        <div className="work-status-content">
+          <div role="alert">
+            <h1>Chat is unavailable</h1>
+            <p>We could not start the chat right now.</p>
+          </div>
+          <div className="work-status-actions">
+            <button
+              type="button"
+              onClick={() => setRetryAttempt((attempt) => attempt + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <ChatShell
+      commands={chatCommands}
+      returnConversationId={returnConversationId}
+    />
   );
 }

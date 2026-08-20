@@ -2,11 +2,30 @@ import { NextResponse } from 'next/server';
 
 import {
   conversationErrorResponse,
+  readConversationMessagesBff,
   postConversationBff,
 } from '@/lib/conversation-bff';
 import { readProductSessionId } from '@/lib/session-cookie';
 
 export const dynamic = 'force-dynamic';
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ conversation_id: string }> },
+) {
+  try {
+    const { conversation_id: conversationId } = await params;
+    return NextResponse.json(
+      await readConversationMessagesBff(
+        await readProductSessionId(),
+        conversationId,
+      ),
+    );
+  } catch (error) {
+    const safe = conversationErrorResponse(error);
+    return NextResponse.json(safe.body, { status: safe.status });
+  }
+}
 
 export async function POST(
   request: Request,

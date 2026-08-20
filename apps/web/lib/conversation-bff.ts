@@ -3,6 +3,7 @@ import 'server-only';
 import {
   AgentServerError,
   getConversation,
+  listConversationMessages,
   listConversations,
   postConversationMessage,
   type AgentConversation,
@@ -91,6 +92,23 @@ export async function postConversationBff(
       message: sanitizeMessage(upstream.message),
       dispatch_enqueued: upstream.dispatch_enqueued === true,
     };
+  } catch (error) {
+    throw sanitizeError(error);
+  }
+}
+
+export async function readConversationMessagesBff(
+  sessionId: string | undefined,
+  conversationId: string,
+) {
+  requireAllowedConversation(sessionId, conversationId);
+  try {
+    const upstream = await listConversationMessages(conversationId);
+    if (!Array.isArray(upstream.messages)) throw invalidUpstream();
+    const messages = upstream.messages.map(sanitizeMessage);
+    if (messages.some((message) => message.conversation_id !== conversationId))
+      throw invalidUpstream();
+    return { messages };
   } catch (error) {
     throw sanitizeError(error);
   }

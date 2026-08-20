@@ -46,6 +46,9 @@ export class ChatDeliveryReconciler {
       agentDefinitionId: dispatch.agentDefinitionId,
       agentVersionId: runtime.activeAgentVersionId,
       conversationId: dispatch.conversationId,
+      instructions: '',
+      capabilitySummary: {},
+      agentHome: {},
       messages: messages.map((message) => ({
         authorType: message.authorType,
         authorId: message.authorId,

@@ -281,6 +281,13 @@ export class PostgresConversationRepository implements ConversationRepository {
         throw new Error('Agent message author does not match its definition.');
       }
 
+      if (
+        authorType === 'principal' &&
+        member.member_principal_type !== input.author.principalType
+      ) {
+        throw new Error('Principal message author type does not match membership.');
+      }
+
       const sequence = Number(conversationRow.next_sequence);
       const messageId = randomUUID();
       const now = iso();

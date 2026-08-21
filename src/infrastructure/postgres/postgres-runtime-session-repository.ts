@@ -34,6 +34,10 @@ export class PostgresRuntimeSessionRepository
     const now = new Date().toISOString();
     const snapshotId = randomUUID();
     const runtimeId = randomUUID();
+    const scopeId = agentChatScopeId(
+      input.agentChatRuntimeId,
+      input.runtimeEpoch,
+    );
     await this.insertSnapshot({
       id: snapshotId,
       tenantId: input.tenantId,
@@ -56,7 +60,7 @@ export class PostgresRuntimeSessionRepository
         input.tenantId,
         input.principalType,
         input.principalId,
-        input.agentChatRuntimeId,
+        scopeId,
         snapshotId,
         now,
       ],
@@ -64,6 +68,8 @@ export class PostgresRuntimeSessionRepository
     const created = await this.findByAgentChat(input);
     if (!created)
       throw new Error('Agent chat runtime session could not be created.');
+    if (created.agentVersionId !== input.agentVersionId)
+      throw new Error('Agent chat runtime session version does not match epoch.');
     return created;
   }
 
@@ -78,7 +84,7 @@ export class PostgresRuntimeSessionRepository
          AND rs.tenant_id=$2 AND sls.workspace_id=$3
          AND rs.principal_type=$4 AND rs.principal_id=$5`,
       [
-        input.agentChatRuntimeId,
+        agentChatScopeId(input.agentChatRuntimeId, input.runtimeEpoch),
         input.tenantId,
         input.workspaceId,
         input.principalType,
@@ -287,7 +293,10 @@ export class PostgresRuntimeSessionRepository
     readonly principalId: string;
     readonly agentVersionId: string;
     readonly environmentVersionId: string | null;
-    readonly resolvedSkills: readonly { readonly ref: string; readonly digest: string }[];
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
     readonly toolRefs: readonly string[];
     readonly now: string;
   }): Promise<void> {
@@ -304,7 +313,9 @@ export class PostgresRuntimeSessionRepository
         input.principalId,
         input.agentVersionId,
         input.environmentVersionId,
-        JSON.stringify(input.resolvedSkills.map(({ ref, digest }) => ({ ref, digest }))),
+        JSON.stringify(
+          input.resolvedSkills.map(({ ref, digest }) => ({ ref, digest })),
+        ),
         JSON.stringify(input.toolRefs),
         input.now,
       ],
@@ -380,11 +391,19 @@ function map(row: any): RuntimeSession {
 
 function runtimeScope(row: any): RuntimeSession['scope'] {
   switch (row.scope_kind) {
-    case 'agent_chat':
-      if (!row.scope_id) throw new Error('Agent chat RuntimeSession has no scope id.');
-      return { kind: 'agent_chat', agentChatRuntimeId: row.scope_id };
+    case 'agent_chat': {
+      if (!row.scope_id)
+        throw new Error('Agent chat RuntimeSession has no scope id.');
+      const parsed = parseAgentChatScopeId(row.scope_id);
+      return {
+        kind: 'agent_chat',
+        agentChatRuntimeId: parsed.agentChatRuntimeId,
+        runtimeEpoch: parsed.runtimeEpoch,
+      };
+    }
     case 'team_member':
-      if (!row.scope_id) throw new Error('Team member RuntimeSession has no scope id.');
+      if (!row.scope_id)
+        throw new Error('Team member RuntimeSession has no scope id.');
       return { kind: 'team_member', teamMemberRunId: row.scope_id };
     case 'task':
       if (!row.task_id) throw new Error('Task RuntimeSession has no task id.');
@@ -392,7 +411,10 @@ function runtimeScope(row: any): RuntimeSession['scope'] {
     case 'product_session':
       if (!row.product_session_id)
         throw new Error('Product RuntimeSession has no product session id.');
-      return { kind: 'product_session', productSessionId: row.product_session_id };
+      return {
+        kind: 'product_session',
+        productSessionId: row.product_session_id,
+      };
     default:
       throw new Error(`Unsupported runtime scope ${String(row.scope_kind)}.`);
   }
@@ -401,7 +423,7 @@ function runtimeScope(row: any): RuntimeSession['scope'] {
 function runtimeScopeId(scope: RuntimeSession['scope']): string {
   switch (scope.kind) {
     case 'agent_chat':
-      return scope.agentChatRuntimeId;
+      return agentChatScopeId(scope.agentChatRuntimeId, scope.runtimeEpoch);
     case 'team_member':
       return scope.teamMemberRunId;
     case 'task':
@@ -409,4 +431,24 @@ function runtimeScopeId(scope: RuntimeSession['scope']): string {
     case 'product_session':
       return scope.productSessionId;
   }
+}
+
+function agentChatScopeId(agentChatRuntimeId: string, runtimeEpoch: number): string {
+  if (!agentChatRuntimeId || !Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
+    throw new Error('Agent chat RuntimeSession requires a positive runtime epoch.');
+  return `${agentChatRuntimeId}:${runtimeEpoch}`;
+}
+
+function parseAgentChatScopeId(scopeId: string): {
+  readonly agentChatRuntimeId: string;
+  readonly runtimeEpoch: number;
+} {
+  const separator = scopeId.lastIndexOf(':');
+  if (separator <= 0)
+    throw new Error('Agent chat RuntimeSession scope id is malformed.');
+  const agentChatRuntimeId = scopeId.slice(0, separator);
+  const runtimeEpoch = Number(scopeId.slice(separator + 1));
+  if (!Number.isSafeInteger(runtimeEpoch) || runtimeEpoch <= 0)
+    throw new Error('Agent chat RuntimeSession epoch is malformed.');
+  return { agentChatRuntimeId, runtimeEpoch };
 }

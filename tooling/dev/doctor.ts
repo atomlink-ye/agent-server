@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 
+import { durableKernelMigrationFileNames } from '../../src/infrastructure/postgres/postgres.js';
 import {
   canConnectTcp,
   commandAvailable,
@@ -16,9 +17,9 @@ export type DoctorCheck = Readonly<{
   requiredFor: readonly ('core' | 'scenario' | 'runtime')[];
 }>;
 
-async function postgresCheck(
+async function postgresChecks(
   environment: NodeJS.ProcessEnv,
-): Promise<DoctorCheck> {
+): Promise<readonly [DoctorCheck, DoctorCheck]> {
   const connectionString = defaultHostDatabaseUrl(environment);
   const pool = new Pool({
     connectionString,
@@ -27,19 +28,60 @@ async function postgresCheck(
   });
   try {
     await pool.query('SELECT 1');
-    return {
+    const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'ok',
       detail: redactDatabaseUrl(connectionString),
       requiredFor: ['core', 'runtime'],
     };
+    try {
+      const result = await pool.query<{ version: string }>(
+        'SELECT version FROM durable_kernel_schema_migrations',
+      );
+      const applied = new Set(result.rows.map((row) => row.version));
+      const expected = durableKernelMigrationFileNames.map((fileName) =>
+        fileName.replace(/\.sql$/, ''),
+      );
+      const missing = expected.filter((version) => !applied.has(version));
+      return [
+        postgres,
+        {
+          name: 'migrations',
+          status: missing.length === 0 ? 'ok' : 'fail',
+          detail:
+            missing.length === 0
+              ? `${expected.length}/${expected.length} durable migrations applied`
+              : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
+          requiredFor: ['core', 'runtime'],
+        },
+      ];
+    } catch (error) {
+      return [
+        postgres,
+        {
+          name: 'migrations',
+          status: 'fail',
+          detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
+          requiredFor: ['core', 'runtime'],
+        },
+      ];
+    }
   } catch (error) {
-    return {
+    const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'fail',
       detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
+    return [
+      postgres,
+      {
+        name: 'migrations',
+        status: 'fail',
+        detail: 'not checked because PostgreSQL is unreachable',
+        requiredFor: ['core', 'runtime'],
+      },
+    ];
   } finally {
     await pool.end().catch(() => undefined);
   }
@@ -108,15 +150,16 @@ export async function runDoctor(
 ): Promise<readonly DoctorCheck[]> {
   const loaded = await loadLocalDotEnv(environment);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
-  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgres, paseo] =
+  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPair, paseo] =
     await Promise.all([
       commandAvailable('pnpm'),
       commandAvailable('psql'),
       isPortFree(Number(loaded.PORT ?? 3000)),
       isPortFree(3001),
-      postgresCheck(loaded),
+      postgresChecks(loaded),
       paseoCheck(loaded),
     ]);
+  const [postgres, migrations] = postgresPair;
   const checks: DoctorCheck[] = [
     {
       name: 'node',
@@ -139,6 +182,7 @@ export async function runDoctor(
       requiredFor: ['core'],
     },
     postgres,
+    migrations,
     {
       name: 'api-port',
       status: apiPortFree ? 'ok' : 'warn',

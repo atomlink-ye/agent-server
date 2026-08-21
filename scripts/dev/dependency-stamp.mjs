@@ -5,9 +5,8 @@ import { pathToFileURL } from 'node:url';
 
 // The stamp decides whether the node_modules baked into the image still matches
 // what the workspace declares. Hashing the raw bytes of package.json made an
-// edit to `scripts` invalidate a 4GB prebuilt image and force a ~20 minute
-// rebuild, even though scripts cannot change a single installed package. So
-// hash only the fields that actually determine the dependency tree.
+// edit to `scripts` invalidate a multi-GB prebuilt image even though scripts
+// cannot change installed packages, so only dependency-bearing fields matter.
 const DEPENDENCY_FIELDS = [
   'dependencies',
   'devDependencies',
@@ -19,13 +18,8 @@ const DEPENDENCY_FIELDS = [
   'overrides',
 ];
 
-const PACKAGE_FILES = [
-  'package.json',
-  'apps/web/package.json',
-  'apps/web-vite/package.json',
-];
-// The lockfile pins every resolved version, so it is hashed whole: any change
-// to it is by definition a change to the dependency tree.
+// There is one canonical browser package after the Vite convergence.
+const PACKAGE_FILES = ['package.json', 'apps/web/package.json'];
 const VERBATIM_FILES = ['pnpm-lock.yaml', 'pnpm-workspace.yaml'];
 
 const stable = (value) => {

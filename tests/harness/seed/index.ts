@@ -5,10 +5,11 @@ import { seedPublishedAgentVersion } from './agent.js';
 import { seedConversation } from './conversation.js';
 import { seedEnvironmentVersion } from './environment.js';
 import { seedPublishedTeamVersion } from './team.js';
-import { seedPublishedWorkDefinition } from './work.js';
+import { seedActiveTask, seedPublishedWorkDefinition } from './work.js';
 import { seedWorkspace } from './workspace.js';
 
 export {
+  seedActiveTask,
   seedPublishedAgentVersion,
   seedConversation,
   seedEnvironmentVersion,

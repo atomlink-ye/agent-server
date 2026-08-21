@@ -37,6 +37,8 @@ type PGliteState = Readonly<{
   dataPath: string;
 }>;
 
+export type HostDatabaseBackend = 'pglite' | 'postgres';
+
 export function localServiceAccountsJson(): string {
   return JSON.stringify([
     {
@@ -327,6 +329,15 @@ async function readPGliteState(): Promise<PGliteState | null> {
       { cause: error },
     );
   }
+}
+
+export async function identifyDatabaseBackend(
+  connectionString: string,
+): Promise<HostDatabaseBackend> {
+  const state = await readPGliteState();
+  return state && state.url === connectionString && processIsAlive(state.pid)
+    ? 'pglite'
+    : 'postgres';
 }
 
 async function waitForPGlite(

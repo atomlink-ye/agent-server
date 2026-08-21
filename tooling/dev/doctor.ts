@@ -6,10 +6,12 @@ import {
   commandAvailable,
   defaultHostDatabaseUrl,
   ensureDevelopmentDatabase,
+  identifyDatabaseBackend,
   isPortFree,
   loadLocalDotEnv,
   redactDatabaseUrl,
 } from './host-native.js';
+import type { HostDatabaseBackend } from './host-native.js';
 
 export type DoctorCheck = Readonly<{
   name: string;
@@ -18,9 +20,14 @@ export type DoctorCheck = Readonly<{
   requiredFor: readonly ('core' | 'scenario' | 'runtime')[];
 }>;
 
+type PostgresChecks = Readonly<{
+  checks: readonly [DoctorCheck, DoctorCheck];
+  backend: HostDatabaseBackend;
+}>;
+
 async function postgresChecks(
   environment: NodeJS.ProcessEnv,
-): Promise<readonly [DoctorCheck, DoctorCheck]> {
+): Promise<PostgresChecks> {
   let connectionString: string;
   try {
     connectionString = await ensureDevelopmentDatabase(environment);
@@ -32,16 +39,20 @@ async function postgresChecks(
       detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
-    return [
-      postgres,
-      {
-        name: 'migrations',
-        status: 'fail',
-        detail: 'not checked because PostgreSQL is unreachable',
-        requiredFor: ['core', 'runtime'],
-      },
-    ];
+    return {
+      backend: 'postgres',
+      checks: [
+        postgres,
+        {
+          name: 'migrations',
+          status: 'fail',
+          detail: 'not checked because PostgreSQL is unreachable',
+          requiredFor: ['core', 'runtime'],
+        },
+      ],
+    };
   }
+  const backend = await identifyDatabaseBackend(connectionString);
   const pool = new Pool({
     connectionString,
     max: 1,
@@ -64,28 +75,34 @@ async function postgresChecks(
         fileName.replace(/\.sql$/, ''),
       );
       const missing = expected.filter((version) => !applied.has(version));
-      return [
-        postgres,
-        {
-          name: 'migrations',
-          status: missing.length === 0 ? 'ok' : 'fail',
-          detail:
-            missing.length === 0
-              ? `${expected.length}/${expected.length} durable migrations applied`
-              : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
-          requiredFor: ['core', 'runtime'],
-        },
-      ];
+      return {
+        backend,
+        checks: [
+          postgres,
+          {
+            name: 'migrations',
+            status: missing.length === 0 ? 'ok' : 'fail',
+            detail:
+              missing.length === 0
+                ? `${expected.length}/${expected.length} durable migrations applied`
+                : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
+            requiredFor: ['core', 'runtime'],
+          },
+        ],
+      };
     } catch (error) {
-      return [
-        postgres,
-        {
-          name: 'migrations',
-          status: 'fail',
-          detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
-          requiredFor: ['core', 'runtime'],
-        },
-      ];
+      return {
+        backend,
+        checks: [
+          postgres,
+          {
+            name: 'migrations',
+            status: 'fail',
+            detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
+            requiredFor: ['core', 'runtime'],
+          },
+        ],
+      };
     }
   } catch (error) {
     const postgres: DoctorCheck = {
@@ -94,15 +111,18 @@ async function postgresChecks(
       detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
-    return [
-      postgres,
-      {
-        name: 'migrations',
-        status: 'fail',
-        detail: 'not checked because PostgreSQL is unreachable',
-        requiredFor: ['core', 'runtime'],
-      },
-    ];
+    return {
+      backend,
+      checks: [
+        postgres,
+        {
+          name: 'migrations',
+          status: 'fail',
+          detail: 'not checked because PostgreSQL is unreachable',
+          requiredFor: ['core', 'runtime'],
+        },
+      ],
+    };
   } finally {
     await pool.end().catch(() => undefined);
   }
@@ -171,7 +191,7 @@ export async function runDoctor(
 ): Promise<readonly DoctorCheck[]> {
   const loaded = await loadLocalDotEnv(environment);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
-  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPair, paseo] =
+  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPairResult, paseo] =
     await Promise.all([
       commandAvailable('pnpm'),
       commandAvailable('psql'),
@@ -180,6 +200,7 @@ export async function runDoctor(
       postgresChecks(loaded),
       paseoCheck(loaded),
     ]);
+  const { checks: postgresPair, backend } = postgresPairResult;
   const [postgres, migrations] = postgresPair;
   const checks: DoctorCheck[] = [
     {
@@ -232,16 +253,18 @@ export async function runDoctor(
     coreReady &&
     checks.find((check) => check.name === 'paseo')?.status === 'ok' &&
     checks.find((check) => check.name === 'provider')?.status === 'ok';
+  const pgReady = postgres.status === 'ok' && migrations.status === 'ok';
 
   for (const check of checks) {
     const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';
     process.stdout.write(`${icon} ${check.name}: ${check.detail}\n`);
   }
   process.stdout.write(`\nready.core=${coreReady}\n`);
+  process.stdout.write(`ready.pg=${pgReady}\n`);
   process.stdout.write(`ready.scenario=${scenarioReady}\n`);
   process.stdout.write(`ready.runtime=${runtimeReady}\n`);
   process.stdout.write(
-    `${JSON.stringify({ event: 'agent_server_doctor', coreReady, scenarioReady, runtimeReady, checks })}\n`,
+    `${JSON.stringify({ event: 'agent_server_doctor', backend, ready: { pg: pgReady, core: coreReady, scenario: scenarioReady, runtime: runtimeReady }, coreReady, pgReady, scenarioReady, runtimeReady, checks })}\n`,
   );
 
   if (!coreReady || !scenarioReady) process.exitCode = 1;

@@ -86,7 +86,10 @@ describe('ContextFS + WorkExecutionService host scenario', () => {
     });
 
     const state = await product.workModule.execution.getWorkState({
-      accessContext: world.owner,
+      accessContext: {
+        ...world.owner,
+        policySnapshotVersion: 'scenario-policy-v1',
+      },
       workId,
     });
     expect(state.work.id).toBe(workId);

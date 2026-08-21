@@ -3,9 +3,10 @@ import {
   RuntimeTimedOutError,
 } from './execution-runtime-errors.js';
 import type { RunUsage } from '../../domain/runs/run.js';
+import type { RuntimeInvocationContext } from '../../domain/runtime/runtime-invocation-context.js';
+import type { ResourceOwner } from '../../domain/tenancy/product-context.js';
 import type {
   ExecutionExtensionBinding,
-  ExecutionObservation,
   ExecutionObservationSink,
   ExecutionPlaneHealth,
   ExecutionPlanePort,
@@ -18,6 +19,7 @@ import type {
   RuntimeMemoryCandidateCollector,
 } from '../ports/runtime-memory-candidate-collector.js';
 import type {
+  RuntimeSession,
   RuntimeSessionLookup,
   RuntimeSessionRepository,
 } from '../ports/runtime-session-repository.js';
@@ -59,6 +61,7 @@ export interface ExecutionTurnRequest {
   readonly model?: string;
   readonly systemPrompt?: string;
   readonly extensions?: ExecutionExtensionBinding;
+  readonly invocationContext?: RuntimeInvocationContext;
   readonly proposalLimit?: number;
 }
 
@@ -74,6 +77,17 @@ export interface ExecutionTurnOutcome {
 
 export interface ExecutionRuntimeService {
   ensureReady(): Promise<boolean>;
+  /** Optional during migration so focused/debug runtimes can stay minimal. */
+  ensureAgentChatRuntimeSession?(input: {
+    readonly agentChatRuntimeId: string;
+    readonly agentOwner: ResourceOwner;
+    readonly agentVersionId: string;
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
+    readonly toolRefs: readonly string[];
+  }): Promise<RuntimeSession>;
   executeTurn(
     input: ExecutionTurnRequest,
     observer?: ExecutionObservationSink,
@@ -102,7 +116,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
 
   public constructor(
     private readonly plane: ExecutionPlanePort,
-    runtimeSessions: RuntimeSessionRepository,
+    private readonly runtimeSessions: RuntimeSessionRepository,
     private readonly runtimeSessionLookup: RuntimeSessionLookup,
     private readonly runtimeWorkspaces: RuntimeWorkspaceRepository,
     private readonly runRegistry: ExecutionRunRegistry,
@@ -119,6 +133,32 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
     } catch {
       return false;
     }
+  }
+
+  public async ensureAgentChatRuntimeSession(input: {
+    readonly agentChatRuntimeId: string;
+    readonly agentOwner: ResourceOwner;
+    readonly agentVersionId: string;
+    readonly resolvedSkills: readonly {
+      readonly ref: string;
+      readonly digest: string;
+    }[];
+    readonly toolRefs: readonly string[];
+  }): Promise<RuntimeSession> {
+    if (!this.runtimeSessions.createOrGetForAgentChat)
+      throw new RuntimeExecutionError(
+        'Agent chat RuntimeSession persistence is unavailable.',
+      );
+    return this.runtimeSessions.createOrGetForAgentChat({
+      agentChatRuntimeId: input.agentChatRuntimeId,
+      tenantId: input.agentOwner.scope.tenantId,
+      workspaceId: input.agentOwner.scope.workspaceId,
+      principalType: input.agentOwner.principal.type,
+      principalId: input.agentOwner.principal.id,
+      agentVersionId: input.agentVersionId,
+      resolvedSkills: input.resolvedSkills,
+      toolRefs: input.toolRefs,
+    });
   }
 
   public async executeTurn(
@@ -164,6 +204,9 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
           ...(input.sessionTitle ? { title: input.sessionTitle } : {}),
           ...(input.labels ? { labels: input.labels } : {}),
           ...(input.extensions ? { extensions: input.extensions } : {}),
+          ...(input.invocationContext
+            ? { invocationContext: input.invocationContext }
+            : {}),
         },
         workspaceBinding: ownerWorkspaceBinding,
       });
@@ -194,6 +237,9 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
             ...(input.provider ? { provider: input.provider } : {}),
             ...(input.model ? { model: input.model } : {}),
             systemPrompt: '',
+            ...(input.invocationContext
+              ? { invocationContext: input.invocationContext }
+              : {}),
           },
           workspaceBinding: ownerWorkspaceBinding,
         });
@@ -238,6 +284,9 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
         ...(input.sessionTitle ? { title: input.sessionTitle } : {}),
         ...(input.labels ? { labels: input.labels } : {}),
         ...(input.extensions ? { extensions: input.extensions } : {}),
+        ...(input.invocationContext
+          ? { invocationContext: input.invocationContext }
+          : {}),
       });
       executionSession = created.session;
       workspaceBinding = created.workspaceBinding;

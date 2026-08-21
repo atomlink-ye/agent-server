@@ -15,6 +15,101 @@ afterEach(async () =>
 );
 
 describe('North Star chat Work MVE', () => {
+  it('rejects turn2 when the real start_work handler is outside the grant', async () => {
+    const definitionId = '00000000-0000-4000-8000-000000000202';
+    const versionId = '00000000-0000-4000-8000-000000000203';
+    const definitions = {
+      async listDefinitionsForAgent() {
+        return [
+          { id: definitionId, name: 'OpenAI analysis', description: null },
+        ];
+      },
+      async listProductVersions() {
+        return {
+          items: [
+            {
+              version: {
+                id: versionId,
+                definitionId,
+                source: {
+                  inputSchema: {
+                    type: 'object',
+                    properties: { query: { type: 'string' } },
+                    required: ['query'],
+                  },
+                },
+              },
+            },
+          ],
+          nextCursor: null,
+        };
+      },
+      async findProductVersion() {
+        return { version: { id: versionId, definitionId } };
+      },
+      async findDefinition() {
+        return { id: definitionId, name: 'OpenAI analysis' };
+      },
+    };
+    const mcp = new RuntimeMcpServer(
+      new RuntimeToolRegistry([
+        ({ server, grant, grants }) =>
+          registerProductWorkMcpTools({
+            server,
+            grant,
+            grants,
+            definitions: definitions as any,
+            workIdentity: {
+              async createWork() {
+                throw new Error('must not create');
+              },
+              async findWorkById() {
+                return null;
+              },
+              async findLatestWorkRun() {
+                return null;
+              },
+            },
+            startWorkRun: {
+              async execute() {
+                throw new Error('must not start');
+              },
+            },
+          }),
+      ]),
+    );
+    servers.push(mcp);
+    const receipt = mcp.grants.issue({
+      tenantId: 'tenant-1',
+      workspaceId: 'workspace-1',
+      principalType: 'service_account',
+      principalId: 'principal-1',
+      scopeId: 'chat-runtime-2',
+      allowedTools: [AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF],
+      catalogTools: [
+        AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+        AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+      ],
+    });
+    const session = await new ScriptedExecutionPlane().createSession({
+      runtimeSessionId: 'chat-runtime-2',
+      workspace: { cwd: process.cwd() },
+      systemPrompt: 'Agent definition ID: agent-1',
+      extensions: {
+        mcpServers: [
+          {
+            name: 'agent-server',
+            url: await mcp.start(),
+            headers: { Authorization: `Bearer ${receipt.token}` },
+          },
+        ],
+      },
+    });
+    await expect(
+      session.session.run({ runId: 'turn-2', prompt: '请做正式分析 OpenAI' }),
+    ).rejects.toThrow('start_work');
+  });
+
   it('turn2 invokes real work MCP handlers and creates a linked Work', async () => {
     const work = {
       id: '00000000-0000-4000-8000-000000000101',

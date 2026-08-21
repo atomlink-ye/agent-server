@@ -253,7 +253,10 @@ export async function runDoctor(
     coreReady &&
     checks.find((check) => check.name === 'paseo')?.status === 'ok' &&
     checks.find((check) => check.name === 'provider')?.status === 'ok';
-  const pgReady = postgres.status === 'ok' && migrations.status === 'ok';
+  const pgReady =
+    backend === 'postgres' &&
+    postgres.status === 'ok' &&
+    migrations.status === 'ok';
 
   for (const check of checks) {
     const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';

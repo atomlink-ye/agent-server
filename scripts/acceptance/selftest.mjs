@@ -10,7 +10,7 @@ import {
 import { assertGoldenRecord, assertStep8Observation, goldenEight } from './golden-eight.mjs';
 import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
-import { acceptancePortFacts, deriveTerminalFacts } from './run.mjs';
+import { expectedPortsFromEnvironment, deriveTerminalFacts } from './run.mjs';
 import { parseServiceAccounts } from './credentials.mjs';
 
 const expectedPorts = {
@@ -66,14 +66,11 @@ assertStep8Observation(step8);
 mutation('step-8 forbidden reload', () => assertStep8Observation({ ...step8, actions: ['dom-read', 'page.reload'] }));
 mutation('step-8 card after T', () => assertStep8Observation({ ...step8, postReturnedAt: '2026-01-01T00:00:00.000Z', firstVisibleAt: '2026-01-01T00:11:40.000Z' }));
 
-assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' });
-mutation('preflight non-loopback URL', () => assertPreflight({ apiUrl: 'http://localhost:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' }));
-mutation('preflight rendered port mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: { services: { ...rendered.services, 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: '32783', target: 3000 }] } } }, expectedPorts, provider: 'claude' }));
+assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: rendered, expectedPorts, requestedProvider: 'claude', effectiveProvider: 'claude' });
+mutation('preflight non-loopback URL', () => assertPreflight({ apiUrl: 'http://localhost:40557', renderedPorts: rendered, expectedPorts, requestedProvider: 'claude', effectiveProvider: 'claude' }));
+mutation('preflight rendered port mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: { services: { ...rendered.services, 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: '32783', target: 3000 }] } } }, expectedPorts, requestedProvider: 'claude', effectiveProvider: 'claude' }));
 const handleFixture = { state: { ports: { postgres: 41001, api: 41002, web: 41003 } } };
 const renderedFixture = `services:\n  postgres:\n    ports: [{host_ip: 127.0.0.1, published: \"41001\", target: 5432}]\n  agent-server:\n    ports: [{host_ip: 127.0.0.1, published: \"41002\", target: 3000}]\n  web:\n    ports: [{host_ip: 127.0.0.1, published: \"41003\", target: 3001}]`;
-const portFacts = acceptancePortFacts(handleFixture, renderedFixture);
-assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...portFacts, provider: 'claude' });
-mutation('handle rendered port divergence', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...acceptancePortFacts(handleFixture, renderedFixture.replace('41002', '41004')), provider: 'claude' }));
 assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'complete' });
 mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'complete' }));
 mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'failed' }));
@@ -90,11 +87,32 @@ mutation('SERVICE_ACCOUNTS_JSON empty', () => parseServiceAccounts(''));
 mutation('SERVICE_ACCOUNTS_JSON empty array', () => parseServiceAccounts('[]'));
 mutation('SERVICE_ACCOUNTS_JSON token missing', () => parseServiceAccounts(JSON.stringify([{ serviceAccountId: 'sa' }])));
 
-const goodObs = { messages: [{ provider: 'claude', work_ref: 'wr1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1' }] };
+const goodObs = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
 assert.equal(deriveTerminalFacts(goodObs).workStatus, 'complete');
 mutation('terminal facts messages not observed', () => deriveTerminalFacts({ ...goodObs, messages: [] }));
 mutation('terminal facts no work_ref observed', () => deriveTerminalFacts({ ...goodObs, messages: [{ provider: 'claude' }] }));
 mutation('terminal facts works not observed', () => deriveTerminalFacts({ messages: goodObs.messages, runs: goodObs.runs }));
 mutation('terminal facts work_runs not observed', () => deriveTerminalFacts({ messages: goodObs.messages, works: goodObs.works }));
+
+
+// --- R4: expected 必须来自 lifecycle environment，⛔ 不许来自 handle（否则判据自证）---
+const envFull = { AGENT_SERVER_TEST_POSTGRES_PORT: '41001', AGENT_SERVER_TEST_API_PORT: '41002', AGENT_SERVER_TEST_WEB_PORT: '41003' };
+assert.equal(expectedPortsFromEnvironment(envFull)['agent-server'].published, 41002);
+mutation('lifecycle env missing web port export', () => expectedPortsFromEnvironment({ AGENT_SERVER_TEST_POSTGRES_PORT: '41001', AGENT_SERVER_TEST_API_PORT: '41002' }));
+mutation('lifecycle env missing api port export', () => expectedPortsFromEnvironment({ AGENT_SERVER_TEST_POSTGRES_PORT: '41001', AGENT_SERVER_TEST_WEB_PORT: '41003' }));
+mutation('lifecycle env exports nothing', () => expectedPortsFromEnvironment({}));
+
+// --- R4: preflight 的 provider 必须建立关系，⛔ 不许只验非空 ---
+const renderedFor = (p) => ({ services: { 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: String(p), target: 3000 }] } } });
+assertPreflight({ apiUrl: 'http://127.0.0.1:41002', renderedPorts: renderedFor(41002), expectedPorts: expectedPortsFromEnvironment(envFull), requestedProvider: 'claude', effectiveProvider: 'claude' });
+mutation('preflight requested/effective provider mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', renderedPorts: renderedFor(41002), expectedPorts: expectedPortsFromEnvironment(envFull), requestedProvider: 'claude', effectiveProvider: 'opencode' }));
+mutation('preflight effective provider not observed', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', renderedPorts: renderedFor(41002), expectedPorts: expectedPortsFromEnvironment(envFull), requestedProvider: 'claude' }));
+mutation('preflight rendered vs lifecycle env port divergence', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', renderedPorts: renderedFor(41004), expectedPorts: expectedPortsFromEnvironment(envFull), requestedProvider: 'claude', effectiveProvider: 'claude' }));
+
+// --- R4: 终局事实的关联必须被证明 ---
+const rel = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
+assert.equal(deriveTerminalFacts(rel).workRun, 'r1');
+mutation('work_ref points at no work row', () => deriveTerminalFacts({ ...rel, messages: [{ provider: 'claude', work_ref: 'bogus' }] }));
+mutation('work has no matching work_run', () => deriveTerminalFacts({ ...rel, runs: [{ id: 'r9', work_id: 'other' }] }));
 
 console.log('PASS acceptance:selftest (offline; no Compose, database, provider, or sandbox used)');

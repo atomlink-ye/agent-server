@@ -132,15 +132,35 @@ function extraComposeFiles(state: LocalEnvironmentState): readonly string[] {
     : [];
 }
 
-export async function composeArgumentsForLocalEnvironment(
+// 🔴 渲染 Compose 配置必须走【和实际起栈完全相同】的 command + args + environment。
+// 早先这里只返回 .args 并丢掉 .command：compose.ts:61-65 在 transport=repository 时
+// command 是 scripts/dev/docker-compose wrapper（它会 source provider defaults 并建 volume 环境），
+// 丢掉它意味着 ① 拼出的 `docker -p ... -f ... config` 连子命令都不对，
+// ② 渲染绕过 wrapper，与实际启动的 effective 环境不同（层数相同也没用）。
+// environment 也必须由 environmentFor 产出：调用方另拼一份就构成【判据自证】——
+// 渲染方自己补上 environmentFor 漏掉的端口变量，判据就再也发现不了 R3-73 那类遗漏。
+export async function composeInvocationForLocalEnvironment(
   state: LocalEnvironmentState,
-  environment: NodeJS.ProcessEnv = process.env,
-): Promise<readonly string[]> {
+  baseEnvironment: NodeJS.ProcessEnv = process.env,
+): Promise<{
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly environment: NodeJS.ProcessEnv;
+}> {
   const profile = await resolveLocalEnvironment(state.profile, {
-    environment,
+    environment: baseEnvironment,
     overrides: state.runtimeOverrides,
   });
-  return composeInvocation(profile, state.projectName, extraComposeFiles(state)).args;
+  const invocation = composeInvocation(
+    profile,
+    state.projectName,
+    extraComposeFiles(state),
+  );
+  return {
+    command: invocation.command,
+    args: invocation.args,
+    environment: environmentFor(baseEnvironment, state, profile.runtime),
+  };
 }
 
 export async function stopLocalEnvironment(

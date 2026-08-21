@@ -32,47 +32,57 @@ export function deriveTerminalFacts(observations) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error('final SQL observations: messages not observed');
   }
-  const agentWithRef = messages.filter((m) => m.work_ref);
-  if (agentWithRef.length === 0) throw new Error('final SQL observations: no message carrying work_ref was observed');
+  const carrier = messages.find((m) => m.work_ref);
+  if (!carrier) throw new Error('final SQL observations: no message carrying work_ref was observed');
   const works = observations?.works;
   if (!Array.isArray(works) || works.length === 0) throw new Error('final SQL observations: works not observed');
   const runs = observations?.runs;
   if (!Array.isArray(runs) || runs.length === 0) throw new Error('final SQL observations: work_runs not observed');
-  return {
-    provider: agentWithRef[0].provider,
-    workRef: agentWithRef[0].work_ref,
-    workRun: runs[0].id,
-    workStatus: works[0].status,
-  };
+
+  // 🔴 关联必须被证明，⛔ 不许取 works[0]/runs[0] 了事：
+  // 那样 work_ref='bogus' + 任意无关的 work/run 都会通过（Oracle 指出，成立）。
+  const work = works.find((w) => w.id === carrier.work_ref);
+  if (!work) {
+    throw new Error(`final SQL observations: work_ref ${carrier.work_ref} has no matching work row — association not observed`);
+  }
+  const run = runs.find((r) => r.work_id === work.id);
+  if (!run) {
+    throw new Error(`final SQL observations: work ${work.id} has no matching work_run — association not observed`);
+  }
+  return { provider: carrier.provider, workRef: carrier.work_ref, workRun: run.id, workStatus: work.status };
 }
 
-export function acceptancePortFacts(handle, composeConfig) {
-  const ports = handle.state.ports;
-  if (!ports.api || !ports.postgres || !ports.web) throw new Error('lifecycle did not allocate all acceptance ports');
-  return {
-    renderedPorts: parseYaml(composeConfig),
-    expectedPorts: {
-      postgres: { hostIp: '127.0.0.1', published: ports.postgres, target: 5432 },
-      'agent-server': { hostIp: '127.0.0.1', published: ports.api, target: 3000 },
-      web: { hostIp: '127.0.0.1', published: ports.web, target: 3001 },
-    },
-  };
-}
 
+// 🔴 渲染必须复用起栈那条 invocation 的 command/args/environment（Oracle + Auditor 均指出过）。
+// ⛔ 不许在这里另拼 environment —— 那会让判据自证：
+// 渲染方替 environmentFor 补上它漏掉的端口变量，preflight 就永远发现不了启动路径的遗漏。
 async function renderedComposeConfig(handle) {
-  const { execFile } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const { composeArgumentsForLocalEnvironment } = await import('../../tooling/environment/lifecycle.ts');
-  const run = promisify(execFile);
-  const environment = {
-    ...process.env,
-    AGENT_SERVER_TEST_POSTGRES_PORT: String(handle.state.ports.postgres),
-    AGENT_SERVER_TEST_API_PORT: String(handle.state.ports.api),
-    AGENT_SERVER_TEST_WEB_PORT: String(handle.state.ports.web),
+  const exec = promisify(rawExecFile);
+  const { composeInvocationForLocalEnvironment } = await import('../../tooling/environment/lifecycle.ts');
+  const { command, args, environment } = await composeInvocationForLocalEnvironment(handle.state);
+  const result = await exec(command, [...args, 'config'], { env: environment, maxBuffer: 32 * 1024 * 1024 });
+  return { stdout: result.stdout, environment };
+}
+
+// 🔴 expected 必须来自【实际交给 Compose 的那份 environment】，⛔ 不许来自 handle.state.ports。
+// 否则 environmentFor 漏掉一个端口导出时，判据两边都缺、照样相等 —— R3-73 变成不可检测。
+export function expectedPortsFromEnvironment(environment) {
+  const need = {
+    postgres: ['AGENT_SERVER_TEST_POSTGRES_PORT', 5432],
+    'agent-server': ['AGENT_SERVER_TEST_API_PORT', 3000],
+    web: ['AGENT_SERVER_TEST_WEB_PORT', 3001],
   };
-  const args = await composeArgumentsForLocalEnvironment(handle.state, environment);
-  const result = await run('docker', [...args, 'config'], { env: environment });
-  return result.stdout;
+  const expected = {};
+  const missing = [];
+  for (const [service, [variable, target]] of Object.entries(need)) {
+    const published = environment[variable];
+    if (!published) { missing.push(variable); continue; }
+    expected[service] = { hostIp: '127.0.0.1', published: Number(published), target };
+  }
+  if (missing.length) {
+    throw new Error(`lifecycle environment did not export: ${missing.join(', ')} — not observed`);
+  }
+  return expected;
 }
 
 async function main() {
@@ -95,8 +105,10 @@ async function main() {
   const handle = await startAcceptanceEnvironment({ provider, model, runDirectory: evidenceDir });
   try {
     const apiUrl = new URL(apiProbeUrl(handle));
-    const { renderedPorts, expectedPorts } = acceptancePortFacts(handle, await renderedComposeConfig(handle));
-    assertPreflight({ apiUrl: apiUrl.origin, renderedPorts, expectedPorts, provider });
+    const rendered = await renderedComposeConfig(handle);
+    const renderedPorts = parseYaml(rendered.stdout);
+    const expectedPorts = expectedPortsFromEnvironment(rendered.environment);
+    assertPreflight({ apiUrl: apiUrl.origin, renderedPorts, expectedPorts, effectiveProvider: rendered.environment.PASEO_PROVIDER, requestedProvider: provider });
 
     const driverEnv = {
       ...process.env,

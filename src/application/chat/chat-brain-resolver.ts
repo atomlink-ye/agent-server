@@ -3,6 +3,7 @@ import type {
   AgentHomeNamespace,
   AgentHomeScopeParams,
 } from '../../domain/agents/agent-home.js';
+import type { ContextView } from '../../domain/context/context-fs.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import {
   principalRef,
@@ -16,6 +17,7 @@ import type {
   AgentHomeAccessContext,
   ListAgentHomeEntries,
 } from '../agents/agent-home.js';
+import { ContextViewResolver } from '../context/context-view-resolver.js';
 import {
   createChatTurnContext,
   runtimeInvocationContextForChat,
@@ -37,8 +39,11 @@ export type ResolvedChatBrain = Readonly<{
   readonly turnContext: ChatTurnContext;
   readonly invocationContext: RuntimeInvocationContext;
   readonly agentOwner: ResourceOwner;
+  /** Canonical ContextFS mount manifest for this Chat turn. */
+  readonly contextView: ContextView;
   readonly instructions: string;
   readonly capabilitySummary: ChatTurnCapabilitySummary;
+  /** Compatibility prompt projection while consumers migrate to ContextFS. */
   readonly agentHome: ChatAgentHomeProjection;
   readonly resolvedSkills: readonly Pick<ResolvedSkillPackage, 'ref' | 'digest'>[];
   readonly toolRefs: readonly string[];
@@ -63,6 +68,7 @@ export class ChatBrainResolver {
     >,
     private readonly agentResolution: AgentResolutionApi,
     private readonly listAgentHomeEntries: Pick<ListAgentHomeEntries, 'execute'>,
+    private readonly contextViews: ContextViewResolver = new ContextViewResolver(),
   ) {}
 
   public async resolve(
@@ -100,9 +106,6 @@ export class ChatBrainResolver {
     if (!resolvedVersion || resolvedVersion.source !== 'managed')
       throw new Error('chat_brain_managed_version_unavailable');
 
-    // The Agent version is resolved under the Agent owner's identity, while
-    // actor-private context is resolved for the principal who triggered this
-    // conversation turn. Owner and actor are intentionally distinct concepts.
     const accessContext: AgentHomeAccessContext = {
       tenantId: definition.tenantId,
       workspaceId: definition.workspaceId,
@@ -127,12 +130,19 @@ export class ChatBrainResolver {
         ? { workEntitlementWorkspaceId: input.workEntitlementWorkspaceId }
         : {}),
     });
+    const contextView = this.contextViews.forChat({
+      productScope: turnContext.productScope,
+      actor,
+      agentDefinitionId: definition.id,
+      conversationId: input.conversationId,
+    });
 
     return Object.freeze({
       [resolvedChatBrainBrand]: true as const,
       turnContext,
       invocationContext: runtimeInvocationContextForChat(turnContext),
       agentOwner,
+      contextView,
       instructions: resolvedVersion.instructions,
       capabilitySummary: Object.freeze({
         agentDefinitionId: definition.id,
@@ -176,9 +186,6 @@ export class ChatBrainResolver {
       }
     }
 
-    // `work` needs a durable Work reference and `scratch` needs a runtime
-    // session scope. A plain chat dispatch has neither, so both namespaces
-    // are intentionally absent from this projection.
     return Object.freeze(projection) as ChatAgentHomeProjection;
   }
 }

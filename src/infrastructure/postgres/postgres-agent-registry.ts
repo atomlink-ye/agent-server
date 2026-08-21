@@ -260,8 +260,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
   ): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
       `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
-       WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
-      [definitionId, owner.tenantId, owner.principalType, owner.principalId],
+       WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
+      [definitionId, owner.tenantId],
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
@@ -283,8 +283,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
     versionId: string,
   ): Promise<ManagedAgentVersion | null> {
     const result = await this.database.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
-      [versionId, owner.tenantId, owner.principalType, owner.principalId],
+      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
+      [versionId, owner.tenantId],
     );
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
@@ -305,17 +305,15 @@ export class PostgresAgentRegistry implements AgentRegistry {
     const values: unknown[] = [
       command.definitionId,
       owner.tenantId,
-      owner.principalType,
-      owner.principalId,
       command.limit + 1,
     ];
     const cursorSql = cursor
-      ? ` AND (created_at,id) > ($6::timestamptz,$7::uuid)`
+      ? ` AND (created_at,id) > ($4::timestamptz,$5::uuid)`
       : '';
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const result = await this.database.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE definition_id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4
-        AND managed_discriminator='managed_agent_v1'${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $5`,
+      `SELECT * FROM agent_versions WHERE definition_id=$1 AND tenant_id=$2
+        AND managed_discriminator='managed_agent_v1'${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $3`,
       values,
     );
     const rows = [...(result.rows ?? [])];

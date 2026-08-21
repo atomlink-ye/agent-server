@@ -10,32 +10,27 @@ import {
   type InvokableOwnerScope,
 } from './invokable.js';
 
+type CanonicalDisplayFields = Pick<
+  CanonicalAgentDefinition,
+  'normalizedName' | 'displayName' | 'roleLabel' | 'summary'
+>;
+
 /**
  * Compatibility view for the old invokable API.
  *
- * The managed/coworker AgentDefinition is the sole product identity. Legacy
- * callers still use name/description while they migrate, but these fields are
- * aliases over displayName/summary rather than a second Agent aggregate.
+ * The managed/coworker AgentDefinition is the sole strict product identity.
+ * Legacy callers still use name/description and may not yet project the newer
+ * display fields, so those canonical aliases stay optional only on this adapter.
  */
-export type AgentDefinition = CanonicalAgentDefinition &
-  Readonly<{
-    readonly name: string;
-    readonly description: string | null;
-  }>;
-
-/** Old persistence rows do not yet project the newer canonical display fields. */
-export type AgentDefinitionSnapshot = Readonly<
-  Omit<
-    AgentDefinition,
-    'normalizedName' | 'displayName' | 'roleLabel' | 'summary'
-  > &
-    Partial<
-      Pick<
-        AgentDefinition,
-        'normalizedName' | 'displayName' | 'roleLabel' | 'summary'
-      >
-    >
+export type AgentDefinition = Readonly<
+  Omit<CanonicalAgentDefinition, keyof CanonicalDisplayFields> &
+    Partial<CanonicalDisplayFields> & {
+      readonly name: string;
+      readonly description: string | null;
+    }
 >;
+
+export type AgentDefinitionSnapshot = AgentDefinition;
 
 export interface CreateAgentDefinitionOptions extends InvokableOwnerScope {
   readonly id?: string;

@@ -26,7 +26,7 @@ describe('PostgresWorkerRuntimeInvocationResolver', () => {
         },
       ],
     }));
-    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query });
+    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query } as any);
 
     const resolved = await resolver.resolve('runtime-session-1');
 
@@ -85,7 +85,7 @@ describe('PostgresWorkerRuntimeInvocationResolver', () => {
         },
       ],
     }));
-    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query });
+    const resolver = new PostgresWorkerRuntimeInvocationResolver({ query } as any);
 
     await expect(resolver.resolve('chat-session-1')).resolves.toBeNull();
   });

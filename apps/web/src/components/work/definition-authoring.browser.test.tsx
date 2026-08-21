@@ -64,6 +64,13 @@ const definitionVersion = ProductWorkDefinitionVersionSchema.parse({
       },
     },
   },
+  source_yaml: `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: supplier-risk-review
+spec:
+  kind: collaboration
+`,
   resolved: {
     resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
   },

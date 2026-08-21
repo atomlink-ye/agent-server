@@ -13,13 +13,18 @@ pnpm typecheck
 pnpm test:unit
 ```
 
-Use `pnpm local-env up <profile>` for interactive infrastructure and `pnpm local-env run <profile> -- <command>` for one-off infrastructure-backed commands. Tests that need infrastructure should normally start it through the shared TestEnvironment support rather than depending on a manual pre-step.
+Use `pnpm setup`, `pnpm doctor`, and `pnpm dev` for host-native core work; use
+`pnpm dev:runtime` only when a real runtime is required. Tests needing real
+PostgreSQL receive an explicit native database URL rather than a manual
+environment wrapper.
 
 ## Repository hygiene
 
 Keep one coherent outcome per change. Do not commit task-specific logs, screenshots, recordings, evidence packets, phase/lane/worker reports, mutation output, or other generated run material. Generated diagnostics belong in `.local/test-runs/` and CI artifacts.
 
-Do not create scenario setup scripts when the real problem is missing environment or fixture support. Improve `tooling/environment/` or `tests/support/` instead.
+Do not create scenario setup scripts when the real problem is missing
+host-native environment or fixture support. Improve `tooling/dev/` or
+`tests/support/` instead.
 
 Long-lived names describe product or engineering semantics, not the development phase that created them.
 

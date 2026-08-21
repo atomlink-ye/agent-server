@@ -3,7 +3,7 @@
 ## Requirements
 
 - Node compatible with `.nvmrc` and pnpm `11.7.0` for host-side deterministic tooling.
-- Docker Compose with a running daemon for `postgres`, `core`, `runtime`, and `full` topologies.
+- Native PostgreSQL only when working on real PostgreSQL semantics. Core development otherwise falls back to PGlite.
 - Linux or macOS, x64 or arm64.
 - External credentials only for live provider smoke.
 
@@ -14,50 +14,30 @@ corepack enable
 pnpm install --frozen-lockfile
 ```
 
-## Local topology model
+## Host-native workflow
 
-All interactive Dev environments and infrastructure-backed Test environments resolve from `config/local-environments.yaml` through `tooling/environment/`.
-
-```text
-in-process   no external service
-postgres     disposable real PostgreSQL
-core         PostgreSQL + Agent Server
-runtime      core + Paseo execution plane
-full         runtime + Web
-```
-
-Start/inspect/stop an interactive topology:
+Prepare the local state and start core development directly on the host:
 
 ```bash
-pnpm local-env up core
-pnpm local-env up runtime
-pnpm local-env up full
-pnpm local-env info
-pnpm local-env down
+pnpm setup
+pnpm doctor
+pnpm dev
 ```
 
-Provider/model overrides are explicit and bounded:
+For runtime work, prepare the Linux-only provider toolchain and start the
+host-native runtime process:
 
 ```bash
-pnpm local-env up runtime --provider opencode --model opencode-go/deepseek-v4-flash
+pnpm setup:providers
+pnpm dev:runtime
 ```
 
-The CLI records only ignored local environment state under `.local/`.
-
-## One-off infrastructure commands
-
-Do not write a new scenario setup script. Use the generic runner:
-
-```bash
-pnpm local-env run postgres -- <command>
-pnpm local-env run runtime -- <command>
-```
-
-The runner allocates a unique Compose project, dynamic host ports, `.local/test-runs/<run-id>/`, useful DB/API environment variables, and cleanup. On failure set `TEST_KEEP_FAILED=1` to retain diagnostics.
+Provider credentials and model selection are explicit environment input. The
+development harness records only ignored local state under `.local/`.
 
 ## Tests
 
-Deterministic tests do not need Docker unless they explicitly select an infrastructure topology.
+Deterministic tests do not need a container runtime.
 
 ```bash
 pnpm test:unit
@@ -66,13 +46,15 @@ pnpm test:integration
 pnpm test:e2e
 ```
 
-Real PostgreSQL tests self-start their database when a DB URL is absent:
+Real PostgreSQL tests require an explicit native test database URL:
 
 ```bash
-pnpm test:real-pg
+createdb agent_server_test
+TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:pg
 ```
 
-If `DATABASE_URL` or `POSTGRES_URL` is already provided, the lane uses that database instead.
+For one real-PG integration file, export `DATABASE_URL` or `POSTGRES_URL`
+before running Vitest. See the repository README for the command.
 
 ## Live runtime smoke
 
@@ -89,7 +71,8 @@ The real Team path is:
 pnpm smoke:agent-team
 ```
 
-Both use the same generic `runtime` topology as interactive development. Real-provider smoke is explicit opt-in and is not a deterministic PR prerequisite.
+Both use the host-native runtime setup. Real-provider smoke is explicit opt-in
+and is not a deterministic PR prerequisite.
 
 ## Generated state
 

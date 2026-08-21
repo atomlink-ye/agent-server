@@ -1,4 +1,12 @@
-import { runCommand, redactDatabaseUrl } from './host-native.js';
+import { runCommand } from './host-native.js';
+
+type TestPgStatus =
+  | { lane: 'test:pg'; status: 'skipped'; reason: 'missing_database_url' }
+  | { lane: 'test:pg'; status: 'running' };
+
+function writeTestPgStatus(status: TestPgStatus): void {
+  process.stdout.write(`${JSON.stringify(status)}\n`);
+}
 
 function resolveTestDatabaseUrl(
   environment: NodeJS.ProcessEnv = process.env,
@@ -31,19 +39,15 @@ export async function runRealPostgresTests(
 ): Promise<void> {
   const connectionString = resolveTestDatabaseUrl(environment);
   if (!connectionString) {
-    process.stdout.write(
-      [
-        '[test:pg] skipped — set TEST_DATABASE_URL (or INTEGRATION_DATABASE_URL) to a dedicated local test database.',
-        `          example: TEST_DATABASE_URL=postgresql://${process.env.USER ?? 'postgres'}@127.0.0.1:5432/agent_server_test pnpm test:pg`,
-        '',
-      ].join('\n'),
-    );
+    writeTestPgStatus({
+      lane: 'test:pg',
+      status: 'skipped',
+      reason: 'missing_database_url',
+    });
     return;
   }
   assertDedicatedTestDatabase(connectionString);
-  process.stdout.write(
-    `[test:pg] using ${redactDatabaseUrl(connectionString)}\n`,
-  );
+  writeTestPgStatus({ lane: 'test:pg', status: 'running' });
   await runCommand(
     'pnpm',
     ['exec', 'vitest', 'run', '--config', 'vitest.real-pg.config.ts'],

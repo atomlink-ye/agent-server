@@ -21,29 +21,50 @@ Prerequisites:
 
 - Node 22–24;
 - pnpm 11;
-- PostgreSQL reachable from the sandbox/host;
-- `createdb` recommended.
+- no PostgreSQL installation is required;
+- `createdb` is optional and lets setup create the real default database when available.
 
 ```bash
 pnpm setup
 ```
 
+Provider binaries are optional for core development. Prepare the pinned
+Paseo/Claude/Codex/OpenCode toolchain before runtime work with:
+
+```bash
+pnpm setup:providers
+```
+
+The command is idempotent and keeps its release under `.local/provider-toolchain`.
+It does not install providers globally or add a provider prerequisite to
+`pnpm setup`.
+
+The pinned provider toolchain is Linux-only and requires the `flock` utility.
+Run it in the Linux development sandbox; macOS/Windows host-native core mode
+remains supported, but cannot prepare this runtime toolchain locally.
+
 Setup is idempotent and owns only developer bootstrap responsibilities:
 
 1. read `.env` / `.env.local` values when the same variable is not already exported;
 2. create `.local/` workspace/runtime/skill-registry directories;
-3. resolve the development database URL;
-4. create the database with `createdb` when it is missing and the tool is available;
-5. apply the durable kernel migrations;
+3. resolve the development database URL, preferring reachable local PostgreSQL;
+4. when the default host database is absent, start or reuse a persistent PGlite wire server under `.local/dev-runtime`;
+5. create the real database with `createdb` when it is missing and the tool is available;
+6. apply the durable kernel migrations;
 6. print the next canonical command.
 
-Default database:
+Default real database:
 
 ```text
 postgresql://$USER@127.0.0.1:5432/agent_server_dev
 ```
 
 Override with `DATABASE_URL` or `POSTGRES_URL`.
+
+When neither variable is set and the default real database is unavailable, the
+harness uses `postgresql://postgres:postgres@127.0.0.1:55432/postgres` backed by
+`.local/dev-runtime/pglite`. Set `PGLITE_PORT` if that port is occupied. An
+explicit database URL is never replaced with PGlite.
 
 ## Doctor
 
@@ -83,21 +104,13 @@ This mode is for product/resource/API/UI work that does not need a live executio
 pnpm dev:runtime
 ```
 
+If the provider toolchain is absent, run `pnpm setup:providers` first. Runtime
+startup uses the pinned local release and an isolated runtime HOME for provider
+configuration; core development does not require either.
+
 Runtime mode still uses host processes. It invokes the existing `scripts/dev/with-paseo.mjs` helper around the API process, so Paseo and the provider toolchain remain isolated behind the runtime boundary without requiring Docker. After API readiness, the Web bootstrap creates/publishes the local Agent/Environment/Team/Work fixtures and the Web process starts on port 3001.
 
 Provider credentials remain explicit environment input. Do not add fallback credentials to repository files.
-
-## Docker compatibility topology
-
-```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-```
-
-These are explicit aliases for the existing `local-env` Compose profiles. Use them only when the container topology is itself under test or when reproducing acceptance/release conditions.
-
-The underlying `config/local-environments.yaml` remains authoritative for Compose topology. It no longer defines the ordinary developer command surface.
 
 ## Database strategy
 
@@ -123,6 +136,15 @@ Create a dedicated database and opt in:
 ```bash
 createdb agent_server_test
 TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:pg
+```
+
+When running one PostgreSQL integration file directly, export `DATABASE_URL`
+or `POSTGRES_URL` first. The direct-file path does not provision a database:
+
+```bash
+createdb agent_server_test
+export DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test
+pnpm exec vitest run tests/integration/real-pg-pool.integration.test.ts
 ```
 
 The runner refuses destructive access unless the database name contains `test`; it also rejects `prod`, `production`, `main`, and `live` names. When no test URL is supplied, the lane skips instead of booting Docker behind the developer's back.

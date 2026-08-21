@@ -10,7 +10,8 @@ import {
 import { assertGoldenRecord, assertStep8Observation, goldenEight } from './golden-eight.mjs';
 import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
-import { acceptancePortFacts } from './run.mjs';
+import { acceptancePortFacts, deriveTerminalFacts } from './run.mjs';
+import { parseServiceAccounts } from './credentials.mjs';
 
 const expectedPorts = {
   postgres: { hostIp: '127.0.0.1', published: 32873, target: 5432 },
@@ -79,5 +80,21 @@ mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', 
 
 assert.deepEqual(acceptanceRuntime('claude', 'deepseek-v4-flash'), { adapter: 'paseo', provider: 'claude', model: 'deepseek-v4-flash' });
 mutation('implicit provider', () => acceptanceRuntime('', 'deepseek-v4-flash'));
+
+
+// --- R4 Manager 追加：凭据解析与终局事实推导的变异对偶 ---
+const goodAccounts = JSON.stringify([{ token: 't1', serviceAccountId: 'sa', tenantId: 'tn' }]);
+assert.equal(parseServiceAccounts(goodAccounts).token, 't1');
+mutation('SERVICE_ACCOUNTS_JSON quote-stripped by shell source', () => parseServiceAccounts('[{token:t1}]'));
+mutation('SERVICE_ACCOUNTS_JSON empty', () => parseServiceAccounts(''));
+mutation('SERVICE_ACCOUNTS_JSON empty array', () => parseServiceAccounts('[]'));
+mutation('SERVICE_ACCOUNTS_JSON token missing', () => parseServiceAccounts(JSON.stringify([{ serviceAccountId: 'sa' }])));
+
+const goodObs = { messages: [{ provider: 'claude', work_ref: 'wr1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1' }] };
+assert.equal(deriveTerminalFacts(goodObs).workStatus, 'complete');
+mutation('terminal facts messages not observed', () => deriveTerminalFacts({ ...goodObs, messages: [] }));
+mutation('terminal facts no work_ref observed', () => deriveTerminalFacts({ ...goodObs, messages: [{ provider: 'claude' }] }));
+mutation('terminal facts works not observed', () => deriveTerminalFacts({ messages: goodObs.messages, runs: goodObs.runs }));
+mutation('terminal facts work_runs not observed', () => deriveTerminalFacts({ messages: goodObs.messages, works: goodObs.works }));
 
 console.log('PASS acceptance:selftest (offline; no Compose, database, provider, or sandbox used)');

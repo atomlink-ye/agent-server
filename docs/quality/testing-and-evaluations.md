@@ -49,7 +49,7 @@ Component/repository/adapter boundaries use PGlite when its semantics are suffic
 pnpm test:integration
 ```
 
-PGlite is not treated as proof of PostgreSQL-only locking/concurrency behavior. It is the fast deterministic default for ordinary persistence wiring.
+PGlite is not treated as proof of PostgreSQL-only locking/concurrency behavior or any L3 claim. It is the fast deterministic default for ordinary persistence wiring; only a dedicated real PostgreSQL run can prove L3 semantics.
 
 ## Deterministic product scenarios
 
@@ -107,10 +107,13 @@ TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:
 The runner:
 
 1. does **not** start Docker;
-2. skips cleanly when neither `TEST_DATABASE_URL` nor `INTEGRATION_DATABASE_URL` is set;
-3. refuses database names without `test`;
-4. refuses `prod`, `production`, `main`, or `live` database names;
-5. passes the selected URL to the existing real-PG Vitest suite.
+2. skips cleanly with exit code `0` when neither `TEST_DATABASE_URL` nor `INTEGRATION_DATABASE_URL` is set, and emits exactly one machine-readable status line: `{"lane":"test:pg","status":"skipped","reason":"missing_database_url"}`;
+3. emits `{"lane":"test:pg","status":"running"}` immediately before starting Vitest when a URL is configured; this status does not include the connection URL;
+4. refuses database names without `test`;
+5. refuses `prod`, `production`, `main`, or `live` database names;
+6. passes the selected URL to the existing real-PG Vitest suite.
+
+The runner guard and `tests/harness/postgres.ts`'s `assertRealPostgresTestUrl` are independent protections: the harness guard requires a `test` database name and rejects production-flavored names before creating the real test pool. PGlite cannot substitute for this lane or prove L3 PostgreSQL-only behavior.
 
 `pnpm test:real-pg` is a compatibility alias.
 

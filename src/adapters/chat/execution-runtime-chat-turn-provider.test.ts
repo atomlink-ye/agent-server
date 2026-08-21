@@ -114,6 +114,14 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(alphaSystemPrompt).toBeDefined();
     expect(betaSystemPrompt).toBeDefined();
 
+    expect(alphaSystemPrompt).toContain(
+      'Agent definition ID: definition-alpha',
+    );
+    expect(alphaSystemPrompt).toContain('Agent version ID: version-alpha');
+    expect(alphaSystemPrompt).not.toContain(
+      'Agent definition ID: definition-beta',
+    );
+    expect(alphaSystemPrompt).not.toContain('Agent version ID: version-beta');
     expect(alphaSystemPrompt).toContain('Always answer in terse Alpha format.');
     expect(alphaSystemPrompt).toContain('alpha-calendar-capability');
     expect(alphaSystemPrompt).toContain('Alpha persona home content.');
@@ -124,6 +132,12 @@ describe('ExecutionRuntimeChatTurnProvider', () => {
     expect(alphaSystemPrompt).not.toContain('Beta persona home content.');
 
     expect(betaSystemPrompt).toContain('Always answer in warm Beta format.');
+    expect(betaSystemPrompt).toContain('Agent definition ID: definition-beta');
+    expect(betaSystemPrompt).toContain('Agent version ID: version-beta');
+    expect(betaSystemPrompt).not.toContain(
+      'Agent definition ID: definition-alpha',
+    );
+    expect(betaSystemPrompt).not.toContain('Agent version ID: version-alpha');
     expect(betaSystemPrompt).toContain('beta-calendar-capability');
     expect(betaSystemPrompt).toContain('Beta persona home content.');
     expect(betaSystemPrompt).not.toContain(

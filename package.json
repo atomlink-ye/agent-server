@@ -21,10 +21,6 @@
     "dev:full": "pnpm dev:runtime",
     "dev:api": "node --import tsx --watch src/entrypoints/api/server.ts",
     "dev:lark": "node --import tsx --watch src/entrypoints/lark/worker.ts",
-    "dev:docker": "pnpm local-env up core",
-    "dev:docker:runtime": "pnpm local-env up runtime",
-    "dev:docker:full": "pnpm local-env up full",
-    "local-env": "node --import tsx tooling/environment/cli.ts",
     "start": "node dist/entrypoints/api/server.js",
     "start:lark": "node dist/entrypoints/lark/worker.js",
     "skill:register": "node --import tsx src/entrypoints/cli/skill-register.ts",
@@ -55,14 +51,13 @@
     "canary:runtime": "node --import tsx tooling/dev/run-canary.ts runtime",
     "canary:golden-path": "node --import tsx tooling/dev/run-canary.ts golden-path",
     "smoke:runtime": "pnpm canary:runtime",
-    "smoke:agent-team": "pnpm local-env run runtime -- node scripts/smoke/agent-team-main-flow.mjs",
-    "smoke:team-registry-work": "pnpm local-env run runtime -- node scripts/smoke/team-registry-work-actor.mjs",
+    "smoke:agent-team": "node --import tsx tooling/dev/run-canary.ts agent-team",
+    "smoke:team-registry-work": "node --import tsx tooling/dev/run-canary.ts team-registry-work",
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",
     "verify": "pnpm check && pnpm test && pnpm build",
     "verify:full": "pnpm verify && pnpm test:pg && pnpm test:e2e",
     "clean": "node scripts/dev/clean.mjs",
-    "acceptance:selftest": "node scripts/acceptance/selftest.mjs",
-    "acceptance:run": "node --import tsx scripts/acceptance/run.mjs"
+    "clean": "node scripts/dev/clean.mjs"
   },
   "dependencies": {
     "@getpaseo/client": "0.1.110",

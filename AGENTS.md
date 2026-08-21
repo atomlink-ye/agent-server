@@ -62,9 +62,8 @@ pnpm canary:golden-path
 
 - `pnpm dev` is host-native API + Web with the execution runtime disabled/mock-gated.
 - `pnpm dev:runtime` is host-native API + Web + Paseo/provider helper.
-- `pnpm dev:docker*` is an explicit production-like/compatibility topology, not a prerequisite for local edits/tests.
 - `tooling/dev/` owns host-native developer orchestration.
-- `tooling/environment/` + `config/local-environments.yaml` own Compose/production-like topology.
+- CI may provide PostgreSQL as a service container; local development does not own a container topology.
 
 Do not add an implicit Docker startup to a normal test command.
 
@@ -109,7 +108,7 @@ tests/scenarios/            deterministic product journeys
 e2e/                        explicit browser/process E2E
 evals/                      Agent/model-quality evaluation
 tooling/dev/                host-native developer/test/canary orchestration
-tooling/environment/        Docker/production-like topology lifecycle
+tooling/dev/                host-native development orchestration
 scripts/dev/                reusable runtime/bootstrap helpers
 scripts/smoke/              canonical real external main flows
 scripts/ops/                migrations/recovery/operator utilities

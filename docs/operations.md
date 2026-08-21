@@ -9,23 +9,13 @@ Agent Server currently supports local development, deterministic verification, a
 
 ## Local environment ownership
 
-Development and infrastructure-backed tests share `config/local-environments.yaml` and `tooling/environment/`. Manual development uses the generic environment CLI:
+`tooling/dev/` owns host-native development. Use `pnpm setup`, `pnpm doctor`,
+and `pnpm dev` for core work, or `pnpm dev:runtime` when an execution runtime
+is required. Real PostgreSQL tests use an explicit native test database URL.
 
-```bash
-pnpm local-env up core
-pnpm local-env up runtime
-pnpm local-env info
-pnpm local-env down
-```
-
-A one-off command that needs infrastructure uses the same lifecycle:
-
-```bash
-pnpm local-env run postgres -- <command>
-pnpm local-env run runtime -- <command>
-```
-
-Do not create scenario-specific setup/acceptance runners for temporary debugging. Improve the shared environment or typed fixture APIs instead.
+Do not create scenario-specific setup or acceptance runners for temporary
+debugging. Improve the shared host-native environment or typed fixture APIs
+instead.
 
 ## Generated diagnostics
 

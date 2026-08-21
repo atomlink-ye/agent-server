@@ -32,7 +32,7 @@ flowchart LR
 - `tests/repository`: small structural repository invariants.
 - `e2e`: deterministic process/socket behavior.
 - `evals`: Agent/model-quality evaluation.
-- `tooling/environment`: shared Dev/Test topology lifecycle.
+- `tooling/dev`: shared host-native development lifecycle.
 - `scripts/dev`, `scripts/smoke`, `scripts/ops`: the only durable script categories.
 
 ## Repository boundaries
@@ -48,7 +48,7 @@ git status --short --branch
 rg "term or contract" docs src tests e2e
 pnpm typecheck
 pnpm test:unit
-pnpm local-env info runtime
+pnpm doctor
 ```
 
 Use focused discovery. Avoid broad destructive cleanup, package upgrades, or speculative infrastructure before the relevant boundary is understood.

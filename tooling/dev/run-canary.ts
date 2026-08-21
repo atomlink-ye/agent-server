@@ -7,6 +7,7 @@ import {
   hostWebEnvironment,
   isPortFree,
   loadLocalDotEnv,
+  localServiceAccountsJson,
   ownedChildLogPath,
   prepareHostNativeEnvironment,
   readRuntimeLogTail,
@@ -18,7 +19,21 @@ import {
 } from './host-native.js';
 import { setupProviders } from './setup-providers.js';
 
-export type CanaryKind = 'runtime' | 'golden-path';
+export type CanaryKind =
+  | 'runtime'
+  | 'golden-path'
+  | 'agent-team'
+  | 'team-registry-work'
+  | 'user-defined-team-work';
+
+const runtimeSmokeCommands: Partial<Record<CanaryKind, string[]>> = {
+  runtime: ['scripts/smoke/runtime-main-flow.mjs'],
+  'agent-team': ['scripts/smoke/agent-team-main-flow.mjs'],
+  'team-registry-work': ['scripts/smoke/team-registry-work-actor.mjs'],
+  'user-defined-team-work': [
+    'scripts/smoke/user-defined-team-work-lifecycle.mjs',
+  ],
+};
 
 function canaryPort(
   environment: NodeJS.ProcessEnv,
@@ -47,8 +62,17 @@ async function assertCanaryPortFree(
 }
 
 function parseKind(value: string | undefined): CanaryKind {
-  if (value === 'runtime' || value === 'golden-path') return value;
-  throw new Error('usage: run-canary.ts <runtime|golden-path>');
+  if (
+    value === 'runtime' ||
+    value === 'golden-path' ||
+    value === 'agent-team' ||
+    value === 'team-registry-work' ||
+    value === 'user-defined-team-work'
+  )
+    return value;
+  throw new Error(
+    'usage: run-canary.ts <runtime|golden-path|agent-team|team-registry-work|user-defined-team-work>',
+  );
 }
 
 function canaryReadyTimeout(environment: NodeJS.ProcessEnv): number {
@@ -69,12 +93,18 @@ export async function runHostCanary(
   let primaryEnvironment: NodeJS.ProcessEnv | undefined;
   try {
     let commandEnvironment: NodeJS.ProcessEnv;
-    if (kind === 'runtime') {
+    const runtimeSmokeCommand = runtimeSmokeCommands[kind];
+    if (runtimeSmokeCommand) {
       // Runtime compatibility does not need to boot Vite/browser. Start only
       // the host-native API wrapped by the existing Paseo helper, then run one
       // bounded real-provider turn.
       const prepared = await prepareHostNativeEnvironment(loaded);
-      const runtimeEnvironment = hostRuntimeEnvironment(prepared);
+      const runtimeEnvironment = {
+        ...hostRuntimeEnvironment(prepared),
+        ...(kind === 'runtime'
+          ? {}
+          : { SERVICE_ACCOUNTS_JSON: localServiceAccountsJson() }),
+      };
       const apiPort = canaryPort(runtimeEnvironment, 'PORT', 3000);
       await assertCanaryPortFree('runtime API', apiPort);
       const readyTimeoutMs = canaryReadyTimeout(runtimeEnvironment);
@@ -109,8 +139,15 @@ export async function runHostCanary(
         AGENT_SERVER_WORKSPACE_ID:
           runtimeEnvironment.AGENT_SERVER_WORKSPACE_ID?.trim() ||
           LOCAL_WORKSPACE_ID,
+        ...(kind === 'team-registry-work' &&
+        !runtimeEnvironment.SMOKE_OUTPUT_FILE?.trim()
+          ? { SMOKE_OUTPUT_FILE: '.local/test-runs/team-registry-work.ndjson' }
+          : {}),
+        ...(kind === 'agent-team'
+          ? { AGENT_TEAM_SMOKE_TIMEOUT_MS: '900000' }
+          : {}),
       };
-      await runCommand('node', ['scripts/smoke/runtime-main-flow.mjs'], {
+      await runCommand('node', runtimeSmokeCommand, {
         environment: commandEnvironment,
         cwd: repositoryRoot,
       });

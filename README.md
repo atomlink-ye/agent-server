@@ -169,18 +169,28 @@ pnpm canary:golden-path
 
 Provider availability, prompt/tool choice, and external runtime behavior are canary concerns; deterministic product wiring belongs in `test:scenario`.
 
-## Docker / production-like topology
+## Deployment-image verification
 
-Docker Compose remains supported, but it is no longer the ordinary development entrypoint:
+The repository's single `Dockerfile` describes the Node, pnpm, browser, and
+provider-toolchain environment needed to verify a deployment image. Local
+development and tests use the host-native commands above; install PostgreSQL
+natively when you need the real PostgreSQL semantic lane.
+
+## Real PostgreSQL test files
+
+`pnpm test:pg` needs a dedicated native PostgreSQL database. A directly-run
+PostgreSQL integration test also needs an explicit database URL; it does not
+start infrastructure for you:
 
 ```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-pnpm acceptance:run
+createdb agent_server_test
+export DATABASE_URL="postgresql://$USER@127.0.0.1:5432/agent_server_test"
+pnpm exec vitest run tests/integration/real-pg-pool.integration.test.ts
 ```
 
-`config/local-environments.yaml` and `tooling/environment/` remain the production-like/CI/acceptance topology harness. Use them when container topology itself is what you need to validate, not as a prerequisite for editing or testing Agent Server inside an already isolated sandbox.
+Use a database name containing `test`; the real-PostgreSQL runner rejects
+production-flavored names. Set `TEST_DATABASE_URL` instead when running
+`pnpm test:pg`.
 
 ## Tests, fixtures, evals, canaries, acceptance
 
@@ -204,7 +214,6 @@ tests/                  contract/integration/repository/scenario checks
 e2e/                    explicit browser/process E2E
 evals/                  Agent/model quality evaluation
 tooling/dev/             host-native developer harness
-tooling/environment/     Docker/production-like topology harness
 scripts/dev/             reusable runtime/bootstrap helpers
 scripts/smoke/           small real external main flows
 scripts/ops/             migration/recovery/operator utilities

@@ -1,9 +1,9 @@
 import type { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import type { StepWorker } from '../../src/shared/workers/step-worker.js';
 import { postConversationMessage } from '../../src/application/chat/post-conversation-message.js';
-import { createWorkModule } from '../../src/modules/work/work-module.js';
 
 import { createPgliteTestDatabase } from './database.js';
+import { createHarnessProductWork } from './product-work.js';
 import { createScriptedRuntimeHarness } from './scripted-runtime.js';
 import {
   seedConversation,
@@ -59,7 +59,9 @@ export async function createAgentServerHarness() {
       postConversationMessage,
     },
     work: {
-      createModule: createWorkModule,
+      scenario(world: Parameters<typeof createHarnessProductWork>[0]['world']) {
+        return createHarnessProductWork({ db, runtime: runtime.plane, world });
+      },
     },
     workers: {
       step: <T>(worker: StepWorker<T>) => worker.step(),

@@ -3,19 +3,13 @@ import type {
   ChatMessage,
   Conversation,
   ConversationId,
+  WorkListItem,
+  WorkListProductState,
 } from '../components/chat/contracts';
 
-export type WorkProductState =
-  | 'running'
-  | 'needs_you'
-  | 'complete'
-  | 'problem';
+export type WorkProductState = 'running' | 'needs_you' | 'complete' | 'problem';
 
-export type WorkResultCaptureStatus =
-  | 'present'
-  | 'not_present'
-  | 'redacted'
-  | 'not_captured';
+export type WorkResultCaptureStatus = 'present' | 'not_present' | 'redacted' | 'not_captured';
 
 export interface WorkChatCard {
   readonly workId: string;
@@ -43,9 +37,7 @@ export class ChatApiError extends Error {
 
 export const isUuid = (value: unknown): value is string =>
   typeof value === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
@@ -86,10 +78,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-export async function initializeSession(): Promise<void> {
-  await request<unknown>('/api/session', { cache: 'no-store' });
-}
-
 export async function loadConversations(): Promise<readonly Conversation[]> {
   const payload = asRecord(await request<unknown>('/api/conversations'));
   const values = payload?.conversations;
@@ -97,13 +85,30 @@ export async function loadConversations(): Promise<readonly Conversation[]> {
   return values.map(normalizeConversation);
 }
 
+export async function createConversation(agentDefinitionId: string): Promise<Conversation> {
+  const payload = asRecord(
+    await request<unknown>('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
+    }),
+  );
+  const conversation = payload?.conversation;
+  if (!conversation) throw invalidResponse();
+  return normalizeConversation(conversation);
+}
+
+export async function loadWorks(): Promise<readonly WorkListItem[]> {
+  const payload = asRecord(await request<unknown>('/api/works'));
+  const values = payload?.works;
+  if (!Array.isArray(values)) throw invalidResponse();
+  return values.map(normalizeWorkListItem);
+}
+
 export async function loadMessages(
   conversationId: ConversationId,
 ): Promise<readonly ChatMessage[]> {
   const payload = asRecord(
-    await request<unknown>(
-      `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-    ),
+    await request<unknown>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`),
   );
   const values = payload?.messages;
   if (!Array.isArray(values)) throw invalidResponse();
@@ -119,10 +124,10 @@ export async function sendMessage(
   body: string,
 ): Promise<ChatMessage> {
   const payload = asRecord(
-    await request<unknown>(
-      `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { method: 'POST', body: JSON.stringify({ body }) },
-    ),
+    await request<unknown>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
   );
   const message = payload?.message;
   if (!message) throw invalidResponse();
@@ -143,6 +148,8 @@ export async function loadWorkCard(workId: string): Promise<WorkChatCard> {
 
 export const chatCommands: ChatCommands = {
   loadConversations,
+  createConversation,
+  loadWorks,
   loadMessages,
   sendMessage,
 };
@@ -151,8 +158,43 @@ function normalizeConversation(value: unknown): Conversation {
   const record = asRecord(value);
   return {
     id: requiredString(record?.conversation_id),
+    kind: requiredConversationKind(record?.kind),
     title: nullableString(record?.title),
+    directAgent: normalizeDirectAgent(record?.direct_agent),
     updatedAt: requiredString(record?.updated_at),
+  };
+}
+
+function normalizeDirectAgent(value: unknown): Conversation['directAgent'] {
+  if (value === null) return null;
+  const record = asRecord(value);
+  if (!record) throw invalidResponse();
+  return {
+    agentDefinitionId: requiredString(record.agent_definition_id),
+    displayName: nullableString(record.display_name),
+  };
+}
+
+function normalizeWorkListItem(value: unknown): WorkListItem {
+  const record = asRecord(value);
+  return {
+    id: requiredString(record?.id),
+    title: requiredString(record?.title),
+    productState: requiredWorkListProductState(record?.product_state),
+    updatedAt: requiredString(record?.updated_at),
+    latestRunSummary: normalizeLatestRunSummary(record?.latest_run_summary),
+  };
+}
+
+function normalizeLatestRunSummary(value: unknown): WorkListItem['latestRunSummary'] {
+  if (value === null || value === undefined) return null;
+  const record = asRecord(value);
+  if (!record) throw invalidResponse();
+  return {
+    id: requiredString(record.id),
+    updatedAt: requiredString(record.updated_at),
+    resultSummary: nullableString(record.result_summary),
+    resultCaptureStatus: requiredString(record.result_capture_status),
   };
 }
 
@@ -241,6 +283,24 @@ function requiredAuthorType(value: unknown): ChatMessage['authorType'] {
   throw invalidResponse();
 }
 
+function requiredConversationKind(value: unknown): Conversation['kind'] {
+  if (value === 'direct' || value === 'group') return value;
+  throw invalidResponse();
+}
+
+function requiredWorkListProductState(value: unknown): WorkListProductState {
+  if (
+    value === 'running' ||
+    value === 'needs_you' ||
+    value === 'complete' ||
+    value === 'problem' ||
+    value === 'not_captured'
+  ) {
+    return value;
+  }
+  throw invalidResponse();
+}
+
 function nullableEnum<T extends string>(value: unknown, values: readonly T[]): T | null {
   if (value === null) return null;
   if (typeof value === 'string' && values.includes(value as T)) return value as T;
@@ -249,10 +309,7 @@ function nullableEnum<T extends string>(value: unknown, values: readonly T[]): T
 
 function isWorkProductState(value: unknown): value is WorkProductState {
   return (
-    value === 'running' ||
-    value === 'needs_you' ||
-    value === 'complete' ||
-    value === 'problem'
+    value === 'running' || value === 'needs_you' || value === 'complete' || value === 'problem'
   );
 }
 

@@ -22,6 +22,11 @@ export interface MessagesStore {
     conversationId: ConversationId,
     loader: (conversationId: ConversationId) => Promise<readonly ChatMessage[]>,
   ): Promise<void>;
+  refresh(
+    conversationId: ConversationId,
+    loader: (conversationId: ConversationId) => Promise<readonly ChatMessage[]>,
+    isCurrent?: () => boolean,
+  ): Promise<void>;
   hydrate(conversationId: ConversationId, messages: readonly ChatMessage[]): void;
   append(conversationId: ConversationId, message: ChatMessage): void;
   clear(conversationId?: ConversationId): void;
@@ -61,6 +66,16 @@ export function createMessagesStore(): MessagesStore {
   let snapshot: Readonly<Record<ConversationId, ConversationMessagesState>> = {};
   const listeners = new Set<StoreListener>();
   const loadVersions = new Map<ConversationId, number>();
+  const refreshVersions = new Map<ConversationId, number>();
+  const loadInFlightVersions = new Map<ConversationId, number>();
+  const refreshInFlightVersions = new Map<ConversationId, number>();
+
+  const invalidateRefresh = (conversationId: ConversationId): void => {
+    refreshVersions.set(
+      conversationId,
+      (refreshVersions.get(conversationId) ?? 0) + 1,
+    );
+  };
 
   const notify = (): void => {
     listeners.forEach((listener) => listener());
@@ -84,8 +99,16 @@ export function createMessagesStore(): MessagesStore {
       return () => listeners.delete(listener);
     },
     load: async (conversationId, loader) => {
+      if (
+        loadInFlightVersions.has(conversationId) ||
+        refreshInFlightVersions.has(conversationId)
+      ) {
+        return;
+      }
       const requestVersion = (loadVersions.get(conversationId) ?? 0) + 1;
       loadVersions.set(conversationId, requestVersion);
+      loadInFlightVersions.set(conversationId, requestVersion);
+      invalidateRefresh(conversationId);
       update(conversationId, (current) => ({
         ...current,
         status: 'loading',
@@ -108,15 +131,65 @@ export function createMessagesStore(): MessagesStore {
           status: 'error',
           error: 'Unable to load messages.',
         }));
+      } finally {
+        if (loadInFlightVersions.get(conversationId) === requestVersion) {
+          loadInFlightVersions.delete(conversationId);
+        }
       }
     },
-    hydrate: (conversationId, messages) =>
+    refresh: async (conversationId, loader, isCurrent = () => true) => {
+      if (
+        loadInFlightVersions.has(conversationId) ||
+        refreshInFlightVersions.has(conversationId)
+      ) {
+        return;
+      }
+      const requestVersion = (refreshVersions.get(conversationId) ?? 0) + 1;
+      refreshVersions.set(conversationId, requestVersion);
+      refreshInFlightVersions.set(conversationId, requestVersion);
+      try {
+        const messages = await loader(conversationId);
+        if (
+          refreshVersions.get(conversationId) !== requestVersion ||
+          !isCurrent()
+        ) {
+          return;
+        }
+        const current = snapshot[conversationId] ?? emptyConversationState;
+        update(conversationId, () => ({
+          ...current,
+          status: 'ready',
+          messages: normalizeMessages(conversationId, [
+            ...current.messages,
+            ...messages,
+          ]),
+          error: null,
+        }));
+      } catch {
+        if (
+          refreshVersions.get(conversationId) !== requestVersion ||
+          !isCurrent()
+        ) {
+          return;
+        }
+        // Background refresh failures preserve the current transcript and retry surface.
+      } finally {
+        if (
+          refreshInFlightVersions.get(conversationId) === requestVersion
+        ) {
+          refreshInFlightVersions.delete(conversationId);
+        }
+      }
+    },
+    hydrate: (conversationId, messages) => {
+      invalidateRefresh(conversationId);
       update(conversationId, (current) => ({
         ...current,
         status: 'ready',
         messages: normalizeMessages(conversationId, messages),
         error: null,
-      })),
+      }));
+    },
     append: (conversationId, message) => {
       if (message.conversationId !== conversationId) return;
       update(conversationId, (current) => ({
@@ -128,12 +201,25 @@ export function createMessagesStore(): MessagesStore {
     },
     clear: (conversationId) => {
       if (conversationId === undefined) {
+        const conversationIds = new Set<ConversationId>([
+          ...Object.keys(snapshot),
+          ...loadVersions.keys(),
+          ...refreshVersions.keys(),
+        ]);
+        conversationIds.forEach((id) => {
+          loadVersions.set(id, (loadVersions.get(id) ?? 0) + 1);
+          invalidateRefresh(id);
+        });
         snapshot = {};
-        loadVersions.clear();
+        // Keep request generations monotonic so cleared requests cannot match new ones.
         notify();
         return;
       }
-      loadVersions.delete(conversationId);
+      loadVersions.set(
+        conversationId,
+        (loadVersions.get(conversationId) ?? 0) + 1,
+      );
+      invalidateRefresh(conversationId);
       const next = { ...snapshot };
       delete next[conversationId];
       snapshot = next;

@@ -203,6 +203,11 @@ export class PostgresAgentRegistry implements AgentRegistry {
           false,
         );
         if (!row) throw new AgentNotFoundError();
+        await ensureChatRuntimeOnReplay(db, {
+          tenantId: command.owner.tenantId,
+          agentDefinitionId: row.definition_id,
+          activeAgentVersionId: row.id,
+        });
         return mapVersion(row);
       }
       const rowResult = await db.query<VersionRow>(
@@ -240,6 +245,11 @@ export class PostgresAgentRegistry implements AgentRegistry {
           published.id,
         ],
       );
+      await upsertChatRuntime(db, {
+        tenantId: command.owner.tenantId,
+        agentDefinitionId: published.definition_id,
+        activeAgentVersionId: published.id,
+      });
       return mapVersion(published);
     });
   }
@@ -250,8 +260,20 @@ export class PostgresAgentRegistry implements AgentRegistry {
   ): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
       `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
+       WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+      [definitionId, owner.tenantId, owner.principalType, owner.principalId],
+    );
+    return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
+  }
+
+  public async findManagedDefinitionByTenant(input: {
+    readonly tenantId: string;
+    readonly definitionId: string;
+  }): Promise<AgentDefinition | null> {
+    const result = await this.database.query<DefinitionRow>(
+      `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
        WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-      [definitionId, owner.tenantId],
+      [input.definitionId, input.tenantId],
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
@@ -261,8 +283,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
     versionId: string,
   ): Promise<ManagedAgentVersion | null> {
     const result = await this.database.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-      [versionId, owner.tenantId],
+      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+      [versionId, owner.tenantId, owner.principalType, owner.principalId],
     );
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
@@ -283,15 +305,17 @@ export class PostgresAgentRegistry implements AgentRegistry {
     const values: unknown[] = [
       command.definitionId,
       owner.tenantId,
+      owner.principalType,
+      owner.principalId,
       command.limit + 1,
     ];
     const cursorSql = cursor
-      ? ` AND (created_at,id) > ($4::timestamptz,$5::uuid)`
+      ? ` AND (created_at,id) > ($6::timestamptz,$7::uuid)`
       : '';
     if (cursor) values.push(cursor.createdAt, cursor.id);
     const result = await this.database.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE definition_id=$1 AND tenant_id=$2
-        AND managed_discriminator='managed_agent_v1'${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $3`,
+      `SELECT * FROM agent_versions WHERE definition_id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4
+        AND managed_discriminator='managed_agent_v1'${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $5`,
       values,
     );
     const rows = [...(result.rows ?? [])];
@@ -312,8 +336,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
     lock: boolean,
   ): Promise<VersionRow | null> {
     const result = await db.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'${lock ? ' FOR UPDATE' : ''}`,
-      [id, owner.tenantId],
+      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'${lock ? ' FOR UPDATE' : ''}`,
+      [id, owner.tenantId, owner.principalType, owner.principalId],
     );
     return result.rows?.[0] ?? null;
   }
@@ -375,6 +399,49 @@ export class PostgresAgentRegistry implements AgentRegistry {
       // Preserve the original work/commit error.
     }
   }
+}
+
+async function upsertChatRuntime(
+  db: PostgresQueryable,
+  input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+    readonly activeAgentVersionId: string;
+  },
+): Promise<void> {
+  await db.query(
+    `INSERT INTO agent_chat_runtimes
+       (tenant_id, agent_definition_id, active_agent_version_id, epoch, status, created_at, updated_at)
+     VALUES ($1, $2, $3, 1, 'available', now(), now())
+     ON CONFLICT (tenant_id, agent_definition_id)
+     DO UPDATE SET
+       active_agent_version_id = EXCLUDED.active_agent_version_id,
+       epoch = CASE
+         WHEN agent_chat_runtimes.active_agent_version_id IS DISTINCT FROM EXCLUDED.active_agent_version_id
+           THEN agent_chat_runtimes.epoch + 1
+         ELSE agent_chat_runtimes.epoch
+       END,
+       status = 'available',
+       updated_at = now()`,
+    [input.tenantId, input.agentDefinitionId, input.activeAgentVersionId],
+  );
+}
+
+async function ensureChatRuntimeOnReplay(
+  db: PostgresQueryable,
+  input: {
+    readonly tenantId: string;
+    readonly agentDefinitionId: string;
+    readonly activeAgentVersionId: string;
+  },
+): Promise<void> {
+  await db.query(
+    `INSERT INTO agent_chat_runtimes
+       (tenant_id, agent_definition_id, active_agent_version_id, epoch, status, created_at, updated_at)
+     VALUES ($1, $2, $3, 1, 'available', now(), now())
+     ON CONFLICT (tenant_id, agent_definition_id) DO NOTHING`,
+    [input.tenantId, input.agentDefinitionId, input.activeAgentVersionId],
+  );
 }
 
 async function claimIdempotency(
@@ -449,12 +516,12 @@ async function loadImportResult(
   versionId: string,
 ) {
   const d = await db.query<DefinitionRow>(
-    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-    [definitionId, owner.tenantId],
+    `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+    [definitionId, owner.tenantId, owner.principalType, owner.principalId],
   );
   const v = await db.query<VersionRow>(
-    `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-    [versionId, owner.tenantId],
+    `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+    [versionId, owner.tenantId, owner.principalType, owner.principalId],
   );
   if (!d.rows?.[0] || !v.rows?.[0]) throw new AgentNotFoundError();
   return {

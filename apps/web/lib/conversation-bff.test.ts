@@ -35,6 +35,7 @@ const conversation = {
   conversation_id: 'conv-1',
   kind: 'direct' as const,
   title: 'A conversation',
+  direct_agent: null,
   topic: null,
   created_at: '2026-08-20T00:00:00.000Z',
   updated_at: '2026-08-20T00:00:01.000Z',
@@ -58,30 +59,32 @@ const message = {
 
 describe('conversation BFF', () => {
   it('supports list, read, and post through the configured server client', async () => {
-    upstream.listConversations.mockResolvedValue({ conversations: [conversation] });
+    upstream.listConversations.mockResolvedValue({
+      conversations: [conversation],
+    });
     upstream.getConversation.mockResolvedValue({ conversation });
     upstream.postConversationMessage.mockResolvedValue({
       message,
       dispatch_enqueued: true,
     });
 
-    const sessionId = 'opaque-session-happy';
-    await expect(listConversationBff(sessionId)).resolves.toEqual({
+    await expect(listConversationBff()).resolves.toEqual({
       conversations: [
         {
           conversation_id: 'conv-1',
           kind: 'direct',
           title: 'A conversation',
+          direct_agent: null,
           topic: null,
           created_at: conversation.created_at,
           updated_at: conversation.updated_at,
         },
       ],
     });
-    await expect(readConversationBff(sessionId, 'conv-1')).resolves.toEqual({
+    await expect(readConversationBff('conv-1')).resolves.toEqual({
       conversation: expect.objectContaining({ conversation_id: 'conv-1' }),
     });
-    await expect(postConversationBff(sessionId, 'conv-1', 'hello')).resolves.toEqual({
+    await expect(postConversationBff('conv-1', 'hello')).resolves.toEqual({
       message: expect.objectContaining({ message_id: 'msg-1', body: 'hello' }),
       dispatch_enqueued: true,
     });
@@ -89,17 +92,20 @@ describe('conversation BFF', () => {
     expect(upstream.postConversationMessage).toHaveBeenCalledWith('conv-1', 'hello');
   });
 
-  it('rejects an unlisted id before either upstream read or mutation', async () => {
-    await expect(readConversationBff('opaque-session-red', 'not-listed')).rejects.toMatchObject({
+  it('forwards an unknown id to the upstream membership check', async () => {
+    upstream.getConversation.mockRejectedValue(new AgentServerError(404, 'not_found'));
+    upstream.postConversationMessage.mockRejectedValue(new AgentServerError(404, 'not_found'));
+
+    await expect(readConversationBff('not-listed')).rejects.toMatchObject({
       status: 404,
-      code: 'conversation_not_allowed',
+      code: 'conversation_unavailable',
     });
-    await expect(postConversationBff('opaque-session-red', 'not-listed', 'intent')).rejects.toMatchObject({
+    await expect(postConversationBff('not-listed', 'intent')).rejects.toMatchObject({
       status: 404,
-      code: 'conversation_not_allowed',
+      code: 'conversation_unavailable',
     });
-    expect(upstream.getConversation).not.toHaveBeenCalled();
-    expect(upstream.postConversationMessage).not.toHaveBeenCalled();
+    expect(upstream.getConversation).toHaveBeenCalledWith('not-listed');
+    expect(upstream.postConversationMessage).toHaveBeenCalledWith('not-listed', 'intent');
   });
 
   it('does not expose an upstream internal error body or code', async () => {
@@ -107,9 +113,7 @@ describe('conversation BFF', () => {
       new AgentServerError(500, 'database_password=super-secret'),
     );
 
-    const result = await listConversationBff('opaque-session-error').catch(
-      conversationErrorResponse,
-    );
+    const result = await listConversationBff().catch(conversationErrorResponse);
     expect(result).toEqual({
       status: 502,
       body: {

@@ -6,8 +6,7 @@ export type PublicChatWorkCard = {
   workId: string;
   workRef: string;
   title: string;
-  productState:
-    'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
+  productState: 'running' | 'needs_you' | 'complete' | 'problem' | 'not_captured';
   problemKind: 'failed' | 'cancelled' | 'not_captured' | null;
   attentionReason: 'completion_approval_pending' | 'not_captured' | null;
   resultSummary: string | null;
@@ -26,11 +25,7 @@ export class WorkChatCardBffError extends Error {
   }
 }
 
-export async function readWorkChatCardBff(
-  sessionId: string | undefined,
-  workId: string,
-): Promise<PublicChatWorkCard> {
-  requireSession(sessionId);
+export async function readWorkChatCardBff(workId: string): Promise<PublicChatWorkCard> {
   if (!isUuid(workId)) throw new WorkChatCardBffError(400, 'invalid_request');
 
   try {
@@ -47,7 +42,6 @@ export function workChatCardErrorResponse(error: unknown) {
       : new WorkChatCardBffError(502, 'work_chat_card_unavailable');
   const messages: Record<string, string> = {
     invalid_request: 'The Work identifier is invalid.',
-    missing_session: 'A product session is required.',
     work_not_found: 'The requested Work was not found.',
     work_chat_card_unavailable: 'Work Chat cards are unavailable.',
   };
@@ -62,18 +56,11 @@ export function workChatCardErrorResponse(error: unknown) {
   };
 }
 
-function requireSession(sessionId: string | undefined): void {
-  if (!isNonEmptyString(sessionId))
-    throw new WorkChatCardBffError(401, 'missing_session');
-}
-
 function sanitizeError(error: unknown): WorkChatCardBffError {
   if (error instanceof WorkChatCardBffError) return error;
   if (error instanceof AgentServerError) {
-    if (error.status === 404)
-      return new WorkChatCardBffError(404, 'work_not_found');
-    if (error.status === 503)
-      return new WorkChatCardBffError(503, 'work_chat_card_unavailable');
+    if (error.status === 404) return new WorkChatCardBffError(404, 'work_not_found');
+    if (error.status === 503) return new WorkChatCardBffError(503, 'work_chat_card_unavailable');
   }
   return new WorkChatCardBffError(502, 'work_chat_card_unavailable');
 }
@@ -113,9 +100,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 function isUuid(value: unknown): value is string {
   return (
     typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value,
-    )
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
   );
 }
 
@@ -127,9 +112,7 @@ function nullableString(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
 }
 
-function isProductState(
-  value: unknown,
-): value is PublicChatWorkCard['productState'] {
+function isProductState(value: unknown): value is PublicChatWorkCard['productState'] {
   return (
     value === 'running' ||
     value === 'needs_you' ||
@@ -139,30 +122,15 @@ function isProductState(
   );
 }
 
-function isProblemKind(
-  value: unknown,
-): value is PublicChatWorkCard['problemKind'] {
-  return (
-    value === null ||
-    value === 'failed' ||
-    value === 'cancelled' ||
-    value === 'not_captured'
-  );
+function isProblemKind(value: unknown): value is PublicChatWorkCard['problemKind'] {
+  return value === null || value === 'failed' || value === 'cancelled' || value === 'not_captured';
 }
 
-function isAttentionReason(
-  value: unknown,
-): value is PublicChatWorkCard['attentionReason'] {
-  return (
-    value === null ||
-    value === 'completion_approval_pending' ||
-    value === 'not_captured'
-  );
+function isAttentionReason(value: unknown): value is PublicChatWorkCard['attentionReason'] {
+  return value === null || value === 'completion_approval_pending' || value === 'not_captured';
 }
 
-function isResultCaptureStatus(
-  value: unknown,
-): value is PublicChatWorkCard['resultCaptureStatus'] {
+function isResultCaptureStatus(value: unknown): value is PublicChatWorkCard['resultCaptureStatus'] {
   return (
     value === 'present' ||
     value === 'not_present' ||

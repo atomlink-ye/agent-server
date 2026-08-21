@@ -12,7 +12,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
 
   public async runTurn(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
-  ): Promise<{ readonly body: string }> {
+  ): Promise<{ readonly body: string; readonly provider: string }> {
     const result = await this.runtime.executeTurn({
       runId: chatRunId(input.conversationId, input.triggerMessageId),
       systemPrompt: buildSystemPrompt(input),
@@ -26,7 +26,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
       ...(input.extensions ? { extensions: input.extensions } : {}),
       proposalLimit: 0,
     });
-    return { body: result.text };
+    return { body: result.text, provider: result.provider };
   }
 }
 
@@ -45,9 +45,9 @@ function buildSystemPrompt(
     `Trigger message ID: ${input.triggerMessageId}`,
     `Agent definition ID: ${input.agentDefinitionId}`,
     `Agent version ID: ${input.agentVersionId}`,
-    `\nTRUSTED AGENT INSTRUCTIONS:\n${input.instructions}`,
-    `\nCAPABILITY SUMMARY:\n${deterministicJson(input.capabilitySummary)}`,
-    `\nALLOWLISTED AGENT HOME PROJECTION:\n${deterministicJson(input.agentHome)}`,
+    `\nTRUSTED AGENT INSTRUCTIONS:\n${input.brain.instructions}`,
+    `\nCAPABILITY SUMMARY:\n${deterministicJson(input.brain.capabilitySummary)}`,
+    `\nALLOWLISTED AGENT HOME PROJECTION:\n${deterministicJson(input.brain.agentHome)}`,
   ].join('\n');
 }
 

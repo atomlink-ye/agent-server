@@ -58,6 +58,8 @@ export const testConfig = {
   port: 3_000,
   logLevel: 'error',
   serviceName: 'agent-server-test',
+  directChatPlane: 'execution_runtime',
+  productWorkPlane: 'execution_runtime',
   teamCompletionApprovalRequired: false,
   skillRegistryRoot: '/tmp/agent-server-test/skill-registry',
   serviceAccounts: [

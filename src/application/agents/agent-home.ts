@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { AccessContext } from '../../platform/access-context.js';
+export interface AgentHomeAccessContext {
+  readonly tenantId: string;
+  readonly workspaceId: string;
+  readonly principalType: string;
+  readonly principalId: string;
+}
 import type {
   AgentHomeRepository,
   AgentHomeEntryRow,
@@ -30,7 +35,7 @@ export class ListAgentHomeEntries {
   ) {}
 
   public async execute(input: {
-    accessContext: AccessContext;
+    accessContext: AgentHomeAccessContext;
     agentDefinitionId: string;
     namespace: AgentHomeNamespace;
     scopeParams: AgentHomeScopeParams;
@@ -80,7 +85,7 @@ export class ReadAgentHomeEntry {
   ) {}
 
   public async execute(input: {
-    accessContext: AccessContext;
+    accessContext: AgentHomeAccessContext;
     agentDefinitionId: string;
     namespace: AgentHomeNamespace;
     scopeParams: AgentHomeScopeParams;
@@ -136,7 +141,7 @@ export class WriteAgentHomeEntry {
   ) {}
 
   public async execute(input: {
-    accessContext: AccessContext;
+    accessContext: AgentHomeAccessContext;
     agentDefinitionId: string;
     namespace: AgentHomeNamespace;
     scopeParams: AgentHomeScopeParams;

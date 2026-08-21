@@ -8,9 +8,11 @@ import type {
   ChatDispatchRepository,
 } from '../ports/chat-dispatch-repository.js';
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
+import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { AgentChatRuntime } from '../../domain/chat/agent-chat-runtime.js';
 import type { ChatMessage } from '../../domain/chat/chat-message.js';
 import { ChatDeliveryReconciler } from './chat-delivery-reconciler.js';
+import { ChatBrainResolver } from './chat-brain-resolver.js';
 
 class FakeConversationRepository implements ConversationRepository {
   private runtimes = new Map<string, AgentChatRuntime>();
@@ -58,14 +60,20 @@ class FakeConversationRepository implements ConversationRepository {
         authorType === 'agent_definition'
           ? (input.author.runtimeEpoch ?? null)
           : null,
+      provider:
+        authorType === 'agent_definition'
+          ? (input.author.provider ?? null)
+          : null,
       workRef: input.workRef ?? null,
       createdAt: new Date().toISOString(),
     });
-    const convMessages = this.messagesByConversationId.get(
-      input.author.conversationId,
-    ) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(input.author.conversationId) ?? [];
     convMessages.push(message);
-    this.messagesByConversationId.set(input.author.conversationId, convMessages);
+    this.messagesByConversationId.set(
+      input.author.conversationId,
+      convMessages,
+    );
     return message;
   }
 
@@ -77,9 +85,8 @@ class FakeConversationRepository implements ConversationRepository {
     // D4 guard test requires that this returns the FULL cross-conversation set
     // if called incorrectly. We store all messages in one big map, so we filter
     // only by conversationId.
-    const convMessages = this.messagesByConversationId.get(
-      input.conversationId,
-    ) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(input.conversationId) ?? [];
     return convMessages;
   }
 
@@ -113,7 +120,8 @@ class FakeConversationRepository implements ConversationRepository {
   }
 
   addMessage(conversationId: string, message: ChatMessage): void {
-    const convMessages = this.messagesByConversationId.get(conversationId) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(conversationId) ?? [];
     convMessages.push(message);
     this.messagesByConversationId.set(conversationId, convMessages);
   }
@@ -157,10 +165,51 @@ class FakeChatDispatchRepository implements ChatDispatchRepository {
 class FakeChatTurnProvider implements ChatTurnProvider {
   lastRunTurnInput: Parameters<ChatTurnProvider['runTurn']>[0] | null = null;
 
-  async runTurn(input: Parameters<ChatTurnProvider['runTurn']>[0]): Promise<{ readonly body: string }> {
+  async runTurn(
+    input: Parameters<ChatTurnProvider['runTurn']>[0],
+  ): Promise<{ readonly body: string; readonly provider: string }> {
     this.lastRunTurnInput = input;
-    return { body: '[mock reply]' };
+    return { body: '[mock reply]', provider: 'mock' };
   }
+}
+
+const fakeConversationWorkLinks = {
+  findWorkIdsByOrigin: async () => [],
+};
+
+function createTestBrainResolver(): ChatBrainResolver {
+  const managedDefinitions = {
+    findManagedDefinitionByTenant: async (input: {
+      readonly tenantId: string;
+      readonly definitionId: string;
+    }) =>
+      Object.freeze({
+        id: input.definitionId,
+        tenantId: input.tenantId,
+        workspaceId: 'workspace-test',
+        principalType: 'service_account',
+        principalId: 'service-account-test',
+        normalizedName: 'test-agent',
+        displayName: 'Test Agent',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        roleLabel: null,
+        summary: null,
+      }),
+  };
+  const agentResolution: AgentResolutionApi = {
+    resolvePublished: async (versionId) => ({
+      source: 'managed',
+      id: versionId,
+      instructions: 'test instructions',
+      modelPolicyRef: 'free-only',
+      skills: [],
+      toolRefs: [],
+    }),
+  };
+  return new ChatBrainResolver(managedDefinitions, agentResolution, {
+    execute: async () => [],
+  });
 }
 
 describe('ChatDeliveryReconciler', () => {
@@ -194,6 +243,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -217,12 +267,13 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
       undefined,
       () => new Date('2026-07-22T10:00:00Z'),
     );
 
-    // Manually call reconcileOne via accessing private method via type casting
-    await (reconciler as any).reconcileOne(dispatch);
+    await reconciler.reconcileOne(dispatch);
 
     // Verify provider was called with messages from conv-1 only
     expect(provider.lastRunTurnInput).not.toBeNull();
@@ -275,6 +326,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -293,6 +345,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -316,6 +369,8 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -327,8 +382,8 @@ describe('ChatDeliveryReconciler', () => {
     expect(provider.lastRunTurnInput!.messages[0]!.body).toBe("What's up?");
 
     // Assert strongly that Alice's secret is NOT in the input
-    const allBodiesInInput = provider.lastRunTurnInput!.messages
-      .map((m) => m.body)
+    const allBodiesInInput = provider
+      .lastRunTurnInput!.messages.map((m) => m.body)
       .join(' ');
     expect(allBodiesInInput).not.toContain('xyz789');
     expect(allBodiesInInput).not.toContain('Alice');
@@ -356,6 +411,8 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     await (reconciler as any).reconcileOne(dispatch);
@@ -397,6 +454,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -414,6 +472,7 @@ describe('ChatDeliveryReconciler', () => {
       agentDefinitionId: null,
       agentVersionId: null,
       runtimeEpoch: null,
+      provider: null,
       workRef: null,
       createdAt: new Date().toISOString(),
     });
@@ -449,6 +508,8 @@ describe('ChatDeliveryReconciler', () => {
       convRepo,
       dispatchRepo,
       provider,
+      createTestBrainResolver(),
+      fakeConversationWorkLinks,
     );
 
     const processed = await reconciler.reconcilePendingDispatches(50);

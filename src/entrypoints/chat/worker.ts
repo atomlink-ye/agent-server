@@ -8,6 +8,7 @@ export type ChatDeliveryWorkerOptions = {
   readonly onError?: (failure: {
     readonly phase: 'claim' | 'deliver' | 'loop';
     readonly errorName: string;
+    readonly error: unknown;
   }) => void;
 };
 
@@ -73,7 +74,7 @@ export class ChatDeliveryWorker {
         this.#options.leaseMs,
       );
     } catch (error: unknown) {
-      this.fail('claim', error);
+      this.report('claim', error);
       return false;
     }
     if (!dispatch) return false;
@@ -92,10 +93,18 @@ export class ChatDeliveryWorker {
   ): void {
     this.#stopping = true;
     this.#running = false;
+    this.report(phase, error);
+  }
+
+  private report(
+    phase: 'claim' | 'deliver' | 'loop',
+    error: unknown,
+  ): void {
     try {
       this.#options.onError?.({
         phase,
         errorName: error instanceof Error ? error.name : 'UnknownError',
+        error,
       });
     } catch {
       /* safe reporting */

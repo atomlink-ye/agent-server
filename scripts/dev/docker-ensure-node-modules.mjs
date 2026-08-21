@@ -16,8 +16,14 @@ import { computeDependencyStamp } from './dependency-stamp.mjs';
 
 const workspaceNodeModules = '/workspace/node_modules';
 const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
+const workspaceWebViteNodeModules = '/workspace/apps/web-vite/node_modules';
 const imageNodeModules = '/home/node/image-node_modules';
 const imageWebNodeModules = '/home/node/image-web-node_modules';
+const imageWebViteNodeModules = '/home/node/image-web-vite-node_modules';
+const includeWebViteNodeModules =
+  process.env.DOCKER_ENSURE_WEB_VITE_NODE_MODULES === 'true';
+const includeWebNodeModules =
+  process.env.DOCKER_ENSURE_WEB_NODE_MODULES !== 'false';
 const restoreLockPath = `${workspaceNodeModules}/.dependency-restore.lock`;
 const restoreLockTimeoutMs = Number(
   process.env.DEPENDENCY_RESTORE_LOCK_TIMEOUT_MS ?? 120000,
@@ -26,16 +32,45 @@ const command = process.argv.slice(2);
 
 const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
 
-// Keep this deliberately small. These links are the runtime entrypoints used
-// by the daemon and the TypeScript commands; a matching stamp does not prove
-// that an exported/imported dependency tree retained them.
+// Keep this deliberately small. These are the runtime entrypoints used by the
+// daemon, TypeScript commands, and the Vite browser client; a matching stamp
+// does not prove that an exported/imported dependency tree retained them.
 const criticalArtifacts = [
   {
     displayPath: 'node_modules/.bin/tsc',
     relativePath: '.bin/tsc',
     workspace: workspaceNodeModules,
     image: imageNodeModules,
+    accessMode: constants.X_OK,
   },
+  ...(includeWebViteNodeModules
+    ? [
+        {
+          displayPath: 'apps/web-vite/node_modules/.bin/vite',
+          relativePath: '.bin/vite',
+          workspace: workspaceWebViteNodeModules,
+          image: imageWebViteNodeModules,
+          accessMode: constants.X_OK,
+        },
+        {
+          displayPath: 'apps/web-vite/node_modules/react/jsx-dev-runtime.js',
+          relativePath: 'react/jsx-dev-runtime.js',
+          workspace: workspaceWebViteNodeModules,
+          image: imageWebViteNodeModules,
+          accessMode: constants.F_OK,
+        },
+      ]
+    : []),
+];
+
+const dependencyTrees = [
+  [workspaceNodeModules, imageNodeModules],
+  ...(includeWebNodeModules
+    ? [[workspaceWebNodeModules, imageWebNodeModules]]
+    : []),
+  ...(includeWebViteNodeModules
+    ? [[workspaceWebViteNodeModules, imageWebViteNodeModules]]
+    : []),
 ];
 
 const checkCriticalArtifacts = async (scope, rootKind) => {
@@ -44,14 +79,15 @@ const checkCriticalArtifacts = async (scope, rootKind) => {
     relativePath,
     workspace,
     image,
+    accessMode,
   } of criticalArtifacts) {
     const root = rootKind === 'image' ? image : workspace;
-    const path = `${root}/${relativePath.replace('apps/web/', '')}`;
+    const path = `${root}/${relativePath}`;
     try {
-      await access(path, constants.X_OK);
+      await access(path, accessMode);
     } catch (error) {
       const code = error?.code ? ` (${error.code})` : '';
-      return `${scope} missing executable ${displayPath}${code}`;
+      return `${scope} missing required artifact ${displayPath}${code}`;
     }
   }
   return null;
@@ -129,9 +165,9 @@ if (command.length === 0) {
     await runWorkspaceWritePreflight();
     const expectedStamp = await computeDependencyStamp('/workspace');
     const imageStamps = await Promise.all(
-      [imageNodeModules, imageWebNodeModules].map(async (nodeModules) => {
+      dependencyTrees.map(async ([, imageTree]) => {
         try {
-          return await readFile(stampPath(nodeModules), 'utf8');
+          return await readFile(stampPath(imageTree), 'utf8');
         } catch {
           return null;
         }
@@ -155,10 +191,10 @@ if (command.length === 0) {
       await acquireRestoreLock();
       try {
         const currentStamps = await Promise.all(
-          [workspaceNodeModules, workspaceWebNodeModules].map(
-            async (nodeModules) => {
+          dependencyTrees.map(
+            async ([workspaceTree]) => {
               try {
-                return await readFile(stampPath(nodeModules), 'utf8');
+                return await readFile(stampPath(workspaceTree), 'utf8');
               } catch {
                 return null;
               }
@@ -182,17 +218,37 @@ if (command.length === 0) {
             await clearAndRestore(workspaceNodeModules, imageNodeModules, [
               '.dependency-restore.lock',
             ]);
-            await clearAndRestore(workspaceWebNodeModules, imageWebNodeModules);
+            if (includeWebNodeModules) {
+              await clearAndRestore(
+                workspaceWebNodeModules,
+                imageWebNodeModules,
+              );
+            }
+            if (includeWebViteNodeModules) {
+              await clearAndRestore(
+                workspaceWebViteNodeModules,
+                imageWebViteNodeModules,
+              );
+            }
             await writeFile(
               stampPath(workspaceNodeModules),
               expectedStamp,
               'utf8',
             );
-            await writeFile(
-              stampPath(workspaceWebNodeModules),
-              expectedStamp,
-              'utf8',
-            );
+            if (includeWebNodeModules) {
+              await writeFile(
+                stampPath(workspaceWebNodeModules),
+                expectedStamp,
+                'utf8',
+              );
+            }
+            if (includeWebViteNodeModules) {
+              await writeFile(
+                stampPath(workspaceWebViteNodeModules),
+                expectedStamp,
+                'utf8',
+              );
+            }
             const restoredArtifactFailure =
               (await checkCriticalArtifacts(
                 'restored workspace dependency tree',

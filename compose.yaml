@@ -25,6 +25,11 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     init: true
+    # Development Compose is the only server deployment defined in this
+    # repository. Keep startup fail-fast, but let Compose retry a process that
+    # lost the Postgres readiness race instead of leaving the stack permanently
+    # health-starting under node --watch.
+    restart: on-failure
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,6 +43,8 @@ services:
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: agent-server
+      AGENT_SERVER_DIRECT_CHAT_PLANE: execution_runtime
+      AGENT_SERVER_PRODUCT_WORK_PLANE: execution_runtime
       RUNTIME_ADAPTER: ${RUNTIME_ADAPTER:-paseo}
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY:-}
       PASEO_CONNECT_TIMEOUT_MS: ${PASEO_CONNECT_TIMEOUT_MS:-}
@@ -115,6 +122,9 @@ services:
       start_period: 45m
 
   web:
+    # Keep the image tag independent of the Compose project so acceptance can
+    # reuse the sandbox-template web image instead of rebuilding it.
+    image: agent-server-web:latest
     build:
       context: .
       dockerfile: Dockerfile

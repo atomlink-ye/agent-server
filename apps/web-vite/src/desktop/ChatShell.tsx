@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +10,9 @@ import { ChatComposer } from '../components/chat/ChatComposer';
 import { ChatTranscript } from '../components/chat/ChatTranscript';
 import type { ChatCommands } from '../components/chat/contracts';
 import { ConversationsPane } from './ConversationsPane';
+import Rail, { type DesktopTab } from './Rail';
+import TitleBar from './TitleBar';
+import { WorkPane } from './WorkPane';
 import { createAppStore, type AppStore } from '../stores/app';
 import {
   createConversationsStore,
@@ -25,6 +29,7 @@ export interface ChatShellProps {
 }
 
 const sendFailureMessage = 'Unable to send this message. Please try again.';
+const messageRefreshIntervalMs = 3000;
 
 export function ChatShell({
   commands,
@@ -34,6 +39,7 @@ export function ChatShell({
   returnConversationId = null,
 }: ChatShellProps) {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<DesktopTab>('conversations');
   const appSelectionStore = useMemo(
     () => providedAppStore ?? createAppStore(),
     [providedAppStore],
@@ -101,6 +107,72 @@ export function ChatShell({
     void messageStore.load(conversationId, commands.loadMessages);
   }, [commands.loadMessages, conversationId, messageStore]);
 
+  useEffect(() => {
+    if (activeTab !== 'conversations' || !conversationId) return;
+
+    let disposed = false;
+    let visibilityGeneration = 0;
+    let refreshInFlight = false;
+    let intervalId: number | null = null;
+
+    const stopPolling = (): void => {
+      if (intervalId === null) return;
+      window.clearInterval(intervalId);
+      intervalId = null;
+    };
+
+    const refresh = (): void => {
+      if (
+        disposed ||
+        refreshInFlight ||
+        document.visibilityState !== 'visible'
+      ) {
+        return;
+      }
+      const requestGeneration = visibilityGeneration;
+      refreshInFlight = true;
+      void messageStore
+        .refresh(
+          conversationId,
+          commands.loadMessages,
+          () =>
+            !disposed &&
+            requestGeneration === visibilityGeneration &&
+            document.visibilityState === 'visible',
+        )
+        .then(
+          () => {
+            refreshInFlight = false;
+          },
+          () => {
+            refreshInFlight = false;
+          },
+        );
+    };
+
+    const startPolling = (): void => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      stopPolling();
+      intervalId = window.setInterval(refresh, messageRefreshIntervalMs);
+    };
+
+    const handleVisibilityChange = (): void => {
+      visibilityGeneration += 1;
+      stopPolling();
+      if (document.visibilityState === 'visible') startPolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    startPolling();
+
+    return () => {
+      disposed = true;
+      visibilityGeneration += 1;
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeTab, commands.loadMessages, conversationId, messageStore]);
+
   const send = useCallback(
     async (body: string): Promise<void> => {
       if (!conversationId || !messageStore.beginSend(conversationId, body)) return;
@@ -158,6 +230,13 @@ export function ChatShell({
     [navigate],
   );
 
+  const openWorkFromPane = useCallback(
+    (workId: string): void => {
+      navigate(`/work/${encodeURIComponent(workId)}`);
+    },
+    [navigate],
+  );
+
   const handleSelect = useCallback(
     (selectedConversationId: string): void => {
       appSelectionStore.select(selectedConversationId);
@@ -167,46 +246,98 @@ export function ChatShell({
 
   return (
     <div className="app-shell">
-      <ConversationsPane
-        commands={commands}
-        appStore={appSelectionStore}
-        conversationsStore={conversationListStore}
-        onSelectConversation={handleSelect}
-      />
+      <Rail activeTab={activeTab} onSelectTab={setActiveTab} />
 
-      <main className="chat-panel">
-        <header className="chat-header">
-          <div>
-            <span className="eyebrow">Workspace</span>
-            <h1>{selectedConversation?.title ?? 'Untitled conversation'}</h1>
-          </div>
-          <button className="icon-button" type="button" aria-label="More options" disabled>
-            ···
-          </button>
-        </header>
+      {activeTab === 'conversations' ? (
+        <>
+          <ConversationsPane
+            commands={commands}
+            appStore={appSelectionStore}
+            conversationsStore={conversationListStore}
+            onSelectConversation={handleSelect}
+          />
 
-        <section className="chat-content" aria-label="Conversation">
-          <ChatTranscript
-            conversationId={conversationId}
-            hasConversations={conversationState.conversations.length > 0}
-            state={messageState}
-            onRetry={retryMessages}
-            onOpenWork={openWork}
-          />
-          <ChatComposer
-            draft={messageState?.draft ?? ''}
-            sending={messageState?.sendStatus === 'sending'}
-            disabled={conversationId === null}
-            sendError={messageState?.sendError ?? null}
-            canRetry={messageState?.sendStatus === 'failed'}
-            onDraftChange={setDraft}
-            onSend={(body) => void send(body)}
-            onRetry={retrySend}
-          />
-        </section>
-      </main>
+          <main className="chat-panel">
+            <TitleBar section="Conversations" />
+            <header className="chat-header">
+              <div className="chat-header-title">
+                <span className="conversation-header-avatar" aria-hidden="true">
+                  {selectedConversation
+                    ? conversationDisplayName(selectedConversation)
+                        .slice(0, 1)
+                        .toUpperCase() || 'C'
+                    : 'C'}
+                </span>
+                <div>
+                  <span className="eyebrow">Conversation</span>
+                  <h1>
+                    {selectedConversation
+                      ? conversationDisplayName(selectedConversation)
+                      : 'Conversation'}
+                  </h1>
+                </div>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="More options"
+                disabled
+              >
+                ···
+              </button>
+            </header>
+
+            <section className="chat-content" aria-label="Conversation">
+              <ChatTranscript
+                conversationId={conversationId}
+                hasConversations={conversationState.conversations.length > 0}
+                state={messageState}
+                onRetry={retryMessages}
+                onOpenWork={openWork}
+              />
+              <ChatComposer
+                draft={messageState?.draft ?? ''}
+                sending={messageState?.sendStatus === 'sending'}
+                disabled={conversationId === null}
+                sendError={messageState?.sendError ?? null}
+                canRetry={messageState?.sendStatus === 'failed'}
+                onDraftChange={setDraft}
+                onSend={(body) => void send(body)}
+                onRetry={retrySend}
+              />
+            </section>
+          </main>
+        </>
+      ) : (
+        <>
+          <WorkPane commands={commands} onOpenWork={openWorkFromPane} />
+          <main className="chat-panel work-main">
+            <TitleBar section="Work" />
+            <section className="work-main-content" aria-label="Work overview">
+              <div className="work-main-empty">
+                <span className="work-main-icon" aria-hidden="true">
+                  ✓
+                </span>
+                <h1>Choose a Work item</h1>
+                <p>Select a real Work item from the pane to view its status.</p>
+              </div>
+            </section>
+          </main>
+        </>
+      )}
     </div>
   );
+}
+
+function conversationDisplayName(conversation: {
+  readonly kind: 'direct' | 'group';
+  readonly title: string | null;
+  readonly directAgent: { readonly displayName: string | null } | null;
+}): string {
+  if (conversation.kind === 'direct') {
+    return conversation.directAgent?.displayName?.trim() || 'Agent';
+  }
+  return conversation.title ?? 'Conversation';
 }
 
 export default ChatShell;

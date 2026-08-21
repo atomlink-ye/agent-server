@@ -47,7 +47,7 @@ profiles:
     runtime:
       enabled: true
       adapter: paseo
-      provider: opencode
+      provider: claude
       model: opencode-go/deepseek-v4-flash
     compose:
       transport: repository
@@ -64,3 +64,20 @@ profiles:
       - paseo-runtime
       - agent-server
       - web
+
+  acceptance:
+    extends: full
+    services:
+      - provider-toolchain-init
+      - paseo-runtime-state-init
+      - paseo-runtime
+      - agent-server
+      - web
+      - web-vite
+    compose:
+      transport: repository
+      files:
+        - compose.yaml
+        - compose.runtime.yaml
+        - compose.external-runtime.yaml
+        - compose.web-vite.yaml

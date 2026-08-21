@@ -1,4 +1,5 @@
 import type { ExecutionExtensionBinding } from './execution-plane.js';
+import type { ResolvedChatBrain } from '../chat/chat-brain-resolver.js';
 
 export interface ChatTurnMessage {
   readonly authorType: 'principal' | 'agent_definition';
@@ -41,10 +42,8 @@ export interface ChatTurnProvider {
     readonly conversationId: string;
     /** Server-derived durable message that triggered this turn. */
     readonly triggerMessageId: string;
-    readonly instructions: string;
-    readonly capabilitySummary: ChatTurnCapabilitySummary;
-    readonly agentHome: ChatAgentHomeProjection;
+    readonly brain: ResolvedChatBrain;
     readonly messages: readonly ChatTurnMessage[];
     readonly extensions?: ExecutionExtensionBinding;
-  }): Promise<{ readonly body: string }>;
+  }): Promise<{ readonly body: string; readonly provider: string }>;
 }

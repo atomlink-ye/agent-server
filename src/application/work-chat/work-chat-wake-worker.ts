@@ -156,7 +156,7 @@ export class WorkChatWakeWorker {
         this.#options.leaseMs,
       );
     } catch (error: unknown) {
-      this.fail('claim', error);
+      this.report('claim', error);
       return observed;
     }
     if (!delivery) return observed;
@@ -175,7 +175,7 @@ export class WorkChatWakeWorker {
         this.#options.workerId,
       );
     } catch (error: unknown) {
-      this.fail('deliver', error);
+      this.report('deliver', error);
     }
     return true;
   }
@@ -188,7 +188,7 @@ export class WorkChatWakeWorker {
         limit: this.#candidateLimit,
       });
     } catch (error: unknown) {
-      this.fail('scan', error);
+      this.report('scan', error);
       return false;
     }
 
@@ -198,7 +198,7 @@ export class WorkChatWakeWorker {
       try {
         card = await this.#dependencies.projection.getByWorkId(key);
       } catch (error: unknown) {
-        this.fail('scan', error);
+        this.report('scan', error);
         continue;
       }
 
@@ -218,7 +218,7 @@ export class WorkChatWakeWorker {
         });
         if (result !== 'unchanged') observed = true;
       } catch (error: unknown) {
-        this.fail('scan', error);
+        this.report('scan', error);
         break;
       }
     }
@@ -233,7 +233,7 @@ export class WorkChatWakeWorker {
       const link = await this.#conversationResolver.resolve(key);
       return link?.conversationId ?? null;
     } catch (error: unknown) {
-      this.fail('scan', error);
+      this.report('scan', error);
       return null;
     }
   }

@@ -19,7 +19,11 @@ const DEPENDENCY_FIELDS = [
   'overrides',
 ];
 
-const PACKAGE_FILES = ['package.json', 'apps/web/package.json'];
+const PACKAGE_FILES = [
+  'package.json',
+  'apps/web/package.json',
+  'apps/web-vite/package.json',
+];
 // The lockfile pins every resolved version, so it is hashed whole: any change
 // to it is by definition a change to the dependency tree.
 const VERBATIM_FILES = ['pnpm-lock.yaml', 'pnpm-workspace.yaml'];

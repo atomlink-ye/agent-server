@@ -33,6 +33,19 @@ export interface AgentRegistry {
   ): Promise<ManagedAgentVersionPage | null>;
 }
 
+/** The narrow managed-definition read seam used by chat admission. */
+export interface ManagedAgentDefinitionRead {
+  findDefinition(
+    owner: ManagedAgentOwner,
+    definitionId: string,
+  ): Promise<AgentDefinition | null>;
+  /** Internal delivery seam: tenant-scoped managed identity read. */
+  findManagedDefinitionByTenant(input: {
+    readonly tenantId: string;
+    readonly definitionId: string;
+  }): Promise<AgentDefinition | null>;
+}
+
 export interface ListAgentVersionsCommand {
   readonly definitionId: string;
   readonly cursor: string | null;

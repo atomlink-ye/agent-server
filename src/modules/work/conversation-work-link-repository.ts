@@ -18,11 +18,12 @@ type ConversationWorkLinkRow = {
   workspace_id: string;
   work_id: string;
   conversation_id: string;
+  trigger_message_id: string | null;
   created_at: string | Date;
 };
 
 const LINK_COLUMNS =
-  'tenant_id,workspace_id,work_id,conversation_id,created_at';
+  'tenant_id,workspace_id,work_id,conversation_id,trigger_message_id,created_at';
 const FIND_CONVERSATION_ID_SQL =
   'SELECT conversation_id FROM conversation_work_links WHERE work_id=$1 AND tenant_id=$2 AND workspace_id=$3';
 
@@ -35,11 +36,12 @@ export class PostgresConversationWorkLinkRepository implements ConversationWorkL
     readonly workspaceId: string;
     readonly workId: string;
     readonly conversationId: string;
+    readonly triggerMessageId: string;
   }): Promise<ConversationWorkLink> {
     const inserted = await this.database.query<ConversationWorkLinkRow>(
       `INSERT INTO conversation_work_links
-         (tenant_id,workspace_id,work_id,conversation_id,created_at)
-       VALUES ($1,$2,$3,$4,$5)
+         (tenant_id,workspace_id,work_id,conversation_id,trigger_message_id,created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (tenant_id,workspace_id,work_id) DO NOTHING
        RETURNING ${LINK_COLUMNS}`,
       [
@@ -47,6 +49,7 @@ export class PostgresConversationWorkLinkRepository implements ConversationWorkL
         input.workspaceId,
         input.workId,
         input.conversationId,
+        input.triggerMessageId,
         new Date().toISOString(),
       ],
     );
@@ -91,6 +94,21 @@ export class PostgresConversationWorkLinkRepository implements ConversationWorkL
     return (result.rows ?? []).map(mapLink);
   }
 
+  public async findWorkIdsByOrigin(input: {
+    readonly tenantId: string;
+    readonly conversationId: string;
+    readonly triggerMessageId: string;
+  }): Promise<readonly string[]> {
+    const result = await this.database.query<{ work_id: string }>(
+      `SELECT work_id
+       FROM conversation_work_links
+       WHERE tenant_id=$1 AND conversation_id=$2 AND trigger_message_id=$3
+       ORDER BY work_id ASC`,
+      [input.tenantId, input.conversationId, input.triggerMessageId],
+    );
+    return (result.rows ?? []).map((row) => row.work_id);
+  }
+
   private async findLink(input: {
     readonly tenantId: string;
     readonly workspaceId: string;
@@ -112,6 +130,7 @@ function mapLink(row: ConversationWorkLinkRow): ConversationWorkLink {
     workspaceId: row.workspace_id,
     workId: row.work_id,
     conversationId: row.conversation_id,
+    triggerMessageId: row.trigger_message_id ?? null,
     createdAt:
       row.created_at instanceof Date
         ? row.created_at.toISOString()

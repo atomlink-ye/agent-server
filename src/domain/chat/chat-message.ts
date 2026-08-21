@@ -11,6 +11,7 @@ export interface ChatMessage {
   readonly agentDefinitionId: string | null;
   readonly agentVersionId: string | null;
   readonly runtimeEpoch: number | null;
+  readonly provider: string | null;
   readonly workRef: string | null;
   /** Optional durable delivery identity; legacy messages have no value. */
   readonly deliveryId?: string | null;

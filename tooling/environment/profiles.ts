@@ -26,6 +26,7 @@ const supportedProfiles = new Set<LocalEnvironmentName>([
   'core',
   'runtime',
   'full',
+  'acceptance',
 ]);
 
 type RawRecord = Record<string, unknown>;

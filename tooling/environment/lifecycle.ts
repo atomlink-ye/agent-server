@@ -63,7 +63,7 @@ async function resolvePorts(
 ): Promise<EnvironmentPorts> {
   if (profile === 'postgres') return { postgres: await freePort() };
   if (!testMode) return {};
-  if (profile === 'core' || profile === 'runtime' || profile === 'full') {
+  if (profile === 'core' || profile === 'runtime' || profile === 'full' || profile === 'acceptance') {
     return {
       postgres: await freePort(),
       api: await freePort(),
@@ -115,12 +115,12 @@ function urlsFor(state: LocalEnvironmentState): LocalEnvironmentUrls {
         ? {}
         : state.profile === 'core' ||
             state.profile === 'runtime' ||
-            state.profile === 'full'
+            state.profile === 'full' || state.profile === 'acceptance'
           ? { api: 'http://127.0.0.1:3000' }
           : {}),
-    ...(state.profile === 'full' && state.ports.web
+    ...((state.profile === 'full' || state.profile === 'acceptance') && state.ports.web
       ? { web: `http://127.0.0.1:${state.ports.web}` }
-      : !state.testMode && state.profile === 'full'
+      : !state.testMode && (state.profile === 'full' || state.profile === 'acceptance')
         ? { web: 'http://127.0.0.1:3001' }
         : {}),
   };
@@ -130,6 +130,37 @@ function extraComposeFiles(state: LocalEnvironmentState): readonly string[] {
   return state.testMode && state.profile !== 'postgres'
     ? ['compose.test-ports.yaml']
     : [];
+}
+
+// 🔴 渲染 Compose 配置必须走【和实际起栈完全相同】的 command + args + environment。
+// 早先这里只返回 .args 并丢掉 .command：compose.ts:61-65 在 transport=repository 时
+// command 是 scripts/dev/docker-compose wrapper（它会 source provider defaults 并建 volume 环境），
+// 丢掉它意味着 ① 拼出的 `docker -p ... -f ... config` 连子命令都不对，
+// ② 渲染绕过 wrapper，与实际启动的 effective 环境不同（层数相同也没用）。
+// environment 也必须由 environmentFor 产出：调用方另拼一份就构成【判据自证】——
+// 渲染方自己补上 environmentFor 漏掉的端口变量，判据就再也发现不了 R3-73 那类遗漏。
+export async function composeInvocationForLocalEnvironment(
+  state: LocalEnvironmentState,
+  baseEnvironment: NodeJS.ProcessEnv = process.env,
+): Promise<{
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly environment: NodeJS.ProcessEnv;
+}> {
+  const profile = await resolveLocalEnvironment(state.profile, {
+    environment: baseEnvironment,
+    overrides: state.runtimeOverrides,
+  });
+  const invocation = composeInvocation(
+    profile,
+    state.projectName,
+    extraComposeFiles(state),
+  );
+  return {
+    command: invocation.command,
+    args: invocation.args,
+    environment: environmentFor(baseEnvironment, state, profile.runtime),
+  };
 }
 
 export async function stopLocalEnvironment(
@@ -155,7 +186,13 @@ export async function stopLocalEnvironment(
       ...invocation.args,
       'down',
       '--remove-orphans',
-      ...(state.testMode ? ['--volumes'] : []),
+      // 🔴 acceptance 不整体删卷：卷里存着从镜像拷出来的 node_modules，删掉就等于
+      // 每次重跑都要再拷一遍整棵树（实测冷卷上 UI 要 546 秒才应答）。
+      // ⛔ 但【数据卷必须删】—— 留着 postgres-data 会让下一次运行撞上
+      //   FATAL: the database system is not yet accepting connections
+      //   DETAIL: Consistent recovery state has not been yet reached.
+      // 每次验收要的是干净的数据库 + 热的依赖，这是两件事，⛔ 不要一起处理。
+      ...(state.testMode && state.profile !== 'acceptance' ? ['--volumes'] : []),
     ],
     environment: environmentFor(
       options.environment ?? process.env,
@@ -165,6 +202,23 @@ export async function stopLocalEnvironment(
     ...(logPath ? { logPath } : {}),
     inheritOutput: options.inheritOutput ?? !state.testMode,
   });
+
+  // 🔴 acceptance 保留依赖卷、但必须丢掉【数据】卷。留着 postgres-data，下一次运行
+  // 会在 postgres 还在 WAL 恢复时就去连它：
+  //   FATAL: the database system is not yet accepting connections
+  //   DETAIL: Consistent recovery state has not been yet reached.
+  // ⛔ 不许用"等久一点"来绕开 —— 验收要的是一个【干净】的数据库，不是一个恢复完的旧库。
+  if (state.testMode && state.profile === 'acceptance') {
+    for (const volume of ['postgres-data', 'local-state', 'paseo-runtime-state']) {
+      await (options.executor ?? executeCommand)({
+        command: 'docker',
+        args: ['volume', 'rm', '-f', `${state.projectName}_${volume}`],
+        environment: options.environment ?? process.env,
+        ...(logPath ? { logPath } : {}),
+        inheritOutput: false,
+      }).catch(() => undefined);
+    }
+  }
 }
 
 export async function startLocalEnvironment(
@@ -211,7 +265,10 @@ export async function startLocalEnvironment(
     args: [
       ...invocation.args,
       'up',
-      ...(profile.compose.transport === 'repository' ? ['--build'] : []),
+      // Acceptance runs in a prebuilt sandbox image. Its dependency stamp is
+      // verified by the container entrypoint, so rebuilding here only turns
+      // environment setup into an unbounded Docker build.
+      ...(profile.compose.transport === 'repository' && options.profile !== 'acceptance' ? ['--build'] : []),
       '-d',
       '--wait',
       ...profile.services,

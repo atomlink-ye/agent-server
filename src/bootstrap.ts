@@ -78,6 +78,12 @@ import {
 } from './entrypoints/work-chat/worker.js';
 import { PostgresWorkChatWakeStateRepository } from './infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
 import { PostgresConversationWorkLinkRepository } from './modules/work/conversation-work-link-repository.js';
+import { ChatBrainResolver } from './application/chat/chat-brain-resolver.js';
+import { ListAgentHomeEntries } from './application/agents/agent-home.js';
+import { PostgresAgentHomeRepository } from './infrastructure/postgres/postgres-agent-home-repository.js';
+import { PostgresAgentHomeDefinitionSource } from './infrastructure/postgres/postgres-agent-home-definition-source.js';
+import { noExternalDependencies } from './application/health/readiness.js';
+import type { ConversationWorkLinkRepository } from './domain/chat/chat-work-origin-ref.js';
 
 export interface ServiceResources {
   readonly dispatcher: Pick<RunDispatcher, 'stop'>;
@@ -201,6 +207,16 @@ function safeLifecycleError(label: string, error: unknown): Error {
   return safe;
 }
 
+async function closeRuntimeAndPool(
+  runtime: Pick<ExecutionRuntimeService, 'close'>,
+  pool: { end(): Promise<void> },
+): Promise<void> {
+  const failures: Error[] = [];
+  await cleanup('runtime', () => runtime.close(), failures);
+  await cleanup('pool', () => pool.end(), failures);
+  throwFailures(failures, 'startup cleanup failed');
+}
+
 function turnLeaseDurationMs(executionTimeoutMs: number): number {
   return Math.max(executionTimeoutMs * 2 + 300_000, 30_000);
 }
@@ -294,10 +310,20 @@ export async function createService(
   const taskRepository = new PostgresTaskRepository(pool);
   const admissionRepository = new PostgresAdmissionRepository(pool);
   const sessions = new PostgresSessionRepository(pool);
-  const conversations = new PostgresConversationRepository(pool);
+  const directChatPlane = config.directChatPlane;
+  const productWorkPlane = config.productWorkPlane;
+  const directChatEnabled = directChatPlane !== 'absent';
+  const productWorkEnabled = productWorkPlane !== 'absent';
+  const conversations = directChatEnabled
+    ? new PostgresConversationRepository(pool)
+    : undefined;
   const conversationWorkEntitlements =
-    new PostgresConversationWorkEntitlementRepository(pool);
-  const chatDispatches = new PostgresChatDispatchRepository(pool);
+    directChatEnabled && productWorkEnabled
+      ? new PostgresConversationWorkEntitlementRepository(pool)
+      : undefined;
+  const chatDispatches = directChatEnabled
+    ? new PostgresChatDispatchRepository(pool)
+    : undefined;
   const submitSessionTurn = new SubmitSessionTurn(sessions);
   const channelRepository = new PostgresChannelRepository(pool);
   const reviewSurfaceRepository = new PostgresLarkReviewSurfaceRepository(pool);
@@ -374,39 +400,73 @@ export async function createService(
     ],
     ...(options.debugRuntime ? { debugRuntime: options.debugRuntime } : {}),
   });
-  const workModule = createWorkModule({
-    database: pool,
-    definitions: resourceModule.definitionReadApi,
-    definitionResolution: resourceModule.workDefinitionResolution,
-    execution: new InvokeTaskExecutionAdmission(invokeTask),
-    executionFacts: new PostgresExecutionFactQuery(pool),
-    conversations: new PostgresConversationRepository(pool),
-    runtimeCapabilities: runtimeModule,
-  });
-  runtimeModule.registerToolContributor(workModule.contributeRuntime);
-  const chatWorkCardProjection = workModule.createChatWorkCardProjection();
-  const workChatWorker = createWorkChatWakeWorker(
-    {
-      workSource: new PostgresWorkChatWakeWorkSource(pool),
-      state: new PostgresWorkChatWakeStateRepository(pool),
-      projection: chatWorkCardProjection,
-      conversationWorkLinks: new PostgresConversationWorkLinkRepository(pool),
-      conversations,
-      conversationAgentDefinitions:
-        new PostgresWorkChatConversationAgentResolver(pool),
-    },
-    {
-      workerId: `${workerId}:work-chat`,
-      leaseMs: leaseDurationMs,
-      onError: ({ phase, errorName }) => {
-        logger.log('error', 'work_chat.wake_worker.failed', {
-          phase,
-          error_name: errorName,
-          worker_id: `${workerId}:work-chat`,
-        });
-      },
-    },
-  );
+  const runtimeRequiresReadiness =
+    directChatPlane === 'execution_runtime' ||
+    productWorkPlane === 'execution_runtime';
+  if (
+    !options.singleRunDebug &&
+    runtimeRequiresReadiness &&
+    config.runtime?.adapter === 'none'
+  ) {
+    await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+    throw new Error(
+      'Declared Direct Chat/Product Work execution runtime requires a runtime adapter.',
+    );
+  }
+  if (!options.singleRunDebug && runtimeRequiresReadiness) {
+    const ready = await runtimeModule.executionRuntime.ensureReady();
+    if (!ready) {
+      await closeRuntimeAndPool(runtimeModule.executionRuntime, pool);
+      throw new Error(
+        'Declared Direct Chat/Product Work execution runtime is not ready.',
+      );
+    }
+  }
+
+  let workModule: ReturnType<typeof createWorkModule> | undefined;
+  let workChatWorker: WorkChatWakeWorker | undefined;
+  let conversationWorkLinks: ConversationWorkLinkRepository | undefined =
+    undefined;
+  if (productWorkEnabled) {
+    workModule = createWorkModule({
+      database: pool,
+      definitions: resourceModule.definitionReadApi,
+      definitionResolution: resourceModule.workDefinitionResolution,
+      execution: new InvokeTaskExecutionAdmission(invokeTask),
+      executionFacts: new PostgresExecutionFactQuery(pool),
+      ...(directChatEnabled && conversations ? { conversations } : {}),
+      runtimeCapabilities: runtimeModule,
+    });
+    runtimeModule.registerToolContributor(workModule.contributeRuntime);
+    const productConversationWorkLinks =
+      new PostgresConversationWorkLinkRepository(pool);
+    conversationWorkLinks = productConversationWorkLinks;
+    if (directChatEnabled && conversations) {
+      const chatWorkCardProjection = workModule.createChatWorkCardProjection();
+      workChatWorker = createWorkChatWakeWorker(
+        {
+          workSource: new PostgresWorkChatWakeWorkSource(pool),
+          state: new PostgresWorkChatWakeStateRepository(pool),
+          projection: chatWorkCardProjection,
+          conversationWorkLinks: productConversationWorkLinks,
+          conversations,
+          conversationAgentDefinitions:
+            new PostgresWorkChatConversationAgentResolver(pool),
+        },
+        {
+          workerId: `${workerId}:work-chat`,
+          leaseMs: leaseDurationMs,
+          onError: ({ phase, errorName }) => {
+            logger.log('error', 'work_chat.wake_worker.failed', {
+              phase,
+              error_name: errorName,
+              worker_id: `${workerId}:work-chat`,
+            });
+          },
+        },
+      );
+    }
+  }
   const {
     executionRuntime,
     executionRuns,
@@ -414,36 +474,53 @@ export async function createService(
     extensions: runtimeExtensionBinder,
     mcpHost: runtimeMcpServer,
   } = runtimeModule;
-  const chatTurnProvider =
-    config.chatTurnProvider === 'execution_runtime' &&
-    !options.singleRunDebug &&
-    config.runtime?.adapter !== 'none'
-      ? new ExecutionRuntimeChatTurnProvider(executionRuntime)
-      : new MockChatTurnProvider();
-  const chatDeliveryReconciler = new ChatDeliveryReconciler(
-    conversations,
-    chatDispatches,
-    chatTurnProvider,
-    logger,
-    undefined,
-    conversationWorkEntitlements,
-    runtimeExtensionBinder,
-  );
-  const chatWorker = new ChatDeliveryWorker(
-    chatDispatches,
-    chatDeliveryReconciler,
-    {
-      workerId: `${workerId}:chat`,
-      leaseMs: leaseDurationMs,
-      onError: ({ phase, errorName }) => {
-        logger.log('error', 'chat.delivery_worker.failed', {
-          phase,
-          error_name: errorName,
-          worker_id: `${workerId}:chat`,
-        });
+  let chatWorker: ChatDeliveryWorker | undefined;
+  if (directChatEnabled && conversations && chatDispatches) {
+    const chatTurnProvider =
+      directChatPlane === 'execution_runtime'
+        ? new ExecutionRuntimeChatTurnProvider(executionRuntime)
+        : new MockChatTurnProvider();
+    const chatBrainResolver = new ChatBrainResolver(
+      resourceModule.managedAgentDefinitions,
+      resourceModule.agentResolutionApi,
+      new ListAgentHomeEntries(
+        new PostgresAgentHomeRepository(pool),
+        new PostgresAgentHomeDefinitionSource(pool),
+      ),
+    );
+    const chatDeliveryReconciler = new ChatDeliveryReconciler(
+      conversations,
+      chatDispatches,
+      chatTurnProvider,
+      chatBrainResolver,
+      conversationWorkLinks,
+      logger,
+      undefined,
+      conversationWorkEntitlements,
+      runtimeExtensionBinder,
+    );
+    chatWorker = new ChatDeliveryWorker(
+      chatDispatches,
+      chatDeliveryReconciler,
+      {
+        workerId: `${workerId}:chat`,
+        leaseMs: leaseDurationMs,
+        onError: ({ phase, errorName, error }) => {
+          logger.log('error', 'chat.delivery_worker.failed', {
+            phase,
+            error_name: errorName,
+            error_message: error instanceof Error ? error.message : undefined,
+            error_stack: error instanceof Error ? error.stack : undefined,
+            postgres_code:
+              typeof (error as { code?: unknown })?.code === 'string'
+                ? (error as { code: string }).code
+                : undefined,
+            worker_id: `${workerId}:chat`,
+          });
+        },
       },
-    },
-  );
+    );
+  }
   const synthesizeMemoryDocument = new SynthesizeMemoryDocument(
     executionRuntime,
   );
@@ -650,7 +727,9 @@ export async function createService(
       repository: channelRepository,
     });
   }
-  const readiness = runtimeModule.readiness;
+  const readiness = runtimeRequiresReadiness
+    ? runtimeModule.readiness
+    : noExternalDependencies;
   const app = createApp({
     config,
     logger,
@@ -666,13 +745,14 @@ export async function createService(
     teamMessages,
     tasks: taskRepository,
     sessions,
-    conversations,
-    chatDispatches,
-    conversationWorkEntitlements,
+    ...(conversations ? { conversations } : {}),
+    ...(chatDispatches ? { chatDispatches } : {}),
+    managedAgentDefinitions: resourceModule.managedAgentDefinitions,
+    ...(conversationWorkEntitlements ? { conversationWorkEntitlements } : {}),
     submitSessionTurn,
     events,
     cancelTask,
-    workModule,
+    ...(workModule ? { workModule } : {}),
     memoryModule,
     resourceModule,
   });
@@ -682,8 +762,8 @@ export async function createService(
       dispatcher,
       ...(larkWorker ? { larkWorker } : {}),
       ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-      chatWorker,
-      workChatWorker,
+      ...(chatWorker ? { chatWorker } : {}),
+      ...(workChatWorker ? { workChatWorker } : {}),
       ...(larkReceiver ? { larkReceiver } : {}),
       runtime: executionRuntime,
       runtimeMcpServer,
@@ -729,8 +809,8 @@ export async function createService(
         dispatcher,
         ...(larkWorker ? { larkWorker } : {}),
         ...(larkOutboxWorker ? { larkOutboxWorker } : {}),
-        chatWorker,
-        workChatWorker,
+        ...(chatWorker ? { chatWorker } : {}),
+        ...(workChatWorker ? { workChatWorker } : {}),
         ...(larkReceiver ? { larkReceiver } : {}),
         runtime: executionRuntime,
         runtimeMcpServer,

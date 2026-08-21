@@ -123,6 +123,10 @@ export type AgentConversation = {
   conversation_id: string;
   kind: 'direct' | 'group';
   title: string | null;
+  direct_agent: {
+    agent_definition_id: string;
+    display_name: string | null;
+  } | null;
   topic: string | null;
   created_at: string;
   updated_at: string;
@@ -145,10 +149,20 @@ export type AgentConversationMessage = {
 export class AgentServerError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code = 'agent_server_error') {
+  readonly body: unknown;
+  readonly hasJsonBody: boolean;
+
+  constructor(
+    status: number,
+    code = 'agent_server_error',
+    body: unknown = null,
+    hasJsonBody = false,
+  ) {
     super(code);
     this.status = status;
     this.code = code;
+    this.body = body;
+    this.hasJsonBody = hasJsonBody;
   }
 }
 
@@ -186,13 +200,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     let code = 'agent_server_error';
+    let body: unknown = null;
+    let hasJsonBody = false;
     try {
-      const body = (await response.json()) as { error?: { code?: string } };
-      if (body.error?.code) code = body.error.code;
+      body = await response.json();
+      hasJsonBody = true;
+      const error = asRecord(body)?.error;
+      const errorCode = asRecord(error)?.code;
+      if (typeof errorCode === 'string' && errorCode) code = errorCode;
     } catch {
       /* Keep the safe generic code. */
     }
-    throw new AgentServerError(response.status, code);
+    throw new AgentServerError(response.status, code, body, hasJsonBody);
   }
   return (await response.json()) as T;
 }
@@ -230,6 +249,15 @@ export async function listConversations(): Promise<{
   conversations: AgentConversation[];
 }> {
   return request('/api/v1/conversations');
+}
+
+export async function createConversation(
+  agentDefinitionId: string,
+): Promise<{ conversation: AgentConversation }> {
+  return request('/api/v1/conversations', {
+    method: 'POST',
+    body: JSON.stringify({ agent_definition_id: agentDefinitionId }),
+  });
 }
 
 export async function getConversation(

@@ -2,6 +2,7 @@ import 'server-only';
 
 import {
   AgentServerError,
+  createConversation,
   getConversation,
   listConversationMessages,
   listConversations,
@@ -12,12 +13,7 @@ import {
 
 export type PublicConversation = Pick<
   AgentConversation,
-  | 'conversation_id'
-  | 'kind'
-  | 'title'
-  | 'topic'
-  | 'created_at'
-  | 'updated_at'
+  'conversation_id' | 'kind' | 'title' | 'direct_agent' | 'topic' | 'created_at' | 'updated_at'
 >;
 
 export type PublicConversationMessage = Pick<
@@ -38,38 +34,47 @@ export type PublicConversationMessage = Pick<
 export class ConversationBffError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly body: unknown;
+  readonly preserveBody: boolean;
 
-  constructor(status: number, code: string) {
+  constructor(
+    status: number,
+    code: string,
+    options: { readonly body?: unknown; readonly preserveBody?: boolean } = {},
+  ) {
     super(code);
     this.name = 'ConversationBffError';
     this.status = status;
     this.code = code;
+    this.body = options.body ?? null;
+    this.preserveBody = options.preserveBody === true;
   }
 }
 
-const allowedConversationIds = new Map<string, Set<string>>();
-
-export async function listConversationBff(sessionId: string | undefined) {
-  const sessionKey = requireSession(sessionId);
+export async function listConversationBff() {
   try {
     const upstream = await listConversations();
     if (!Array.isArray(upstream.conversations)) throw invalidUpstream();
     const conversations = upstream.conversations.map(sanitizeConversation);
-    allowedConversationIds.set(
-      sessionKey,
-      new Set(conversations.map((conversation) => conversation.conversation_id)),
-    );
     return { conversations };
   } catch (error) {
     throw sanitizeError(error);
   }
 }
 
-export async function readConversationBff(
-  sessionId: string | undefined,
-  conversationId: string,
-) {
-  requireAllowedConversation(sessionId, conversationId);
+export async function createConversationBff(agentDefinitionId: unknown) {
+  if (!isNonEmptyString(agentDefinitionId)) throw new ConversationBffError(400, 'invalid_request');
+  try {
+    const upstream = await createConversation(agentDefinitionId);
+    const conversation = sanitizeConversation(upstream.conversation);
+    return { conversation };
+  } catch (error) {
+    throw sanitizeCreateError(error);
+  }
+}
+
+export async function readConversationBff(conversationId: string) {
+  requireConversationId(conversationId);
   try {
     const upstream = await getConversation(conversationId);
     return { conversation: sanitizeConversation(upstream.conversation) };
@@ -78,14 +83,9 @@ export async function readConversationBff(
   }
 }
 
-export async function postConversationBff(
-  sessionId: string | undefined,
-  conversationId: string,
-  body: unknown,
-) {
-  requireAllowedConversation(sessionId, conversationId);
-  if (!isNonEmptyString(body))
-    throw new ConversationBffError(400, 'invalid_request');
+export async function postConversationBff(conversationId: string, body: unknown) {
+  requireConversationId(conversationId);
+  if (!isNonEmptyString(body)) throw new ConversationBffError(400, 'invalid_request');
   try {
     const upstream = await postConversationMessage(conversationId, body);
     return {
@@ -97,11 +97,8 @@ export async function postConversationBff(
   }
 }
 
-export async function readConversationMessagesBff(
-  sessionId: string | undefined,
-  conversationId: string,
-) {
-  requireAllowedConversation(sessionId, conversationId);
+export async function readConversationMessagesBff(conversationId: string) {
+  requireConversationId(conversationId);
   try {
     const upstream = await listConversationMessages(conversationId);
     if (!Array.isArray(upstream.messages)) throw invalidUpstream();
@@ -119,10 +116,14 @@ export function conversationErrorResponse(error: unknown) {
     error instanceof ConversationBffError
       ? error
       : new ConversationBffError(502, 'conversation_unavailable');
+  if (bffError.preserveBody) {
+    return {
+      status: bffError.status,
+      body: bffError.body,
+    };
+  }
   const messages: Record<string, string> = {
     invalid_request: 'The conversation request is invalid.',
-    missing_session: 'A product session is required.',
-    conversation_not_allowed: 'The requested conversation is unavailable.',
     conversation_unavailable: 'Conversations are unavailable.',
   };
   return {
@@ -136,22 +137,8 @@ export function conversationErrorResponse(error: unknown) {
   };
 }
 
-function requireSession(sessionId: string | undefined): string {
-  if (!isNonEmptyString(sessionId))
-    throw new ConversationBffError(401, 'missing_session');
-  return sessionId;
-}
-
-function requireAllowedConversation(
-  sessionId: string | undefined,
-  conversationId: string,
-): void {
-  const sessionKey = requireSession(sessionId);
-  if (
-    !isNonEmptyString(conversationId) ||
-    !allowedConversationIds.get(sessionKey)?.has(conversationId)
-  )
-    throw new ConversationBffError(404, 'conversation_not_allowed');
+function requireConversationId(conversationId: string): void {
+  if (!isNonEmptyString(conversationId)) throw new ConversationBffError(400, 'invalid_request');
 }
 
 function sanitizeError(error: unknown): ConversationBffError {
@@ -164,10 +151,35 @@ function sanitizeError(error: unknown): ConversationBffError {
   return new ConversationBffError(502, 'conversation_unavailable');
 }
 
+function sanitizeCreateError(error: unknown): ConversationBffError {
+  if (error instanceof ConversationBffError) return error;
+  if (
+    error instanceof AgentServerError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.hasJsonBody === true
+  ) {
+    return new ConversationBffError(error.status, 'conversation_create_failed', {
+      body: error.body,
+      preserveBody: true,
+    });
+  }
+  return new ConversationBffError(502, 'conversation_unavailable');
+}
+
 function sanitizeConversation(value: AgentConversation): PublicConversation {
   if (!value || typeof value.conversation_id !== 'string' || !value.conversation_id)
     throw invalidUpstream();
   if (value.kind !== 'direct' && value.kind !== 'group') throw invalidUpstream();
+  if (value.direct_agent !== null) {
+    if (
+      !value.direct_agent ||
+      !isNonEmptyString(value.direct_agent.agent_definition_id) ||
+      !nullableString(value.direct_agent.display_name)
+    ) {
+      throw invalidUpstream();
+    }
+  }
   if (!nullableString(value.title) || value.title === undefined) {
     if (value.title !== null) throw invalidUpstream();
   }
@@ -180,6 +192,7 @@ function sanitizeConversation(value: AgentConversation): PublicConversation {
     conversation_id: value.conversation_id,
     kind: value.kind,
     title: value.title,
+    direct_agent: value.direct_agent,
     topic: value.topic,
     created_at: value.created_at,
     updated_at: value.updated_at,
@@ -199,7 +212,8 @@ function sanitizeMessage(value: AgentConversationMessage): PublicConversationMes
   if (!nullableString(value.agent_version_id) || value.agent_version_id === undefined) {
     if (value.agent_version_id !== null) throw invalidUpstream();
   }
-  if (value.runtime_epoch !== null && !Number.isSafeInteger(value.runtime_epoch)) throw invalidUpstream();
+  if (value.runtime_epoch !== null && !Number.isSafeInteger(value.runtime_epoch))
+    throw invalidUpstream();
   if (!nullableString(value.work_ref) || value.work_ref === undefined) {
     if (value.work_ref !== null) throw invalidUpstream();
   }

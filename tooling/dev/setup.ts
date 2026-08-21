@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   commandAvailable,
   defaultHostDatabaseUrl,
@@ -31,7 +34,11 @@ export async function setupHostNative(
   return prepared;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isEntrypoint =
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isEntrypoint) {
   setupHostNative().catch((error: unknown) => {
     process.stderr.write(
       `setup failed: ${error instanceof Error ? error.message : String(error)}\n`,

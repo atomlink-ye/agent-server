@@ -1,5 +1,9 @@
 import type { ChatDeliveryReconciler } from '../../application/chat/chat-delivery-reconciler.js';
 import type { ChatDispatchRepository } from '../../application/ports/chat-dispatch-repository.js';
+import type {
+  StepWorker,
+  WorkerStepResult,
+} from '../../shared/workers/step-worker.js';
 
 export type ChatDeliveryWorkerOptions = {
   readonly workerId: string;
@@ -12,7 +16,7 @@ export type ChatDeliveryWorkerOptions = {
   }) => void;
 };
 
-export class ChatDeliveryWorker {
+export class ChatDeliveryWorker implements StepWorker {
   readonly #repository: Pick<ChatDispatchRepository, 'claimNext'>;
   readonly #reconciler: Pick<ChatDeliveryReconciler, 'reconcile'>;
   readonly #options: Required<
@@ -58,15 +62,8 @@ export class ChatDeliveryWorker {
     this.#loop = null;
   }
 
-  private async runLoop(): Promise<void> {
-    while (!this.#stopping) {
-      const processed = await this.processOnce();
-      if (!processed && !this.#stopping)
-        await this.delay(this.#options.pollIntervalMs);
-    }
-  }
-
-  private async processOnce(): Promise<boolean> {
+  /** Claim and reconcile at most one durable chat dispatch. */
+  public async step(): Promise<WorkerStepResult> {
     let dispatch;
     try {
       dispatch = await this.#repository.claimNext(
@@ -75,16 +72,24 @@ export class ChatDeliveryWorker {
       );
     } catch (error: unknown) {
       this.report('claim', error);
-      return false;
+      return { kind: 'idle' };
     }
-    if (!dispatch) return false;
+    if (!dispatch) return { kind: 'idle' };
 
     try {
       await this.#reconciler.reconcile(dispatch, this.#options.workerId);
     } catch (error: unknown) {
       this.fail('deliver', error);
     }
-    return true;
+    return { kind: 'processed', value: dispatch };
+  }
+
+  private async runLoop(): Promise<void> {
+    while (!this.#stopping) {
+      const result = await this.step();
+      if (result.kind === 'idle' && !this.#stopping)
+        await this.delay(this.#options.pollIntervalMs);
+    }
   }
 
   private fail(

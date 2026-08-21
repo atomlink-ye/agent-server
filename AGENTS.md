@@ -12,10 +12,11 @@ Repository documentation must remain usable without private Drive access. Curren
 
 1. [README](README.md) for the runnable baseline and commands.
 2. [Development](docs/development.md) for the host-native developer/test boundary.
-3. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
-4. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
-5. [Testing and evaluations](docs/quality/testing-and-evaluations.md) when changing verification/runtime setup.
-6. [Agent handbook](docs/agents.md) for implementation and handoff rules.
+3. [Frontend architecture](docs/frontend.md) when changing Web, browser API/BFF, Chat, Work UI, routing, or frontend dependencies.
+4. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
+5. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
+6. [Testing and evaluations](docs/quality/testing-and-evaluations.md) when changing verification/runtime setup.
+7. [Agent handbook](docs/agents.md) for implementation and handoff rules.
 
 Never infer that a documented target is implemented. Current code and observed behavior are primary implementation facts; tests are supporting repeatable verification.
 
@@ -27,6 +28,7 @@ Never infer that a documented target is implemented. Current code and observed b
 - HTTP callers cannot choose arbitrary paid models. Automatic selection must never silently select a paid model.
 - Prompts, credentials, tokens, raw provider errors, and private local paths must not enter ordinary responses or logs.
 - A public API, tenant/security/credential boundary, migration/durable-state contract, destructive behavior, or core dependency change is a Human Gate.
+- `apps/web` is the only browser application. It is React 18 + Vite + React Router with the Cumora-inspired coworker shell. Do not reintroduce Next.js, `apps/web-vite`, a second product shell, or frontend-held service credentials.
 
 ## Repository hygiene — mandatory
 
@@ -65,6 +67,7 @@ pnpm canary:golden-path
 - `pnpm dev:docker*` is an explicit production-like/compatibility topology, not a prerequisite for local edits/tests.
 - `tooling/dev/` owns host-native developer orchestration.
 - `tooling/environment/` + `config/local-environments.yaml` own Compose/production-like topology.
+- `apps/web` is the canonical Vite browser application on port 3001; browser-safe `/api/*` BFF routes are hosted by the Agent Server API process.
 
 Do not add an implicit Docker startup to a normal test command.
 
@@ -95,11 +98,12 @@ Deterministic software behavior belongs in Vitest. Model/Agent quality belongs i
 ## Repository map
 
 ```text
+apps/web/                    single React/Vite browser application and Cumora-style workspace shell
 src/domain/                 framework-free state and invariants
 src/application/            use cases and ports
 src/adapters/               external-system translations
 src/infrastructure/         storage/process-neutral infrastructure
-src/entrypoints/            HTTP/channel/CLI entrypoints
+src/entrypoints/            HTTP/channel/CLI entrypoints, including browser-safe Web BFF routes
 tests/harness/              reusable deterministic scenario composition + semantic seeds
 tests/contract/             public contract checks
 tests/integration/          component/datastore boundaries

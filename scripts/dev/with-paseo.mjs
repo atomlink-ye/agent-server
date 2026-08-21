@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -85,13 +85,22 @@ if (command.length === 0) {
         model: realProviderDefaults.PASEO_MODEL,
       });
     }
-    for (const [name, value] of Object.entries({
-      ...anthropicDefaults,
-      ANTHROPIC_API_KEY: process.env.OPENCODE_GO_API_KEY,
-    })) {
+    for (const [name, value] of Object.entries(anthropicDefaults)) {
       if (!process.env[name]?.trim()) process.env[name] = value;
     }
+    process.env.ANTHROPIC_BASE_URL = anthropicDefaults.ANTHROPIC_BASE_URL;
+    process.env.ANTHROPIC_API_KEY = process.env.OPENCODE_GO_API_KEY.trim();
   }
+  const claudeHome = join(runtimeRoot, 'home', '.claude');
+  const claudeSettingsPath = join(claudeHome, 'settings.json');
+  await mkdir(claudeHome, { recursive: true, mode: 0o700 });
+  await chmod(claudeHome, 0o700);
+  await writeFile(
+    claudeSettingsPath,
+    JSON.stringify({ env: { ANTHROPIC_MODEL: openCodeGoModel } }),
+    { mode: 0o600 },
+  );
+  await chmod(claudeSettingsPath, 0o600);
   const codexHome = join(runtimeRoot, 'home', '.codex');
   await mkdir(codexHome, { recursive: true, mode: 0o700 });
   await writeFile(

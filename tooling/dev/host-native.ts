@@ -62,7 +62,7 @@ export async function loadLocalDotEnv(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<NodeJS.ProcessEnv> {
   const result = { ...environment };
-  for (const fileName of ['.env', '.env.local']) {
+  for (const fileName of ['.env', '.env.local', '.local/model.env']) {
     let contents: string;
     try {
       contents = await readFile(resolve(repositoryRoot, fileName), 'utf8');

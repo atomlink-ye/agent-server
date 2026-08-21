@@ -136,11 +136,15 @@ export class ChatBrainResolver {
       agentDefinitionId: definition.id,
       conversationId: input.conversationId,
     });
+    const invocationContext = Object.freeze({
+      ...runtimeInvocationContextForChat(turnContext),
+      contextView,
+    });
 
     return Object.freeze({
       [resolvedChatBrainBrand]: true as const,
       turnContext,
-      invocationContext: runtimeInvocationContextForChat(turnContext),
+      invocationContext,
       agentOwner,
       contextView,
       instructions: resolvedVersion.instructions,

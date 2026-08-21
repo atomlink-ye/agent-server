@@ -118,7 +118,10 @@ describe('agent registry user principal authorization', () => {
     expect(published.status).toBe('published');
 
     // User principal CAN read the definition (tenant-wide read access)
-    const userCanRead = await registry.findDefinition(userOwner, definitionId);
+    const userCanRead = await registry.findManagedDefinitionByTenant({
+      tenantId: userOwner.tenantId,
+      definitionId,
+    });
     expect(userCanRead).not.toBeNull();
     expect(userCanRead?.id).toBe(definitionId);
     expect(userCanRead?.displayName).toBe('User Principal Test Agent');
@@ -166,10 +169,13 @@ describe('agent registry user principal authorization', () => {
     });
 
     // User principal CAN list versions (tenant-wide read access)
-    const page = await registry.listVersionsForOwner(userOwner, {
-      definitionId,
-      cursor: null,
-      limit: 10,
+    const page = await registry.listVersionsByTenant({
+      tenantId: userOwner.tenantId,
+      command: {
+        definitionId,
+        cursor: null,
+        limit: 10,
+      },
     });
 
     expect(page).not.toBeNull();

@@ -147,7 +147,13 @@ async function browser(mode, values) {
   const env = [
     `R2_BROWSER_MODE=${mode}`, `CHAT_BASE_URL=${browserBaseUrl}`,
     `PUBLISHED_AGENT_DEFINITION_ID=${values.definitionId}`, 'EVIDENCE_OUTPUT_DIR=/evidence',
-    ...(mode === 'send' ? [`R2_CONVERSATION_ID=${values.conversationId}`, `CHAT_PROMPT=${values.prompt}`, 'MAX_WAIT_MS=600000'] : []),
+    // 🔴 MAX_WAIT_MS 两种模式都要传。browser 侧是 required()（phase0-browser.mjs:22，
+    // 故意不给默认值，防止静默回落到 120000），而 deadline 是模块级的、create 模式的有界
+    // 等待也用它。先前只在 send 传 ⇒ step 6 browser create 直接死在
+    // "Missing required environment variable: MAX_WAIT_MS"。
+    // ⛔ 修法不是放宽 browser 的 required()，那会把守卫拆掉。
+    'MAX_WAIT_MS=600000',
+    ...(mode === 'send' ? [`R2_CONVERSATION_ID=${values.conversationId}`, `CHAT_PROMPT=${values.prompt}`] : []),
   ];
   const args = ['run', '--rm', '--network', 'host', '--user', '0',
     '-v', `${browserScript}:/workspace/r2-browser.mjs:ro`, '-v', `${output}:/evidence`,

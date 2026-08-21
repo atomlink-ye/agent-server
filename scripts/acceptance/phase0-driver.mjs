@@ -18,13 +18,14 @@ const operations = [];
 // 🔴 Auditor finding-1-24209abe(2)：本文件可被直接执行且含冻结的产品 POST 动作。
 // 闸门只挡在 run.mjs 里是不够的 —— 直接调用本文件即可绕过。所以这里也必须过闸门。
 // ⛔ 不许为了"方便调试"加环境变量跳过它。
-{
+const gateReport = await (async () => {
   const { checkPreconditions, assertPreconditions } = await import('./preconditions.mjs');
   const { fileURLToPath } = await import('node:url');
   const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-  const gateReport = await checkPreconditions(repoRoot);
-  assertPreconditions(gateReport);
-}
+  const report = await checkPreconditions(repoRoot);
+  assertPreconditions(report);
+  return report;
+})();
 
 await mkdir(evidence, { recursive: true });
 
@@ -153,10 +154,20 @@ async function browser(mode, values) {
     // "Missing required environment variable: MAX_WAIT_MS"。
     // ⛔ 修法不是放宽 browser 的 required()，那会把守卫拆掉。
     'MAX_WAIT_MS=600000',
+    // 🔴 浏览器容器内没有 git，它自己求不了 checkPreconditions（gate-report.mjs 顶部有判据）。
+    // 把 driver 刚刚求过值的那份报告挂进去，并显式给出本次运行对应的 HEAD：
+    // 报告的 head 与这个值不一致就红 ⇒ 挂一份【别的装置】的旧报告不会被放行。
+    `ACCEPTANCE_GATE_REPORT=/workspace/gate-report.json`,
+    `ACCEPTANCE_GATE_HEAD=${gateReport.head}`,
     ...(mode === 'send' ? [`R2_CONVERSATION_ID=${values.conversationId}`, `CHAT_PROMPT=${values.prompt}`] : []),
   ];
+  const gateReportHostPath = `${evidence}/driver-preconditions.json`;
+  await writeFile(gateReportHostPath, JSON.stringify(gateReport, null, 2));
   const args = ['run', '--rm', '--network', 'host', '--user', '0',
     '-v', `${browserScript}:/workspace/r2-browser.mjs:ro`, '-v', `${output}:/evidence`,
+    // phase0-browser.mjs 会 import './gate-report.mjs'，所以它必须和入口文件同目录挂进去。
+    '-v', `${browserScript.replace(/phase0-browser\.mjs$/, 'gate-report.mjs')}:/workspace/gate-report.mjs:ro`,
+    '-v', `${gateReportHostPath}:/workspace/gate-report.json:ro`,
     ...env.flatMap((item) => ['-e', item]), browserImage, 'node', '/workspace/r2-browser.mjs'];
   const { stdout, stderr } = await execFile('docker', args, { maxBuffer: 16 * 1024 * 1024 });
   await save(`browser-${mode}-stdout.json`, { stdout, stderr });

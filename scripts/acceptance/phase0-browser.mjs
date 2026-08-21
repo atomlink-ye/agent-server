@@ -134,10 +134,16 @@ const assertStatus = (response, expected, label) => {
 // 🔴 必须放在 try 之外：本文件的 catch 会把异常吞成一次"跑过并失败"的 run-result.json，
 // 而闸门失败【不是一次失败的运行】—— 它必须在任何浏览器动作之前中止，且不产出 run 结果。
 // ⛔ 不许加环境变量跳过它。
+// 🔴 容器内没有 git（判据：docker run --rm agent-server-web-testing:r2 bash -lc 'git --version'
+// → command not found），所以这里不能自己跑 checkPreconditions —— 那需要 git 和工作树。
+// 改为核验 driver 已经求过值、并挂载进来的那份报告，两个变量都是 required()：
+// ⛔ 不许加环境变量跳过它，⛔ 不许在缺变量时退回"不检查"。
 {
-  const { checkPreconditions, assertPreconditions } = await import('./preconditions.mjs');
-  const { fileURLToPath } = await import('node:url');
-  assertPreconditions(await checkPreconditions(fileURLToPath(new URL('../..', import.meta.url))));
+  const reportPath = required('ACCEPTANCE_GATE_REPORT');
+  const expectedHead = required('ACCEPTANCE_GATE_HEAD');
+  const { readFile } = await import('node:fs/promises');
+  const { assertGateReport } = await import('./gate-report.mjs');
+  assertGateReport(JSON.parse(await readFile(reportPath, 'utf8')), expectedHead);
 }
 
 try {

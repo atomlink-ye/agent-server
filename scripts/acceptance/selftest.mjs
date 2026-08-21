@@ -12,6 +12,7 @@ import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
 import { expectedPortsFromEnvironment, deriveTerminalFacts } from './run.mjs';
 import { parseServiceAccounts } from './credentials.mjs';
+import { assertGateReport } from './gate-report.mjs';
 
 const expectedPorts = {
   postgres: { hostIp: '127.0.0.1', published: 32873, target: 5432 },
@@ -128,5 +129,22 @@ const twoWorks = {
 assert.equal(deriveTerminalFacts(twoWorks, 'old-complete').workStatus, 'completed');
 assert.equal(deriveTerminalFacts(twoWorks, 'new-visible').workStatus, 'failed');
 mutation('screen shows failed Work while an earlier Work is complete', () => assertFinalSql(deriveTerminalFacts(twoWorks, 'new-visible')));
+
+
+// --- R4: 浏览器入口的闸门（容器内没有 git，只能核验挂进来的报告）---
+// 🔴 每一条都必须能红。绿的那条在最前面，作为"这个谓词不是恒红"的对偶。
+const goodReport = { ok: true, head: 'ffd9359c9', dirty: 'no', failed: [], results: [] };
+assert.equal(assertGateReport(goodReport, 'ffd9359c9').head, 'ffd9359c9');
+mutation('gate report says not ok', () => assertGateReport({ ...goodReport, ok: false, failed: ['CLEAN'] }, 'ffd9359c9'));
+mutation('gate report ok is truthy but not true', () => assertGateReport({ ...goodReport, ok: 'yes' }, 'ffd9359c9'));
+mutation('gate report head is unavailable', () => assertGateReport({ ...goodReport, head: 'unavailable' }, 'ffd9359c9'));
+mutation('gate report head is empty', () => assertGateReport({ ...goodReport, head: '   ' }, 'ffd9359c9'));
+mutation('gate report was produced against a dirty worktree', () => assertGateReport({ ...goodReport, dirty: '3 path(s)' }, 'ffd9359c9'));
+mutation('gate report lists failures despite ok', () => assertGateReport({ ...goodReport, failed: ['P3'] }, 'ffd9359c9'));
+// 🔴 这条是本次改动的要害：挂一份【别的装置】的旧报告必须红。
+mutation('gate report belongs to a different HEAD', () => assertGateReport(goodReport, '2ef2a5e'));
+mutation('expected HEAD was not supplied', () => assertGateReport(goodReport, undefined));
+mutation('expected HEAD is blank', () => assertGateReport(goodReport, '  '));
+mutation('gate report is not an object', () => assertGateReport(null, 'ffd9359c9'));
 
 console.log('PASS acceptance:selftest (offline; no Compose, database, provider, or sandbox used)');

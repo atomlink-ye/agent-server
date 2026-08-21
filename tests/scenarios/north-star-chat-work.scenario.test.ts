@@ -142,8 +142,7 @@ describe('North Star chat Work MVE', () => {
       environmentVersionId,
       memoryVersionIds: [],
     };
-    const parsed =
-      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+    const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
   name: b2b-product-work
@@ -1201,9 +1200,7 @@ spec:
         } as any,
       } as any);
       const mcp = new RuntimeMcpServer(
-        new RuntimeToolRegistry([
-          (context) => workModule.contributeRuntime(context),
-        ]),
+        new RuntimeToolRegistry([(context) => workModule.contributeRuntime(context)]),
       );
       servers.push(mcp);
       const binder = new LocalRuntimeExtensionBinder(
@@ -1213,8 +1210,7 @@ spec:
       );
       const provider = {
         async runTurn(input: any) {
-          if (!input.extensions)
-            throw new Error('reconciler did not bind extensions');
+          if (!input.extensions) throw new Error('reconciler did not bind extensions');
           const created = await executionPlane.createSession({
             runtimeSessionId: `chat-runtime-b4-${conversation.id}`,
             workspace: { cwd: process.cwd() },

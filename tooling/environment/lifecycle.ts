@@ -186,10 +186,12 @@ export async function stopLocalEnvironment(
       ...invocation.args,
       'down',
       '--remove-orphans',
-      // 🔴 acceptance 不删卷。它的 project 名是固定的，卷里存着从镜像拷出来的
-      // node_modules；删掉就等于每次重跑都要再拷一遍整棵树（实测冷卷上 UI 要 546 秒
-      // 才应答）。⛔ 不要为了"干净"把 --volumes 加回来 —— 干净由固定 project 名 +
-      // 依赖 stamp 保证，不是靠每次清空。
+      // 🔴 acceptance 不整体删卷：卷里存着从镜像拷出来的 node_modules，删掉就等于
+      // 每次重跑都要再拷一遍整棵树（实测冷卷上 UI 要 546 秒才应答）。
+      // ⛔ 但【数据卷必须删】—— 留着 postgres-data 会让下一次运行撞上
+      //   FATAL: the database system is not yet accepting connections
+      //   DETAIL: Consistent recovery state has not been yet reached.
+      // 每次验收要的是干净的数据库 + 热的依赖，这是两件事，⛔ 不要一起处理。
       ...(state.testMode && state.profile !== 'acceptance' ? ['--volumes'] : []),
     ],
     environment: environmentFor(
@@ -200,6 +202,23 @@ export async function stopLocalEnvironment(
     ...(logPath ? { logPath } : {}),
     inheritOutput: options.inheritOutput ?? !state.testMode,
   });
+
+  // 🔴 acceptance 保留依赖卷、但必须丢掉【数据】卷。留着 postgres-data，下一次运行
+  // 会在 postgres 还在 WAL 恢复时就去连它：
+  //   FATAL: the database system is not yet accepting connections
+  //   DETAIL: Consistent recovery state has not been yet reached.
+  // ⛔ 不许用"等久一点"来绕开 —— 验收要的是一个【干净】的数据库，不是一个恢复完的旧库。
+  if (state.testMode && state.profile === 'acceptance') {
+    for (const volume of ['postgres-data', 'local-state', 'paseo-runtime-state']) {
+      await (options.executor ?? executeCommand)({
+        command: 'docker',
+        args: ['volume', 'rm', '-f', `${state.projectName}_${volume}`],
+        environment: options.environment ?? process.env,
+        ...(logPath ? { logPath } : {}),
+        inheritOutput: false,
+      }).catch(() => undefined);
+    }
+  }
 }
 
 export async function startLocalEnvironment(

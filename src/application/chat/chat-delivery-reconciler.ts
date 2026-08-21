@@ -86,17 +86,34 @@ export class ChatDeliveryReconciler {
         })
       : null;
 
-    const membershipActor =
-      triggerMessage.authorType === 'principal' && this.actorResolver
-        ? await this.actorResolver.resolve({
-            tenantId: dispatch.tenantId,
-            conversationId: dispatch.conversationId,
-            principalId: triggerMessage.authorId,
-          })
-        : null;
+    const canResolveMembership = Boolean(
+      this.actorResolver || this.conversations.findPrincipalMember,
+    );
+    let membershipActor = null;
+    if (triggerMessage.authorType === 'principal') {
+      if (this.actorResolver) {
+        membershipActor = await this.actorResolver.resolve({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          principalId: triggerMessage.authorId,
+        });
+      } else if (this.conversations.findPrincipalMember) {
+        const member = await this.conversations.findPrincipalMember({
+          tenantId: dispatch.tenantId,
+          conversationId: dispatch.conversationId,
+          principalId: triggerMessage.authorId,
+        });
+        if (member?.memberPrincipalType) {
+          membershipActor = principalRef({
+            principalType: member.memberPrincipalType,
+            principalId: member.memberId,
+          });
+        }
+      }
+    }
     if (
       triggerMessage.authorType === 'principal' &&
-      this.actorResolver &&
+      canResolveMembership &&
       !membershipActor
     )
       throw new Error('chat_turn_actor_membership_missing');

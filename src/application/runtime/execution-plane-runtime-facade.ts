@@ -80,6 +80,7 @@ export interface ExecutionRuntimeService {
   /** Optional during migration so focused/debug runtimes can stay minimal. */
   ensureAgentChatRuntimeSession?(input: {
     readonly agentChatRuntimeId: string;
+    readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
     readonly agentVersionId: string;
     readonly resolvedSkills: readonly {
@@ -106,10 +107,6 @@ interface CachedFreshSession {
   readonly workspaceBinding: ExecutionWorkspaceBinding;
 }
 
-/**
- * Application service over ExecutionPlanePort. It owns runtime placement and
- * session reuse policy but no Paseo SDK/wire logic.
- */
 export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
   readonly #resolver: ExecutionSessionResolver;
   readonly #freshSessions = new Map<string, CachedFreshSession>();
@@ -137,6 +134,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
 
   public async ensureAgentChatRuntimeSession(input: {
     readonly agentChatRuntimeId: string;
+    readonly runtimeEpoch: number;
     readonly agentOwner: ResourceOwner;
     readonly agentVersionId: string;
     readonly resolvedSkills: readonly {
@@ -151,6 +149,7 @@ export class ExecutionPlaneRuntimeFacade implements ExecutionRuntimeService {
       );
     return this.runtimeSessions.createOrGetForAgentChat({
       agentChatRuntimeId: input.agentChatRuntimeId,
+      runtimeEpoch: input.runtimeEpoch,
       tenantId: input.agentOwner.scope.tenantId,
       workspaceId: input.agentOwner.scope.workspaceId,
       principalType: input.agentOwner.principal.type,

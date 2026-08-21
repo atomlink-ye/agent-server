@@ -50,7 +50,6 @@ describe('PostgresLogicalFileStore', () => {
       principal: principalRef({ principalType: 'user', principalId: 'bob' }),
     });
 
-    await files.write({ alice: undefined } as never).catch(() => undefined);
     await files.write({ scope: alice, path: 'prefs.md', content: 'alice prefs' });
     await files.write({ scope: bob, path: 'prefs.md', content: 'bob prefs' });
 

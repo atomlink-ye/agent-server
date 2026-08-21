@@ -136,9 +136,10 @@ class ScriptedExecutionSession implements ExecutionSession {
 function continuationRequest(
   prompt: string,
 ): { readonly work_ref: string; readonly feedback: string } | null {
-  const match = /继续(?:做|返工)\s+Work\s+([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\s*[:：]\s*(.+)/i.exec(
-    prompt,
-  );
+  const match =
+    /继续(?:做|返工)\s+Work\s+([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\s*[:：]\s*(.+)/i.exec(
+      prompt,
+    );
   if (!match?.[1] || !match[2]) return null;
   return { work_ref: match[1], feedback: match[2] };
 }

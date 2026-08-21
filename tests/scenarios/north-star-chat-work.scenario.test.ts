@@ -505,7 +505,9 @@ spec:
         [conversationId, tenantId, at],
       );
 
-      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(db);
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+        db,
+      );
       await authoredDefinitions.publish({
         definitionId,
         versionId,
@@ -686,13 +688,269 @@ spec:
       );
       expect(runs.rows).toHaveLength(1);
       expect(runs.rows[0]?.work_id).toBe(works.rows[0]?.id);
-      const links = await db.query<{ work_id: string; conversation_id: string }>(
+      const links = await db.query<{
+        work_id: string;
+        conversation_id: string;
+      }>(
         'SELECT work_id, conversation_id FROM conversation_work_links WHERE tenant_id=$1',
         [tenantId],
       );
       expect(links.rows).toHaveLength(1);
       expect(links.rows[0]?.work_id).toBe(works.rows[0]?.id);
       expect(links.rows[0]?.conversation_id).toBe(conversationId);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('B2b-3 continues an existing Work through the real WorkModule contributor', async () => {
+    const db = new PGlite();
+    const at = '2026-08-21T00:00:00.000Z';
+    const tenantId = 'tenant-b2b3';
+    const workspaceId = randomUUID();
+    const principalId = 'principal-b2b3';
+    const conversationId = randomUUID();
+    const triggerMessageId = randomUUID();
+    const agentVersionId = randomUUID();
+    const agentDefinitionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account' as const,
+      principalId,
+    };
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+      inputSchema: {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const } },
+        required: ['query'],
+        additional_properties: false,
+      },
+    };
+    const parsed =
+      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b2b3-product-work
+  description: B2b-3 Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account',$3,'B2b3',$4,$4)`,
+        [workspaceId, tenantId, principalId, at],
+      );
+      await db.query(
+        `INSERT INTO conversations (id,tenant_id,kind,created_at,updated_at) VALUES($1,$2,'direct',$3,$3)`,
+        [conversationId, tenantId, at],
+      );
+
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+        db,
+      );
+      await authoredDefinitions.publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B2b3 Product Work',
+        description: 'B2b-3 Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: at,
+      });
+      await authoredDefinitions.associateAgentWorkflow({
+        tenantId,
+        workspaceId,
+        agentDefinitionId,
+        definitionId,
+        now: at,
+      });
+
+      const invokables = new PostgresInvokableRepository(db);
+      const resolver = new ResolveWorkDefinition({
+        agents: {
+          async findDefinition() {
+            return null;
+          },
+          async findVersion(_owner, id) {
+            return id === agentVersionId
+              ? ({
+                  id: agentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B2b3 Agent',
+                  fingerprint: `sha256:${'a'.repeat(64)}`,
+                } as any)
+              : null;
+          },
+        },
+        agentResolution: {
+          async resolvePublished(id) {
+            return id === agentVersionId
+              ? {
+                  source: 'managed' as const,
+                  id: agentVersionId,
+                  instructions: 'Handle typed Product Work input.',
+                  modelPolicyRef: 'free-only' as const,
+                  proposalLimit: 0,
+                  skills: [],
+                  toolRefs: [],
+                }
+              : null;
+          },
+        },
+        definitions: invokables,
+        authoredDefinitions,
+        environments: {
+          async findVersion(_owner, id) {
+            return id === environmentVersionId
+              ? ({
+                  id: environmentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B2b3 Environment',
+                  package: {},
+                  canonicalJson: '{}',
+                  fingerprint: `sha256:${'e'.repeat(64)}`,
+                  createdAt: at,
+                  updatedAt: at,
+                  publishedAt: at,
+                } as any)
+              : null;
+          },
+        },
+      });
+      const workModule = createWorkModule({
+        database: db as any,
+        definitions: invokables,
+        definitionResolution: resolver,
+        execution: {
+          async admitRoot(request: any) {
+            const taskId = randomUUID();
+            await db.query(
+              `INSERT INTO tasks
+               (id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,
+                root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,
+                input_snapshot_ref,input_fingerprint,created_at,updated_at)
+               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,$9,$10,$11,$11)`,
+              [
+                taskId,
+                request.accessContext.tenantId,
+                request.accessContext.workspaceId,
+                request.accessContext.principalType,
+                request.accessContext.principalId,
+                request.accessContext.policySnapshotVersion,
+                request.invokable.kind,
+                request.invokable.versionId,
+                'b2b3',
+                'b2b3',
+                at,
+              ],
+            );
+            return { taskId, reused: false };
+          },
+        } as any,
+        runtimeCapabilities: new ScriptedExecutionPlane(),
+        executionFacts: new PostgresExecutionFactQuery(db as any),
+        conversations: {
+          async appendMessage() {
+            return undefined as any;
+          },
+        } as any,
+      } as any);
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([
+          (context: any) =>
+            workModule.contributeRuntime({
+              ...context,
+              chatContext: { conversationId, triggerMessageId },
+            }),
+        ]),
+      );
+      servers.push(mcp);
+      const receipt = mcp.grants.issue({
+        tenantId,
+        workspaceId,
+        principalType: 'service_account',
+        principalId,
+        scopeId: 'chat-runtime-b2b3',
+        allowedTools: [
+          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+        ],
+      });
+      const created = await new ScriptedExecutionPlane().createSession({
+        runtimeSessionId: 'chat-runtime-b2b3',
+        workspace: { cwd: process.cwd() },
+        systemPrompt: `Agent definition ID: ${agentDefinitionId}`,
+        extensions: {
+          mcpServers: [
+            {
+              name: 'agent-server',
+              url: await mcp.start(),
+              headers: { Authorization: `Bearer ${receipt.token}` },
+            },
+          ],
+        },
+      });
+
+      await created.session.run({
+        runId: 'turn-2',
+        prompt: '请做正式分析 OpenAI',
+      });
+      const before = await db.query<{ id: string }>(
+        'SELECT id FROM works WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(before.rows).toHaveLength(1);
+      const workId = before.rows[0]!.id;
+
+      await created.session.run({
+        runId: 'turn-3',
+        prompt: `继续返工 Work ${workId}: 删除融资部分`,
+      });
+
+      const works = await db.query<{ id: string }>(
+        'SELECT id FROM works WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(works.rows).toEqual([{ id: workId }]);
+      const runs = await db.query<{ work_id: string }>(
+        'SELECT work_id FROM work_runs WHERE tenant_id=$1 ORDER BY created_at,id',
+        [tenantId],
+      );
+      expect(runs.rows).toHaveLength(2);
+      expect(runs.rows.map((run) => run.work_id)).toEqual([workId, workId]);
     } finally {
       await db.close();
     }

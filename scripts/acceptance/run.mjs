@@ -27,29 +27,37 @@ async function runDriver(env) {
 
 // 🔴 独立复核：从 driver 落盘的【原始 SQL 行】自己推导终局事实，
 // ⛔ 不采信 driver 自己那句 rc=0。空结果必须显式红并说"未观察到"。
-export function deriveTerminalFacts(observations) {
+// 🔴 必须传入 step-8 在 DOM 里【实际观察到的】 workRef（Auditor finding-1-e09f1b9a）。
+// 先前取"第一条带 work_ref 的消息"，反例：同一会话里 messages=[旧的已完成, 新的可见]、
+// works=[旧:complete, 新:failed] ⇒ 返回旧的那条并判绿。
+// ⇒ 界面上显示的是一个 Work Card，认证的却是同一会话里另一个更早的 Work。
+// 关联校验只修了"无关行"，没修"哪一行才是相关的那一行"。
+export function deriveTerminalFacts(observations, observedWorkRef) {
+  if (typeof observedWorkRef !== 'string' || observedWorkRef.trim() === '') {
+    throw new Error('final SQL observations: the step-8 observed workRef was not supplied — cannot certify which Work ran');
+  }
   const messages = observations?.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error('final SQL observations: messages not observed');
   }
-  const carrier = messages.find((m) => m.work_ref);
-  if (!carrier) throw new Error('final SQL observations: no message carrying work_ref was observed');
+  const carrier = messages.find((m) => m.work_ref === observedWorkRef);
+  if (!carrier) {
+    throw new Error(`final SQL observations: no message carries the observed workRef ${observedWorkRef} — the Work Card on screen is not backed by an observed message`);
+  }
   const works = observations?.works;
   if (!Array.isArray(works) || works.length === 0) throw new Error('final SQL observations: works not observed');
   const runs = observations?.runs;
   if (!Array.isArray(runs) || runs.length === 0) throw new Error('final SQL observations: work_runs not observed');
 
-  // 🔴 关联必须被证明，⛔ 不许取 works[0]/runs[0] 了事：
-  // 那样 work_ref='bogus' + 任意无关的 work/run 都会通过（Oracle 指出，成立）。
-  const work = works.find((w) => w.id === carrier.work_ref);
+  const work = works.find((w) => w.id === observedWorkRef);
   if (!work) {
-    throw new Error(`final SQL observations: work_ref ${carrier.work_ref} has no matching work row — association not observed`);
+    throw new Error(`final SQL observations: observed workRef ${observedWorkRef} has no matching work row — association not observed`);
   }
   const run = runs.find((r) => r.work_id === work.id);
   if (!run) {
     throw new Error(`final SQL observations: work ${work.id} has no matching work_run — association not observed`);
   }
-  return { provider: carrier.provider, workRef: carrier.work_ref, workRun: run.id, workStatus: work.status };
+  return { provider: carrier.provider, workRef: observedWorkRef, workRun: run.id, workStatus: work.status };
 }
 
 
@@ -130,7 +138,7 @@ async function main() {
     const step8 = JSON.parse(await readFile(path.join(evidenceDir, 'step8-observation.json'), 'utf8'));
     assertStep8Observation(step8);
     const observations = JSON.parse(await readFile(path.join(evidenceDir, 'final-sql-observations.json'), 'utf8'));
-    assertFinalSql(deriveTerminalFacts(observations));
+    assertFinalSql(deriveTerminalFacts(observations, step8.workRef));
 
     console.log(`PASS acceptance:run at HEAD=${report.head} provider=${provider}`);
   } finally {

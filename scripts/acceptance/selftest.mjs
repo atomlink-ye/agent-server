@@ -88,11 +88,11 @@ mutation('SERVICE_ACCOUNTS_JSON empty array', () => parseServiceAccounts('[]'));
 mutation('SERVICE_ACCOUNTS_JSON token missing', () => parseServiceAccounts(JSON.stringify([{ serviceAccountId: 'sa' }])));
 
 const goodObs = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
-assert.equal(deriveTerminalFacts(goodObs).workStatus, 'complete');
-mutation('terminal facts messages not observed', () => deriveTerminalFacts({ ...goodObs, messages: [] }));
-mutation('terminal facts no work_ref observed', () => deriveTerminalFacts({ ...goodObs, messages: [{ provider: 'claude' }] }));
-mutation('terminal facts works not observed', () => deriveTerminalFacts({ messages: goodObs.messages, runs: goodObs.runs }));
-mutation('terminal facts work_runs not observed', () => deriveTerminalFacts({ messages: goodObs.messages, works: goodObs.works }));
+assert.equal(deriveTerminalFacts(goodObs, 'w1').workStatus, 'complete');
+mutation('terminal facts messages not observed', () => deriveTerminalFacts({ ...goodObs, messages: [] }, 'w1'));
+mutation('terminal facts no work_ref observed', () => deriveTerminalFacts({ ...goodObs, messages: [{ provider: 'claude' }] }, 'w1'));
+mutation('terminal facts works not observed', () => deriveTerminalFacts({ messages: goodObs.messages, runs: goodObs.runs }, 'w1'));
+mutation('terminal facts work_runs not observed', () => deriveTerminalFacts({ messages: goodObs.messages, works: goodObs.works }, 'w1'));
 
 
 // --- R4: expected 必须来自 lifecycle environment，⛔ 不许来自 handle（否则判据自证）---
@@ -111,8 +111,20 @@ mutation('preflight rendered vs lifecycle env port divergence', () => assertPref
 
 // --- R4: 终局事实的关联必须被证明 ---
 const rel = { messages: [{ provider: 'claude', work_ref: 'w1' }], works: [{ id: 'w1', status: 'complete' }], runs: [{ id: 'r1', work_id: 'w1' }] };
-assert.equal(deriveTerminalFacts(rel).workRun, 'r1');
-mutation('work_ref points at no work row', () => deriveTerminalFacts({ ...rel, messages: [{ provider: 'claude', work_ref: 'bogus' }] }));
-mutation('work has no matching work_run', () => deriveTerminalFacts({ ...rel, runs: [{ id: 'r9', work_id: 'other' }] }));
+assert.equal(deriveTerminalFacts(rel, 'w1').workRun, 'r1');
+mutation('observed workRef not supplied', () => deriveTerminalFacts(rel));
+mutation('observed workRef has no carrying message', () => deriveTerminalFacts(rel, 'bogus'));
+mutation('work has no matching work_run', () => deriveTerminalFacts({ ...rel, runs: [{ id: 'r9', work_id: 'other' }] }, 'w1'));
+
+// 🔴 Auditor finding-1-e09f1b9a 的原始反例：同一会话里有旧的已完成 Work 与新的失败 Work。
+// 认证的必须是 step-8 在 DOM 里看到的那一个，⛔ 不许退回去认证更早的那个。
+const twoWorks = {
+  messages: [{ provider: 'claude', work_ref: 'old-complete' }, { provider: 'claude', work_ref: 'new-visible' }],
+  works: [{ id: 'old-complete', status: 'complete' }, { id: 'new-visible', status: 'failed' }],
+  runs: [{ id: 'run-old', work_id: 'old-complete' }, { id: 'run-new', work_id: 'new-visible' }],
+};
+assert.equal(deriveTerminalFacts(twoWorks, 'old-complete').workStatus, 'complete');
+assert.equal(deriveTerminalFacts(twoWorks, 'new-visible').workStatus, 'failed');
+mutation('screen shows failed Work while an earlier Work is complete', () => assertFinalSql(deriveTerminalFacts(twoWorks, 'new-visible')));
 
 console.log('PASS acceptance:selftest (offline; no Compose, database, provider, or sandbox used)');

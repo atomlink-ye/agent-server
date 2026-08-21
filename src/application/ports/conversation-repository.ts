@@ -48,6 +48,13 @@ export interface ConversationRepository {
     readonly memberId: string;
   }): Promise<readonly Conversation[]>;
 
+  /** Trusted membership lookup used to derive the actor for a Chat turn. */
+  findPrincipalMember?(input: {
+    readonly tenantId: string;
+    readonly conversationId: string;
+    readonly principalId: string;
+  }): Promise<ConversationMember | null>;
+
   appendMessage(input: {
     readonly author: ConversationMessageAuthorContext;
     readonly body: string;

@@ -114,14 +114,12 @@ export async function startHostDevelopment(
     const webBaseEnvironment = hostWebEnvironment({
       ...applicationEnvironment,
       AGENT_SERVER_BASE_URL: apiBaseUrl,
+      ...(mode === 'core' ? { WEB_BOOTSTRAP_SKIP_WORK: '1' } : {}),
     });
-    let generatedWebEnv: NodeJS.ProcessEnv = {};
-    if (mode === 'runtime') {
-      await runCommand('node', ['scripts/dev/web-bootstrap.mjs'], {
-        environment: webBaseEnvironment,
-      });
-      generatedWebEnv = await readGeneratedWebEnv();
-    }
+    await runCommand('node', ['scripts/dev/web-bootstrap.mjs'], {
+      environment: webBaseEnvironment,
+    });
+    const generatedWebEnv = await readGeneratedWebEnv();
     const webEnvironment = hostWebEnvironment({
       ...webBaseEnvironment,
       ...generatedWebEnv,
@@ -138,6 +136,7 @@ export async function startHostDevelopment(
         mode === 'runtime'
           ? 'runtime=paseo (host-native helper)'
           : 'runtime=disabled (direct chat uses deterministic mock; Product Work execution is absent)',
+        'bootstrap=agent/environment/team/workspace ready',
         '',
       ].join('\n'),
     );

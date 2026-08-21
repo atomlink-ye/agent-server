@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { PostgresConversationRepository } from '../../../src/infrastructure/postgres/postgres-conversation-repository.js';
 import type { SeedDatabase } from './types.js';
 import { seedPublishedAgentVersion } from './agent.js';
 import { seedConversation } from './conversation.js';
@@ -47,7 +48,22 @@ export async function seedGoldenPathWorld(
     agentVersionId: agent.versionId,
     name: `${options.name ?? 'Golden Path'} Team`,
   });
-  const conversation = await seedConversation(db, owner);
+
+  // Use the production conversation repository for the canonical Golden Path
+  // fixture so direct-pair identity, memberships, and chat-runtime state match
+  // the product path rather than a hand-written table approximation.
+  const conversations = new PostgresConversationRepository(db as any);
+  await conversations.ensureChatRuntime({
+    tenantId: owner.tenantId,
+    agentDefinitionId: agent.definitionId,
+    activeAgentVersionId: agent.versionId,
+  });
+  const conversation = await conversations.findOrCreateDirect({
+    tenantId: owner.tenantId,
+    principalId: owner.principalId,
+    principalType: owner.principalType,
+    agentDefinitionId: agent.definitionId,
+  });
   const entitlement = await seedWorkEntitlement(db, owner, {
     conversationId: conversation.id,
     agentDefinitionId: agent.definitionId,

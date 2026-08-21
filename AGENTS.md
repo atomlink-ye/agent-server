@@ -11,10 +11,11 @@ Repository documentation must remain usable without private Drive access. Curren
 ## Required reading order
 
 1. [README](README.md) for the runnable baseline and commands.
-2. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
-3. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
-4. [Quality](docs/quality.md) when changing verification/test/runtime setup.
-5. [Agent handbook](docs/agents.md) for implementation and handoff rules.
+2. [Development](docs/development.md) for the host-native developer/test boundary.
+3. [Product](docs/product.md) and [Features](docs/features.md) for scope/status.
+4. The relevant [Component](docs/components.md) and [Contract](docs/contracts.md).
+5. [Testing and evaluations](docs/quality/testing-and-evaluations.md) when changing verification/runtime setup.
+6. [Agent handbook](docs/agents.md) for implementation and handoff rules.
 
 Never infer that a documented target is implemented. Current code and observed behavior are primary implementation facts; tests are supporting repeatable verification.
 
@@ -38,25 +39,58 @@ Do not commit:
 - long-lived files/commands named after temporary development phases such as `phase-b`, `c3`, `e8`, `worker-c`, or `lane-h` unless that term is literally a product concept;
 - scenario-specific setup runners created only because a test is inconvenient to start.
 
-Generated test/runtime output belongs under ignored `.local/test-runs/<run-id>/` and may be uploaded as a CI artifact. Git history and PR/Issue history are the archive for development history.
+Generated test/runtime output belongs under ignored `.local/` paths and may be uploaded as a CI artifact. Git history and PR/Issue history are the archive for development history.
 
 `package.json` + pnpm is the sole repository command surface. Do not reintroduce a Makefile or a second command wrapper whose only job is to rename package scripts.
 
-## Test/environment model
+## Developer/environment model
 
-Use **Topology × Fixture × Test Case**.
+The normal development boundary is the existing host/sandbox, not Docker.
 
-- Topology describes infrastructure only: `in-process`, `postgres`, `core`, `runtime`, `full`.
-- Fixture describes initial product data only, preferably through typed TypeScript builders.
-- Test Case owns assertions only.
+Canonical commands:
 
-Dev and Test share `config/local-environments.yaml` and `tooling/environment/`.
+```bash
+pnpm setup
+pnpm doctor
+pnpm dev
+pnpm dev:runtime
+pnpm test:scenario
+pnpm test:pg
+pnpm canary:runtime
+pnpm canary:golden-path
+```
 
-An infrastructure-backed test should start the environment it needs. Manual setup through `pnpm local-env up ...` is for interactive debugging, not a prerequisite for tests. For one-off infrastructure commands use `pnpm local-env run <profile> -- <command>`.
+- `pnpm dev` is host-native API + Web with the execution runtime disabled/mock-gated.
+- `pnpm dev:runtime` is host-native API + Web + Paseo/provider helper.
+- `pnpm dev:docker*` is an explicit production-like/compatibility topology, not a prerequisite for local edits/tests.
+- `tooling/dev/` owns host-native developer orchestration.
+- `tooling/environment/` + `config/local-environments.yaml` own Compose/production-like topology.
 
-If you are about to add `scripts/run-<scenario>` because setup is hard, improve `TestEnvironment`, the environment library, or fixture APIs instead.
+Do not add an implicit Docker startup to a normal test command.
 
-Deterministic software behavior belongs in Vitest. Model/Agent quality belongs in `evals/`. Only a small number of canonical real external flows belong in `scripts/smoke/`.
+## Test model
+
+Use the cheapest boundary that proves the changed behavior:
+
+```text
+unit
+  -> PGlite integration
+  -> deterministic product scenario
+  -> local real-Postgres semantics when required
+  -> real runtime canary
+  -> browser/product canary
+  -> production-like acceptance
+```
+
+PGlite is the default persistence test database. Real PostgreSQL is reserved for PostgreSQL-specific lock/transaction/index/migration behavior and is opt-in through a dedicated `*test*` database URL. The `test:pg` runner must never silently point at a development or production database.
+
+Deterministic scenarios use `tests/harness/` and semantic fixtures. Fake the probabilistic runtime/model decision boundary, not the product system. Keep production handlers/repositories real whenever the scenario is claiming product wiring correctness.
+
+Important background workers expose deterministic `step()` seams. Test a single state transition by calling `step()` rather than starting the infinite polling loop and sleeping.
+
+If setup is hard, improve `tooling/dev/`, `tests/harness/`, or semantic fixture APIs instead of adding a task-specific runner.
+
+Deterministic software behavior belongs in Vitest. Model/Agent quality belongs in `evals/`. Real external compatibility belongs in a small number of explicit canaries. Milestone/release evidence belongs in acceptance/CI artifacts.
 
 ## Repository map
 
@@ -66,14 +100,17 @@ src/application/            use cases and ports
 src/adapters/               external-system translations
 src/infrastructure/         storage/process-neutral infrastructure
 src/entrypoints/            HTTP/channel/CLI entrypoints
+tests/harness/              reusable deterministic scenario composition + semantic seeds
 tests/contract/             public contract checks
 tests/integration/          component/datastore boundaries
-tests/support/              TestEnvironment and typed test support
+tests/support/              lower-level test support
 tests/repository/           small structural repository invariants
-e2e/                        deterministic process/socket E2E
+tests/scenarios/            deterministic product journeys
+e2e/                        explicit browser/process E2E
 evals/                      Agent/model-quality evaluation
-tooling/environment/        shared Dev/Test topology lifecycle
-scripts/dev/                durable local-development helpers
+tooling/dev/                host-native developer/test/canary orchestration
+tooling/environment/        Docker/production-like topology lifecycle
+scripts/dev/                reusable runtime/bootstrap helpers
 scripts/smoke/              canonical real external main flows
 scripts/ops/                migrations/recovery/operator utilities
 docs/                       durable product/engineering authority
@@ -91,10 +128,10 @@ For each slice:
 2. Probe only a technical unknown that can invalidate the path.
 3. Build the thinnest real path.
 4. Exercise the path early.
-5. Fix `BLOCKER-NOW`; record non-blocking follow-up without absorbing it into scope.
+5. Fix `BLOCKER-NOW`; record non-blocking follow-up without absorbing it into scope unless the current user explicitly asks for the full follow-up scope.
 6. Stop at proof.
 
-Automated test authoring is not a default feature deliverable. Add a test when the user requests it, the changed risk warrants it, or it is the cheapest durable replacement for a behavior previously encoded in an ad-hoc script. Do not create a new harness to prove the harness.
+Automated test authoring is not a default feature deliverable. Add a test when the user requests it, the changed risk warrants it, or it is the cheapest durable replacement for behavior previously encoded in an ad-hoc script. Do not create a second harness merely to prove the harness.
 
 ## Completion definition
 

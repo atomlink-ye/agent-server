@@ -100,6 +100,16 @@ class ScriptedExecutionSession implements ExecutionSession {
     readonly runId: string;
     readonly prompt: string;
   }): Promise<ExecutionResult> {
+    const continuation = continuationRequest(input.prompt);
+    if (continuation) {
+      const client = await connect(requiredMcp(this.spec));
+      try {
+        await call(client, 'continue_work', continuation);
+        return completed('已续做既有工作。');
+      } finally {
+        await client.close();
+      }
+    }
     if (/正式分析|OpenAI/i.test(input.prompt)) {
       const client = await connect(requiredMcp(this.spec));
       try {
@@ -116,15 +126,21 @@ class ScriptedExecutionSession implements ExecutionSession {
         await client.close();
       }
     }
-    if (/删掉融资部分/.test(input.prompt))
-      throw new Error(
-        'Scripted continue_work requires a work reference in the prompt.',
-      );
     if (/hello/i.test(input.prompt)) return completed('hello');
     return completed('hello');
   }
 
   public async close(): Promise<void> {}
+}
+
+function continuationRequest(
+  prompt: string,
+): { readonly work_ref: string; readonly feedback: string } | null {
+  const match = /继续(?:做|返工)\s+Work\s+([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\s*[:：]\s*(.+)/i.exec(
+    prompt,
+  );
+  if (!match?.[1] || !match[2]) return null;
+  return { work_ref: match[1], feedback: match[2] };
 }
 
 async function connect(server: ExecutionMcpServerConfig): Promise<Client> {

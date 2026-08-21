@@ -107,6 +107,10 @@ jobs:
           fi
 
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          # Why this exists: a skipped required check can look green while
+          # silently missing a host-native runtime change.
+          # Design contract: tooling/dev changes reach this real-runtime job.
+          # Design goals: avoid false-green CI without charging unrelated docs.
           if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else

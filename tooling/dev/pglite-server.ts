@@ -7,6 +7,18 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 
 import { repositoryRoot } from './host-native.js';
 
+/*
+ * Why this exists: the host-native loop needs one predictable PostgreSQL wire
+ * endpoint when a developer has no local server, without repository state or
+ * a Docker dependency.
+ * Design contract: the default endpoint is fixed at 127.0.0.1:55432 and its
+ * durable database plus PID state live only under .local/dev-runtime. A stale
+ * PID/state ownership claim is an error for the harness to report; this child
+ * never silently adopts or repairs another process's state.
+ * Design goals: make reuse explicit, keep fallback state disposable, and keep
+ * real PostgreSQL semantics visibly outside this development-only server.
+ */
+
 type PGliteState = Readonly<{
   kind: 'agent-server-pglite';
   pid: number;

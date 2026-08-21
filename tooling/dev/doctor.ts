@@ -242,6 +242,9 @@ export async function runDoctor(
     migrations,
     {
       name: 'api-port',
+      // Why this exists: doctor must predict whether pnpm dev can bind its API.
+      // Design contract: an occupied required port is a failure, not a warning.
+      // Design goals: make readiness actionable before starting child processes.
       status: apiPortFree ? 'ok' : 'fail',
       detail: apiPortFree
         ? `:${loaded.PORT ?? 3000} free`
@@ -250,6 +253,9 @@ export async function runDoctor(
     },
     {
       name: 'web-port',
+      // Why this exists: core startup also owns the Web port.
+      // Design contract: an occupied required port makes core readiness false.
+      // Design goals: keep doctor metadata consistent with actual startup.
       status: webPortFree ? 'ok' : 'fail',
       detail: webPortFree ? ':3001 free' : ':3001 already in use',
       requiredFor: ['core', 'runtime'],
@@ -268,6 +274,14 @@ export async function runDoctor(
     coreReady &&
     checks.find((check) => check.name === 'paseo')?.status === 'ok' &&
     checks.find((check) => check.name === 'provider')?.status === 'ok';
+  /*
+   * Why this exists: PGlite speaks the PostgreSQL wire protocol but cannot
+   * prove PostgreSQL-specific semantics. The backend gate prevents a PGlite
+   * fallback from becoming a false-green real-Postgres signal.
+   * Design contract: ready.pg is true only for reachable, migrated real
+   * PostgreSQL; PGlite may still make ready.core true.
+   * Design goals: keep capability reporting honest and independently useful.
+   */
   const pgReady =
     backend === 'postgres' &&
     postgres.status === 'ok' &&

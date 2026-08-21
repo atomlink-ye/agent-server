@@ -12,26 +12,23 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^server-only$/,
-        replacement: resolve(repoRoot, 'apps/web/lib/server-only-noop.ts'),
-      },
-      {
         find: /^@\//,
-        replacement: `${resolve(repoRoot, 'apps/web')}/`,
+        replacement: `${resolve(repoRoot, 'apps/web/src')}/`,
       },
     ],
   },
   test: {
     testTimeout: 30_000,
     include: [
-      'components/work/work-list.browser.test.tsx',
-      'components/work/work-detail.browser.test.tsx',
-      'components/work/definition-authoring.browser.test.tsx',
-      'features/run-trace/run-trace.browser.test.tsx',
-      'features/run-trace/events.browser.test.tsx',
-      'features/run-trace/map.browser.test.tsx',
-      'features/run-trace/execution-transcript.browser.test.tsx',
-      'features/run-trace/session-transcripts.browser.test.tsx',
+      'src/desktop/ChatShell.browser.test.tsx',
+      'src/components/work/work-list.browser.test.tsx',
+      'src/components/work/work-detail.browser.test.tsx',
+      'src/components/work/definition-authoring.browser.test.tsx',
+      'src/features/run-trace/run-trace.browser.test.tsx',
+      'src/features/run-trace/events.browser.test.tsx',
+      'src/features/run-trace/map.browser.test.tsx',
+      'src/features/run-trace/execution-transcript.browser.test.tsx',
+      'src/features/run-trace/session-transcripts.browser.test.tsx',
     ],
     browser: {
       enabled: true,

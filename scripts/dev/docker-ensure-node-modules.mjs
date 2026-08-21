@@ -16,12 +16,8 @@ import { computeDependencyStamp } from './dependency-stamp.mjs';
 
 const workspaceNodeModules = '/workspace/node_modules';
 const workspaceWebNodeModules = '/workspace/apps/web/node_modules';
-const workspaceWebViteNodeModules = '/workspace/apps/web-vite/node_modules';
-const imageNodeModules = '/home/node/image-node_modules';
-const imageWebNodeModules = '/home/node/image-web-node_modules';
-const imageWebViteNodeModules = '/home/node/image-web-vite-node_modules';
-const includeWebViteNodeModules =
-  process.env.DOCKER_ENSURE_WEB_VITE_NODE_MODULES === 'true';
+const imageNodeModules = '/home/node/image-node-modules';
+const imageWebNodeModules = '/home/node/image-web-node-modules';
 const includeWebNodeModules =
   process.env.DOCKER_ENSURE_WEB_NODE_MODULES !== 'false';
 const restoreLockPath = `${workspaceNodeModules}/.dependency-restore.lock`;
@@ -32,9 +28,8 @@ const command = process.argv.slice(2);
 
 const stampPath = (nodeModules) => `${nodeModules}/.docker-dependencies-stamp`;
 
-// Keep this deliberately small. These are the runtime entrypoints used by the
-// daemon, TypeScript commands, and the Vite browser client; a matching stamp
-// does not prove that an exported/imported dependency tree retained them.
+// The canonical web package is Vite. Verify the root TypeScript toolchain plus
+// the Vite/React artifacts used by apps/web; there is no second web-vite tree.
 const criticalArtifacts = [
   {
     displayPath: 'node_modules/.bin/tsc',
@@ -43,20 +38,20 @@ const criticalArtifacts = [
     image: imageNodeModules,
     accessMode: constants.X_OK,
   },
-  ...(includeWebViteNodeModules
+  ...(includeWebNodeModules
     ? [
         {
-          displayPath: 'apps/web-vite/node_modules/.bin/vite',
+          displayPath: 'apps/web/node_modules/.bin/vite',
           relativePath: '.bin/vite',
-          workspace: workspaceWebViteNodeModules,
-          image: imageWebViteNodeModules,
+          workspace: workspaceWebNodeModules,
+          image: imageWebNodeModules,
           accessMode: constants.X_OK,
         },
         {
-          displayPath: 'apps/web-vite/node_modules/react/jsx-dev-runtime.js',
+          displayPath: 'apps/web/node_modules/react/jsx-dev-runtime.js',
           relativePath: 'react/jsx-dev-runtime.js',
-          workspace: workspaceWebViteNodeModules,
-          image: imageWebViteNodeModules,
+          workspace: workspaceWebNodeModules,
+          image: imageWebNodeModules,
           accessMode: constants.F_OK,
         },
       ]
@@ -67,9 +62,6 @@ const dependencyTrees = [
   [workspaceNodeModules, imageNodeModules],
   ...(includeWebNodeModules
     ? [[workspaceWebNodeModules, imageWebNodeModules]]
-    : []),
-  ...(includeWebViteNodeModules
-    ? [[workspaceWebViteNodeModules, imageWebViteNodeModules]]
     : []),
 ];
 
@@ -180,8 +172,7 @@ if (command.length === 0) {
       process.exitCode = 1;
     } else {
       const imageArtifactFailure =
-        (await checkCriticalArtifacts('image dependency seed', 'image')) ??
-        null;
+        (await checkCriticalArtifacts('image dependency seed', 'image')) ?? null;
       if (imageArtifactFailure) {
         process.stderr.write(
           `[docker-ensure-node-modules] dependency_restore failed reason=${imageArtifactFailure}; rebuild the image\n`,
@@ -191,15 +182,13 @@ if (command.length === 0) {
       await acquireRestoreLock();
       try {
         const currentStamps = await Promise.all(
-          dependencyTrees.map(
-            async ([workspaceTree]) => {
-              try {
-                return await readFile(stampPath(workspaceTree), 'utf8');
-              } catch {
-                return null;
-              }
-            },
-          ),
+          dependencyTrees.map(async ([workspaceTree]) => {
+            try {
+              return await readFile(stampPath(workspaceTree), 'utf8');
+            } catch {
+              return null;
+            }
+          }),
         );
         const workspaceArtifactFailure =
           (await checkCriticalArtifacts(
@@ -224,12 +213,6 @@ if (command.length === 0) {
                 imageWebNodeModules,
               );
             }
-            if (includeWebViteNodeModules) {
-              await clearAndRestore(
-                workspaceWebViteNodeModules,
-                imageWebViteNodeModules,
-              );
-            }
             await writeFile(
               stampPath(workspaceNodeModules),
               expectedStamp,
@@ -238,13 +221,6 @@ if (command.length === 0) {
             if (includeWebNodeModules) {
               await writeFile(
                 stampPath(workspaceWebNodeModules),
-                expectedStamp,
-                'utf8',
-              );
-            }
-            if (includeWebViteNodeModules) {
-              await writeFile(
-                stampPath(workspaceWebViteNodeModules),
                 expectedStamp,
                 'utf8',
               );
@@ -279,9 +255,7 @@ if (command.length === 0) {
         stdio: 'inherit',
       });
       const forwardSignal = (signal) => {
-        if (child.exitCode === null) {
-          child.kill(signal);
-        }
+        if (child.exitCode === null) child.kill(signal);
       };
       process.on('SIGINT', forwardSignal);
       process.on('SIGTERM', forwardSignal);
@@ -300,10 +274,6 @@ if (command.length === 0) {
       process.exitCode = exitCode;
     }
   } catch (error) {
-    // Print the cause. A bare "Failed to prepare container dependencies." says
-    // nothing about whether the stamp mismatched, a copy failed, or a path was
-    // unreadable, and every occurrence then costs a diagnostic round inside the
-    // container to recover information the process already had.
     process.stderr.write(
       `Failed to prepare container dependencies: ${error?.stack ?? error}\n`,
     );

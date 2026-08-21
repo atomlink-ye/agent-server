@@ -82,7 +82,7 @@ function boundedTail(output) {
 async function prepareProviderToolchain() {
   const child = spawn(
     process.execPath,
-    ['--import', 'tsx', 'tooling/dev/setup-providers.ts', '--json'],
+    ['--import', 'tsx', 'tooling/dev/setup-providers.ts', '--json', '--fast'],
     {
       cwd: repositoryRoot,
       env: process.env,

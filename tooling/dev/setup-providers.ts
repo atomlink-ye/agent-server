@@ -151,6 +151,17 @@ async function assertProviderExecutables(): Promise<void> {
   ]);
 }
 
+export async function findInstalledProviderToolchain(): Promise<
+  typeof providerToolchainPaths | undefined
+> {
+  try {
+    await assertProviderExecutables();
+    return providerToolchainPaths;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function setupProviders(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<typeof providerToolchainPaths> {
@@ -185,7 +196,12 @@ function isEntrypoint(): boolean {
 
 if (isEntrypoint()) {
   const json = process.argv.includes('--json');
-  setupProviders()
+  const setup = process.argv.includes('--fast')
+    ? findInstalledProviderToolchain().then(
+        (paths) => paths ?? setupProviders(),
+      )
+    : setupProviders();
+  setup
     .then((paths) => {
       if (json) {
         process.stdout.write(

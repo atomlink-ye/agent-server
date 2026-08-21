@@ -30,6 +30,74 @@ describe('North Star chat Work MVE', () => {
     }
   });
 
+  it('B2a seeds the real Work-link foreign-key fixture in PGlite', async () => {
+    const db = new PGlite();
+    const ids = {
+      workspace: '00000000-0000-4000-8000-000000000301',
+      environmentDefinition: '00000000-0000-4000-8000-000000000302',
+      environmentVersion: '00000000-0000-4000-8000-000000000303',
+      teamDefinition: '00000000-0000-4000-8000-000000000304',
+      teamVersion: '00000000-0000-4000-8000-000000000305',
+      conversation: '00000000-0000-4000-8000-000000000306',
+    };
+    const tenant = 'tenant-b2a';
+    const at = '2026-08-21T00:00:00.000Z';
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account','principal-b2a','B2a',$3,$3)`,
+        [ids.workspace, tenant, at],
+      );
+      await db.query(
+        `INSERT INTO environment_definitions (id,tenant_id,principal_type,principal_id,normalized_name,display_name,created_at,updated_at) VALUES($1,$2,'service_account','principal-b2a','b2a','B2a',$3,$3)`,
+        [ids.environmentDefinition, tenant, at],
+      );
+      await db.query(
+        `INSERT INTO environment_versions (id,definition_id,tenant_id,principal_type,principal_id,status,display_name,canonical_package,fingerprint,created_at,updated_at,published_at) VALUES($1,$2,$3,'service_account','principal-b2a','published','B2a','{}'::jsonb,'b2a',$4,$4,$4)`,
+        [ids.environmentVersion, ids.environmentDefinition, tenant, at],
+      );
+      await db.query(
+        `INSERT INTO team_definitions (id,tenant_id,workspace_id,principal_type,principal_id,name,description,created_at,updated_at) VALUES($1,$2,$3,'service_account','principal-b2a','B2a','fixture',$4,$4)`,
+        [ids.teamDefinition, tenant, ids.workspace, at],
+      );
+      await db.query(
+        `INSERT INTO team_versions (id,definition_id,tenant_id,workspace_id,principal_type,principal_id,status,name,description,spec,environment_version_id,created_at,updated_at,published_at) VALUES($1,$2,$3,$4,'service_account','principal-b2a','published','B2a','fixture',$5::jsonb,$6,$7,$7,$7)`,
+        [
+          ids.teamVersion,
+          ids.teamDefinition,
+          tenant,
+          ids.workspace,
+          JSON.stringify({
+            lead: { name: 'lead', agentVersionId: 'agent-b2a' },
+            roster: [{ name: 'reviewer', agentVersionId: 'agent-b2a' }],
+            environmentVersionId: ids.environmentVersion,
+          }),
+          ids.environmentVersion,
+          at,
+        ],
+      );
+      await db.query(
+        `INSERT INTO conversations (id,tenant_id,kind,created_at,updated_at) VALUES($1,$2,'direct',$3,$3)`,
+        [ids.conversation, tenant, at],
+      );
+      for (const [table, id] of Object.entries({
+        workspaces: ids.workspace,
+        environment_definitions: ids.environmentDefinition,
+        team_definitions: ids.teamDefinition,
+        team_versions: ids.teamVersion,
+        conversations: ids.conversation,
+      })) {
+        const result = await db.query<{ count: number }>(
+          `SELECT count(*)::int AS count FROM ${table} WHERE id=$1`,
+          [id],
+        );
+        expect(result.rows[0]?.count).toBe(1);
+      }
+    } finally {
+      await db.close();
+    }
+  });
+
   it('rejects turn2 when the real start_work handler is outside the grant', async () => {
     const definitionId = '00000000-0000-4000-8000-000000000202';
     const versionId = '00000000-0000-4000-8000-000000000203';

@@ -50,16 +50,20 @@ export function assertProviderEffect({ agentServer, paseoRuntime, runtimeInitial
   if (failed.length) throw new Error(`provider effect mismatch: ${failed.join(', ')}`);
 }
 
-export function serviceHealth(service) {
-  const health = service?.State?.Health;
-  return health?.Status ?? 'no-healthcheck';
+export function assertLifecycleServices(services, { required, oneShot }) {
+  const failed = [];
+  for (const name of required) {
+    const service = services[name];
+    if (!service || service.State?.Status !== 'running' || (service.State.Health && service.State.Health.Status !== 'healthy')) failed.push(name);
+  }
+  for (const name of oneShot) {
+    const service = services[name];
+    if (!service || service.State?.Status !== 'exited' || service.State.ExitCode !== 0) failed.push(name);
+  }
+  if (failed.length) throw new Error(`lifecycle services not ready: ${failed.join(', ')}`);
 }
 
-export function assertLifecycleServices(services) {
-  const failed = Object.entries(services).filter(([, service]) =>
-    service?.State?.Status !== 'running' ||
-    (service?.State?.Health && service.State.Health.Status !== 'healthy'),
-  );
-  if (failed.length) throw new Error(`lifecycle services not ready: ${failed.map(([name]) => name).join(', ')}`);
+export function assertUniqueAccessibleLabel(html, label) {
+  const matches = [...html.matchAll(/aria-label="([^"]+)"/gu)].filter((match) => match[1] === label);
+  if (matches.length !== 1) throw new Error(`strict locator ${label} matched ${matches.length} elements`);
 }
-

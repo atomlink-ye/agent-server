@@ -222,12 +222,12 @@ describe('North Star host-native deterministic harness', () => {
   });
 
   it('steps chat delivery without starting a polling loop', async () => {
-    const claimed = [{ id: 'dispatch-1' }, null] as const;
+    const claimed: unknown[] = [{ id: 'dispatch-1' }, null];
     const reconciled: unknown[] = [];
     const worker = new ChatDeliveryWorker(
       {
         async claimNext() {
-          return claimed.shift?.() as never;
+          return claimed.shift() as never;
         },
       } as any,
       {

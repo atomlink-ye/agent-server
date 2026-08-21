@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
+import { randomUUID } from 'node:crypto';
 
 import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
@@ -10,6 +11,9 @@ import { registerProductWorkMcpTools } from '../../src/entrypoints/mcp/product-w
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
 import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
+import { validateProductWorkDefinition } from '../../src/application/work/validate-product-work-definition.js';
+import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
+import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -93,6 +97,78 @@ describe('North Star chat Work MVE', () => {
         );
         expect(result.rows[0]?.count).toBe(1);
       }
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('B2b-1 publishes a Product WorkDefinition in PGlite', async () => {
+    const db = new PGlite();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const agentVersionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const owner = {
+      tenantId: 'tenant-b2b',
+      workspaceId: randomUUID(),
+      principalType: 'service_account' as const,
+      principalId: 'principal-b2b',
+    };
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+    };
+    const parsed =
+      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b2b-product-work
+  description: B2b Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at)
+         VALUES($1,$2,$3,$4,'B2b',$5,$5)`,
+        [
+          owner.workspaceId,
+          owner.tenantId,
+          owner.principalType,
+          owner.principalId,
+          '2026-08-21T00:00:00.000Z',
+        ],
+      );
+      if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+      await new PostgresWorkDefinitionSourceRepository(db).publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B2b Product Work',
+        description: 'B2b Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: '2026-08-21T00:00:00.000Z',
+      });
+      const result = await db.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM work_definition_source_versions WHERE id=$1',
+        [versionId],
+      );
+      expect(result.rows[0]?.count).toBe(1);
     } finally {
       await db.close();
     }

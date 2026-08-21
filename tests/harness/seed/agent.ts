@@ -69,7 +69,7 @@ export async function seedPublishedAgentVersion(
       name,
       options.instructions ?? 'Handle deterministic harness work.',
       canonicalPackage,
-      `sha256:${'a'.repeat(64)}`,
+      'a'.repeat(64),
       '{}',
       JSON.stringify({ modelPolicyRef: 'free-only' }),
       JSON.stringify({ tools: [], skills: [] }),

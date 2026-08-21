@@ -123,7 +123,7 @@ export async function createIsolatedRuntimeEnvironment(runtimeRoot) {
 /**
  * A persisted Paseo home can outlive the container that created it.
  * A parseable marker from another hostname is stale. For the same hostname
- * (for example `docker compose restart` reusing a container hostname), retain
+ * (for example a restart reusing a process hostname), retain
  * it only when the PID is live and `/proc` identifies that PID as Paseo.
  * Unreadable or ambiguous markers remain fail-closed.
  */

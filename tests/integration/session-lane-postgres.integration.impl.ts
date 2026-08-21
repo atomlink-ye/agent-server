@@ -168,6 +168,20 @@ describeRealPostgres('Phase C session lanes on PostgreSQL', () => {
                   },
                 },
               }) as never,
+            findVersionByTenant: async () =>
+              ({
+                status: 'published',
+                id: versionId,
+                package: {
+                  spec: {
+                    instructions: 'instructions',
+                    tools: [],
+                    skills: [],
+                    memory: { proposalLimit: 1 },
+                    runtime: { modelPolicyRef: 'free-only' },
+                  },
+                },
+              }) as never,
           },
           invokables,
           { resolve: async () => null },

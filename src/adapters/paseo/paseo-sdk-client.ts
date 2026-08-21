@@ -24,7 +24,7 @@ const PASEO_PROVIDER_DEFAULT_MODE: Readonly<
   Record<ManagedEnvironmentProvider, string>
 > = {
   opencode: 'build',
-  claude: 'bypassPermissions',
+  claude: 'auto',
   codex: 'full-access',
 };
 

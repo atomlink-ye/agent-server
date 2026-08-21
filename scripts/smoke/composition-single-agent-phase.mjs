@@ -18,7 +18,7 @@ export async function runCompositionSingleAgentSmoke({
 }) {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl)
-    throw new Error('composition smoke requires DATABASE_URL from local-env');
+    throw new Error('composition smoke requires a host-native DATABASE_URL');
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_SINGLE_AGENT_OK_${scenarioId}`;
 
@@ -374,7 +374,7 @@ export async function runCompositionSingleAgentInlineSmoke({
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl)
     throw new Error(
-      'inline composition smoke requires DATABASE_URL from local-env',
+      'inline composition smoke requires a host-native DATABASE_URL',
     );
   const scenarioId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const marker = `COMPOSITION_INLINE_OK_${scenarioId}`;

@@ -22,8 +22,8 @@ flowchart LR
 Prerequisites:
 
 - Node 22–24 and pnpm 11;
-- a locally reachable PostgreSQL server;
-- `createdb` is recommended so setup can create the development database automatically.
+- no PostgreSQL installation is required;
+- `createdb` is optional and lets setup create the real default database automatically.
 
 Install and prepare the development database:
 
@@ -31,16 +31,19 @@ Install and prepare the development database:
 corepack enable
 pnpm install --frozen-lockfile
 pnpm setup
+pnpm setup:providers   # optional; required for host-native runtime work
 pnpm doctor
 ```
 
-By default the harness uses:
+When reachable, the default real database is:
 
 ```text
 postgresql://$USER@127.0.0.1:5432/agent_server_dev
 ```
 
 Set `DATABASE_URL` when the local database uses a different user, password, host, port, or name. `pnpm setup` is idempotent: it creates local working directories, creates the database when possible, and applies durable migrations.
+
+If no explicit `DATABASE_URL`/`POSTGRES_URL` is set and local PostgreSQL is absent, setup starts or reuses a persistent PGlite wire server at `127.0.0.1:55432` under `.local/dev-runtime` and applies the same migrations. Set `PGLITE_PORT` when that port is occupied. Explicit database URLs still require reachable real PostgreSQL.
 
 Start normal core development without Docker or a provider:
 
@@ -61,8 +64,13 @@ Core mode uses the deterministic direct-chat mock and leaves Product Work execut
 When the change actually needs the execution plane, load provider credentials and run:
 
 ```bash
+pnpm setup:providers
 pnpm dev:runtime
 ```
+
+The pinned provider toolchain requires Linux and `flock`; use the Linux
+development sandbox for host-native runtime preparation. Core development does
+not require provider installation.
 
 `dev:runtime` starts the same host-native API/Web topology and uses the existing host-native Paseo helper for the runtime process. It also runs the idempotent Web bootstrap after the API becomes ready.
 
@@ -161,18 +169,28 @@ pnpm canary:golden-path
 
 Provider availability, prompt/tool choice, and external runtime behavior are canary concerns; deterministic product wiring belongs in `test:scenario`.
 
-## Docker / production-like topology
+## Deployment-image verification
 
-Docker Compose remains supported, but it is no longer the ordinary development entrypoint:
+The repository's single `Dockerfile` describes the Node, pnpm, browser, and
+provider-toolchain environment needed to verify a deployment image. Local
+development and tests use the host-native commands above; install PostgreSQL
+natively when you need the real PostgreSQL semantic lane.
+
+## Real PostgreSQL test files
+
+`pnpm test:pg` needs a dedicated native PostgreSQL database. A directly-run
+PostgreSQL integration test also needs an explicit database URL; it does not
+start infrastructure for you:
 
 ```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-pnpm acceptance:run
+createdb agent_server_test
+export DATABASE_URL="postgresql://$USER@127.0.0.1:5432/agent_server_test"
+pnpm exec vitest run tests/integration/real-pg-pool.integration.test.ts
 ```
 
-`config/local-environments.yaml` and `tooling/environment/` remain the production-like/CI/acceptance topology harness. Use them when container topology itself is what you need to validate, not as a prerequisite for editing or testing Agent Server inside an already isolated sandbox.
+Use a database name containing `test`; the real-PostgreSQL runner rejects
+production-flavored names. Set `TEST_DATABASE_URL` instead when running
+`pnpm test:pg`.
 
 ## Tests, fixtures, evals, canaries, acceptance
 
@@ -196,7 +214,6 @@ tests/                  contract/integration/repository/scenario checks
 e2e/                    explicit browser/process E2E
 evals/                  Agent/model quality evaluation
 tooling/dev/             host-native developer harness
-tooling/environment/     Docker/production-like topology harness
 scripts/dev/             reusable runtime/bootstrap helpers
 scripts/smoke/           small real external main flows
 scripts/ops/             migration/recovery/operator utilities

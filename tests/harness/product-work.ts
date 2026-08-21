@@ -65,6 +65,12 @@ export function createHarnessProductWork(input: {
             } as any)
           : null;
       },
+      async findManagedDefinitionByTenant() {
+        return null;
+      },
+      async findVersionByTenant() {
+        return null;
+      },
     },
     agentResolution: {
       async resolvePublished(id) {

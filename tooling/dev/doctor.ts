@@ -1,3 +1,7 @@
+import { access, constants } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+
 import { Pool } from 'pg';
 
 import { durableKernelMigrationFileNames } from '../../src/infrastructure/postgres/postgres.js';
@@ -5,10 +9,18 @@ import {
   canConnectTcp,
   commandAvailable,
   defaultHostDatabaseUrl,
+  ensureDevelopmentDatabase,
+  identifyDatabaseBackend,
   isPortFree,
   loadLocalDotEnv,
   redactDatabaseUrl,
 } from './host-native.js';
+import {
+  providerToolchainPaths,
+  repositoryRoot,
+  validateProviders,
+} from './setup-providers.js';
+import type { HostDatabaseBackend } from './host-native.js';
 
 export type DoctorCheck = Readonly<{
   name: string;
@@ -17,10 +29,54 @@ export type DoctorCheck = Readonly<{
   requiredFor: readonly ('core' | 'scenario' | 'runtime')[];
 }>;
 
+type PostgresChecks = Readonly<{
+  checks: readonly [DoctorCheck, DoctorCheck];
+  backend: HostDatabaseBackend;
+}>;
+
+function databaseDetail(
+  connectionString: string,
+  backend: HostDatabaseBackend,
+): string {
+  if (backend === 'pglite') {
+    try {
+      const parsed = new URL(connectionString);
+      return `PGlite wire server at ${parsed.host} — development usable; real PG semantics not covered`;
+    } catch {
+      return 'PGlite wire server — development usable; real PG semantics not covered';
+    }
+  }
+  return `real PostgreSQL at ${redactDatabaseUrl(connectionString)}`;
+}
+
 async function postgresChecks(
   environment: NodeJS.ProcessEnv,
-): Promise<readonly [DoctorCheck, DoctorCheck]> {
-  const connectionString = defaultHostDatabaseUrl(environment);
+): Promise<PostgresChecks> {
+  let connectionString: string;
+  try {
+    connectionString = await ensureDevelopmentDatabase(environment);
+  } catch (error) {
+    connectionString = defaultHostDatabaseUrl(environment);
+    const postgres: DoctorCheck = {
+      name: 'postgres',
+      status: 'fail',
+      detail: `real PostgreSQL at ${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
+      requiredFor: ['core', 'runtime'],
+    };
+    return {
+      backend: 'postgres',
+      checks: [
+        postgres,
+        {
+          name: 'migrations',
+          status: 'fail',
+          detail: 'not checked because PostgreSQL is unreachable',
+          requiredFor: ['core', 'runtime'],
+        },
+      ],
+    };
+  }
+  const backend = await identifyDatabaseBackend(connectionString);
   const pool = new Pool({
     connectionString,
     max: 1,
@@ -31,7 +87,7 @@ async function postgresChecks(
     const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'ok',
-      detail: redactDatabaseUrl(connectionString),
+      detail: databaseDetail(connectionString, backend),
       requiredFor: ['core', 'runtime'],
     };
     try {
@@ -43,45 +99,54 @@ async function postgresChecks(
         fileName.replace(/\.sql$/, ''),
       );
       const missing = expected.filter((version) => !applied.has(version));
-      return [
-        postgres,
-        {
-          name: 'migrations',
-          status: missing.length === 0 ? 'ok' : 'fail',
-          detail:
-            missing.length === 0
-              ? `${expected.length}/${expected.length} durable migrations applied`
-              : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
-          requiredFor: ['core', 'runtime'],
-        },
-      ];
+      return {
+        backend,
+        checks: [
+          postgres,
+          {
+            name: 'migrations',
+            status: missing.length === 0 ? 'ok' : 'fail',
+            detail:
+              missing.length === 0
+                ? `${expected.length}/${expected.length} durable migrations applied`
+                : `${applied.size}/${expected.length} applied; run pnpm setup (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''})`,
+            requiredFor: ['core', 'runtime'],
+          },
+        ],
+      };
     } catch (error) {
-      return [
-        postgres,
-        {
-          name: 'migrations',
-          status: 'fail',
-          detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
-          requiredFor: ['core', 'runtime'],
-        },
-      ];
+      return {
+        backend,
+        checks: [
+          postgres,
+          {
+            name: 'migrations',
+            status: 'fail',
+            detail: `migration registry unavailable; run pnpm setup (${error instanceof Error ? error.message : 'unknown error'})`,
+            requiredFor: ['core', 'runtime'],
+          },
+        ],
+      };
     }
   } catch (error) {
     const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'fail',
-      detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
+      detail: `${databaseDetail(connectionString, backend)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
-    return [
-      postgres,
-      {
-        name: 'migrations',
-        status: 'fail',
-        detail: 'not checked because PostgreSQL is unreachable',
-        requiredFor: ['core', 'runtime'],
-      },
-    ];
+    return {
+      backend,
+      checks: [
+        postgres,
+        {
+          name: 'migrations',
+          status: 'fail',
+          detail: 'not checked because PostgreSQL is unreachable',
+          requiredFor: ['core', 'runtime'],
+        },
+      ],
+    };
   } finally {
     await pool.end().catch(() => undefined);
   }
@@ -90,7 +155,26 @@ async function postgresChecks(
 async function paseoCheck(
   environment: NodeJS.ProcessEnv,
 ): Promise<DoctorCheck> {
-  const wsUrl = environment.PASEO_WS_URL?.trim() || 'ws://127.0.0.1:6767/ws';
+  const configuredWsUrl = environment.PASEO_WS_URL?.trim();
+  if (!configuredWsUrl) {
+    try {
+      await validateProviders(environment);
+      return {
+        name: 'paseo',
+        status: 'ok',
+        detail: 'provisioned provider-toolchain Paseo binary is valid',
+        requiredFor: ['runtime'],
+      };
+    } catch (error) {
+      return {
+        name: 'paseo',
+        status: 'warn',
+        detail: `provider-toolchain Paseo binary unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        requiredFor: ['runtime'],
+      };
+    }
+  }
+  const wsUrl = configuredWsUrl;
   try {
     const parsed = new URL(wsUrl);
     const port = Number.parseInt(
@@ -116,12 +200,93 @@ async function paseoCheck(
   }
 }
 
-function providerCheck(environment: NodeJS.ProcessEnv): DoctorCheck {
-  const provider = (environment.PASEO_PROVIDER?.trim() || 'opencode').toLowerCase();
+type ProviderBinaryName = 'paseo' | 'opencode' | 'claude' | 'codex';
+
+const providerBinaryNames: readonly ProviderBinaryName[] = [
+  'paseo',
+  'opencode',
+  'claude',
+  'codex',
+];
+
+async function binaryVersion(path: string): Promise<string> {
+  return new Promise((resolveVersion) => {
+    const child = spawn(path, ['--version'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let output = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      resolveVersion('unavailable');
+    }, 15_000);
+    timer.unref?.();
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.once('error', () => {
+      clearTimeout(timer);
+      resolveVersion('unavailable');
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        resolveVersion('unavailable');
+        return;
+      }
+      resolveVersion(
+        output.match(/\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/u)?.[0] ??
+          'unknown',
+      );
+    });
+  });
+}
+
+async function providerBinaryStatus(): Promise<string> {
+  const statuses = await Promise.all(
+    providerBinaryNames.map(async (name) => {
+      try {
+        await access(
+          providerToolchainPaths[name],
+          constants.X_OK,
+        );
+      } catch {
+        return `${name}=absent`;
+      }
+      return `${name}=installed(${await binaryVersion(providerToolchainPaths[name])})`;
+    }),
+  );
+  return statuses.join(',');
+}
+
+async function providerConfigStatus(): Promise<string> {
+  const configPaths = {
+    claude: join(
+      repositoryRoot,
+      '.local/dev-runtime/home/.claude/settings.json',
+    ),
+    codex: join(repositoryRoot, '.local/dev-runtime/home/.codex/config.toml'),
+  } as const;
+  const statuses = await Promise.all(
+    Object.entries(configPaths).map(async ([name, path]) => {
+      try {
+        await access(path, constants.R_OK);
+        return `${name}=present`;
+      } catch {
+        return `${name}=absent`;
+      }
+    }),
+  );
+  return `${statuses.join(',')},opencode=runtime-env`;
+}
+
+async function providerCheck(
+  environment: NodeJS.ProcessEnv,
+): Promise<DoctorCheck> {
+  const provider = (environment.PASEO_PROVIDER?.trim() || 'claude').toLowerCase();
   const keyByProvider: Readonly<Record<string, string>> = {
     opencode: 'OPENCODE_GO_API_KEY',
-    claude: 'ANTHROPIC_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
+    claude: 'OPENCODE_GO_API_KEY',
+    anthropic: 'OPENCODE_GO_API_KEY',
     codex: 'OPENAI_API_KEY',
     openai: 'OPENAI_API_KEY',
   };
@@ -134,13 +299,27 @@ function providerCheck(environment: NodeJS.ProcessEnv): DoctorCheck {
       requiredFor: ['runtime'],
     };
   }
+  const [binaryStatus, configStatus] = await Promise.all([
+    providerBinaryStatus(),
+    providerConfigStatus(),
+  ]);
+  let validationStatus = 'failed';
+  let validationError = '';
+  try {
+    await validateProviders(environment);
+    validationStatus = 'valid';
+  } catch (error) {
+    validationError = error instanceof Error ? error.message : String(error);
+  }
   const configured = Boolean(environment[keyName]?.trim());
+  const binariesInstalled = providerBinaryNames.every((name) =>
+    binaryStatus.includes(`${name}=installed(`),
+  );
+  const ready = configured && binariesInstalled && validationStatus === 'valid';
   return {
     name: 'provider',
-    status: configured ? 'ok' : 'warn',
-    detail: configured
-      ? `${provider}: ${keyName} is configured`
-      : `${provider}: ${keyName} is not exported; pnpm dev still works`,
+    status: ready ? 'ok' : 'warn',
+    detail: `${provider}: ${keyName}=${configured ? 'configured' : 'absent'}; validation=${validationStatus}${validationError ? `(${validationError})` : ''}; ${binaryStatus}; config=${configStatus}`,
     requiredFor: ['runtime'],
   };
 }
@@ -150,7 +329,7 @@ export async function runDoctor(
 ): Promise<readonly DoctorCheck[]> {
   const loaded = await loadLocalDotEnv(environment);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
-  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPair, paseo] =
+  const [pnpmAvailable, psqlAvailable, apiPortFree, webPortFree, postgresPairResult, paseo] =
     await Promise.all([
       commandAvailable('pnpm'),
       commandAvailable('psql'),
@@ -159,6 +338,7 @@ export async function runDoctor(
       postgresChecks(loaded),
       paseoCheck(loaded),
     ]);
+  const { checks: postgresPair, backend } = postgresPairResult;
   const [postgres, migrations] = postgresPair;
   const checks: DoctorCheck[] = [
     {
@@ -185,7 +365,10 @@ export async function runDoctor(
     migrations,
     {
       name: 'api-port',
-      status: apiPortFree ? 'ok' : 'warn',
+      // Why this exists: doctor must predict whether pnpm dev can bind its API.
+      // Design contract: an occupied required port is a failure, not a warning.
+      // Design goals: make readiness actionable before starting child processes.
+      status: apiPortFree ? 'ok' : 'fail',
       detail: apiPortFree
         ? `:${loaded.PORT ?? 3000} free`
         : `:${loaded.PORT ?? 3000} already in use`,
@@ -193,12 +376,15 @@ export async function runDoctor(
     },
     {
       name: 'web-port',
-      status: webPortFree ? 'ok' : 'warn',
+      // Why this exists: core startup also owns the Web port.
+      // Design contract: an occupied required port makes core readiness false.
+      // Design goals: keep doctor metadata consistent with actual startup.
+      status: webPortFree ? 'ok' : 'fail',
       detail: webPortFree ? ':3001 free' : ':3001 already in use',
       requiredFor: ['core', 'runtime'],
     },
     paseo,
-    providerCheck(loaded),
+    await providerCheck(loaded),
   ];
 
   const coreReady = !checks.some(
@@ -211,16 +397,29 @@ export async function runDoctor(
     coreReady &&
     checks.find((check) => check.name === 'paseo')?.status === 'ok' &&
     checks.find((check) => check.name === 'provider')?.status === 'ok';
+  /*
+   * Why this exists: PGlite speaks the PostgreSQL wire protocol but cannot
+   * prove PostgreSQL-specific semantics. The backend gate prevents a PGlite
+   * fallback from becoming a false-green real-Postgres signal.
+   * Design contract: ready.pg is true only for reachable, migrated real
+   * PostgreSQL; PGlite may still make ready.core true.
+   * Design goals: keep capability reporting honest and independently useful.
+   */
+  const pgReady =
+    backend === 'postgres' &&
+    postgres.status === 'ok' &&
+    migrations.status === 'ok';
 
   for (const check of checks) {
     const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '○' : '✗';
     process.stdout.write(`${icon} ${check.name}: ${check.detail}\n`);
   }
   process.stdout.write(`\nready.core=${coreReady}\n`);
+  process.stdout.write(`ready.pg=${pgReady}\n`);
   process.stdout.write(`ready.scenario=${scenarioReady}\n`);
   process.stdout.write(`ready.runtime=${runtimeReady}\n`);
   process.stdout.write(
-    `${JSON.stringify({ event: 'agent_server_doctor', coreReady, scenarioReady, runtimeReady, checks })}\n`,
+    `${JSON.stringify({ event: 'agent_server_doctor', backend, ready: { pg: pgReady, core: coreReady, scenario: scenarioReady, runtime: runtimeReady }, coreReady, pgReady, scenarioReady, runtimeReady, checks })}\n`,
   );
 
   if (!coreReady || !scenarioReady) process.exitCode = 1;

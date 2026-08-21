@@ -46,7 +46,10 @@ export class InvokeTask {
     private readonly admissions: AdmissionRepository,
     private readonly definitions: DefinitionReadApi,
     resolverOrNow: AgentResolutionApi | (() => Date) = new ResolveAgentVersion(
-      { findVersion: async () => null },
+      {
+        findVersion: async () => null,
+        findVersionByTenant: async () => null,
+      },
       definitions,
       { resolve: async () => null },
     ),
@@ -55,7 +58,10 @@ export class InvokeTask {
     this.resolver =
       typeof resolverOrNow === 'function'
         ? new ResolveAgentVersion(
-            { findVersion: async () => null },
+            {
+              findVersion: async () => null,
+              findVersionByTenant: async () => null,
+            },
             definitions,
             { resolve: async () => null },
           )

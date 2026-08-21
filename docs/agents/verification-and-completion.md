@@ -17,7 +17,9 @@ Tests may be few in Prove, but their category must be truthful.
 
 ## Environment and fixtures
 
-Infrastructure-backed tests should use `tests/support/environment` and the shared `config/local-environments.yaml` topology definitions. A focused test should not require an undocumented manual setup script.
+Infrastructure-backed tests should use the host-native harness and explicit
+native PostgreSQL URLs when PostgreSQL semantics are required. A focused test
+should not require an undocumented manual setup script.
 
 Fixture setup is TypeScript-first. Serialized fixtures belong in Git only when a test consumes them as a stable protocol/example input.
 

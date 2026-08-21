@@ -36,6 +36,14 @@ function canonicalize(value) {
   return JSON.stringify(value);
 }
 
+function expectedRuntimeModel(provider, model) {
+  const prefix = 'opencode-go/';
+  const stripsProviderPrefix = provider === 'claude' || provider === 'codex';
+  return stripsProviderPrefix && model.startsWith(prefix)
+    ? model.slice(prefix.length)
+    : model;
+}
+
 function fingerprint(source) {
   return `sha256:${createHash('sha256')
     .update(canonicalize(source), 'utf8')
@@ -238,7 +246,7 @@ const teamVersion = await request(
 progress('team_version_published', { version_id: teamVersion.id });
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl)
-  throw new Error('composition team smoke requires DATABASE_URL from local-env');
+  throw new Error('composition team smoke requires a host-native DATABASE_URL');
 const definitionId = randomUUID();
 const definitionVersionId = randomUUID();
 const compositionSource = {
@@ -463,7 +471,10 @@ if (
   !(usage.output_tokens > 0) ||
   !(usage.total_cost_usd > 0) ||
   !runtimeModels.has(
-    `${realProviderDefaults.PASEO_PROVIDER}/${realProviderDefaults.PASEO_MODEL}`,
+    `${realProviderDefaults.PASEO_PROVIDER}/${expectedRuntimeModel(
+      realProviderDefaults.PASEO_PROVIDER,
+      realProviderDefaults.PASEO_MODEL,
+    )}`,
   )
 ) {
   throw new Error(

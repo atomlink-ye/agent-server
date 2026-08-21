@@ -6,6 +6,8 @@ import type {
   ReadAgentHomeEntryInput,
   WriteAgentHomeEntryInput,
 } from '../../application/ports/agent-home-repository.js';
+import { AgentHomeContextAdapter } from '../../application/context/agent-home-context-adapter.js';
+import { PostgresLogicalFileStore } from './postgres-logical-file-store.js';
 
 interface Queryable {
   query<T = Record<string, unknown>>(
@@ -34,7 +36,36 @@ type EntryRow = {
 const ENTRY_COLUMNS =
   'id, path, current_version, content, content_sha256, content_size_bytes, created_at, updated_at';
 
+/**
+ * Public compatibility adapter. Existing Agent Home APIs keep their contract,
+ * while new writes are canonically owned by ContextFS. Historical
+ * agent_home_entries remain readable through the legacy fallback.
+ */
 export class PostgresAgentHomeRepository implements AgentHomeRepository {
+  private readonly adapter: AgentHomeContextAdapter;
+
+  public constructor(database: Database) {
+    this.adapter = new AgentHomeContextAdapter(
+      new PostgresLogicalFileStore(database),
+      new LegacyPostgresAgentHomeRepository(database),
+    );
+  }
+
+  public list(input: ListAgentHomeEntriesInput) {
+    return this.adapter.list(input);
+  }
+
+  public read(input: ReadAgentHomeEntryInput) {
+    return this.adapter.read(input);
+  }
+
+  public write(input: WriteAgentHomeEntryInput) {
+    return this.adapter.write(input);
+  }
+}
+
+/** Read-only-after-cutover compatibility implementation for old rows. */
+class LegacyPostgresAgentHomeRepository implements AgentHomeRepository {
   public constructor(private readonly database: Database) {}
 
   public async list(
@@ -74,11 +105,12 @@ export class PostgresAgentHomeRepository implements AgentHomeRepository {
   public async write(
     input: WriteAgentHomeEntryInput,
   ): Promise<AgentHomeEntryRow | null> {
+    // Retained for source compatibility and historical migration tests. The
+    // public PostgresAgentHomeRepository never calls this method for new writes.
     const client = await this.client();
     const now = new Date().toISOString();
     await client.query('BEGIN');
     try {
-      // Try to find existing entry
       const existingResult = await client.query<{
         id: string;
         current_version: number;
@@ -100,7 +132,6 @@ export class PostgresAgentHomeRepository implements AgentHomeRepository {
       const nextVersion = (existing?.current_version ?? 0) + 1;
 
       if (existing) {
-        // Update existing entry
         await client.query(
           `UPDATE agent_home_entries
            SET content = $1, content_sha256 = $2, content_size_bytes = $3,
@@ -116,7 +147,6 @@ export class PostgresAgentHomeRepository implements AgentHomeRepository {
           ],
         );
       } else {
-        // Insert new entry
         await client.query(
           `INSERT INTO agent_home_entries
            (id, tenant_id, agent_definition_id, namespace, scope_key, path,
@@ -138,7 +168,6 @@ export class PostgresAgentHomeRepository implements AgentHomeRepository {
         );
       }
 
-      // Create snapshot
       await client.query(
         `INSERT INTO agent_home_snapshots
          (id, entry_id, version, content, content_sha256, content_size_bytes, created_at)
@@ -154,7 +183,6 @@ export class PostgresAgentHomeRepository implements AgentHomeRepository {
         ],
       );
 
-      // Fetch the updated entry
       const result = await client.query<EntryRow>(
         `SELECT ${ENTRY_COLUMNS} FROM agent_home_entries WHERE id = $1`,
         [entryId],

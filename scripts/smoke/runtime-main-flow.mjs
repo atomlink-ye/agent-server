@@ -251,7 +251,7 @@ async function main() {
       token,
       workspaceId,
       expectedProvider: realProviderDefaults.PASEO_PROVIDER,
-      expectedModel: realProviderDefaults.PASEO_MODEL,
+      expectedModel,
       timeoutMs: stageTimeouts.run,
       progress,
     });
@@ -262,7 +262,7 @@ async function main() {
       token,
       workspaceId,
       expectedProvider: realProviderDefaults.PASEO_PROVIDER,
-      expectedModel: realProviderDefaults.PASEO_MODEL,
+      expectedModel,
       timeoutMs: stageTimeouts.run,
       progress,
     });

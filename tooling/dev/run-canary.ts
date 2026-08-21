@@ -5,8 +5,11 @@ import {
   LOCAL_WORKSPACE_ID,
   hostRuntimeEnvironment,
   hostWebEnvironment,
+  isPortFree,
   loadLocalDotEnv,
+  ownedChildLogPath,
   prepareHostNativeEnvironment,
+  readRuntimeLogTail,
   repositoryRoot,
   runCommand,
   spawnOwned,
@@ -15,6 +18,32 @@ import {
 } from './host-native.js';
 
 export type CanaryKind = 'runtime' | 'golden-path';
+
+function canaryPort(
+  environment: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+): number {
+  const value = Number.parseInt(
+    environment[name]?.trim() || String(fallback),
+    10,
+  );
+  if (!Number.isInteger(value) || value < 1 || value > 65_535) {
+    throw new Error(`${name} must be between 1 and 65535 (received ${value})`);
+  }
+  return value;
+}
+
+async function assertCanaryPortFree(
+  label: string,
+  port: number,
+): Promise<void> {
+  if (!(await isPortFree(port))) {
+    throw new Error(
+      `${label} port 127.0.0.1:${port} is already in use; stop the existing process before running the canary.`,
+    );
+  }
+}
 
 function parseKind(value: string | undefined): CanaryKind {
   if (value === 'runtime' || value === 'golden-path') return value;
@@ -27,6 +56,8 @@ export async function runHostCanary(
 ): Promise<void> {
   const loaded = await loadLocalDotEnv(environment);
   const children: ChildProcess[] = [];
+  let primaryChild: ChildProcess | undefined;
+  let primaryEnvironment: NodeJS.ProcessEnv | undefined;
   try {
     let commandEnvironment: NodeJS.ProcessEnv;
     if (kind === 'runtime') {
@@ -35,6 +66,9 @@ export async function runHostCanary(
       // bounded real-provider turn.
       const prepared = await prepareHostNativeEnvironment(loaded);
       const runtimeEnvironment = hostRuntimeEnvironment(prepared);
+      const apiPort = canaryPort(runtimeEnvironment, 'PORT', 3000);
+      await assertCanaryPortFree('runtime API', apiPort);
+      const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
       const api = spawnOwned(
         'node',
         [
@@ -45,13 +79,19 @@ export async function runHostCanary(
           'tsx',
           'src/entrypoints/api/server.ts',
         ],
-        { environment: runtimeEnvironment },
+        { environment: runtimeEnvironment, logName: 'canary-runtime-api' },
       );
       children.push(api);
-      await waitForHttp('http://127.0.0.1:3000/health/ready', 90_000);
+      primaryChild = api;
+      primaryEnvironment = runtimeEnvironment;
+      await waitForHttp(`${apiBaseUrl}/health/ready`, 90_000, {
+        child: api,
+        environment: runtimeEnvironment,
+        label: 'runtime canary API',
+      });
       commandEnvironment = {
         ...runtimeEnvironment,
-        AGENT_SERVER_BASE_URL: 'http://127.0.0.1:3000',
+        AGENT_SERVER_BASE_URL: apiBaseUrl,
         AGENT_SERVER_SERVICE_TOKEN:
           runtimeEnvironment.AGENT_SERVER_SERVICE_TOKEN?.trim() ||
           LOCAL_SERVICE_TOKEN,
@@ -66,17 +106,31 @@ export async function runHostCanary(
       return;
     }
 
+    const apiPort = canaryPort(loaded, 'PORT', 3000);
+    await assertCanaryPortFree('golden-path API', apiPort);
+    await assertCanaryPortFree('golden-path web', 3001);
+    const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
     const dev = spawnOwned(
       'node',
       ['--import', 'tsx', 'tooling/dev/start.ts', 'runtime'],
-      { environment: loaded },
+      { environment: loaded, logName: 'canary-golden-path-dev' },
     );
     children.push(dev);
-    await waitForHttp('http://127.0.0.1:3000/health/ready', 90_000);
-    await waitForHttp('http://127.0.0.1:3001', 90_000);
+    primaryChild = dev;
+    primaryEnvironment = loaded;
+    await waitForHttp(`${apiBaseUrl}/health/ready`, 90_000, {
+      child: dev,
+      environment: loaded,
+      label: 'golden-path dev',
+    });
+    await waitForHttp('http://127.0.0.1:3001', 90_000, {
+      child: dev,
+      environment: loaded,
+      label: 'golden-path dev',
+    });
     commandEnvironment = hostWebEnvironment({
       ...loaded,
-      AGENT_SERVER_BASE_URL: 'http://127.0.0.1:3000',
+      AGENT_SERVER_BASE_URL: apiBaseUrl,
       AGENT_SERVER_SERVICE_TOKEN:
         loaded.AGENT_SERVER_SERVICE_TOKEN?.trim() || LOCAL_SERVICE_TOKEN,
       AGENT_SERVER_WORKSPACE_ID:
@@ -96,6 +150,22 @@ export async function runHostCanary(
       ],
       { environment: commandEnvironment, cwd: repositoryRoot },
     );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const logPath = primaryChild && ownedChildLogPath(primaryChild);
+    if (logPath && !errorMessage.includes('\nlog tail:\n')) {
+      let tail = '[runtime log is unavailable]';
+      try {
+        tail = await readRuntimeLogTail(logPath, primaryEnvironment ?? loaded);
+      } catch {
+        // Preserve the primary failure if the diagnostic log cannot be read.
+      }
+      throw new Error(
+        `${errorMessage}\ncanary primary child: log=${logPath}\nlog tail:\n${tail}`,
+        { cause: error },
+      );
+    }
+    throw error;
   } finally {
     await stopOwned(children);
   }

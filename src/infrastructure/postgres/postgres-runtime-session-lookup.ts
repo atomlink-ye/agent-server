@@ -54,21 +54,18 @@ export class PostgresRuntimeSessionLookup implements RuntimeSessionLookup {
 function mapRuntimeSession(row: any): RuntimeSession {
   const paseoWorkspaceId = row.paseo_workspace_id ?? null;
   const providerAgentId = row.provider_agent_id ?? null;
+  const scope = runtimeScope(row);
   return {
     id: row.id,
-    scopeKind: row.scope_kind,
+    scope,
+    scopeKind: scope.kind,
     workspaceId: row.workspace_id,
-    scopeId:
-      row.scope_kind === 'task'
-        ? row.task_id
-        : row.scope_kind === 'team_member'
-          ? row.scope_id
-          : row.product_session_id,
+    scopeId: runtimeScopeId(scope),
     productSessionId: row.product_session_id ?? null,
     taskId: row.task_id ?? null,
     launchSnapshotId: row.launch_snapshot_id,
     agentVersionId: row.agent_version_id,
-    environmentVersionId: row.environment_version_id,
+    environmentVersionId: row.environment_version_id ?? null,
     resolvedSkills: row.resolved_skills ?? [],
     toolRefs: row.tool_refs ?? [],
     workspaceBinding: paseoWorkspaceId
@@ -80,4 +77,37 @@ function mapRuntimeSession(row: any): RuntimeSession {
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };
+}
+
+function runtimeScope(row: any): RuntimeSession['scope'] {
+  switch (row.scope_kind) {
+    case 'agent_chat':
+      if (!row.scope_id) throw new Error('Agent chat RuntimeSession has no scope id.');
+      return { kind: 'agent_chat', agentChatRuntimeId: row.scope_id };
+    case 'team_member':
+      if (!row.scope_id) throw new Error('Team member RuntimeSession has no scope id.');
+      return { kind: 'team_member', teamMemberRunId: row.scope_id };
+    case 'task':
+      if (!row.task_id) throw new Error('Task RuntimeSession has no task id.');
+      return { kind: 'task', taskId: row.task_id };
+    case 'product_session':
+      if (!row.product_session_id)
+        throw new Error('Product RuntimeSession has no product session id.');
+      return { kind: 'product_session', productSessionId: row.product_session_id };
+    default:
+      throw new Error(`Unsupported runtime scope ${String(row.scope_kind)}.`);
+  }
+}
+
+function runtimeScopeId(scope: RuntimeSession['scope']): string {
+  switch (scope.kind) {
+    case 'agent_chat':
+      return scope.agentChatRuntimeId;
+    case 'team_member':
+      return scope.teamMemberRunId;
+    case 'task':
+      return scope.taskId;
+    case 'product_session':
+      return scope.productSessionId;
+  }
 }

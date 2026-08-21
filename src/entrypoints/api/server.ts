@@ -13,9 +13,15 @@ const logger = createLogger({
 });
 const { app, close } = await createService(config, logger);
 
-// The canonical frontend is now a pure Vite client. Keep browser-facing BFF
-// routes on the Agent Server process so service-account credentials never enter
-// the browser and no second Next.js runtime is required.
+// The canonical frontend is a pure Vite client. Browser-facing BFF routes live
+// on Agent Server so service-account credentials never enter browser code.
+// Local development historically declares two sample accounts; choose the
+// first enabled account only outside production when no explicit browser token
+// is configured. Production remains fail-closed and requires an explicit token.
+if (!process.env.AGENT_SERVER_SERVICE_TOKEN?.trim() && config.nodeEnv !== 'production') {
+  const localAccount = config.serviceAccounts.find((account) => !account.disabled);
+  if (localAccount) process.env.AGENT_SERVER_SERVICE_TOKEN = localAccount.token;
+}
 registerBrowserWebRoutes(app, config);
 
 const server = serve(
@@ -52,9 +58,7 @@ const server = serve(
 
 let stopping = false;
 async function shutdown(signal: string): Promise<void> {
-  if (stopping) {
-    return;
-  }
+  if (stopping) return;
   stopping = true;
   await shutdownService({
     signal,

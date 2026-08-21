@@ -103,12 +103,10 @@ spec:
 
 For local integration work, `pnpm dev` starts the `core` profile and is not the
 Agent Team runtime/API process to target. Start the runtime profile with
-`pnpm dev:runtime` (or `pnpm local-env up runtime`) and inspect its connection
-metadata with `pnpm local-env info`. For an isolated command, use
-`pnpm local-env run runtime -- <command>`; that shared environment wrapper
-supplies `AGENT_SERVER_BASE_URL` and `AGENT_SERVER_SERVICE_TOKEN` to the
-command. Do not copy those connection values into an Agent package or source
-file.
+`pnpm dev:runtime`; it prepares the host-native runtime API and its connection
+metadata. Smoke commands start their own bounded host-native runtime and supply
+`AGENT_SERVER_BASE_URL` and `AGENT_SERVER_SERVICE_TOKEN` to their child command.
+Do not copy those connection values into an Agent package or source file.
 
 `agentctl` authoring failures emit an error `code`, resource-qualified `path`,
 and usable `message`. Native package and project-reference validation retain

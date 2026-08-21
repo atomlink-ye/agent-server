@@ -14,6 +14,10 @@ import type {
   WorkChatWakeWorkKey,
   WorkChatWakeWorkPage,
 } from './work-chat-wake-state-repository.js';
+import type {
+  StepWorker,
+  WorkerStepResult,
+} from '../../shared/workers/step-worker.js';
 
 export interface WorkChatConversationLink {
   readonly conversationId: string;
@@ -80,7 +84,7 @@ type WorkChatWakeWorkerRuntimeDependencies = WorkChatWakeWorkerDependencies & {
 };
 
 /** Polls product cards, atomically queues transitions, and drains the outbox. */
-export class WorkChatWakeWorker {
+export class WorkChatWakeWorker implements StepWorker {
   readonly #dependencies: WorkChatWakeWorkerRuntimeDependencies;
   readonly #conversationResolver: WorkChatConversationResolver;
   readonly #options: Required<
@@ -146,7 +150,14 @@ export class WorkChatWakeWorker {
     this.#loop = null;
   }
 
-  /** One scan plus at most one claimed delivery. */
+  /** Deterministic one-step seam used by product scenarios. */
+  public async step(): Promise<WorkerStepResult> {
+    return (await this.processOnce())
+      ? { kind: 'processed' }
+      : { kind: 'idle' };
+  }
+
+  /** One scan plus at most one claimed delivery. Kept as a compatibility API. */
   public async processOnce(): Promise<boolean> {
     const observed = await this.scanOnce();
     let delivery;
@@ -240,8 +251,8 @@ export class WorkChatWakeWorker {
 
   private async runLoop(): Promise<void> {
     while (!this.#stopping) {
-      const processed = await this.processOnce();
-      if (!processed && !this.#stopping)
+      const result = await this.step();
+      if (result.kind === 'idle' && !this.#stopping)
         await this.delay(this.#options.pollIntervalMs);
     }
   }

@@ -77,10 +77,9 @@ USER node
 
 FROM dependencies AS development
 
-# Compose bind-mounts the checked-out repository at /workspace for every
-# development service. Keep the image source-independent so an application
-# edit does not force a multi-gigabyte runtime image export; only the build-time
-# binary gate needs to be present in this stage.
+# Keep the deployment-verification image source-independent so an application
+# edit does not force a multi-gigabyte runtime image export; only the
+# build-time binary gate needs to be present in this stage.
 COPY --chown=node:node scripts/dev/resolve-provider.mjs scripts/dev/resolve-opencode.mjs scripts/dev/resolve-paseo.mjs scripts/dev/safe-environment.mjs ./scripts/dev/
 COPY --chown=node:node provider-toolchain/ ./provider-toolchain/
 
@@ -94,7 +93,7 @@ COPY --chown=node:node provider-toolchain/ ./provider-toolchain/
 # Consequence, on purpose: with the default `development` target,
 # `pnpm test:web` / `test:e2e:web` — and therefore `pnpm test` and `pnpm run ci`,
 # which include them — cannot run. Build with `--target web-testing`
-# (or `docker compose build --build-arg`/service override) when you need them.
+# when you need them.
 FROM development AS web-testing
 
 USER root

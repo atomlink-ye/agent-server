@@ -44,6 +44,16 @@ export interface ManagedAgentDefinitionRead {
     readonly tenantId: string;
     readonly definitionId: string;
   }): Promise<AgentDefinition | null>;
+  /** Internal delivery seam: tenant-scoped managed version read. */
+  findVersionByTenant(input: {
+    readonly tenantId: string;
+    readonly versionId: string;
+  }): Promise<ManagedAgentVersion | null>;
+  /** Internal delivery seam: tenant-scoped managed version listing. */
+  listVersionsByTenant(input: {
+    readonly tenantId: string;
+    readonly command: ListAgentVersionsCommand;
+  }): Promise<ManagedAgentVersionPage | null>;
 }
 
 export interface ListAgentVersionsCommand {

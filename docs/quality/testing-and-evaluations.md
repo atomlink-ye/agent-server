@@ -1,26 +1,39 @@
 # Testing and evaluations
 
-Agent Server separates deterministic software verification from Agent/model-quality evaluation and from real external smoke.
+Agent Server separates deterministic software verification from Agent/model-quality evaluation, live runtime compatibility, and production-like acceptance.
 
 ## Core rule
 
 ```text
-Topology × Fixture × Test Case
+Test the seam continuously.
+Test the world periodically.
 ```
 
-Topology defines infrastructure. Fixture defines starting product data. Test Case defines assertions. A phase-specific runner that owns all three is a design smell.
+A developer should be able to identify which boundary failed. Do not use a live model, browser, scheduler timing, container topology, and real database simultaneously when the assertion only concerns deterministic product wiring.
 
-## Deterministic tests
+## Validation lanes
 
-### Unit
+| Lane | Default dependencies | Purpose | Canonical command |
+| --- | --- | --- | --- |
+| L0 Unit | none | pure logic/state/validation | `pnpm test:unit` |
+| L1 Integration | PGlite/fakes as appropriate | module/repository wiring | `pnpm test:integration` |
+| L2 Scenario | PGlite + scripted runtime decision | complete deterministic product journey | `pnpm test:scenario` |
+| L3 PostgreSQL semantic | dedicated local real PostgreSQL | PG-only locking/transaction/index behavior | `pnpm test:pg` |
+| L4 Runtime canary | Paseo + real provider | runtime/provider/tool compatibility | `pnpm canary:runtime` |
+| L5 Product canary | host-native API/Web/runtime/browser | representative user journey | `pnpm canary:golden-path` |
+| L6 Acceptance | production-like topology | milestone/release evidence | `pnpm acceptance:run` |
 
-Pure domain/application/helper/config behavior. No Docker, provider, or real network.
+The normal `pnpm test` aggregate stops at deterministic lanes. Live provider/browser/acceptance work is explicit.
+
+## Unit
+
+Pure domain/application/helper/config behavior. No Docker, provider, real network, or real PostgreSQL.
 
 ```bash
 pnpm test:unit
 ```
 
-### Contract
+## Contract
 
 Public request/response/schema/error contracts, normally in-process.
 
@@ -28,48 +41,143 @@ Public request/response/schema/error contracts, normally in-process.
 pnpm test:contract
 ```
 
-### Integration
+## Integration — PGlite by default
 
-Component/repository/adapter boundaries. PGlite is the default database when its semantics are sufficient.
+Component/repository/adapter boundaries use PGlite when its semantics are sufficient:
 
 ```bash
 pnpm test:integration
 ```
 
-For PostgreSQL-specific transaction, lock, concurrency, migration, or SQL semantics use the real-Postgres lane:
+PGlite is not treated as proof of PostgreSQL-only locking/concurrency behavior or any L3 claim. It is the fast deterministic default for ordinary persistence wiring; only a dedicated real PostgreSQL run can prove L3 semantics.
+
+## Deterministic product scenarios
 
 ```bash
-pnpm test:real-pg
+pnpm test:scenario
 ```
 
-The lane self-starts a disposable PostgreSQL environment when no external database URL is supplied.
+North Star scenarios use:
 
-### E2E
+- real Agent Server domain/application/module code;
+- real repositories and migrations;
+- real production MCP handlers;
+- semantic test fixtures;
+- explicit worker `step()` calls;
+- a scripted runtime/model decision boundary.
 
-Complete deterministic process/socket paths with fake/controlled execution where possible.
+The fake is the probabilistic decision boundary, not the product system. A scenario must not depend on whether Claude/Codex happens to choose the desired tool on that run.
+
+Reusable composition belongs in `tests/harness/`, not in every scenario file. Prefer:
+
+```text
+seed.workspace()
+seed.agentVersion()
+seed.environmentVersion()
+seed.teamVersion()
+seed.conversation()
+seed.workDefinition()
+seed.goldenPath()
+```
+
+over repeated table-shaped fixture SQL.
+
+`pnpm test:north-star` is a compatibility alias for this lane.
+
+## Real PostgreSQL semantic tests
+
+Only use this lane for PostgreSQL behavior PGlite should not claim to prove:
+
+```text
+FOR UPDATE / SKIP LOCKED
+advisory locks
+transaction/concurrency races
+connection-level behavior
+PostgreSQL-only index/constraint semantics
+real migration concurrency
+```
+
+The developer opts in with a dedicated local database:
 
 ```bash
-pnpm test:e2e
+createdb agent_server_test
+TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:pg
 ```
+
+The runner:
+
+1. does **not** start Docker;
+2. skips cleanly with exit code `0` when neither `TEST_DATABASE_URL` nor `INTEGRATION_DATABASE_URL` is set, and emits exactly one machine-readable status line: `{"lane":"test:pg","status":"skipped","reason":"missing_database_url"}`;
+3. emits `{"lane":"test:pg","status":"running"}` immediately before starting Vitest when a URL is configured; this status does not include the connection URL;
+4. refuses database names without `test`;
+5. refuses `prod`, `production`, `main`, or `live` database names;
+6. passes the selected URL to the existing real-PG Vitest suite.
+
+The runner guard and `tests/harness/postgres.ts`'s `assertRealPostgresTestUrl` are independent protections: the harness guard requires a `test` database name and rejects production-flavored names before creating the real test pool. PGlite cannot substitute for this lane or prove L3 PostgreSQL-only behavior.
+
+`pnpm test:real-pg` is a compatibility alias.
+
+CI may supply PostgreSQL as a service container. The important boundary is that the test harness does not secretly own a Compose lifecycle.
+
+## Deterministic worker testing
+
+Background loops are an outer runtime concern. Important workers expose:
+
+```ts
+step(): Promise<{ kind: 'idle' } | { kind: 'processed'; value?: unknown }>
+```
+
+Production `start()` loops repeatedly call the same step. Tests call `step()` directly. Do not write:
+
+```text
+start worker
+sleep
+poll
+hope
+```
+
+for a state transition that can be asserted after one deterministic unit of work.
 
 ## Repository tests
 
-`tests/repository` contains only small stable structural invariants, such as repository hygiene, attribution, and a narrow module import boundary. These tests must not grow into a semantic policy engine or mutation harness.
+`tests/repository` contains only small stable structural invariants, such as repository hygiene, attribution, and narrow module import boundaries.
 
 ```bash
 pnpm test:repository
 ```
 
-## External smoke
+Repository tests must not grow into an alternative semantic policy engine or a second acceptance system.
 
-A smoke is a small canonical real-system main flow. It may use Paseo/provider credentials and is therefore explicit opt-in, not an ordinary PR gate.
+## Browser/process E2E
+
+Browser/process E2E is explicit:
 
 ```bash
-pnpm smoke:runtime
-pnpm smoke:agent-team
+pnpm test:e2e
+pnpm test:e2e:web
 ```
 
-Do not preserve each development phase as a separate smoke. When a newer flow supersedes an older one, keep the current canonical scenario.
+Do not put real provider choice into deterministic E2E merely to make the path feel more realistic.
+
+## Runtime and product canaries
+
+```bash
+pnpm canary:runtime
+pnpm canary:golden-path
+```
+
+A runtime canary validates current external compatibility: provider credentials, Paseo startup, model normalization, tool visibility, and one real turn.
+
+A product canary validates a representative host-native API/Web/runtime journey. It may fail for external reasons even when deterministic product scenarios are green; that distinction is intentional and diagnostic.
+
+## Acceptance
+
+Acceptance is milestone/release evidence, not the ordinary coding loop. It may
+use a production-like deployment environment, browser instrumentation, provider
+transcripts, screenshots, manifests, hashes, and other evidence when the
+milestone requires them.
+
+Do not require an acceptance evidence bundle for every local feature edit.
 
 ## Evals
 
@@ -79,34 +187,27 @@ Evals measure persistent Agent/model behavior rather than deterministic software
 pnpm eval:memory
 ```
 
-A product/code assertion should not become an eval merely because an Agent is involved; an Agent-quality judgement should not be encoded as a brittle unit test.
+A product/code assertion should not become an eval merely because an Agent is involved; an Agent-quality judgement should not be encoded as a brittle deterministic test.
 
-## Environment lifecycle
+## Environment ownership
 
-Dev and Test share `config/local-environments.yaml`. Infrastructure-backed tests use `tests/support/environment` to allocate an isolated run/project, start only required services, expose typed URLs, and clean up.
+Host-native developer orchestration lives in `tooling/dev/`. Real PostgreSQL
+tests receive an explicit native database URL. CI may use a PostgreSQL service
+container, but the repository does not own a container lifecycle for local
+development or tests.
 
-Stable topologies:
+## Fixtures and harness
 
-- `in-process`
-- `postgres`
-- `core`
-- `runtime`
-- `full`
+Prefer typed semantic builders for Workspace/Agent/Environment/Team/Conversation/Work setup. JSON/YAML fixtures are appropriate when the serialized representation itself is the input under test.
 
-Manual `pnpm local-env up ...` is for interactive debugging. It is not a hidden prerequisite for tests.
+If fixture setup repeats in multiple scenarios, move it into `tests/harness/seed/`. If application composition repeats, move it into `tests/harness/agent-server-harness.ts`. Do not solve setup friction with a task-specific shell script.
 
-## Fixtures
+### Seed promotion rule
 
-Prefer typed builders for Workspace/Agent/Environment/Team/Session/database setup. JSON/YAML fixtures are appropriate when the serialized representation itself is the stable input under test.
+A seed enters `tests/harness/seed/` only when at least two scenario files genuinely reuse it. A seed that serves one scenario stays in that scenario file and is named for the business situation it constructs, rather than the entity it inserts.
 
-If a fixture needs a temporary variation, use a typed override in the test instead of adding phase/task-specific mutation files.
+This keeps the shared layer small. Cumora's `_helpers.ts` exports only eight things and only two broadly reusable seeds; its scenario-specific seeds stay with their tests and use business names such as `seedDirect`, `seedGroupWithTwoAgents`, `seedEmailConvoWithInbound`, and `seedFailedOutbound`. Our current entity-sliced shared directory has nine files, which would otherwise tend toward a god-module.
 
 ## Generated diagnostics
 
-All generated test/run diagnostics belong under:
-
-```text
-.local/test-runs/<run-id>/
-```
-
-Successful runs may remove the directory. `TEST_KEEP_FAILED=1` may retain failed diagnostics locally. CI may upload the directory as a workflow artifact. Generated output is never committed as a source/evidence directory.
+Generated test/run diagnostics belong under ignored `.local/` paths or CI artifacts. Logs, screenshots, recordings, provider transcripts, one-run API captures, mutation output, and task handoff artifacts are not repository source.

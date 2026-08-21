@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 
-import type { AgentRegistry } from '../ports/agent-registry.js';
+import type {
+  AgentRegistry,
+  ManagedAgentDefinitionRead,
+} from '../ports/agent-registry.js';
 import type { AgentResolutionApi } from '../ports/agent-resolution-api.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
 import type { EnvironmentReadApi } from '../ports/environment-read-api.js';
@@ -28,7 +31,11 @@ import type {
 } from '../../domain/work/work-definition-source.js';
 
 export interface ResolveWorkDefinitionOptions {
-  readonly agents: Pick<AgentRegistry, 'findDefinition' | 'findVersion'>;
+  readonly agents: Pick<AgentRegistry, 'findDefinition' | 'findVersion'> &
+    Pick<
+      ManagedAgentDefinitionRead,
+      'findManagedDefinitionByTenant' | 'findVersionByTenant'
+    >;
   readonly agentResolution: AgentResolutionApi;
   readonly definitions: Pick<
     DefinitionReadApi,
@@ -336,10 +343,15 @@ export class ResolveWorkDefinition implements WorkDefinitionResolutionPort {
   private async resolveSingleAgentCompatibility(
     input: ResolveWorkDefinitionInput,
   ): Promise<ResolvedWorkDefinition | null> {
-    const owner = managedOwner(input);
     const [definition, version] = await Promise.all([
-      this.options.agents.findDefinition(owner, input.definitionId),
-      this.options.agents.findVersion(owner, input.definitionVersionId),
+      this.options.agents.findManagedDefinitionByTenant({
+        tenantId: input.accessContext.tenantId,
+        definitionId: input.definitionId,
+      }),
+      this.options.agents.findVersionByTenant({
+        tenantId: input.accessContext.tenantId,
+        versionId: input.definitionVersionId,
+      }),
     ]);
     if (!definition && !version) return null;
     if (!definition || !version || version.definitionId !== input.definitionId)

@@ -16,6 +16,11 @@ export async function seedPublishedWorkDefinition(
     readonly definitionId?: string;
     readonly versionId?: string;
     readonly name?: string;
+    /**
+     * When provided, create a strict one-field schema. When omitted, use the
+     * canonical scripted Golden Path lifecycle schema: start_work sends
+     * `query`, while continue_work sends `instruction`.
+     */
     readonly inputField?: string;
     readonly now?: string;
   },
@@ -23,19 +28,31 @@ export async function seedPublishedWorkDefinition(
   const definitionId = options.definitionId ?? randomUUID();
   const versionId = options.versionId ?? randomUUID();
   const name = options.name ?? 'Harness Product Work';
-  const inputField = options.inputField ?? 'query';
   const now = options.now ?? HARNESS_NOW;
+  const inputSchema = options.inputField
+    ? {
+        type: 'object' as const,
+        properties: { [options.inputField]: { type: 'string' as const } },
+        required: [options.inputField],
+        additional_properties: false,
+      }
+    : {
+        type: 'object' as const,
+        properties: {
+          query: { type: 'string' as const },
+          instruction: { type: 'string' as const },
+        },
+        additional_properties: false,
+      };
+  const inputSchemaYaml = options.inputField
+    ? `    properties:\n      ${options.inputField}:\n        type: string\n    required: [${options.inputField}]\n    additional_properties: false`
+    : `    properties:\n      query:\n        type: string\n      instruction:\n        type: string\n    additional_properties: false`;
   const source = {
     kind: 'single_agent' as const,
     agentVersionId: options.agentVersionId,
     environmentVersionId: options.environmentVersionId,
     memoryVersionIds: [],
-    inputSchema: {
-      type: 'object' as const,
-      properties: { [inputField]: { type: 'string' as const } },
-      required: [inputField],
-      additional_properties: false,
-    },
+    inputSchema,
   };
   const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
@@ -48,11 +65,7 @@ spec:
   environment_version_id: ${options.environmentVersionId}
   input_schema:
     type: object
-    properties:
-      ${inputField}:
-        type: string
-    required: [${inputField}]
-    additional_properties: false
+${inputSchemaYaml}
 `);
   if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
 

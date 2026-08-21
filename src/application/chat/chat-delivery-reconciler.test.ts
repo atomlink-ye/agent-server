@@ -67,11 +67,13 @@ class FakeConversationRepository implements ConversationRepository {
       workRef: input.workRef ?? null,
       createdAt: new Date().toISOString(),
     });
-    const convMessages = this.messagesByConversationId.get(
-      input.author.conversationId,
-    ) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(input.author.conversationId) ?? [];
     convMessages.push(message);
-    this.messagesByConversationId.set(input.author.conversationId, convMessages);
+    this.messagesByConversationId.set(
+      input.author.conversationId,
+      convMessages,
+    );
     return message;
   }
 
@@ -83,9 +85,8 @@ class FakeConversationRepository implements ConversationRepository {
     // D4 guard test requires that this returns the FULL cross-conversation set
     // if called incorrectly. We store all messages in one big map, so we filter
     // only by conversationId.
-    const convMessages = this.messagesByConversationId.get(
-      input.conversationId,
-    ) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(input.conversationId) ?? [];
     return convMessages;
   }
 
@@ -119,7 +120,8 @@ class FakeConversationRepository implements ConversationRepository {
   }
 
   addMessage(conversationId: string, message: ChatMessage): void {
-    const convMessages = this.messagesByConversationId.get(conversationId) ?? [];
+    const convMessages =
+      this.messagesByConversationId.get(conversationId) ?? [];
     convMessages.push(message);
     this.messagesByConversationId.set(conversationId, convMessages);
   }
@@ -163,7 +165,9 @@ class FakeChatDispatchRepository implements ChatDispatchRepository {
 class FakeChatTurnProvider implements ChatTurnProvider {
   lastRunTurnInput: Parameters<ChatTurnProvider['runTurn']>[0] | null = null;
 
-  async runTurn(input: Parameters<ChatTurnProvider['runTurn']>[0]): Promise<{ readonly body: string; readonly provider: string }> {
+  async runTurn(
+    input: Parameters<ChatTurnProvider['runTurn']>[0],
+  ): Promise<{ readonly body: string; readonly provider: string }> {
     this.lastRunTurnInput = input;
     return { body: '[mock reply]', provider: 'mock' };
   }
@@ -269,8 +273,7 @@ describe('ChatDeliveryReconciler', () => {
       () => new Date('2026-07-22T10:00:00Z'),
     );
 
-    // Manually call reconcileOne via accessing private method via type casting
-    await (reconciler as any).reconcileOne(dispatch);
+    await reconciler.reconcileOne(dispatch);
 
     // Verify provider was called with messages from conv-1 only
     expect(provider.lastRunTurnInput).not.toBeNull();
@@ -379,8 +382,8 @@ describe('ChatDeliveryReconciler', () => {
     expect(provider.lastRunTurnInput!.messages[0]!.body).toBe("What's up?");
 
     // Assert strongly that Alice's secret is NOT in the input
-    const allBodiesInInput = provider.lastRunTurnInput!.messages
-      .map((m) => m.body)
+    const allBodiesInInput = provider
+      .lastRunTurnInput!.messages.map((m) => m.body)
       .join(' ');
     expect(allBodiesInInput).not.toContain('xyz789');
     expect(allBodiesInInput).not.toContain('Alice');

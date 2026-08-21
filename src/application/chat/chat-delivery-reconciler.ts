@@ -1,5 +1,8 @@
 import type { ConversationRepository } from '../ports/conversation-repository.js';
-import type { ChatDispatch, ChatDispatchRepository } from '../ports/chat-dispatch-repository.js';
+import type {
+  ChatDispatch,
+  ChatDispatchRepository,
+} from '../ports/chat-dispatch-repository.js';
 import type { ChatTurnProvider } from '../ports/chat-turn-provider.js';
 import type { ConversationWorkEntitlementRepository } from '../ports/conversation-work-entitlement-repository.js';
 import type { ConversationWorkLinkRepository } from '../../domain/chat/chat-work-origin-ref.js';
@@ -86,28 +89,29 @@ export class ChatDeliveryReconciler {
           agentDefinitionId: dispatch.agentDefinitionId,
         })
       : null;
-    const extensions = entitlement && this.extensions
-      ? await this.extensions.bind({
-          tenantId: entitlement.tenantId,
-          principalType: entitlement.principalType,
-          principalId: entitlement.principalId,
-          workspaceId: entitlement.workspaceId,
-          scopeId: runtime.id,
-          chatContext: {
-            conversationId: dispatch.conversationId,
-            triggerMessageId: triggerMessage.id,
-          },
-          skills: [],
-          toolRefs: [
-            AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-            AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-          ],
-          catalogTools: [
-            AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
-            AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
-          ],
-        })
-      : undefined;
+    const extensions =
+      entitlement && this.extensions
+        ? await this.extensions.bind({
+            tenantId: entitlement.tenantId,
+            principalType: entitlement.principalType,
+            principalId: entitlement.principalId,
+            workspaceId: entitlement.workspaceId,
+            scopeId: runtime.id,
+            chatContext: {
+              conversationId: dispatch.conversationId,
+              triggerMessageId: triggerMessage.id,
+            },
+            skills: [],
+            toolRefs: [
+              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+            ],
+            catalogTools: [
+              AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+              AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+            ],
+          })
+        : undefined;
 
     const reply = await this.provider.runTurn({
       tenantId: dispatch.tenantId,
@@ -184,7 +188,7 @@ export class ChatDeliveryReconciler {
   }
 
   // Retained for the existing focused test seam; leased workers use reconcile.
-  private async reconcileOne(dispatch: ChatDispatch): Promise<void> {
+  public async reconcileOne(dispatch: ChatDispatch): Promise<void> {
     return this.reconcile(dispatch);
   }
 }

@@ -12,6 +12,7 @@ import {
   seedPublishedAgentVersion,
   seedPublishedTeamVersion,
   seedPublishedWorkDefinition,
+  seedWorkEntitlement,
   seedWorkspace,
 } from './seed/index.js';
 
@@ -43,6 +44,10 @@ export async function createAgentServerHarness() {
         owner: Parameters<typeof seedConversation>[1],
         options?: Parameters<typeof seedConversation>[2],
       ) => seedConversation(db, owner, options),
+      workEntitlement: (
+        owner: Parameters<typeof seedWorkEntitlement>[1],
+        input: Parameters<typeof seedWorkEntitlement>[2],
+      ) => seedWorkEntitlement(db, owner, input),
       workDefinition: (
         owner: Parameters<typeof seedPublishedWorkDefinition>[1],
         options: Parameters<typeof seedPublishedWorkDefinition>[2],

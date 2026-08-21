@@ -39,6 +39,9 @@ function singleResolver(input?: {
       agents: {
         findDefinition: async () => definition as any,
         findVersion: async () => version as any,
+        findManagedDefinitionByTenant: async () => definition as any,
+        findVersionByTenant: async () => version as any,
+        listVersionsByTenant: async () => null,
       } as any,
       agentResolution: {
         resolvePublished: async () =>
@@ -157,6 +160,9 @@ describe('ResolveWorkDefinition', () => {
         findDefinition: async () => null,
         findVersion: async (_owner: unknown, id: string) =>
           ({ id, status: 'published', fingerprint: `sha256:${id}` }) as any,
+        findManagedDefinitionByTenant: async () => null,
+        findVersionByTenant: async () => null,
+        listVersionsByTenant: async () => null,
       } as any,
       agentResolution: {
         resolvePublished: async (id: string) =>
@@ -233,6 +239,9 @@ describe('ResolveWorkDefinition', () => {
       agents: {
         findDefinition: async () => null,
         findVersion: async () => null,
+        findManagedDefinitionByTenant: async () => null,
+        findVersionByTenant: async () => null,
+        listVersionsByTenant: async () => null,
       } as any,
       agentResolution: { resolvePublished: async () => null },
       definitions: {

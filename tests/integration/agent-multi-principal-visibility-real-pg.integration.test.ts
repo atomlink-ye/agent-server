@@ -161,13 +161,19 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
     createdDefinitionIds.push(definitionId);
 
     // Positive: SA2 should be able to GET the definition
-    const def = await registry.findDefinition(sa2, definitionId);
+    const def = await registry.findManagedDefinitionByTenant({
+      tenantId: sa2.tenantId,
+      definitionId,
+    });
     expect(def).toBeDefined();
     expect(def?.id).toBe(definitionId);
     expect(def?.displayName).toBe('Test Agent A');
 
     // Positive: SA2 should be able to GET the version
-    const ver = await registry.findVersion(sa2, versionId);
+    const ver = await registry.findVersionByTenant({
+      tenantId: sa2.tenantId,
+      versionId,
+    });
     expect(ver).toBeDefined();
     expect(ver?.id).toBe(versionId);
     expect(ver?.definitionId).toBe(definitionId);
@@ -203,7 +209,10 @@ describe('Multi-principal Agent Visibility on real PostgreSQL', () => {
     const definitionId = 'a0000000-0000-4000-8000-000000000001';
 
     // SA3 is in a different tenant, should not see SA1's definition
-    const def = await registry.findDefinition(sa3, definitionId);
+    const def = await registry.findManagedDefinitionByTenant({
+      tenantId: sa3.tenantId,
+      definitionId,
+    });
     expect(def).toBeNull();
   });
 });

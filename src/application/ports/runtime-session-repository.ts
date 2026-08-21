@@ -39,6 +39,7 @@ export interface RuntimeSessionLookup {
 export interface RuntimeSessionRepository {
   createOrGetForAgentChat?(input: {
     agentChatRuntimeId: string;
+    runtimeEpoch: number;
     tenantId: string;
     principalType: string;
     principalId: string;
@@ -49,6 +50,7 @@ export interface RuntimeSessionRepository {
   }): Promise<RuntimeSession>;
   findByAgentChat?(input: {
     agentChatRuntimeId: string;
+    runtimeEpoch: number;
     tenantId: string;
     workspaceId: string;
     principalType: string;

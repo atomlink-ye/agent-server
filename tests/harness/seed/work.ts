@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { validateProductWorkDefinition } from '../../../src/application/work/validate-product-work-definition.js';
-import { fingerprintWorkDefinitionSource } from '../../../src/domain/work/work-definition-source.js';
+import type { WorkInputSchema } from '../../../src/domain/work/work-input-schema.js';
+import {
+  fingerprintWorkDefinitionSource,
+  type WorkDefinitionCompositionSource,
+} from '../../../src/domain/work/work-definition-source.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
 import type { HarnessOwner, SeedDatabase } from './types.js';
 import { HARNESS_NOW } from './types.js';
@@ -29,18 +33,18 @@ export async function seedPublishedWorkDefinition(
   const versionId = options.versionId ?? randomUUID();
   const name = options.name ?? 'Harness Product Work';
   const now = options.now ?? HARNESS_NOW;
-  const inputSchema = options.inputField
+  const inputSchema: WorkInputSchema = options.inputField
     ? {
-        type: 'object' as const,
-        properties: { [options.inputField]: { type: 'string' as const } },
+        type: 'object',
+        properties: { [options.inputField]: { type: 'string' } },
         required: [options.inputField],
         additional_properties: false,
       }
     : {
-        type: 'object' as const,
+        type: 'object',
         properties: {
-          query: { type: 'string' as const },
-          feedback: { type: 'string' as const },
+          query: { type: 'string' },
+          feedback: { type: 'string' },
         },
         required: [],
         additional_properties: false,
@@ -48,8 +52,8 @@ export async function seedPublishedWorkDefinition(
   const inputSchemaYaml = options.inputField
     ? `    properties:\n      ${options.inputField}:\n        type: string\n    required: [${options.inputField}]\n    additional_properties: false`
     : `    properties:\n      query:\n        type: string\n      feedback:\n        type: string\n    required: []\n    additional_properties: false`;
-  const source = {
-    kind: 'single_agent' as const,
+  const source: WorkDefinitionCompositionSource = {
+    kind: 'single_agent',
     agentVersionId: options.agentVersionId,
     environmentVersionId: options.environmentVersionId,
     memoryVersionIds: [],

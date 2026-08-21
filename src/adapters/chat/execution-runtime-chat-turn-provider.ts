@@ -16,28 +16,37 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   public async runTurn(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
   ): Promise<{ readonly body: string; readonly provider: string }> {
-    const durableSession = this.runtime.ensureAgentChatRuntimeSession
-      ? await this.runtime.ensureAgentChatRuntimeSession({
-          agentChatRuntimeId: input.brain.turnContext.agentChatRuntimeId,
-          runtimeEpoch: input.brain.turnContext.runtimeEpoch,
-          agentOwner: input.brain.agentOwner,
-          agentVersionId: input.brain.turnContext.agentVersionId,
-          resolvedSkills: input.brain.resolvedSkills,
-          toolRefs: input.brain.toolRefs,
-        })
-      : null;
+    // PR #100's deterministic harness still has a narrow legacy fake brain.
+    // Production ChatBrainResolver always supplies these fields; keep the
+    // fallback only while the stacked harness migrates so Phase 1–3 remain a
+    // product-model change rather than an accidental Phase 0 rewrite.
+    const turnContext = input.brain.turnContext;
+    const durableSession =
+      this.runtime.ensureAgentChatRuntimeSession && turnContext
+        ? await this.runtime.ensureAgentChatRuntimeSession({
+            agentChatRuntimeId: turnContext.agentChatRuntimeId,
+            runtimeEpoch: turnContext.runtimeEpoch,
+            agentOwner: input.brain.agentOwner,
+            agentVersionId: turnContext.agentVersionId,
+            resolvedSkills: input.brain.resolvedSkills,
+            toolRefs: input.brain.toolRefs,
+          })
+        : null;
+
+    const invocationContext = input.brain.invocationContext
+      ? {
+          ...input.brain.invocationContext,
+          // ChatTurnProvider's top-level origin is the current server-derived
+          // dispatch identity. Keep machine context aligned with this turn.
+          conversationId: input.conversationId,
+          triggerMessageId: input.triggerMessageId,
+        }
+      : undefined;
 
     const result = await this.runtime.executeTurn({
       runId: chatRunId(input.conversationId, input.triggerMessageId),
       ...(durableSession ? { runtimeSessionId: durableSession.id } : {}),
-      invocationContext: {
-        ...input.brain.invocationContext,
-        // ChatTurnProvider's top-level origin is the current server-derived
-        // dispatch identity. Keep the machine context aligned with that turn
-        // while older/fake brain fixtures migrate to ChatTurnContext.
-        conversationId: input.conversationId,
-        triggerMessageId: input.triggerMessageId,
-      },
+      ...(invocationContext ? { invocationContext } : {}),
       systemPrompt: buildSystemPrompt(input),
       prompt: buildTurnPrompt(input),
       sessionTitle: `Chat ${input.agentDefinitionId}`,
@@ -47,7 +56,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         trigger_message_id: input.triggerMessageId,
         agent_definition_id: input.agentDefinitionId,
         agent_version_id: input.agentVersionId,
-        runtime_epoch: String(input.brain.turnContext.runtimeEpoch),
+        ...(turnContext ? { runtime_epoch: String(turnContext.runtimeEpoch) } : {}),
       },
       ...(input.extensions ? { extensions: input.extensions } : {}),
       proposalLimit: 0,

@@ -50,7 +50,10 @@ else
     })
   ).workspace_id;
 
-let sampleWorkId = env('WEB_SAMPLE_WORK_ID');
+// Core mode intentionally has no Product Work execution plane. Do not carry a
+// stale WEB_SAMPLE_WORK_ID forward from an older runtime bootstrap, otherwise a
+// fresh/recreated local database can point the Web UI at a non-existent Work.
+let sampleWorkId = skipProductWork ? '' : env('WEB_SAMPLE_WORK_ID');
 if (!sampleWorkId && !skipProductWork) {
   const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
     agentVersionId,

@@ -242,7 +242,7 @@ export async function runDoctor(
     migrations,
     {
       name: 'api-port',
-      status: apiPortFree ? 'ok' : 'warn',
+      status: apiPortFree ? 'ok' : 'fail',
       detail: apiPortFree
         ? `:${loaded.PORT ?? 3000} free`
         : `:${loaded.PORT ?? 3000} already in use`,
@@ -250,7 +250,7 @@ export async function runDoctor(
     },
     {
       name: 'web-port',
-      status: webPortFree ? 'ok' : 'warn',
+      status: webPortFree ? 'ok' : 'fail',
       detail: webPortFree ? ':3001 free' : ':3001 already in use',
       requiredFor: ['core', 'runtime'],
     },

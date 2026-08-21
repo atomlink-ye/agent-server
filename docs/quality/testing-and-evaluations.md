@@ -212,6 +212,12 @@ Prefer typed semantic builders for Workspace/Agent/Environment/Team/Conversation
 
 If fixture setup repeats in multiple scenarios, move it into `tests/harness/seed/`. If application composition repeats, move it into `tests/harness/agent-server-harness.ts`. Do not solve setup friction with a task-specific shell script.
 
+### Seed promotion rule
+
+A seed enters `tests/harness/seed/` only when at least two scenario files genuinely reuse it. A seed that serves one scenario stays in that scenario file and is named for the business situation it constructs, rather than the entity it inserts.
+
+This keeps the shared layer small. Cumora's `_helpers.ts` exports only eight things and only two broadly reusable seeds; its scenario-specific seeds stay with their tests and use business names such as `seedDirect`, `seedGroupWithTwoAgents`, `seedEmailConvoWithInbound`, and `seedFailedOutbound`. Our current entity-sliced shared directory has nine files, which would otherwise tend toward a god-module.
+
 ## Generated diagnostics
 
 Generated test/run diagnostics belong under ignored `.local/` paths or CI artifacts. Logs, screenshots, recordings, provider transcripts, one-run API captures, mutation output, and task handoff artifacts are not repository source.

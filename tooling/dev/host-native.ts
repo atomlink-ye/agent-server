@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { access, mkdir, readFile, unlink } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { closeSync, constants, openSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -381,28 +381,29 @@ async function ensurePGliteDatabase(
   }
 
   const logPath = resolve(repositoryRoot, '.local/dev-runtime/pglite.log');
-  const child = spawn(
-    process.execPath,
-    ['--import', 'tsx', resolve(repositoryRoot, 'tooling/dev/pglite-server.ts')],
-    {
-      cwd: repositoryRoot,
-      detached: true,
-      env: {
-        ...environment,
-        PGLITE_HOST,
-        PGLITE_PORT: String(port),
-        PGLITE_DATABASE,
-        PGLITE_DATA_PATH,
-        PGLITE_STATE_PATH,
+  const logFd = openSync(logPath, 'a', 0o600);
+  let child: ChildProcess;
+  try {
+    child = spawn(
+      process.execPath,
+      ['--import', 'tsx', resolve(repositoryRoot, 'tooling/dev/pglite-server.ts')],
+      {
+        cwd: repositoryRoot,
+        detached: true,
+        env: {
+          ...environment,
+          PGLITE_HOST,
+          PGLITE_PORT: String(port),
+          PGLITE_DATABASE,
+          PGLITE_DATA_PATH,
+          PGLITE_STATE_PATH,
+        },
+        stdio: ['ignore', logFd, logFd],
       },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    },
-  );
-  child.stderr?.on('data', (chunk: Buffer) => {
-    void import('node:fs/promises').then(({ appendFile }) =>
-      appendFile(logPath, chunk),
     );
-  });
+  } finally {
+    closeSync(logFd);
+  }
   child.unref();
   return waitForPGlite(child, fallbackUrl);
 }

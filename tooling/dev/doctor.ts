@@ -1,3 +1,7 @@
+import { access, constants } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+
 import { Pool } from 'pg';
 
 import { durableKernelMigrationFileNames } from '../../src/infrastructure/postgres/postgres.js';
@@ -11,6 +15,11 @@ import {
   loadLocalDotEnv,
   redactDatabaseUrl,
 } from './host-native.js';
+import {
+  providerToolchainPaths,
+  repositoryRoot,
+  validateProviders,
+} from './setup-providers.js';
 import type { HostDatabaseBackend } from './host-native.js';
 
 export type DoctorCheck = Readonly<{
@@ -146,7 +155,26 @@ async function postgresChecks(
 async function paseoCheck(
   environment: NodeJS.ProcessEnv,
 ): Promise<DoctorCheck> {
-  const wsUrl = environment.PASEO_WS_URL?.trim() || 'ws://127.0.0.1:6767/ws';
+  const configuredWsUrl = environment.PASEO_WS_URL?.trim();
+  if (!configuredWsUrl) {
+    try {
+      await validateProviders(environment);
+      return {
+        name: 'paseo',
+        status: 'ok',
+        detail: 'provisioned provider-toolchain Paseo binary is valid',
+        requiredFor: ['runtime'],
+      };
+    } catch (error) {
+      return {
+        name: 'paseo',
+        status: 'warn',
+        detail: `provider-toolchain Paseo binary unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        requiredFor: ['runtime'],
+      };
+    }
+  }
+  const wsUrl = configuredWsUrl;
   try {
     const parsed = new URL(wsUrl);
     const port = Number.parseInt(
@@ -172,12 +200,93 @@ async function paseoCheck(
   }
 }
 
-function providerCheck(environment: NodeJS.ProcessEnv): DoctorCheck {
-  const provider = (environment.PASEO_PROVIDER?.trim() || 'opencode').toLowerCase();
+type ProviderBinaryName = 'paseo' | 'opencode' | 'claude' | 'codex';
+
+const providerBinaryNames: readonly ProviderBinaryName[] = [
+  'paseo',
+  'opencode',
+  'claude',
+  'codex',
+];
+
+async function binaryVersion(path: string): Promise<string> {
+  return new Promise((resolveVersion) => {
+    const child = spawn(path, ['--version'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let output = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      resolveVersion('unavailable');
+    }, 15_000);
+    timer.unref?.();
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.once('error', () => {
+      clearTimeout(timer);
+      resolveVersion('unavailable');
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        resolveVersion('unavailable');
+        return;
+      }
+      resolveVersion(
+        output.match(/\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/u)?.[0] ??
+          'unknown',
+      );
+    });
+  });
+}
+
+async function providerBinaryStatus(): Promise<string> {
+  const statuses = await Promise.all(
+    providerBinaryNames.map(async (name) => {
+      try {
+        await access(
+          providerToolchainPaths[name],
+          constants.X_OK,
+        );
+      } catch {
+        return `${name}=absent`;
+      }
+      return `${name}=installed(${await binaryVersion(providerToolchainPaths[name])})`;
+    }),
+  );
+  return statuses.join(',');
+}
+
+async function providerConfigStatus(): Promise<string> {
+  const configPaths = {
+    claude: join(
+      repositoryRoot,
+      '.local/dev-runtime/home/.claude/settings.json',
+    ),
+    codex: join(repositoryRoot, '.local/dev-runtime/home/.codex/config.toml'),
+  } as const;
+  const statuses = await Promise.all(
+    Object.entries(configPaths).map(async ([name, path]) => {
+      try {
+        await access(path, constants.R_OK);
+        return `${name}=present`;
+      } catch {
+        return `${name}=absent`;
+      }
+    }),
+  );
+  return `${statuses.join(',')},opencode=runtime-env`;
+}
+
+async function providerCheck(
+  environment: NodeJS.ProcessEnv,
+): Promise<DoctorCheck> {
+  const provider = (environment.PASEO_PROVIDER?.trim() || 'claude').toLowerCase();
   const keyByProvider: Readonly<Record<string, string>> = {
     opencode: 'OPENCODE_GO_API_KEY',
-    claude: 'ANTHROPIC_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
+    claude: 'OPENCODE_GO_API_KEY',
+    anthropic: 'OPENCODE_GO_API_KEY',
     codex: 'OPENAI_API_KEY',
     openai: 'OPENAI_API_KEY',
   };
@@ -190,13 +299,27 @@ function providerCheck(environment: NodeJS.ProcessEnv): DoctorCheck {
       requiredFor: ['runtime'],
     };
   }
+  const [binaryStatus, configStatus] = await Promise.all([
+    providerBinaryStatus(),
+    providerConfigStatus(),
+  ]);
+  let validationStatus = 'failed';
+  let validationError = '';
+  try {
+    await validateProviders(environment);
+    validationStatus = 'valid';
+  } catch (error) {
+    validationError = error instanceof Error ? error.message : String(error);
+  }
   const configured = Boolean(environment[keyName]?.trim());
+  const binariesInstalled = providerBinaryNames.every((name) =>
+    binaryStatus.includes(`${name}=installed(`),
+  );
+  const ready = configured && binariesInstalled && validationStatus === 'valid';
   return {
     name: 'provider',
-    status: configured ? 'ok' : 'warn',
-    detail: configured
-      ? `${provider}: ${keyName} is configured`
-      : `${provider}: ${keyName} is not exported; pnpm dev still works`,
+    status: ready ? 'ok' : 'warn',
+    detail: `${provider}: ${keyName}=${configured ? 'configured' : 'absent'}; validation=${validationStatus}${validationError ? `(${validationError})` : ''}; ${binaryStatus}; config=${configStatus}`,
     requiredFor: ['runtime'],
   };
 }
@@ -261,7 +384,7 @@ export async function runDoctor(
       requiredFor: ['core', 'runtime'],
     },
     paseo,
-    providerCheck(loaded),
+    await providerCheck(loaded),
   ];
 
   const coreReady = !checks.some(

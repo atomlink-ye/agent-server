@@ -1,6 +1,8 @@
 import type { AccessContext } from '../../platform/access-context.js';
 import type { SessionTurnOrigin } from '../sessions/session-turn-origin.js';
-export interface Workspace {
+
+/** Long-lived product/project container. Distinct from provider execution cwd. */
+export interface ProductWorkspace {
   readonly id: string;
   readonly tenantId: string;
   readonly principalType: string;
@@ -9,6 +11,10 @@ export interface Workspace {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+/** @deprecated Prefer ProductWorkspace; retained while legacy callers migrate. */
+export type Workspace = ProductWorkspace;
+
 export interface ProductSession {
   readonly id: string;
   readonly workspaceId: string;
@@ -54,8 +60,8 @@ export interface SubmitSessionTurnInput {
   readonly origin: SessionTurnOrigin;
 }
 export interface SessionRepository {
-  createWorkspace(name: string, owner: AccessContext): Promise<Workspace>;
-  getWorkspace(id: string, owner: AccessContext): Promise<Workspace | null>;
+  createWorkspace(name: string, owner: AccessContext): Promise<ProductWorkspace>;
+  getWorkspace(id: string, owner: AccessContext): Promise<ProductWorkspace | null>;
   createSession(input: {
     workspaceId: string;
     agentVersionId: string;

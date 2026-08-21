@@ -64,6 +64,7 @@ export function runtimeInvocationContextForChat(
     scope: {
       kind: 'agent_chat' as const,
       agentChatRuntimeId: turn.agentChatRuntimeId,
+      runtimeEpoch: turn.runtimeEpoch,
     },
     productScope: turn.productScope,
     actor: turn.actor,

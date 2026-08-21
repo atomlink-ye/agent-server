@@ -25,6 +25,21 @@ type PostgresChecks = Readonly<{
   backend: HostDatabaseBackend;
 }>;
 
+function databaseDetail(
+  connectionString: string,
+  backend: HostDatabaseBackend,
+): string {
+  if (backend === 'pglite') {
+    try {
+      const parsed = new URL(connectionString);
+      return `PGlite wire server at ${parsed.host} — development usable; real PG semantics not covered`;
+    } catch {
+      return 'PGlite wire server — development usable; real PG semantics not covered';
+    }
+  }
+  return `real PostgreSQL at ${redactDatabaseUrl(connectionString)}`;
+}
+
 async function postgresChecks(
   environment: NodeJS.ProcessEnv,
 ): Promise<PostgresChecks> {
@@ -36,7 +51,7 @@ async function postgresChecks(
     const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'fail',
-      detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
+      detail: `real PostgreSQL at ${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
     return {
@@ -63,7 +78,7 @@ async function postgresChecks(
     const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'ok',
-      detail: redactDatabaseUrl(connectionString),
+      detail: databaseDetail(connectionString, backend),
       requiredFor: ['core', 'runtime'],
     };
     try {
@@ -108,7 +123,7 @@ async function postgresChecks(
     const postgres: DoctorCheck = {
       name: 'postgres',
       status: 'fail',
-      detail: `${redactDatabaseUrl(connectionString)} (${error instanceof Error ? error.message : 'unreachable'})`,
+      detail: `${databaseDetail(connectionString, backend)} (${error instanceof Error ? error.message : 'unreachable'})`,
       requiredFor: ['core', 'runtime'],
     };
     return {

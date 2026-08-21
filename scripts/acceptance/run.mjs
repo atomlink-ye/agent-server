@@ -15,10 +15,6 @@ export function acceptancePortFacts(handle, composeConfig) {
   };
 }
 
-export function assertComposeLayerParity(profileFiles, invocationFiles) {
-  if (JSON.stringify(profileFiles) !== JSON.stringify(invocationFiles)) throw new Error('rendered Compose layers differ from lifecycle declaration');
-}
-
 async function renderedComposeConfig(handle) {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
@@ -44,7 +40,7 @@ async function main() {
   const apiUrl = new URL(apiProbeUrl(handle));
   const { renderedPorts, expectedPorts } = acceptancePortFacts(handle, await renderedComposeConfig(handle));
   assertPreflight({ apiUrl: apiUrl.origin, renderedPorts, expectedPorts, provider });
-  throw new Error('golden-eight runner is intentionally disabled until a fresh acceptance budget authorizes product commands');
+  throw new Error('golden-eight execution adapter must be supplied by the authorized acceptance invocation');
   } finally {
     await handle.stop();
   }

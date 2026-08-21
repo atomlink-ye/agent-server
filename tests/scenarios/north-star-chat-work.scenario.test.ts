@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { PGlite } from '@electric-sql/pglite';
 
 import {
   AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
@@ -8,6 +9,7 @@ import { ScriptedExecutionPlane } from '../../src/adapters/runtime/scripted-exec
 import { registerProductWorkMcpTools } from '../../src/entrypoints/mcp/product-work-mcp-tools.js';
 import { RuntimeMcpServer } from '../../src/infrastructure/extensions/runtime-mcp-server.js';
 import { RuntimeToolRegistry } from '../../src/platform/runtime-tool-registry.js';
+import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/postgres.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -15,6 +17,19 @@ afterEach(async () =>
 );
 
 describe('North Star chat Work MVE', () => {
+  it('B1 migrates the in-process product Work schema', async () => {
+    const db = new PGlite();
+    try {
+      await applyDurableKernelMigrations(db);
+      const result = await db.query<{ table: string | null }>(
+        "SELECT to_regclass('public.works') AS table",
+      );
+      expect(result.rows[0]?.table).toBe('works');
+    } finally {
+      await db.close();
+    }
+  });
+
   it('rejects turn2 when the real start_work handler is outside the grant', async () => {
     const definitionId = '00000000-0000-4000-8000-000000000202';
     const versionId = '00000000-0000-4000-8000-000000000203';

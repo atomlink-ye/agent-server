@@ -7,14 +7,29 @@ import type { ExecutionRuntimeService } from '../../application/runtime/executio
  */
 export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
   public constructor(
-    private readonly runtime: Pick<ExecutionRuntimeService, 'executeTurn'>,
+    private readonly runtime: Pick<
+      ExecutionRuntimeService,
+      'executeTurn' | 'ensureAgentChatRuntimeSession'
+    >,
   ) {}
 
   public async runTurn(
     input: Parameters<ChatTurnProvider['runTurn']>[0],
   ): Promise<{ readonly body: string; readonly provider: string }> {
+    const durableSession = this.runtime.ensureAgentChatRuntimeSession
+      ? await this.runtime.ensureAgentChatRuntimeSession({
+          agentChatRuntimeId: input.brain.turnContext.agentChatRuntimeId,
+          agentOwner: input.brain.agentOwner,
+          agentVersionId: input.brain.turnContext.agentVersionId,
+          resolvedSkills: input.brain.resolvedSkills,
+          toolRefs: input.brain.toolRefs,
+        })
+      : null;
+
     const result = await this.runtime.executeTurn({
       runId: chatRunId(input.conversationId, input.triggerMessageId),
+      ...(durableSession ? { runtimeSessionId: durableSession.id } : {}),
+      invocationContext: input.brain.invocationContext,
       systemPrompt: buildSystemPrompt(input),
       prompt: buildTurnPrompt(input),
       sessionTitle: `Chat ${input.agentDefinitionId}`,
@@ -22,6 +37,8 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         scope: 'agent_chat',
         conversation_id: input.conversationId,
         trigger_message_id: input.triggerMessageId,
+        agent_definition_id: input.agentDefinitionId,
+        agent_version_id: input.agentVersionId,
       },
       ...(input.extensions ? { extensions: input.extensions } : {}),
       proposalLimit: 0,

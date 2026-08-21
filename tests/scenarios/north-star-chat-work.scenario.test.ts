@@ -27,14 +27,19 @@ import { LocalRuntimeExtensionBinder } from '../../src/infrastructure/extensions
 import { postConversationMessage } from '../../src/application/chat/post-conversation-message.js';
 import { AdmitRootTask } from '../../src/application/tasks/admit-root-task.js';
 import { CompleteRun } from '../../src/application/runs/complete-run.js';
+import { ExecuteRun } from '../../src/application/runs/execute-run.js';
+import { ExecuteTeamTask } from '../../src/application/tasks/execute-team-task.js';
 import { transitionRun } from '../../src/domain/runs/run.js';
 import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
 import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
+import { PostgresRunEventRepository } from '../../src/infrastructure/postgres/postgres-run-event-repository.js';
 import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
 import { createWorkChatWakeWorker } from '../../src/application/work-chat/work-chat-wake-worker.js';
 import { PostgresWorkChatWakeWorkSource } from '../../src/infrastructure/postgres/postgres-work-chat-wake-work-source.js';
 import { PostgresWorkChatWakeStateRepository } from '../../src/infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
 import { PostgresWorkChatConversationAgentResolver } from '../../src/infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';
+import { FakeAgentRuntime } from '../fixtures/fake-agent-runtime.js';
+import { createLogger } from '../../src/shared/observability/logger.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -1274,6 +1279,320 @@ spec:
     }
   });
 
+  it('B3 trace persists WorkRun task, run, and run event rows', async () => {
+    const db = new PGlite();
+    const at = '2026-08-21T00:00:00.000Z';
+    const tenantId = 'tenant-b3-trace';
+    const workspaceId = randomUUID();
+    const principalId = 'principal-b3-trace';
+    const agentDefinitionId = randomUUID();
+    const agentVersionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account' as const,
+      principalId,
+    };
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+      inputSchema: {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const } },
+        required: ['query'],
+        additional_properties: false,
+      },
+    };
+    const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b3-trace-product-work
+  description: B3 trace Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account',$3,'B3 trace',$4,$4)`,
+        [workspaceId, tenantId, principalId, at],
+      );
+      const conversations = new PostgresConversationRepository(db as any);
+      await conversations.ensureChatRuntime({
+        tenantId,
+        agentDefinitionId,
+        activeAgentVersionId: agentVersionId,
+      });
+      const conversation = await conversations.findOrCreateDirect({
+        tenantId,
+        principalId,
+        principalType: 'service_account',
+        agentDefinitionId,
+      });
+      const trigger = await postConversationMessage(conversations, {
+        author: {
+          type: 'principal',
+          tenantId,
+          conversationId: conversation.id,
+          principalType: 'service_account',
+          principalId,
+        },
+        body: '请做正式分析 OpenAI',
+      });
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+        db,
+      );
+      await authoredDefinitions.publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B3 trace Product Work',
+        description: 'B3 trace Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: at,
+      });
+      await authoredDefinitions.associateAgentWorkflow({
+        tenantId,
+        workspaceId,
+        agentDefinitionId,
+        definitionId,
+        now: at,
+      });
+      const invokables = new PostgresInvokableRepository(db);
+      const resolver = new ResolveWorkDefinition({
+        agents: {
+          async findDefinition() {
+            return null;
+          },
+          async findVersion(_owner, id) {
+            return id === agentVersionId
+              ? ({
+                  id: agentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B3 trace Agent',
+                  fingerprint: `sha256:${'a'.repeat(64)}`,
+                } as any)
+              : null;
+          },
+        },
+        agentResolution: {
+          async resolvePublished(id) {
+            return id === agentVersionId
+              ? {
+                  source: 'managed' as const,
+                  id: agentVersionId,
+                  instructions: 'Handle typed Product Work input.',
+                  modelPolicyRef: 'free-only' as const,
+                  proposalLimit: 0,
+                  skills: [],
+                  toolRefs: [],
+                }
+              : null;
+          },
+        },
+        definitions: invokables,
+        authoredDefinitions,
+        environments: {
+          async findVersion(_owner, id) {
+            return id === environmentVersionId
+              ? ({
+                  id: environmentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B3 trace Environment',
+                  package: {},
+                  canonicalJson: '{}',
+                  fingerprint: `sha256:${'e'.repeat(64)}`,
+                  createdAt: at,
+                  updatedAt: at,
+                  publishedAt: at,
+                } as any)
+              : null;
+          },
+        },
+      });
+      const tasks = new PostgresTaskRepository(db as any);
+      const runs = new PostgresRunRepository(db as any);
+      const admissions = new PostgresAdmissionRepository(db as any);
+      const admitRoot = new AdmitRootTask(
+        tasks,
+        runs,
+        admissions,
+        () => new Date(at),
+      );
+      const executionPlane = new ScriptedExecutionPlane();
+      const workModule = createWorkModule({
+        database: db as any,
+        definitions: invokables,
+        definitionResolution: resolver,
+        execution: {
+          async admitRoot(request: any) {
+            const receipt = await admitRoot.execute({
+              prompt: request.input.text,
+              idempotencyKey: request.idempotencyKey,
+              accessContext: request.accessContext,
+            });
+            return { taskId: receipt.taskId, reused: receipt.reused };
+          },
+        },
+        runtimeCapabilities: executionPlane,
+        executionFacts: new PostgresExecutionFactQuery(db as any),
+        conversations,
+      } as any);
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([
+          (context: any) =>
+            workModule.contributeRuntime({
+              ...context,
+              chatContext: {
+                conversationId: conversation.id,
+                triggerMessageId: trigger.id,
+              },
+            }),
+        ]),
+      );
+      servers.push(mcp);
+      const receipt = mcp.grants.issue({
+        tenantId,
+        workspaceId,
+        principalType: 'service_account',
+        principalId,
+        scopeId: 'chat-runtime-b3-trace',
+        allowedTools: [
+          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+        ],
+      });
+      const session = await executionPlane.createSession({
+        runtimeSessionId: 'chat-runtime-b3-trace',
+        workspace: { cwd: process.cwd() },
+        systemPrompt: `Agent definition ID: ${agentDefinitionId}`,
+        extensions: {
+          mcpServers: [
+            {
+              name: 'agent-server',
+              url: await mcp.start(),
+              headers: { Authorization: `Bearer ${receipt.token}` },
+            },
+          ],
+        },
+      });
+      await session.session.run({
+        runId: 'turn-b3-trace',
+        prompt: '请做正式分析 OpenAI',
+      });
+
+      const binding = await db.query<{
+        work_id: string;
+        root_task_id: string;
+      }>(
+        'SELECT work_id, root_task_id FROM work_runs WHERE tenant_id=$1 AND workspace_id=$2',
+        [tenantId, workspaceId],
+      );
+      expect(binding.rows).toHaveLength(1);
+      const bound = binding.rows[0]!;
+      expect(bound.root_task_id).toBeTruthy();
+      const admittedRun = await runs.findByTaskId(bound.root_task_id);
+      if (!admittedRun)
+        throw new Error('expected the admitted root Task to have a Run');
+      const claim = await runs.claimQueuedById({
+        runId: admittedRun.id,
+        workerId: 'b3-trace-worker',
+        activationId: randomUUID(),
+        claimedAt: at,
+        leaseExpiresAt: '2026-08-21T00:01:00.000Z',
+      });
+      if (!claim) throw new Error('expected the admitted Run to be claimable');
+      const execute = new ExecuteRun(
+        new CompleteRun(runs, tasks),
+        tasks,
+        invokables,
+        new ExecuteTeamTask(invokables, {} as never),
+        new FakeAgentRuntime(),
+        createLogger({
+          service: 'north-star-work-run-trace',
+          minimumLevel: 'error',
+          write: () => undefined,
+        }),
+        undefined,
+        undefined,
+        new PostgresRunEventRepository(db),
+      );
+      await execute.execute(claim);
+
+      const trace = await db.query<{
+        work_run_id: string;
+        root_task_id: string;
+        task_id: string;
+        run_id: string;
+        event_run_id: string;
+        event_count: number;
+        event_types: string[];
+        tenant_id: string;
+        workspace_id: string;
+      }>(
+        `SELECT wr.id AS work_run_id,
+                wr.root_task_id,
+                t.id AS task_id,
+                r.id AS run_id,
+                re.run_id AS event_run_id,
+                count(re.id)::int AS event_count,
+                array_agg(re.type ORDER BY re.sequence) AS event_types,
+                t.tenant_id,
+                t.workspace_id
+           FROM work_runs wr
+           JOIN tasks t ON t.id = wr.root_task_id
+           JOIN runs r ON r.task_id = t.id
+           JOIN run_events re ON re.run_id = r.id
+          WHERE wr.tenant_id = $1 AND wr.workspace_id = $2
+          GROUP BY wr.id, wr.root_task_id, t.id, r.id, re.run_id,
+                   t.tenant_id, t.workspace_id`,
+        [tenantId, workspaceId],
+      );
+      expect(trace.rows).toHaveLength(1);
+      const row = trace.rows[0]!;
+      expect(row.work_run_id).toBeTruthy();
+      expect(row.root_task_id).toBe(row.task_id);
+      expect(row.task_id).toBeTruthy();
+      expect(row.run_id).toBeTruthy();
+      expect(row.event_run_id).toBe(row.run_id);
+      expect(row.event_count).toBeGreaterThanOrEqual(1);
+      expect(row.event_types).toContain('started');
+      expect(row.tenant_id).toBe(tenantId);
+      expect(row.workspace_id).toBe(workspaceId);
+    } finally {
+      await db.close();
+    }
+  });
+
   it('B3 completes a Work task and wakes its linked Chat', async () => {
     const db = new PGlite();
     const at = '2026-08-21T00:00:00.000Z';
@@ -1450,7 +1769,7 @@ spec:
         definitions: invokables,
         definitionResolution: resolver,
         execution: {
-          async admitRoot(request) {
+          async admitRoot(request: any) {
             const receipt = await admitRoot.execute({
               prompt: request.input.text,
               idempotencyKey: request.idempotencyKey,

@@ -16,10 +16,13 @@ describe('local environment profiles', () => {
     expect(core.services).toEqual(['postgres', 'agent-server']);
     expect(core.runtime).toMatchObject({ enabled: false, adapter: 'none' });
     expect(runtime.services).toContain('paseo-runtime');
+    // a9a49a9 ("Run direct chat through the runtime profile") deliberately moved
+    // the runtime profile from opencode to claude; this expectation was left
+    // behind and asserted the pre-change value.
     expect(runtime.runtime).toMatchObject({
       enabled: true,
       adapter: 'paseo',
-      provider: 'opencode',
+      provider: 'claude',
     });
   });
 

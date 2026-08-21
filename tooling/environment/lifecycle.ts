@@ -186,7 +186,11 @@ export async function stopLocalEnvironment(
       ...invocation.args,
       'down',
       '--remove-orphans',
-      ...(state.testMode ? ['--volumes'] : []),
+      // 🔴 acceptance 不删卷。它的 project 名是固定的，卷里存着从镜像拷出来的
+      // node_modules；删掉就等于每次重跑都要再拷一遍整棵树（实测冷卷上 UI 要 546 秒
+      // 才应答）。⛔ 不要为了"干净"把 --volumes 加回来 —— 干净由固定 project 名 +
+      // 依赖 stamp 保证，不是靠每次清空。
+      ...(state.testMode && state.profile !== 'acceptance' ? ['--volumes'] : []),
     ],
     environment: environmentFor(
       options.environment ?? process.env,

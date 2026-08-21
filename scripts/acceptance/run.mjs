@@ -202,7 +202,14 @@ async function main() {
 
     console.log(`PASS acceptance:run at HEAD=${report.head} provider=${provider}`);
   } finally {
-    await handle.stop();
+    // 🔴 单步调试用：留栈不拆，⛔ 默认仍然拆（不留在这里当常态）。
+    // Owner 指示"手动单步调试完，可以了再跑完整脚本" —— 一次性拆栈会把证据
+    // 连同容器一起销毁，run3/run4 两次都是这样丢掉 docker logs 的。
+    if (process.env.ACCEPTANCE_KEEP_STACK === '1') {
+      console.log(`ACCEPTANCE_KEEP_STACK=1 — leaving ${handle.state.projectName} up for inspection`);
+    } else {
+      await handle.stop();
+    }
   }
 }
 

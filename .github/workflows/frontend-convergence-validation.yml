@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - refactor/single-vite-frontend
+  pull_request:
+    branches:
+      - refactor/host-native-dev-harness
 
 permissions:
   contents: read

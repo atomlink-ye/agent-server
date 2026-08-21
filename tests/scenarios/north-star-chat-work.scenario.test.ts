@@ -25,6 +25,16 @@ import { PostgresConversationWorkEntitlementRepository } from '../../src/infrast
 import { PostgresConversationWorkLinkRepository } from '../../src/modules/work/conversation-work-link-repository.js';
 import { LocalRuntimeExtensionBinder } from '../../src/infrastructure/extensions/local-runtime-extension-binder.js';
 import { postConversationMessage } from '../../src/application/chat/post-conversation-message.js';
+import { AdmitRootTask } from '../../src/application/tasks/admit-root-task.js';
+import { CompleteRun } from '../../src/application/runs/complete-run.js';
+import { transitionRun } from '../../src/domain/runs/run.js';
+import { PostgresAdmissionRepository } from '../../src/infrastructure/postgres/postgres-admission-repository.js';
+import { PostgresRunRepository } from '../../src/infrastructure/postgres/postgres-run-repository.js';
+import { PostgresTaskRepository } from '../../src/infrastructure/postgres/postgres-task-repository.js';
+import { createWorkChatWakeWorker } from '../../src/application/work-chat/work-chat-wake-worker.js';
+import { PostgresWorkChatWakeWorkSource } from '../../src/infrastructure/postgres/postgres-work-chat-wake-work-source.js';
+import { PostgresWorkChatWakeStateRepository } from '../../src/infrastructure/postgres/postgres-work-chat-wake-state-repository.js';
+import { PostgresWorkChatConversationAgentResolver } from '../../src/infrastructure/postgres/postgres-work-chat-conversation-agent-resolver.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -994,7 +1004,8 @@ spec:
         additional_properties: false,
       },
     };
-    const parsed = validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+    const parsed =
+      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
 kind: WorkDefinition
 metadata:
   name: b4-product-work
@@ -1190,7 +1201,9 @@ spec:
         } as any,
       } as any);
       const mcp = new RuntimeMcpServer(
-        new RuntimeToolRegistry([(context) => workModule.contributeRuntime(context)]),
+        new RuntimeToolRegistry([
+          (context) => workModule.contributeRuntime(context),
+        ]),
       );
       servers.push(mcp);
       const binder = new LocalRuntimeExtensionBinder(
@@ -1200,7 +1213,8 @@ spec:
       );
       const provider = {
         async runTurn(input: any) {
-          if (!input.extensions) throw new Error('reconciler did not bind extensions');
+          if (!input.extensions)
+            throw new Error('reconciler did not bind extensions');
           const created = await executionPlane.createSession({
             runtimeSessionId: `chat-runtime-b4-${conversation.id}`,
             workspace: { cwd: process.cwd() },
@@ -1259,6 +1273,312 @@ spec:
       expect(links.rows[0]?.work_id).toBe(works.rows[0]?.id);
       expect(links.rows[0]?.conversation_id).toBe(conversation.id);
       expect(links.rows[0]?.trigger_message_id).toBe(message.id);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('B3 completes a Work task and wakes its linked Chat', async () => {
+    const db = new PGlite();
+    const at = '2026-08-21T00:00:00.000Z';
+    const tenantId = 'tenant-b3';
+    const workspaceId = randomUUID();
+    const principalId = 'principal-b3';
+    const agentDefinitionId = randomUUID();
+    const agentVersionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account' as const,
+      principalId,
+    };
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+      inputSchema: {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const } },
+        required: ['query'],
+        additional_properties: false,
+      },
+    };
+    const parsed =
+      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b3-product-work
+  description: B3 Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account',$3,'B3',$4,$4)`,
+        [workspaceId, tenantId, principalId, at],
+      );
+      const conversations = new PostgresConversationRepository(db as any);
+      await conversations.ensureChatRuntime({
+        tenantId,
+        agentDefinitionId,
+        activeAgentVersionId: agentVersionId,
+      });
+      const conversation = await conversations.findOrCreateDirect({
+        tenantId,
+        principalId,
+        principalType: 'service_account',
+        agentDefinitionId,
+      });
+      const trigger = await postConversationMessage(conversations, {
+        author: {
+          type: 'principal',
+          tenantId,
+          conversationId: conversation.id,
+          principalType: 'service_account',
+          principalId,
+        },
+        body: '请做正式分析 OpenAI',
+      });
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(
+        db,
+      );
+      await authoredDefinitions.publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B3 Product Work',
+        description: 'B3 Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: at,
+      });
+      await authoredDefinitions.associateAgentWorkflow({
+        tenantId,
+        workspaceId,
+        agentDefinitionId,
+        definitionId,
+        now: at,
+      });
+      const invokables = new PostgresInvokableRepository(db);
+      const resolver = new ResolveWorkDefinition({
+        agents: {
+          async findDefinition() {
+            return null;
+          },
+          async findVersion(_owner, id) {
+            return id === agentVersionId
+              ? ({
+                  id: agentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B3 Agent',
+                  fingerprint: `sha256:${'a'.repeat(64)}`,
+                } as any)
+              : null;
+          },
+        },
+        agentResolution: {
+          async resolvePublished(id) {
+            return id === agentVersionId
+              ? {
+                  source: 'managed' as const,
+                  id: agentVersionId,
+                  instructions: 'Handle typed Product Work input.',
+                  modelPolicyRef: 'free-only' as const,
+                  proposalLimit: 0,
+                  skills: [],
+                  toolRefs: [],
+                }
+              : null;
+          },
+        },
+        definitions: invokables,
+        authoredDefinitions,
+        environments: {
+          async findVersion(_owner, id) {
+            return id === environmentVersionId
+              ? ({
+                  id: environmentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B3 Environment',
+                  package: {},
+                  canonicalJson: '{}',
+                  fingerprint: `sha256:${'e'.repeat(64)}`,
+                  createdAt: at,
+                  updatedAt: at,
+                  publishedAt: at,
+                } as any)
+              : null;
+          },
+        },
+      });
+      const tasks = new PostgresTaskRepository(db as any);
+      const runs = new PostgresRunRepository(db as any);
+      const admissions = new PostgresAdmissionRepository(db as any);
+      const admitRoot = new AdmitRootTask(
+        tasks,
+        runs,
+        admissions,
+        () => new Date(at),
+      );
+      const executionPlane = new ScriptedExecutionPlane();
+      const workModule = createWorkModule({
+        database: db as any,
+        definitions: invokables,
+        definitionResolution: resolver,
+        execution: {
+          async admitRoot(request) {
+            const receipt = await admitRoot.execute({
+              prompt: request.input.text,
+              idempotencyKey: request.idempotencyKey,
+              accessContext: request.accessContext,
+            });
+            return { taskId: receipt.taskId, reused: receipt.reused };
+          },
+        },
+        runtimeCapabilities: executionPlane,
+        executionFacts: new PostgresExecutionFactQuery(db as any),
+        conversations,
+      } as any);
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([
+          (context: any) =>
+            workModule.contributeRuntime({
+              ...context,
+              chatContext: {
+                conversationId: conversation.id,
+                triggerMessageId: trigger.id,
+              },
+            }),
+        ]),
+      );
+      servers.push(mcp);
+      const receipt = mcp.grants.issue({
+        tenantId,
+        workspaceId,
+        principalType: 'service_account',
+        principalId,
+        scopeId: 'chat-runtime-b3',
+        allowedTools: [
+          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+        ],
+      });
+      const session = await executionPlane.createSession({
+        runtimeSessionId: 'chat-runtime-b3',
+        workspace: { cwd: process.cwd() },
+        systemPrompt: `Agent definition ID: ${agentDefinitionId}`,
+        extensions: {
+          mcpServers: [
+            {
+              name: 'agent-server',
+              url: await mcp.start(),
+              headers: { Authorization: `Bearer ${receipt.token}` },
+            },
+          ],
+        },
+      });
+      await session.session.run({
+        runId: 'turn-b3',
+        prompt: '请做正式分析 OpenAI',
+      });
+
+      const binding = await db.query<{ work_id: string; root_task_id: string }>(
+        'SELECT work_id, root_task_id FROM work_runs WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(binding.rows).toHaveLength(1);
+      const bound = binding.rows[0]!;
+      expect(bound.root_task_id).toBeTruthy();
+      const run = await runs.findByTaskId(bound.root_task_id);
+      if (!run)
+        throw new Error('expected the admitted root Task to have a Run');
+      const claim = await runs.claimQueuedById({
+        runId: run.id,
+        workerId: 'b3-completion-worker',
+        activationId: randomUUID(),
+        claimedAt: at,
+        leaseExpiresAt: '2026-08-21T00:01:00.000Z',
+      });
+      if (!claim) throw new Error('expected the admitted Run to be claimable');
+      await new CompleteRun(runs, tasks).execute({
+        claim,
+        run: transitionRun(
+          claim.run,
+          'succeeded',
+          { result: { text: 'B3 completed Work result' } },
+          () => new Date('2026-08-21T00:00:01.000Z'),
+        ),
+      });
+      const link = await db.query<{ work_id: string }>(
+        'SELECT work_id FROM conversation_work_links WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(link.rows).toEqual([{ work_id: bound.work_id }]);
+      const wakeDatabase = {
+        query: db.query.bind(db),
+        async connect() {
+          return { query: db.query.bind(db), release() {} };
+        },
+      };
+      const worker = createWorkChatWakeWorker(
+        {
+          workSource: new PostgresWorkChatWakeWorkSource(wakeDatabase),
+          state: new PostgresWorkChatWakeStateRepository(wakeDatabase),
+          projection: workModule.createChatWorkCardProjection(),
+          conversationWorkLinks: new PostgresConversationWorkLinkRepository(
+            db as any,
+          ),
+          conversations,
+          conversationAgentDefinitions:
+            new PostgresWorkChatConversationAgentResolver(db as any),
+        },
+        { workerId: 'b3-work-chat', leaseMs: 60_000, now: () => new Date(at) },
+      );
+      await worker.processOnce();
+
+      const task = await db.query<{ status: string }>(
+        'SELECT status FROM tasks WHERE id=$1',
+        [bound.root_task_id],
+      );
+      expect(task.rows).toEqual([{ status: 'completed' }]);
+      const terminalRun = await db.query<{ status: string }>(
+        'SELECT status FROM runs WHERE task_id=$1',
+        [bound.root_task_id],
+      );
+      expect(terminalRun.rows).toEqual([{ status: 'succeeded' }]);
+      const messages = await db.query<{ work_ref: string }>(
+        'SELECT work_ref FROM chat_messages WHERE tenant_id=$1 AND work_ref=$2',
+        [tenantId, bound.work_id],
+      );
+      expect(messages.rows).toEqual([{ work_ref: bound.work_id }]);
     } finally {
       await db.close();
     }

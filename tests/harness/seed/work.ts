@@ -80,3 +80,40 @@ spec:
   }
   return { definitionId, versionId };
 }
+
+export async function seedActiveTask(
+  db: SeedDatabase,
+  input: {
+    readonly owner: HarnessOwner;
+    readonly invokableKind: string;
+    readonly invokableVersionId: string;
+    readonly policySnapshotVersion?: string;
+    readonly inputSnapshotRef?: string;
+    readonly inputFingerprint?: string;
+    readonly now?: string;
+  },
+): Promise<{ taskId: string; reused: false }> {
+  const taskId = randomUUID();
+  const now = input.now ?? HARNESS_NOW;
+  await db.query(
+    `INSERT INTO tasks
+      (id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,
+       root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,
+       input_snapshot_ref,input_fingerprint,created_at,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,$9,$10,$11,$11)`,
+    [
+      taskId,
+      input.owner.tenantId,
+      input.owner.workspaceId,
+      input.owner.principalType,
+      input.owner.principalId,
+      input.policySnapshotVersion ?? 'harness-policy-v1',
+      input.invokableKind,
+      input.invokableVersionId,
+      input.inputSnapshotRef ?? `harness:${taskId}`,
+      input.inputFingerprint ?? `harness:${taskId}`,
+      now,
+    ],
+  );
+  return { taskId, reused: false };
+}

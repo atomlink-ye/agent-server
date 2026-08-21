@@ -87,6 +87,7 @@ describe('North Star chat Work MVE', () => {
       for (const [table, id] of Object.entries({
         workspaces: ids.workspace,
         environment_definitions: ids.environmentDefinition,
+        environment_versions: ids.environmentVersion,
         team_definitions: ids.teamDefinition,
         team_versions: ids.teamVersion,
         conversations: ids.conversation,

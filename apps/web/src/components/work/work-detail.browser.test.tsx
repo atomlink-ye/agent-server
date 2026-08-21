@@ -74,6 +74,13 @@ function productDefinitionVersion(versionId: string, name: string) {
         },
       },
     },
+    source_yaml: `apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: ${name}
+spec:
+  kind: collaboration
+`,
     resolved: {
       resource_manifest_fingerprint: `sha256:${'b'.repeat(64)}`,
     },

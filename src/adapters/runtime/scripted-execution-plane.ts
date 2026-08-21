@@ -146,6 +146,7 @@ function requiredMcp(spec: ExecutionSessionSpec): ExecutionMcpServerConfig {
 }
 
 function agentDefinitionId(systemPrompt: string): string {
+  // Coupled to buildSystemPrompt wording: changing that generated label breaks this test plane.
   const match = /^Agent definition ID: (.+)$/m.exec(systemPrompt);
   if (!match?.[1])
     throw new Error(

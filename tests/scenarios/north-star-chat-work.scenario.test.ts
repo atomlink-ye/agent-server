@@ -14,6 +14,10 @@ import { applyDurableKernelMigrations } from '../../src/infrastructure/postgres/
 import { validateProductWorkDefinition } from '../../src/application/work/validate-product-work-definition.js';
 import { fingerprintWorkDefinitionSource } from '../../src/domain/work/work-definition-source.js';
 import { PostgresWorkDefinitionSourceRepository } from '../../src/infrastructure/postgres/postgres-work-definition-source-repository.js';
+import { createWorkModule } from '../../src/modules/work/work-module.js';
+import { PostgresInvokableRepository } from '../../src/infrastructure/postgres/postgres-invokable-repository.js';
+import { PostgresExecutionFactQuery } from '../../src/infrastructure/postgres/postgres-execution-fact-query.js';
+import { ResolveWorkDefinition } from '../../src/application/work/resolve-work-definition.js';
 
 const servers: RuntimeMcpServer[] = [];
 afterEach(async () =>
@@ -431,5 +435,266 @@ spec:
         triggerMessageId: 'message-1',
       },
     ]);
+  });
+
+  // B2b-2 · 端到端：真实 WorkModule 装配 + 真实产品 handler，在同一个 PGlite 上。
+  // 🔴 works/work_runs/conversation_work_links 必须由【真实路径】建出，⛔ 不手写 INSERT INTO works。
+  it('B2b-2 creates a durable Work through the real WorkModule contributor', async () => {
+    const db = new PGlite();
+    const at = '2026-08-21T00:00:00.000Z';
+    const tenantId = 'tenant-b2b2';
+    const workspaceId = randomUUID();
+    const principalId = 'principal-b2b2';
+    const conversationId = randomUUID();
+    const triggerMessageId = randomUUID();
+    const agentVersionId = randomUUID();
+    const agentDefinitionId = randomUUID();
+    const environmentVersionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const owner = {
+      tenantId,
+      workspaceId,
+      principalType: 'service_account' as const,
+      principalId,
+    };
+    // 🔴 source 必须带 inputSchema：list_agent_workflows 返回的 input_schema 取自
+    // version.source.inputSchema（product-work-mcp-tools.ts:708），取不到就回落成空 schema，
+    // 于是脚本化 start_work 会送 {}，被真实校验拒为 "input does not match"。
+    // YAML 里写了 input_schema 不等于 source 对象里有 —— 两处都要给。
+    const source = {
+      kind: 'single_agent' as const,
+      agentVersionId,
+      environmentVersionId,
+      memoryVersionIds: [],
+      inputSchema: {
+        type: 'object' as const,
+        properties: { query: { type: 'string' as const } },
+        required: ['query'],
+        additional_properties: false,
+      },
+    };
+    const parsed =
+      validateProductWorkDefinition(`apiVersion: agentserver.dev/v1alpha1
+kind: WorkDefinition
+metadata:
+  name: b2b2-product-work
+  description: B2b-2 Product WorkDefinition
+spec:
+  kind: single_agent
+  agent_version_id: ${agentVersionId}
+  environment_version_id: ${environmentVersionId}
+  input_schema:
+    type: object
+    properties:
+      query:
+        type: string
+    required: [query]
+    additional_properties: false
+`);
+    if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));
+
+    try {
+      await applyDurableKernelMigrations(db);
+      await db.query(
+        `INSERT INTO workspaces (id,tenant_id,principal_type,principal_id,name,created_at,updated_at) VALUES($1,$2,'service_account',$3,'B2b2',$4,$4)`,
+        [workspaceId, tenantId, principalId, at],
+      );
+      await db.query(
+        `INSERT INTO conversations (id,tenant_id,kind,created_at,updated_at) VALUES($1,$2,'direct',$3,$3)`,
+        [conversationId, tenantId, at],
+      );
+
+      const authoredDefinitions = new PostgresWorkDefinitionSourceRepository(db);
+      await authoredDefinitions.publish({
+        definitionId,
+        versionId,
+        owner,
+        name: 'B2b2 Product Work',
+        description: 'B2b-2 Product WorkDefinition',
+        source,
+        fingerprint: fingerprintWorkDefinitionSource(source),
+        authorSource: parsed.document,
+        authorFingerprint: parsed.fingerprint,
+        now: at,
+      });
+
+      // 🔴 list_agent_workflows 走 listDefinitionsForAgent，它 JOIN agent_workflow_associations
+      // （postgres-work-definition-source-repository.ts:396-409）。没有这一行关联，真实 handler
+      // 会返回"无可启动 workflow" —— 这不是 bug，是产品要求 workflow 必须显式关联到 agent。
+      await authoredDefinitions.associateAgentWorkflow({
+        tenantId,
+        workspaceId,
+        agentDefinitionId,
+        definitionId,
+        now: at,
+      });
+
+      const invokables = new PostgresInvokableRepository(db);
+      const resolver = new ResolveWorkDefinition({
+        agents: {
+          async findDefinition() {
+            return null;
+          },
+          async findVersion(_owner, id) {
+            return id === agentVersionId
+              ? ({
+                  id: agentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B2b2 Agent',
+                  fingerprint: `sha256:${'a'.repeat(64)}`,
+                } as any)
+              : null;
+          },
+        },
+        agentResolution: {
+          async resolvePublished(id) {
+            return id === agentVersionId
+              ? {
+                  source: 'managed' as const,
+                  id: agentVersionId,
+                  instructions: 'Handle typed Product Work input.',
+                  modelPolicyRef: 'free-only' as const,
+                  proposalLimit: 0,
+                  skills: [],
+                  toolRefs: [],
+                }
+              : null;
+          },
+        },
+        definitions: invokables,
+        authoredDefinitions,
+        environments: {
+          async findVersion(_owner, id) {
+            return id === environmentVersionId
+              ? ({
+                  id: environmentVersionId,
+                  definitionId: randomUUID(),
+                  tenantId,
+                  workspaceId,
+                  principalType: owner.principalType,
+                  principalId,
+                  status: 'published',
+                  displayName: 'B2b2 Environment',
+                  package: {},
+                  canonicalJson: '{}',
+                  fingerprint: `sha256:${'e'.repeat(64)}`,
+                  createdAt: at,
+                  updatedAt: at,
+                  publishedAt: at,
+                } as any)
+              : null;
+          },
+        },
+      });
+
+      const workModule = createWorkModule({
+        database: db as any,
+        definitions: invokables,
+        definitionResolution: resolver,
+        execution: {
+          async admitRoot(request: any) {
+            const taskId = randomUUID();
+            await db.query(
+              `INSERT INTO tasks
+               (id,tenant_id,workspace_id,principal_type,principal_id,policy_snapshot_version,
+                root_task_id,depth,status,ingress,invokable_kind,invokable_version_id,
+                input_snapshot_ref,input_fingerprint,created_at,updated_at)
+               VALUES($1,$2,$3,$4,$5,$6,$1,0,'active','api',$7,$8,$9,$10,$11,$11)`,
+              [
+                taskId,
+                request.accessContext.tenantId,
+                request.accessContext.workspaceId,
+                request.accessContext.principalType,
+                request.accessContext.principalId,
+                request.accessContext.policySnapshotVersion,
+                request.invokable.kind,
+                request.invokable.versionId,
+                'b2b2',
+                'b2b2',
+                at,
+              ],
+            );
+            return { taskId, reused: false };
+          },
+        } as any,
+        // 🔴 真实 StartWorkRun 会校验运行时能力（start-work-run.ts:54-56, 278）。
+        // 不传就用 NO_RUNTIME_CAPABILITIES ⇒ 报 "unsupported runtime capability: external_workspace"。
+        // 这里用 ScriptedExecutionPlane 自己声明的能力集，保持与实际执行方一致。
+        runtimeCapabilities: new ScriptedExecutionPlane(),
+        executionFacts: new PostgresExecutionFactQuery(db as any),
+        conversations: {
+          async appendMessage() {
+            return undefined as any;
+          },
+        } as any,
+      } as any);
+
+      const mcp = new RuntimeMcpServer(
+        new RuntimeToolRegistry([
+          (context: any) =>
+            workModule.contributeRuntime({
+              ...context,
+              chatContext: { conversationId, triggerMessageId },
+            }),
+        ]),
+      );
+      servers.push(mcp);
+      const receipt = mcp.grants.issue({
+        tenantId,
+        workspaceId,
+        principalType: 'service_account',
+        principalId,
+        scopeId: 'chat-runtime-b2b2',
+        allowedTools: [
+          AGENT_SERVER_LIST_AGENT_WORKFLOWS_TOOL_REF,
+          AGENT_SERVER_PRODUCT_WORK_RUN_START_TOOL_REF,
+        ],
+      });
+      const created = await new ScriptedExecutionPlane().createSession({
+        runtimeSessionId: 'chat-runtime-b2b2',
+        workspace: { cwd: process.cwd() },
+        systemPrompt: `Agent definition ID: ${agentDefinitionId}`,
+        extensions: {
+          mcpServers: [
+            {
+              name: 'agent-server',
+              url: await mcp.start(),
+              headers: { Authorization: `Bearer ${receipt.token}` },
+            },
+          ],
+        },
+      });
+      await expect(
+        created.session.run({ runId: 'turn-2', prompt: '请做正式分析 OpenAI' }),
+      ).resolves.toMatchObject({ status: 'completed' });
+
+      const works = await db.query<{ id: string; v: string }>(
+        'SELECT id, current_definition_version_id AS v FROM works WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(works.rows).toHaveLength(1);
+      expect(works.rows[0]?.v).toBe(versionId);
+      const runs = await db.query<{ work_id: string }>(
+        'SELECT work_id FROM work_runs WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(runs.rows).toHaveLength(1);
+      expect(runs.rows[0]?.work_id).toBe(works.rows[0]?.id);
+      const links = await db.query<{ work_id: string; conversation_id: string }>(
+        'SELECT work_id, conversation_id FROM conversation_work_links WHERE tenant_id=$1',
+        [tenantId],
+      );
+      expect(links.rows).toHaveLength(1);
+      expect(links.rows[0]?.work_id).toBe(works.rows[0]?.id);
+      expect(links.rows[0]?.conversation_id).toBe(conversationId);
+    } finally {
+      await db.close();
+    }
   });
 });

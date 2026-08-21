@@ -15,7 +15,23 @@ import {
   type ExecutionSessionSpec,
 } from '../../application/ports/execution-plane.js';
 
-const CAPABILITIES: ExecutionPlaneCapabilities = { supported: new Set() };
+// 🔴 必须与真实执行面（PaseoExecutionPlane，paseo-execution-plane.ts:29-41）声明一致。
+// 先前是空集合：真实 StartWorkRun 会因此拒绝 Work（"unsupported runtime capability:
+// external_workspace"），于是 harness 在一个生产里不存在的能力前提下运行 ——
+// 那样它证明的东西对产品无效。替身可以脚本化【决策】，⛔ 不许改变【契约】。
+const CAPABILITIES: ExecutionPlaneCapabilities = {
+  supported: new Set([
+    'streaming',
+    'cancellation',
+    'reusable_session',
+    'external_workspace',
+    'timeline_replay',
+    'permissions',
+    'nested_activities',
+    'provider_discovery',
+    'platform_mcp',
+  ]),
+};
 
 /**
  * Deterministic test execution plane. It scripts the model decision only;
@@ -127,11 +143,19 @@ async function call(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   const result = await client.callTool({ name, arguments: args });
-  if (result.isError) throw new Error(`Scripted MCP tool ${name} failed.`);
   const content = result.content as readonly {
     readonly type: string;
     readonly text?: string;
   }[];
+  // 🔴 必须把产品返回的错误文本带出来。先前只抛 `tool X failed.`，
+  // 把一个具体的产品拒绝原因压成了一句通用消息 —— 诊断时看不出是 entitlement、
+  // 找不到 workflow、还是 input 契约不符。这与 R3-93 同源：丢掉了唯一能定位根因的那段文本。
+  if (result.isError) {
+    const detail = content?.find((item) => item.type === 'text')?.text;
+    throw new Error(
+      `Scripted MCP tool ${name} failed: ${detail ?? '<no text content returned>'}`,
+    );
+  }
   const text = content.find((item) => item.type === 'text')?.text;
   if (!text)
     throw new Error(`Scripted MCP tool ${name} returned no text result.`);

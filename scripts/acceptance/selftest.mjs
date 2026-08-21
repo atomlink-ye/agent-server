@@ -10,6 +10,7 @@ import {
 import { assertGoldenRecord, assertStep8Observation, goldenEight } from './golden-eight.mjs';
 import { acceptanceRuntime } from './lifecycle.mjs';
 import { assertFinalSql, assertPreflight } from './preflight.mjs';
+import { acceptancePortFacts } from './run.mjs';
 
 const expectedPorts = {
   postgres: { hostIp: '127.0.0.1', published: 32873, target: 5432 },
@@ -67,6 +68,11 @@ mutation('step-8 card after T', () => assertStep8Observation({ ...step8, postRet
 assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' });
 mutation('preflight non-loopback URL', () => assertPreflight({ apiUrl: 'http://localhost:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' }));
 mutation('preflight rendered port mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: { services: { ...rendered.services, 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: '32783', target: 3000 }] } } }, expectedPorts, provider: 'claude' }));
+const handleFixture = { state: { ports: { postgres: 41001, api: 41002, web: 41003 } } };
+const renderedFixture = `services:\n  postgres:\n    ports: [{host_ip: 127.0.0.1, published: \"41001\", target: 5432}]\n  agent-server:\n    ports: [{host_ip: 127.0.0.1, published: \"41002\", target: 3000}]\n  web:\n    ports: [{host_ip: 127.0.0.1, published: \"41003\", target: 3001}]`;
+const portFacts = acceptancePortFacts(handleFixture, renderedFixture);
+assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...portFacts, provider: 'claude' });
+mutation('handle rendered port divergence', () => assertPreflight({ apiUrl: 'http://127.0.0.1:41002', ...acceptancePortFacts(handleFixture, renderedFixture.replace('41002', '41004')), provider: 'claude' }));
 assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'complete' });
 mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'complete' }));
 mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'failed' }));

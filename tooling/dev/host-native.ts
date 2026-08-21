@@ -84,6 +84,29 @@ export function localServiceAccountsJson(): string {
   ]);
 }
 
+async function seedLocalWorkspaces(pool: Pool): Promise<void> {
+  await pool.query(
+    `INSERT INTO workspaces
+       (id, tenant_id, principal_type, principal_id, name, created_at, updated_at)
+     VALUES
+       ($1, $2, $3, $4, $5, now(), now()),
+       ($6, $7, $8, $9, $10, now(), now())
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      LOCAL_WORKSPACE_ID,
+      'tenant_local',
+      'service_account',
+      'svc_local',
+      'Local development workspace',
+      '00000000-0000-4000-8000-000000000002',
+      'tenant_local_2',
+      'service_account',
+      'svc_local_2',
+      'Local development workspace 2',
+    ],
+  );
+}
+
 export async function loadLocalDotEnv(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<NodeJS.ProcessEnv> {
@@ -454,6 +477,7 @@ export async function prepareHostNativeEnvironment(
   const pool = new Pool({ connectionString, max: 2 });
   try {
     await applyDurableKernelMigrations(pool);
+    await seedLocalWorkspaces(pool);
   } finally {
     await pool.end();
   }

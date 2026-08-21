@@ -19,6 +19,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
     const durableSession = this.runtime.ensureAgentChatRuntimeSession
       ? await this.runtime.ensureAgentChatRuntimeSession({
           agentChatRuntimeId: input.brain.turnContext.agentChatRuntimeId,
+          runtimeEpoch: input.brain.turnContext.runtimeEpoch,
           agentOwner: input.brain.agentOwner,
           agentVersionId: input.brain.turnContext.agentVersionId,
           resolvedSkills: input.brain.resolvedSkills,
@@ -39,6 +40,7 @@ export class ExecutionRuntimeChatTurnProvider implements ChatTurnProvider {
         trigger_message_id: input.triggerMessageId,
         agent_definition_id: input.agentDefinitionId,
         agent_version_id: input.agentVersionId,
+        runtime_epoch: String(input.brain.turnContext.runtimeEpoch),
       },
       ...(input.extensions ? { extensions: input.extensions } : {}),
       proposalLimit: 0,

@@ -84,11 +84,9 @@ class ScriptedExecutionSession implements ExecutionSession {
     readonly runId: string;
     readonly prompt: string;
   }): Promise<ExecutionResult> {
-    if (/hello/i.test(input.prompt)) return completed('hello');
-    const mcp = requiredMcp(this.spec);
-    const client = await connect(mcp);
-    try {
-      if (/正式分析|OpenAI/i.test(input.prompt)) {
+    if (/正式分析|OpenAI/i.test(input.prompt)) {
+      const client = await connect(requiredMcp(this.spec));
+      try {
         const workflows = await call(client, 'list_agent_workflows', {
           agent_definition_id: agentDefinitionId(this.spec.systemPrompt),
         });
@@ -98,16 +96,16 @@ class ScriptedExecutionSession implements ExecutionSession {
           input: inputFor(workflow.input_schema, input.prompt),
         });
         return completed('已开始正式分析。');
+      } finally {
+        await client.close();
       }
-      if (/删掉融资部分/.test(input.prompt)) {
-        throw new Error(
-          'Scripted continue_work requires a work reference in the prompt.',
-        );
-      }
-      return completed('hello');
-    } finally {
-      await client.close();
     }
+    if (/删掉融资部分/.test(input.prompt))
+      throw new Error(
+        'Scripted continue_work requires a work reference in the prompt.',
+      );
+    if (/hello/i.test(input.prompt)) return completed('hello');
+    return completed('hello');
   }
 
   public async close(): Promise<void> {}

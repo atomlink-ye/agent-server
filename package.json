@@ -36,6 +36,7 @@
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:repository": "vitest run --config vitest.repository.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:north-star": "vitest run --config vitest.north-star.config.ts",
     "test:real-pg": "vitest run --config vitest.real-pg.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:web": "vitest run --config vitest.web.config.ts",

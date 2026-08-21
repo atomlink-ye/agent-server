@@ -120,6 +120,53 @@ it('refreshes the selected transcript on its interval and stops when selection c
   }
 });
 
+it('renders Work as a sibling tab inside the same Cumora-style shell', async () => {
+  const workId = '11111111-1111-4111-8111-111111111111';
+  const commands: ChatCommands = {
+    loadConversations: async () => [],
+    createConversation: async () => conversation('conversation-a'),
+    loadWorks: async () => [
+      {
+        id: workId,
+        title: 'Competitor Research',
+        productState: 'running',
+        updatedAt: '2026-08-21T00:00:00.000Z',
+        latestRunSummary: null,
+      },
+    ],
+    loadMessages: async () => [],
+    sendMessage: async () => message('conversation-a', 'message-a', 1, 'hello'),
+  };
+
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/work']}>
+          <ChatShell commands={commands} />
+        </MemoryRouter>,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const rail = host.querySelector('.rail');
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain('Conversations');
+    expect(rail?.textContent).toContain('Work');
+    expect(host.querySelector('.work-pane')).not.toBeNull();
+    expect(host.querySelector('.work-main')).not.toBeNull();
+    expect(host.textContent).toContain('Choose a Work item');
+    expect(host.textContent).toContain('Competitor Research');
+    expect(host.querySelector('.work-product-nav')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
 function conversation(id: ConversationId): Conversation {
   return {
     id,

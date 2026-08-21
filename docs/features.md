@@ -67,7 +67,11 @@ Agent Teams v2 materializes child Tasks/Runs only for bounded Lead turns, Work a
 
 Platform MCP capabilities are registered separately from managed Agent domain tool refs. Composition admission checks the required runtime capabilities before technical Task/provider admission, and the WorkRun resource manifest pins the exact resolved Definition/Agent/Environment/Memory/Skill/Tool/platform-capability facts used for execution.
 
-Local development is Docker-first and has an observed process-isolation baseline: the long-lived PostgreSQL and co-process Agent Server services run in Compose, while Paseo, OpenCode, and Runtime MCP remain inside the Agent Server container. Only the loopback API port is host-published. This is not production sandboxing, tenant isolation, or a placement guarantee.
+Local development is host-native: Agent Server, Web, and optional Paseo runtime
+processes run on the developer host. A reachable native PostgreSQL instance is
+used when real PostgreSQL semantics are required; ordinary development can use
+PGlite. This is not production sandboxing, tenant isolation, or a placement
+guarantee.
 
 **V1 acceptance:** dedicated execution placement, compatibility suite, normalized events, audience-bound capability tokens, credential-aware tool operations, approval policy, receipt-based side-effect recovery, and no raw business credential in a runtime-readable surface.
 

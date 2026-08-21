@@ -172,7 +172,10 @@ A product canary validates a representative host-native API/Web/runtime journey.
 
 ## Acceptance
 
-Acceptance is milestone/release evidence, not the ordinary coding loop. It may use production-like Compose topology, browser instrumentation, provider transcripts, screenshots, manifests, hashes, and other evidence when the milestone requires them.
+Acceptance is milestone/release evidence, not the ordinary coding loop. It may
+use a production-like deployment environment, browser instrumentation, provider
+transcripts, screenshots, manifests, hashes, and other evidence when the
+milestone requires them.
 
 Do not require an acceptance evidence bundle for every local feature edit.
 
@@ -188,23 +191,10 @@ A product/code assertion should not become an eval merely because an Agent is in
 
 ## Environment ownership
 
-Host-native developer orchestration lives in `tooling/dev/`.
-
-Docker/production-like topology lives in:
-
-```text
-config/local-environments.yaml
-tooling/environment/
-compose*.yaml
-```
-
-Manual Compose environments are explicit compatibility/debugging choices:
-
-```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-```
+Host-native developer orchestration lives in `tooling/dev/`. Real PostgreSQL
+tests receive an explicit native database URL. CI may use a PostgreSQL service
+container, but the repository does not own a container lifecycle for local
+development or tests.
 
 ## Fixtures and harness
 

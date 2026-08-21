@@ -111,7 +111,7 @@ jobs:
           # silently missing a host-native runtime change.
           # Design contract: tooling/dev changes reach this real-runtime job.
           # Design goals: avoid false-green CI without charging unrelated docs.
-          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|tooling/environment/|config/local-environments\.yaml|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|compose[^/]*\.yaml|package\.json|pnpm-lock\.yaml)'; then
+          if printf '%s\n' "$changed" | grep -qE '^(src/|scripts/dev/|scripts/smoke/|tooling/dev/|config/real-provider-defaults\.env|\.github/workflows/real-runtime\.yml|\.nvmrc|Dockerfile|package\.json|pnpm-lock\.yaml)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             skip "No runtime-relevant paths changed, so a real provider cannot observe this diff."
@@ -181,7 +181,7 @@ jobs:
 
       - name: Real-provider user-defined Team Work execution lifecycle
         if: steps.credentials.outputs.available == 'true'
-        run: pnpm local-env run runtime -- node scripts/smoke/user-defined-team-work-lifecycle.mjs
+        run: node --import tsx tooling/dev/run-canary.ts user-defined-team-work
 
 
       - name: Record that the real-provider checks ran

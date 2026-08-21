@@ -112,18 +112,6 @@ Runtime mode still uses host processes. It invokes the existing `scripts/dev/wit
 
 Provider credentials remain explicit environment input. Do not add fallback credentials to repository files.
 
-## Docker compatibility topology
-
-```bash
-pnpm dev:docker
-pnpm dev:docker:runtime
-pnpm dev:docker:full
-```
-
-These are explicit aliases for the existing `local-env` Compose profiles. Use them only when the container topology is itself under test or when reproducing acceptance/release conditions.
-
-The underlying `config/local-environments.yaml` remains authoritative for Compose topology. It no longer defines the ordinary developer command surface.
-
 ## Database strategy
 
 ### PGlite — default deterministic database
@@ -148,6 +136,15 @@ Create a dedicated database and opt in:
 ```bash
 createdb agent_server_test
 TEST_DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test pnpm test:pg
+```
+
+When running one PostgreSQL integration file directly, export `DATABASE_URL`
+or `POSTGRES_URL` first. The direct-file path does not provision a database:
+
+```bash
+createdb agent_server_test
+export DATABASE_URL=postgresql://$USER@127.0.0.1:5432/agent_server_test
+pnpm exec vitest run tests/integration/real-pg-pool.integration.test.ts
 ```
 
 The runner refuses destructive access unless the database name contains `test`; it also rejects `prod`, `production`, `main`, and `live` names. When no test URL is supplied, the lane skips instead of booting Docker behind the developer's back.

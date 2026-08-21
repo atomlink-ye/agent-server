@@ -246,12 +246,20 @@ if (command.length === 0) {
     stdio: 'inherit',
   });
 
-  const stop = async () => {
-    await Promise.all([stopProcessTree(child), stopProcessTree(paseo.child)]);
+  let stopping;
+  const stop = () => {
+    stopping ??= Promise.allSettled([
+      stopProcessTree(child),
+      stopProcessTree(paseo.child),
+    ]);
+    return stopping;
   };
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
-      void stop();
+      void stop().finally(() => {
+        process.exitCode = signal === 'SIGINT' ? 130 : 143;
+        process.exit();
+      });
     });
   }
 

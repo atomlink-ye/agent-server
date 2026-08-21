@@ -63,7 +63,7 @@ async function resolvePorts(
 ): Promise<EnvironmentPorts> {
   if (profile === 'postgres') return { postgres: await freePort() };
   if (!testMode) return {};
-  if (profile === 'core' || profile === 'runtime' || profile === 'full') {
+  if (profile === 'core' || profile === 'runtime' || profile === 'full' || profile === 'acceptance') {
     return {
       postgres: await freePort(),
       api: await freePort(),
@@ -115,12 +115,12 @@ function urlsFor(state: LocalEnvironmentState): LocalEnvironmentUrls {
         ? {}
         : state.profile === 'core' ||
             state.profile === 'runtime' ||
-            state.profile === 'full'
+            state.profile === 'full' || state.profile === 'acceptance'
           ? { api: 'http://127.0.0.1:3000' }
           : {}),
-    ...(state.profile === 'full' && state.ports.web
+    ...((state.profile === 'full' || state.profile === 'acceptance') && state.ports.web
       ? { web: `http://127.0.0.1:${state.ports.web}` }
-      : !state.testMode && state.profile === 'full'
+      : !state.testMode && (state.profile === 'full' || state.profile === 'acceptance')
         ? { web: 'http://127.0.0.1:3001' }
         : {}),
   };

@@ -7,7 +7,7 @@ export function acceptanceRuntime(provider, model) {
 export async function startAcceptanceEnvironment({ provider, model, runDirectory, projectName }) {
   const { startLocalEnvironment } = await import('../../tooling/environment/lifecycle.ts');
   return startLocalEnvironment({
-    profile: 'full',
+    profile: 'acceptance',
     testMode: true,
     projectName,
     runDirectory,

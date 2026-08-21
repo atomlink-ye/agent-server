@@ -5,6 +5,7 @@ import {
   isModelPolicyRef,
   type ModelPolicyRef,
 } from '../../domain/agents/managed-agent-package.js';
+import { resourceOwner } from '../../domain/tenancy/product-context.js';
 import {
   AGENT_SERVER_MEMORY_READ_TOOL_REF,
   SUPPORTED_MANAGED_AGENT_TOOL_REFS,
@@ -49,6 +50,8 @@ export class ResolveAgentVersion implements AgentResolutionApi {
         return {
           source: 'managed',
           id: managedVersion.id,
+          definitionId: managedVersion.definitionId,
+          agentOwner: resourceOwner(managedVersion),
           instructions: managedVersion.package.spec.instructions,
           modelPolicyRef: readModelPolicyRef(managedVersion),
           proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
@@ -85,6 +88,8 @@ export class ResolveAgentVersion implements AgentResolutionApi {
       return {
         source: 'managed',
         id: managedVersion.id,
+        definitionId: managedVersion.definitionId,
+        agentOwner: resourceOwner(managedVersion),
         instructions: managedVersion.package.spec.instructions,
         modelPolicyRef: readModelPolicyRef(managedVersion),
         proposalLimit: managedVersion.package.spec.memory?.proposalLimit ?? 0,
@@ -100,6 +105,8 @@ export class ResolveAgentVersion implements AgentResolutionApi {
       ? {
           source: 'legacy',
           id: legacyVersion.id,
+          definitionId: legacyVersion.definitionId,
+          agentOwner: resourceOwner(legacyVersion),
           instructions: legacyVersion.instructions,
           modelPolicyRef: 'free-only',
           proposalLimit: 0,

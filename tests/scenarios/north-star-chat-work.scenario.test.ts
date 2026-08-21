@@ -729,8 +729,8 @@ spec:
       memoryVersionIds: [],
       inputSchema: {
         type: 'object' as const,
-        properties: { query: { type: 'string' as const } },
-        required: ['query'],
+        properties: { feedback: { type: 'string' as const } },
+        required: ['feedback'],
         additional_properties: false,
       },
     };
@@ -747,9 +747,9 @@ spec:
   input_schema:
     type: object
     properties:
-      query:
+      feedback:
         type: string
-    required: [query]
+    required: [feedback]
     additional_properties: false
 `);
     if (!parsed.valid) throw new Error(JSON.stringify(parsed.diagnostics));

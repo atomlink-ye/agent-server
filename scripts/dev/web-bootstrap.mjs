@@ -19,6 +19,7 @@ const baseUrl = (
   env('AGENT_SERVER_BASE_URL') || 'http://127.0.0.1:3000'
 ).replace(/\/$/, '');
 const token = env('AGENT_SERVER_SERVICE_TOKEN') || 'token-local-dev';
+const skipProductWork = env('WEB_BOOTSTRAP_SKIP_WORK') === '1';
 let agentVersionId = env('WEB_AGENT_VERSION_ID');
 let environmentVersionId = env('WEB_ENVIRONMENT_VERSION_ID');
 let agenticTeamVersionId = env('WEB_AGENTIC_TEAM_VERSION_ID');
@@ -50,7 +51,7 @@ else
   ).workspace_id;
 
 let sampleWorkId = env('WEB_SAMPLE_WORK_ID');
-if (!sampleWorkId) {
+if (!sampleWorkId && !skipProductWork) {
   const { definitionId, definitionVersionId } = await bootstrapWorkDefinition(
     agentVersionId,
     environmentVersionId,
@@ -68,12 +69,14 @@ await writeFile(
     `WEB_AGENTIC_TEAM_VERSION_ID=${agenticTeamVersionId}`,
     `WEB_WORKSPACE_NAME=${quoteEnv(workspaceName)}`,
     `WEB_WORKSPACE_ID=${workspaceId}`,
-    `WEB_SAMPLE_WORK_ID=${sampleWorkId}`,
+    ...(sampleWorkId ? [`WEB_SAMPLE_WORK_ID=${sampleWorkId}`] : []),
     '',
   ].join('\n'),
   { mode: 0o600 },
 );
-process.stdout.write(`web bootstrap ready: ${outputPath}\n`);
+process.stdout.write(
+  `web bootstrap ready: ${outputPath}${skipProductWork ? ' (core resources only)' : ''}\n`,
+);
 
 async function readPublished(url) {
   const value = await request(url);

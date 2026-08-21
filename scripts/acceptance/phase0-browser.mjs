@@ -128,6 +128,18 @@ const assertStatus = (response, expected, label) => {
   }
 };
 
+// 🔴 Auditor finding-1-8861bd03：本文件是【第三条】可独立执行的产品路径 ——
+// 它直接产生 POST /api/conversations 与 POST /api/conversations/:id/messages，
+// 给齐环境直接调用即可绕过 run.mjs 与 phase0-driver.mjs 两道闸门，所以这里也必须过闸门。
+// 🔴 必须放在 try 之外：本文件的 catch 会把异常吞成一次"跑过并失败"的 run-result.json，
+// 而闸门失败【不是一次失败的运行】—— 它必须在任何浏览器动作之前中止，且不产出 run 结果。
+// ⛔ 不许加环境变量跳过它。
+{
+  const { checkPreconditions, assertPreconditions } = await import('./preconditions.mjs');
+  const { fileURLToPath } = await import('node:url');
+  assertPreconditions(await checkPreconditions(fileURLToPath(new URL('../..', import.meta.url))));
+}
+
 try {
   browser = await chromium.launch({ headless: true });
   context = await browser.newContext({ baseURL: baseUrl });

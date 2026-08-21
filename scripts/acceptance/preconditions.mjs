@@ -5,6 +5,16 @@ import { latestRuntimeInitialized, assertProviderEffect } from './assertions.mjs
 const run = promisify(execFile);
 
 // P1/P2/P3 运行时闸门。
+//
+// 🔴 这个闸门【不是】执行完整性边界，⛔ 不要这样描述它（Auditor finding-1-8861bd03）。
+// Auditor 实测：把 assertPreconditions 改成 return 而不是 throw 之后，
+// checkPreconditions 照样报 ok=false failed=[CLEAN]，但没有任何东西阻止后续产品调用。
+// git status 是【对已跟踪文件的篡改证据】，不是执行完整性边界：
+// 被 ignore 的依赖/配置、以及被改写的执行函数本身，都在它能阻止的范围之外。
+//
+// 它能做的：防止【无意中】拿一套过期或未提交的装置去跑产品命令，并把当次求值的
+// HEAD/dirty 状态写进证据。它不能做的：抵抗对装置本身的修改。
+// ⇒ 真正的完整性控制是【外部审计】，不是这段代码。作者自证在这里无效。
 // 🔴 它取代了"授权书里挂一个 HEAD 快照"的做法：携带 HEAD 的授权是一张证书，
 // 而证书必然随装置移动而过期（R4 里连续过期了两次，两次都被 Auditor 抓到）。
 // 闸门在每次运行时、在它自己当前的 HEAD 上求值，

@@ -14,6 +14,7 @@ import {
 } from '../agents/built-in-skills.js';
 import type { Logger } from '../../shared/observability/logger.js';
 import type { ChatBrainResolver } from './chat-brain-resolver.js';
+import type { ConversationActorResolver } from './chat-turn-context.js';
 
 export class ChatDeliveryReconciler {
   public constructor(
@@ -27,6 +28,7 @@ export class ChatDeliveryReconciler {
     private readonly now: () => Date = () => new Date(),
     private readonly workEntitlements?: ConversationWorkEntitlementRepository,
     private readonly extensions?: RuntimeExtensionBinder,
+    private readonly actorResolver?: ConversationActorResolver,
   ) {}
 
   public async reconcilePendingDispatches(limit = 50): Promise<number> {
@@ -76,9 +78,6 @@ export class ChatDeliveryReconciler {
       return;
     }
 
-    // Resolve actor/work scope before building the Agent brain. The Agent owner
-    // and the principal currently talking to it are deliberately different
-    // concepts; actor-private Agent Home context must follow the latter.
     const entitlement = this.workEntitlements
       ? await this.workEntitlements.resolveForChatTurn({
           tenantId: dispatch.tenantId,
@@ -86,19 +85,37 @@ export class ChatDeliveryReconciler {
           agentDefinitionId: dispatch.agentDefinitionId,
         })
       : null;
+
+    const membershipActor =
+      triggerMessage.authorType === 'principal' && this.actorResolver
+        ? await this.actorResolver.resolve({
+            tenantId: dispatch.tenantId,
+            conversationId: dispatch.conversationId,
+            principalId: triggerMessage.authorId,
+          })
+        : null;
     if (
-      entitlement &&
       triggerMessage.authorType === 'principal' &&
-      entitlement.principalId !== triggerMessage.authorId
+      this.actorResolver &&
+      !membershipActor
     )
-      throw new Error('chat_turn_actor_entitlement_mismatch');
-    const actor =
+      throw new Error('chat_turn_actor_membership_missing');
+
+    const entitlementActor =
       entitlement && triggerMessage.authorType === 'principal'
         ? principalRef({
             principalType: entitlement.principalType,
             principalId: entitlement.principalId,
           })
-        : undefined;
+        : null;
+    if (
+      membershipActor &&
+      entitlementActor &&
+      (membershipActor.id !== entitlementActor.id ||
+        membershipActor.type !== entitlementActor.type)
+    )
+      throw new Error('chat_turn_actor_entitlement_mismatch');
+    const actor = membershipActor ?? entitlementActor ?? undefined;
 
     const brain = await this.brainResolver.resolve({
       tenantId: dispatch.tenantId,

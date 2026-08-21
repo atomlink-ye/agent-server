@@ -13,6 +13,7 @@ interface Queryable {
 }
 
 type Row = {
+  work_id: string;
   work_run_id: string;
   definition_version_id: string;
   root_task_id: string;
@@ -32,7 +33,7 @@ export class PostgresWorkRunResourceManifestRead implements WorkRunResourceManif
     scope: WorkRunManifestScope,
   ): Promise<WorkRunCompositionManifest | null> {
     const result = await this.db.query<Row>(
-      `SELECT wr.id AS work_run_id,wr.definition_version_id,$1::uuid AS root_task_id,
+      `SELECT wr.work_id,wr.id AS work_run_id,wr.definition_version_id,$1::uuid AS root_task_id,
               m.slot,m.resource_kind,m.requested_ref,m.resolved_version_id,
               m.resolved_fingerprint,m.resolved_at
          FROM tasks root
@@ -69,6 +70,7 @@ export class PostgresWorkRunResourceManifestRead implements WorkRunResourceManif
     if (rows.length === 0) return null;
     const first = rows[0]!;
     return {
+      workId: first.work_id,
       workRunId: first.work_run_id,
       definitionVersionId: first.definition_version_id,
       rootTaskId: first.root_task_id,

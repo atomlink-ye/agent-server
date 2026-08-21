@@ -6,7 +6,6 @@ import type { ListMemoryEntries } from '../../../application/memory/list-memory-
 import type { ListMemoryProposals } from '../../../application/memory/list-memory-proposals.js';
 import type { ReviewMemoryProposal } from '../../../application/memory/review-memory-proposal.js';
 import type { ExecutionRuntimeService } from '../../../application/runtime/execution-plane-runtime-facade.js';
-import type { AgentRegistry } from '../../../application/ports/agent-registry.js';
 import type { GetRun } from '../../../application/runs/get-run.js';
 import type { SubmitRun } from '../../../application/runs/submit-run.js';
 import type { GetTask } from '../../../application/tasks/get-task.js';
@@ -105,7 +104,10 @@ describe('run routes', () => {
         findDefinition: async () => null,
         findVersion: async () => null,
         listVersionsForOwner: async () => null,
-      } as AgentRegistry,
+        findManagedDefinitionByTenant: async () => null,
+        findVersionByTenant: async () => null,
+        listVersionsByTenant: async () => null,
+      },
     });
 
     const headers = {

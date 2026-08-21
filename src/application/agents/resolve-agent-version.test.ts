@@ -32,10 +32,24 @@ function managed(
 
 describe('ResolveAgentVersion', () => {
   it('does not fall back when an owner-matching managed draft exists', async () => {
-    const findVersion = vi.fn(async () => managed('draft'));
+    const findVersion = vi.fn(
+      async (_owner: unknown, _versionId: string) => managed('draft'),
+    );
+    const findVersionByTenant = vi.fn(
+      async (input: { readonly tenantId: string; readonly versionId: string }) =>
+        findVersion(
+          {
+            tenantId: input.tenantId,
+            workspaceId: scope.workspaceId,
+            principalType: scope.principalType,
+            principalId: scope.principalId,
+          },
+          input.versionId,
+        ),
+    );
     const findLegacy = vi.fn(async () => ({ instructions: 'legacy' })) as never;
     const resolver = new ResolveAgentVersion(
-      { findVersion },
+      { findVersion, findVersionByTenant },
       { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );
@@ -57,7 +71,10 @@ describe('ResolveAgentVersion', () => {
 
   it('returns only managed identity, source, and instructions when published', async () => {
     const resolver = new ResolveAgentVersion(
-      { findVersion: vi.fn(async () => managed('published', 'managed')) },
+      {
+        findVersion: vi.fn(async () => managed('published', 'managed')),
+        findVersionByTenant: vi.fn(async () => managed('published', 'managed')),
+      },
       { findPublishedAgentVersionById: vi.fn() },
       { resolve: vi.fn(async () => null) },
     );
@@ -82,7 +99,10 @@ describe('ResolveAgentVersion', () => {
       proposalLimit: 0,
     })) as never;
     const resolver = new ResolveAgentVersion(
-      { findVersion: vi.fn(async () => null) },
+      {
+        findVersion: vi.fn(async () => null),
+        findVersionByTenant: vi.fn(async () => null),
+      },
       { findPublishedAgentVersionById: findLegacy },
       { resolve: vi.fn(async () => null) },
     );

@@ -130,6 +130,12 @@ describe('Chat-Work Bridge integration on real PostgreSQL', () => {
               } as any)
             : null;
         },
+        async findManagedDefinitionByTenant() {
+          return null;
+        },
+        async findVersionByTenant() {
+          return null;
+        },
       },
       agentResolution: {
         async resolvePublished(versionId) {

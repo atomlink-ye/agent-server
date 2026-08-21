@@ -1,6 +1,8 @@
-import type { AgentRegistry } from '../ports/agent-registry.js';
+import type {
+  AgentRegistry,
+  ManagedAgentDefinitionRead,
+} from '../ports/agent-registry.js';
 import type { DefinitionReadApi } from '../ports/definition-read-api.js';
-import type { ManagedAgentOwner } from '../../domain/agents/managed-agent-owner.js';
 import {
   isModelPolicyRef,
   type ModelPolicyRef,
@@ -26,7 +28,8 @@ export type {
 
 export class ResolveAgentVersion implements AgentResolutionApi {
   public constructor(
-    private readonly managed: Pick<AgentRegistry, 'findVersion'>,
+    private readonly managed: Pick<AgentRegistry, 'findVersion'> &
+      Pick<ManagedAgentDefinitionRead, 'findVersionByTenant'>,
     private readonly legacy: Pick<
       DefinitionReadApi,
       'findPublishedAgentVersionById'
@@ -39,10 +42,10 @@ export class ResolveAgentVersion implements AgentResolutionApi {
     scope: AgentVersionResolutionScope,
     options: { readonly resolveExtensions?: boolean } = {},
   ): Promise<ResolvedAgentVersion | null> {
-    const managedVersion = await this.managed.findVersion(
-      managedOwner(scope),
+    const managedVersion = await this.managed.findVersionByTenant({
+      tenantId: scope.tenantId,
       versionId,
-    );
+    });
     if (managedVersion) {
       if (managedVersion.status !== 'published') return null;
       if (options.resolveExtensions === false) {
@@ -130,13 +133,4 @@ function validateToolRefs(refs: readonly string[]): void {
       throw new Error('The managed Agent references an unsupported Tool.');
     seen.add(ref);
   }
-}
-
-function managedOwner(scope: AgentVersionResolutionScope): ManagedAgentOwner {
-  return {
-    tenantId: scope.tenantId,
-    workspaceId: scope.workspaceId,
-    principalType: scope.principalType,
-    principalId: scope.principalId,
-  };
 }

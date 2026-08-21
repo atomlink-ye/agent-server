@@ -1,10 +1,17 @@
 import type { AgentHomeNamespace } from '../../domain/agents/agent-home.js';
 
+/**
+ * Compatibility shape used by the legacy Agent Home API. New ContextFS code
+ * must derive canonical ownership from these server-side facts rather than
+ * treating agentDefinitionId as the owner of every namespace.
+ */
 export interface AgentHomeScope {
   readonly tenantId: string;
   readonly agentDefinitionId: string;
   readonly namespace: AgentHomeNamespace;
   readonly scopeKey: string;
+  readonly workspaceId?: string;
+  readonly principalType?: string;
 }
 
 export interface AgentHomeEntryRow {

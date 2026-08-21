@@ -23,7 +23,19 @@ export type AgentDefinition = CanonicalAgentDefinition &
     readonly description: string | null;
   }>;
 
-export type AgentDefinitionSnapshot = AgentDefinition;
+/** Old persistence rows do not yet project the newer canonical display fields. */
+export type AgentDefinitionSnapshot = Readonly<
+  Omit<
+    AgentDefinition,
+    'normalizedName' | 'displayName' | 'roleLabel' | 'summary'
+  > &
+    Partial<
+      Pick<
+        AgentDefinition,
+        'normalizedName' | 'displayName' | 'roleLabel' | 'summary'
+      >
+    >
+>;
 
 export interface CreateAgentDefinitionOptions extends InvokableOwnerScope {
   readonly id?: string;

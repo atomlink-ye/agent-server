@@ -15,6 +15,17 @@ const agentName = 'r2-golden-chat-work';
 const tenantId = 'tenant_local';
 const operations = [];
 
+// 🔴 Auditor finding-1-24209abe(2)：本文件可被直接执行且含冻结的产品 POST 动作。
+// 闸门只挡在 run.mjs 里是不够的 —— 直接调用本文件即可绕过。所以这里也必须过闸门。
+// ⛔ 不许为了"方便调试"加环境变量跳过它。
+{
+  const { checkPreconditions, assertPreconditions } = await import('./preconditions.mjs');
+  const { fileURLToPath } = await import('node:url');
+  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const gateReport = await checkPreconditions(repoRoot);
+  assertPreconditions(gateReport);
+}
+
 await mkdir(evidence, { recursive: true });
 
 function required(name) {

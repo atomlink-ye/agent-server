@@ -43,11 +43,22 @@ export async function checkPreconditions(repoRoot) {
     record('P3', duals.length > 0, `selftest rc=0, ${duals.length} duals: ${duals.map((d) => d.replace('PASS mutation ', '')).join(', ')}`);
   } catch (e) { record('P3', false, `selftest rc=${e.code ?? 'n/a'}`); }
 
+  // 🔴 脏树守卫（Auditor finding-1-24209abe(1)）：不查 git status 时，
+  // report 里的 HEAD 对一棵脏树就是【谎话】—— 它记 HEAD=X，实际求值的是被改过的字节。
+  // 一个保留 P1/P2/P3 的脏改动会得到 ok=true + head=X，为另一套装置背书。
   let head = 'unavailable';
-  try { head = (await run('git', ['-C', repoRoot, 'rev-parse', '--short', 'HEAD'])).stdout.trim(); } catch { /* 非 git 树时保持 unavailable */ }
+  let dirty = 'unknown';
+  try {
+    head = (await run('git', ['-C', repoRoot, 'rev-parse', '--short', 'HEAD'])).stdout.trim();
+    const st = (await run('git', ['-C', repoRoot, 'status', '--porcelain'])).stdout.trim();
+    dirty = st === '' ? 'no' : st.split('\n').length + ' path(s)';
+    record('CLEAN', st === '', st === '' ? 'worktree clean' : `worktree dirty: HEAD is not what runs — ${dirty}`);
+  } catch (e) {
+    record('CLEAN', false, `cannot determine worktree state: ${e.message}`);
+  }
 
   const failed = results.filter((r) => !r.ok);
-  return { head, results, ok: failed.length === 0, failed: failed.map((r) => r.id) };
+  return { head, dirty, results, ok: failed.length === 0, failed: failed.map((r) => r.id) };
 }
 
 export function assertPreconditions(report) {

@@ -59,14 +59,17 @@ mutation('unhealthy required service', () => assertLifecycleServices({ postgres:
 const record = goldenEight.map((kind) => ({ kind }));
 assertGoldenRecord(record);
 mutation('golden eighth command', () => assertGoldenRecord([...record.slice(0, 7), { kind: 'browser:reload' }]));
-const step8 = { maxWaitMs: 600000, postReturnedAt: 't0', actions: ['dom-read', 'passive-wait'], firstVisibleAt: 't1', workRef: 'work-1' };
+const step8 = { maxWaitMs: 600000, postReturnedAt: '2026-01-01T00:00:00.000Z', actions: ['dom-read', 'passive-wait'], firstVisibleAt: '2026-01-01T00:00:03.000Z', workRef: 'work-1' };
 assertStep8Observation(step8);
 mutation('step-8 forbidden reload', () => assertStep8Observation({ ...step8, actions: ['dom-read', 'page.reload'] }));
+mutation('step-8 card after T', () => assertStep8Observation({ ...step8, postReturnedAt: '2026-01-01T00:00:00.000Z', firstVisibleAt: '2026-01-01T00:11:40.000Z' }));
 
 assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' });
 mutation('preflight non-loopback URL', () => assertPreflight({ apiUrl: 'http://localhost:40557', renderedPorts: rendered, expectedPorts, provider: 'claude' }));
+mutation('preflight rendered port mismatch', () => assertPreflight({ apiUrl: 'http://127.0.0.1:40557', renderedPorts: { services: { ...rendered.services, 'agent-server': { ports: [{ host_ip: '127.0.0.1', published: '32783', target: 3000 }] } } }, expectedPorts, provider: 'claude' }));
 assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'complete' });
 mutation('terminal SQL missing work_ref', () => assertFinalSql({ provider: 'claude', workRun: 'run-1', workStatus: 'complete' }));
+mutation('terminal SQL failed Work', () => assertFinalSql({ provider: 'claude', workRef: 'work-1', workRun: 'run-1', workStatus: 'failed' }));
 
 assert.deepEqual(acceptanceRuntime('claude', 'deepseek-v4-flash'), { adapter: 'paseo', provider: 'claude', model: 'deepseek-v4-flash' });
 mutation('implicit provider', () => acceptanceRuntime('', 'deepseek-v4-flash'));

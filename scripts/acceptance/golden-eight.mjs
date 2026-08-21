@@ -16,4 +16,6 @@ export function assertStep8Observation(observation) {
   if (!observation.postReturnedAt) throw new Error('step-8 POST timestamp is missing');
   if (!Array.isArray(observation.actions) || observation.actions.some((action) => action !== 'dom-read' && action !== 'passive-wait')) throw new Error('step-8 observer performed a forbidden action');
   if (!observation.firstVisibleAt || !observation.workRef) throw new Error('step-8 did not observe a Work Card/workRef');
+  const elapsed = Date.parse(observation.firstVisibleAt) - Date.parse(observation.postReturnedAt);
+  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed > observation.maxWaitMs) throw new Error(`step-8 Work Card appeared outside T: ${elapsed}ms`);
 }

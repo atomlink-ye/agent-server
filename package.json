@@ -48,7 +48,8 @@
     "eval:memory": "node --import tsx evals/memory-policy/run.ts",
     "verify": "pnpm check && pnpm test && pnpm test:e2e && pnpm build",
     "clean": "node scripts/dev/clean.mjs",
-    "acceptance:selftest": "node scripts/acceptance/selftest.mjs"
+    "acceptance:selftest": "node scripts/acceptance/selftest.mjs",
+    "acceptance:run": "node --import tsx scripts/acceptance/run.mjs"
   },
   "dependencies": {
     "@getpaseo/client": "0.1.110",

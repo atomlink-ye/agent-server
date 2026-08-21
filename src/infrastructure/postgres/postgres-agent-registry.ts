@@ -260,8 +260,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
   ): Promise<AgentDefinition | null> {
     const result = await this.database.query<DefinitionRow>(
       `SELECT id,tenant_id,workspace_id,principal_type,principal_id,name,normalized_name,role_label,summary,created_at,updated_at FROM agent_definitions
-       WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-      [definitionId, owner.tenantId],
+       WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+      [definitionId, owner.tenantId, owner.principalType, owner.principalId],
     );
     return result.rows?.[0] ? mapDefinition(result.rows[0]) : null;
   }
@@ -283,8 +283,8 @@ export class PostgresAgentRegistry implements AgentRegistry {
     versionId: string,
   ): Promise<ManagedAgentVersion | null> {
     const result = await this.database.query<VersionRow>(
-      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
-      [versionId, owner.tenantId],
+      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4 AND managed_discriminator='managed_agent_v1'`,
+      [versionId, owner.tenantId, owner.principalType, owner.principalId],
     );
     return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
   }
@@ -305,6 +305,61 @@ export class PostgresAgentRegistry implements AgentRegistry {
     const values: unknown[] = [
       command.definitionId,
       owner.tenantId,
+      owner.principalType,
+      owner.principalId,
+      command.limit + 1,
+    ];
+    const cursorSql = cursor
+      ? ` AND (created_at,id) > ($6::timestamptz,$7::uuid)`
+      : '';
+    if (cursor) values.push(cursor.createdAt, cursor.id);
+    const result = await this.database.query<VersionRow>(
+      `SELECT * FROM agent_versions WHERE definition_id=$1 AND tenant_id=$2 AND principal_type=$3 AND principal_id=$4
+        AND managed_discriminator='managed_agent_v1'${cursorSql} ORDER BY created_at ASC,id ASC LIMIT $5`,
+      values,
+    );
+    const rows = [...(result.rows ?? [])];
+    const hasNext = rows.length > command.limit;
+    const items = rows.slice(0, command.limit).map(mapVersion);
+    const last = items[items.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasNext && last ? encodeCursor(last.createdAt, last.id) : null,
+    };
+  }
+
+  public async findVersionByTenant(input: {
+    readonly tenantId: string;
+    readonly versionId: string;
+  }): Promise<ManagedAgentVersion | null> {
+    const result = await this.database.query<VersionRow>(
+      `SELECT * FROM agent_versions WHERE id=$1 AND tenant_id=$2 AND managed_discriminator='managed_agent_v1'`,
+      [input.versionId, input.tenantId],
+    );
+    return result.rows?.[0] ? mapVersion(result.rows[0]) : null;
+  }
+
+  public async listVersionsByTenant(input: {
+    readonly tenantId: string;
+    readonly command: ListAgentVersionsCommand;
+  }): Promise<ManagedAgentVersionPage | null> {
+    const { command } = input;
+    if (
+      !Number.isInteger(command.limit) ||
+      command.limit < 1 ||
+      command.limit > 100
+    )
+      throw new InvalidAgentListLimitError();
+    const cursor = command.cursor ? decodeCursor(command.cursor) : null;
+    const definition = await this.findManagedDefinitionByTenant({
+      tenantId: input.tenantId,
+      definitionId: command.definitionId,
+    });
+    if (!definition) return null;
+    const values: unknown[] = [
+      command.definitionId,
+      input.tenantId,
       command.limit + 1,
     ];
     const cursorSql = cursor

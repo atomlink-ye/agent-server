@@ -698,13 +698,15 @@ spec:
       const links = await db.query<{
         work_id: string;
         conversation_id: string;
+        trigger_message_id: string;
       }>(
-        'SELECT work_id, conversation_id FROM conversation_work_links WHERE tenant_id=$1',
+        'SELECT work_id, conversation_id, trigger_message_id FROM conversation_work_links WHERE tenant_id=$1',
         [tenantId],
       );
       expect(links.rows).toHaveLength(1);
       expect(links.rows[0]?.work_id).toBe(works.rows[0]?.id);
       expect(links.rows[0]?.conversation_id).toBe(conversationId);
+      expect(links.rows[0]?.trigger_message_id).toBe(triggerMessageId);
     } finally {
       await db.close();
     }
